@@ -20,6 +20,7 @@
 # production
 /build
 /.netlify/
+tailwindcss-*.log
 
 # misc
 .DS_Store
