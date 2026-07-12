@@ -4,6 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { FormEvent, useMemo, useState } from "react";
 import { Field } from "./ComparatorChrome";
+import { GasUpgradeQuestionnaire } from "./GasUpgradeQuestionnaire";
 
 type GasRate = { label: string; centsPerMj: number };
 type GasSeason = { label: string; days: number; supply: number; usage: number; rates: GasRate[] };
@@ -71,7 +72,7 @@ export function GasComparator() {
 
   return (
     <>
-      <form className="card" onSubmit={compare}>
+      <form id="gas-comparison-form" className="card" onSubmit={compare}>
         <h2><span className="stepnum">1</span> Your gas use</h2>
         <p className="sub">Use the total MJ from your last four gas bills. Gas plans are priced with their daily supply charges and declining usage blocks.</p>
         <div className="grid c3">
@@ -79,11 +80,13 @@ export function GasComparator() {
           <Field label="Gas use (MJ per year)" hint="Find the total MJ on your recent gas bills, then annualise it if the bill covers less than a year."><input type="number" min="1" value={annualMj} inputMode="numeric" onChange={(event) => setAnnualMj(event.target.value)} /></Field>
           <label className="toggle" style={{ alignSelf: "end", marginBottom: 10 }}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /> Assume conditional discounts are met</label>
         </div>
-        <button className="btn" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button>
         {loading && <div className="progresswrap"><div className="pbar"><div className="pfill" style={{ width: `${progress}%` }} /></div><div className="pmsg">{status}</div></div>}
         {!loading && status && <p className="note">{status}</p>}
         {error && <p className="error">{error}</p>}
       </form>
+
+      <GasUpgradeQuestionnaire annualMj={annualMj} />
+      <div className="gas-compare-action"><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>
 
       {plans.length > 0 && <section className="results" aria-live="polite">
         <div className="rsummary">
