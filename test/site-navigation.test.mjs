@@ -16,6 +16,7 @@ const rebates = read("../src/components/RebatesHub.tsx");
 const rebatesRoute = read("../src/app/rebates/page.tsx");
 const guideShell = read("../src/components/GuideShell.tsx");
 const caseStudies = read("../src/app/case-studies/page.tsx");
+const assessments = read("../src/app/assessments/page.tsx");
 const layout = read("../src/app/layout.tsx");
 const fastNavigation = read("../src/components/FastNavigation.tsx");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
@@ -35,6 +36,8 @@ test("shared navigation connects Direct Trade Services, electricity and gas jour
   assert.match(chrome, /href: "\/", label: "Direct Trade Services"/);
   assert.match(chrome, /href: "\/compare"/);
   assert.match(chrome, /href: "\/gas-compare"/);
+  assert.match(chrome, /href: "\/assessments"/);
+  assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);
   assert.match(chrome, /href: "\/rebates"/);
@@ -74,7 +77,8 @@ test("customer-facing pages use the shared powered-by footer", () => {
   assert.match(rebates, /<SiteFooter>/);
   assert.match(guideShell, /<SiteFooter>/);
   assert.match(caseStudies, /<SiteFooter>/);
-  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}`, /Provided by/);
+  assert.match(assessments, /<SiteFooter>/);
+  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}`, /Provided by/);
 });
 
 test("shared visual foundation uses the polished responsive system", () => {

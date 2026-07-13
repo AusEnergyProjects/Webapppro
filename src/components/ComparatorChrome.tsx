@@ -16,11 +16,12 @@ export function BrandBar() {
   );
 }
 
-type SiteActive = "start" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-standards" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
+type SiteActive = "start" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
     { key: "start", href: "/", label: "Direct Trade Services" },
+    { key: "assessments", href: "/assessments", label: "Assessments" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "guides", href: "/guides", label: "Guides" },

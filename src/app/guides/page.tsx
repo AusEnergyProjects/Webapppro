@@ -7,6 +7,7 @@ export const metadata = {
 
 export default function GuidesPage() {
   return <GuideShell label="Home energy guides" title="Plan an upgrade with the assumptions visible" introduction="Use these guides to understand the evidence, quote details and practical questions that matter before choosing solar, storage, heating or hot water equipment.">
+    <section className="guide-callout"><div><h2>Need a NatHERS or BASIX assessment?</h2><p>Start with the dedicated assessment hub for new homes, existing homes and NSW BASIX projects, including the evidence to prepare and the official pathway to confirm.</p></div><a href="/assessments">Explore assessment services</a></section>
     <GuideSection eyebrow="Choose a guide" title="Start with the decision you are making"><div className="guide-card-grid">
       <article className="guide-card"><span>Rooftop solar</span><h3>Match generation to your home</h3><p>Understand sizing, self-consumption, exports, site design, quote assumptions and installer checks.</p><a href="/guides/solar">Open the solar guide</a></article>
       <article className="guide-card"><span>Home batteries</span><h3>Test whether storage fits your load</h3><p>Understand usable capacity, power, backup, cycling, warranties, VPP terms and the current federal discount structure.</p><a href="/guides/batteries">Open the battery guide</a></article>
