@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BrandBar, SiteNav } from "./ComparatorChrome";
+import { SiteHeader } from "./ComparatorChrome";
 
 type Program = { title: string; locations: string[]; categories: string; administrator: string; caveat: string; href: string };
 
@@ -38,8 +38,7 @@ export function RebatesHub() {
   const visibleLocal = localPrograms.filter((program) => program.locations.includes(location));
 
   return <main className="wrap guide-page rebates-page">
-    <BrandBar />
-    <SiteNav active="rebates" />
+    <SiteHeader active="rebates" />
     <header className="guide-hero"><span>Rebates and assistance</span><h1>Find the support that may apply to your home</h1><p>Programs change by location, household circumstances, product and installer. Use this hub to find the official source, then confirm the current rules before relying on a discount in a quote.</p></header>
 
     <section className="rebate-asat" aria-label="Information date"><strong>Information checked 14 July 2026</strong><span>Official program pages remain the source of truth. Availability, funding and eligibility can change.</span></section>

@@ -1,4 +1,4 @@
-import { BrandBar, ComparatorHero, SiteNav } from "@/components/ComparatorChrome";
+import { ComparatorHero, SiteHeader } from "@/components/ComparatorChrome";
 import { GasComparator } from "@/components/GasComparator";
 
 export const metadata = {
@@ -9,8 +9,7 @@ export const metadata = {
 export default function GasComparisonPage() {
   return (
     <main className="wrap">
-      <BrandBar />
-      <SiteNav active="gas" />
+      <SiteHeader active="gas" />
       <ComparatorHero title="Gas Plan Comparator">
         <p>Compare current gas offers using your location, annual MJ and seasonal household pattern.</p>
         <div className="fresh"><span className="dot" /> Current CDR gas plan records, retrieved for each comparison</div>

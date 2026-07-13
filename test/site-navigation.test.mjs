@@ -24,14 +24,25 @@ test("the homepage provides a getting-started journey instead of redirecting", (
 });
 
 test("shared navigation connects the start, electricity and gas journeys", () => {
+  assert.match(chrome, /export function SiteHeader/);
+  assert.match(chrome, /className="site-header"/);
   assert.match(chrome, /href: "\/getting-started"/);
   assert.match(chrome, /href: "\/compare"/);
   assert.match(chrome, /href: "\/gas-compare"/);
-  assert.match(electricity, /SiteNav active="electricity"/);
-  assert.match(gas, /SiteNav active="gas"/);
+  assert.match(electricity, /SiteHeader active="electricity"/);
+  assert.match(gas, /SiteHeader active="gas"/);
   assert.match(chrome, /href: "\/rebates"/);
   assert.match(rebatesRoute, /RebatesHub/);
-  assert.match(rebates, /SiteNav active="rebates"/);
+  assert.match(rebates, /SiteHeader active="rebates"/);
+});
+
+test("shared visual foundation uses the polished responsive system", () => {
+  assert.match(styles, /family=Manrope/);
+  assert.match(styles, /family=Source\+Serif\+4/);
+  assert.match(styles, /\.site-header \{/);
+  assert.match(styles, /radial-gradient\(circle at 8% 0%/);
+  assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
+  assert.match(styles, /a:focus-visible/);
 });
 
 test("rebates hub makes location boundaries and source confirmation visible", () => {

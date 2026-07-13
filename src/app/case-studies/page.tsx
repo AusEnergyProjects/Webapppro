@@ -1,4 +1,4 @@
-import { BrandBar, SiteNav } from "@/components/ComparatorChrome";
+import { SiteHeader } from "@/components/ComparatorChrome";
 
 export const metadata = {
   title: "Energy Assessment Worked Examples | Australian Energy Assessments",
@@ -55,8 +55,7 @@ const publicationChecks = [
 
 export default function CaseStudiesPage() {
   return <main className="wrap guide-page case-study-page">
-    <BrandBar />
-    <SiteNav active="case-studies" />
+    <SiteHeader active="case-studies" />
     <header className="guide-hero"><span>Worked examples</span><h1>See how the evidence changes the decision</h1><p>These examples explain the assessment method without presenting invented customers, testimonials or guaranteed savings. Each one shows what evidence is useful, how it is treated and where uncertainty remains.</p></header>
 
     <section className="case-study-disclosure"><strong>Illustrative scenarios, not customer case studies</strong><p>No household, retailer result or savings claim is represented here. Real outcomes require current plan data and household-specific evidence.</p></section>

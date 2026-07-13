@@ -13,7 +13,7 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 
 test("worked examples are connected to the shared journey", () => {
   assert.match(chrome, /href: "\/case-studies"/);
-  assert.match(page, /SiteNav active="case-studies"/);
+  assert.match(page, /SiteHeader active="case-studies"/);
   assert.match(start, /href="\/case-studies"/);
   assert.match(guides, /href="\/case-studies"/);
 });

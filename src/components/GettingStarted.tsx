@@ -1,4 +1,4 @@
-import { BrandBar, SiteNav } from "./ComparatorChrome";
+import { SiteHeader } from "./ComparatorChrome";
 
 const preparation = [
   { number: "1", title: "Bring a recent bill", text: "Your postcode, retailer, plan name and energy use help establish a useful comparison." },
@@ -8,8 +8,7 @@ const preparation = [
 
 export function GettingStarted() {
   return <main className="wrap start-page">
-    <BrandBar />
-    <SiteNav active="start" />
+    <SiteHeader active="start" />
     <header className="start-hero">
       <div><span className="start-eyebrow">Independent energy comparison</span><h1>Make a confident energy decision</h1><p>Start with the energy bill you already have. We will help you choose the right comparison path, understand the assumptions and know what to confirm before changing plans.</p><div className="start-actions"><a className="btn" href="/compare">Compare electricity</a><a className="btn ghost" href="/gas-compare">Compare gas</a></div></div>
       <aside aria-label="What this service does"><strong>Clear evidence, not a sales ranking</strong><ul><li>Published retailer plan data</li><li>Your household usage where available</li><li>Visible assumptions and calculation audits</li><li>Retailer confirmation before switching</li></ul></aside>
