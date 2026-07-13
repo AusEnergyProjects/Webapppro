@@ -20,7 +20,9 @@
 
 # production
 /build
+/dist/
 /.netlify/
+/.wrangler/
 tailwindcss-*.log
 
 # misc

@@ -49,6 +49,9 @@ Progress as at 14 July 2026:
 - Ambiguous postcodes require the gas distributor shown on the bill before ranking. Conditional discounts are off by default, while eligibility, fees, incentives and other uncosted features remain visible.
 - Appliance inputs are separated into heating, hot water, cooking, clothes dryer and pool or spa sections. The heating answer now sets the seasonal pricing profile automatically, removing the duplicate gas-use question, while unbenchmarked dryer and pool or spa allocations are labelled as broad proxies.
 - Residents can shortlist up to three gas offers in a side-by-side view covering annual and monthly cost, supply and usage rates, seasonal pricing and conditions to confirm.
+- Gas supply is now explicitly gated between reticulated mains gas and LPG. LPG users are directed to supplier quotes before any CDR plan request is made.
+- Residents can enter either a full-year MJ total or one bill with exact start and end dates. Recent bills are annualised using the selected heating or steady profile, so a winter bill is not multiplied as though usage were flat all year.
+- Concession status is captured and disclosed without guessing a dollar value. Plan rankings remain on a consistent before-concession basis and residents are prompted to confirm transfer and evidence requirements with the retailer.
 
 ## Phase 4: expand the site
 

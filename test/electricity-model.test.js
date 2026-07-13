@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const model = require('../public/electricity-model.js');
+const model = require('../scripts/compat/load-electricity-model.cjs');
 
 test('daily and monthly tariff blocks scale their published thresholds to the priced period', () => {
   const rates = [{ unitPrice: 0.1, volume: 10 }, { unitPrice: 0.3 }];

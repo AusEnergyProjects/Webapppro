@@ -6,6 +6,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Field } from "./ComparatorChrome";
 import { GasUpgradeQuestionnaire } from "./GasUpgradeQuestionnaire";
 import type { GasUsageProfile } from "@/lib/gas-tariff-engine";
+import { annualiseGasUsage, type GasUsageInputMode } from "@/lib/gas-usage-input";
 
 type GasRate = { label: string; centsPerMj: number };
 type GasSeason = { label: string; days: number; usageMj: number; supply: number; usage: number; rates: GasRate[] };
@@ -63,9 +64,14 @@ function fmtD2(value: number) { return "$" + value.toLocaleString(undefined, { m
 
 export function GasComparator() {
   const [postcode, setPostcode] = useState("");
-  const [annualMj, setAnnualMj] = useState("58000");
+  const [supplyType, setSupplyType] = useState<"mains" | "lpg">("mains");
+  const [usageMode, setUsageMode] = useState<GasUsageInputMode>("annual");
+  const [usageMj, setUsageMj] = useState("58000");
+  const [billStart, setBillStart] = useState("");
+  const [billEnd, setBillEnd] = useState("");
   const [usageProfile, setUsageProfile] = useState<GasUsageProfile>("heating");
   const [includeConditional, setIncludeConditional] = useState(false);
+  const [hasConcession, setHasConcession] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [bundle, setBundle] = useState<GasBundle | null>(null);
   const [distributors, setDistributors] = useState<string[]>([]);
@@ -78,15 +84,20 @@ export function GasComparator() {
   const [search, setSearch] = useState("");
   const [shown, setShown] = useState(12);
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const annualisedUsage = useMemo(() => annualiseGasUsage({
+    usageMj: Number(usageMj), mode: usageMode, profile: usageProfile, billStart, billEnd,
+  }), [billEnd, billStart, usageMj, usageMode, usageProfile]);
+  const effectiveAnnualMj = annualisedUsage.ok ? Math.round(annualisedUsage.annualMj) : 0;
 
   async function compare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(""); setPlans([]); setBundle(null); setDistributors([]); setDistributor(""); setShown(12); setSelectedPlanIds([]);
+    if (supplyType !== "mains") { setError("This comparison covers reticulated mains gas only. LPG cylinder and bulk supply prices require quotes from LPG suppliers."); return; }
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
-    if (!(Number(annualMj) > 0)) { setError("Enter your annual gas use in MJ."); return; }
+    if (!annualisedUsage.ok) { setError(annualisedUsage.error); return; }
     setLoading(true); setProgress(12); setStatus("Loading current gas offers...");
     try {
-      const query = new URLSearchParams({ postcode, annualMj, usageProfile, includeConditional: String(includeConditional) });
+      const query = new URLSearchParams({ postcode, annualMj: String(Math.round(annualisedUsage.annualMj)), usageProfile, includeConditional: String(includeConditional) });
       setProgress(35);
       const response = await fetch("/api/gas-plans?" + query);
       const data = await response.json();
@@ -120,20 +131,32 @@ export function GasComparator() {
     <>
       <form id="gas-comparison-form" className="card" onSubmit={compare}>
         <h2><span className="stepnum">1</span> Your gas use</h2>
-        <p className="sub">Add the MJ from bills covering a full year. Your appliance answers below set the seasonal pattern used for summer and winter rates.</p>
-        <div className="grid c2">
+        <p className="sub">Use a full year of bills where possible. A recent bill can also be converted to an annual estimate using its exact dates and your appliance profile below.</p>
+        <fieldset className="gas-choice-group"><legend>Gas supply type</legend><div className="gas-choice-grid">
+          <label className={`native-assumption-card${supplyType === "mains" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "mains"} onChange={() => setSupplyType("mains")} /><span><b>Reticulated mains gas</b><small>A gas meter and network supply connected to the property.</small></span></label>
+          <label className={`native-assumption-card${supplyType === "lpg" ? " selected" : ""}`}><input type="radio" name="gas-supply-type" checked={supplyType === "lpg"} onChange={() => setSupplyType("lpg")} /><span><b>LPG bottles or bulk tank</b><small>Delivered LPG is not covered by retail gas plan data.</small></span></label>
+        </div></fieldset>
+        {supplyType === "lpg" ? <div className="note"><b>LPG needs a supplier quote.</b> This tool cannot rank LPG cylinder or bulk tank prices against mains gas offers because the products, delivery fees and units differ.</div> : <>
+        <fieldset className="gas-choice-group"><legend>Usage evidence</legend><div className="gas-choice-grid">
+          <label className={`native-assumption-card${usageMode === "annual" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "annual"} onChange={() => setUsageMode("annual")} /><span><b>Full year total</b><small>Most reliable. Add the MJ from bills covering about 12 months.</small></span></label>
+          <label className={`native-assumption-card${usageMode === "bill" ? " selected" : ""}`}><input type="radio" name="gas-usage-mode" checked={usageMode === "bill"} onChange={() => setUsageMode("bill")} /><span><b>One recent bill</b><small>We annualise the MJ using the bill dates and seasonal profile.</small></span></label>
+        </div></fieldset>
+        <div className="grid c2 gas-primary-inputs">
           <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => setPostcode(event.target.value)} placeholder="e.g. 3000" /></Field>
-          <Field label="Gas use (MJ per year)" hint="Add the total MJ from bills covering the last 12 months. If you do not have them, ask your retailer for your usage history."><input type="number" min="1" value={annualMj} inputMode="numeric" onChange={(event) => setAnnualMj(event.target.value)} /></Field>
+          <Field label={usageMode === "annual" ? "Gas use (MJ per year)" : "Gas use on this bill (MJ)"} hint={usageMode === "annual" ? "Add the total MJ from bills covering the last 12 months." : "Use the total MJ shown for this billing period."}><input type="number" min="1" value={usageMj} inputMode="numeric" onChange={(event) => setUsageMj(event.target.value)} /></Field>
         </div>
+        {usageMode === "bill" && <div className="gas-bill-period"><Field label="Bill period starts" hint="Use the first date covered by the bill."><input type="date" value={billStart} onChange={(event) => setBillStart(event.target.value)} /></Field><Field label="Bill period ends" hint="Use the last date covered by the bill."><input type="date" value={billEnd} onChange={(event) => setBillEnd(event.target.value)} /></Field>{annualisedUsage.ok && <div className="gas-annual-equivalent"><span>Annualised usage</span><b>{Math.round(annualisedUsage.annualMj).toLocaleString()} MJ/year</b><small>Based on {annualisedUsage.billDays} bill days and the {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile.</small></div>}</div>}
         <label className={`native-assumption-card gas-discount-card${includeConditional ? " selected" : ""}`}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Leave this off unless you expect to meet every published condition, such as paying on time or using direct debit.</small></span></label>
+        <label className={`native-assumption-card gas-discount-card${hasConcession ? " selected" : ""}`}><input type="checkbox" checked={hasConcession} onChange={(event) => setHasConcession(event.target.checked)} /><span><b>I receive an energy concession</b><small>Ranked plan costs remain before concessions because eligibility, calculation and transfer rules vary. Confirm your concession with the retailer before switching.</small></span></label>
         {loading && <div className="progresswrap"><div className="pbar"><div className="pfill" style={{ width: `${progress}%` }} /></div><div className="pmsg">{status}</div></div>}
         {!loading && status && <p className="note">{status}</p>}
         {distributors.length > 1 && <div className="native-location-evidence"><Field label="Gas distributor or network" hint="Choose the network name shown on your gas bill, usually near the meter number, supply address or faults contact."><select value={distributor} onChange={(event) => { setDistributor(event.target.value); setShown(12); setSelectedPlanIds([]); setStatus(""); }}><option value="">Choose the network from your bill</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
         {error && <p className="error">{error}</p>}
+        </>}
       </form>
 
-      <GasUpgradeQuestionnaire annualMj={annualMj} onUsageProfileChange={setUsageProfile} />
-      <div className="gas-compare-action"><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>
+      {supplyType === "mains" && <GasUpgradeQuestionnaire annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} onUsageProfileChange={setUsageProfile} />}
+      {supplyType === "mains" && <div className="gas-compare-action"><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>}
 
       {plans.length > 0 && !needsDistributor && <section className="results" aria-live="polite">
         <div className="rsummary">
@@ -151,11 +174,12 @@ export function GasComparator() {
         </div></details>
         <div className="filters"><label className="toggle"><input type="checkbox" checked={showStanding} onChange={(event) => setShowStanding(event.target.checked)} /> Standing offers</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter by retailer or plan name" aria-label="Filter by retailer or plan name" /></div>
         {visiblePlans.some((plan) => plan.eligibilityConfirmations.length > 0) && <div className="note"><b>Confirm eligibility before switching.</b> {visiblePlans.filter((plan) => plan.eligibilityConfirmations.length > 0).length} displayed offers have retailer conditions this calculator cannot verify.</div>}
+        {hasConcession && <div className="note"><b>Concession not deducted.</b> These offers are ranked before concessions so every plan uses the same comparable cost basis. Ask the retailer to confirm your concession can transfer and what evidence is required.</div>}
         {selectedPlans.length > 0 && <GasPlanComparison plans={selectedPlans} onRemove={toggleSelectedPlan} />}
         <div>{displayedPlans.map((plan, index) => <GasPlanCard key={`${plan.id}-${Math.round(plan.annualCost)}`} plan={plan} index={index} selected={selectedPlanIds.includes(plan.id)} compareFull={selectedPlanIds.length >= 3} onToggleCompare={toggleSelectedPlan} />)}{!visiblePlans.length && <div className="note">No offers match these filters. Turn on standing offers or clear the search field.</div>}</div>
         {visiblePlans.length > shown && <button className="btn ghost showmore" type="button" onClick={() => setShown((current) => current + 12)}>Show more plans</button>}
         <p className="offer-count">Showing {displayedPlans.length} of {visiblePlans.length} available offers</p>
-        <div className="note"><b>How these estimates work.</b> Annual cost equals published daily supply charges plus usage charges, less only the conditional discounts selected above, based on {Number(annualMj).toLocaleString()} MJ per year. The {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile allocates usage across each seasonal tariff period. Results include only offers that passed strict calendar coverage and rate validation. Confirm rates, eligibility and conditions with the retailer before switching.</div>
+        <div className="note"><b>How these estimates work.</b> Annual cost equals published daily supply charges plus usage charges, less only the conditional discounts selected above, based on {effectiveAnnualMj.toLocaleString()} MJ per year. {usageMode === "bill" ? "The entered bill was annualised from its exact dates before pricing. " : ""}The {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile allocates usage across each seasonal tariff period. Concessions are not deducted. Results include only offers that passed strict calendar coverage and rate validation. Confirm rates, eligibility and conditions with the retailer before switching.</div>
         {bundle && <div className="note"><b>Gas tariff evidence.</b> Retrieved current CDR records {bundle.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "this session"}. {bundle.source?.detailPlansSucceeded || bundle.plans.length} of {bundle.source?.candidatePlans || bundle.plans.length} locally relevant plan details passed strict validation from {bundle.source?.listSourcesSucceeded ?? "the available"} of {bundle.source?.retailersDiscovered ?? "the discovered"} sources. {bundle.source?.oldestPlanUpdatedAt && bundle.source?.newestPlanUpdatedAt ? `Included retailer records were last updated between ${new Date(bundle.source.oldestPlanUpdatedAt).toLocaleDateString()} and ${new Date(bundle.source.newestPlanUpdatedAt).toLocaleDateString()}. ` : ""}{bundle.source?.plansMissingLastUpdated ? `${bundle.source.plansMissingLastUpdated} included records did not publish a usable update time. ` : ""}{bundle.source?.partial ? "Some sources or plan details were unavailable or rejected, so this is not a complete-market result." : "All discovered sources and local candidates completed successfully."}</div>}
         {bundle?.source?.retailerCoverage && <details className="note"><summary>Retailer source coverage</summary><ul>{bundle.source.retailerCoverage.filter((coverage) => !coverage.listAvailable || coverage.candidatePlans > 0).map((coverage) => <li key={coverage.retailer}><b>{coverage.retailer}:</b> {coverage.listAvailable ? `${coverage.detailsPassed} of ${coverage.candidatePlans} local plan details passed` : "plan list unavailable"}{coverage.detailsRejected ? `; ${coverage.detailsRejected} rejected by gas tariff validation` : ""}{coverage.detailsUnavailable ? `; ${coverage.detailsUnavailable} unavailable` : ""}</li>)}</ul></details>}
       </section>}

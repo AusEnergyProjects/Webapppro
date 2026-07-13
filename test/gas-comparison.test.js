@@ -1,10 +1,10 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+/* eslint-disable @typescript-eslint/no-require-imports */
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
-const directory = path.dirname(fileURLToPath(import.meta.url));
+const directory = __dirname;
 const component = fs.readFileSync(path.resolve(directory, "../src/components/GasComparator.tsx"), "utf8");
 const questionnaire = fs.readFileSync(path.resolve(directory, "../src/components/GasUpgradeQuestionnaire.tsx"), "utf8");
 const route = fs.readFileSync(path.resolve(directory, "../src/app/api/gas-plans/route.ts"), "utf8");
@@ -16,6 +16,17 @@ test("gas comparison sends an explicit seasonal profile and excludes conditional
   assert.match(component, /onUsageProfileChange=\{setUsageProfile\}/);
   assert.match(questionnaire, /hasGasHeating \? "heating" : "steady"/);
   assert.doesNotMatch(component, /name="gas-usage-profile"/);
+});
+
+test("gas comparison gates LPG and supports dated bill usage with concession disclosure", () => {
+  assert.match(component, /Reticulated mains gas/);
+  assert.match(component, /LPG bottles or bulk tank/);
+  assert.match(component, /supplyType !== "mains"/);
+  assert.match(component, /annualiseGasUsage/);
+  assert.match(component, /Bill period starts/);
+  assert.match(component, /Bill period ends/);
+  assert.match(component, /I receive an energy concession/);
+  assert.match(component, /Concession not deducted/);
 });
 
 test("gas appliances have separate behaviour-led sections", () => {

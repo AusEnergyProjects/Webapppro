@@ -7,7 +7,7 @@ import { allocateNem12Registers, parseNem12 as parseTyped, scaleNem12AnnualAlloc
 import { buildNem12ChartModel } from "../src/lib/electricity/nem12-chart.ts";
 
 const require = createRequire(import.meta.url);
-const legacy = require("../public/electricity-model.js");
+const legacy = require("../scripts/compat/load-electricity-model.cjs");
 
 function record300(date, values, quality = "A") {
   return ["300", date, ...values.map(String), quality, "", "", "", ""].join(",");

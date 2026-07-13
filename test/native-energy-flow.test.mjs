@@ -13,7 +13,7 @@ import {
 } from "../src/lib/electricity/energy-flow.ts";
 
 const require = createRequire(import.meta.url);
-const compatibility = require("../public/electricity-model.js");
+const compatibility = require("../scripts/compat/load-electricity-model.cjs");
 
 function grid(bin) {
   return Array.from({ length: 7 }, () => Array.from({ length: 48 }, (_, index) => index === bin ? 1 : 0));

@@ -52,7 +52,7 @@ type GasContract = {
 };
 
 const GST = 1.1;
-const HEATING_MONTH_SHARES = [0.035, 0.03, 0.045, 0.07, 0.11, 0.145, 0.17, 0.145, 0.095, 0.065, 0.045, 0.045];
+export const HEATING_MONTH_SHARES = [0.035, 0.03, 0.045, 0.07, 0.11, 0.145, 0.17, 0.145, 0.095, 0.065, 0.045, 0.045];
 const YEAR = 2025;
 
 function finiteNonNegative(value: unknown): number | null {

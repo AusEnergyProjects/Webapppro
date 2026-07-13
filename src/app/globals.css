@@ -177,6 +177,15 @@ input:focus, select:focus { border-color: var(--color-aea-green); outline: 2px s
 .native-controlled-usage { margin-top: 12px; max-width: 420px; }
 .gas-profile-fieldset { margin-top: 16px; }
 .gas-profile-fieldset .native-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gas-choice-group { border: 0; margin: 14px 0; padding: 0; }
+.gas-choice-group legend { color: var(--color-aea-ink); font-size: .82rem; font-weight: 900; margin-bottom: 8px; }
+.gas-choice-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 760px; }
+.gas-choice-grid .native-assumption-card { min-height: 82px; }
+.gas-primary-inputs { margin-top: 14px; }
+.gas-bill-period { align-items: start; background: #f8fcf9; border: 1px solid var(--color-aea-line); border-radius: 10px; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(190px, .8fr); margin: 12px 0; padding: 14px; }
+.gas-annual-equivalent { align-self: stretch; background: #eaf8ef; border: 1px solid #b8ddc6; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; }
+.gas-annual-equivalent span, .gas-annual-equivalent small { color: var(--color-aea-muted); font-size: .69rem; line-height: 1.4; }
+.gas-annual-equivalent b { color: var(--color-aea-green-dark); font-size: 1rem; margin: 2px 0; }
 .gas-discount-card { margin-top: 4px; max-width: 620px; min-height: auto; }
 .native-meter-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
 .native-override-flag { background: #fff8e9; border: 1px solid #f0dca6; border-radius: 8px; color: #6d5200; font-size: .76rem; margin: 0 0 12px; padding: 9px 11px; }
@@ -328,13 +337,14 @@ input:focus, select:focus { border-color: var(--color-aea-green); outline: 2px s
 .modal .mcancel { background: #fff; border: 1.5px solid var(--color-aea-line); border-radius: 9px; color: var(--color-aea-ink); cursor: pointer; font-weight: 800; padding: 9px 18px; }
 .modal .enqfine { color: var(--color-aea-muted); font-size: .72rem; margin-top: 12px; }
 @media (max-width: 720px) {
-  .gas-questionnaire .question-grid, .gas-questionnaire .question-grid-wide, .gas-household-context, .gas-appliance-grid, .gas-appliance-split, .estimate-inputs, .savings-grid { grid-template-columns: 1fr !important; }
+  .gas-questionnaire .question-grid, .gas-questionnaire .question-grid-wide, .gas-household-context, .gas-appliance-grid, .gas-appliance-split, .estimate-inputs, .savings-grid, .gas-bill-period { grid-template-columns: 1fr !important; }
   .gas-appliance-card-wide { grid-column: auto; }
   .gas-savings { padding: 18px 14px; }
   .native-location-grid { grid-template-columns: 1fr !important; }
   .native-usage-entry { grid-template-columns: 1fr; }
   .native-assumption-grid { grid-template-columns: 1fr; }
   .native-assumption-card { min-height: 0; }
+  .gas-choice-grid { grid-template-columns: 1fr; }
   .native-network-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 footer { color: var(--color-aea-muted); font-size: .8rem; margin-top: 30px; text-align: center; }
