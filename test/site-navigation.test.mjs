@@ -14,6 +14,7 @@ const gas = read("../src/app/gas-compare/page.tsx");
 const styles = read("../src/app/globals.css");
 const rebates = read("../src/components/RebatesHub.tsx");
 const rebatesRoute = read("../src/app/rebates/page.tsx");
+const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.png");
 
 test("the homepage provides a getting-started journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
@@ -43,6 +44,27 @@ test("shared visual foundation uses the polished responsive system", () => {
   assert.match(styles, /radial-gradient\(circle at 8% 0%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
   assert.match(styles, /a:focus-visible/);
+});
+
+test("shared layout and component tokens prevent page-level visual drift", () => {
+  assert.match(styles, /--layout-max: 1180px/);
+  assert.match(styles, /\.wrap \{[^}]*max-width: var\(--layout-max\)/);
+  assert.doesNotMatch(styles, /\.(?:start-page|guide-page) \{[^}]*max-width:/);
+  assert.match(styles, /--radius-control: 11px/);
+  assert.match(styles, /--radius-card: 18px/);
+  assert.match(styles, /--action-primary: linear-gradient/);
+  assert.match(styles, /\.btn \{[^}]*background: var\(--action-primary\)/);
+  assert.match(styles, /\.guide-callout > a \{[^}]*background: var\(--action-primary\)/);
+  assert.match(styles, /\.native-guidance-links a \{[^}]*background: var\(--action-primary\)/);
+  assert.match(styles, /\.modal \.mclose \{[^}]*background: var\(--action-primary\)/);
+  assert.match(styles, /\.start-path-card \{[^}]*border-radius: var\(--radius-card\)/);
+});
+
+test("homepage uses the original AEA energy platform artwork", () => {
+  assert.match(guide, /className="start-hero-visual"/);
+  assert.match(styles, /url\("\/aea-energy-platform-hero\.png"\)/);
+  assert.equal(fs.existsSync(heroAsset), true);
+  assert.ok(fs.statSync(heroAsset).size > 100_000);
 });
 
 test("rebates hub makes location boundaries and source confirmation visible", () => {
