@@ -2,8 +2,6 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-const EMAIL_WEBHOOK = "https://script.google.com/macros/s/AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308/exec";
-
 type UpgradeEnquiryModalProps = {
   title: string;
   annualMj: string;
@@ -16,12 +14,15 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
+  const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState("");
   const [statusType, setStatusType] = useState<"" | "ok" | "err">("");
   const [sending, setSending] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const startedAt = useRef(0);
 
   useEffect(() => {
+    startedAt.current = Date.now();
     nameRef.current?.focus();
   }, []);
 
@@ -31,7 +32,7 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (website.trim()) {
       setStatusType("ok");
@@ -54,12 +55,19 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
       setStatus("That email does not look right. Check it, or leave it blank and give a phone number.");
       return;
     }
+    if (!consent) {
+      setStatusType("err");
+      setStatus("Please confirm that we may use these details to respond to this enquiry.");
+      return;
+    }
 
     setSending(true);
     setStatusType("");
     setStatus("Sending...");
     const payload = {
-      ts: new Date().toISOString(),
+      submissionType: "upgrade",
+      clientStartedAt: startedAt.current,
+      website,
       enquiry: title,
       type: `Upgrade enquiry: ${title}`,
       upgrades: true,
@@ -68,21 +76,25 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
       phone: phone.trim(),
       annualMj: Number(annualMj) || "",
       annualSaving: Math.round(estimatedSaving),
+      consent: { accepted: true, purpose: "Respond to this upgrade enquiry", noticeVersion: "2026-07-14", grantedAt: new Date().toISOString() },
     };
 
-    fetch(EMAIL_WEBHOOK, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) })
-      .then(() => {
-        setStatusType("ok");
-        setStatus(`Thanks ${name.trim()}, your enquiry is in. Our team will be in touch about an independent assessment and direct-to-trade options.`);
-        setName("");
-        setEmail("");
-        setPhone("");
-      })
-      .catch(() => {
-        setStatusType("err");
-        setStatus("Could not send right now. Please try again shortly, or call 1300 241 149.");
-      })
-      .finally(() => setSending(false));
+    try {
+      const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "Could not send right now.");
+      setStatusType("ok");
+      setStatus(`Thanks ${name.trim()}, your enquiry is in. Our team will be in touch about an independent assessment and direct-to-trade options.`);
+      setName("");
+      setEmail("");
+      setPhone("");
+      setConsent(false);
+    } catch (error) {
+      setStatusType("err");
+      setStatus(error instanceof Error ? error.message : "Could not send right now. Please try again shortly, or call 1300 241 149.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return <div className="modal-ov show" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -96,6 +108,7 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
           <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone number" aria-label="Phone number" />
         </div>
         <input className="hp-field" type="text" value={website} onChange={(event) => setWebsite(event.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" placeholder="Leave this blank" />
+        <label className="direct-trade-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree that Australian Energy Assessments may use these details to respond to this enquiry.</span></label>
         {status && <div className={`estat ${statusType}`}>{status}</div>}
         <div className="enqbtns">
           <button className="mclose" type="submit" disabled={sending}>{sending ? "Sending..." : "Send my enquiry"}</button>

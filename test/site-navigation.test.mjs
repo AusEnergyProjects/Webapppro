@@ -45,10 +45,11 @@ test("shared navigation connects Direct Trade Services, electricity and gas jour
 test("direct trade proposition presents the trade network and subscription as live", () => {
   assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /trade network and installer subscription model are active/);
+  assert.match(guide, /through an active trade network/);
   assert.match(guide, /Participating installers fund the service through a current subscription/);
   assert.match(guide, /not a margin added to household equipment/);
   assert.doesNotMatch(guide, /planned revenue model|installer subscriptions and applications are in development|Future Direct Trade members/);
+  assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 
 test("direct trade marketplace includes reputable wholesalers", () => {

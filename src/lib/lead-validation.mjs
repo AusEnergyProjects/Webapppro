@@ -1,4 +1,10 @@
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const DIRECT_TRADE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
+const DIRECT_TRADE_STATES = new Set(["ACT", "NSW", "NT", "QLD", "Qld", "SA", "TAS", "Tas", "VIC", "Vic", "WA"]);
+const PROPERTY_TYPES = new Set(["house", "townhouse-unit", "apartment", "small-business", "other"]);
+const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quotes", "replacement-urgent"]);
+const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
+const CONTACT_METHODS = new Set(["email", "phone", "either"]);
 
 function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -7,6 +13,16 @@ function cleanText(value, maxLength) {
 function cleanNumber(value, minimum = 0, maximum = 100000000) {
   const number = Number(value);
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
+}
+
+function cleanEnum(value, allowed) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return allowed.has(text) ? text : "";
+}
+
+function cleanStringArray(value, allowed, maximum = 8) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => cleanEnum(item, allowed)).filter(Boolean))].slice(0, maximum);
 }
 
 function cleanTopPlans(value) {
@@ -63,8 +79,22 @@ export function validateLeadPayload(raw) {
   }
 
   const annualKwh = cleanNumber(raw.annualKwh, 0, 100000000);
+  const annualMj = cleanNumber(raw.annualMj, 0, 100000000);
   const postcode = cleanText(raw.postcode, 4);
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
+  const enquiry = cleanText(raw.enquiry, 80);
+  const projectCategories = cleanStringArray(raw.projectCategories, DIRECT_TRADE_CATEGORIES);
+  const state = cleanEnum(raw.state, DIRECT_TRADE_STATES);
+  const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);
+  const projectStage = cleanEnum(raw.projectStage, PROJECT_STAGES);
+  const timeframe = cleanEnum(raw.timeframe, PROJECT_TIMEFRAMES);
+  const preferredContact = cleanEnum(raw.preferredContact, CONTACT_METHODS);
+  if (enquiry === "direct-trade-project") {
+    if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    if (!postcode || !state) return { ok: false, error: "Please enter a postcode and choose a state or territory." };
+    if (!projectCategories.length) return { ok: false, error: "Please choose at least one service." };
+    if (!propertyType || !projectStage || !timeframe || !preferredContact) return { ok: false, error: "Please complete the project details." };
+  }
 
   return {
     ok: true,
@@ -83,11 +113,18 @@ export function validateLeadPayload(raw) {
         grantedAt: consentGrantedAt,
       },
       upgrades: Boolean(raw.upgrades),
-      enquiry: cleanText(raw.enquiry, 80),
+      enquiry,
       type: cleanText(raw.type, 160),
       postcode,
-      state: cleanText(raw.state, 8),
+      state,
       annualKwh,
+      annualMj,
+      projectCategories,
+      propertyType,
+      projectStage,
+      timeframe,
+      preferredContact,
+      projectNotes: cleanText(raw.projectNotes, 800),
       solar: cleanText(raw.solar, 32),
       hasEv: Boolean(raw.hasEv),
       hasControlledLoad: Boolean(raw.hasControlledLoad),

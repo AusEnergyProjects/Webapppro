@@ -84,3 +84,35 @@ test('lead validation drops meter identifiers and interval data', async () => {
   assert.equal('intervals' in result.value, false);
   assert.equal('overrideReason' in result.value, false);
 });
+
+test('direct trade project briefs retain only allowlisted project fields', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-project';
+  payload.state = 'Vic';
+  payload.projectCategories = ['solar', 'battery', 'not-a-service'];
+  payload.propertyType = 'house';
+  payload.projectStage = 'assessment-ready';
+  payload.timeframe = 'one-three-months';
+  payload.preferredContact = 'email';
+  payload.projectNotes = 'Interested in a staged upgrade.';
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.projectCategories, ['solar', 'battery']);
+  assert.equal(result.value.state, 'Vic');
+  assert.equal(result.value.propertyType, 'house');
+  assert.equal(result.value.projectNotes, 'Interested in a staged upgrade.');
+});
+
+test('direct trade project briefs require location, service and project details', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-project';
+  payload.state = 'Vic';
+  payload.projectCategories = ['not-a-service'];
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /service/i);
+});
