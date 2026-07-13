@@ -6,6 +6,8 @@ const DIRECT_TRADE_STATES = new Set(["ACT", "NSW", "NT", "QLD", "Qld", "SA", "TA
 const PROPERTY_TYPES = new Set(["house", "townhouse-unit", "apartment", "small-business", "other"]);
 const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quotes", "replacement-urgent"]);
 const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
+const PROPERTY_RELATIONSHIPS = new Set(["owner-occupier", "landlord-manager", "authorised-tenant", "organisation-representative", "planning-only"]);
+const PROJECT_PRIORITIES = new Set(["lower-running-costs", "improve-comfort", "replace-equipment", "move-from-gas", "solar-storage", "assessment-compliance", "need-advice"]);
 const CONTACT_METHODS = new Set(["email", "phone", "either"]);
 const PARTNER_TYPES = new Set(["installer", "supplier"]);
 
@@ -91,6 +93,8 @@ export function validateLeadPayload(raw) {
   const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);
   const projectStage = cleanEnum(raw.projectStage, PROJECT_STAGES);
   const timeframe = cleanEnum(raw.timeframe, PROJECT_TIMEFRAMES);
+  const propertyRelationship = cleanEnum(raw.propertyRelationship, PROPERTY_RELATIONSHIPS);
+  const projectPriorities = cleanStringArray(raw.projectPriorities, PROJECT_PRIORITIES, 7);
   const preferredContact = cleanEnum(raw.preferredContact, CONTACT_METHODS);
   const partnerType = cleanEnum(raw.partnerType, PARTNER_TYPES);
   const serviceStates = cleanStringArray(raw.serviceStates, DIRECT_TRADE_STATES);
@@ -101,7 +105,8 @@ export function validateLeadPayload(raw) {
       return { ok: false, error: `Postcode ${postcode} is usually in ${australianStateLabel(residentialStateFromPostcode(postcode))}. Please check the postcode or state.` };
     }
     if (!projectCategories.length) return { ok: false, error: "Please choose at least one service." };
-    if (!propertyType || !projectStage || !timeframe || !preferredContact) return { ok: false, error: "Please complete the project details." };
+    if (!propertyType || !projectStage || !timeframe || !propertyRelationship || !preferredContact) return { ok: false, error: "Please complete the project details." };
+    if (!projectPriorities.length) return { ok: false, error: "Please choose at least one project priority." };
   }
   if (enquiry === "direct-trade-partner") {
     if (submissionType !== "upgrade" || !partnerType) return { ok: false, error: "Please choose a participation type." };
@@ -135,6 +140,8 @@ export function validateLeadPayload(raw) {
       annualMj,
       projectCategories,
       propertyType,
+      propertyRelationship,
+      projectPriorities,
       projectStage,
       timeframe,
       preferredContact,

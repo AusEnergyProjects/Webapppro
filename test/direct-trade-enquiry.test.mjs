@@ -56,3 +56,16 @@ test("project location is checked before trade matching", () => {
   assert.match(postcodeRules, /return "WA"/);
   assert.match(postcodeRules, /return "TAS"/);
 });
+
+test("project briefs capture structured matching priorities and show a review summary", () => {
+  assert.match(brief, /const priorities =/);
+  assert.match(brief, /const propertyRelationships =/);
+  assert.match(brief, /Choose at least one project priority/);
+  assert.match(brief, /propertyRelationship,/);
+  assert.match(brief, /projectPriorities,/);
+  assert.match(brief, /className="direct-trade-review"/);
+  assert.match(brief, /Project brief summary/);
+  assert.match(brief, /Planning before authority is confirmed/);
+  assert.match(leadValidation, /PROPERTY_RELATIONSHIPS/);
+  assert.match(leadValidation, /PROJECT_PRIORITIES/);
+});

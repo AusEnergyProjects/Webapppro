@@ -93,6 +93,8 @@ test('direct trade project briefs retain only allowlisted project fields', async
   payload.state = 'Vic';
   payload.projectCategories = ['solar', 'battery', 'not-a-service'];
   payload.propertyType = 'house';
+  payload.propertyRelationship = 'owner-occupier';
+  payload.projectPriorities = ['lower-running-costs', 'improve-comfort', 'not-allowed'];
   payload.projectStage = 'assessment-ready';
   payload.timeframe = 'one-three-months';
   payload.preferredContact = 'email';
@@ -102,6 +104,8 @@ test('direct trade project briefs retain only allowlisted project fields', async
   assert.deepEqual(result.value.projectCategories, ['solar', 'battery']);
   assert.equal(result.value.state, 'Vic');
   assert.equal(result.value.propertyType, 'house');
+  assert.equal(result.value.propertyRelationship, 'owner-occupier');
+  assert.deepEqual(result.value.projectPriorities, ['lower-running-costs', 'improve-comfort']);
   assert.equal(result.value.projectNotes, 'Interested in a staged upgrade.');
 });
 
@@ -131,6 +135,24 @@ test('direct trade project briefs reject a known postcode and state mismatch', a
   const result = validateLeadPayload(payload);
   assert.equal(result.ok, false);
   assert.match(result.error, /usually in Victoria/i);
+});
+
+test('direct trade project briefs require a property role and matching priority', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-project';
+  payload.state = 'VIC';
+  payload.projectCategories = ['heating-cooling'];
+  payload.propertyType = 'house';
+  payload.propertyRelationship = 'owner-occupier';
+  payload.projectPriorities = ['not-allowed'];
+  payload.projectStage = 'researching';
+  payload.timeframe = 'later';
+  payload.preferredContact = 'phone';
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /project priority/i);
 });
 
 test('direct trade partner enquiries retain allowlisted participation fields', async () => {
