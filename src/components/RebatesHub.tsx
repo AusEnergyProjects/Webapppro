@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SiteHeader } from "./ComparatorChrome";
+import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 
 type Program = { title: string; locations: string[]; categories: string; administrator: string; caveat: string; href: string };
 
@@ -50,6 +50,6 @@ export function RebatesHub() {
     <section className="guide-section" aria-labelledby="local-title"><div className="guide-section-heading"><span>Step 3</span><h2 id="local-title">State, territory and provider support</h2></div>{location ? <><p className="rebate-intro">Showing support identified for {selectedName}. The official page is the confirmation link for each item.</p><div className="rebate-card-grid">{visibleLocal.map((program) => <ProgramCard key={program.title} program={program} />)}</div><div className="guide-note"><strong>Nothing here is a national promise.</strong><p>Some local support is a concession, loan, provider discount or bill assistance rather than an equipment rebate. Ask the administering body whether it can be combined with a federal certificate or another offer.</p></div></> : <div className="rebate-empty">Choose a state or territory above to see location-specific support.</div>}</section>
 
     <section className="guide-callout"><div><h2>Before you accept a rebate claim</h2><p>Ask for the program name, official administrator, as-at date, eligible product model, installer status, certificate or discount calculation, and every condition that could change the quoted price.</p></div><a href="/guides">Read the upgrade guides</a></section>
-    <footer><p>Rebates and assistance are indicative starting points. Confirm current eligibility, funding, product rules, installer requirements and final pricing with the official administrator before committing.</p><p>Provided by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | Independent energy assessments | 1300 241 149</p></footer>
+    <SiteFooter>Rebates and assistance are indicative starting points. Confirm current eligibility, funding, product rules, installer requirements and final pricing with the official administrator before committing.</SiteFooter>
   </main>;
 }

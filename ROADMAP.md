@@ -4,7 +4,7 @@
 
 - Next.js app lives in C:\Webproject\aea-energy.
 - /compare is the native typed electricity comparator. The compatibility implementation remains available at the noindex `/compare/electricity-legacy` rollback route.
-- /compare/gas is the new native Next gas page with a server-side gas-plan endpoint.
+- /gas-compare is the native Next gas page with a server-side gas-plan endpoint. `/compare/gas` remains a compatibility entry point.
 - The Electricity compare and Gas compare tabs now link the two tools.
 
 ## Phase 1: protect the working comparator
@@ -55,14 +55,14 @@ Progress as at 14 July 2026:
 
 ## Phase 4: expand the site
 
-- Add guides, rebates, case studies, solar, batteries, heating, hot water and getting-started pages.
+- Add guides, rebates, case studies, solar, batteries, heating, hot water and a Direct Trade Services entry journey.
 - Continue monitoring consented saved comparisons and lead follow-up after production release.
 - Deploy only after local build, desktop and mobile checks pass.
 
 Progress as at 14 July 2026:
 
-- The root route now provides a Getting Started journey instead of sending every visitor directly into electricity comparison.
-- Shared navigation connects the start, electricity and gas journeys, while the guide explains what evidence to prepare, the difference between electricity and mains gas inputs, privacy boundaries and what to confirm before switching.
+- The root route now presents Direct Trade Services as the main proposition instead of sending every visitor directly into electricity comparison. The previous `/getting-started` route remains as a compatibility entry point.
+- Shared navigation connects Direct Trade Services, electricity and gas journeys, while the entry page explains what evidence to prepare, the difference between electricity and mains gas inputs, privacy boundaries and what to confirm before switching.
 - A dedicated guides area now covers rooftop solar and home batteries. It explains household energy flow, sizing evidence, written quote requirements, installer and product checks, backup and VPP questions, and the federal battery support structure current at 14 July 2026.
 - Solar and battery guides link directly into the existing half-hour scenario model so educational guidance and household calculations use the same evidence-led journey.
 - Heating and hot water guides now cover building-load reduction, climate-zone performance, system sizing, noise, tariffs, written quote evidence and location-specific support checks. The hot water guide links certificate claims to the current Clean Energy Regulator model register.
@@ -71,3 +71,5 @@ Progress as at 14 July 2026:
 - An insulation and draught-proofing guide now covers building-fabric diagnosis, R values, thermal bridges, moisture, deliberate ventilation, electrical and combustion-appliance safety, windows, quote scope and the need to reassess heating and cooling size after reducing the load.
 - The shared visual foundation now uses a unified responsive header, contemporary typography, refined spacing, stronger hierarchy, consistent focus states, quieter page surfaces and polished cards, forms, buttons and hero treatments across the comparison and guidance journeys.
 - The site-wide visual system now uses one maximum content width, shared spacing, radius, surface, shadow and action tokens, and a consistent navy, teal, emerald and restrained gold palette. The Getting Started hero includes original AEA-specific energy artwork, while desktop and mobile page shells use the same responsive geometry.
+- The Direct Trade Services proposition now explains the intended path from independent assessment to verified licensed installers, itemised quotes and visible rebate assumptions. It discloses the planned installer subscription model and makes clear that installer matching, subscriptions and applications are still in development.
+- Future Direct Trade Specialist membership is explicitly separated from government accreditation, trade licensing and scheme-specific installer approvals. Customer-facing pages now share one `Powered by Australian Energy Assessments` footer component so later brand changes remain consistent across the site.

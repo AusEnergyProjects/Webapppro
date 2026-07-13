@@ -1,4 +1,4 @@
-import { SiteHeader } from "./ComparatorChrome";
+import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import type { ReactNode } from "react";
 
 export function GuideShell({ label, title, introduction, children }: { label: string; title: string; introduction: string; children: ReactNode }) {
@@ -6,7 +6,7 @@ export function GuideShell({ label, title, introduction, children }: { label: st
     <SiteHeader active="guides" />
     <header className="guide-hero"><span>{label}</span><h1>{title}</h1><p>{introduction}</p></header>
     {children}
-    <footer><p>Guidance is general and estimates are indicative. Obtain site-specific advice and confirm products, eligibility, incentives, warranties and network requirements before committing.</p><p>Provided by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | Independent energy assessments | 1300 241 149</p></footer>
+    <SiteFooter>Guidance is general and estimates are indicative. Obtain site-specific advice and confirm products, eligibility, incentives, warranties and network requirements before committing.</SiteFooter>
   </main>;
 }
 

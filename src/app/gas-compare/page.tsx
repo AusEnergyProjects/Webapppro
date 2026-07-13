@@ -1,4 +1,4 @@
-import { ComparatorHero, SiteHeader } from "@/components/ComparatorChrome";
+import { ComparatorHero, SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { GasComparator } from "@/components/GasComparator";
 
 export const metadata = {
@@ -15,10 +15,7 @@ export default function GasComparisonPage() {
         <div className="fresh"><span className="dot" /> Current CDR gas plan records, retrieved for each comparison</div>
       </ComparatorHero>
       <GasComparator />
-      <footer>
-        <p>Estimates are indicative only, are not financial advice and use the tariff data retailers publish under the Consumer Data Right. Always confirm rates, eligibility and conditions with the retailer before switching.</p>
-        <p>Provided by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | Independent energy assessments | 1300 241 149</p>
-      </footer>
+      <SiteFooter>Estimates are indicative only, are not financial advice and use the tariff data retailers publish under the Consumer Data Right. Always confirm rates, eligibility and conditions with the retailer before switching.</SiteFooter>
     </main>
   );
 }

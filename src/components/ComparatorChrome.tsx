@@ -18,7 +18,7 @@ export function BrandBar() {
 
 export function SiteNav({ active }: { active: "start" | "electricity" | "gas" | "guides" | "rebates" | "case-studies" }) {
   const links = [
-    { key: "start", href: "/getting-started", label: "Start here" },
+    { key: "start", href: "/", label: "Direct Trade Services" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "guides", href: "/guides", label: "Guides" },
@@ -30,6 +30,10 @@ export function SiteNav({ active }: { active: "start" | "electricity" | "gas" | 
 
 export function SiteHeader({ active }: { active: "start" | "electricity" | "gas" | "guides" | "rebates" | "case-studies" }) {
   return <header className="site-header"><BrandBar /><SiteNav active={active} /></header>;
+}
+
+export function SiteFooter({ children }: { children: ReactNode }) {
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | Independent energy assessments | 1300 241 149</p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {

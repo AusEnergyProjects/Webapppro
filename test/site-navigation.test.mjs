@@ -14,20 +14,23 @@ const gas = read("../src/app/gas-compare/page.tsx");
 const styles = read("../src/app/globals.css");
 const rebates = read("../src/components/RebatesHub.tsx");
 const rebatesRoute = read("../src/app/rebates/page.tsx");
+const guideShell = read("../src/components/GuideShell.tsx");
+const caseStudies = read("../src/app/case-studies/page.tsx");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.png");
 
-test("the homepage provides a getting-started journey instead of redirecting", () => {
+test("the homepage provides a direct trade journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
   assert.doesNotMatch(home, /redirect\(/);
-  assert.match(guide, /Make a confident energy decision/);
+  assert.match(guide, /Go direct to the licensed trades who do the work/);
+  assert.match(guide, /Direct Trade Services/);
   assert.match(guide, /Bring a recent bill/);
   assert.match(guide, /Confirm before switching/);
 });
 
-test("shared navigation connects the start, electricity and gas journeys", () => {
+test("shared navigation connects Direct Trade Services, electricity and gas journeys", () => {
   assert.match(chrome, /export function SiteHeader/);
   assert.match(chrome, /className="site-header"/);
-  assert.match(chrome, /href: "\/getting-started"/);
+  assert.match(chrome, /href: "\/", label: "Direct Trade Services"/);
   assert.match(chrome, /href: "\/compare"/);
   assert.match(chrome, /href: "\/gas-compare"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
@@ -35,6 +38,34 @@ test("shared navigation connects the start, electricity and gas journeys", () =>
   assert.match(chrome, /href: "\/rebates"/);
   assert.match(rebatesRoute, /RebatesHub/);
   assert.match(rebates, /SiteHeader active="rebates"/);
+});
+
+test("direct trade proposition separates the live service from the planned installer model", () => {
+  assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
+  assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
+  assert.match(guide, /planned revenue model is a subscription paid by participating installers/);
+  assert.match(guide, /not a margin added to household equipment/);
+  assert.match(guide, /Direct Trade installer matching, installer subscriptions and applications are in development/);
+  assert.match(guide, /Installer applications are not open yet/);
+});
+
+test("installer membership does not imply government accreditation", () => {
+  assert.match(guide, /verified membership in the Australian Energy Assessments program/);
+  assert.match(guide, /will not replace a trade licence, government accreditation or scheme-specific installer approval/);
+  assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
+  assert.doesNotMatch(guide, /\u2013|\u2014/);
+});
+
+test("customer-facing pages use the shared powered-by footer", () => {
+  assert.match(chrome, /export function SiteFooter/);
+  assert.match(chrome, /Powered by/);
+  assert.match(guide, /<SiteFooter>/);
+  assert.match(electricity, /<SiteFooter>/);
+  assert.match(gas, /<SiteFooter>/);
+  assert.match(rebates, /<SiteFooter>/);
+  assert.match(guideShell, /<SiteFooter>/);
+  assert.match(caseStudies, /<SiteFooter>/);
+  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}`, /Provided by/);
 });
 
 test("shared visual foundation uses the polished responsive system", () => {
