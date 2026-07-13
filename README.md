@@ -16,6 +16,23 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Comparison routes
+
+- `/compare` is the primary typed electricity comparer.
+- `/compare/electricity-next` is a noindex native regression route.
+- `/compare/electricity-legacy` preserves the compatibility implementation as a noindex rollback path.
+- `/gas-compare` is the gas comparer.
+
+## Local enquiry delivery
+
+The comparer submits result emails and upgrade enquiries to the same-origin `/api/leads` route. Configure the downstream processor in an ignored `.env.local` file:
+
+```text
+AEA_LEAD_WEBHOOK_URL=https://your-private-lead-processor.example/endpoint
+```
+
+Do not expose this value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a best-effort local rate limit, and only reports success after the downstream processor returns a successful response. A production launch should replace the in-memory rate limit with a durable shared limiter.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

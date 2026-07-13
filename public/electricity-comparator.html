@@ -38,6 +38,7 @@
   label.f span.opt{font-weight:400; color:var(--muted);}
   input[type=text],input[type=number],input[type=email],input[type=tel],select{width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:.95rem; background:#fff; color:var(--text); font-family:inherit;}
   input:focus,select:focus{outline:2px solid var(--amber); border-color:var(--amber);}
+  input[readonly],select:disabled{background:#edf4ef; color:#53685c; cursor:not-allowed;}
   .hint{font-size:.75rem; color:var(--muted); margin-top:3px;}
   .btn{display:inline-flex; align-items:center; gap:8px; background:var(--amber); color:#fff; border:none; border-radius:10px; padding:12px 26px; font-size:1rem; font-weight:900; font-family:'Lato',sans-serif; cursor:pointer; box-shadow:0 3px 10px rgba(23,163,93,.3); transition:background .15s, transform .1s;}
   .btn:hover{background:var(--amber-dark); transform:translateY(-1px);}
@@ -66,6 +67,11 @@
   .pmsg{font-size:.8rem; color:var(--muted); margin-top:6px;}
   #results{display:none;}
   .rsummary{display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px;}
+  .dataquality{display:none; margin-bottom:14px; padding:12px 15px; border-radius:10px; border:1px solid var(--line); background:#eef7f1; font-size:.8rem; color:var(--text);}
+  .dataquality.show{display:block;}
+  .dataquality.warn{background:#fff8e9; border-color:#f0dca6; color:#6d5200;}
+  .dataquality b{color:var(--ink);}
+  .dataquality .dqmeta{margin-top:4px; color:inherit;}
   .stat{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--amber); border-radius:10px; padding:12px 18px; flex:1 1 150px;}
   .stat .v{font-size:1.3rem; font-weight:900; color:var(--ink); font-family:'Lato',sans-serif;}
   .stat .l{font-size:.75rem; color:var(--muted);}
@@ -92,6 +98,13 @@
   .upload .ustat.ok{color:var(--good); font-weight:700;}
   .upload .ustat.err{color:var(--red);}
   .upload input[type=file]{margin-top:8px; font-size:.85rem;}
+  .registerpanel{display:none; margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#f8fbf9;}
+  .registerpanel.show{display:block;}
+  .registerrow{display:grid; grid-template-columns:minmax(160px,1fr) minmax(170px,240px); gap:10px; align-items:center; padding:9px 0; border-top:1px solid var(--line);}
+  .registerrow:first-of-type{border-top:0;}
+  .registermeta{font-size:.78rem; color:var(--muted);}
+  .registermeta b{display:block; font-size:.86rem; color:var(--ink);}
+  @media(max-width:620px){.registerrow{grid-template-columns:1fr;}}
   .upload.hero{border-color:var(--amber); background:var(--amber-soft);}
   .upload .uphead{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
   .upload .rec{font-size:.66rem; font-weight:900; text-transform:uppercase; letter-spacing:.03em; background:var(--amber); color:#fff; padding:2px 8px; border-radius:10px;}
@@ -124,8 +137,23 @@
   .nemviz .toubar{display:flex; height:22px; border-radius:6px; overflow:hidden; margin-top:14px; border:1px solid var(--line);}
   .nemviz .toubar > div{display:flex; align-items:center; justify-content:center; font-size:.66rem; font-weight:800; color:#fff; white-space:nowrap; min-width:0;}
   .nemviz .toulegend{font-size:.71rem; color:var(--muted); margin-top:7px;}
+  .nemviz .datawarnings{margin-top:12px; padding:10px 12px; border-radius:9px; background:#fff8e9; border:1px solid #f0dca6; color:#7a5a00; font-size:.74rem;}
+  .nemviz .datawarnings ul{margin:5px 0 0 18px;}
+  .nemviz .datawarnings li{margin-top:3px;}
   .ordiv{display:flex; align-items:center; gap:12px; text-align:center; font-size:.76rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:16px 0 12px;}
   .ordiv::before,.ordiv::after{content:""; flex:1; height:1px; background:var(--line);}
+  .metersource{display:none; margin-top:14px; padding:12px 14px; border:1px solid #b9dcc8; border-radius:10px; background:#fff;}
+  .metersource.show{display:block;}
+  .metersource .mstitle{font-size:.85rem; font-weight:900; color:var(--ink);}
+  .metersource .msdetail{font-size:.76rem; color:var(--muted); margin-top:3px;}
+  .metersource .msactions{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .metersource .msactions .btn{padding:7px 12px; font-size:.78rem;}
+  .overridepanel{display:none; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
+  .overridepanel.show{display:block;}
+  .overridepanel .grid{margin-bottom:9px;}
+  .overridepanel .overrideerr{display:none; color:var(--red); font-size:.76rem; margin-top:7px;}
+  .overridepanel .overrideerr.show{display:block;}
+  .overrideflag{font-size:.76rem; color:#7a5a00; margin-top:8px;}
   .emailbox{background:var(--amber-soft); border:1px solid #c4e6d2; border-radius:14px; padding:18px 22px; margin:16px 0;}
   .emailbox h3{color:var(--ink); font-size:1rem; margin-bottom:6px;}
   .emailbox p{font-size:.82rem; color:var(--muted); margin-bottom:10px;}
@@ -143,6 +171,24 @@
   .modal ul{margin:10px 0 12px 18px;} .modal li{margin-bottom:7px;}
   .modal .mclose{margin-top:14px; background:var(--amber); color:#fff; border:none; border-radius:9px; padding:9px 20px; font-weight:800; cursor:pointer;}
   .modal .mclose:hover{background:var(--amber-dark);}
+  .auditmodal{max-width:940px;}
+  .audithead{display:flex; justify-content:space-between; gap:14px; align-items:flex-start; margin-bottom:14px;}
+  .audithead .auditprice{font-size:1.35rem; font-weight:900; color:var(--ink); white-space:nowrap;}
+  .auditsection{margin-top:16px; padding-top:14px; border-top:1px solid var(--line);}
+  .auditsection h4{font-family:'Arvo',serif; color:var(--ink); font-size:.95rem; margin-bottom:7px;}
+  .auditsection .auditnote{font-size:.76rem; color:var(--muted); margin-bottom:8px;}
+  .audittablewrap{overflow-x:auto;}
+  .audittable{width:100%; border-collapse:collapse; font-size:.76rem;}
+  .audittable th,.audittable td{padding:7px 8px; border-bottom:1px solid var(--line); text-align:right; vertical-align:top;}
+  .audittable th{background:#f3faf5; color:var(--ink); font-weight:900; white-space:nowrap;}
+  .audittable th:first-child,.audittable td:first-child{text-align:left;}
+  .auditgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px;}
+  .auditkv{background:#f8fbf9; border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:.75rem; color:var(--muted); overflow-wrap:anywhere;}
+  .auditkv b{display:block; color:var(--ink); font-size:.8rem; margin-bottom:2px;}
+  .auditok{color:var(--good); font-weight:900;}
+  .auditbad{color:var(--red); font-weight:900;}
+  .auditbtn{margin-top:8px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:.76rem; font-weight:900; cursor:pointer;}
+  .auditbtn:hover{border-color:var(--amber);}
   .steps3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:16px 0 18px;}
   .steps3 .s{background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
   .steps3 .s .stepn{background:var(--ink); color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:900; font-size:.8rem; font-family:'Lato',sans-serif; margin-bottom:8px;}
@@ -228,7 +274,7 @@
   <header class="hero">
     <h1>Electricity Plan Comparator</h1>
     <p>Enter your postcode or NMI, tell us about your usage, solar and battery, and we will identify your network distributor and rank the current retail market offers available at your address.</p>
-    <div class="fresh"><span class="dot"></span><span id="freshText">Live API data, refreshed daily</span></div>
+    <div class="fresh"><span class="dot"></span><span id="freshText">Published CDR tariff data, refreshed hourly</span></div>
   </header>
 
   <!-- STEP 1 -->
@@ -252,6 +298,13 @@
           <option value="BUSINESS">Small business</option>
         </select>
       </div>
+      <div id="dnspChoiceWrap" style="display:none;">
+        <label class="f" for="dnspChoice">Network distributor</label>
+        <select id="dnspChoice">
+          <option value="">Choose your distributor</option>
+        </select>
+        <div class="hint">Needed where a postcode overlaps more than one electricity network.</div>
+      </div>
     </div>
     <div id="dnspPanel">
       <div class="dnspbox" id="dnspBox"></div>
@@ -261,16 +314,17 @@
   <!-- STEP 2 -->
   <section class="card">
     <h2><span class="stepnum">2</span> Your electricity usage</h2>
-    <p class="sub">The most accurate way to compare is with your real meter data, exactly like the official government comparators. Upload it below, or enter the kWh figures from a recent bill.</p>
+    <p class="sub">The most accurate comparison uses the dates, seasons and interval pattern in your real meter data. Upload it below, or enter the kWh figures from a recent bill.</p>
     <div class="upload hero">
       <div class="uphead"><b>Fastest and most accurate: upload your meter data</b> <span class="rec">Recommended</span></div>
-      <div class="hint">We read your real half hourly usage and price every plan against it. The difference from Victorian Energy Compare: your file is read in your browser and never leaves your device.</div>
+      <div class="hint">We read 5, 15 or 30 minute NEM12 usage, quality flags and solar exports, then price each plan against its own published time windows. Your file is read in your browser and never leaves your device.</div>
       <div class="dropzone" id="dropzone">
         <div class="dzmain">Drop your usage file here, or choose a file</div>
-        <div class="dzsub">CSV in NEM12 format, up to 2 years of data</div>
+        <div class="dzsub">CSV in NEM12 format. A full 12 months gives the strongest result.</div>
         <input type="file" id="nemFile" accept=".csv,.txt">
       </div>
       <div class="ustat" id="nemStat"></div>
+      <div class="registerpanel" id="registerPanel" aria-live="polite"></div>
       <div class="nemviz" id="nemViz"></div>
       <details class="helpbox">
         <summary>How do I get my usage file?</summary>
@@ -315,7 +369,7 @@
     <div class="hint" style="margin-bottom:10px;">Enter what you actually import from the grid. If you have solar, this is your usage after solar self consumption.</div>
     <div class="grid c3">
       <div>
-        <label class="f">Grid usage</label>
+        <label class="f" id="usageLabel">Grid usage</label>
         <input type="number" id="usageKwh" min="1" placeholder="e.g. 1100">
       </div>
       <div>
@@ -336,6 +390,33 @@
         <div class="hint">Used to estimate time of use tariff costs.</div>
       </div>
     </div>
+    <div class="metersource" id="meterUsageSource" aria-live="polite">
+      <div class="mstitle" id="meterUsageTitle">Annualised import from NMI data</div>
+      <div class="msdetail" id="meterUsageDetail"></div>
+      <div class="overrideflag" id="usageOverrideStatus"></div>
+      <div class="msactions">
+        <button class="btn ghost" type="button" id="usageOverrideBtn">Adjust annual total</button>
+        <button class="btn ghost" type="button" id="removeMeterBtn">Remove meter data and enter manually</button>
+      </div>
+      <div class="overridepanel" id="usageOverridePanel">
+        <div class="grid c3">
+          <div>
+            <label class="f" for="usageOverrideKwh">Adjusted annual grid usage</label>
+            <input type="number" id="usageOverrideKwh" min="1" step="1">
+          </div>
+          <div style="grid-column:span 2;">
+            <label class="f" for="usageOverrideReason">Reason for adjustment</label>
+            <input type="text" id="usageOverrideReason" maxlength="160" placeholder="For example, recent heating upgrade or incomplete period">
+          </div>
+        </div>
+        <div class="msactions">
+          <button class="btn" type="button" id="applyUsageOverride">Apply adjustment</button>
+          <button class="btn ghost" type="button" id="cancelUsageOverride">Cancel</button>
+          <button class="btn ghost" type="button" id="removeUsageOverride">Use the NMI annual figure</button>
+        </div>
+        <div class="overrideerr" id="usageOverrideError"></div>
+      </div>
+    </div>
   </section>
 
   <!-- STEP 3 -->
@@ -348,7 +429,13 @@
       <span class="pill" id="pillSolarBatt">Solar + battery</span>
     </div>
     <label class="toggle" style="margin-bottom:6px;"><input type="checkbox" id="hasEv"> I have an electric vehicle</label>
-    <div class="hint" style="margin-bottom:14px;">Plans that require equipment you do not have (battery, EV, solar) are automatically excluded from your results.</div>
+    <label class="toggle" style="margin-bottom:6px;"><input type="checkbox" id="hasControlledLoad"> I have a controlled load, such as separately metered off peak hot water</label>
+    <div id="controlledUsageWrap" style="display:none; max-width:360px; margin:8px 0 12px;">
+      <label class="f" for="controlledKwh">Controlled load usage (kWh per year)</label>
+      <input type="number" id="controlledKwh" min="0" step="1" placeholder="From your bill or meter data">
+      <div class="hint" id="controlledKwhHint">Enter only the separately metered controlled-load usage. It will be priced at each plan's published controlled-load rate.</div>
+    </div>
+    <div class="hint" style="margin-bottom:14px;">Plans that require equipment you do not have, including a battery, EV, solar or controlled load, are automatically excluded from your results.</div>
     <div class="grid c3" id="solarFields" style="display:none;">
       <div>
         <label class="f">Solar system size (kW)</label>
@@ -379,6 +466,7 @@
   <!-- RESULTS -->
   <section id="results" style="margin-top:22px;">
     <div class="rsummary" id="rsummary"></div>
+    <div class="dataquality" id="resultDataQuality"></div>
 
     <div id="battPanel"></div>
     <div id="solarPanel"></div>
@@ -387,6 +475,7 @@
       <h3>Email me my top 3 plans</h3>
       <p>We will send your top 3 right away, then a fresh comparison reminder every 6 months so you always know you are on the right plan. Unsubscribe anytime with one click.</p>
       <label class="upgchk"><input type="checkbox" id="leadUpgrades"> I'm considering upgrades for my home (solar, battery, hot water, heating and cooling, induction cooktop, insulation, draught proofing). Tick and our team will be in touch about an independent assessment and direct-to-trade options.</label>
+      <label class="upgchk"><input type="checkbox" id="leadConsent"> I agree that Australian Energy Assessments may use my details to send these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label>
       <div class="emailrow">
         <input type="text" id="leadName" placeholder="Name" aria-label="Name" required>
         <input type="email" id="leadEmail" placeholder="Email address" aria-label="Email address" required>
@@ -407,7 +496,7 @@
         <p><b>Single rate:</b> one price per kWh no matter what time you use power. Simple and predictable.</p>
         <p><b>Time of use:</b> the price changes with the time of day. <b>Peak</b> is the most expensive window, usually weekday afternoons and evenings when demand is highest. <b>Off peak</b> is the cheapest, usually overnight. <b>Shoulder</b> sits in between, covering the remaining hours. We show the time window next to each rate so you can see exactly when it applies. Some retailers label most of their windows "shoulder", so always check the times shown.</p>
         <p><b>Feed in (c/kWh):</b> the credit you receive for each kWh your solar exports to the grid.</p>
-        <p><b>Demand tariff:</b> an extra charge based on your single highest usage spike in a period. These plans suit some households but are hard to predict, so we flag them rather than estimate them.</p>
+        <p><b>Demand tariff:</b> an extra charge based on measured usage spikes. We calculate supported demand plans only when a near-complete year of high-quality interval data is available.</p>
         <p>All rates shown include GST, the way they appear on your bill.</p>
       </div>
     </details>
@@ -415,7 +504,7 @@
     <div class="filters">
       <label class="toggle"><input type="checkbox" id="fTou" checked> Time of use plans</label>
       <label class="toggle"><input type="checkbox" id="fFlat" checked> Single rate plans</label>
-      <label class="toggle"><input type="checkbox" id="fDemand"> Include demand tariff plans</label>
+      <label class="toggle" id="fDemandLabel"><input type="checkbox" id="fDemand"> Include demand tariff plans calculated from meter peaks</label>
       <label class="toggle"><input type="checkbox" id="fCond"> Assume conditional discounts are met</label>
       <input type="text" id="fSearch" placeholder="Filter by retailer or plan name" style="max-width:240px;">
     </div>
@@ -436,7 +525,7 @@
     <p><b>Your data.</b> Your name, email and, if you provide it, phone number are used by Australian Energy Assessments to send your top 3 plan results and a comparison reminder every 6 months. If you tick that you are considering upgrades, we also use them to contact you about an assessment and the options below.</p>
     <ul>
       <li>Your details are stored securely in our systems.</li>
-      <li>We never sell, rent or pass your information to third parties.</li>
+      <li>We do not sell or rent your information. Service providers may process it only to deliver and operate the service under our instructions.</li>
       <li>Every reminder email has a one click unsubscribe, and you can ask us to delete your details at any time.</li>
       <li>If you upload a meter data file, it is read in your browser only and is never sent to us.</li>
     </ul>
@@ -452,6 +541,13 @@
   </div>
 </div>
 
+<div class="modal-ov" id="auditModal">
+  <div class="modal auditmodal" role="dialog" aria-modal="true" aria-labelledby="auditTitle">
+    <div id="auditBody"></div>
+    <button class="mclose" id="auditClose">Close audit</button>
+  </div>
+</div>
+
 <div class="modal-ov" id="enquiryModal">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="enqTitle">
     <h3 id="enqTitle">Enquire about direct solar</h3>
@@ -461,6 +557,7 @@
       <input type="email" id="enqEmail" placeholder="Email address" aria-label="Email address">
       <input type="tel" id="enqPhone" placeholder="Phone number" aria-label="Phone number">
     </div>
+    <label class="upgchk"><input type="checkbox" id="enqConsent"> I agree that Australian Energy Assessments may use my details to respond to this upgrade enquiry.</label>
     <input type="text" id="enqWebsite" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="Leave this blank">
     <div class="estat" id="enqStat"></div>
     <div class="enqbtns">
@@ -471,6 +568,7 @@
   </div>
 </div>
 
+<script src="electricity-model.js"></script>
 <script>
 /* ============================================================
    Australian Electricity Plan Comparator
@@ -601,18 +699,24 @@ function stateFromPostcode(pc){
 // Annual solar yield per kW installed, rough state averages (kWh/kW/year)
 const SOLAR_YIELD = {VIC:1250, NSW:1400, QLD:1500, SA:1450, TAS:1150, ACT:1400, WA:1500, NT:1600};
 
-const FEED_URL = 'https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json';
-const CACHE_TTL = 24*60*60*1000; // refresh data every 24 hours
+const PLAN_API = '/api/electricity-plans';
+const CACHE_TTL = 60*60*1000; // refresh tariff data every hour
 const GST = 1.1;
 
-// SITE OWNER SETUP: paste your Google Apps Script web app URL here to
-// enable the email feature (see the setup guide provided with this file).
-// Leave empty to hide the email panel.
-const EMAIL_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308/exec';
+const LEAD_API = '/api/leads';
+const LEAD_NOTICE_VERSION = '2026-07-13';
 
 /* ---------- Small helpers ---------- */
 const $ = id => document.getElementById(id);
 const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const maskNmi = value => {
+  const s = String(value||'');
+  return s.length>4 ? s.slice(0,2)+'••••'+s.slice(-2) : s;
+};
+function fmtNemDate(value){
+  const s=String(value||'');
+  return /^\d{8}$/.test(s) ? s.slice(6,8)+'/'+s.slice(4,6)+'/'+s.slice(0,4) : s;
+}
 
 function cacheGet(key){
   try{
@@ -646,43 +750,13 @@ function recordCompare(){
   try{ const t = comparesRecent(); t.push(Date.now()); localStorage.setItem('aeaCompareTimes', JSON.stringify(t)); }catch(e){}
 }
 function showNotice(msg){ const n=$('compareNote'); if(!n) return; n.textContent=msg; n.style.display='block'; }
+function appendNotice(msg){ const n=$('compareNote'); if(!n) return; n.textContent=(n.style.display==='block'&&n.textContent?n.textContent+' ':'')+msg; n.style.display='block'; }
 function clearNotice(){ const n=$('compareNote'); if(n) n.style.display='none'; }
 
-async function fetchJson(url, xv){
-  const r = await fetch(url, {headers: xv ? {'x-v': String(xv)} : {}});
+async function fetchJson(url){
+  const r = await fetch(url);
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
-}
-
-// Run tasks with limited concurrency
-async function pool(items, limit, fn, onEach){
-  const results = new Array(items.length);
-  let i = 0, done = 0;
-  async function worker(){
-    while(i < items.length){
-      const idx = i++;
-      try{ results[idx] = await fn(items[idx], idx); }
-      catch(e){ results[idx] = {__err: e.message}; }
-      done++;
-      if(onEach) onEach(done, items.length);
-    }
-  }
-  await Promise.all(Array.from({length: Math.min(limit, items.length)}, worker));
-  return results;
-}
-
-function postcodeMatches(pc, list){
-  if(!Array.isArray(list)) return false;
-  const n = +pc;
-  for(const item of list){
-    const s = String(item).trim();
-    if(s === pc) return true;
-    if(s.includes('-')){
-      const [a,b] = s.split('-').map(x=>+x.trim());
-      if(isFinite(a)&&isFinite(b)&&n>=a&&n<=b) return true;
-    }
-  }
-  return false;
 }
 
 /* ---------- Usage profile model ----------
@@ -750,74 +824,133 @@ function applyBattery(profile){
    300 = one day of interval values
    Suffix E* = consumption from grid, B* = solar export. */
 function parseNem12(text){
-  const lines = String(text).split(/\r?\n/);
-  let ch = null;           // current channel context
-  const res = {nmi:null, importKwh:0, exportKwh:0, importDays:new Set(), exportDays:new Set(),
-               eChannels:new Set(), profile:null, ok:false};
-  const grid = []; for(let d=0; d<7; d++) grid.push(new Array(48).fill(0));
-  const dowDays = []; for(let d=0; d<7; d++) dowDays.push(new Set());
-  const dailyImport = {};
-  let found200 = false, found300 = false;
+  return AeaInterval.parseNem12(text);
+}
 
-  for(const raw of lines){
-    const f = raw.split(',');
-    const rec = f[0];
-    if(rec==='200'){
-      found200 = true;
-      const suffix = String(f[4]||'').toUpperCase().trim();
-      const uom = String(f[7]||'KWH').toUpperCase().trim();
-      let ivl = parseInt(f[8],10); if(!(ivl>0)) ivl = 30;
-      const nmi = String(f[1]||'').trim();
-      if(!res.nmi && nmi) res.nmi = nmi;
-      ch = {
-        dir: suffix.startsWith('B') ? 'export' : (suffix.startsWith('E') ? 'import' : null),
-        scale: uom==='WH' ? 0.001 : (uom==='MWH' ? 1000 : 1),
-        ivl, suffix
-      };
-      if(ch.dir==='import') res.eChannels.add(suffix);
-    }
-    else if(rec==='300' && ch && ch.dir){
-      found300 = true;
-      const dateStr = String(f[1]||'').trim();
-      if(!/^\d{8}$/.test(dateStr)) continue;
-      const y=+dateStr.slice(0,4), m=+dateStr.slice(4,6), d=+dateStr.slice(6,8);
-      const dow = (new Date(y, m-1, d).getDay()+6)%7; // 0=Mon..6=Sun
-      const n = Math.round(1440/ch.ivl);
-      let dayTotal = 0;
-      for(let i=0; i<n; i++){
-        const v = parseFloat(f[2+i]);
-        if(!isFinite(v)) continue;
-        const kwh = v*ch.scale;
-        dayTotal += kwh;
-        if(ch.dir==='import'){
-          const bin = Math.min(47, Math.floor(i*ch.ivl/30));
-          grid[dow][bin] += kwh;
-        }
-      }
-      if(ch.dir==='import'){ res.importKwh += dayTotal; res.importDays.add(dateStr); dowDays[dow].add(dateStr); dailyImport[dateStr] = (dailyImport[dateStr]||0) + dayTotal; }
-      else { res.exportKwh += dayTotal; res.exportDays.add(dateStr); }
-    }
+function meterUsageDetail(r){
+  if(!r) return '';
+  const quality = Math.round((r.actualPct||0)*100)+'% of intervals marked actual';
+  if(r.fullYear){
+    return 'Measured across '+r.spanDays+' days with '+Math.round((r.coverageRatio||0)*100)+'% calendar coverage and '+quality+'. The interval pattern and seasonal usage are used directly for pricing.';
   }
+  return 'Extrapolated from '+r.spanDays+' observed days to an annual figure, with '+quality+'. The measured interval pattern is used for pricing, but seasonal uncertainty remains.';
+}
 
-  if(!found200 || !found300) return {ok:false, err:'This does not look like a NEM12 interval data file. Ask your retailer or distributor portal for your "interval data" or "detailed meter data" CSV download.'};
-  const days = res.importDays.size;
-  if(days < 7) return {ok:false, err:'The file covers less than a week of data ('+days+' days). Please download at least a few weeks, ideally 12 months, for a reliable comparison.'};
-
-  res.spanDays = days;
-  const sortedDates = Object.keys(dailyImport).sort();
-  res.fullYear = days >= 330;                    // enough to cover a seasonal cycle
-  if(days >= 365){
-    let sum = 0; for(let i=days-365; i<days; i++) sum += dailyImport[sortedDates[i]];
-    res.annualImport = sum;                      // exact most recent 12 months
-  } else {
-    res.annualImport = res.importKwh/days*365;   // extrapolated from a shorter span
+function markComparisonNeedsRun(message){
+  if($('results').style.display==='block'){
+    $('results').style.display='none';
+    showNotice(message||'Your usage inputs changed. Run the comparison again to refresh every plan.');
   }
-  res.annualExport = res.exportDays.size>0 ? res.exportKwh/res.exportDays.size*365 : 0;
-  res.profile = grid; // real weekly shape; magnitudes normalise in touFraction
-  res.grid = grid;
-  res.dowCount = dowDays.map(function(x){ return x.size; });
-  res.ok = true;
-  return res;
+}
+
+function refreshMeterUsageUi(){
+  const r = S.upload;
+  if(!r) return;
+  const adjusted = r.userAnnualOverride;
+  $('usageKwh').value = Math.round(adjusted ? adjusted.value : r.annualImport);
+  if(r.registerAllocation&&r.registerAllocation.annualControlledKwh>0){
+    const allocationTotal=r.registerAllocation.annualGeneralKwh+r.registerAllocation.annualControlledKwh;
+    const shownTotal=adjusted?adjusted.value:r.annualImport;
+    $('controlledKwh').value=Math.round(r.registerAllocation.annualControlledKwh*(allocationTotal>0?shownTotal/allocationTotal:1));
+  }
+  $('usageLabel').textContent = 'Annualised import from NMI data';
+  $('meterUsageTitle').textContent = r.fullYear ? 'Measured annual usage from NMI data' : 'Annualised import from NMI data';
+  $('meterUsageDetail').textContent = meterUsageDetail(r);
+  $('usageOverrideStatus').textContent = adjusted
+    ? 'User adjustment active: '+Math.round(r.annualImport).toLocaleString()+' kWh changed to '+Math.round(adjusted.value).toLocaleString()+' kWh. Reason: '+adjusted.reason+'. The NMI interval shape is unchanged.'
+    : '';
+  $('usageOverrideBtn').textContent = adjusted ? 'Change annual adjustment' : 'Adjust annual total';
+  $('removeUsageOverride').style.display = adjusted ? 'inline-flex' : 'none';
+}
+
+function setControlledLoadUi(){
+  const active=$('hasControlledLoad').checked;
+  $('controlledUsageWrap').style.display=active?'block':'none';
+  const allocated=S.upload&&S.upload.registerAllocation;
+  $('controlledKwh').readOnly=Boolean(allocated&&allocated.annualControlledKwh>0);
+  $('controlledKwhHint').textContent=allocated&&allocated.annualControlledKwh>0
+    ? 'Calculated from the meter register you assigned as controlled load. Annual adjustments preserve the measured general and controlled-load proportions.'
+    : 'Enter only the separately metered controlled-load usage. It will be priced at each plan\'s published controlled-load rate.';
+}
+
+function applyRegisterAllocation(){
+  const r=S.upload;
+  if(!r||!Array.isArray(r.registers)) return false;
+  const roles={};
+  r.registers.forEach(register=>{
+    const select=document.querySelector('[data-register-role="'+register.id+'"]');
+    roles[register.id]=select?select.value:(r.registerRoles&&r.registerRoles[register.id]);
+  });
+  const allocation=AeaInterval.allocateRegisters(r.registers, roles);
+  r.registerRoles=roles;
+  r.registerAllocation=allocation.ok?allocation:null;
+  if(!allocation.ok) return false;
+  r.profile=allocation.generalProfile;
+  const aggregateByDate=new Map((r.series||[]).map(day=>[day.date,day]));
+  r.pricingSeries=allocation.series.map(day=>({
+    date:day.date, dow:day.dow, stamp:day.stamp, import:day.general,
+    export:(aggregateByDate.get(day.date)&&aggregateByDate.get(day.date).export)||new Array(48).fill(0),
+    general:day.general, controlled:day.controlled
+  }));
+  $('hasControlledLoad').checked=allocation.annualControlledKwh>0;
+  $('controlledKwh').value=allocation.annualControlledKwh>0?Math.round(allocation.annualControlledKwh):'';
+  setControlledLoadUi();
+  return true;
+}
+
+function renderRegisterPanel(r){
+  const panel=$('registerPanel');
+  if(!r||!Array.isArray(r.registers)||!r.registers.length){ panel.classList.remove('show'); panel.innerHTML=''; return; }
+  panel.classList.add('show');
+  panel.innerHTML='<b>Confirm what each consumption register supplies</b><div class="hint">Registers stay separate. We never assume that a second register is controlled load.</div>'
+    +r.registers.map(register=>{
+      const choice=(r.registerRoles&&r.registerRoles[register.id])||(r.registers.length===1?'general':'');
+      const suggestion=register.suggestedRole==='general'?' Suggested: general usage.':register.suggestedRole==='controlled'?' Suggested: controlled load.':'';
+      return '<div class="registerrow"><div class="registermeta"><b>Register '+esc(register.registerId||register.suffix||register.id)+'</b>'
+        +esc(register.suffix)+' | '+register.intervalMinutes+' minute data | about '+Math.round(register.annualKwh).toLocaleString()+' kWh/year.'+suggestion+'</div>'
+        +'<select data-register-role="'+esc(register.id)+'" aria-label="Role for register '+esc(register.registerId||register.id)+'">'
+        +'<option value=""'+(choice?'':' selected')+'>Choose register role</option>'
+        +'<option value="general"'+(choice==='general'?' selected':'')+'>General household usage</option>'
+        +'<option value="controlled"'+(choice==='controlled'?' selected':'')+'>Controlled load</option></select></div>';
+    }).join('')
+    +'<div class="hint" id="registerStatus"></div>';
+  panel.querySelectorAll('[data-register-role]').forEach(select=>select.addEventListener('change', ()=>{
+    const ok=applyRegisterAllocation();
+    $('registerStatus').textContent=ok?'Register roles confirmed. General usage and controlled load will be priced separately.':'Choose a role for every consumption register before comparing plans.';
+    markComparisonNeedsRun('Your meter register assignments changed. Run the comparison again to refresh every plan.');
+  }));
+  const ok=applyRegisterAllocation();
+  $('registerStatus').textContent=ok?'Register roles confirmed. General usage and controlled load will be priced separately.':'Choose a role for every consumption register before comparing plans.';
+}
+
+function activateMeterUsage(r){
+  $('usageKwh').readOnly = true;
+  $('usagePeriod').value = '1';
+  $('usagePeriod').disabled = true;
+  $('profile').disabled = true;
+  $('meterUsageSource').classList.add('show');
+  $('usageOverridePanel').classList.remove('show');
+  $('usageOverrideError').classList.remove('show');
+  refreshMeterUsageUi();
+  markComparisonNeedsRun('New meter data is ready. Run the comparison again to price every plan against it.');
+}
+
+function removeMeterUsage(){
+  const previous = S.upload;
+  S.upload = null;
+  $('usageKwh').readOnly = false;
+  $('usagePeriod').disabled = false;
+  $('profile').disabled = false;
+  $('usageLabel').textContent = 'Grid usage';
+  $('meterUsageSource').classList.remove('show');
+  $('usageOverridePanel').classList.remove('show');
+  $('nemFile').value = '';
+  $('registerPanel').classList.remove('show'); $('registerPanel').innerHTML='';
+  const vz=$('nemViz'); if(vz){ vz.classList.remove('show'); vz.innerHTML=''; }
+  if(previous&&previous.registerAllocation&&previous.registerAllocation.annualControlledKwh>0){ $('hasControlledLoad').checked=false; $('controlledKwh').value=''; setControlledLoadUi(); }
+  if(previous && previous.exportAutofilled && num($('exportKwh').value)===Math.round(previous.annualExport)) $('exportKwh').value='';
+  const stat=$('nemStat'); stat.className='ustat'; stat.textContent='Meter data removed. Enter usage manually from a bill, or upload another NEM12 file.';
+  markComparisonNeedsRun('Meter data was removed. Run the comparison again after entering your manual usage assumptions.');
 }
 
 function handleNemFile(file){
@@ -828,7 +961,14 @@ function handleNemFile(file){
   reader.onload = ()=>{
     try{
       const r = parseNem12(reader.result);
-      if(!r.ok){ S.upload = null; stat.className='ustat err'; stat.textContent = r.err; const vz=$('nemViz'); if(vz){ vz.classList.remove('show'); vz.innerHTML=''; } return; }
+      if(!r.ok){ stat.className='ustat err'; stat.textContent = r.err; if(!S.upload){ const vz=$('nemViz'); if(vz){ vz.classList.remove('show'); vz.innerHTML=''; } } return; }
+      // NEM12 rows are totals by weekday. Average each weekday first so
+      // a ten day file does not accidentally give repeated weekdays more
+      // influence than the others when projected over a normal year.
+      r.profile = AeaInterval.averageWeeklyProfile(r.grid, r.dowCount);
+      r.exportProfile = AeaInterval.averageWeeklyProfile(r.exportGrid, r.exportDowCount);
+      r.userAnnualOverride = null;
+      r.exportAutofilled = false;
       S.upload = r;
       // fill the form from real data
       $('usageKwh').value = Math.round(r.annualImport);
@@ -836,23 +976,64 @@ function handleNemFile(file){
       if(r.nmi && !$('nmi').value){ $('nmi').value = r.nmi.slice(0,11); $('nmi').dispatchEvent(new Event('input')); }
       if(r.annualExport > 100){
         $('exportKwh').value = Math.round(r.annualExport);
+        r.exportAutofilled = true;
         if(S.solarMode==='none') setSolarMode('solar');
       }
+      renderRegisterPanel(r);
+      activateMeterUsage(r);
       stat.className = 'ustat ok';
       stat.textContent = 'Loaded '+r.spanDays+' days of real meter data'
-        + (r.nmi ? ' for NMI '+r.nmi : '')
+        + (r.nmi ? ' for NMI '+maskNmi(r.nmi) : '')
         + ': '+Math.round(r.annualImport).toLocaleString()+' kWh/yr grid usage'
         + (r.annualExport>100 ? ', '+Math.round(r.annualExport).toLocaleString()+' kWh/yr solar export' : '')
-        + (r.eChannels.size>1 ? '. Note: multiple usage channels found, controlled load may be included.' : '')
-        + ' Your real usage pattern will be used for time of use pricing.';
+        + '. '+r.confidence.charAt(0).toUpperCase()+r.confidence.slice(1)+' confidence. Your real usage pattern will be used for time of use pricing.'
+        + (r.registers.length>1?' Confirm every register role below before comparing.':'');
       renderNemViz(r);
     }catch(e){
-      S.upload = null; stat.className='ustat err';
+      stat.className='ustat err';
       stat.textContent = 'Could not read this file: '+e.message;
     }
   };
   reader.readAsText(file);
 }
+
+$('usageOverrideBtn').addEventListener('click', ()=>{
+  if(!S.upload) return;
+  const adjusted=S.upload.userAnnualOverride;
+  $('usageOverrideKwh').value=Math.round(adjusted ? adjusted.value : S.upload.annualImport);
+  $('usageOverrideReason').value=adjusted ? adjusted.reason : '';
+  $('usageOverrideError').classList.remove('show');
+  $('usageOverridePanel').classList.add('show');
+  $('usageOverrideKwh').focus();
+});
+$('cancelUsageOverride').addEventListener('click', ()=>{
+  $('usageOverridePanel').classList.remove('show');
+  $('usageOverrideError').classList.remove('show');
+});
+$('applyUsageOverride').addEventListener('click', ()=>{
+  if(!S.upload) return;
+  const value=num($('usageOverrideKwh').value);
+  const reason=$('usageOverrideReason').value.trim();
+  const error=$('usageOverrideError');
+  if(value<=0 || reason.length<5){
+    error.textContent='Enter a positive annual kWh figure and a short reason for the adjustment.';
+    error.classList.add('show');
+    return;
+  }
+  S.upload.userAnnualOverride={value, reason, originalValue:S.upload.annualImport, changedAt:new Date().toISOString()};
+  $('usageOverridePanel').classList.remove('show');
+  error.classList.remove('show');
+  refreshMeterUsageUi();
+  markComparisonNeedsRun('The annual total was adjusted. Run the comparison again to refresh every plan using the adjusted total and original NMI interval shape.');
+});
+$('removeUsageOverride').addEventListener('click', ()=>{
+  if(!S.upload) return;
+  S.upload.userAnnualOverride=null;
+  $('usageOverridePanel').classList.remove('show');
+  refreshMeterUsageUi();
+  markComparisonNeedsRun('The annual adjustment was removed. Run the comparison again to use the NMI annual figure.');
+});
+$('removeMeterBtn').addEventListener('click', removeMeterUsage);
 
 function buildLoadCurveSvg(weekday, weekend, maxY){
   const W=700,H=240,L=46,R=14,T=16,B=30, pw=W-L-R, ph=H-T-B;
@@ -892,14 +1073,17 @@ function renderNemViz(r){
   const pct=function(v){ return tot>0?Math.round(v/tot*100):0; };
   const avgPerDay=r.importKwh/days, estimated=!r.fullYear;
   const svg=buildLoadCurveSvg(wd, weDays?we:null, maxY);
+  const confidenceLabel=r.confidence.charAt(0).toUpperCase()+r.confidence.slice(1);
+  const warnings=(r.warnings||[]).map(function(w){ return '<li>'+esc(w)+'</li>'; }).join('');
   el.innerHTML='<div class="vizcard">'
     +'<h4>Your actual usage, straight from your meter</h4>'
-    +'<div class="vsub">Read from '+days+' days of half hourly data'+(r.nmi?' for NMI '+esc(String(r.nmi)):'')+'. This is exactly what we price every plan against.</div>'
+    +'<div class="vsub">Read from '+days+' days of '+esc(r.intervalLengths.join(', '))+' minute data, '+fmtNemDate(r.startDate)+' to '+fmtNemDate(r.endDate)+(r.nmi?' for NMI '+esc(maskNmi(r.nmi)):'')+'. The observed interval shape is used directly in tariff calculations.</div>'
     +'<div class="vchips">'
-      +'<div class="vchip"><div class="v">'+Math.round(r.annualImport).toLocaleString()+'</div><div class="l">kWh per year'+(estimated?' (estimated)':'')+'</div></div>'
+      +'<div class="vchip"><div class="v">'+Math.round(r.annualImport).toLocaleString()+'</div><div class="l">kWh per year'+(estimated?' (extrapolated)':'')+'</div></div>'
       +'<div class="vchip"><div class="v">'+avgPerDay.toFixed(1)+'</div><div class="l">kWh on an average day</div></div>'
       +'<div class="vchip"><div class="v">'+clock(pk)+'</div><div class="l">your busiest time</div></div>'
       +'<div class="vchip"><div class="v">'+pct(off)+'%</div><div class="l">used overnight and weekends</div></div>'
+      +'<div class="vchip"><div class="v">'+confidenceLabel+'</div><div class="l">data confidence, '+Math.round((r.actualPct||0)*100)+'% actual intervals</div></div>'
     +'</div>'
     +svg
     +'<div class="legend"><span><i class="swatch" style="background:#0e7a44"></i>Weekday</span>'+(weDays?'<span><i class="swatch" style="background:#3bbf86"></i>Weekend</span>':'')+'</div>'
@@ -908,7 +1092,8 @@ function renderNemViz(r){
       +(pct(shoulder)>0?'<div style="background:#d69a1e; flex:'+shoulder.toFixed(3)+'">'+(pct(shoulder)>=9?pct(shoulder)+'% shoulder':'')+'</div>':'')
       +(pct(off)>0?'<div style="background:#17a35d; flex:'+off.toFixed(3)+'">'+(pct(off)>=9?pct(off)+'% off peak':'')+'</div>':'')
     +'</div>'
-    +'<div class="toulegend">A typical time of use split (peak weekday 3pm to 9pm, off peak overnight and weekends). Your real half hourly shape is used to price each plan on its own windows.'+(estimated?' The yearly figure is estimated from '+days+' days of data. Upload a full 12 months for the exact annual cost.':'')+'</div>'
+    +'<div class="toulegend">The bar is an orientation only. Every plan is priced using its own published days and time windows, not this example split.</div>'
+    +(warnings?'<div class="datawarnings"><b>What limits this estimate</b><ul>'+warnings+'</ul></div>':'')
     +'</div>';
   el.classList.add('show');
 }
@@ -1024,7 +1209,10 @@ const SOLAR_SHAPE = (()=>{
 })();
 
 // Fraction of solar exports falling inside the given feed in windows
-function solarOverlap(wins){
+function solarOverlap(wins, exportProfile){
+  if(exportProfile && AeaInterval.gridSum(exportProfile)>0){
+    return AeaInterval.profileFraction(exportProfile, wins);
+  }
   if(!Array.isArray(wins)||!wins.length) return 1; // no window: applies all day
   let f = 0;
   for(let h=0; h<48; h++){
@@ -1047,29 +1235,14 @@ function solarOverlap(wins){
 
 // Fraction of weekly consumption inside a set of TOU windows
 function touFraction(profile, touWindows){
-  let inSum = 0, total = 0;
-  const covered = [];
-  for(let d=0; d<7; d++){ covered.push(new Array(48).fill(false)); }
-  (touWindows||[]).forEach(w=>{
-    const dset = daysToSet(w.days);
-    let start = parseTime(w.startTime), end = parseTime(w.endTime);
-    if(start==null||end==null) return;
-    if(end===0) end = 24;
-    for(const d of dset){
-      for(let h=0; h<48; h++){
-        const hr = h/2 + 0.25;
-        let inWin;
-        if(start<=end) inWin = hr>=start && hr<end;
-        else inWin = hr>=start || hr<end; // overnight window
-        if(inWin) covered[d][h] = true;
-      }
-    }
-  });
-  for(let d=0; d<7; d++) for(let h=0; h<48; h++){
-    total += profile[d][h];
-    if(covered[d][h]) inSum += profile[d][h];
-  }
-  return total>0 ? inSum/total : 0;
+  return AeaInterval.profileFraction(profile, touWindows);
+}
+
+function exportProfileFor(annualExport, profile){
+  if(profile && AeaInterval.gridSum(profile)>0) return profile;
+  const generic=[];
+  for(let d=0;d<7;d++) generic.push(SOLAR_SHAPE.slice());
+  return AeaInterval.scaleGrid(generic, Math.max(0,annualExport)*7/365);
 }
 
 /* ---------- Tariff cost engine ---------- */
@@ -1088,54 +1261,58 @@ function periodDays(tp){
 }
 
 // Cost of energy through block rates for a given annual kWh
-function blockCost(rates, annualKwh, days){
-  if(!Array.isArray(rates)||!rates.length) return 0;
-  let remaining = annualKwh, cost = 0;
-  for(let i=0;i<rates.length;i++){
-    const r = rates[i];
-    const price = num(r.unitPrice);
-    let vol = r.volume!=null ? num(r.volume) : Infinity;
-    if(r.volume!=null && r.period==='P1D') vol = vol*days;
-    if(i===rates.length-1) vol = Infinity;
-    const take = Math.min(remaining, vol);
-    cost += take*price;
-    remaining -= take;
-    if(remaining<=0) break;
-  }
-  return cost;
+function blockCost(rates, annualKwh, days, ratePeriod){
+  return AeaInterval.blockCost(rates, annualKwh, days, ratePeriod);
 }
 
 function estimateContract(contract, annualKwh, exportKwh, profile, opts){
-  const out = {supply:0, usage:0, fit:0, discounts:0, flags:[], touMix:null, hasDemand:false, tariffKind:'single'};
+  opts = opts || {};
+  const out = {supply:0, usage:0, controlledUsage:0, controlledSupply:0, demand:0, fit:0, discounts:0, flags:[], touMix:null, hasDemand:false, tariffKind:'single',
+    audit:{energyPeriods:[], controlled:[], demand:[], feedIn:null, discounts:[], gstRate:GST-1}};
   const tps = contract.tariffPeriod||[];
   if(!tps.length) return null;
 
-  let totalDays = tps.reduce((s,tp)=>s+periodDays(tp),0);
+  let totalDays = tps.filter(tp=>tp.rateBlockUType!=='demandCharges').reduce((s,tp)=>s+periodDays(tp),0);
   if(totalDays<300) totalDays = 365;
 
   for(const tp of tps){
     const days = periodDays(tp) * (365/totalDays); // normalise to a full year
-    const share = days/365;
+    const observedShare = AeaInterval.meterPeriodShare(opts.meter, tp, 'import');
+    const share = observedShare==null ? days/365 : observedShare;
     const kwh = annualKwh*share;
+    const auditPeriod={
+      startDate:tp.startDate||'01-01', endDate:tp.endDate||'12-31', days,
+      allocationSource:observedShare==null?'profile and calendar':'measured seasonal usage', share, kwh,
+      supplyDailyExGst:num(tp.dailySupplyCharges ?? tp.dailySupplyCharge), supplyCostExGst:0,
+      tariffKind:tp.rateBlockUType, usageLines:[]
+    };
 
     // supply charge
     const dsc = num(tp.dailySupplyCharges ?? tp.dailySupplyCharge);
     out.supply += dsc*days;
+    auditPeriod.supplyCostExGst=dsc*days;
 
     const u = tp.rateBlockUType;
     if(u==='singleRate' && tp.singleRate){
-      out.usage += blockCost(tp.singleRate.rates, kwh, days);
+      const priced=AeaInterval.blockCostDetails(tp.singleRate.rates, kwh, days, tp.singleRate.period);
+      out.usage += priced.total;
+      priced.tiers.forEach(tier=>auditPeriod.usageLines.push({...tier,label:'Anytime usage',fraction:1}));
     }
     else if(u==='timeOfUseRates' && Array.isArray(tp.timeOfUseRates)){
       out.tariffKind = 'tou';
-      const fracs = tp.timeOfUseRates.map(t=>touFraction(profile, t.timeOfUse));
+      const fracs = tp.timeOfUseRates.map(t=>{
+        const actual = AeaInterval.meterFraction(opts.meter, tp, t.timeOfUse, 'import');
+        return actual==null ? touFraction(profile, t.timeOfUse) : actual;
+      });
       let fsum = fracs.reduce((a,b)=>a+b,0);
       const mix = {};
       tp.timeOfUseRates.forEach((t,i)=>{
         let f = fsum>0 ? fracs[i]/Math.max(fsum,1e-9) : 1/tp.timeOfUseRates.length;
         const kk = kwh*f;
-        out.usage += blockCost(t.rates, kk, days);
         const label = (t.type||'RATE').toLowerCase().replace(/_/g,' ');
+        const priced=AeaInterval.blockCostDetails(t.rates, kk, days, t.period);
+        out.usage += priced.total;
+        priced.tiers.forEach(tier=>auditPeriod.usageLines.push({...tier,label,fraction:f,windows:windowSummary(t.timeOfUse)}));
         mix[label] = (mix[label]||0) + f;
       });
       out.touMix = mix;
@@ -1144,6 +1321,25 @@ function estimateContract(contract, annualKwh, exportKwh, profile, opts){
       out.hasDemand = true; out.tariffKind='demand';
     }
     if(Array.isArray(tp.demandCharges) && tp.demandCharges.length){ out.hasDemand = true; }
+    if(u!=='demandCharges') out.audit.energyPeriods.push(auditPeriod);
+  }
+
+  if(opts.controlledKwh>0){
+    const controlled=AeaInterval.controlledLoadCost(contract.controlledLoad, opts.controlledKwh, opts.controlledProfile);
+    if(!controlled.supported) return null;
+    out.controlledUsage=controlled.usage;
+    out.controlledSupply=controlled.supply;
+    out.controlledRateList=controlled.rateList||[];
+    out.audit.controlled=controlled.details||[];
+  }
+
+  if(out.hasDemand){
+    if(!opts.demandReady) return null;
+    const demand=AeaInterval.demandChargeCost(tps, opts.demandSeries);
+    if(!demand.supported) return null;
+    out.demand=demand.total;
+    out.demandPeakKw=demand.peakKw;
+    out.audit.demand=demand.details||[];
   }
 
   // Published rates from the first tariff period, GST inclusive,
@@ -1185,28 +1381,25 @@ function estimateContract(contract, annualKwh, exportKwh, profile, opts){
       let weighted = 0, bestWindow = 0;
       f.timeVaryingTariffs.forEach(tv=>{
         const r = (tv.rates&&tv.rates[0]) ? num(tv.rates[0].unitPrice) : 0;
-        const frac = solarOverlap(tv.timeVariations || tv.timeOfUse || []);
+        const frac = solarOverlap(tv.timeVariations || tv.timeOfUse || [], opts.exportProfile || (opts.meter&&opts.meter.exportProfile));
         weighted += r*frac;
         bestWindow = Math.max(bestWindow, r);
       });
-      let eff = weighted;
-      if(opts.hasBatt && opts.battKwh>0 && exportKwh>0){
-        // share of daily exports the battery could time shift
-        const dailyExport = exportKwh/365;
-        const shiftable = Math.min(1, (opts.battKwh*0.9)/Math.max(dailyExport, 0.1));
-        eff = Math.max(weighted, bestWindow*shiftable);
-      }
-      fitRate = Math.max(fitRate, eff);
+      fitRate = Math.max(fitRate, weighted);
     }
   });
   out.fitRate = fitRate;
   out.fitTv = fitTv;
   out.fit = exportKwh*fitRate;
+  out.audit.feedIn={exportKwh, effectiveRate:fitRate, timeVarying:fitTv, credit:out.fit};
   if(fitTv) out.flags.push('Time limited feed in windows valued against when your solar actually exports');
 
   // GST on charges (residential prices in PRD are exclusive of GST)
   out.supply *= GST;
   out.usage *= GST;
+  out.controlledUsage *= GST;
+  out.controlledSupply *= GST;
+  out.demand *= GST;
 
   // Discounts
   const condList = [];
@@ -1214,16 +1407,22 @@ function estimateContract(contract, annualKwh, exportKwh, profile, opts){
     const isCond = (d.type||'').toUpperCase()==='CONDITIONAL';
     const apply = !isCond || opts.assumeConditional;
     let amt = 0;
-    const base = out.usage + out.supply;
+    const base = out.usage + out.supply + out.controlledUsage + out.controlledSupply + out.demand;
     if(d.methodUType==='percentOfBill' && d.percentOfBill) amt = base*num(d.percentOfBill.rate);
     else if(d.methodUType==='percentOfUse' && d.percentOfUse) amt = out.usage*num(d.percentOfUse.rate);
     else if(d.methodUType==='fixedAmount' && d.fixedAmount) amt = num(d.fixedAmount.amount);
     if(apply) out.discounts += amt;
+    out.audit.discounts.push({label:d.displayName||'Published discount',conditional:isCond,applied:apply,method:d.methodUType||'unknown',amount:apply?amt:0});
     if(isCond) condList.push(d.displayName||'Conditional discount');
   });
   out.conditional = condList;
 
-  out.total = out.supply + out.usage - out.fit - out.discounts;
+  out.total = out.supply + out.usage + out.controlledUsage + out.controlledSupply + out.demand - out.fit - out.discounts;
+  out.audit.reconciliation={
+    supply:out.supply, usage:out.usage, controlledUsage:out.controlledUsage, controlledSupply:out.controlledSupply,
+    demand:out.demand, feedIn:-out.fit, discounts:-out.discounts, total:out.total,
+    componentTotal:out.supply+out.usage+out.controlledUsage+out.controlledSupply+out.demand-out.fit-out.discounts
+  };
   return out;
 }
 
@@ -1245,9 +1444,22 @@ function setSolarMode(m){
 $('pillNoSolar').onclick = ()=>setSolarMode('none');
 $('pillSolar').onclick = ()=>setSolarMode('solar');
 $('pillSolarBatt').onclick = ()=>setSolarMode('batt');
+$('hasControlledLoad').addEventListener('change', ()=>{
+  setControlledLoadUi();
+  markComparisonNeedsRun('Your controlled-load input changed. Run the comparison again to refresh every plan.');
+});
+$('controlledKwh').addEventListener('input', ()=>markComparisonNeedsRun('Your controlled-load usage changed. Run the comparison again to refresh every plan.'));
+$('fDemand').disabled=true;
+setControlledLoadUi();
 
 $('nmi').addEventListener('input', ()=>{ showDnsp(); });
-$('postcode').addEventListener('input', ()=>{ if($('postcode').value.length===4) showDnsp(); });
+$('postcode').addEventListener('input', ()=>{
+  if($('dnspChoice').dataset.postcode!==$('postcode').value.trim()){
+    $('dnspChoice').value='';
+    $('dnspChoiceWrap').style.display='none';
+  }
+  if($('postcode').value.length===4) showDnsp();
+});
 
 // Match against the first 10 characters: NMIs are 10 characters,
 // and bills often print an 11th checksum digit which is ignored.
@@ -1295,6 +1507,21 @@ function showDnsp(extraNames){
   if(WA_NT_MSG(st)) return;
 }
 
+function setDistributorChoices(names, byNmi, postcode){
+  const values=[...new Set((names||[]).filter(n=>DNSP_INFO[n]))];
+  const select=$('dnspChoice'), wrap=$('dnspChoiceWrap');
+  const previous=select.dataset.postcode===postcode ? select.value : '';
+  select.innerHTML='';
+  const prompt=document.createElement('option'); prompt.value=''; prompt.textContent='Choose your distributor'; select.appendChild(prompt);
+  values.forEach(name=>{ const option=document.createElement('option'); option.value=name; option.textContent=name; select.appendChild(option); });
+  select.dataset.postcode=postcode;
+  if(byNmi && values.includes(byNmi)) select.value=byNmi;
+  else if(values.length===1) select.value=values[0];
+  else if(values.includes(previous)) select.value=previous;
+  select.disabled=Boolean(byNmi)||values.length===1;
+  wrap.style.display=values.length ? 'block' : 'none';
+}
+
 function WA_NT_MSG(st){
   if(st==='WA'||st==='NT'){
     showError('Sorry, this tool covers the National Electricity Market (NSW, VIC, QLD, SA, TAS and ACT). '+st+' has a separate regulated electricity system that is not part of the open retail market data set.');
@@ -1323,15 +1550,33 @@ async function run(){
   const annualKwh = num($('usageKwh').value) * num($('usagePeriod').value);
   if(annualKwh<=0) return showError('Please enter your electricity usage from a recent bill.');
 
+  if(S.upload&&!S.upload.registerAllocation) return showError('Choose general usage or controlled load for every meter register before comparing plans.');
+
   const custType = $('custType').value;
   // Rate limit only the expensive path (a fresh postcode we must fetch).
-  const freshCompare = !cacheGet('cand2:'+pc+':'+custType);
+  const planKey = 'electricity-provenance-v2:'+pc+':'+custType;
+  const freshCompare = !cacheGet(planKey);
   if(freshCompare && comparesRecent().length >= COMPARE_CAP){
     return showError('You have run 15 comparisons in the past hour, which is our limit to keep the tool fast and fair for everyone. Please try again a little later, or call us on 1300 241 149 and we will be glad to help.');
   }
   const hasSolar = S.solarMode!=='none';
   const hasBatt = S.solarMode==='batt';
   const hasEv = $('hasEv').checked;
+  const hasControlledLoad = $('hasControlledLoad').checked;
+  const allocation=S.upload&&S.upload.registerAllocation;
+  const allocatedTotal=allocation ? allocation.annualGeneralKwh+allocation.annualControlledKwh : 0;
+  const allocationScale=allocatedTotal>0 ? annualKwh/allocatedTotal : 1;
+  const controlledKwh=hasControlledLoad
+    ? (allocation ? allocation.annualControlledKwh*allocationScale : num($('controlledKwh').value))
+    : 0;
+  if(hasControlledLoad&&controlledKwh<=0) return showError('Enter the annual kWh used by your separately metered controlled load.');
+  if(controlledKwh>=annualKwh) return showError('Controlled-load usage must be less than total annual grid usage.');
+  const generalKwh=annualKwh-controlledKwh;
+  const demandReady=Boolean(S.upload&&allocation&&S.upload.dateSpanDays>=360&&S.upload.coverageRatio>=0.98&&S.upload.actualPct>=0.9);
+  const pricingMeter=S.upload?Object.assign({},S.upload,{series:S.upload.pricingSeries||S.upload.series}):null;
+  $('fDemand').disabled=!demandReady;
+  if(!demandReady) $('fDemand').checked=false;
+  $('fDemandLabel').title=demandReady?'Demand charges use the peaks measured in your uploaded general-usage register.':'Upload at least a 360 day span with 98% day coverage and 90% actual intervals to calculate demand plans.';
   const solarKw = hasSolar ? num($('solarKw').value) : 0;
   let exportKwh = hasSolar ? num($('exportKwh').value) : 0;
   if(hasSolar && !exportKwh && solarKw>0){
@@ -1339,101 +1584,63 @@ async function run(){
     exportKwh = Math.round(gen * (hasBatt ? 0.30 : 0.55));
   }
   // real uploaded meter shape beats the modelled profile
-  const baseProfile = (S.upload && S.upload.profile) ? S.upload.profile : buildProfile($('profile').value, false);
-  const profile = hasBatt ? applyBattery(baseProfile) : baseProfile;
+  const baseProfile = allocation ? allocation.generalProfile : ((S.upload && S.upload.profile) ? S.upload.profile : buildProfile($('profile').value, false));
+  // Uploaded data already contains the effect of an existing battery.
+  // Applying a second synthetic shift would double count its benefit.
+  const profile = hasBatt && !S.upload ? applyBattery(baseProfile) : baseProfile;
+  const exportProfile = hasSolar ? exportProfileFor(exportKwh, S.upload&&S.upload.exportProfile) : null;
 
   $('goBtn').disabled = true;
   $('results').style.display='none';
   try{
-    // 1) Retailer directory
-    setProgress(2, 'Loading retailer directory...');
-    let feed = cacheGet('feed');
-    if(!feed){
-      const fj = await fetchJson(FEED_URL);
-      feed = (fj.data||fj).filter(b => (b.industries||[]).includes('energy'))
-        .map(b => ({name:b.brandName, logo:b.logoUri, base:b.productReferenceDataBaseUri||((b.publicBaseUri||'').startsWith('https://cdr.energymadeeasy.gov.au')?b.publicBaseUri:null)}))
-        .filter(b => b.base);
-      cacheSet('feed', feed);
+    // Retailer discovery, postcode filtering and tariff normalization happen
+    // behind this same-origin route. Interval pricing stays local so NMI data
+    // never leaves the browser.
+    setProgress(4, 'Loading current electricity tariffs...');
+    let planBundle = cacheGet(planKey);
+    if(!planBundle){
+      planBundle = await fetchJson(PLAN_API+'?postcode='+encodeURIComponent(pc)+'&customerType='+encodeURIComponent(custType));
+      if(!planBundle || !Array.isArray(planBundle.plans)) throw new Error('The tariff service returned an invalid response. Please try again.');
+      cacheSet(planKey, planBundle);
     }
-
-    // 2) Plan lists (cached per postcode+type for 24h)
-    const candKey = 'cand2:'+pc+':'+custType;
-    let candidates = cacheGet(candKey);
-    if(!candidates){
-      setProgress(5, 'Fetching current plans from '+feed.length+' retailers...');
-      const lists = await pool(feed, 10, async (b)=>{
-        let plans = [], page=1, totalPages=1;
-        while(page<=totalPages && page<=5){
-          const j = await fetchJson(b.base.replace(/\/$/,'')+'/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page='+page, 1);
-          plans = plans.concat(j.data.plans||[]);
-          totalPages = (j.meta&&j.meta.totalPages)||1;
-          page++;
-        }
-        return {brand:b, plans};
-      }, (done,total)=> setProgress(5+40*done/total, 'Fetching plans... '+done+' of '+total+' retailers'));
-
-      candidates = [];
-      let failed = 0;
-      for(const r of lists){
-        if(!r || r.__err){ failed++; continue; }
-        for(const p of r.plans){
-          if(p.customerType && p.customerType!==custType) continue;
-          if(p.fuelType && !['ELECTRICITY','DUAL'].includes(p.fuelType)) continue;
-          const g = p.geography||{};
-          if(g.excludedPostcodes && postcodeMatches(pc, g.excludedPostcodes)) continue;
-          if(g.includedPostcodes && g.includedPostcodes.length){
-            if(!postcodeMatches(pc, g.includedPostcodes)) continue;
-          } else continue; // no geography data: skip rather than guess
-          const ai = p.additionalInformation||{};
-          candidates.push({
-            planId:p.planId, name:p.displayName, brand:p.brandName||r.brand.name,
-            logo:r.brand.logo, base:r.brand.base, type:p.type,
-            distributors:(g.distributors||[]).map(normDnsp),
-            app:p.applicationUri, info:ai.overviewUri||ai.pricingUri||null
-          });
-        }
-      }
-      cacheSet(candKey, candidates);
-      if(failed) console.warn(failed+' retailers could not be loaded');
-    }
+    let candidates = planBundle.plans||[];
 
     if(!candidates.length){
       throw new Error('No current market plans were found for postcode '+pc+'. Check the postcode, or this area may be outside the National Electricity Market.');
     }
 
-    // distributor panel from real plan geography
+    // Resolve the exact network before pricing. Some postcodes cross a
+    // distributor boundary, so postcode alone is not always sufficient.
     const dnspCount = {};
     candidates.forEach(c=>c.distributors.forEach(d=>{ dnspCount[d]=(dnspCount[d]||0)+1; }));
     const dnsps = Object.entries(dnspCount).sort((a,b)=>b[1]-a[1]).filter(x=>DNSP_INFO[x[0]]).map(x=>x[0]).slice(0,3);
-    showDnsp(dnsps);
-
-    // 3) Plan details
-    const marketOnly = candidates.filter(c=>c.type!=='REGULATED');
-    setProgress(46, 'Loading tariff details for '+marketOnly.length+' plans...');
-    const details = await pool(marketOnly, 12, async (c)=>{
-      const dKey = 'pd:'+c.planId;
-      let d = cacheGet(dKey);
-      if(!d){
-        let j = null;
-        for(const v of ['3','2','1']){
-          try{ j = await fetchJson(c.base.replace(/\/$/,'')+'/cds-au/v1/energy/plans/'+encodeURIComponent(c.planId), v); break; }
-          catch(e){ if(v==='1') throw e; }
-        }
-        d = j.data;
-        cacheSet(dKey, d);
+    const nmiDnsp=dnspFromNmi($('nmi').value);
+    setDistributorChoices(dnsps, nmiDnsp, pc);
+    const selectedDnsp=nmiDnsp||$('dnspChoice').value;
+    if(dnsps.length>1 && !selectedDnsp){
+      showDnsp(dnsps);
+      throw new Error('This postcode overlaps more than one electricity network. Choose your network distributor above, or enter your NMI so we can select it accurately.');
+    }
+    if(selectedDnsp){
+      const exactCandidates=AeaInterval.filterPlansByDistributor(candidates, selectedDnsp);
+      if(!exactCandidates.length){
+        throw new Error('The selected distributor does not match the plans published for postcode '+pc+'. Check the postcode and NMI before comparing.');
       }
-      return d;
-    }, (done,total)=> setProgress(46+50*done/total, 'Loading tariffs... '+done+' of '+total+' plans'));
+      candidates=exactCandidates;
+      showDnsp([selectedDnsp]);
+    }else showDnsp(dnsps);
 
-    // 4) Cost estimates
-    setProgress(97, 'Crunching the numbers...');
-    const opts = {assumeConditional: $('fCond').checked, hasBatt, battKwh: hasBatt ? (num($('battKwh').value)||10) : 0};
+    // The API returns normalized plan details, including the full contract
+    // required by the local interval cost engine.
+    const marketOnly = candidates.filter(c=>c.type!=='REGULATED');
+    setProgress(80, 'Pricing '+marketOnly.length+' plans against your usage pattern...');
+    const opts = {assumeConditional: $('fCond').checked, hasBatt, battKwh: hasBatt ? (num($('battKwh').value)||10) : 0,
+                  meter:pricingMeter, exportProfile, controlledKwh, controlledProfile:allocation&&allocation.controlledProfile,
+                  demandReady, demandSeries:allocation&&allocation.series};
     const rows = [];
     const condOnly = [];
-    marketOnly.forEach((c,i)=>{
-      const d = details[i];
-      if(!d || d.__err) return;
-      const contract = d.electricityContract;
+    marketOnly.forEach(c=>{
+      const contract = c.contract;
       if(!contract) return;
 
       // Skip plans that require equipment this household does not have
@@ -1442,7 +1649,9 @@ async function run(){
       const needsBattery = /batter/.test(eligText);
       const needsSolar = /existing_solar|with solar|solar panels|solar pv|solar system|have solar|solar customers/.test(eligText);
       const needsEv = /electric vehicle|\bev\b/.test(eligText);
+      const needsControlledLoad = /controlled load|separately metered|off.?peak hot water/.test(eligText);
       if(needsEv && !hasEv) return;
+      if(needsControlledLoad && !hasControlledLoad) return;
       const missSolar = needsSolar && !hasSolar;
       const missBatt = needsBattery && !hasBatt;
       if(missSolar || missBatt){
@@ -1453,15 +1662,11 @@ async function run(){
         return;
       }
 
-      // Prefer the retailer's own links captured in the plan detail
-      const ai = d.additionalInformation||{};
-      const link = c.app || ai.overviewUri || c.info || ai.pricingUri || null;
-
-      const est = estimateContract(contract, annualKwh, exportKwh, profile, opts);
+      const est = estimateContract(contract, generalKwh, exportKwh, profile, opts);
       if(!est) return;
-      rows.push({...c, est, contract, link,
+      rows.push({...c, est, contract, link:c.link||c.app||c.info||null,
         eligibility:(contract.eligibility||[]).map(e=>e.information||e.description).filter(Boolean),
-        fees:(contract.fees||[]).length
+        fees:Number.isFinite(c.fees)?c.fees:(contract.fees||[]).length
       });
     });
     if(!rows.length) throw new Error('Plans were found but tariff details could not be loaded. Please try again.');
@@ -1480,7 +1685,12 @@ async function run(){
     // battery upgrade scenario for a solar owner: only plans whose sole
     // missing requirement is the battery
     S.batteryPlans = condOnly.filter(p=>p.needsBattery && !p.needsSolar);
-    S.inputs = {pc, st, annualKwh, exportKwh, hasSolar, hasBatt, hasEv, custType, profile, baseProfile,
+    S.inputs = {pc, st, dnsp:selectedDnsp||dnsps[0]||null, annualKwh, generalKwh, controlledKwh, exportKwh, hasSolar, hasBatt, hasEv, hasControlledLoad, custType, profile, baseProfile, exportProfile, meter:pricingMeter, demandReady,
+                annualSource:S.upload?(S.upload.fullYear?'meter-measured':'meter-extrapolated'):'manual',
+                annualOverride:S.upload&&S.upload.userAnnualOverride?{...S.upload.userAnnualOverride}:null,
+                tariffSource:planBundle.source||null, tariffFetchedAt:planBundle.fetchedAt||null,
+                tariffSourceHash:planBundle.sourceHash||null, tariffSchemaVersion:planBundle.tariffSchemaVersion||null,
+                engineVersion:AeaInterval.ENGINE_VERSION,
                 usageEntered:$('usageKwh').value, period:$('usagePeriod').value, profileKind:$('profile').value,
                 solarKw:$('solarKw').value, battKwh:$('battKwh').value};
     S.battSizeOv = null; S.battCostOv = null; S.battCostTouched = false;
@@ -1498,6 +1708,9 @@ async function run(){
       if(usedNow >= COMPARE_WARN){
         showNotice('Heads up: you have run '+usedNow+' of 15 comparisons allowed this hour. After 15 you will need to wait a short while before running more.');
       }
+    }
+    if(planBundle.source&&planBundle.source.partial){
+      appendNotice('Some published tariff records could not be used. The result includes '+planBundle.source.detailPlansSucceeded+' of '+planBundle.source.candidatePlans+' eligible plan details from '+planBundle.source.listSourcesSucceeded+' of '+planBundle.source.retailersDiscovered+' retailer sources. '+(planBundle.source.detailPlansRejected||0)+' failed tariff validation and '+(planBundle.source.detailPlansUnavailable||0)+' could not be retrieved, so this may not represent the complete market.');
     }
   }catch(e){
     $('prog').style.display='none';
@@ -1548,7 +1761,7 @@ function batteryInsight(plans, I, sizeOverride, costOverride){
     total += I.profile[d][h];
     if(hr>=16 || hr<7) inWin += I.profile[d][h];
   }
-  const eveningDaily = (I.annualKwh/365) * (total>0 ? inWin/total : 0.6);
+  const eveningDaily = (I.generalKwh/365) * (total>0 ? inWin/total : 0.6);
 
   // storable energy is capped by what the solar exports and what
   // the household can actually use back
@@ -1559,18 +1772,21 @@ function batteryInsight(plans, I, sizeOverride, costOverride){
   const suggested = BATT_SIZES.find(s=>s>=idealRaw) || BATT_SIZES[BATT_SIZES.length-1];
   const size = sizeOverride || suggested;
 
-  const charge = Math.min(dailyExport, size);          // kWh into the battery per day
-  const discharge = Math.min(charge*BATT_EFF, eveningDaily); // kWh of grid import avoided
-  const annualAvoided = discharge*365;
-  const annualExportLost = (discharge/BATT_EFF)*365;
-
-  // re-cost every plan under the battery scenario
-  const kwh2 = Math.max(0, I.annualKwh - annualAvoided);
-  const exp2 = Math.max(0, I.exportKwh - annualExportLost);
-  const prof2 = applyBattery(I.baseProfile || I.profile);
-  // scenario: the battery exists, so battery plans and time shifted
-  // feed in windows are both on the table
-  const opts = {assumeConditional: $('fCond').checked, hasBatt:true, battKwh:size};
+  // Dispatch the battery through the household's own half hourly import
+  // and export shapes. This preserves when energy is actually available
+  // to charge and when the household can use it again.
+  const sourceExportProfile = exportProfileFor(I.exportKwh, I.exportProfile);
+  const flow = AeaInterval.simulateBattery(I.baseProfile || I.profile, sourceExportProfile,
+                                           I.generalKwh, I.exportKwh, size, BATT_EFF);
+  const kwh2 = flow.annualImport;
+  const exp2 = flow.annualExport;
+  const prof2 = flow.importProfile;
+  const discharge = flow.dailyDischarge;
+  const annualAvoided = Math.max(0, I.generalKwh-kwh2);
+  const annualExportLost = Math.max(0, I.exportKwh-exp2);
+  const opts = {assumeConditional: $('fCond').checked, hasBatt:true, battKwh:size,
+                exportProfile:flow.exportProfile, controlledKwh:I.controlledKwh,
+                controlledProfile:I.meter&&I.meter.registerAllocation&&I.meter.registerAllocation.controlledProfile};
 
   // cheapest ordinary plan today (demand plans are not costed)
   let bestNow = Infinity;
@@ -1626,7 +1842,7 @@ function renderBattPanel(){
   }
   el.innerHTML = '<div class="battcard">'
     +'<h3>What would a battery do for this bill?</h3>'
-    +'<p>Sized from your daily solar exports and your evening and overnight grid usage. Have a quote? Enter its size and price (quotes are normally shown with the federal rebate already taken off) and the payback updates instantly.</p>'
+    +'<p>Sized and dispatched against the half hourly pattern of your solar exports and grid imports. Have a quote? Enter its size and price (quotes are normally shown with the federal rebate already taken off) and the payback updates instantly.</p>'
     +battInputsHtml(b0.size, b0.costNet)
     +'<div id="battStats"></div>'
     +'<p>Bill savings count what can be measured from published tariffs: buying less peak power, compared across every available plan including battery only offers. VPP programs (payments for letting the retailer use your battery) can add roughly $200 to $400 a year on top but vary too much to promise. The federal Cheaper Home Batteries discount shown uses the current DCCEEW schedule ('+STC_PER_KWH+' STCs per usable kWh for installs to 31 December 2026, tapered above 14 kWh) at the July 2026 market price of about $'+STC_PRICE+' per certificate.</p>'
@@ -1709,7 +1925,7 @@ function suggestedBattForSolar(kw){
     total += I.baseProfile[d][h];
     if(hr>=16 || hr<7) inWin += I.baseProfile[d][h];
   }
-  const eveningDaily = (I.annualKwh/365)*(total>0 ? inWin/total : 0.6);
+  const eveningDaily = (I.generalKwh/365)*(total>0 ? inWin/total : 0.6);
   const useful = Math.min(dailyExport*BATT_EFF, eveningDaily);
   return BATT_SIZES.find(s=>s>=useful/BATT_EFF) || BATT_SIZES[BATT_SIZES.length-1];
 }
@@ -1717,18 +1933,18 @@ function suggestedBattForSolar(kw){
 function solarScenario(sizeKw, withBatt, battKwh){
   const I = S.inputs;
   const gen = sizeKw*(SOLAR_YIELD[I.st]||1350);
-  const base = SELF_USE[I.profileKind] ?? 0.35;
-  let selfUse = base;
-  if(withBatt){
-    // the battery stores daytime excess for evening use
-    const extra = Math.min((battKwh*0.9*365)/gen, 0.92-base);
-    selfUse = base + Math.max(0, extra);
-  }
-  const selfKwh = Math.min(I.annualKwh*0.9, gen*selfUse);
-  const kwh2 = Math.max(0, I.annualKwh - selfKwh);
-  const exp2 = Math.max(0, gen - selfKwh);
-  const prof2 = withBatt ? applyBattery(I.baseProfile) : I.baseProfile;
-  const opts = {assumeConditional:$('fCond').checked, hasBatt:withBatt, battKwh:withBatt?battKwh:0};
+  const solarFlow = AeaInterval.simulateSolar(I.baseProfile, I.generalKwh, gen);
+  const flow = withBatt
+    ? AeaInterval.simulateBattery(solarFlow.importProfile, solarFlow.exportProfile,
+                                  solarFlow.annualImport, solarFlow.annualExport, battKwh, BATT_EFF)
+    : solarFlow;
+  const selfKwh = solarFlow.annualSelfUse;
+  const kwh2 = flow.annualImport;
+  const exp2 = flow.annualExport;
+  const prof2 = flow.importProfile;
+  const opts = {assumeConditional:$('fCond').checked, hasBatt:withBatt, battKwh:withBatt?battKwh:0,
+                exportProfile:flow.exportProfile, controlledKwh:I.controlledKwh,
+                controlledProfile:I.meter&&I.meter.registerAllocation&&I.meter.registerAllocation.controlledProfile};
   const pool = S.plans.concat((S.condPlans||[]).filter(p=>withBatt ? true : !p.needsBattery));
   let best = Infinity, bestPlan = null;
   pool.forEach(p=>{
@@ -1767,7 +1983,7 @@ function renderSolarPanel(){
         +'<div class="statsbox" id="solarStatsBatt"></div>'
       +'</div>'
     +'</div>'
-    +'<p>Default prices assume $'+SOLAR_COST_PER_KW+' per kW installed for solar (after the solar STC rebate) and a battery at market rates net of its federal rebate. The solar plus battery figure is a single combined quote, so enter your whole system price there. Generation uses your state average per kW; real output depends on roof orientation, tilt, shading and your exact location, so treat paybacks as a guide. Your quotes firm up the cost side, and a site assessment firms up the generation side.</p>'
+    +'<p>Default prices assume $'+SOLAR_COST_PER_KW+' per kW installed for solar (after the solar STC rebate) and a battery at market rates net of its federal rebate. The solar plus battery figure is a single combined quote, so enter your whole system price there. Solar is simulated half hourly against your load pattern using your state annual yield and a representative daytime production curve. Real output depends on roof orientation, tilt, shading, weather and your exact location, so treat paybacks as a guide. Your quotes firm up the cost side, and a site assessment firms up generation.</p>'
     +'</div>';
   function comboDefault(){ var kw=S.solKwOv||S.solKwDef, bk=S.solBattOv||S.solBattDef; return Math.round(kw*SOLAR_COST_PER_KW/100)*100 + battDefaultNet(bk); }
   $('solKwIn').addEventListener('input', ()=>{
@@ -1854,9 +2070,12 @@ function planVisible(p){
 
 function recompute(){
   const I = S.inputs;
-  const opts = {assumeConditional: $('fCond').checked, hasBatt:I.hasBatt, battKwh:I.hasBatt?(num(I.battKwh)||10):0};
+  const opts = {assumeConditional: $('fCond').checked, hasBatt:I.hasBatt, battKwh:I.hasBatt?(num(I.battKwh)||10):0,
+                meter:I.meter||null, exportProfile:I.exportProfile||null, controlledKwh:I.controlledKwh,
+                controlledProfile:I.meter&&I.meter.registerAllocation&&I.meter.registerAllocation.controlledProfile,
+                demandReady:I.demandReady, demandSeries:I.meter&&I.meter.registerAllocation&&I.meter.registerAllocation.series};
   S.plans.forEach(p=>{
-    p.est = estimateContract(p.contract, I.annualKwh, I.exportKwh, I.profile, opts) || p.est;
+    p.est = estimateContract(p.contract, I.generalKwh, I.exportKwh, I.profile, opts) || p.est;
   });
 }
 
@@ -1866,10 +2085,39 @@ function render(){
   const best = vis[0], median = vis[Math.floor(vis.length/2)];
 
   $('rsummary').innerHTML =
-    stat(vis.length, 'current market offers at '+I.pc)
+    stat(vis.length, 'current market offers at '+I.pc+(I.dnsp?' on '+I.dnsp:''))
     + stat(best ? fmt$(best.est.total) : 'n/a', 'best estimated annual cost')
     + stat(median ? fmt$(median.est.total) : 'n/a', 'median offer')
-    + (best&&median ? stat(fmt$(median.est.total-best.est.total), 'potential saving vs median') : '');
+    + (best&&median ? stat(fmt$(median.est.total-best.est.total), 'potential saving vs median') : '')
+    + (I.meter ? stat(I.meter.confidence.charAt(0).toUpperCase()+I.meter.confidence.slice(1), 'meter data confidence') : '');
+
+  const quality=$('resultDataQuality');
+  if(I.meter){
+    const extrapolated=!I.meter.fullYear;
+    const adjusted=I.annualOverride;
+    quality.className='dataquality show'+(extrapolated||I.meter.confidence==='low'?' warn':'');
+    quality.innerHTML='<b>'+(extrapolated?'Extrapolated annual usage':'Measured annual usage')+', '+esc(I.meter.confidence)+' confidence.</b>'
+      +'<div class="dqmeta">Based on '+I.meter.spanDays+' observed days from '+fmtNemDate(I.meter.startDate)+' to '+fmtNemDate(I.meter.endDate)+', '
+      +Math.round((I.meter.coverageRatio||0)*100)+'% calendar coverage and '+Math.round((I.meter.actualPct||0)*100)+'% actual intervals. Every TOU plan below uses the measured general-usage interval shape.'
+      +(I.controlledKwh>0?' Controlled-load registers remain separate and contribute '+Math.round(I.controlledKwh).toLocaleString()+' kWh/year at each plan\'s published controlled-load rate.':'')
+      +(I.demandReady?' Demand-plan charges use the measured general-register peaks.':' Demand plans are excluded because this file does not meet the stricter full-year demand-data threshold.')
+      +(adjusted?' The annual total was adjusted from '+Math.round(adjusted.originalValue).toLocaleString()+' to '+Math.round(adjusted.value).toLocaleString()+' kWh because: '+esc(adjusted.reason)+'.':'')
+      +(I.meter.warnings&&I.meter.warnings.length?' '+esc(I.meter.warnings.join(' ')):'')+'</div>';
+  }else{
+    quality.className='dataquality show warn';
+    quality.innerHTML='<b>Modelled usage pattern.</b><div class="dqmeta">No interval file is active. TOU costs use the household pattern selected in the form, so results are less personalised than a NEM12 comparison.</div>';
+  }
+  if(I.tariffSource){
+    const source=I.tariffSource;
+    const checked=I.tariffFetchedAt&&isFinite(new Date(I.tariffFetchedAt).getTime())
+      ? new Date(I.tariffFetchedAt).toLocaleString() : 'this session';
+    if(source.partial && !quality.className.includes('warn')) quality.className+=' warn';
+    quality.insertAdjacentHTML('beforeend','<div class="dqmeta"><b>Tariff source check:</b> '+esc(checked)+'. '
+      +source.detailPlansSucceeded+' of '+source.candidatePlans+' postcode eligible market plan details loaded from '
+      +source.listSourcesSucceeded+' of '+source.retailersDiscovered+' published retailer sources.'
+      +(source.partial?' '+(source.detailPlansRejected||0)+' failed tariff validation and '+(source.detailPlansUnavailable||0)+' could not be retrieved, so the comparison may not cover the complete market.':' All discovered retailer sources and eligible plan details responded and passed validation.')
+      +(I.tariffSourceHash?' Evidence '+esc(I.tariffSourceHash.replace('sha256:','').slice(0,12))+'.':'')+'</div>');
+  }
 
   const list = $('planList');
   list.innerHTML = '';
@@ -1877,14 +2125,26 @@ function render(){
   $('moreBtn').style.display = vis.length>S.shown ? 'block' : 'none';
 
   $('methodNote').innerHTML =
-    '<b>How these estimates work.</b> Rates come live from each retailer\'s published tariff data'
-    + ' (checked against your postcode ' + I.pc + '). Charges include GST. Annual cost = daily supply charges + usage charges'
+    '<b>How these estimates work.</b> Rates come from each retailer\'s published CDR tariff data, retrieved through our same-origin comparison service'
+    + ' and checked against your postcode ' + I.pc + (I.tariffFetchedAt?' on '+esc(new Date(I.tariffFetchedAt).toLocaleString()):'') + '. Charges include GST. Annual cost = daily supply charges + usage charges'
     + (I.hasSolar ? ' minus feed in credits on an estimated ' + Math.round(I.exportKwh).toLocaleString() + ' kWh exported per year' : '')
     + ', based on ' + Math.round(I.annualKwh).toLocaleString() + ' kWh per year of grid usage'
-    + ' and your selected usage pattern for time of use windows. Plans that require equipment you do not have are excluded. Conditional discounts are '
+    + (I.controlledKwh>0 ? ', split into '+Math.round(I.generalKwh).toLocaleString()+' kWh general usage and '+Math.round(I.controlledKwh).toLocaleString()+' kWh controlled load' : '')
+    + (I.meter
+      ? ' and the days and half hourly pattern measured in your NEM12 file. Full year files also preserve seasonal usage across seasonal tariff periods.'
+      : ' and your selected modelled usage pattern for time of use windows.')
+    + (I.annualOverride ? ' The annual total is a user adjustment from '+Math.round(I.annualOverride.originalValue).toLocaleString()+' kWh; the NMI interval shape remains unchanged.' : '')
+    + ' Plans that require equipment you do not have are excluded. Conditional discounts are '
     + ($('fCond').checked ? 'assumed to be met.' : 'not included (toggle above).')
-    + ' Demand tariff plans, controlled loads, one off fees and sign up incentives are flagged but not costed.'
-    + ' Data caches in your browser and refreshes automatically every 24 hours.';
+    + (I.demandReady?' Supported demand charges use measured half hourly peaks from the general-usage register.':' Demand plans are excluded unless meter history spans at least 360 days with 98% day coverage and 90% actual intervals.')
+    + (I.controlledKwh>0?' Controlled-load usage is kept outside solar and battery self-consumption because separately metered circuits are not assumed to sit behind those systems.':'')
+    + ' One off fees and sign up incentives are flagged but not costed.'
+    + (I.meter && !I.meter.fullYear ? ' The annual figure is extrapolated from '+I.meter.spanDays+' observed days, so seasonal uncertainty remains.' : '')
+    + (I.tariffSource&&I.tariffSource.partial?' Some tariff sources were unavailable during this check, and the coverage counts shown above define the result set.':'')
+    + (I.engineVersion?' Calculation engine '+esc(I.engineVersion)+'.':'')
+    + (I.tariffSchemaVersion?' Tariff schema '+esc(I.tariffSchemaVersion)+'.':'')
+    + (I.tariffSourceHash?' Source evidence '+esc(I.tariffSourceHash)+'.':'')
+    + ' Tariff data caches in your browser and refreshes automatically every hour.';
 }
 
 function stat(v,l){ return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>'; }
@@ -1903,6 +2163,7 @@ function rateLine(e){
   (e.rateList||[]).slice(0,5).forEach(r=>{
     parts.push('<span class="r"><b>'+fmtC(r.c)+'</b>/kWh <span>'+esc(r.label)+'</span></span>');
   });
+  (e.controlledRateList||[]).slice(0,3).forEach(r=>parts.push('<span class="r"><b>'+fmtC(r.unitPrice*GST)+'</b>/kWh <span>'+esc(r.label)+'</span></span>'));
   if(e.fitRate>0) parts.push('<span class="r"><b>'+fmtC(e.fitRate)+'</b>/kWh <span>'+(e.fitTv?'effective feed in (time limited windows)':'solar feed in')+'</span></span>');
   if(e.seasonal) parts.push('<span class="r"><span>seasonal rates vary</span></span>');
   if(parts.length) parts.push('<span class="r"><span>prices inc GST</span></span>');
@@ -1910,12 +2171,119 @@ function rateLine(e){
   return '<div class="rateline">'+parts.join('')+'</div>';
 }
 
+function auditTable(headers, rows){
+  if(!rows.length) return '<div class="auditnote">No charge lines apply.</div>';
+  return '<div class="audittablewrap"><table class="audittable"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.map(row=>'<tr>'+row.map(cell=>'<td>'+cell+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+}
+
+function auditSection(title, note, content){
+  return '<section class="auditsection"><h4>'+esc(title)+'</h4>'+(note?'<div class="auditnote">'+esc(note)+'</div>':'')+content+'</section>';
+}
+
+function profileAssumptionLabel(kind){
+  return ({evening:'Out weekdays, home evenings',daytime:'Home most of the day',even:'Fairly even around the clock'})[kind]||String(kind||'Modelled usage');
+}
+
+function openPlanAudit(p){
+  const e=p.est, a=e.audit||{}, I=S.inputs||{}, meter=I.meter;
+  const energyRows=[];
+  (a.energyPeriods||[]).forEach(period=>{
+    const season=period.startDate+' to '+period.endDate;
+    energyRows.push([
+      esc(season+' supply'), Math.round(period.days).toLocaleString()+' days', '', fmtC(period.supplyDailyExGst*GST)+'/day', fmtD2(period.supplyCostExGst*GST)
+    ]);
+    (period.usageLines||[]).forEach(line=>energyRows.push([
+      esc(season+' '+line.label+(line.windows?' | '+line.windows:'')+(line.tier>1?' | tier '+line.tier:'')),
+      (line.quantityKwh||0).toLocaleString(undefined,{maximumFractionDigits:1})+' kWh',
+      Math.round((line.fraction||0)*100)+'%', fmtC((line.unitPrice||0)*GST)+'/kWh', fmtD2((line.cost||0)*GST)
+    ]));
+  });
+
+  const controlledRows=(a.controlled||[]).map(line=>[
+    esc(line.label+(line.tier>1?' | tier '+line.tier:'')),
+    line.quantityKwh!=null?line.quantityKwh.toLocaleString(undefined,{maximumFractionDigits:1})+' kWh':(line.quantity||0).toLocaleString()+' '+esc(line.unit||''),
+    line.fraction!=null?Math.round(line.fraction*100)+'%':'',
+    line.unitPrice!=null?(line.unit==='days'?fmtC(line.unitPrice*GST)+'/day':fmtC(line.unitPrice*GST)+'/kWh'):'',
+    fmtD2((line.cost||0)*GST)
+  ]);
+
+  const demandRows=(a.demand||[]).map(line=>[
+    esc(line.label+' | '+line.startTime+' to '+line.endTime+' | '+(line.days||[]).join(', ')),
+    esc(line.measurementPeriod+' peak, charged per '+line.chargePeriod.toLowerCase()),
+    (line.peakKw||0).toFixed(2)+' kW',
+    (line.billedKwUnits||0).toLocaleString(undefined,{maximumFractionDigits:2}),
+    fmtC((line.unitPrice||0)*GST), fmtD2((line.total||0)*GST)
+  ]);
+
+  const discountRows=(a.discounts||[]).map(line=>[
+    esc(line.label), esc(line.method), line.conditional?'Conditional':'Unconditional', line.applied?'Applied':'Not applied', fmtD2(line.amount||0)
+  ]);
+  const rec=a.reconciliation||{};
+  const componentRows=[
+    ['Daily supply charges',fmtD2(rec.supply||0)], ['General usage charges',fmtD2(rec.usage||0)],
+    ['Controlled-load usage',fmtD2(rec.controlledUsage||0)], ['Controlled-load daily charges',fmtD2(rec.controlledSupply||0)],
+    ['Demand charges',fmtD2(rec.demand||0)], ['Feed-in credits',fmtD2(rec.feedIn||0)],
+    ['Discounts',fmtD2(rec.discounts||0)], ['Recalculated annual total',fmtD2(rec.componentTotal||0)]
+  ];
+  const difference=(rec.componentTotal||0)-e.total;
+  const reconciled=Math.abs(difference)<0.005;
+
+  let registerHtml='';
+  if(meter&&Array.isArray(meter.registers)){
+    const scale=meter.annualImport>0?I.annualKwh/meter.annualImport:1;
+    registerHtml=auditTable(['Register','Assigned role','Annual kWh used','Interval'],meter.registers.map(register=>[
+      esc(register.registerId||register.suffix||register.id),
+      esc((meter.registerRoles&&meter.registerRoles[register.id])||'unassigned'),
+      Math.round(register.annualKwh*scale).toLocaleString(),
+      register.intervalMinutes+' minutes'
+    ]));
+  }
+
+  const fit=a.feedIn||{exportKwh:0,effectiveRate:0,credit:0};
+  const limitations=(p.validation&&p.validation.limitations)||[];
+  $('auditBody').innerHTML=
+    '<div class="audithead"><div><h3 id="auditTitle">Calculation audit: '+esc(p.name)+'</h3><p>'+esc(p.brand)+' | Offer '+esc(String(p.planId||'').split('@')[0])+'</p></div><div class="auditprice">'+fmtD2(e.total)+'/year</div></div>'
+    +'<div class="auditgrid">'
+    +'<div class="auditkv"><b>Usage priced</b>'+Math.round(I.generalKwh||I.annualKwh||0).toLocaleString()+' kWh general'+(I.controlledKwh>0?' + '+Math.round(I.controlledKwh).toLocaleString()+' kWh controlled load':'')+'</div>'
+    +'<div class="auditkv"><b>Usage evidence</b>'+(meter?esc(meter.spanDays+' observed days, '+Math.round((meter.coverageRatio||0)*100)+'% coverage, '+Math.round((meter.actualPct||0)*100)+'% actual intervals. TOU allocation uses measured intervals.'):esc('Manual assumption: '+profileAssumptionLabel(I.profileKind)+'. This selection determines the TOU allocation shown below.'))+'</div>'
+    +'<div class="auditkv"><b>Tariff evidence</b>'+esc(p.tariffHash||'No plan hash supplied')+'</div>'
+    +'<div class="auditkv"><b>Calculation versions</b>'+esc(I.engineVersion||'')+' | '+esc(I.tariffSchemaVersion||'')+'</div></div>'
+    +(registerHtml?auditSection('Meter register allocation','Annual values reflect any documented annual-usage adjustment. Registers remain separate during pricing.',registerHtml):'')
+    +auditSection('General usage and supply charges','All prices below include GST. Seasonal shares use measured seasonal usage when a suitable full-year meter file is active.',auditTable(['Charge line','Quantity','Usage share','Published rate','Annual charge'],energyRows))
+    +(controlledRows.length?auditSection('Controlled-load charges','Controlled load is priced separately and is not assumed to be offset by solar or battery systems.',auditTable(['Charge line','Quantity','Usage share','Published rate','Annual charge'],controlledRows)):'')
+    +(demandRows.length?auditSection('Demand charges','Measured 30-minute general-register energy is converted to kW by multiplying each interval by two. Published measurement and charge periods are then applied.',auditTable(['Demand window','Basis','Measured peak','Billed kW units','Rate','Annual charge'],demandRows)):'')
+    +(fit.exportKwh>0?auditSection('Solar feed-in credit','Time-varying feed-in rates are weighted against the export timing profile.',auditTable(['Export quantity','Effective rate','Annual credit'],[[Math.round(fit.exportKwh).toLocaleString()+' kWh',fmtC(fit.effectiveRate)+'/kWh','-'+fmtD2(fit.credit)]])):'')
+    +(discountRows.length?auditSection('Published discounts','Conditional discounts are included only when the comparison toggle says they are assumed to be met.',auditTable(['Discount','Method','Condition','Treatment','Annual value'],discountRows)):'')
+    +auditSection('Annual total reconciliation','Credits and discounts appear as negative amounts.',auditTable(['Component','Amount'],componentRows)
+      +'<p class="'+(reconciled?'auditok':'auditbad')+'">'+(reconciled?'Reconciled exactly to the ranked plan total.':'Reconciliation difference: '+fmtD2(difference)+'. This plan must not be relied on until corrected.')+'</p>')
+    +auditSection('Source, scope and limitations','The audit contains calculation evidence, not a guarantee of future bills or eligibility.',
+      '<div class="auditgrid"><div class="auditkv"><b>Tariffs checked</b>'+esc(I.tariffFetchedAt?new Date(I.tariffFetchedAt).toLocaleString():'This session')+'</div>'
+      +'<div class="auditkv"><b>Market source evidence</b>'+esc(I.tariffSourceHash||'Unavailable')+'</div>'
+      +'<div class="auditkv"><b>Plan tariff evidence</b>'+esc(p.tariffHash||'Unavailable')+'</div>'
+      +'<div class="auditkv"><b>Not included</b>'+esc(limitations.length?limitations.join(', ').replace(/_/g,' '):'No validation limitations recorded')+'</div></div>');
+  $('auditModal').classList.add('show');
+  $('auditClose').focus();
+}
+
 function planCard(p, i){
   const el = document.createElement('div');
   el.className = 'plan';
   const badges = [];
   badges.push('<span class="badge">'+(p.est.tariffKind==='tou'?'Time of use':p.est.tariffKind==='demand'?'Demand tariff':'Single rate')+'</span>');
-  if(p.est.hasDemand) badges.push('<span class="badge warn">Demand charges apply, not included in estimate</span>');
+  if(p.est.hasDemand) badges.push('<span class="badge info">Demand charge calculated from measured peak'+(p.est.demandPeakKw>0?' ('+p.est.demandPeakKw.toFixed(1)+' kW)':'')+'</span>');
+  const meter=S.inputs&&S.inputs.meter;
+  if(meter){
+    badges.push('<span class="badge '+(meter.fullYear?'info':'warn')+'">'+(meter.fullYear?'Measured annual usage':'Annual usage extrapolated from '+meter.spanDays+' days')+'</span>');
+    badges.push('<span class="badge '+(['high','good'].includes(meter.confidence)?'info':'warn')+'">'+esc(meter.confidence.charAt(0).toUpperCase()+meter.confidence.slice(1))+' meter confidence</span>');
+    if(S.inputs.annualOverride) badges.push('<span class="badge warn">Annual total manually adjusted</span>');
+    if(meter.registers&&meter.registers.length>1) badges.push('<span class="badge info">Meter registers priced separately</span>');
+  }else badges.push('<span class="badge warn">Modelled load pattern</span>');
+  if(p.fees) badges.push('<span class="badge warn">Published fees not fully costed</span>');
+  const limitations=(p.validation&&p.validation.limitations)||[];
+  if(limitations.includes('incentives_not_costed')) badges.push('<span class="badge warn">Sign up incentives not included</span>');
+  if(limitations.includes('green_power_not_costed')) badges.push('<span class="badge warn">Optional GreenPower not included</span>');
+  if(limitations.includes('unsupported_discount_not_costed')) badges.push('<span class="badge warn">A published discount could not be costed</span>');
   (p.est.conditional||[]).slice(0,2).forEach(c=>badges.push('<span class="badge info">Conditional: '+esc(c)+'</span>'));
   if(p.eligibility&&p.eligibility.length) badges.push('<span class="badge warn">Eligibility conditions</span>');
   if(p.type==='STANDING') badges.push('<span class="badge info">Standing offer</span>');
@@ -1937,8 +2305,11 @@ function planCard(p, i){
     + '<div class="price"><div class="annual">'+fmt$(e.total)+'<span style="font-size:.8rem;font-weight:400;color:var(--muted)">/yr</span></div>'
     + '<div class="permo">about '+fmt$(e.total/12)+' per month</div>'
     + '<a href="'+esc(link)+'" target="_blank" rel="noopener">'+linkLabel+'</a>'
-    + '<div class="offerid">Offer ID: '+esc(String(p.planId||'').split('@')[0])+'</div></div>'
+    + '<button type="button" class="auditbtn">Open calculation audit</button>'
+    + '<div class="offerid">Offer ID: '+esc(String(p.planId||'').split('@')[0])+(p.tariffHash?' | Tariff evidence: '+esc(p.tariffHash.replace('sha256:','').slice(0,12)):'')+'</div></div>'
     + '<div class="breakdown">Supply charges '+fmtD2(e.supply)+' + usage '+fmtD2(e.usage)
+    + (e.controlledUsage>0||e.controlledSupply>0?' + controlled load '+fmtD2(e.controlledUsage+e.controlledSupply):'')
+    + (e.demand>0?' + demand charges '+fmtD2(e.demand):'')
     + (e.fit>0?' - feed in credits '+fmtD2(e.fit):'')
     + (e.discounts>0?' - discounts '+fmtD2(e.discounts):'')
     + ' = '+fmtD2(e.total)+' inc GST'
@@ -1946,6 +2317,7 @@ function planCard(p, i){
     + ((p.eligibility||[]).length?'<br>Eligibility: '+esc(p.eligibility.join('; ').slice(0,220)):'')
     + '</div>';
   el.querySelector('.bd-toggle').onclick = ()=>el.classList.toggle('open');
+  el.querySelector('.auditbtn').onclick = ()=>openPlanAudit(p);
   return el;
 }
 
@@ -1957,19 +2329,20 @@ $('moreBtn').onclick = ()=>{ S.shown += 12; render(); };
 
 /* ---------- Email my top 3, with 6 monthly re-check ---------- */
 
-// A link that re-opens this tool with the same inputs and re-runs
-// the comparison against whatever the current market rates are.
+// A link that re-opens this tool with non-sensitive inputs. Meter files
+// stay local, so a meter-based comparison asks for a fresh upload rather
+// than silently substituting a generic profile.
 function magicLink(){
   const I = S.inputs;
+  const needsMeterUpload = Boolean(I.meter);
   const q = new URLSearchParams({
     pc:I.pc, kwh:Math.round(I.annualKwh), profile:I.profileKind,
-    solar:S.solarMode, ev:I.hasEv?'1':'0', cust:I.custType, auto:'1'
+    solar:S.solarMode, ev:I.hasEv?'1':'0', cl:I.hasControlledLoad?'1':'0', cust:I.custType, auto:needsMeterUpload?'0':'1'
   });
   if(I.solarKw) q.set('kw', I.solarKw);
   if(I.battKwh) q.set('bkwh', I.battKwh);
   if(I.exportKwh) q.set('exp', Math.round(I.exportKwh));
-  const nmi = $('nmi').value.trim();
-  if(nmi) q.set('nmi', nmi);
+  if(needsMeterUpload) q.set('meter','reupload');
   return location.origin + location.pathname + '?' + q.toString();
 }
 
@@ -1980,11 +2353,10 @@ function top3(){
       offerId:String(p.planId||'').split('@')[0],
       annual:Math.round(p.est.total),
       monthly:Math.round(p.est.total/12),
+      tariffHash:p.tariffHash||'',
       link: p.link || retailerSite(p.base) || ''
     }));
 }
-
-if(!EMAIL_WEBHOOK) $('emailCard').style.display = 'none';
 
 // Invisible bot protection: honeypot, time-trap, and a per-browser rate limit
 const pageLoadTs = Date.now();
@@ -1995,17 +2367,32 @@ function leadsRecent(){
   return t.filter(x => now - x < 3600000);
 }
 
+async function submitLead(payload){
+  const response = await fetch(LEAD_API, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  let result={};
+  try{ result=await response.json(); }catch(_){ }
+  if(!response.ok || !result.ok) throw new Error(result.error||'Your request could not be delivered. Please try again.');
+  return result;
+}
+
 $('leadBtn').onclick = async ()=>{
   const name = $('leadName').value.trim();
   const email = $('leadEmail').value.trim();
   const phone = $('leadPhone').value.trim();
   const website = $('leadWebsite').value.trim(); // honeypot: real people never fill this
   const stat = $('leadStat');
-  // Honeypot filled, or submitted implausibly fast: silently treat as handled, never send.
-  if(website || (Date.now() - pageLoadTs) < 3000){
+  // A filled honeypot is silently handled and never sent.
+  if(website){
     stat.className='estat ok'; stat.style.display='block';
     stat.textContent='Thanks, your request has been received.';
     return;
+  }
+  if((Date.now() - pageLoadTs) < 1200){
+    stat.className='estat err'; stat.style.display='block'; stat.textContent='Please wait a moment, then try again.'; return;
   }
   if(!name){
     stat.className='estat err'; stat.style.display='block'; stat.textContent='Please enter your name.'; $('leadName').focus(); return;
@@ -2013,36 +2400,54 @@ $('leadBtn').onclick = async ()=>{
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
     stat.className='estat err'; stat.style.display='block'; stat.textContent='Please enter a valid email address.'; $('leadEmail').focus(); return;
   }
+  if(!$('leadConsent').checked){
+    stat.className='estat err'; stat.style.display='block'; stat.textContent='Please confirm that we may use your details to send these results.'; $('leadConsent').focus(); return;
+  }
   if(leadsRecent().length >= 3){
     stat.className='estat err'; stat.style.display='block'; stat.textContent='You have sent a few requests recently. Please try again in a little while, or call 1300 241 149.'; return;
   }
   const upgrades = $('leadUpgrades').checked;
   const payload = {
-    ts:new Date().toISOString(),
+    submissionType:'comparison', ts:new Date().toISOString(), clientStartedAt:pageLoadTs, website,
     name, phone, upgrades,
     email, postcode:S.inputs.pc, state:S.inputs.st,
     annualKwh:Math.round(S.inputs.annualKwh),
-    solar:S.solarMode, hasEv:S.inputs.hasEv,
+    solar:S.solarMode, hasEv:S.inputs.hasEv, hasControlledLoad:S.inputs.hasControlledLoad,
     top3:top3(), magicLink:magicLink(),
-    recheckMonths:6
+    provenance:{
+      engineVersion:S.inputs.engineVersion, tariffSchemaVersion:S.inputs.tariffSchemaVersion,
+      sourceHash:S.inputs.tariffSourceHash, sourceFetchedAt:S.inputs.tariffFetchedAt,
+      annualSource:S.inputs.annualSource, meterConfidence:S.inputs.meter?S.inputs.meter.confidence:'modelled',
+      conditionalDiscountsAssumed:$('fCond').checked
+    },
+    recheckMonths:6,
+    consent:{accepted:true, purpose:'Email comparison results and six monthly comparison reminders', noticeVersion:LEAD_NOTICE_VERSION, grantedAt:new Date().toISOString()}
   };
   $('leadBtn').disabled = true;
   stat.className='estat'; stat.style.display='block'; stat.textContent='Sending...';
   try{
-    await fetch(EMAIL_WEBHOOK, {method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'}, body:JSON.stringify(payload)});
+    await submitLead(payload);
     stat.className='estat ok';
     stat.textContent='Done. Your top 3 plans are on their way to '+email+', and we will send a fresh comparison reminder every 6 months.'+(upgrades?' Our team will also be in touch about an independent assessment.':'');
     try{ const t = leadsRecent(); t.push(Date.now()); localStorage.setItem('aeaLeadTimes', JSON.stringify(t)); }catch(e){}
   }catch(e){
     stat.className='estat err';
-    stat.textContent='Could not send right now. Please try again shortly.';
+    stat.textContent=e.message||'Could not send right now. Please try again shortly.';
   }finally{
     $('leadBtn').disabled = false;
   }
 };
 
 /* ---------- Privacy popup ---------- */
+(function(){
+  const ov=$('auditModal'), close=$('auditClose');
+  if(!ov||!close) return;
+  const shut=()=>ov.classList.remove('show');
+  close.addEventListener('click',shut);
+  ov.addEventListener('click',e=>{ if(e.target===ov) shut(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&ov.classList.contains('show')) shut(); });
+})();
+
 (function(){
   const ov = $('privacyModal'), link = $('privacyLink'), close = $('privacyClose');
   if(!ov || !link) return;
@@ -2058,7 +2463,7 @@ $('leadBtn').onclick = async ()=>{
 /* ---------- Direct upgrade enquiry popup ---------- */
 (function(){
   const ov = $('enquiryModal'); if(!ov) return;
-  const nameEl=$('enqName'), emailEl=$('enqEmail'), phoneEl=$('enqPhone'), hp=$('enqWebsite'),
+  const nameEl=$('enqName'), emailEl=$('enqEmail'), phoneEl=$('enqPhone'), hp=$('enqWebsite'), consentEl=$('enqConsent'),
         stat=$('enqStat'), sendBtn=$('enqSend'), cancelBtn=$('enqCancel'), title=$('enqTitle');
   let current = null;
   const LABELS = {'solar':'Enquire about direct solar', 'solar-battery':'Enquire about direct solar and battery', 'battery':'Enquire about direct battery'};
@@ -2067,6 +2472,7 @@ $('leadBtn').onclick = async ()=>{
     current = kind;
     title.textContent = LABELS[kind] || 'Enquire about an upgrade';
     stat.style.display='none'; stat.textContent='';
+    consentEl.checked=false;
     openTs.t = Date.now();
     ov.classList.add('show');
     setTimeout(()=>nameEl.focus(), 30);
@@ -2081,12 +2487,14 @@ $('leadBtn').onclick = async ()=>{
   document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ov.classList.contains('show')) shut(); });
   sendBtn.addEventListener('click', async ()=>{
     const name=nameEl.value.trim(), email=emailEl.value.trim(), phone=phoneEl.value.trim();
-    if(hp.value.trim() || (Date.now()-(openTs.t||0) < 1200)){
+    if(hp.value.trim()){
       stat.className='estat ok'; stat.style.display='block'; stat.textContent='Thanks, your enquiry has been received.'; return;
     }
+    if(Date.now()-(openTs.t||0) < 1200){ stat.className='estat err'; stat.style.display='block'; stat.textContent='Please wait a moment, then try again.'; return; }
     if(!name){ stat.className='estat err'; stat.style.display='block'; stat.textContent='Please enter your name.'; nameEl.focus(); return; }
     if(!email && !phone){ stat.className='estat err'; stat.style.display='block'; stat.textContent='Please enter an email or a phone number so we can reach you.'; emailEl.focus(); return; }
     if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ stat.className='estat err'; stat.style.display='block'; stat.textContent='That email does not look right. Check it, or leave it blank and give a phone number.'; emailEl.focus(); return; }
+    if(!consentEl.checked){ stat.className='estat err'; stat.style.display='block'; stat.textContent='Please confirm that we may use your details to respond to this enquiry.'; consentEl.focus(); return; }
     if(leadsRecent().length >= 3){ stat.className='estat err'; stat.style.display='block'; stat.textContent='You have sent a few requests recently. Please try again shortly, or call 1300 241 149.'; return; }
     const ctx = S.enquiryCtx || {};
     let kw='', bkwh='', solarCost='', comboCost='', saving='', label='direct solar';
@@ -2094,29 +2502,30 @@ $('leadBtn').onclick = async ()=>{
     else if(current==='battery'){ kw=(S.inputs&&S.inputs.solarKw)||''; bkwh=ctx.bk||''; comboCost=ctx.batteryCost||''; saving=ctx.saving||''; label='direct battery'; }
     else { kw=ctx.kw||''; solarCost=ctx.solarCost||''; saving=ctx.save1||''; label='direct solar'; }
     const payload = {
-      ts:new Date().toISOString(),
+      submissionType:'upgrade', ts:new Date().toISOString(), clientStartedAt:openTs.t, website:hp.value.trim(),
       enquiry:current,
       type:'Upgrade enquiry: '+label,
       upgrades:true,
       name, email, phone,
       postcode:(S.inputs&&S.inputs.pc)||'', state:(S.inputs&&S.inputs.st)||'',
       annualKwh:S.inputs?Math.round(S.inputs.annualKwh):'',
-      solar:S.solarMode, hasEv:S.inputs?S.inputs.hasEv:false,
+      solar:S.solarMode, hasEv:S.inputs?S.inputs.hasEv:false, hasControlledLoad:S.inputs?S.inputs.hasControlledLoad:false,
       solarKw:kw, batteryKwh:bkwh, solarCost:solarCost, comboCost:comboCost, annualSaving:saving,
       top3:(S.plans&&S.plans.length)?top3():[],
-      magicLink:S.inputs?magicLink():''
+      magicLink:S.inputs?magicLink():'',
+      consent:{accepted:true, purpose:'Respond to this upgrade enquiry', noticeVersion:LEAD_NOTICE_VERSION, grantedAt:new Date().toISOString()}
     };
     sendBtn.disabled = true;
     stat.className='estat'; stat.style.display='block'; stat.textContent='Sending...';
     try{
-      await fetch(EMAIL_WEBHOOK, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body:JSON.stringify(payload)});
+      await submitLead(payload);
       stat.className='estat ok';
       stat.textContent='Thanks '+name+', your enquiry is in. Our team will be in touch about an independent assessment and direct-to-trade options.';
       try{ const t=leadsRecent(); t.push(Date.now()); localStorage.setItem('aeaLeadTimes', JSON.stringify(t)); }catch(_){}
       nameEl.value=''; emailEl.value=''; phoneEl.value='';
     }catch(e){
       stat.className='estat err';
-      stat.textContent='Could not send right now. Please try again shortly, or call 1300 241 149.';
+      stat.textContent=e.message||'Could not send right now. Please try again shortly, or call 1300 241 149.';
     }finally{
       sendBtn.disabled = false;
     }
@@ -2128,7 +2537,6 @@ $('leadBtn').onclick = async ()=>{
   const q = new URLSearchParams(location.search);
   if(!q.get('pc')) return;
   $('postcode').value = q.get('pc');
-  if(q.get('nmi')) $('nmi').value = q.get('nmi');
   if(q.get('cust')) $('custType').value = q.get('cust');
   if(q.get('kwh')){ $('usageKwh').value = q.get('kwh'); $('usagePeriod').value = '1'; }
   if(q.get('profile')) $('profile').value = q.get('profile');
@@ -2138,7 +2546,9 @@ $('leadBtn').onclick = async ()=>{
   if(q.get('bkwh')) $('battKwh').value = q.get('bkwh');
   if(q.get('exp')) $('exportKwh').value = q.get('exp');
   if(q.get('ev')==='1') $('hasEv').checked = true;
+  if(q.get('cl')==='1'){ $('hasControlledLoad').checked = true; setControlledLoadUi(); }
   showDnsp();
+  if(q.get('meter')==='reupload') showNotice('This comparison originally used a local NEM12 meter file. For privacy, the file and NMI were not stored in this link. Re-upload the meter file before comparing to reproduce the personalised result.');
   if(q.get('auto')==='1' && q.get('kwh')) run();
 })();
 </script>
