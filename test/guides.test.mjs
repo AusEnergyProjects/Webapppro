@@ -14,6 +14,7 @@ const heating = read("../src/app/guides/heating/page.tsx");
 const hotWater = read("../src/app/guides/hot-water/page.tsx");
 const start = read("../src/components/GettingStarted.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
+const rebates = read("../src/components/RebatesHub.tsx");
 
 test("solar and battery guides are connected to the shared journey", () => {
   assert.match(chrome, /href: "\/guides"/);
@@ -25,6 +26,9 @@ test("solar and battery guides are connected to the shared journey", () => {
   assert.match(start, /href="\/guides\/batteries"/);
   assert.match(start, /href="\/guides\/heating"/);
   assert.match(start, /href="\/guides\/hot-water"/);
+  assert.match(start, /href="\/rebates"/);
+  assert.match(overview, /href="\/rebates"/);
+  assert.match(rebates, /href="\/guides"/);
 });
 
 test("solar guidance distinguishes household use, exports and written quote evidence", () => {

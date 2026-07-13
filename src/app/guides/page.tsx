@@ -14,5 +14,6 @@ export default function GuidesPage() {
       <article className="guide-card"><span>Hot water</span><h3>Match the system to household demand</h3><p>Compare heat pump, solar, storage and continuous-flow options using capacity, climate, tariffs, noise, backup and written quote evidence.</p><a href="/guides/hot-water">Open the hot water guide</a></article>
     </div></GuideSection>
     <section className="guide-callout"><div><h2>Use your own load pattern where possible</h2><p>A household can use the same annual electricity as another home but at very different times. Half-hour meter data makes solar self-use and battery discharge estimates more representative.</p></div><a href="/compare">Model solar and battery scenarios</a></section>
+    <section className="guide-callout"><div><h2>Check location-specific support</h2><p>Rebates, certificates, loans and provider discounts can have different rules. Choose your state or territory and confirm the official source before using an incentive in a quote.</p></div><a href="/rebates">Open rebates and assistance</a></section>
   </GuideShell>;
 }

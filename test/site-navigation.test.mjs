@@ -12,6 +12,8 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 const electricity = read("../src/app/compare/page.tsx");
 const gas = read("../src/app/gas-compare/page.tsx");
 const styles = read("../src/app/globals.css");
+const rebates = read("../src/components/RebatesHub.tsx");
+const rebatesRoute = read("../src/app/rebates/page.tsx");
 
 test("the homepage provides a getting-started journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
@@ -27,6 +29,27 @@ test("shared navigation connects the start, electricity and gas journeys", () =>
   assert.match(chrome, /href: "\/gas-compare"/);
   assert.match(electricity, /SiteNav active="electricity"/);
   assert.match(gas, /SiteNav active="gas"/);
+  assert.match(chrome, /href: "\/rebates"/);
+  assert.match(rebatesRoute, /RebatesHub/);
+  assert.match(rebates, /SiteNav active="rebates"/);
+});
+
+test("rebates hub makes location boundaries and source confirmation visible", () => {
+  assert.match(rebates, /Choose your state or territory/);
+  assert.match(rebates, /Select a state or territory/);
+  assert.match(rebates, /Federal certificates and programs/);
+  assert.match(rebates, /State, territory and provider support/);
+  assert.match(rebates, /Information checked 14 July 2026/);
+  assert.match(rebates, /Official program pages remain the source of truth/);
+  assert.match(rebates, /Open official source and confirm/);
+  assert.match(rebates, /Solar PV, solar hot water and eligible heat pump hot water/);
+  assert.match(rebates, /insulation and draught proofing/);
+  assert.match(rebates, /Heating and cooling/);
+  assert.match(rebates, /[A-Z][A-Za-z ]+ Government/);
+});
+
+test("rebates hub contains no prohibited dash characters", () => {
+  assert.doesNotMatch(`${rebates}${rebatesRoute}`, /\u2013|\u2014/);
 });
 
 test("homepage hero actions keep visible text on distinct backgrounds", () => {
