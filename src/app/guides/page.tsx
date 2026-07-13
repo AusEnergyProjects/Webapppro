@@ -15,5 +15,6 @@ export default function GuidesPage() {
     </div></GuideSection>
     <section className="guide-callout"><div><h2>Use your own load pattern where possible</h2><p>A household can use the same annual electricity as another home but at very different times. Half-hour meter data makes solar self-use and battery discharge estimates more representative.</p></div><a href="/compare">Model solar and battery scenarios</a></section>
     <section className="guide-callout"><div><h2>Check location-specific support</h2><p>Rebates, certificates, loans and provider discounts can have different rules. Choose your state or territory and confirm the official source before using an incentive in a quote.</p></div><a href="/rebates">Open rebates and assistance</a></section>
+    <section className="guide-callout"><div><h2>See why the evidence matters</h2><p>Worked examples show how timing, self-use and seasonal consumption can change an assessment, with the method and limitations visible.</p></div><a href="/case-studies">View worked examples</a></section>
   </GuideShell>;
 }

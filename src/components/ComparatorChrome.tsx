@@ -16,13 +16,14 @@ export function BrandBar() {
   );
 }
 
-export function SiteNav({ active }: { active: "start" | "electricity" | "gas" | "guides" | "rebates" }) {
+export function SiteNav({ active }: { active: "start" | "electricity" | "gas" | "guides" | "rebates" | "case-studies" }) {
   const links = [
     { key: "start", href: "/getting-started", label: "Start here" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "guides", href: "/guides", label: "Guides" },
     { key: "rebates", href: "/rebates", label: "Rebates and help" },
+    { key: "case-studies", href: "/case-studies", label: "Worked examples" },
   ] as const;
   return <nav aria-label="Energy services" className="comparator-nav">{links.map((link) => <a className={active === link.key ? "active" : "inactive"} href={link.href} key={link.key} aria-current={active === link.key ? "page" : undefined}>{link.label}</a>)}</nav>;
 }
