@@ -58,3 +58,10 @@ Progress as at 14 July 2026:
 - Add guides, rebates, case studies, solar, batteries, heating, hot water and getting-started pages.
 - Continue monitoring consented saved comparisons and lead follow-up after production release.
 - Deploy only after local build, desktop and mobile checks pass.
+
+Progress as at 14 July 2026:
+
+- The root route now provides a Getting Started journey instead of sending every visitor directly into electricity comparison.
+- Shared navigation connects the start, electricity and gas journeys, while the guide explains what evidence to prepare, the difference between electricity and mains gas inputs, privacy boundaries and what to confirm before switching.
+- A dedicated guides area now covers rooftop solar and home batteries. It explains household energy flow, sizing evidence, written quote requirements, installer and product checks, backup and VPP questions, and the federal battery support structure current at 14 July 2026.
+- Solar and battery guides link directly into the existing half-hour scenario model so educational guidance and household calculations use the same evidence-led journey.

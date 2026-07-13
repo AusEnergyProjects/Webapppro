@@ -1,0 +1,26 @@
+import { GuideShell, GuideSection } from "@/components/GuideShell";
+
+export const metadata = {
+  title: "Home Battery Guide | Australian Energy Assessments",
+  description: "Assess home battery sizing, backup, warranties, cycling, VPP terms and current federal support.",
+};
+
+export default function BatteryGuidePage() {
+  return <GuideShell label="Home battery guide" title="A battery needs both surplus energy and somewhere useful to send it" introduction="The strongest battery case usually combines solar exports available for charging with grid imports later in the day. Capacity alone does not show how much a household will save.">
+    <GuideSection eyebrow="Start with the energy flow" title="Three limits shape battery value"><div className="guide-principle-grid">
+      <article><strong>Energy available to charge</strong><p>A solar-charged battery cannot capture more energy than the household would otherwise export.</p></article>
+      <article><strong>Later grid imports</strong><p>Stored energy only avoids purchases when the home would otherwise import electricity after charging.</p></article>
+      <article><strong>Round-trip losses</strong><p>Some energy is lost during charging and discharging, so delivered energy is lower than the energy sent into the battery.</p></article>
+    </div></GuideSection>
+
+    <GuideSection eyebrow="Read the specification" title="Capacity and power answer different questions"><div className="guide-two-column"><div><h3>Energy capacity in kWh</h3><p>Usable capacity is the energy available for normal cycling. Compare usable capacity, not only the larger nominal figure.</p><ul><li>Expected daily cycling</li><li>Warranty years, cycles and throughput</li><li>Retained capacity at the warranty endpoint</li></ul></div><div><h3>Power output in kW</h3><p>Power determines how much load the battery can supply at once. Check continuous and peak power against the appliances you expect it to support.</p><ul><li>Single-phase or three-phase arrangement</li><li>Large appliance start-up loads</li><li>Inverter and existing solar compatibility</li></ul></div></div></GuideSection>
+
+    <GuideSection eyebrow="Backup and VPP choices" title="Ask what happens when the grid fails"><div className="guide-two-column"><div><h3>Backup is not automatic</h3><p>Solar and batteries may shut down during an outage unless the system is specifically designed and wired for backup. Confirm which circuits are backed up, the maximum backup power and whether solar can recharge the battery while the grid is unavailable.</p></div><div><h3>Read virtual power plant terms</h3><p>A VPP may offer credits or other benefits in exchange for controlling part of the battery. Check minimum reserve, event limits, exit fees, contract length and how the offer changes your retail tariff.</p></div></div></GuideSection>
+
+    <GuideSection eyebrow="Federal support, checked 14 July 2026" title="How the Cheaper Home Batteries discount is structured"><div className="guide-program"><p>Eligible new batteries connected to new or existing rooftop solar can create small-scale technology certificates. Installations must meet all program, product and installer rules.</p><dl><div><dt>Eligible nominal capacity</dt><dd>5 to 100 kWh</dd></div><div><dt>Supported usable capacity</dt><dd>First 50 kWh</dd></div><div><dt>STC factor for May to December 2026</dt><dd>6.8 per supported kWh before size tapering</dd></div></dl><p>The factor applies at 100% through 14 kWh, 60% above 14 through 28 kWh, and 15% above 28 through 50 kWh. The dollar discount also depends on the certificate value and how it is assigned, so use the written installed quote and official calculator for the final amount.</p></div><div className="guide-source-links"><a href="https://www.dcceew.gov.au/energy/programs/cheaper-home-batteries/eligibility-information" target="_blank" rel="noreferrer">Current program eligibility</a><a href="https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries" target="_blank" rel="noreferrer">Clean Energy Regulator battery rules</a></div></GuideSection>
+
+    <GuideSection eyebrow="Written quote checklist" title="Confirm the complete installed system"><ul className="guide-checklist"><li>Nominal and usable capacity plus continuous and peak power</li><li>Exact battery, inverter, gateway and backup hardware models</li><li>Approved product status and accredited, licensed battery installer</li><li>Battery location and compliance with installation clearances</li><li>Backup circuits, outage behaviour and black-start limitations</li><li>Warranty years, cycles, throughput, retained capacity and exclusions</li><li>Gross installed cost and every STC or other incentive deduction</li><li>Monitoring access, software support, VPP terms and exit conditions</li></ul></GuideSection>
+
+    <section className="guide-callout"><div><h2>Test a battery against the household load</h2><p>The electricity comparison estimates solar charging, later discharge, remaining imports, exports and payback using the same half-hour household profile.</p></div><a href="/compare">Open the battery scenario</a></section>
+  </GuideShell>;
+}

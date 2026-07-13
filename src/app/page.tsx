@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { GettingStarted } from "@/components/GettingStarted";
 
 export default function Home() {
-  redirect("/compare");
+  return <GettingStarted />;
 }

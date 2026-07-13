@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Electricity Plan Comparator | Australian Energy Assessments",
-  description: "Independent energy plan comparisons and home-upgrade advice.",
+  title: "Australian Energy Assessments | Independent Energy Comparison",
+  description: "Independent electricity and mains gas plan comparisons with visible evidence and assumptions.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

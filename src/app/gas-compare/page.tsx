@@ -1,4 +1,4 @@
-import { BrandBar, ComparatorHero } from "@/components/ComparatorChrome";
+import { BrandBar, ComparatorHero, SiteNav } from "@/components/ComparatorChrome";
 import { GasComparator } from "@/components/GasComparator";
 
 export const metadata = {
@@ -10,10 +10,7 @@ export default function GasComparisonPage() {
   return (
     <main className="wrap">
       <BrandBar />
-      <nav aria-label="Energy comparison" className="comparator-nav">
-        <a className="inactive" href="/compare">Electricity compare</a>
-        <a className="active" href="/gas-compare">Gas compare</a>
-      </nav>
+      <SiteNav active="gas" />
       <ComparatorHero title="Gas Plan Comparator">
         <p>Compare current gas offers using your location, annual MJ and seasonal household pattern.</p>
         <div className="fresh"><span className="dot" /> Current CDR gas plan records, retrieved for each comparison</div>
