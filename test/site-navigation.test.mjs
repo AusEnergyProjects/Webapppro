@@ -83,7 +83,7 @@ test("shared visual foundation uses the polished responsive system", () => {
   assert.match(layout, /display=swap/);
   assert.match(layout, /fonts\.gstatic\.com/);
   assert.match(styles, /\.site-header \{/);
-  assert.match(styles, /radial-gradient\(circle at 8% 0%/);
+  assert.match(styles, /radial-gradient\(circle at 8% -4%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
   assert.match(styles, /a:focus-visible/);
 });
