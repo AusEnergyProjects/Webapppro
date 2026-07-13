@@ -8,6 +8,8 @@ const page = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/page.ts
 const previewPage = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/electricity-next/page.tsx"), "utf8");
 const rollbackRoute = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/electricity-legacy/route.ts"), "utf8");
 const component = fs.readFileSync(path.resolve(__dirname, "../src/components/electricity/NativeElectricityComparator.tsx"), "utf8");
+const chart = fs.readFileSync(path.resolve(__dirname, "../src/components/electricity/Nem12UsageChart.tsx"), "utf8");
+const styles = fs.readFileSync(path.resolve(__dirname, "../src/app/globals.css"), "utf8");
 
 test("native electricity is primary with noindex regression and rollback routes", () => {
   assert.match(page, /Electricity plan comparison/);
@@ -88,4 +90,18 @@ test("upgrade scenarios distinguish editable quotes from model assumptions", () 
   assert.match(component, /using first-year bill saving/);
   assert.match(component, /Indicative scenario, not an installation recommendation/);
   assert.match(component, /SunSPOT calculator/);
+});
+
+test("meter chart uses a vivid lightweight interactive SVG", () => {
+  assert.match(chart, /linearGradient id="weekday-area"/);
+  assert.match(chart, /linearGradient id="weekend-area"/);
+  assert.match(chart, /onPointerMove=\{selectPointerBin\}/);
+  assert.match(chart, /onKeyDown=\{selectKeyboardBin\}/);
+  assert.match(chart, /ArrowLeft/);
+  assert.match(chart, /ArrowRight/);
+  assert.match(chart, /Move or touch across the chart/);
+  assert.match(styles, /\.nem12-chart-line\.weekday/);
+  assert.match(styles, /#25f4d2/);
+  assert.match(styles, /#ffd84d/);
+  assert.doesNotMatch(chart, /chart\.js|recharts|d3/);
 });

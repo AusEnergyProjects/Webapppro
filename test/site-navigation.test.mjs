@@ -16,7 +16,9 @@ const rebates = read("../src/components/RebatesHub.tsx");
 const rebatesRoute = read("../src/app/rebates/page.tsx");
 const guideShell = read("../src/components/GuideShell.tsx");
 const caseStudies = read("../src/app/case-studies/page.tsx");
-const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.png");
+const layout = read("../src/app/layout.tsx");
+const fastNavigation = read("../src/components/FastNavigation.tsx");
+const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
 
 test("the homepage provides a direct trade journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
@@ -40,18 +42,24 @@ test("shared navigation connects Direct Trade Services, electricity and gas jour
   assert.match(rebates, /SiteHeader active="rebates"/);
 });
 
-test("direct trade proposition separates the live service from the planned installer model", () => {
+test("direct trade proposition presents the trade network and subscription as live", () => {
   assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /planned revenue model is a subscription paid by participating installers/);
+  assert.match(guide, /trade network and installer subscription model are active/);
+  assert.match(guide, /Participating installers fund the service through a current subscription/);
   assert.match(guide, /not a margin added to household equipment/);
-  assert.match(guide, /Direct Trade installer matching, installer subscriptions and applications are in development/);
-  assert.match(guide, /Installer applications are not open yet/);
+  assert.doesNotMatch(guide, /planned revenue model|installer subscriptions and applications are in development|Future Direct Trade members/);
+});
+
+test("direct trade marketplace includes reputable wholesalers", () => {
+  assert.match(guide, /For wholesalers/);
+  assert.match(guide, /Quality products into customers’ homes/);
+  assert.match(guide, /reputable suppliers to connect proven products with qualified trades and suitable households/);
 });
 
 test("installer membership does not imply government accreditation", () => {
   assert.match(guide, /verified membership in the Australian Energy Assessments program/);
-  assert.match(guide, /will not replace a trade licence, government accreditation or scheme-specific installer approval/);
+  assert.match(guide, /does not replace a trade licence, government accreditation or scheme-specific installer approval/);
   assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);
 });
@@ -69,8 +77,10 @@ test("customer-facing pages use the shared powered-by footer", () => {
 });
 
 test("shared visual foundation uses the polished responsive system", () => {
-  assert.match(styles, /family=Manrope/);
-  assert.match(styles, /family=Source\+Serif\+4/);
+  assert.match(layout, /family=Manrope/);
+  assert.match(layout, /family=Source\+Serif\+4/);
+  assert.match(layout, /display=swap/);
+  assert.match(layout, /fonts\.gstatic\.com/);
   assert.match(styles, /\.site-header \{/);
   assert.match(styles, /radial-gradient\(circle at 8% 0%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
@@ -93,9 +103,19 @@ test("shared layout and component tokens prevent page-level visual drift", () =>
 
 test("homepage uses the original AEA energy platform artwork", () => {
   assert.match(guide, /className="start-hero-visual"/);
-  assert.match(styles, /url\("\/aea-energy-platform-hero\.png"\)/);
+  assert.match(styles, /url\("\/aea-energy-platform-hero\.jpg"\)/);
   assert.equal(fs.existsSync(heroAsset), true);
   assert.ok(fs.statSync(heroAsset).size > 100_000);
+  assert.ok(fs.statSync(heroAsset).size < 500_000);
+});
+
+test("internal navigation prefetches and transitions without full document reloads", () => {
+  assert.match(layout, /<FastNavigation \/>/);
+  assert.match(fastNavigation, /router\.prefetch/);
+  assert.match(fastNavigation, /router\.push/);
+  assert.match(fastNavigation, /document\.addEventListener\("click"/);
+  assert.match(fastNavigation, /route-loading/);
+  assert.match(styles, /html\.route-loading body::before/);
 });
 
 test("rebates hub makes location boundaries and source confirmation visible", () => {

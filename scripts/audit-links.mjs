@@ -5,6 +5,10 @@ const root = process.cwd();
 const sourceRoot = path.join(root, "src");
 const liveOrigin = process.env.SITE_URL || "https://compare.ausenergyassessments.com";
 const timeoutMs = 12_000;
+const resourceHintOrigins = new Set([
+  "https://fonts.googleapis.com",
+  "https://fonts.gstatic.com",
+]);
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -17,7 +21,7 @@ const sourceFiles = walk(sourceRoot).filter((file) => /\.(?:js|mjs|ts|tsx)$/.tes
 const literalUrls = [...new Set(sourceFiles.flatMap((file) => {
   const source = fs.readFileSync(file, "utf8");
   return [...source.matchAll(/https:\/\/[^\s"')]+/g)].map((match) => match[0].replace(/[.,;]$/, ""));
-}))];
+}))].filter((url) => !resourceHintOrigins.has(url));
 
 const checks = [
   { label: "live electricity comparer", url: new URL("/compare", liveOrigin).href, kind: "page" },
