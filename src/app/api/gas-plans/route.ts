@@ -1,44 +1,14 @@
 /* CDR retailer payloads vary by retailer and supported API version. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { estimateGasContract, type GasUsageProfile } from "@/lib/gas-tariff-engine";
+import { safeCdrBase } from "@/lib/electricity-cdr.mjs";
+import { resolveCustomerPlanUrl, retailerWebsite } from "@/lib/retailer-links.mjs";
 
 const FEED_URL = "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
-const GST = 1.1;
-const RETAILER_WEBSITES: Record<string, string> = {
-  "agl": "https://www.agl.com.au/",
-  "alinta energy": "https://www.alintaenergy.com.au/",
-  "arcline by racv": "https://energy.arcline.com.au/",
-  "arcline by racv - energy": "https://energy.arcline.com.au/",
-  "covau": "https://covau.com.au/",
-  "dodo power & gas": "https://www.dodo.com/",
-  "energy locals": "https://energylocals.com.au/",
-  "energyaustralia": "https://www.energyaustralia.com.au/",
-  "engie": "https://www.engie.com.au/",
-  "globird energy": "https://www.globirdenergy.com.au/",
-  "kogan energy": "https://www.koganenergy.com.au/",
-  "lumo energy": "https://www.lumoenergy.com.au/",
-  "momentum energy": "https://www.momentumenergy.com.au/",
-  "origin energy": "https://www.originenergy.com.au/",
-  "powershop": "https://www.powershop.com.au/",
-  "red energy": "https://www.redenergy.com.au/",
-  "tango energy": "https://www.tangoenergy.com/",
-  "1st energy": "https://1stenergy.com.au/",
-};
-
-function retailerWebsite(name: string, logoUri: string | null): string | null {
-  const normalized = name.toLowerCase().replace(/\s+/g, " ").trim();
-  if (RETAILER_WEBSITES[normalized]) return RETAILER_WEBSITES[normalized];
-  try {
-    const hostname = new URL(logoUri || "").hostname.replace(/^www\./, "");
-    if (hostname && !/(cloudinary|pcdn|2mdn|public\.energylocals)/i.test(hostname)) return "https://" + hostname + "/";
-  } catch {
-    return null;
-  }
-  return null;
-}
-
+const DETAIL_API_VERSION = "3";
 async function getJson(url: string, version?: string): Promise<any> {
-  const response = await fetch(url, { headers: version ? { "x-v": version } : {}, cache: "no-store" });
+  const response = await fetch(url, { headers: version ? { "x-v": version, "x-min-v": version } : {}, cache: "no-store" });
   if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);
   return response.json();
 }
@@ -54,95 +24,13 @@ function postcodeMatches(postcode: string, values: unknown): boolean {
   });
 }
 
-function blockCost(rates: any[], usageMj: number, days: number, ratePeriod?: string): number {
-  let remaining = usageMj;
-  let total = 0;
-  rates.forEach((rate, index) => {
-    if (remaining <= 0) return;
-    let volume = rate.volume == null ? Infinity : Number(rate.volume);
-    if (ratePeriod === "P1D") volume *= days;
-    if (index === rates.length - 1) volume = Infinity;
-    const used = Math.min(remaining, volume);
-    total += used * Number(rate.unitPrice || 0);
-    remaining -= used;
-  });
-  return total;
-}
-
-function dayOfYear(month: number, day: number): number {
-  const date = new Date(Date.UTC(2025, month - 1, day));
-  return Math.floor((date.getTime() - Date.UTC(2025, 0, 1)) / 86400000) + 1;
-}
-
-function periodDays(period: any): number {
-  const [startMonth, startDay] = String(period.startDate || "01-01").split("-").map(Number);
-  const [endMonth, endDay] = String(period.endDate || "12-31").split("-").map(Number);
-  const start = dayOfYear(startMonth || 1, startDay || 1);
-  const end = dayOfYear(endMonth || 12, endDay || 31);
-  return end >= start ? end - start + 1 : 365 - start + 1 + end;
-}
-
-function estimate(contract: any, annualMj: number, includeConditional: boolean) {
-  const periods = Array.isArray(contract?.tariffPeriod) ? contract.tariffPeriod : [];
-  const priceablePeriods = periods.filter((period: any) => Array.isArray(period?.singleRate?.rates) && period.singleRate.rates.length);
-  if (!priceablePeriods.length) return null;
-
-  const usagePerDay = annualMj / 365;
-  const breakdown = priceablePeriods.map((period: any) => {
-    const days = periodDays(period);
-    const rates = period.singleRate.rates;
-    return {
-      period,
-      days,
-      supply: Number(period.dailySupplyCharges ?? period.dailySupplyCharge ?? 0) * days,
-      usage: blockCost(rates, usagePerDay * days, days, period.singleRate.period),
-      rates,
-    };
-  });
-  const supply = breakdown.reduce((total: number, item: any) => total + item.supply, 0) * GST;
-  const usage = breakdown.reduce((total: number, item: any) => total + item.usage, 0) * GST;
-  let discount = 0;
-  const conditionalDiscounts: string[] = [];
-  for (const item of contract.discounts || []) {
-    const conditional = String(item.type || "").toUpperCase() === "CONDITIONAL";
-    if (conditional) conditionalDiscounts.push(item.displayName || "Conditional discount");
-    if (conditional && !includeConditional) continue;
-    if (item.methodUType === "percentOfBill") discount += (supply + usage) * Number(item.percentOfBill?.rate || 0);
-    if (item.methodUType === "percentOfUse") discount += usage * Number(item.percentOfUse?.rate || 0);
-    if (item.methodUType === "fixedAmount") discount += Number(item.fixedAmount?.amount || 0);
-  }
-  const firstPeriod = breakdown[0];
-  return {
-    annualCost: supply + usage - discount,
-    supply,
-    usage,
-    supplyChargeDaily: Number(firstPeriod.period.dailySupplyCharges ?? firstPeriod.period.dailySupplyCharge ?? 0) * GST * 100,
-    rates: firstPeriod.rates.map((rate: any, index: number) => ({
-      label: rate.volume && index < firstPeriod.rates.length - 1 ? "first " + rate.volume + (firstPeriod.period.singleRate.period === "P1D" ? " MJ/day" : " MJ") : index ? "remaining usage" : "all usage",
-      centsPerMj: Number(rate.unitPrice || 0) * GST * 100,
-    })),
-    seasonal: breakdown.length > 1,
-    seasons: breakdown.map((item: any) => ({
-      label: item.period.displayName || "Seasonal rate",
-      days: item.days,
-      supply: item.supply * GST,
-      usage: item.usage * GST,
-      rates: item.rates.map((rate: any, index: number) => ({
-        label: rate.volume && index < item.rates.length - 1 ? "first " + rate.volume + (item.period.singleRate.period === "P1D" ? " MJ/day" : " MJ") : index ? "remaining usage" : "all usage",
-        centsPerMj: Number(rate.unitPrice || 0) * GST * 100,
-      })),
-    })),
-    conditionalDiscounts,
-    discounts: discount,
-  };
-}
-
 export async function GET(request: NextRequest) {
   const postcode = request.nextUrl.searchParams.get("postcode") || "";
   const annualMj = Number(request.nextUrl.searchParams.get("annualMj"));
-  const includeConditional = request.nextUrl.searchParams.get("includeConditional") !== "false";
-  if (!/^\d{4}$/.test(postcode) || !(annualMj > 0)) {
-    return NextResponse.json({ error: "A valid postcode and annual MJ are required." }, { status: 400 });
+  const includeConditional = request.nextUrl.searchParams.get("includeConditional") === "true";
+  const usageProfile = (request.nextUrl.searchParams.get("usageProfile") || "heating") as GasUsageProfile;
+  if (!/^\d{4}$/.test(postcode) || !Number.isFinite(annualMj) || !(annualMj > 0) || !["heating", "steady"].includes(usageProfile)) {
+    return NextResponse.json({ error: "A valid postcode, annual MJ and gas-use pattern are required." }, { status: 400 });
   }
   try {
     const feed: any = await getJson(FEED_URL);
@@ -150,8 +38,8 @@ export async function GET(request: NextRequest) {
       .filter((brand: any) => brand.industries?.includes("energy"))
       .map((brand: any) => ({
         name: brand.brandName,
-        base: brand.productReferenceDataBaseUri || brand.publicBaseUri,
-        retailerUrl: retailerWebsite(brand.brandName, brand.logoUri || null),
+        base: safeCdrBase(brand.productReferenceDataBaseUri || brand.publicBaseUri),
+        retailerUrl: retailerWebsite(brand.productReferenceDataBaseUri || brand.publicBaseUri, brand.brandName),
         logo: brand.logoUri || null,
       }))
       .filter((brand: any) => brand.base);
@@ -171,16 +59,22 @@ export async function GET(request: NextRequest) {
           page += 1;
           if (!batch.length) break;
         } while (page <= totalPages);
-        return { retailer, plans };
+        return { retailer, plans, available: true };
       } catch {
-        return { retailer, plans: [] };
+        return { retailer, plans: [], available: false };
       }
     }));
 
     const candidates = lists.flatMap(({ retailer, plans }: any) => plans
       .filter((plan: any) => {
         const geography = plan.geography || {};
-        return (!plan.customerType || plan.customerType === "RESIDENTIAL")
+        const now = Date.now();
+        const effectiveFrom = plan.effectiveFrom ? Date.parse(plan.effectiveFrom) : null;
+        const effectiveTo = plan.effectiveTo ? Date.parse(plan.effectiveTo) : null;
+        return String(plan.fuelType || "GAS").toUpperCase() === "GAS"
+          && (effectiveFrom == null || Number.isFinite(effectiveFrom) && effectiveFrom <= now)
+          && (effectiveTo == null || Number.isFinite(effectiveTo) && effectiveTo > now)
+          && (!plan.customerType || plan.customerType === "RESIDENTIAL")
           && !postcodeMatches(postcode, geography.excludedPostcodes)
           && postcodeMatches(postcode, geography.includedPostcodes);
       })
@@ -191,39 +85,97 @@ export async function GET(request: NextRequest) {
         base: retailer.base,
         logo: retailer.logo,
         retailerUrl: retailer.retailerUrl,
+        sourceRetailer: retailer.name,
+        distributors: [...new Set((plan.geography?.distributors || []).map((item: unknown) => String(item).trim()).filter(Boolean))],
         link: plan.applicationUri || plan.additionalInformation?.overviewUri || plan.additionalInformation?.pricingUri || null,
+        effectiveFrom: plan.effectiveFrom || null,
+        effectiveTo: plan.effectiveTo || null,
+        lastUpdated: Number.isFinite(Date.parse(plan.lastUpdated)) ? plan.lastUpdated : null,
       })));
 
-    const priced = await Promise.all(candidates.map(async (plan: any) => {
+    const outcomes = await Promise.all(candidates.map(async (plan: any) => {
       try {
-        let detail: any = null;
-        for (const version of ["3", "2", "1"]) {
-          try {
-            detail = await getJson(plan.base.replace(/\/$/, "") + "/cds-au/v1/energy/plans/" + encodeURIComponent(plan.id), version);
-            break;
-          } catch {
-            if (version === "1") throw new Error("Gas plan details unavailable");
-          }
-        }
-        const result = estimate(detail.data?.gasContract, annualMj, includeConditional);
+        const detail: any = await getJson(plan.base.replace(/\/$/, "") + "/cds-au/v1/energy/plans/" + encodeURIComponent(plan.id), DETAIL_API_VERSION);
+        const now = Date.now();
+        const effectiveFrom = detail.data?.effectiveFrom ? Date.parse(detail.data.effectiveFrom) : null;
+        const effectiveTo = detail.data?.effectiveTo ? Date.parse(detail.data.effectiveTo) : null;
+        if ((effectiveFrom != null && (!Number.isFinite(effectiveFrom) || effectiveFrom > now)) || (effectiveTo != null && (!Number.isFinite(effectiveTo) || effectiveTo <= now))) return { status: "rejected", plan };
+        const result = estimateGasContract(detail.data?.gasContract, annualMj, includeConditional, usageProfile);
+        if (!result) return { status: "rejected", plan };
         const additionalInformation = detail.data?.additionalInformation || {};
-        return result ? {
+        const contract = detail.data.gasContract;
+        return { status: "passed", plan, result: {
           ...plan,
           ...result,
-          link: plan.link || additionalInformation.overviewUri || additionalInformation.pricingUri || plan.retailerUrl || null,
+          link: resolveCustomerPlanUrl(
+            [plan.link, additionalInformation.overviewUri, additionalInformation.pricingUri],
+            plan.retailerUrl,
+          ),
           type: detail.data?.type || "MARKET",
-          eligibility: detail.data?.gasContract?.eligibility || [],
-          terms: detail.data?.gasContract?.terms || "",
-        } : null;
+          effectiveFrom: detail.data?.effectiveFrom || plan.effectiveFrom,
+          effectiveTo: detail.data?.effectiveTo || plan.effectiveTo,
+          lastUpdated: Number.isFinite(Date.parse(detail.data?.lastUpdated)) ? detail.data.lastUpdated : plan.lastUpdated,
+          eligibility: contract.eligibility || [],
+          eligibilityConfirmations: (contract.eligibility || []).map((item: any) => {
+            const type = String(item.type || "Retailer condition").replaceAll("_", " ").toLowerCase();
+            const description = item.information || item.description;
+            return description ? `${type}: ${description}` : type;
+          }),
+          feeCount: Array.isArray(contract.fees) ? contract.fees.length : 0,
+          incentiveCount: Array.isArray(contract.incentives) ? contract.incentives.length : 0,
+          terms: contract.terms || "",
+          variation: contract.variation || "",
+          onExpiryDescription: contract.onExpiryDescription || "",
+        } };
       } catch {
-        return null;
+        return { status: "unavailable", plan };
       }
     }));
 
     const distinct = new Map<string, any>();
-    priced.filter(Boolean).forEach((plan: any) => distinct.set(plan.id, plan));
+    outcomes.filter((outcome) => outcome.status === "passed").forEach((outcome: any) => distinct.set(outcome.result.id, outcome.result));
     const plans = [...distinct.values()].sort((a, b) => a.annualCost - b.annualCost);
-    return NextResponse.json({ plans });
+    const timestamps = plans.map((plan) => Date.parse(plan.lastUpdated)).filter(Number.isFinite).sort((a, b) => a - b);
+    const listFailures = lists.filter((item) => !item.available).length;
+    const rejected = outcomes.filter((outcome) => outcome.status === "rejected").length;
+    const unavailable = outcomes.filter((outcome) => outcome.status === "unavailable").length;
+    const retailerCoverage = retailers.map((retailer: any) => {
+      const list = lists.find((item: any) => item.retailer.name === retailer.name);
+      const local = candidates.filter((plan: any) => plan.sourceRetailer === retailer.name);
+      const localOutcomes = outcomes.filter((outcome) => outcome.plan.sourceRetailer === retailer.name);
+      return {
+        retailer: retailer.name,
+        listAvailable: Boolean(list?.available),
+        candidatePlans: local.length,
+        detailsPassed: localOutcomes.filter((outcome) => outcome.status === "passed").length,
+        detailsRejected: localOutcomes.filter((outcome) => outcome.status === "rejected").length,
+        detailsUnavailable: localOutcomes.filter((outcome) => outcome.status === "unavailable").length,
+      };
+    });
+    return NextResponse.json({
+      plans,
+      fetchedAt: new Date().toISOString(),
+      usageProfile,
+      source: {
+        directorySource: FEED_URL,
+        planDataAuthority: "AER and Victorian government Energy Product Reference Data",
+        listApiVersion: "1",
+        detailApiVersion: DETAIL_API_VERSION,
+        retailersDiscovered: retailers.length,
+        listSourcesSucceeded: lists.length - listFailures,
+        listSourcesFailed: listFailures,
+        candidatePlans: candidates.length,
+        detailPlansSucceeded: plans.length,
+        detailPlansRejected: rejected,
+        detailPlansUnavailable: unavailable,
+        plansWithLastUpdated: timestamps.length,
+        plansMissingLastUpdated: plans.length - timestamps.length,
+        oldestPlanUpdatedAt: timestamps.length ? new Date(timestamps[0]).toISOString() : null,
+        newestPlanUpdatedAt: timestamps.length ? new Date(timestamps[timestamps.length - 1]).toISOString() : null,
+        retailerCoverage,
+        partial: listFailures > 0 || rejected > 0 || unavailable > 0,
+      },
+    });
   } catch {
     return NextResponse.json({ error: "The gas-plan service is temporarily unavailable. Please try again shortly." }, { status: 502 });
   }

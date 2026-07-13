@@ -26,9 +26,14 @@ export const SOLAR_YIELD_KWH_PER_KW: Record<string, number> = {
 export const BATTERY_ROUND_TRIP_EFFICIENCY = 0.9;
 export const COMMON_SOLAR_SIZES = [3, 4, 5, 6.6, 8, 10, 13.2];
 export const COMMON_BATTERY_SIZES = [5, 10, 13.5, 16, 20];
-const BATTERY_COST_PER_KWH = 1000;
-const STC_PER_KWH = 6.8;
-const STC_PRICE = 39.45;
+export const SCENARIO_COST_ASSUMPTIONS = {
+  version: "2026-07-14",
+  solarNetInstalledPerKw: 850,
+  batteryGrossInstalledPerUsableKwh: 1000,
+  batteryStcFactor: 6.8,
+  assumedStcValue: 40,
+  batterySupportedUsableKwh: 50,
+} as const;
 
 function emptyGrid(): HalfHourlyGrid {
   return Array.from({ length: 7 }, () => new Array(48).fill(0));
@@ -173,14 +178,20 @@ export function suggestedBatterySize(importProfile: HalfHourlyGrid, annualImport
 }
 
 export function batteryRebate(sizeKwh: number): { stcs: number; amount: number } {
-  const size = Math.max(0, sizeKwh);
+  const size = Number.isFinite(sizeKwh) ? Math.max(0, sizeKwh) : 0;
   const effective = Math.min(size, 14)
     + Math.max(0, Math.min(size, 28) - 14) * 0.6
     + Math.max(0, Math.min(size, 50) - 28) * 0.15;
-  const stcs = Math.floor(effective * STC_PER_KWH);
-  return { stcs, amount: Math.round(stcs * STC_PRICE) };
+  const stcs = Math.floor(effective * SCENARIO_COST_ASSUMPTIONS.batteryStcFactor);
+  return { stcs, amount: Math.round(stcs * SCENARIO_COST_ASSUMPTIONS.assumedStcValue) };
 }
 
 export function defaultBatteryNetCost(sizeKwh: number): number {
-  return Math.max(0, Math.round((Math.max(0, sizeKwh) * BATTERY_COST_PER_KWH - batteryRebate(sizeKwh).amount) / 100) * 100);
+  const size = Number.isFinite(sizeKwh) ? Math.max(0, sizeKwh) : 0;
+  return Math.max(0, Math.round((size * SCENARIO_COST_ASSUMPTIONS.batteryGrossInstalledPerUsableKwh - batteryRebate(size).amount) / 100) * 100);
+}
+
+export function defaultSolarNetCost(sizeKw: number): number {
+  const size = Number.isFinite(sizeKw) ? Math.max(0, sizeKw) : 0;
+  return Math.max(0, Math.round(size * SCENARIO_COST_ASSUMPTIONS.solarNetInstalledPerKw / 100) * 100);
 }

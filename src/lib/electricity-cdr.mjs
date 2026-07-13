@@ -4,11 +4,12 @@ import {
   tariffSourceHash,
   validateElectricityTariff,
 } from "./electricity-tariff-validation.mjs";
+import { resolveCustomerPlanUrl, retailerWebsite } from "./retailer-links.mjs";
 
 export const ELECTRICITY_CDR_DIRECTORY_URL =
   "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
 
-const API_VERSIONS = ["3", "2", "1"];
+const DETAIL_API_VERSION = "3";
 const MAX_LIST_PAGES = 5;
 const PAGE_SIZE = 1000;
 
@@ -77,11 +78,15 @@ export function normalizeRetailerDirectory(payload) {
   if (!Array.isArray(records)) return [];
   return records
     .filter((record) => Array.isArray(record?.industries) && record.industries.includes("energy"))
-    .map((record) => ({
+    .map((record) => {
+      const base = safeCdrBase(record.productReferenceDataBaseUri || record.publicBaseUri);
+      return {
       name: String(record.brandName || "Retailer"),
       logo: record.logoUri || null,
-      base: safeCdrBase(record.productReferenceDataBaseUri || record.publicBaseUri),
-    }))
+      base,
+      retailerUrl: retailerWebsite(base, record.brandName),
+      };
+    })
     .filter((record) => record.base);
 }
 
@@ -93,6 +98,11 @@ export function normalizePlanSummary(plan, retailer, postcode, customerType) {
   if (postcodeMatches(postcode, geography.excludedPostcodes)) return null;
   if (!Array.isArray(geography.includedPostcodes) || !geography.includedPostcodes.length) return null;
   if (!postcodeMatches(postcode, geography.includedPostcodes)) return null;
+  const now = Date.now();
+  const effectiveFrom = plan.effectiveFrom ? Date.parse(plan.effectiveFrom) : null;
+  const effectiveTo = plan.effectiveTo ? Date.parse(plan.effectiveTo) : null;
+  if (effectiveFrom != null && (!Number.isFinite(effectiveFrom) || effectiveFrom > now)) return null;
+  if (effectiveTo != null && (!Number.isFinite(effectiveTo) || effectiveTo <= now)) return null;
   const information = plan.additionalInformation || {};
   return {
     planId: String(plan.planId),
@@ -100,10 +110,14 @@ export function normalizePlanSummary(plan, retailer, postcode, customerType) {
     brand: String(plan.brandName || retailer.name),
     logo: retailer.logo || null,
     base: retailer.base,
+    retailerUrl: retailer.retailerUrl || null,
     type: plan.type || "MARKET",
     distributors: [...new Set((geography.distributors || []).map(normalizeDistributor).filter(Boolean))],
     app: plan.applicationUri || null,
     info: information.overviewUri || information.pricingUri || null,
+    effectiveFrom: plan.effectiveFrom || null,
+    effectiveTo: plan.effectiveTo || null,
+    lastUpdated: Number.isFinite(Date.parse(plan.lastUpdated)) ? plan.lastUpdated : null,
   };
 }
 
@@ -116,9 +130,15 @@ export function normalizePlanDetail(summary, payload) {
     ...summary,
     type: data.type || summary.type || "MARKET",
     contract,
-    link: summary.app || information.overviewUri || summary.info || information.pricingUri || null,
+    link: resolveCustomerPlanUrl(
+      [summary.app, information.overviewUri, summary.info, information.pricingUri],
+      summary.retailerUrl,
+    ),
     eligibility: Array.isArray(contract.eligibility) ? contract.eligibility : [],
     fees: Array.isArray(contract.fees) ? contract.fees.length : 0,
+    effectiveFrom: data.effectiveFrom || summary.effectiveFrom || null,
+    effectiveTo: data.effectiveTo || summary.effectiveTo || null,
+    lastUpdated: Number.isFinite(Date.parse(data.lastUpdated)) ? data.lastUpdated : summary.lastUpdated,
   };
 }
 
@@ -127,7 +147,7 @@ async function fetchJson(url, { fetchImpl, version, timeoutMs }) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, {
-      headers: version ? { "x-v": version } : {},
+      headers: version ? { "x-v": version, "x-min-v": version } : {},
       cache: "no-store",
       signal: controller.signal,
     });
@@ -187,42 +207,37 @@ export async function loadElectricityPlans({
   const distinctSummaries = [...new Map(summaries.map((plan) => [plan.base + "|" + plan.planId, plan])).values()];
   const marketSummaries = distinctSummaries.filter((plan) => plan.type !== "REGULATED");
   const detailResults = await mapWithConcurrency(marketSummaries, 12, async (summary) => {
-    let lastError;
-    for (const version of API_VERSIONS) {
-      try {
-        const payload = await fetchJson(
-          summary.base + "/cds-au/v1/energy/plans/" + encodeURIComponent(summary.planId),
-          { fetchImpl, version, timeoutMs },
-        );
-        const detail = normalizePlanDetail(summary, payload);
-        if (!detail) throw new Error("Electricity contract missing from plan detail.");
-        const validation = validateElectricityTariff(detail.contract);
-        if (!validation.valid) {
-          const error = new Error("Electricity tariff failed validation.");
-          error.code = "INVALID_TARIFF";
-          error.validationErrors = validation.errors;
-          throw error;
-        }
-        const tariffHash = sha256({
-          planId: detail.planId,
-          brand: detail.brand,
-          type: detail.type,
-          distributors: detail.distributors,
-          contract: detail.contract,
-        });
-        return {
-          ...detail,
-          tariffHash,
-          validation: {
-            schemaVersion: validation.schemaVersion,
-            limitations: validation.limitations,
-          },
-        };
-      } catch (error) {
-        lastError = error;
-      }
+    const payload = await fetchJson(
+      summary.base + "/cds-au/v1/energy/plans/" + encodeURIComponent(summary.planId),
+      { fetchImpl, version: DETAIL_API_VERSION, timeoutMs },
+    );
+    const detail = normalizePlanDetail(summary, payload);
+    if (!detail) throw new Error("Electricity contract missing from plan detail.");
+    const validation = validateElectricityTariff(detail.contract);
+    if (!validation.valid) {
+      const error = new Error("Electricity tariff failed validation.");
+      error.code = "INVALID_TARIFF";
+      error.validationErrors = validation.errors;
+      throw error;
     }
-    throw lastError || new Error("Electricity plan details unavailable.");
+    const tariffHash = sha256({
+      planId: detail.planId,
+      brand: detail.brand,
+      type: detail.type,
+      distributors: detail.distributors,
+      effectiveFrom: detail.effectiveFrom,
+      effectiveTo: detail.effectiveTo,
+      lastUpdated: detail.lastUpdated,
+      contract: detail.contract,
+    });
+    return {
+      ...detail,
+      tariffHash,
+      validation: {
+        schemaVersion: validation.schemaVersion,
+        limitations: validation.limitations,
+      },
+    };
   });
 
   const plans = detailResults.filter((result) => result.ok).map((result) => result.value);
@@ -236,7 +251,36 @@ export async function loadElectricityPlans({
       validationFailures[category] = (validationFailures[category] || 0) + 1;
     });
   });
+  const updatedTimes = plans
+    .map((plan) => Date.parse(plan.lastUpdated))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const eligibilityTypes = {};
+  plans.forEach((plan) => {
+    (plan.eligibility || []).forEach((condition) => {
+      const type = String(condition?.type || "UNSPECIFIED").toUpperCase();
+      eligibilityTypes[type] = (eligibilityTypes[type] || 0) + 1;
+    });
+  });
+  const retailerCoverage = retailers.map((retailer, retailerIndex) => {
+    const summaryIndexes = marketSummaries
+      .map((summary, index) => summary.base === retailer.base ? index : -1)
+      .filter((index) => index >= 0);
+    const results = summaryIndexes.map((index) => detailResults[index]);
+    return {
+      retailer: retailer.name,
+      listAvailable: Boolean(listResults[retailerIndex]?.ok),
+      candidatePlans: summaryIndexes.length,
+      detailsPassed: results.filter((result) => result?.ok).length,
+      detailsRejected: results.filter((result) => !result?.ok && result?.error?.code === "INVALID_TARIFF").length,
+      detailsUnavailable: results.filter((result) => !result?.ok && result?.error?.code !== "INVALID_TARIFF").length,
+    };
+  });
   const source = {
+    directorySource: ELECTRICITY_CDR_DIRECTORY_URL,
+    planDataAuthority: "Australian Energy Regulator and Victorian government product reference data",
+    listApiVersion: "1",
+    detailApiVersion: DETAIL_API_VERSION,
     retailersDiscovered: retailers.length,
     listSourcesSucceeded,
     listSourcesFailed: retailers.length - listSourcesSucceeded,
@@ -246,6 +290,13 @@ export async function loadElectricityPlans({
     detailPlansRejected: invalidResults.length,
     detailPlansUnavailable: marketSummaries.length - detailPlansSucceeded - invalidResults.length,
     validationFailures,
+    retailerCoverage,
+    plansWithEligibility: plans.filter((plan) => plan.eligibility?.length).length,
+    eligibilityTypes,
+    plansWithLastUpdated: updatedTimes.length,
+    plansMissingLastUpdated: plans.length - updatedTimes.length,
+    oldestPlanUpdatedAt: updatedTimes.length ? new Date(updatedTimes[0]).toISOString() : null,
+    newestPlanUpdatedAt: updatedTimes.length ? new Date(updatedTimes.at(-1)).toISOString() : null,
     partial: listSourcesSucceeded < retailers.length || detailPlansSucceeded < marketSummaries.length,
   };
   return {

@@ -1,6 +1,6 @@
 import type { HalfHourlyGrid, Nem12AllocatedDay } from "./nem12-types.ts";
 
-export const NATIVE_ENGINE_VERSION = "aea-native-electricity-0.4.0";
+export const NATIVE_ENGINE_VERSION = "aea-native-electricity-0.5.0";
 const GST = 1.1;
 const DAY_INDEX: Record<string, number> = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
 
@@ -57,6 +57,9 @@ export interface NativeElectricityContract {
   discounts?: Discount[];
   solarFeedInTariff?: FeedInTariff[];
   eligibility?: Array<{ type?: string; information?: string; description?: string }>;
+  terms?: string;
+  variation?: string;
+  onExpiryDescription?: string;
 }
 
 export interface NativePlanInput {
@@ -65,9 +68,13 @@ export interface NativePlanInput {
   brand: string;
   logo?: string | null;
   base?: string | null;
+  retailerUrl?: string | null;
   type?: string;
   distributors?: string[];
   link?: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  lastUpdated?: string | null;
   tariffHash?: string;
   fees?: number;
   validation?: { schemaVersion?: string; limitations?: string[] };
@@ -88,6 +95,8 @@ export interface NativeEstimateInputs {
   hasSolar?: boolean;
   hasBattery?: boolean;
   hasEv?: boolean;
+  hasIntervalMeter?: boolean;
+  customerType?: "RESIDENTIAL" | "BUSINESS";
   evidenceLabel?: string;
   registerEvidence?: NativeAuditRegister[];
 }
@@ -111,6 +120,7 @@ export interface NativePlanResult extends NativePlanInput {
   supplyCentsPerDay: number;
   rates: NativeRateDisplay[];
   controlledRates: NativeRateDisplay[];
+  eligibilityConfirmations: string[];
   touMix: Record<string, number> | null;
   audit: NativeCalculationAudit;
 }
@@ -161,6 +171,7 @@ export interface NativeCalculationAudit {
     difference: number;
   };
   eligibility: string[];
+  contractTerms: string[];
   limitations: string[];
 }
 
@@ -169,6 +180,45 @@ export type NativeEstimateResult = { ok: true; result: NativePlanResult } | { ok
 function number(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function eligibilityLabel(condition: { type?: string; information?: string; description?: string }): string {
+  const type = String(condition.type || "Retailer condition").replaceAll("_", " ").toLowerCase();
+  const detail = condition.information || condition.description;
+  return detail ? `${type}: ${detail}` : type;
+}
+
+function evaluateEligibility(contract: NativeElectricityContract, inputs: NativeEstimateInputs): { reason?: string; confirmations: string[] } {
+  const confirmations: string[] = [];
+  for (const condition of contract.eligibility || []) {
+    const type = String(condition.type || "").toUpperCase();
+    const text = `${type} ${condition.information || ""} ${condition.description || ""}`.toLowerCase();
+
+    if (type === "EXISTING_SOLAR" || /existing_solar|with solar|solar panels|solar pv|solar system|have solar|solar customers/.test(text)) {
+      if (!inputs.hasSolar) return { reason: "Solar is required.", confirmations };
+      continue;
+    }
+    if (type === "EXISTING_BATTERY" || /existing_battery|must have (?:a )?battery|battery customers/.test(text)) {
+      if (!inputs.hasBattery) return { reason: "A battery is required.", confirmations };
+      continue;
+    }
+    if (/electric vehicle|\bev\b/.test(text)) {
+      if (!inputs.hasEv) return { reason: "An electric vehicle is required.", confirmations };
+      continue;
+    }
+    if (/controlled load|separately metered|off.?peak hot water/.test(text)) {
+      if (inputs.annualControlledKwh <= 0) return { reason: "A controlled load is required.", confirmations };
+      continue;
+    }
+    if (type === "SMALL_BUSINESS") {
+      if (inputs.customerType !== "BUSINESS") return { reason: "This offer is restricted to small-business customers.", confirmations };
+      continue;
+    }
+    if (type === "EXISTING_SMART_METER" && inputs.hasIntervalMeter) continue;
+
+    confirmations.push(eligibilityLabel(condition));
+  }
+  return { confirmations };
 }
 
 function periodDays(period: TariffPeriod): number {
@@ -423,11 +473,8 @@ export function estimateNativePlan(plan: NativePlanInput, inputs: NativeEstimate
   if (!periods.length) return { ok: false, reason: "No tariff periods were published." };
   const hasDemand = periods.some((period) => period.rateBlockUType === "demandCharges");
   if (hasDemand && (!inputs.demandReady || !inputs.demandSeries?.length)) return { ok: false, reason: "Demand pricing requires a near-complete year of high-quality interval data." };
-  const eligibility = (plan.contract.eligibility || []).map((item) => `${item.type || ""} ${item.information || item.description || ""}`).join(" ").toLowerCase();
-  if (/batter/.test(eligibility) && !inputs.hasBattery) return { ok: false, reason: "A battery is required." };
-  if (/existing_solar|with solar|solar panels|solar pv|solar system|have solar|solar customers/.test(eligibility) && !inputs.hasSolar) return { ok: false, reason: "Solar is required." };
-  if (/electric vehicle|\bev\b/.test(eligibility) && !inputs.hasEv) return { ok: false, reason: "An electric vehicle is required." };
-  if (/controlled load|separately metered|off.?peak hot water/.test(eligibility) && inputs.annualControlledKwh <= 0) return { ok: false, reason: "A controlled load is required." };
+  const eligibility = evaluateEligibility(plan.contract, inputs);
+  if (eligibility.reason) return { ok: false, reason: eligibility.reason };
 
   const energyPeriods = periods.filter((period) => period.rateBlockUType !== "demandCharges");
   const publishedDays = energyPeriods.reduce((sum, period) => sum + periodDays(period), 0);
@@ -524,6 +571,11 @@ export function estimateNativePlan(plan: NativePlanInput, inputs: NativeEstimate
   const annualCost = supply + usage + controlled + demand - feedIn.credit - discounts;
   const componentTotal = supply + usage + controlled + demand - feedIn.credit - discounts;
   const eligibilityLines = (plan.contract.eligibility || []).map((item) => item.information || item.description || item.type || "").filter(Boolean);
+  const contractTerms = [
+    plan.contract.terms,
+    plan.contract.variation,
+    plan.contract.onExpiryDescription,
+  ].map((item) => String(item || "").trim()).filter(Boolean);
   const feedInAudit: NativeAuditChargeLine[] = feedIn.credit > 0 ? [{
     label: "Solar feed-in credit", quantity: `${Math.max(0, inputs.annualExportKwh || 0).toFixed(1)} kWh`,
     allocation: "effective rate weighted against the export timing profile", rate: `${(feedIn.effectiveRate * 100).toFixed(2)}c/kWh`, amount: feedIn.credit,
@@ -543,6 +595,7 @@ export function estimateNativePlan(plan: NativePlanInput, inputs: NativeEstimate
     supplyCentsPerDay: number(firstEnergyPeriod?.dailySupplyCharges ?? firstEnergyPeriod?.dailySupplyCharge) * GST * 100,
     rates,
     controlledRates,
+    eligibilityConfirmations: eligibility.confirmations,
     touMix: hasTou ? mix : null,
     audit: {
       engineVersion: NATIVE_ENGINE_VERSION,
@@ -560,7 +613,11 @@ export function estimateNativePlan(plan: NativePlanInput, inputs: NativeEstimate
         componentTotal, rankedTotal: annualCost, difference: componentTotal - annualCost,
       },
       eligibility: eligibilityLines,
-      limitations: plan.validation?.limitations || [],
+      contractTerms,
+      limitations: [
+        ...(plan.validation?.limitations || []),
+        ...(eligibility.confirmations.length ? ["eligibility_confirmation_required"] : []),
+      ],
     },
   } };
 }

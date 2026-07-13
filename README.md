@@ -23,15 +23,59 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 - `/compare/electricity-legacy` preserves the compatibility implementation as a noindex rollback path.
 - `/gas-compare` is the gas comparer.
 
+## Electricity tariff sources and freshness
+
+The electricity comparer retrieves current plan records from retailer Consumer Data Right product-reference-data endpoints. Retailer endpoint discovery currently uses the community-maintained Australian CDR register directory because the AER does not publish a dynamic JSON directory of retailer endpoints. Plan names, prices, eligibility, fees, effective dates and retailer update times come from the official AER and Victorian government Energy Product Reference Data APIs, not from the directory.
+
+The service uses list API v1 and detail API v3, rejects plans that are not yet effective or have expired, and caches successful retrievals for no more than one hour. Retrieval time is not described as the retailer publication time. Every response reports source coverage, validation failures, missing timestamps and the oldest and newest retailer update times represented in the result.
+
+Recognised equipment and customer-type eligibility is enforced by the comparison engine. Conditions that cannot be proven from the supplied inputs remain visible as retailer confirmations, and published contract terms are retained in each calculation audit. Fees, benefits or tariff structures that cannot be costed are labelled or excluded rather than silently treated as zero.
+
+## Solar and battery scenario assumptions
+
+Upgrade scenarios simulate solar and battery energy flows half-hourly, but their financial output is a simple first-year bill-saving comparison rather than a lifetime return forecast. The consumer can replace the state-level solar yield, battery round-trip efficiency and every installed-cost input. Changing a system size refreshes the cost field to a dated model default so an old quote is not silently applied to a different system size.
+
+Cost model `2026-07-14` uses an indicative solar net installed cost of $850 per kW and an indicative battery gross installed cost of $1,000 per usable kWh. Its federal battery discount estimate uses the May to December 2026 factor of 6.8 STCs per eligible kWh, the current capacity taper and the government clearing-house value of $40 per STC. These are transparent modelling placeholders, not market quotes or an eligibility decision. The UI asks the consumer to replace them with complete written installed quotes after every applicable discount.
+
+The scenario caveat identifies omitted lifetime and site variables, including degradation, replacement, finance, warranty, VPP control, roof geometry, shading, inverter constraints, export limits, connection work and product compatibility. It links to the government-supported SunSPOT calculator and Australian Government quote checklist for roof-specific and installer-specific checks.
+
+## Gas comparison integrity
+
+The gas comparer retrieves current list API v1 and detail API v3 product-reference-data records. It rejects future or expired records, reports retailer source coverage and publication timestamps, and does not claim complete-market coverage when a source or plan detail fails.
+
+Annual gas MJ is allocated using an explicit household pattern. The gas-heating profile concentrates usage in cooler months, while the hot-water-or-cooking profile spreads usage evenly through the year. Published seasonal calendars must cover every day exactly once. Daily and monthly usage blocks reset at the correct interval, and plans with overlapping, incomplete or unsupported tariff periods are excluded from ranking.
+
+Postcodes can contain more than one gas distribution network. When multiple networks are represented, the consumer must choose the distributor printed on the gas bill before any ranked results are shown. Conditional discounts are excluded by default, and uncosted fees, incentives and retailer eligibility conditions remain visible on each result.
+
 ## Local enquiry delivery
 
 The comparer submits result emails and upgrade enquiries to the same-origin `/api/leads` route. Configure the downstream processor in an ignored `.env.local` file:
 
 ```text
 AEA_LEAD_WEBHOOK_URL=https://your-private-lead-processor.example/endpoint
+AEA_LEAD_RATE_LIMIT_SECRET=replace-with-at-least-32-random-characters
 ```
 
-Do not expose this value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a best-effort local rate limit, and only reports success after the downstream processor returns a successful response. A production launch should replace the in-memory rate limit with a durable shared limiter.
+Do not expose either value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a durable shared rate limit through the site-scoped `aea-lead-rate-limit` Netlify Blobs store, and only reports success after the downstream processor returns a successful response. Raw IP addresses are never stored: the limiter uses an HMAC-obscured client key and an atomic rolling list of recent request times. Local Next.js development uses an in-memory fallback because Netlify Blobs requires `netlify dev` outside production.
+
+### Privacy-safe webhook delivery probe
+
+`POST /api/internal/lead-webhook-probe` verifies that the configured lead processor is reachable and returns a successful acknowledgement. It sends a dedicated `webhook.delivery_probe` event containing only a test flag, probe ID, timestamp, schema version and application name. It does not pass through lead validation and contains no customer, contact, meter, usage, postcode or plan data.
+
+Configure a separate random token of at least 32 characters as `AEA_LEAD_WEBHOOK_TEST_TOKEN`. The downstream processor must treat `eventType: "webhook.delivery_probe"` or the matching `X-AEA-Event-Type` header as an operational event and must not create a customer lead. Invoke the probe from PowerShell without printing the token:
+
+```powershell
+$headers = @{ Authorization = "Bearer $env:AEA_LEAD_WEBHOOK_TEST_TOKEN" }
+Invoke-RestMethod -Method Post -Uri "https://compare.ausenergyassessments.com/api/internal/lead-webhook-probe" -Headers $headers
+```
+
+An `ok: true` response proves that the application reached the processor and received a 2xx response. Confirming any downstream audit record still requires checking the processor itself by `probeId`.
+
+### API monitoring and alerts
+
+An hourly Netlify scheduled function checks `/api/electricity-plans` and the privacy-safe lead delivery probe. Configure `AEA_OPS_ALERT_WEBHOOK_URL` to an alert receiver that accepts JSON and notifies an operations channel. Failure and recovery notifications are deduplicated through the site-scoped `aea-operations` Netlify Blobs store. API responses include an `X-Request-Id`, and server logs contain structured outcome and aggregate source metrics without request bodies, contact details, IP addresses, NMIs or meter data.
+
+See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert behavior, privacy boundaries and incident response steps.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

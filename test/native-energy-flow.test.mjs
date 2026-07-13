@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import {
+  SCENARIO_COST_ASSUMPTIONS,
+  batteryRebate,
+  defaultBatteryNetCost,
+  defaultSolarNetCost,
   simulateBattery,
   simulateSolar,
   solarYieldForPostcode,
@@ -37,4 +41,14 @@ test("solar sizing uses the household postcode yield", () => {
   assert.equal(solarYieldForPostcode("4000"), 1500);
   assert.equal(suggestedSolarSize(5000, "3000"), 4);
   assert.equal(suggestedSolarSize(5000, "4000"), 4);
+});
+
+test("scenario cost defaults expose the current dated assumptions", () => {
+  assert.equal(SCENARIO_COST_ASSUMPTIONS.version, "2026-07-14");
+  assert.deepEqual(batteryRebate(10), { stcs: 68, amount: 2720 });
+  assert.deepEqual(batteryRebate(40), { stcs: 164, amount: 6560 });
+  assert.deepEqual(batteryRebate(60), { stcs: 174, amount: 6960 });
+  assert.deepEqual(batteryRebate(Number.NaN), { stcs: 0, amount: 0 });
+  assert.equal(defaultBatteryNetCost(10), 7300);
+  assert.equal(defaultSolarNetCost(4), 3400);
 });

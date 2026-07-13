@@ -19,20 +19,35 @@ test('CDR base validation permits HTTPS and rejects local or private targets', a
   assert.equal(safeCdrBase('https://192.168.1.10/api'), null);
 });
 
+test('retailer customer links never fall back to CDR API namespaces', async () => {
+  const { resolveCustomerPlanUrl, retailerWebsite, safeCustomerUrl } = await import('../src/lib/retailer-links.mjs');
+  assert.equal(retailerWebsite('https://cdr.energymadeeasy.gov.au/ovo-energy', 'OVO Energy'), 'https://www.ovoenergy.com.au/');
+  assert.equal(safeCustomerUrl('https://cdr.energymadeeasy.gov.au/ovo-energy'), null);
+  assert.equal(safeCustomerUrl('javascript:alert(1)'), null);
+  assert.equal(resolveCustomerPlanUrl(['https://cdr.energymadeeasy.gov.au/ovo-energy'], 'https://www.ovoenergy.com.au/'), 'https://www.ovoenergy.com.au/');
+  assert.equal(resolveCustomerPlanUrl(['https://www.ovoenergy.com.au/electricity'], 'https://www.ovoenergy.com.au/'), 'https://www.ovoenergy.com.au/electricity');
+});
+
 test('plan summaries enforce customer, fuel and postcode eligibility', async () => {
   const { normalizePlanSummary } = await import('../src/lib/electricity-cdr.mjs');
-  const retailer = { name: 'Example Energy', logo: null, base: 'https://cdr.example.com' };
+  const retailer = { name: 'Example Energy', logo: null, base: 'https://cdr.example.com', retailerUrl: 'https://www.example.com/' };
   const plan = {
     planId: 'plan-1',
     displayName: 'Time Saver',
     customerType: 'RESIDENTIAL',
     fuelType: 'ELECTRICITY',
     geography: { includedPostcodes: ['3000-3005'], excludedPostcodes: ['3002'], distributors: ['CitiPower Pty Ltd'] },
+    lastUpdated: '2026-07-10T00:00:00Z',
   };
   assert.equal(normalizePlanSummary(plan, retailer, '3002', 'RESIDENTIAL'), null);
   assert.equal(normalizePlanSummary(plan, retailer, '3000', 'BUSINESS'), null);
   assert.equal(normalizePlanSummary({ ...plan, fuelType: 'GAS' }, retailer, '3000', 'RESIDENTIAL'), null);
-  assert.deepEqual(normalizePlanSummary(plan, retailer, '3000', 'RESIDENTIAL').distributors, ['CitiPower']);
+  const normalized = normalizePlanSummary(plan, retailer, '3000', 'RESIDENTIAL');
+  assert.deepEqual(normalized.distributors, ['CitiPower']);
+  assert.equal(normalized.lastUpdated, '2026-07-10T00:00:00Z');
+  assert.equal(normalized.retailerUrl, 'https://www.example.com/');
+  assert.equal(normalizePlanSummary({ ...plan, effectiveFrom: '2999-01-01T00:00:00Z' }, retailer, '3000', 'RESIDENTIAL'), null);
+  assert.equal(normalizePlanSummary({ ...plan, effectiveTo: '2000-01-01T00:00:00Z' }, retailer, '3000', 'RESIDENTIAL'), null);
 });
 
 test('plan details retain the full contract used by interval pricing', async () => {
@@ -56,14 +71,16 @@ test('loader reports partial source coverage without discarding successful plans
       { brandName: 'Unavailable Energy', industries: ['energy'], productReferenceDataBaseUri: 'https://bad.example/cdr' },
     ] }],
     ['https://good.example/cdr/cds-au/v1/energy/plans?fuelType=ELECTRICITY&effective=CURRENT&page-size=1000&page=1', {
-      data: { plans: [{ planId: 'p1', displayName: 'Good TOU', customerType: 'RESIDENTIAL', fuelType: 'ELECTRICITY', type: 'MARKET', geography: { includedPostcodes: ['3000'], distributors: ['CitiPower'] } }] },
+      data: { plans: [{ planId: 'p1', displayName: 'Good TOU', customerType: 'RESIDENTIAL', fuelType: 'ELECTRICITY', type: 'MARKET', lastUpdated: '2026-07-10T00:00:00Z', geography: { includedPostcodes: ['3000'], distributors: ['CitiPower'] } }] },
       meta: { totalPages: 1 },
     }],
     ['https://good.example/cdr/cds-au/v1/energy/plans/p1', {
       data: { electricityContract: { tariffPeriod: [{ dailySupplyCharge: '1', rateBlockUType: 'singleRate', singleRate: { rates: [{ unitPrice: '0.25' }] } }] }, additionalInformation: { overviewUri: 'https://good.example/plan' } },
     }],
   ]);
-  const fetchImpl = async (url) => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, headers: options.headers });
     if (!responses.has(url)) return { ok: false, status: 503, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => responses.get(url) };
   };
@@ -73,6 +90,16 @@ test('loader reports partial source coverage without discarding successful plans
   assert.equal(result.source.listSourcesSucceeded, 1);
   assert.equal(result.source.listSourcesFailed, 1);
   assert.equal(result.source.partial, true);
+  assert.equal(result.source.detailApiVersion, '3');
+  assert.equal(result.source.plansWithLastUpdated, 1);
+  assert.equal(result.source.plansMissingLastUpdated, 0);
+  assert.equal(result.source.oldestPlanUpdatedAt, '2026-07-10T00:00:00.000Z');
+  assert.deepEqual(result.source.retailerCoverage, [
+    { retailer: 'Good Energy', listAvailable: true, candidatePlans: 1, detailsPassed: 1, detailsRejected: 0, detailsUnavailable: 0 },
+    { retailer: 'Unavailable Energy', listAvailable: false, candidatePlans: 0, detailsPassed: 0, detailsRejected: 0, detailsUnavailable: 0 },
+  ]);
+  assert.deepEqual(calls.find((call) => call.url.includes('/energy/plans?')).headers, { 'x-v': '1', 'x-min-v': '1' });
+  assert.deepEqual(calls.find((call) => call.url.endsWith('/energy/plans/p1')).headers, { 'x-v': '3', 'x-min-v': '3' });
   assert.match(result.sourceHash, /^sha256:[a-f0-9]{64}$/);
   assert.equal(result.tariffSchemaVersion, 'aea-electricity-tariff-1.1.0');
 });

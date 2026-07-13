@@ -15,8 +15,8 @@ export default function GasComparisonPage() {
         <a className="active" href="/gas-compare">Gas compare</a>
       </nav>
       <ComparatorHero title="Gas Plan Comparator">
-        <p>Enter your postcode and annual gas use. We price published usage blocks, daily supply charges and discounts across current retailer offers.</p>
-        <div className="fresh"><span className="dot" /> Live API data, refreshed daily</div>
+        <p>Compare current gas offers using your location, annual MJ and seasonal household pattern.</p>
+        <div className="fresh"><span className="dot" /> Current CDR gas plan records, retrieved for each comparison</div>
       </ComparatorHero>
       <GasComparator />
       <footer>

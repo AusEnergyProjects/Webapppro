@@ -1,34 +1,23 @@
 import { validateLeadPayload } from "@/lib/lead-validation.mjs";
+import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
+import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 64 * 1024;
-const RATE_WINDOW_MS = 60 * 60 * 1000;
-const RATE_LIMIT = 5;
-const rateBuckets = new Map();
+const leadRateLimiter = createSharedLeadRateLimiter();
 
-function json(body, status = 200) {
+function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "no-store", ...extraHeaders },
   });
 }
 
 function clientKey(request) {
+  const netlifyIp = request.headers.get("x-nf-client-connection-ip")?.trim();
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "local";
-}
-
-function rateAllowed(key) {
-  const now = Date.now();
-  const recent = (rateBuckets.get(key) || []).filter((time) => now - time < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    rateBuckets.set(key, recent);
-    return false;
-  }
-  recent.push(now);
-  rateBuckets.set(key, recent);
-  return true;
+  return netlifyIp || forwarded || request.headers.get("x-real-ip") || "local";
 }
 
 function safeMagicLink(value, requestUrl) {
@@ -44,35 +33,50 @@ function safeMagicLink(value, requestUrl) {
 }
 
 export async function POST(request) {
+  const operations = createOperationalRecorder({ event: "api.leads" });
+  const respond = (body, status, outcome, metrics = {}, extraHeaders = {}) => {
+    operations.record(outcome, status, metrics);
+    return json(body, status, { "X-Request-Id": operations.requestId, ...extraHeaders });
+  };
   const origin = request.headers.get("origin");
   const requestOrigin = new URL(request.url).origin;
-  if (origin && origin !== requestOrigin) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  if (origin && origin !== requestOrigin) return respond({ ok: false, error: "Request origin was not accepted." }, 403, "origin_rejected");
 
   const contentType = request.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) return json({ ok: false, error: "JSON is required." }, 415);
+  if (!contentType.includes("application/json")) return respond({ ok: false, error: "JSON is required." }, 415, "content_type_rejected");
 
   const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > MAX_BODY_BYTES) return json({ ok: false, error: "Request is too large." }, 413);
+  if (declaredLength > MAX_BODY_BYTES) return respond({ ok: false, error: "Request is too large." }, 413, "body_too_large");
 
   let raw;
   try {
     const text = await request.text();
-    if (text.length > MAX_BODY_BYTES) return json({ ok: false, error: "Request is too large." }, 413);
+    if (text.length > MAX_BODY_BYTES) return respond({ ok: false, error: "Request is too large." }, 413, "body_too_large");
     raw = JSON.parse(text);
   } catch {
-    return json({ ok: false, error: "Invalid JSON." }, 400);
+    return respond({ ok: false, error: "Invalid JSON." }, 400, "invalid_json");
   }
 
   const result = validateLeadPayload(raw);
-  if (!result.ok) return json({ ok: false, error: result.error }, 400);
+  if (!result.ok) return respond({ ok: false, error: result.error }, 400, "validation_rejected");
 
   const payload = result.value;
+  const metrics = { submissionType: payload.submissionType };
   const startedTooQuickly = payload.clientStartedAt && Date.now() - payload.clientStartedAt < 1200;
-  if (payload.website || startedTooQuickly) return json({ ok: true, filtered: true });
-  if (!rateAllowed(clientKey(request))) return json({ ok: false, error: "Too many requests. Please try again later." }, 429);
+  if (payload.website || startedTooQuickly) return respond({ ok: true, filtered: true }, 200, "bot_filtered", metrics);
 
   const webhook = process.env.AEA_LEAD_WEBHOOK_URL;
-  if (!webhook) return json({ ok: false, error: "Enquiries are not configured in this local environment." }, 503);
+  if (!webhook) return respond({ ok: false, error: "Enquiries are not configured in this local environment." }, 503, "webhook_unconfigured", metrics);
+
+  const rateLimit = await leadRateLimiter.check(clientKey(request));
+  if (rateLimit.unavailable) return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "rate_limit_unavailable", metrics);
+  if (!rateLimit.allowed) return respond(
+    { ok: false, error: "Too many requests. Please try again later." },
+    429,
+    "rate_limited",
+    metrics,
+    { "Retry-After": String(rateLimit.retryAfterSeconds || 3600) },
+  );
 
   payload.magicLink = safeMagicLink(payload.magicLink, request.url);
   const controller = new AbortController();
@@ -86,9 +90,14 @@ export async function POST(request) {
       signal: controller.signal,
     });
     if (!response.ok) throw new Error("Lead processor returned " + response.status);
-    return json({ ok: true, reference: crypto.randomUUID() });
-  } catch {
-    return json({ ok: false, error: "Your request could not be delivered. Please try again or call 1300 241 149." }, 502);
+    return respond({ ok: true, reference: crypto.randomUUID() }, 200, "delivered", metrics);
+  } catch (error) {
+    return respond(
+      { ok: false, error: "Your request could not be delivered. Please try again or call 1300 241 149." },
+      502,
+      "downstream_failure",
+      { ...metrics, errorType: error instanceof Error ? error.name : "UnknownError" },
+    );
   } finally {
     clearTimeout(timeout);
   }

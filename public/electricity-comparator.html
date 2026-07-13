@@ -274,7 +274,7 @@
   <header class="hero">
     <h1>Electricity Plan Comparator</h1>
     <p>Enter your postcode or NMI, tell us about your usage, solar and battery, and we will identify your network distributor and rank the current retail market offers available at your address.</p>
-    <div class="fresh"><span class="dot"></span><span id="freshText">Published CDR tariff data, refreshed hourly</span></div>
+    <div class="fresh"><span class="dot"></span><span id="freshText">Current CDR plan records, retrieved within the last hour</span></div>
   </header>
 
   <!-- STEP 1 -->
@@ -2125,7 +2125,7 @@ function render(){
   $('moreBtn').style.display = vis.length>S.shown ? 'block' : 'none';
 
   $('methodNote').innerHTML =
-    '<b>How these estimates work.</b> Rates come from each retailer\'s published CDR tariff data, retrieved through our same-origin comparison service'
+    '<b>How these estimates work.</b> Rates come from current AER and Victorian government CDR product-reference records, retrieved through our same-origin comparison service'
     + ' and checked against your postcode ' + I.pc + (I.tariffFetchedAt?' on '+esc(new Date(I.tariffFetchedAt).toLocaleString()):'') + '. Charges include GST. Annual cost = daily supply charges + usage charges'
     + (I.hasSolar ? ' minus feed in credits on an estimated ' + Math.round(I.exportKwh).toLocaleString() + ' kWh exported per year' : '')
     + ', based on ' + Math.round(I.annualKwh).toLocaleString() + ' kWh per year of grid usage'
@@ -2144,7 +2144,7 @@ function render(){
     + (I.engineVersion?' Calculation engine '+esc(I.engineVersion)+'.':'')
     + (I.tariffSchemaVersion?' Tariff schema '+esc(I.tariffSchemaVersion)+'.':'')
     + (I.tariffSourceHash?' Source evidence '+esc(I.tariffSourceHash)+'.':'')
-    + ' Tariff data caches in your browser and refreshes automatically every hour.';
+    + ' Retrieved plan records cache in your browser for up to one hour. Retrieval time does not replace the retailer\'s own record update time or guarantee that every condition applies to you.';
 }
 
 function stat(v,l){ return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>'; }

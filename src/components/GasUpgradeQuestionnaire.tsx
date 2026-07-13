@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UpgradeEnquiryModal } from "./UpgradeEnquiryModal";
 
 type ApplianceOption = { value: string; label: string };
@@ -37,6 +37,24 @@ const frequencyOptions = [
   ["low", "About once a week"],
   ["medium", "Several times a week"],
   ["high", "Most days"],
+];
+
+const hotWaterUseOptions = [
+  ["low", "Low: short showers and light hot-water use"],
+  ["typical", "Typical household use"],
+  ["high", "High: long showers, baths or frequent hot-water use"],
+];
+
+const cookingUseOptions = [
+  ["low", "A few meals each week"],
+  ["typical", "About one cooked meal most days"],
+  ["high", "Multiple burners or meals most days"],
+];
+
+const spaUseOptions = [
+  ["occasional", "Occasionally during the year"],
+  ["seasonal", "Regularly during one season"],
+  ["frequent", "Frequently across the year"],
 ];
 
 type BenchmarkPoint = { x: number; value: number };
@@ -96,21 +114,28 @@ function payback(value: number): string {
   return `${years} year${years === 1 ? "" : "s"}${remaining ? ` ${remaining} month${remaining === 1 ? "" : "s"}` : ""}`;
 }
 
-export function GasUpgradeQuestionnaire({ annualMj }: { annualMj: string }) {
+export function GasUpgradeQuestionnaire({ annualMj, onUsageProfileChange }: { annualMj: string; onUsageProfileChange: (profile: "heating" | "steady") => void }) {
   const [people, setPeople] = useState("2");
   const [rooms, setRooms] = useState("6");
   const [heating, setHeating] = useState(["gas-ducted"]);
   const [winterUse, setWinterUse] = useState("medium");
-  const [hotWater, setHotWater] = useState(["gas-storage"]);
+  const [hotWater, setHotWater] = useState("gas-storage");
+  const [hotWaterUse, setHotWaterUse] = useState("typical");
   const [gasCooktop, setGasCooktop] = useState(false);
+  const [cooktopUse, setCooktopUse] = useState("typical");
   const [gasDryer, setGasDryer] = useState(false);
-  const [dryerUse, setDryerUse] = useState("none");
+  const [dryerUse, setDryerUse] = useState("low");
+  const [gasSpa, setGasSpa] = useState(false);
+  const [spaUse, setSpaUse] = useState("occasional");
   const [gasSpend, setGasSpend] = useState("");
   const [gasRate, setGasRate] = useState("4.5");
   const [electricityRate, setElectricityRate] = useState("30");
   const [heatingInstall, setHeatingInstall] = useState("5000");
   const [hotWaterInstall, setHotWaterInstall] = useState("3000");
   const [enquiryTitle, setEnquiryTitle] = useState("");
+
+  const hasGasHeating = heating.some((value) => value.startsWith("gas-"));
+  useEffect(() => onUsageProfileChange(hasGasHeating ? "heating" : "steady"), [hasGasHeating, onUsageProfileChange]);
 
   const estimate = useMemo(() => {
     const householdSize = Math.max(1, Number(people) || 1);
@@ -141,15 +166,20 @@ export function GasUpgradeQuestionnaire({ annualMj }: { annualMj: string }) {
       replacementKwh: total.replacementKwh + profile.replacementKwh * heatingFactor,
     }), { gasMj: 0, replacementKwh: 0 });
 
-    const hotWaterType = hotWater[0] || "other";
+    const hotWaterType = hotWater || "other";
+    const hotWaterFactors: Record<string, number> = { low: .75, typical: 1, high: 1.25 };
+    const hotWaterFactor = hotWaterFactors[hotWaterUse] ?? 1;
     const hotWaterBenchmark: EnergyProfile = HOT_WATER_GAS_MJ[hotWaterType] ? {
-      gasMj: byHousehold(HOT_WATER_GAS_MJ[hotWaterType], householdSize),
-      replacementKwh: byHousehold(HEAT_PUMP_KWH, householdSize),
+      gasMj: byHousehold(HOT_WATER_GAS_MJ[hotWaterType], householdSize) * hotWaterFactor,
+      replacementKwh: byHousehold(HEAT_PUMP_KWH, householdSize) * hotWaterFactor,
     } : { gasMj: 0, replacementKwh: 0 };
-    const cooktopBenchmarkMj = gasCooktop ? 1100 + householdSize * 350 : 0;
+    const cookingFactors: Record<string, number> = { low: .7, typical: 1, high: 1.3 };
+    const cooktopBenchmarkMj = gasCooktop ? 1583 * (cookingFactors[cooktopUse] ?? 1) : 0;
     const dryerCyclesPerWeek: Record<string, number> = { none: 0, low: 1, medium: 3, high: 6 };
     const dryerBenchmarkMj = gasDryer ? (dryerCyclesPerWeek[dryerUse] ?? 0) * 52 * 15 : 0;
-    const benchmarkGasMj = heatingBenchmark.gasMj + hotWaterBenchmark.gasMj + cooktopBenchmarkMj + dryerBenchmarkMj;
+    const spaAnnualMj: Record<string, number> = { occasional: 5000, seasonal: 15000, frequent: 30000 };
+    const spaBenchmarkMj = gasSpa ? spaAnnualMj[spaUse] ?? 5000 : 0;
+    const benchmarkGasMj = heatingBenchmark.gasMj + hotWaterBenchmark.gasMj + cooktopBenchmarkMj + dryerBenchmarkMj + spaBenchmarkMj;
     const enteredUse = Number(annualMj);
     const use = enteredUse > 0 ? enteredUse : Math.max(12000, benchmarkGasMj);
     const billScale = benchmarkGasMj > 0 ? use / benchmarkGasMj : 0;
@@ -157,6 +187,7 @@ export function GasUpgradeQuestionnaire({ annualMj }: { annualMj: string }) {
     const hotWaterGasUse = hotWaterBenchmark.gasMj * billScale;
     const cooktopGasUse = cooktopBenchmarkMj * billScale;
     const dryerGasUse = dryerBenchmarkMj * billScale;
+    const spaGasUse = spaBenchmarkMj * billScale;
 
     const supplyCharge = 310;
     const enteredSpend = Number(gasSpend);
@@ -190,35 +221,35 @@ export function GasUpgradeQuestionnaire({ annualMj }: { annualMj: string }) {
       hotWaterGasUse,
       cooktopGasUse,
       dryerGasUse,
+      spaGasUse,
       centralArea,
       roomHeatedArea,
       hotWaterType,
       heatingPayback: Number(heatingInstall) > 0 ? Number(heatingInstall) / heatingSaving : 0,
       hotWaterPayback: Number(hotWaterInstall) > 0 ? Number(hotWaterInstall) / hotWaterSaving : 0,
-      fullElectricSaving: heatingSaving + hotWaterSaving + cooktopSaving + dryerSaving + (benchmarkGasMj > 0 ? supplyCharge : 0),
+      fullElectricSaving: heatingSaving + hotWaterSaving + cooktopSaving + dryerSaving + (benchmarkGasMj > 0 && !gasSpa ? supplyCharge : 0),
       hasHeating: heatingGasUse > 0,
       hasHotWater: hotWaterGasUse > 0,
     };
-  }, [annualMj, people, rooms, heating, winterUse, hotWater, gasCooktop, gasDryer, dryerUse, gasSpend, gasRate, electricityRate, heatingInstall, hotWaterInstall]);
+  }, [annualMj, people, rooms, heating, winterUse, hotWater, hotWaterUse, gasCooktop, cooktopUse, gasDryer, dryerUse, gasSpa, spaUse, gasSpend, gasRate, electricityRate, heatingInstall, hotWaterInstall]);
 
   return (
     <section className="card gas-questionnaire">
       <h2><span className="stepnum">2</span> Your gas appliances and home</h2>
-      <p className="sub">These are the gas-relevant questions used by government comparison tools. They help estimate what switching gas heating or hot water could mean for your home.</p>
+      <p className="sub">Tell us which appliances actually use gas. Your heating answer automatically sets the seasonal pattern used to compare plans, so you only answer this once.</p>
 
-      <div className="question-grid">
-        <label className="f">How many people live in your house?<span className="field-control"><select value={people} onChange={(event) => setPeople(event.target.value)}>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span></label>
-        <label className="f">How many rooms (total)?<span className="field-control"><select value={rooms} onChange={(event) => setRooms(event.target.value)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span></label>
-      </div>
+      <div className="gas-household-context"><label className="f">People in your household<span className="field-control"><select value={people} onChange={(event) => setPeople(event.target.value)}>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used only for the hot-water estimate.</span></label><div><b>Seasonal plan profile</b><span>{hasGasHeating ? "Gas heating: more annual MJ is allocated to cooler months." : "No gas heating: annual MJ is allocated steadily across the year."}</span></div></div>
 
-      <div className="question-grid question-grid-wide">
-        <fieldset className="question-group"><legend>How do you heat your home? Tick all that apply.</legend><div className="option-list">{heatingOptions.map((option) => <label className="option-item" key={option.value}><input type="checkbox" checked={heating.includes(option.value)} onChange={() => setHeating((current) => option.value === "none" ? ["none"] : toggleValue(current.filter((value) => value !== "none"), option.value))} />{option.label}</label>)}</div></fieldset>
-        <label className="f">How much of the time do you run your gas heating in winter?<span className="field-control"><select value={winterUse} onChange={(event) => setWinterUse(event.target.value)}>{winterUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>
-      </div>
+      <div className="gas-appliance-grid">
+        <section className="gas-appliance-card gas-appliance-card-wide" aria-labelledby="gas-heating-title"><div className="gas-appliance-heading"><span>1</span><div><h3 id="gas-heating-title">Home heating</h3><p>Select every heating system used in the home.</p></div></div><div className="gas-appliance-content gas-appliance-split"><fieldset className="question-group"><legend>Heating systems</legend><div className="option-list">{heatingOptions.map((option) => <label className="option-item" key={option.value}><input type="checkbox" checked={heating.includes(option.value)} onChange={() => setHeating((current) => option.value === "none" ? ["none"] : toggleValue(current.filter((value) => value !== "none"), option.value))} />{option.label}</label>)}</div></fieldset><div className="gas-appliance-variables"><label className="f">Rooms in your home<span className="field-control"><select value={rooms} onChange={(event) => setRooms(event.target.value)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used to approximate the heated area.</span></label>{hasGasHeating && <label className="f">Gas-heating use in winter<span className="field-control"><select value={winterUse} onChange={(event) => setWinterUse(event.target.value)}>{winterUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div></div></section>
 
-      <div className="question-grid question-grid-wide">
-        <fieldset className="question-group"><legend>Which hot water system do you use?</legend><div className="option-list">{hotWaterOptions.map((option) => <label className="option-item" key={option.value}><input type="radio" name="gas-hot-water-system" checked={hotWater[0] === option.value} onChange={() => setHotWater([option.value])} />{option.label}</label>)}</div></fieldset>
-        <div className="question-group"><span className="question-label">Other gas appliances</span><label className="option-item"><input type="checkbox" checked={gasCooktop} onChange={(event) => setGasCooktop(event.target.checked)} />Gas cooktop</label><label className="option-item"><input type="checkbox" checked={gasDryer} onChange={(event) => setGasDryer(event.target.checked)} />Gas clothes dryer</label>{gasDryer && <label className="f compact-field">How often?<span className="field-control"><select value={dryerUse} onChange={(event) => setDryerUse(event.target.value)}>{frequencyOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div>
+        <section className="gas-appliance-card" aria-labelledby="gas-hot-water-title"><div className="gas-appliance-heading"><span>2</span><div><h3 id="gas-hot-water-title">Hot water</h3><p>System type, household size and behaviour affect this estimate.</p></div></div><div className="gas-appliance-content"><fieldset className="question-group"><legend>Hot-water system</legend><div className="option-list">{hotWaterOptions.map((option) => <label className="option-item" key={option.value}><input type="radio" name="gas-hot-water-system" checked={hotWater === option.value} onChange={() => setHotWater(option.value)} />{option.label}</label>)}</div></fieldset>{HOT_WATER_GAS_MJ[hotWater] && <label className="f compact-field">Typical hot-water behaviour<span className="field-control"><select value={hotWaterUse} onChange={(event) => setHotWaterUse(event.target.value)}>{hotWaterUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div></section>
+
+        <section className="gas-appliance-card" aria-labelledby="gas-cooking-title"><div className="gas-appliance-heading"><span>3</span><div><h3 id="gas-cooking-title">Cooking</h3><p>Include a gas cooktop or gas oven used for meals.</p></div></div><div className="gas-appliance-content"><label className="option-item"><input type="checkbox" checked={gasCooktop} onChange={(event) => setGasCooktop(event.target.checked)} />I use gas for cooking</label>{gasCooktop && <label className="f compact-field">How often do you cook with gas?<span className="field-control"><select value={cooktopUse} onChange={(event) => setCooktopUse(event.target.value)}>{cookingUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div></section>
+
+        <section className="gas-appliance-card" aria-labelledby="gas-dryer-title"><div className="gas-appliance-heading"><span>4</span><div><h3 id="gas-dryer-title">Clothes dryer</h3><p>Gas dryers are uncommon, so only select this if the dryer is connected to gas.</p></div></div><div className="gas-appliance-content"><label className="option-item"><input type="checkbox" checked={gasDryer} onChange={(event) => setGasDryer(event.target.checked)} />I have a gas clothes dryer</label>{gasDryer && <label className="f compact-field">How often is it used?<span className="field-control"><select value={dryerUse} onChange={(event) => setDryerUse(event.target.value)}>{frequencyOptions.filter(([value]) => value !== "none").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div></section>
+
+        <section className="gas-appliance-card" aria-labelledby="gas-spa-title"><div className="gas-appliance-heading"><span>5</span><div><h3 id="gas-spa-title">Pool or spa heating</h3><p>Include this only where the water heater itself uses gas.</p></div></div><div className="gas-appliance-content"><label className="option-item"><input type="checkbox" checked={gasSpa} onChange={(event) => setGasSpa(event.target.checked)} />I heat a pool or spa with gas</label>{gasSpa && <label className="f compact-field">How often is gas heating used?<span className="field-control"><select value={spaUse} onChange={(event) => setSpaUse(event.target.value)}>{spaUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span><span className="hint">This is a broad allocation proxy. Pool size, cover, temperature and climate can change usage substantially.</span></label>}</div></section>
       </div>
 
       <div className="question-grid question-grid-wide estimate-inputs">
@@ -233,13 +264,13 @@ export function GasUpgradeQuestionnaire({ annualMj }: { annualMj: string }) {
           {estimate.hasHeating && <SavingCard title="Gas heating to reverse cycle" current={estimate.heatingCurrent} after={estimate.heatingAfter} saving={estimate.heatingSaving} install={heatingInstall} setInstall={setHeatingInstall} payback={estimate.heatingPayback} action="Enquire about reverse cycle heating" />}
           {estimate.hasHotWater && <SavingCard title="Gas hot water to heat pump" current={estimate.hotWaterCurrent} after={estimate.hotWaterAfter} saving={estimate.hotWaterSaving} install={hotWaterInstall} setInstall={setHotWaterInstall} payback={estimate.hotWaterPayback} action="Enquire about heat pump hot water" />}
         </div>
-        <p className="savings-note"><b>Go fully electric:</b> about {dollars(estimate.fullElectricSaving)}/yr saved, including roughly $310/yr from disconnecting gas and dropping the daily supply charge.</p>
+        <p className="savings-note"><b>Modelled electrification saving:</b> about {dollars(estimate.fullElectricSaving)}/yr{gasSpa ? ". Pool or spa replacement energy and the gas supply charge are not included because the remaining gas appliance would keep the connection active." : ", including roughly $310/yr from disconnecting gas and dropping the daily supply charge once every gas appliance is removed."}</p>
         <details className="savings-explain"><summary>How we estimate these savings</summary><div>
           <p>We build separate benchmark profiles for your selected heating and hot-water systems, household size, room count and winter use. We then scale those profiles so the allocated uses add back to your entered {Math.round(estimate.use).toLocaleString()} MJ/year.</p>
-          <p><b>Estimated bill allocation:</b> heating {Math.round(estimate.heatingGasUse).toLocaleString()} MJ, hot water {Math.round(estimate.hotWaterGasUse).toLocaleString()} MJ, cooktop {Math.round(estimate.cooktopGasUse).toLocaleString()} MJ and dryer {Math.round(estimate.dryerGasUse).toLocaleString()} MJ.</p>
+          <p><b>Estimated bill allocation:</b> heating {Math.round(estimate.heatingGasUse).toLocaleString()} MJ, hot water {Math.round(estimate.hotWaterGasUse).toLocaleString()} MJ, cooking {Math.round(estimate.cooktopGasUse).toLocaleString()} MJ, dryer {Math.round(estimate.dryerGasUse).toLocaleString()} MJ and pool or spa {Math.round(estimate.spaGasUse).toLocaleString()} MJ.</p>
           <p>Storage, instantaneous and gas-boosted solar hot water use different household-size curves. Central heating uses about {Math.round(estimate.centralArea)} m² and room heating about {Math.round(estimate.roomHeatedArea)} m². Gas slab heating uses the published hydronic C-rating profile as the closest central-heating proxy.</p>
-          <p>Cooking and dryer allocations are conservative proxies because no equivalent Victorian household benchmark table is published. Real savings depend on appliance ratings, building fabric, climate and behaviour. Costs use your effective gas rate of {estimate.effectiveRate.toFixed(1)}c/MJ and entered electricity rate.</p>
-          <p className="method-links"><a href="https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/save-energy-in-the-home/heat-your-home-efficiently/calculate-heating-costs" target="_blank" rel="noreferrer">Heating benchmarks</a><a href="https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/save-energy-in-the-home/water-heating/calculate-water-heating-running-costs" target="_blank" rel="noreferrer">Hot-water benchmarks</a></p>
+          <p>Cooking starts from the Victorian building-electrification reference-home assumption and is adjusted by the behaviour selected above. Dryer and pool or spa allocations are broad proxies because no equivalent Victorian household benchmark table is published. Pool or spa replacement energy is not included in the savings figure. Real savings depend on appliance ratings, building fabric, climate and behaviour. Costs use your effective gas rate of {estimate.effectiveRate.toFixed(1)}c/MJ and entered electricity rate.</p>
+          <p className="method-links"><a href="https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/save-energy-in-the-home/heat-your-home-efficiently/calculate-heating-costs" target="_blank" rel="noreferrer">Heating benchmarks</a><a href="https://www.sustainability.vic.gov.au/annual-energy-costs-of-water-heating-in-2025" target="_blank" rel="noreferrer">Hot-water benchmarks</a><a href="https://www.vic.gov.au/sites/default/files/2025-03/building-electrification-regulatory-impact-statement_3785-%281%29.pdf" target="_blank" rel="noreferrer">Cooking reference</a></p>
         </div></details>
       </div>}
       {enquiryTitle && <UpgradeEnquiryModal title={enquiryTitle} annualMj={annualMj} estimatedSaving={enquiryTitle.includes("hot water") ? estimate.hotWaterSaving : estimate.heatingSaving} onClose={() => setEnquiryTitle("")} />}

@@ -6,7 +6,10 @@ import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "reac
 import { Field, StepCard } from "@/components/ComparatorChrome";
 import { Nem12UsageChart } from "@/components/electricity/Nem12UsageChart";
 import {
+  BATTERY_ROUND_TRIP_EFFICIENCY,
+  SCENARIO_COST_ASSUMPTIONS,
   defaultBatteryNetCost,
+  defaultSolarNetCost,
   genericExportProfile,
   simulateBattery,
   simulateSolar,
@@ -32,13 +35,26 @@ import {
   type NativeAuditChargeLine,
 } from "@/lib/electricity/native-tariff-engine";
 import { buildNativeComparisonUrl, parseNativeComparisonQuery } from "@/lib/electricity/native-sharing";
+import { annualiseUsage, usageForPeriod, type UsagePeriod } from "@/lib/electricity/usage-input";
 
 type PlanBundle = {
   plans: NativePlanInput[];
   fetchedAt?: string;
   sourceHash?: string;
   tariffSchemaVersion?: string;
-  source?: { candidatePlans?: number; detailPlansSucceeded?: number; detailPlansRejected?: number; detailPlansUnavailable?: number; partial?: boolean };
+  source?: {
+    candidatePlans?: number;
+    detailPlansSucceeded?: number;
+    detailPlansRejected?: number;
+    detailPlansUnavailable?: number;
+    retailersDiscovered?: number;
+    listSourcesSucceeded?: number;
+    plansMissingLastUpdated?: number;
+    oldestPlanUpdatedAt?: string | null;
+    newestPlanUpdatedAt?: string | null;
+    partial?: boolean;
+    retailerCoverage?: Array<{ retailer: string; listAvailable: boolean; candidatePlans: number; detailsPassed: number; detailsRejected: number; detailsUnavailable: number }>;
+  };
 };
 
 type SetupMode = "none" | "solar" | "battery";
@@ -52,6 +68,8 @@ type PricingContext = {
   exportProfile: HalfHourlyGrid;
   evidenceLabel: string;
   registerEvidence: NativeAuditRegister[];
+  customerType: ElectricityCustomerType;
+  hasIntervalMeter: boolean;
 };
 
 type ScenarioResult = {
@@ -66,7 +84,48 @@ type ScenarioResult = {
 };
 
 type ContactDetails = { name: string; email: string; phone: string; website: string };
+type ChoiceOption<T extends string> = { value: T; title: string; description: string };
 const LEAD_NOTICE_VERSION = "2026-07-13";
+
+const USAGE_PERIOD_OPTIONS: ChoiceOption<UsagePeriod>[] = [
+  { value: "quarterly", title: "Typical quarterly bill", description: "Enter the kWh from one representative 3 month bill." },
+  { value: "monthly", title: "Monthly bill", description: "Enter the kWh from one representative month." },
+  { value: "annual", title: "Annual total", description: "Enter the kWh used across a full 12 months." },
+];
+
+const PROFILE_OPTIONS: ChoiceOption<string>[] = [
+  { value: "evening", title: "Mostly evenings", description: "Usually out on weekdays, with most power used after 3 pm." },
+  { value: "daytime", title: "Home during the day", description: "Someone is usually home and uses power through the day." },
+  { value: "even", title: "Fairly even", description: "Power use is spread fairly evenly across the day and night." },
+];
+
+const SETUP_OPTIONS: ChoiceOption<SetupMode>[] = [
+  { value: "none", title: "No solar", description: "I do not have solar panels at this property." },
+  { value: "solar", title: "Solar only", description: "I have solar panels but no home battery." },
+  { value: "battery", title: "Solar + battery", description: "I have solar panels and a home battery." },
+];
+
+function ChoiceCards<T extends string>({ name, legend, hint, value, options, disabled = false, onChange }: {
+  name: string;
+  legend: string;
+  hint?: string;
+  value: T;
+  options: ChoiceOption<T>[];
+  disabled?: boolean;
+  onChange: (value: T) => void;
+}) {
+  return <fieldset className="native-choice-fieldset" disabled={disabled}>
+    <legend>{legend}</legend>
+    {hint && <p>{hint}</p>}
+    <div className="native-choice-grid">
+      {options.map((option) => <label className={`native-choice-card${value === option.value ? " selected" : ""}`} key={option.value}>
+        <input type="radio" name={name} value={option.value} checked={value === option.value} onChange={() => onChange(option.value)} />
+        <span className="native-choice-title">{option.title}</span>
+        <span className="native-choice-description">{option.description}</span>
+      </label>)}
+    </div>
+  </fieldset>;
+}
 
 function emptyProfile(): HalfHourlyGrid {
   return Array.from({ length: 7 }, () => new Array(48).fill(0));
@@ -127,6 +186,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [nmi, setNmi] = useState("");
   const [customerType, setCustomerType] = useState<ElectricityCustomerType>("RESIDENTIAL");
   const [annualKwh, setAnnualKwh] = useState("5000");
+  const [usagePeriod, setUsagePeriod] = useState<UsagePeriod>("quarterly");
   const [profileKind, setProfileKind] = useState("evening");
   const [meter, setMeter] = useState<Nem12Success | null>(null);
   const [registerRoles, setRegisterRoles] = useState<Record<string, RegisterRole | undefined>>({});
@@ -147,14 +207,18 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [assumeConditional, setAssumeConditional] = useState(false);
   const [distributors, setDistributors] = useState<string[]>([]);
   const [distributor, setDistributor] = useState("");
+  const [meterGuideDistributor, setMeterGuideDistributor] = useState("");
   const [plans, setPlans] = useState<NativePlanResult[]>([]);
   const [excluded, setExcluded] = useState<Record<string, number>>({});
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
   const [pricingContext, setPricingContext] = useState<PricingContext | null>(null);
   const [scenarioSolarKw, setScenarioSolarKw] = useState("4");
   const [scenarioBatteryKwh, setScenarioBatteryKwh] = useState("10");
-  const [scenarioSolarCost, setScenarioSolarCost] = useState("3400");
-  const [scenarioComboCost, setScenarioComboCost] = useState("10700");
+  const [scenarioSolarYield, setScenarioSolarYield] = useState("1350");
+  const [scenarioBatteryEfficiency, setScenarioBatteryEfficiency] = useState(String(BATTERY_ROUND_TRIP_EFFICIENCY * 100));
+  const [scenarioSolarCost, setScenarioSolarCost] = useState(String(defaultSolarNetCost(4)));
+  const [scenarioBatteryCost, setScenarioBatteryCost] = useState(String(defaultBatteryNetCost(10)));
+  const [scenarioComboCost, setScenarioComboCost] = useState(String(defaultSolarNetCost(4) + defaultBatteryNetCost(10)));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showTou, setShowTou] = useState(true);
@@ -178,8 +242,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const pageStartedAt = useRef(0);
   const auditReturnRef = useRef<HTMLButtonElement | null>(null);
   const nmiDistributor = useMemo(() => distributorFromNmi(nmi), [nmi]);
-  const guidanceDistributor = nmiDistributor || distributor;
+  const guidanceDistributor = nmiDistributor || meterGuideDistributor || distributor;
   const distributorInfo = guidanceDistributor ? DISTRIBUTOR_INFO[guidanceDistributor] : null;
+  const displayedUsage = usageForPeriod(annualKwh, usagePeriod);
+  const annualUsageNumber = Number(annualKwh);
   const meterAllocation = useMemo(() => meter ? allocateNem12Registers(meter.registers, registerRoles) : null, [meter, registerRoles]);
   const demandReady = Boolean(meter && meterAllocation?.ok && meter.dateSpanDays >= 360 && meter.coverageRatio >= 0.98 && meter.actualPct >= 0.9);
 
@@ -189,7 +255,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     /* URL restoration intentionally initializes the controlled form after hydration. */
     /* eslint-disable react-hooks/set-state-in-effect */
     if (restored.postcode) setPostcode(restored.postcode);
-    if (restored.annualKwh) setAnnualKwh(String(restored.annualKwh));
+    if (restored.annualKwh) {
+      setAnnualKwh(String(restored.annualKwh));
+      setUsagePeriod("annual");
+    }
     if (restored.profileKind) setProfileKind(restored.profileKind);
     if (restored.customerType) setCustomerType(restored.customerType);
     if (restored.setupMode) setSetupMode(restored.setupMode);
@@ -209,16 +278,26 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     const bestNow = plans.filter((plan) => plan.tariffKind !== "demand").sort((a, b) => a.annualCost - b.annualCost)[0];
     if (!bestNow) return [];
     const batterySize = Math.max(0, Number(scenarioBatteryKwh));
-    const common = { annualControlledKwh: pricingContext.annualControlledKwh, controlledProfile: pricingContext.controlledProfile, assumeConditional, hasEv, registerEvidence: pricingContext.registerEvidence };
+    const solarYield = Math.max(0, Number(scenarioSolarYield)) || solarYieldForPostcode(postcode);
+    const batteryEfficiency = Math.min(1, Math.max(0.5, Number(scenarioBatteryEfficiency) / 100 || BATTERY_ROUND_TRIP_EFFICIENCY));
+    const common = {
+      annualControlledKwh: pricingContext.annualControlledKwh,
+      controlledProfile: pricingContext.controlledProfile,
+      assumeConditional,
+      hasEv,
+      registerEvidence: pricingContext.registerEvidence,
+      customerType: pricingContext.customerType,
+      hasIntervalMeter: pricingContext.hasIntervalMeter,
+    };
     const results: ScenarioResult[] = [];
     if (setupMode === "none") {
       const size = Math.max(0, Number(scenarioSolarKw));
       if (!(size > 0)) return [];
-      const solar = simulateSolar(pricingContext.profile, pricingContext.annualGeneralKwh, size * solarYieldForPostcode(postcode));
+      const solar = simulateSolar(pricingContext.profile, pricingContext.annualGeneralKwh, size * solarYield);
       const solarBest = cheapestScenarioPlan(pricingContext.candidates, {
         ...common, annualGeneralKwh: solar.annualImport, profile: solar.importProfile, hasSolar: true,
         annualExportKwh: solar.annualExport, exportProfile: solar.exportProfile,
-        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar was simulated half hourly before tariff pricing.`,
+        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year was simulated half hourly before tariff pricing.`,
       });
       if (solarBest) results.push({
         label: "Solar only", description: `${size} kW solar`, best: solarBest,
@@ -226,11 +305,11 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         annualExportKwh: solar.annualExport, installedCost: Math.max(0, Number(scenarioSolarCost)),
       });
       if (batterySize > 0) {
-        const battery = simulateBattery(solar.importProfile, solar.exportProfile, solar.annualImport, solar.annualExport, batterySize);
+        const battery = simulateBattery(solar.importProfile, solar.exportProfile, solar.annualImport, solar.annualExport, batterySize, batteryEfficiency);
         const batteryBest = cheapestScenarioPlan(pricingContext.candidates, {
           ...common, annualGeneralKwh: battery.annualImport, profile: battery.importProfile, hasSolar: true, hasBattery: true,
           annualExportKwh: battery.annualExport, exportProfile: battery.exportProfile,
-          evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar and a ${batterySize} kWh battery were simulated half hourly before tariff pricing.`,
+          evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year and a ${batterySize} kWh usable battery at ${Math.round(batteryEfficiency * 100)}% round-trip efficiency were simulated half hourly before tariff pricing.`,
         });
         if (batteryBest) results.push({
           label: "Solar + battery", description: `${size} kW solar + ${batterySize} kWh battery`, best: batteryBest,
@@ -240,21 +319,35 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         });
       }
     } else if (setupMode === "solar" && pricingContext.annualExportKwh > 0 && batterySize > 0) {
-      const battery = simulateBattery(pricingContext.profile, pricingContext.exportProfile, pricingContext.annualGeneralKwh, pricingContext.annualExportKwh, batterySize);
+      const battery = simulateBattery(pricingContext.profile, pricingContext.exportProfile, pricingContext.annualGeneralKwh, pricingContext.annualExportKwh, batterySize, batteryEfficiency);
       const batteryBest = cheapestScenarioPlan(pricingContext.candidates, {
         ...common, annualGeneralKwh: battery.annualImport, profile: battery.importProfile, hasSolar: true, hasBattery: true,
         annualExportKwh: battery.annualExport, exportProfile: battery.exportProfile,
-        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} A ${batterySize} kWh battery was dispatched half hourly before tariff pricing.`,
+        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} A ${batterySize} kWh usable battery at ${Math.round(batteryEfficiency * 100)}% round-trip efficiency was dispatched half hourly before tariff pricing.`,
       });
       if (batteryBest) results.push({
         label: "Add a battery", description: `${batterySize} kWh battery`, best: batteryBest,
         annualSaving: bestNow.annualCost - batteryBest.annualCost, annualImportKwh: battery.annualImport,
         annualExportKwh: battery.annualExport, annualDischargeKwh: battery.annualDischarge,
-        installedCost: defaultBatteryNetCost(batterySize),
+        installedCost: Math.max(0, Number(scenarioBatteryCost)),
       });
     }
     return results;
-  }, [assumeConditional, hasEv, plans, postcode, pricingContext, scenarioBatteryKwh, scenarioComboCost, scenarioSolarCost, scenarioSolarKw, setupMode]);
+  }, [assumeConditional, hasEv, plans, postcode, pricingContext, scenarioBatteryCost, scenarioBatteryEfficiency, scenarioBatteryKwh, scenarioComboCost, scenarioSolarCost, scenarioSolarKw, scenarioSolarYield, setupMode]);
+
+  function updateScenarioSolarSize(value: string) {
+    setScenarioSolarKw(value);
+    const solarCost = defaultSolarNetCost(Number(value));
+    setScenarioSolarCost(String(solarCost));
+    setScenarioComboCost(String(solarCost + defaultBatteryNetCost(Number(scenarioBatteryKwh))));
+  }
+
+  function updateScenarioBatterySize(value: string) {
+    setScenarioBatteryKwh(value);
+    const batteryCost = defaultBatteryNetCost(Number(value));
+    setScenarioBatteryCost(String(batteryCost));
+    setScenarioComboCost(String(defaultSolarNetCost(Number(scenarioSolarKw)) + batteryCost));
+  }
 
   async function readMeterFile(file: File | undefined) {
     if (!file) return;
@@ -268,6 +361,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     setUsageOverride(null);
     setShowUsageOverride(false);
     setAnnualKwh(String(Math.round(parsed.annualImport)));
+    setUsagePeriod("annual");
     if (parsed.nmi && !nmi) {
       setNmi(cleanNmi(parsed.nmi).slice(0, 11));
       setDistributor("");
@@ -307,6 +401,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     }
     setUsageOverride({ value, reason });
     setAnnualKwh(String(Math.round(value)));
+    setUsagePeriod("annual");
     setShowUsageOverride(false);
     setOverrideError("");
     setMeterStatus("Annual total adjusted. The original measured interval pattern remains active.");
@@ -316,6 +411,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     if (!meter) return;
     setUsageOverride(null);
     setAnnualKwh(String(Math.round(meter.annualImport)));
+    setUsagePeriod("annual");
     setShowUsageOverride(false);
     setOverrideError("");
     setMeterStatus("Annual adjustment removed. The NEM12 annual figure and measured pattern are active.");
@@ -398,6 +494,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           hasSolar,
           hasBattery,
           hasEv,
+          hasIntervalMeter: Boolean(meter),
+          customerType,
           annualExportKwh: annualExport,
           exportProfile,
           evidenceLabel,
@@ -413,9 +511,12 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       const suggestedBattery = suggestedBatterySize(previewSolar.importProfile, previewSolar.annualImport, previewSolar.annualExport);
       setScenarioSolarKw(String(suggestedSolar));
       setScenarioBatteryKwh(String(suggestedBattery));
-      setScenarioSolarCost(String(Math.round(suggestedSolar * 850 / 100) * 100));
-      setScenarioComboCost(String(Math.round(suggestedSolar * 850 / 100) * 100 + defaultBatteryNetCost(suggestedBattery)));
-      setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence });
+      setScenarioSolarYield(String(solarYieldForPostcode(postcode)));
+      setScenarioBatteryEfficiency(String(BATTERY_ROUND_TRIP_EFFICIENCY * 100));
+      setScenarioSolarCost(String(defaultSolarNetCost(suggestedSolar)));
+      setScenarioBatteryCost(String(defaultBatteryNetCost(suggestedBattery)));
+      setScenarioComboCost(String(defaultSolarNetCost(suggestedSolar) + defaultBatteryNetCost(suggestedBattery)));
+      setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence, customerType, hasIntervalMeter: Boolean(meter) });
       if (!priced.length) setError("Plans were published, but none met the comparison engine's strict priceability rules for these inputs.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load electricity plans.");
@@ -447,7 +548,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     return visible.slice(0, 3).map((plan, index) => ({
       rank: index + 1, brand: plan.brand, plan: plan.name, offerId: plan.planId.split("@")[0],
       annual: Math.round(plan.annualCost), monthly: Math.round(plan.annualCost / 12),
-      tariffHash: plan.tariffHash || "", link: plan.link || plan.base || "",
+      tariffHash: plan.tariffHash || "", link: plan.link || plan.retailerUrl || "",
     }));
   }
 
@@ -524,30 +625,49 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <a href="/compare">/compare</a>.</span></div>}
     <form onSubmit={compare}>
       <StepCard number="1" title="Usage and location">
-        <p className="sub">Your postcode finds available offers. An optional NMI confirms the exact network without being sent to the plan service.</p>
-        <div className="grid c3">
-          <Field label="Postcode"><input value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => { setPostcode(event.target.value); setDistributor(""); setDistributors([]); }} placeholder="e.g. 3000" /></Field>
-          <Field label="NMI (optional)" hint="The 10 or 11 character identifier on your electricity bill. Used locally to confirm your distributor."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(cleanNmi(event.target.value).slice(0, 11)); setDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
+        <p className="sub">Start with the details on a recent electricity bill. Your NMI is optional and always stays in this browser.</p>
+        <div className="grid c3 native-location-grid">
+          <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => { setPostcode(event.target.value); setDistributor(""); setDistributors([]); }} placeholder="e.g. 3000" /></Field>
+          <Field label="NMI" optional="(optional)" hint="A 10 or 11 character number, usually near the top of your bill. It identifies your electricity connection."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(cleanNmi(event.target.value).slice(0, 11)); setDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
           <Field label="Customer type"><select value={customerType} onChange={(event) => setCustomerType(event.target.value as ElectricityCustomerType)}><option value="RESIDENTIAL">Residential</option><option value="BUSINESS">Small business</option></select></Field>
-          <Field label="Annual grid usage" hint={meter ? "Read-only while typed meter data is active." : "kWh imported from the grid per year."}><input type="number" min="1" value={annualKwh} readOnly={Boolean(meter)} onChange={(event) => setAnnualKwh(event.target.value)} /></Field>
-          <Field label="Usage pattern"><select value={profileKind} disabled={Boolean(meter)} onChange={(event) => setProfileKind(event.target.value)}><option value="evening">Out weekdays, home evenings</option><option value="daytime">Home most of the day</option><option value="even">Fairly even</option></select></Field>
           {distributors.length > 1 && <Field label="Network distributor" hint={nmiDistributor ? "Confirmed from your NMI." : "Required because this postcode crosses network boundaries."}><select value={nmiDistributor || distributor} disabled={Boolean(nmiDistributor)} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field>}
         </div>
+        <p className="native-nmi-help">Not sure where to find your NMI? <a href="#meter-data-help">Follow the bill and meter-data guide below</a>.</p>
         {nmi && <div className={nmiDistributor ? "native-location-evidence ok" : "native-location-evidence"} aria-live="polite">{nmiDistributor ? <><b>{nmiDistributor}</b> was identified from NMI {maskNmi(nmi)}. The full NMI stays in this browser and is not included in the plan request.</> : cleanNmi(nmi).length >= 10 ? <>This NMI prefix is not in the supported National Electricity Market allocation table. We will use postcode and ask you to confirm the distributor if needed.</> : <>Enter the complete NMI to confirm the exact distributor.</>}</div>}
+        <div className="native-usage-panel">
+          <div className="native-section-intro"><h3>Electricity usage from your bill</h3><p>You do not need to know your annual usage. Choose the period shown on your bill and enter its total kWh.</p></div>
+          <ChoiceCards name="usage-period" legend="What period does your usage cover?" value={usagePeriod} options={USAGE_PERIOD_OPTIONS} disabled={Boolean(meter)} onChange={setUsagePeriod} />
+          <div className="native-usage-entry">
+            <Field label="Grid usage" hint={meter ? "Read-only while your uploaded meter data is active." : "Enter the kWh figure, not the dollar amount. Look for kWh, total usage or consumption on your bill."}>
+              <input type="number" min="1" step="any" value={displayedUsage} readOnly={Boolean(meter)} onChange={(event) => { const value = event.target.value; setAnnualKwh(value === "" ? "" : String(annualiseUsage(value, usagePeriod))); }} placeholder={usagePeriod === "quarterly" ? "e.g. 1250" : usagePeriod === "monthly" ? "e.g. 420" : "e.g. 5000"} />
+            </Field>
+            {!meter && annualUsageNumber > 0 && <div className="native-annual-equivalent" aria-live="polite"><b>{Math.round(annualUsageNumber).toLocaleString()} kWh per year</b><span>will be used to compare plans.</span></div>}
+          </div>
+          <ChoiceCards name="usage-pattern" legend="When do you usually use the most power?" hint="This helps estimate time-of-use plans when no smart-meter file is provided." value={profileKind} options={PROFILE_OPTIONS} disabled={Boolean(meter)} onChange={setProfileKind} />
+        </div>
       </StepCard>
-      <StepCard number="2" title="Typed NEM12 meter data">
-        <p className="sub">The file is parsed in this browser and is not sent to the server.</p>
+      <StepCard number="2" title="Optional: use your smart-meter data">
+        <p className="sub">For the most accurate comparison, upload a NEM12 CSV with up to 12 months of interval usage. The file is read only in this browser and is never uploaded.</p>
         <div className={`native-dropzone${dragActive ? " drag" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false); }} onDrop={handleMeterDrop}>
-          <b>Drag your NEM12 CSV here</b>
+          <b>Drag your NEM12 meter-data CSV here</b>
           <span>or choose a file from this device</span>
           <label className="btn ghost" htmlFor="native-nem12-file">Choose meter-data file</label>
           <input id="native-nem12-file" type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Choose NEM12 file" onChange={(event) => void readMeterFile(event.target.files?.[0])} />
         </div>
-        <details className="native-meter-help">
-          <summary>How to get your meter data</summary>
+        <details className="native-meter-help" id="meter-data-help">
+          <summary>Step-by-step: find your NMI and download meter data</summary>
           <div>
-            <p>Request detailed interval data in NEM12 CSV format, ideally covering 12 months. You will usually need the NMI shown on your bill.</p>
-            {distributorInfo ? <div className="native-distributor-card"><b>{guidanceDistributor}</b><span>{distributorInfo.state} · AEMO region {distributorInfo.region}</span><p>{distributorInfo.meterDataInstructions}</p><div className="native-guidance-links">{distributorInfo.meterDataUrl && <a href={distributorInfo.meterDataUrl} target="_blank" rel="noreferrer">Get meter data</a>}<a href={distributorInfo.website} target="_blank" rel="noreferrer">Distributor website</a></div></div> : <p>Enter your NMI above or run the postcode comparison once to identify your distributor and show its meter-data instructions.</p>}
+            <div className="native-meter-clarifier"><b>Your NMI and meter data are different.</b><span>The NMI is the connection number printed on your bill. The NEM12 CSV is the detailed usage file you download from your electricity distributor, sometimes called your network.</span></div>
+            <ol className="native-meter-steps">
+              <li><b>Open a recent electricity bill.</b><span>Find the 10 or 11 character NMI, usually on the first or second page near your supply address.</span></li>
+              <li><b>Identify your distributor.</b><span>Enter the NMI above, check the network name on your bill, or choose it below.</span></li>
+              <li><b>Request interval data.</b><span>Use the matching official link and ask for up to 12 months in NEM12 CSV format.</span></li>
+              <li><b>Upload the downloaded CSV here.</b><span>You do not need to open or edit it first.</span></li>
+            </ol>
+            <div className="native-guide-selector"><Field label="Choose your electricity distributor" hint={nmiDistributor ? "Identified from the NMI entered above." : "If you are unsure, check the network or faults number printed on your bill."}><select value={guidanceDistributor} disabled={Boolean(nmiDistributor)} onChange={(event) => setMeterGuideDistributor(event.target.value)}><option value="">Choose distributor</option>{Object.keys(DISTRIBUTOR_INFO).map((name) => <option key={name}>{name}</option>)}</select></Field></div>
+            {distributorInfo && <div className="native-distributor-card"><b>{guidanceDistributor}</b><span>{distributorInfo.state} | AEMO region {distributorInfo.region}</span><p>{distributorInfo.meterDataInstructions}</p><div className="native-guidance-links">{distributorInfo.meterDataUrl && <a href={distributorInfo.meterDataUrl} target="_blank" rel="noreferrer">Open official meter-data page</a>}<a href={distributorInfo.website} target="_blank" rel="noreferrer">Open distributor website</a></div></div>}
+            <h3 className="native-network-links-title">Official links for every supported distributor</h3>
+            <div className="native-network-links">{Object.entries(DISTRIBUTOR_INFO).map(([name, info]) => <a href={info.meterDataUrl || info.website} target="_blank" rel="noreferrer" key={name}><b>{name}</b><span>{info.state} | {info.meterDataUrl ? "Meter-data help" : "Distributor help"}</span></a>)}</div>
             <p className="native-privacy-note">The downloaded file is read locally. Its NMI and intervals are never uploaded by this comparer.</p>
           </div>
         </details>
@@ -572,16 +692,19 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         </>}
       </StepCard>
       <StepCard number="3" title="Pricing assumptions">
-        <div className="grid c3">
-          <Field label="Current solar and battery setup"><select value={setupMode} onChange={(event) => setSetupMode(event.target.value as SetupMode)}><option value="none">No solar</option><option value="solar">Solar only</option><option value="battery">Solar + battery</option></select></Field>
-          {setupMode !== "none" && <Field label="Existing solar system size" hint="kW. If exports are not supplied, this and the postcode estimate them."><input type="number" min="0.1" step="0.1" value={solarKw} onChange={(event) => setSolarKw(event.target.value)} placeholder="e.g. 6.6" /></Field>}
+        <p className="sub">Tell us what is already installed and which plan conditions apply to your home.</p>
+        <ChoiceCards name="current-energy-setup" legend="Current solar and battery setup" value={setupMode} options={SETUP_OPTIONS} onChange={setSetupMode} />
+        {setupMode !== "none" && <div className="grid c3 native-existing-system-fields">
+          <Field label="Existing solar system size" hint="kW. If exports are not supplied, this and the postcode estimate them."><input type="number" min="0.1" step="0.1" value={solarKw} onChange={(event) => setSolarKw(event.target.value)} placeholder="e.g. 6.6" /></Field>
           {setupMode === "battery" && <Field label="Existing usable battery size" hint="kWh. Uploaded imports are not shifted again."><input type="number" min="0.1" step="0.1" value={batteryKwh} onChange={(event) => setBatteryKwh(event.target.value)} /></Field>}
-          {setupMode !== "none" && <Field label="Annual solar export" hint={meter?.annualExport ? "Read from the active meter file." : "kWh exported to the grid. Leave blank to estimate."}><input type="number" min="0" value={exportKwh} readOnly={Boolean(meter?.annualExport)} onChange={(event) => setExportKwh(event.target.value)} placeholder="Estimate from system size" /></Field>}
-          {!meter && <label className="toggle"><input type="checkbox" checked={hasControlledLoad} onChange={(event) => setHasControlledLoad(event.target.checked)} /> I have separately metered controlled load</label>}
-          {!meter && hasControlledLoad && <Field label="Controlled-load kWh per year"><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} /></Field>}
-          <label className="toggle"><input type="checkbox" checked={hasEv} onChange={(event) => setHasEv(event.target.checked)} /> I have an electric vehicle</label>
-          <label className="toggle"><input type="checkbox" checked={assumeConditional} onChange={(event) => setAssumeConditional(event.target.checked)} /> Assume conditional discounts are met</label>
+          <Field label="Annual solar export" hint={meter?.annualExport ? "Read from the active meter file." : "kWh exported to the grid. Leave blank to estimate."}><input type="number" min="0" value={exportKwh} readOnly={Boolean(meter?.annualExport)} onChange={(event) => setExportKwh(event.target.value)} placeholder="Estimate from system size" /></Field>
+        </div>}
+        <div className="native-assumption-grid">
+          {!meter && <label className={`native-assumption-card${hasControlledLoad ? " selected" : ""}`}><input type="checkbox" checked={hasControlledLoad} onChange={(event) => setHasControlledLoad(event.target.checked)} /><span><b>I have a controlled load</b><small>Usually electric hot water, slab heating or pool equipment shown separately on your bill as controlled load, dedicated circuit or off-peak usage.</small></span></label>}
+          <label className={`native-assumption-card${hasEv ? " selected" : ""}`}><input type="checkbox" checked={hasEv} onChange={(event) => setHasEv(event.target.checked)} /><span><b>I charge an electric vehicle at home</b><small>Select this so EV-specific plans can be included when you meet their equipment requirements.</small></span></label>
+          <label className={`native-assumption-card${assumeConditional ? " selected" : ""}`}><input type="checkbox" checked={assumeConditional} onChange={(event) => setAssumeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Only select this if you expect to meet conditions such as paying on time or using direct debit. Otherwise we leave these discounts out.</small></span></label>
         </div>
+        {!meter && hasControlledLoad && <div className="native-controlled-usage"><Field label="Controlled-load usage per year" hint="Enter only the separately listed controlled-load kWh from your bill. It must be less than your total grid usage."><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} placeholder="e.g. 1200" /></Field></div>}
       </StepCard>
       <div className="gas-compare-action"><button className="btn" disabled={loading}>{loading ? "Pricing published plans..." : "Run native comparison"}</button></div>
       {error && <p className="error">{error}</p>}
@@ -597,18 +720,27 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       {pricingContext && setupMode !== "battery" && <div className="native-scenarios">
         <h2>{setupMode === "none" ? "Native solar and battery scenarios" : "Native battery scenario"}</h2>
         <p>{setupMode === "none" ? "Solar is generated half hourly against this household's load pattern. The battery then charges only from remaining solar exports and discharges against later grid imports." : "The battery charges from this household's solar export pattern and discharges against its grid-import pattern. Existing meter imports are not double-shifted."}</p>
+        <p className="native-scenario-instruction"><b>Replace the prefilled cost with a written installed quote.</b> Enter the final amount after every certificate discount and rebate shown by the installer.</p>
         <div className="grid c3">
-          {setupMode === "none" && <Field label="Scenario solar size"><input type="number" min="0.1" step="0.1" value={scenarioSolarKw} onChange={(event) => setScenarioSolarKw(event.target.value)} /></Field>}
-          <Field label="Scenario usable battery size"><input type="number" min="0.1" step="0.5" value={scenarioBatteryKwh} onChange={(event) => setScenarioBatteryKwh(event.target.value)} /></Field>
-          {setupMode === "none" && <Field label="Solar quote after rebate"><input type="number" min="0" step="100" value={scenarioSolarCost} onChange={(event) => setScenarioSolarCost(event.target.value)} /></Field>}
-          {setupMode === "none" && <Field label="Solar + battery quote after rebates"><input type="number" min="0" step="100" value={scenarioComboCost} onChange={(event) => setScenarioComboCost(event.target.value)} /></Field>}
+          {setupMode === "none" && <Field label="Scenario solar size" hint="Panel capacity in kW."><input type="number" min="0.1" step="0.1" value={scenarioSolarKw} onChange={(event) => updateScenarioSolarSize(event.target.value)} /></Field>}
+          <Field label="Scenario usable battery size" hint="Usable storage in kWh, not the larger nominal capacity."><input type="number" min="0.1" step="0.5" value={scenarioBatteryKwh} onChange={(event) => updateScenarioBatterySize(event.target.value)} /></Field>
+          {setupMode === "none" ? <Field label="Solar installed quote after discounts" hint="Include panels, inverter, labour, connection work, GST and solar STCs."><input type="number" min="0" step="100" value={scenarioSolarCost} onChange={(event) => setScenarioSolarCost(event.target.value)} /></Field> : <Field label="Battery installed quote after discounts" hint="Include battery, inverter or integration work, labour, GST and the confirmed federal discount."><input type="number" min="0" step="100" value={scenarioBatteryCost} onChange={(event) => setScenarioBatteryCost(event.target.value)} /></Field>}
+          {setupMode === "none" && <Field label="Solar + battery installed quote after discounts" hint="Use the combined written quote, which may differ from adding two standalone prices."><input type="number" min="0" step="100" value={scenarioComboCost} onChange={(event) => setScenarioComboCost(event.target.value)} /></Field>}
         </div>
+        <details className="native-scenario-assumptions">
+          <summary>Review energy and default cost assumptions</summary>
+          <div className="grid c3">
+            {setupMode === "none" && <Field label="Annual solar yield" hint="kWh generated per kW of panels each year. The default is a broad state estimate."><input type="number" min="500" max="2500" step="10" value={scenarioSolarYield} onChange={(event) => setScenarioSolarYield(event.target.value)} /></Field>}
+            <Field label="Battery round-trip efficiency" hint="Percent of charging energy available after storage losses."><input type="number" min="50" max="100" step="1" value={scenarioBatteryEfficiency} onChange={(event) => setScenarioBatteryEfficiency(event.target.value)} /></Field>
+          </div>
+          <p>Cost model {SCENARIO_COST_ASSUMPTIONS.version} prefills solar at {fmtMoney(SCENARIO_COST_ASSUMPTIONS.solarNetInstalledPerKw)} per kW after solar STCs. Battery cost starts at {fmtMoney(SCENARIO_COST_ASSUMPTIONS.batteryGrossInstalledPerUsableKwh)} per usable kWh before an estimated federal discount. The discount uses the current {SCENARIO_COST_ASSUMPTIONS.batteryStcFactor} STCs per eligible kWh factor, the capacity taper on the first {SCENARIO_COST_ASSUMPTIONS.batterySupportedUsableKwh} usable kWh and the government&apos;s {fmtMoneyExact(SCENARIO_COST_ASSUMPTIONS.assumedStcValue)} clearing-house value. The program also requires an eligible 5 to 100 kWh nominal system. Installer charges and site eligibility vary, so these defaults are not quotes.</p>
+        </details>
         <div className="native-scenario-grid">{upgradeScenarios.map((scenario) => <article className="native-scenario" key={scenario.label}>
           <span className="badge info">{scenario.label}</span><h3>{fmtMoney(scenario.best.annualCost)}/yr</h3>
           <p>Cheapest current bill {fmtMoney(scenario.best.annualCost + scenario.annualSaving)} to {fmtMoney(scenario.best.annualCost)} after {scenario.description}.</p>
           <div><b>{fmtMoney(scenario.annualSaving)}/yr</b><span> estimated bill saving</span></div>
-          <div><b>{payback(scenario.installedCost / scenario.annualSaving)}</b><span> indicative payback</span></div>
-          <div><b>{fmtMoney(scenario.installedCost)}</b><span> scenario installed cost after applicable rebates</span></div>
+          <div><b>{scenario.annualSaving > 0 ? payback(scenario.installedCost / scenario.annualSaving) : "No simple payback"}</b><span> using first-year bill saving</span></div>
+          <div><b>{fmtMoney(scenario.installedCost)}</b><span> installed cost input after discounts</span></div>
           <div><b>{Math.round(scenario.annualImportKwh).toLocaleString()} kWh</b><span> annual grid import</span></div>
           <div><b>{Math.round(scenario.annualExportKwh).toLocaleString()} kWh</b><span> annual solar export</span></div>
           {scenario.annualDischargeKwh != null && <div><b>{Math.round(scenario.annualDischargeKwh).toLocaleString()} kWh</b><span> annual battery discharge</span></div>}
@@ -616,15 +748,17 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           <button type="button" className="audit-button" onClick={(event) => { auditReturnRef.current = event.currentTarget; setAuditPlan(scenario.best); }}>Open scenario calculation audit</button>
           <button type="button" className="btn native-enquiry-button" onClick={() => setEnquiryScenario(scenario)}>Enquire about this option</button>
         </article>)}</div>
-        <p className="native-scenario-caveat">Scenario generation uses the comparison engine&apos;s state yield and representative daylight curve. Default battery costs use the same July 2026 federal rebate assumptions. Roof orientation, shading, weather, usable battery capacity, rebate eligibility and actual installed price still require a site assessment.</p>
+        <div className="native-scenario-caveat"><b>Indicative scenario, not an installation recommendation.</b> The simple payback holds first-year usage, tariffs and savings constant. It excludes finance costs, maintenance, insurance, component replacement, degradation, warranty limits, VPP income or control, backup reserve and future tariff changes. The energy model does not inspect roof area, orientation, tilt, shading, inverter limits, network export limits, curtailment, switchboard work, battery location or product compatibility. Confirm annual generation, usable and nominal battery capacity, federal and state incentive eligibility, connection approval and the complete installed price through a site assessment and written quotes. For an independent roof-specific cross-check, use the <a href="https://www.sunspot.org.au/" target="_blank" rel="noreferrer">government-supported SunSPOT calculator</a> and the <a href="https://www.energy.gov.au/solar/solar-retailers-and-installation/choose-your-solar-retailer-and-installer" target="_blank" rel="noreferrer">Australian Government quote checklist</a>.</div>
       </div>}
       <div className="filters"><label className="toggle"><input type="checkbox" checked={showTou} onChange={(event) => setShowTou(event.target.checked)} /> Time of use</label><label className="toggle"><input type="checkbox" checked={showSingle} onChange={(event) => setShowSingle(event.target.checked)} /> Single rate</label><label className="toggle"><input type="checkbox" checked={showDemand} onChange={(event) => setShowDemand(event.target.checked)} /> Demand</label><label className="toggle"><input type="checkbox" checked={showStanding} onChange={(event) => setShowStanding(event.target.checked)} /> Standing offers</label><input aria-label="Filter native electricity plans" placeholder="Filter retailer or plan" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+      {visible.some((plan) => plan.eligibilityConfirmations.length > 0) && <div className="note"><b>Check eligibility before switching.</b> {visible.filter((plan) => plan.eligibilityConfirmations.length > 0).length} displayed offers have published retailer conditions that this calculator cannot confirm from your inputs. They remain priced, but each is labelled and the condition is shown in its calculation audit.</div>}
       {visible.slice(0, shown).map((plan, index) => <NativePlanCard key={`${plan.planId}-${Math.round(plan.annualCost)}`} plan={plan} rank={index + 1} onAudit={(button) => { auditReturnRef.current = button; setAuditPlan(plan); }} />)}
       {!visible.length && <p className="note">No plans match the selected filters.</p>}
       {visible.length > shown && <button className="btn ghost showmore" type="button" onClick={() => setShown((value) => value + 12)}>Show more plans</button>}
       <p className="offer-count">Showing {Math.min(shown, visible.length)} of {visible.length} priceable offers</p>
       <div className="note"><b>Native calculation scope.</b> Engine {NATIVE_ENGINE_VERSION}. General and controlled-load usage, supply charges, single rates, time-of-use windows, feed-in credits, published blocks, GST and supported discounts are calculated. Solar, battery, EV and controlled-load eligibility is applied to both current and upgrade scenarios. {demandReady ? "Supported demand plans use peaks measured in the uploaded general-usage register." : "Demand plans are excluded until the uploaded data passes the full-year quality threshold."} {Object.values(excluded).reduce((sum, count) => sum + count, 0)} candidate plans were excluded by these rules.</div>
-      {bundle && <div className="note"><b>Tariff evidence.</b> Checked {bundle.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "this session"}. Source {bundle.sourceHash || "unavailable"}. Schema {bundle.tariffSchemaVersion || "unavailable"}. {bundle.source?.detailPlansSucceeded || bundle.plans.length} plan details passed server validation.</div>}
+      {bundle && <div className="note"><b>Tariff evidence.</b> Retrieved current CDR records {bundle.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "this session"}. {bundle.source?.detailPlansSucceeded || bundle.plans.length} of {bundle.source?.candidatePlans || bundle.plans.length} locally relevant plan details passed strict validation from {bundle.source?.listSourcesSucceeded ?? "the available"} of {bundle.source?.retailersDiscovered ?? "the discovered"} sources. {bundle.source?.oldestPlanUpdatedAt && bundle.source?.newestPlanUpdatedAt ? `The included retailer records were last updated between ${new Date(bundle.source.oldestPlanUpdatedAt).toLocaleDateString()} and ${new Date(bundle.source.newestPlanUpdatedAt).toLocaleDateString()}. ` : ""}{bundle.source?.plansMissingLastUpdated ? `${bundle.source.plansMissingLastUpdated} included records did not publish a usable update time. ` : ""}{bundle.source?.partial ? "Some sources or plan details were unavailable or rejected, so this is not a complete-market result. " : ""}Source evidence {bundle.sourceHash || "unavailable"}. Schema {bundle.tariffSchemaVersion || "unavailable"}.</div>}
+      {bundle?.source?.retailerCoverage && <details className="note"><summary>Retailer source coverage</summary><ul>{bundle.source.retailerCoverage.filter((coverage) => !coverage.listAvailable || coverage.candidatePlans > 0).map((coverage) => <li key={coverage.retailer}><b>{coverage.retailer}:</b> {coverage.listAvailable ? `${coverage.detailsPassed} of ${coverage.candidatePlans} local plan details passed` : "plan list unavailable"}{coverage.detailsRejected ? `; ${coverage.detailsRejected} rejected by tariff validation` : ""}{coverage.detailsUnavailable ? `; ${coverage.detailsUnavailable} unavailable` : ""}</li>)}</ul></details>}
       <div className="native-followup-grid">
         <section className="native-followup-card"><h2>Save this comparison privately</h2><p>The link contains only comparison assumptions. It never contains an NMI, meter intervals, filename, annual-adjustment reason or contact details.</p><button type="button" className="btn ghost" onClick={() => void copyPrivateLink()}>Copy private-safe link</button>{shareStatus && <p className="native-action-status" role="status">{shareStatus}</p>}{sharedUrl && <Field label="Private-safe link"><input readOnly value={sharedUrl} onFocus={(event) => event.currentTarget.select()} /></Field>}</section>
         <form className="native-followup-card" onSubmit={sendTopPlans}><h2>Email my top three</h2><p>Receive the three cheapest currently visible plans and a reminder to compare again every six months.</p><div className="grid c3"><Field label="Name"><input required autoComplete="name" value={leadName} onChange={(event) => setLeadName(event.target.value)} /></Field><Field label="Email"><input required type="email" autoComplete="email" value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} /></Field><Field label="Phone (optional)"><input autoComplete="tel" value={leadPhone} onChange={(event) => setLeadPhone(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={leadWebsite} onChange={(event) => setLeadWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={leadConsent} onChange={(event) => setLeadConsent(event.target.checked)} /> I agree that Australian Energy Assessments may email these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label><label className="toggle"><input type="checkbox" checked={leadUpgrades} onChange={(event) => setLeadUpgrades(event.target.checked)} /> I would also like information about independent solar or battery assessments.</label><button className="btn" disabled={leadSending}>{leadSending ? "Sending..." : "Send my top three"}</button>{leadStatus && <p className="native-action-status" role="status">{leadStatus}</p>}<details className="native-privacy-details"><summary>How my details are used</summary><p>Your details are sent only when you submit this form. Meter files, NMI values and interval data stay in your browser and are not included. Upgrade follow-up occurs only if you select it.</p></details></form>
@@ -684,14 +818,14 @@ function NativeUpgradeDialog({ scenario, onSubmit, onClose }: { scenario: Scenar
 }
 
 function NativePlanCard({ plan, rank, onAudit }: { plan: NativePlanResult; rank: number; onAudit: (button: HTMLButtonElement) => void }) {
-  const retailerLink = plan.link || plan.base;
+  const retailerLink = plan.link || plan.retailerUrl;
   return <article className="plan">
     <div><div className="top"><span className={`rank${rank === 1 ? " r1" : ""}`}>#{rank}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div>
       <div className="rateline"><span className="r"><b>{fmtCents(plan.supplyCentsPerDay)}c</b>/day <span>supply</span></span>{[...plan.rates, ...plan.controlledRates].slice(0, 6).map((rate, index) => <span className="r" key={`${rate.label}-${index}`}><b>{fmtCents(rate.centsPerKwh)}c</b>/kWh <span>{rate.label}</span></span>)}<span className="r"><span>prices inc GST</span></span></div>
-      <div className="badges"><span className="badge">{plan.tariffKind === "tou" ? "Time of use" : plan.tariffKind === "demand" ? "Demand tariff" : "Single rate"}</span>{plan.demand > 0 && <span className="badge info">Measured peak {plan.demandPeakKw.toFixed(1)} kW</span>}{plan.feedIn > 0 && <span className="badge info">Feed-in credit {fmtCents(plan.feedInCentsPerKwh)}c/kWh effective</span>}{plan.controlled > 0 && <span className="badge info">Controlled load costed separately</span>}{plan.fees ? <span className="badge warn">Published fees not included</span> : null}</div>
+      <div className="badges"><span className="badge">{plan.tariffKind === "tou" ? "Time of use" : plan.tariffKind === "demand" ? "Demand tariff" : "Single rate"}</span>{plan.demand > 0 && <span className="badge info">Measured peak {plan.demandPeakKw.toFixed(1)} kW</span>}{plan.feedIn > 0 && <span className="badge info">Feed-in credit {fmtCents(plan.feedInCentsPerKwh)}c/kWh effective</span>}{plan.controlled > 0 && <span className="badge info">Controlled load costed separately</span>}{plan.fees ? <span className="badge warn">Published fees not included</span> : null}{plan.validation?.limitations?.some((item) => item !== "fees_not_costed") && <span className="badge warn">Some published benefits not included</span>}{plan.eligibilityConfirmations.length > 0 && <span className="badge warn">Retailer eligibility must be confirmed</span>}</div>
     </div>
-    <div className="price"><div className="annual">{fmtMoney(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400 }}>/yr</span></div><div className="permo">about {fmtMoney(plan.annualCost / 12)} per month</div>{retailerLink ? <a href={retailerLink} target="_blank" rel="noreferrer">{plan.link ? "View retailer plan" : "Go to retailer"}</a> : <span className="source-missing">Retailer link not published</span>}<div className="offerid">Offer ID: {plan.planId.split("@")[0]} | Evidence: {plan.tariffHash?.replace("sha256:", "").slice(0, 12) || "unavailable"}</div></div>
-    <div className="native-breakdown">Supply {fmtMoneyExact(plan.supply)} + general usage {fmtMoneyExact(plan.usage)}{plan.controlled > 0 ? ` + controlled load ${fmtMoneyExact(plan.controlled)}` : ""}{plan.demand > 0 ? ` + measured demand ${fmtMoneyExact(plan.demand)}` : ""}{plan.feedIn > 0 ? ` - feed-in credits ${fmtMoneyExact(plan.feedIn)}` : ""}{plan.discounts > 0 ? ` - discounts ${fmtMoneyExact(plan.discounts)}` : ""} = {fmtMoneyExact(plan.annualCost)} inc GST{plan.touMix ? ` | Usage mix: ${Object.entries(plan.touMix).map(([label, share]) => `${label} ${Math.round(share * 100)}%`).join(", ")}` : ""}<button type="button" className="audit-button" onClick={(event) => onAudit(event.currentTarget)}>Open calculation audit</button></div>
+    <div className="price"><div className="annual">{fmtMoney(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400 }}>/yr</span></div><div className="permo">about {fmtMoney(plan.annualCost / 12)} per month</div><div className="plan-actions">{retailerLink ? <a href={retailerLink} target="_blank" rel="noreferrer">{plan.link ? "View retailer plan" : "Go to retailer"}</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className="audit-button" onClick={(event) => onAudit(event.currentTarget)}>Open calculation audit</button></div><div className="offerid">Offer ID: {plan.planId.split("@")[0]} | Evidence: {plan.tariffHash?.replace("sha256:", "").slice(0, 12) || "unavailable"}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
+    <div className="native-breakdown">Supply {fmtMoneyExact(plan.supply)} + general usage {fmtMoneyExact(plan.usage)}{plan.controlled > 0 ? ` + controlled load ${fmtMoneyExact(plan.controlled)}` : ""}{plan.demand > 0 ? ` + measured demand ${fmtMoneyExact(plan.demand)}` : ""}{plan.feedIn > 0 ? ` - feed-in credits ${fmtMoneyExact(plan.feedIn)}` : ""}{plan.discounts > 0 ? ` - discounts ${fmtMoneyExact(plan.discounts)}` : ""} = {fmtMoneyExact(plan.annualCost)} inc GST{plan.touMix ? ` | Usage mix: ${Object.entries(plan.touMix).map(([label, share]) => `${label} ${Math.round(share * 100)}%`).join(", ")}` : ""}</div>
   </article>;
 }
 
@@ -740,8 +874,6 @@ function NativeAuditDialog({ plan, bundle, onClose }: { plan: NativePlanResult; 
       <div className="audit-summary-grid">
         <div><b>Usage priced</b>{Math.round(audit.inputs.annualGeneralKwh).toLocaleString()} kWh general{audit.inputs.annualControlledKwh > 0 ? ` + ${Math.round(audit.inputs.annualControlledKwh).toLocaleString()} kWh controlled load` : ""}{audit.inputs.annualExportKwh > 0 ? `; ${Math.round(audit.inputs.annualExportKwh).toLocaleString()} kWh export` : ""}</div>
         <div><b>Usage evidence</b>{audit.evidenceLabel}</div>
-        <div><b>Plan tariff evidence</b>{plan.tariffHash || "Unavailable"}</div>
-        <div><b>Calculation versions</b>{audit.engineVersion} | {bundle?.tariffSchemaVersion || "Schema unavailable"}</div>
       </div>
       {audit.registers.length > 0 && <NativeAuditSection title="Meter register allocation" note="Registers remain separate for general usage and controlled-load pricing."><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Register</th><th>Assigned role</th><th>Annual kWh</th><th>Interval</th></tr></thead><tbody>{audit.registers.map((register) => <tr key={register.id}><td>{register.id}</td><td>{register.role === "general" ? "General usage" : "Controlled load"}</td><td>{Math.round(register.annualKwh).toLocaleString()} kWh</td><td>{register.intervalMinutes} minutes</td></tr>)}</tbody></table></div></NativeAuditSection>}
       <NativeAuditSection title="Supply charges" note="Published prices are shown including GST."><NativeAuditTable lines={audit.supply} /></NativeAuditSection>
@@ -751,7 +883,7 @@ function NativeAuditDialog({ plan, bundle, onClose }: { plan: NativePlanResult; 
       {audit.feedIn.length > 0 && <NativeAuditSection title="Solar feed-in credit" note="Time-varying feed-in rates are weighted against the export timing profile."><NativeAuditTable lines={audit.feedIn} credit /></NativeAuditSection>}
       {audit.discounts.length > 0 && <NativeAuditSection title="Published discounts" note="Conditional discounts apply only when the comparison toggle says they are assumed to be met."><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Discount</th><th>Method</th><th>Condition</th><th>Treatment</th><th>Annual value</th></tr></thead><tbody>{audit.discounts.map((discount, index) => <tr key={`${discount.label}-${index}`}><td>{discount.label}</td><td>{discount.method}</td><td>{discount.conditional ? "Conditional" : "Unconditional"}</td><td>{discount.applied ? "Included" : "Not assumed"}</td><td>{discount.applied ? `-${fmtMoneyExact(discount.amount)}` : "$0.00"}</td></tr>)}</tbody></table></div></NativeAuditSection>}
       <NativeAuditSection title="Annual total reconciliation" note="Credits and discounts appear as negative amounts."><div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Component</th><th>Amount</th></tr></thead><tbody>{componentRows.map(([label, amount]) => <tr key={label}><td>{label}</td><td>{fmtSignedMoney(amount)}</td></tr>)}</tbody></table></div><p className={reconciled ? "audit-reconciled" : "audit-failed"}>{reconciled ? "Reconciled exactly to the ranked plan total." : `Reconciliation difference: ${fmtSignedMoney(reconciliation.difference)}. This result must not be relied on until corrected.`}</p></NativeAuditSection>
-      <NativeAuditSection title="Source, eligibility and limitations" note="The audit is calculation evidence, not a guarantee of future bills or eligibility."><div className="audit-summary-grid"><div><b>Tariffs checked</b>{bundle?.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "This session"}</div><div><b>Market source evidence</b>{bundle?.sourceHash || "Unavailable"}</div><div><b>Eligibility</b>{audit.eligibility.length ? audit.eligibility.join("; ") : "No published equipment eligibility text"}</div><div><b>Not included</b>{audit.limitations.length ? audit.limitations.join(", ").replaceAll("_", " ") : "No validation limitations recorded"}</div></div></NativeAuditSection>
+      <NativeAuditSection title="Plan dates and eligibility" note="Confirm the plan is still available and that you meet its published conditions before switching."><div className="audit-summary-grid"><div><b>Record retrieved</b>{bundle?.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "This session"}</div><div><b>Retailer record updated</b>{plan.lastUpdated ? new Date(plan.lastUpdated).toLocaleString() : "Not published"}</div><div><b>Effective period</b>{plan.effectiveFrom ? new Date(plan.effectiveFrom).toLocaleDateString() : "Start not published"} to {plan.effectiveTo ? new Date(plan.effectiveTo).toLocaleDateString() : "No end published"}</div><div><b>Published eligibility</b>{audit.eligibility.length ? audit.eligibility.join("; ") : "No published eligibility text"}</div><div><b>Must confirm with retailer</b>{plan.eligibilityConfirmations.length ? plan.eligibilityConfirmations.join("; ") : "No unresolved published conditions"}</div>{audit.contractTerms.length > 0 && <div className="audit-contract-terms"><b>Published contract terms</b>{audit.contractTerms.join(" ")}</div>}</div></NativeAuditSection>
       <button type="button" className="btn audit-close" onClick={onClose} ref={closeRef}>Close audit</button>
     </div>
   </div>;

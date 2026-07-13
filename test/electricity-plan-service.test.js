@@ -20,11 +20,19 @@ test('same-origin API caches by postcode and customer type', () => {
   assert.match(route, /loadElectricityPlans\(\{ postcode, customerType \}\)/);
 });
 
+test('plan API emits privacy-safe operational metrics and a correlation ID', () => {
+  assert.match(route, /createOperationalRecorder\(\{ event: "api\.electricity_plans" \}\)/);
+  assert.match(route, /"X-Request-Id": operations\.requestId/);
+  assert.match(route, /detailPlansRejected/);
+  assert.match(route, /detailPlansUnavailable/);
+});
+
 test('comparison discloses tariff freshness and partial source coverage', () => {
   assert.match(comparator, /Tariff source check:/);
   assert.match(comparator, /detailPlansSucceeded/);
   assert.match(comparator, /may not represent the complete market/);
-  assert.match(comparator, /refreshes automatically every hour/);
+  assert.match(comparator, /Current CDR plan records, retrieved within the last hour/);
+  assert.match(comparator, /Retrieval time does not replace the retailer/);
   assert.match(comparator, /Calculation engine/);
   assert.match(comparator, /Source evidence/);
   assert.match(comparator, /failed tariff validation/);

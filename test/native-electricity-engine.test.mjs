@@ -26,7 +26,7 @@ test("native single-rate pricing reconciles supply, usage, controlled load and d
   });
   const estimate = estimateNativePlan(input, { annualGeneralKwh: 4000, annualControlledKwh: 1000, profile: profile(), assumeConditional: true });
   assert.equal(estimate.ok, true);
-  assert.equal(NATIVE_ENGINE_VERSION, "aea-native-electricity-0.4.0");
+  assert.equal(NATIVE_ENGINE_VERSION, "aea-native-electricity-0.5.0");
   const result = estimate.result;
   assert.ok(Math.abs(result.supply - 401.5) < 1e-9);
   assert.ok(Math.abs(result.usage - 1100) < 1e-9);
@@ -105,6 +105,51 @@ test("native feed-in pricing follows the measured export window and equipment el
   assert.equal(withSolar.result.audit.feedIn.length, 1);
   assert.ok(Math.abs(withSolar.result.audit.feedIn[0].amount - withSolar.result.feedIn) < 1e-9);
   assert.ok(Math.abs(withSolar.result.annualCost - (withSolar.result.supply + withSolar.result.usage - withSolar.result.feedIn)) < 1e-9);
+});
+
+test("unresolved retailer eligibility is labelled instead of silently assumed", () => {
+  const conditionalPlan = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } }, {
+    eligibility: [{ type: "OTHER", information: "Customer must be on an applicable network tariff" }],
+    terms: "The customer must confirm the property requirement with the retailer.",
+  });
+  const estimate = estimateNativePlan(conditionalPlan, {
+    annualGeneralKwh: 5000,
+    annualControlledKwh: 0,
+    profile: profile(),
+    assumeConditional: false,
+    customerType: "RESIDENTIAL",
+  });
+
+  assert.equal(estimate.ok, true);
+  assert.deepEqual(estimate.result.eligibilityConfirmations, [
+    "other: Customer must be on an applicable network tariff",
+  ]);
+  assert.ok(estimate.result.audit.limitations.includes("eligibility_confirmation_required"));
+  assert.deepEqual(estimate.result.audit.contractTerms, [
+    "The customer must confirm the property requirement with the retailer.",
+  ]);
+});
+
+test("structured equipment and customer eligibility is enforced from supplied inputs", () => {
+  const batteryPlan = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } }, {
+    eligibility: [{ type: "EXISTING_BATTERY", information: "Existing battery customers only" }],
+  });
+  const noBattery = estimateNativePlan(batteryPlan, {
+    annualGeneralKwh: 5000, annualControlledKwh: 0, profile: profile(), assumeConditional: false,
+    customerType: "RESIDENTIAL",
+  });
+  assert.equal(noBattery.ok, false);
+  assert.match(noBattery.reason, /battery is required/i);
+
+  const smallBusinessPlan = plan({ rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } }, {
+    eligibility: [{ type: "SMALL_BUSINESS", information: "Small business only" }],
+  });
+  const residential = estimateNativePlan(smallBusinessPlan, {
+    annualGeneralKwh: 5000, annualControlledKwh: 0, profile: profile(), assumeConditional: false,
+    customerType: "RESIDENTIAL",
+  });
+  assert.equal(residential.ok, false);
+  assert.match(residential.reason, /small-business/);
 });
 
 test("native seasonal audit allocation uses dated NEM12 intervals when available", () => {

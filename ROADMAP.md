@@ -41,6 +41,15 @@ Progress as at 13 July 2026:
 - Add offer details, rates, terms, retailer contact and side-by-side comparison.
 - Align the user journey with Victorian Energy Compare: recent bill, usage profile, annual estimated offer ranking, offer details and retailer contact. The official guidance says gas usage is measured in MJ and offers are ranked by annual estimated price. [Government comparison guidance](https://compare.energy.vic.gov.au/assets/languages/english/how-to-compare-offers-on-victoria-energy-compare.html)
 
+Progress as at 14 July 2026:
+
+- Gas plans now use current CDR list v1 and detail v3 records with effective-date checks, retailer source coverage and update-time evidence.
+- Annual MJ is allocated through an explicit gas-heating or steady-use profile before seasonal tariff periods are priced. Daily and monthly usage blocks reset at their published interval.
+- Tariff calendars must cover all 365 days exactly once. Unsupported, overlapping or incomplete plans are excluded rather than ranked with a flat daily approximation.
+- Ambiguous postcodes require the gas distributor shown on the bill before ranking. Conditional discounts are off by default, while eligibility, fees, incentives and other uncosted features remain visible.
+- Appliance inputs are separated into heating, hot water, cooking, clothes dryer and pool or spa sections. The heating answer now sets the seasonal pricing profile automatically, removing the duplicate gas-use question, while unbenchmarked dryer and pool or spa allocations are labelled as broad proxies.
+- Residents can shortlist up to three gas offers in a side-by-side view covering annual and monthly cost, supply and usage rates, seasonal pricing and conditions to confirm.
+
 ## Phase 4: expand the site
 
 - Add guides, rebates, case studies, solar, batteries, heating, hot water and getting-started pages.
