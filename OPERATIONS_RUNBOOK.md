@@ -59,6 +59,7 @@ When `lead_delivery` fails:
 2. Search downstream records by probe ID only if the processor records it as an operational event.
 3. Confirm that no customer lead was created from `webhook.delivery_probe`.
 4. Keep the public fallback telephone number available while delivery is impaired.
+5. Confirm the deployed Apps Script source matches `integrations/google-apps-script/lead-email-relay.gs` and that the active web app deployment was updated after the last source change.
 
 When both checks fail, first confirm the production site and Netlify function runtime are reachable, then check environment configuration and provider status.
 
@@ -74,3 +75,13 @@ lead_delivery.ok=true
 ```
 
 Do not test recovery by submitting a real lead. Use only the dedicated webhook probe event.
+
+## Email workflow release check
+
+The lead processor must return the plain text acknowledgement `ok` only after it accepts the event and completes the required sends. Before updating the Apps Script deployment:
+
+1. Confirm the repository relay tests cover all five event types and the operational probe.
+2. Confirm new unsubscribe links use only `?action=unsub&t=<opaque token>`.
+3. Confirm internal messages reply to the supplied customer email when present, while customer messages reply to `info@ausenergyassessments.com`.
+4. Create a new Apps Script deployment version rather than relying on saved editor source alone.
+5. Run the privacy-safe probe after deployment. Do not create a customer lead as a health check.

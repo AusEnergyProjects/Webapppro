@@ -15,5 +15,7 @@ test("lead route uses the shared limiter and the Netlify client address", () => 
   assert.match(route, /createOperationalRecorder\(\{ event: "api\.leads" \}\)/);
   assert.match(route, /"X-Request-Id": operations\.requestId/);
   assert.match(route, /submissionType: payload\.submissionType/);
+  assert.match(route, /createLeadEnvelope/);
+  assert.match(route, /acknowledgement\.trim\(\) !== "ok"/);
   assert.doesNotMatch(route, /rateBuckets|new Map\(\)/);
 });

@@ -1,4 +1,5 @@
 import { validateLeadPayload } from "@/lib/lead-validation.mjs";
+import { createLeadEnvelope } from "@/lib/lead-envelope.mjs";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 
@@ -60,7 +61,7 @@ export async function POST(request) {
   const result = validateLeadPayload(raw);
   if (!result.ok) return respond({ ok: false, error: result.error }, 400, "validation_rejected");
 
-  const payload = result.value;
+  const payload = createLeadEnvelope(result.value);
   const metrics = { submissionType: payload.submissionType };
   const startedTooQuickly = payload.clientStartedAt && Date.now() - payload.clientStartedAt < 1200;
   if (payload.website || startedTooQuickly) return respond({ ok: true, filtered: true }, 200, "bot_filtered", metrics);
@@ -89,8 +90,9 @@ export async function POST(request) {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error("Lead processor returned " + response.status);
-    return respond({ ok: true, reference: crypto.randomUUID() }, 200, "delivered", metrics);
+    const acknowledgement = await response.text();
+    if (!response.ok || acknowledgement.trim() !== "ok") throw new Error("Lead processor did not acknowledge delivery.");
+    return respond({ ok: true, reference: payload.reference }, 200, "delivered", metrics);
   } catch (error) {
     return respond(
       { ok: false, error: "Your request could not be delivered. Please try again or call 1300 241 149." },

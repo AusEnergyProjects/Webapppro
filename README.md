@@ -56,7 +56,11 @@ AEA_LEAD_WEBHOOK_URL=https://your-private-lead-processor.example/endpoint
 AEA_LEAD_RATE_LIMIT_SECRET=replace-with-at-least-32-random-characters
 ```
 
-Do not expose either value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a durable shared rate limit through the site-scoped `aea-lead-rate-limit` Netlify Blobs store, and only reports success after the downstream processor returns a successful response. Raw IP addresses are never stored: the limiter uses an HMAC-obscured client key and an atomic rolling list of recent request times. Local Next.js development uses an in-memory fallback because Netlify Blobs requires `netlify dev` outside production.
+Do not expose either value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a durable shared rate limit through the site-scoped `aea-lead-rate-limit` Netlify Blobs store, and only reports success after the downstream processor returns the exact acknowledgement `ok`. Raw IP addresses are never stored: the limiter uses an HMAC-obscured client key and an atomic rolling list of recent request times. Local Next.js development uses an in-memory fallback because Netlify Blobs requires `netlify dev` outside production.
+
+The current Google Apps Script processor is tracked at `integrations/google-apps-script/lead-email-relay.gs`. Website submissions use schema version 2 and one of five explicit events: electricity comparison results, electricity upgrades, gas upgrades, Direct Trade household projects and Direct Trade partner applications. Every delivered request receives an `AEA` reference shared by the browser acknowledgement, customer email, internal email and spreadsheet row. Customer and internal messages use the same navy, teal, emerald and restrained gold visual system as the website, include plain text fallbacks and show only fields relevant to that request.
+
+Comparison emails require a positive annual usage value and at least one complete ranked plan. Scenario emails omit unavailable optional values instead of printing placeholders. New reminder unsubscribe links contain an opaque random token only. They never include an email address, phone number, meter identifier or energy data.
 
 ### Privacy-safe webhook delivery probe
 
@@ -69,7 +73,7 @@ $headers = @{ Authorization = "Bearer $env:AEA_LEAD_WEBHOOK_TEST_TOKEN" }
 Invoke-RestMethod -Method Post -Uri "https://compare.ausenergyassessments.com/api/internal/lead-webhook-probe" -Headers $headers
 ```
 
-An `ok: true` response proves that the application reached the processor and received a 2xx response. Confirming any downstream audit record still requires checking the processor itself by `probeId`.
+An `ok: true` response proves that the application reached the processor and received its exact `ok` acknowledgement. The Apps Script branch for this event must return before opening the customer sheet or sending mail. Confirming any downstream audit record still requires checking the processor itself by `probeId`.
 
 ### API monitoring and alerts
 

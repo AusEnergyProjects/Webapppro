@@ -3,13 +3,16 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 type UpgradeEnquiryModalProps = {
+  enquiryCode: "gas-heating" | "gas-hot-water";
   title: string;
+  postcode: string;
   annualMj: string;
   estimatedSaving: number;
+  installedCost: number;
   onClose: () => void;
 };
 
-export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose }: UpgradeEnquiryModalProps) {
+export function UpgradeEnquiryModal({ enquiryCode, title, postcode, annualMj, estimatedSaving, installedCost, onClose }: UpgradeEnquiryModalProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -68,14 +71,16 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
       submissionType: "upgrade",
       clientStartedAt: startedAt.current,
       website,
-      enquiry: title,
-      type: `Upgrade enquiry: ${title}`,
+      enquiry: enquiryCode,
+      type: `Gas upgrade enquiry: ${title}`,
       upgrades: true,
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
+      postcode,
       annualMj: Number(annualMj) || "",
       annualSaving: Math.round(estimatedSaving),
+      installedCost: Math.max(0, Math.round(installedCost)),
       consent: { accepted: true, purpose: "Respond to this upgrade enquiry", noticeVersion: "2026-07-14", grantedAt: new Date().toISOString() },
     };
 
@@ -84,7 +89,7 @@ export function UpgradeEnquiryModal({ title, annualMj, estimatedSaving, onClose 
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Could not send right now.");
       setStatusType("ok");
-      setStatus(`Thanks ${name.trim()}, your enquiry is in. Our team will be in touch about an independent assessment and direct-to-trade options.`);
+      setStatus(`Thanks ${name.trim()}, your enquiry is in.${result.reference ? ` Reference ${result.reference}.` : ""} Our team will be in touch about an independent assessment and direct-to-trade options.`);
       setName("");
       setEmail("");
       setPhone("");

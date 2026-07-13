@@ -563,8 +563,9 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
   async function postLead(payload: Record<string, unknown>) {
     const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+    const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; reference?: string };
     if (!response.ok || !result.ok) throw new Error(result.error || "Your request could not be delivered. Please try again.");
+    return result.reference || "";
   }
 
   async function copyPrivateLink() {
@@ -587,7 +588,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     if (!leadConsent) { setLeadStatus("Please confirm that we may email these results and six-monthly reminders."); return; }
     setLeadSending(true); setLeadStatus("Sending...");
     try {
-      await postLead({
+      const reference = await postLead({
         submissionType: "comparison", clientStartedAt: pageStartedAt.current, website: leadWebsite,
         name: leadName, email: leadEmail, phone: leadPhone, upgrades: leadUpgrades,
         postcode, annualKwh: Math.round(Number(annualKwh)), solar: setupMode, hasEv,
@@ -595,7 +596,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(), recheckMonths: 6,
         consent: { accepted: true, purpose: "Email comparison results and six monthly comparison reminders", noticeVersion: LEAD_NOTICE_VERSION, grantedAt: new Date().toISOString() },
       });
-      setLeadStatus(`Done. The top three plans and a six-monthly reminder will be sent to ${leadEmail}.`);
+      setLeadStatus(`Done. The top three plans and a six-monthly reminder will be sent to ${leadEmail}.${reference ? ` Reference ${reference}.` : ""}`);
     } catch (caught) { setLeadStatus(caught instanceof Error ? caught.message : "Could not send right now."); }
     finally { setLeadSending(false); }
   }
@@ -603,15 +604,17 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   async function sendUpgradeEnquiry(contact: ContactDetails) {
     if (!enquiryScenario) return;
     const scenario = enquiryScenario;
+    const enquiry = scenario.label === "Solar only" ? "electricity-solar" : scenario.label === "Solar + battery" ? "electricity-solar-battery" : "electricity-battery";
     await postLead({
       submissionType: "upgrade", clientStartedAt: pageStartedAt.current,
-      enquiry: scenario.label.toLowerCase().replaceAll(" ", "-"), type: `Upgrade enquiry: ${scenario.label}`,
+      enquiry, type: `Electricity upgrade enquiry: ${scenario.label}`,
       upgrades: true, ...contact, postcode, annualKwh: Math.round(Number(annualKwh)), solar: setupMode, hasEv,
       hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
       solarKw: scenario.label === "Add a battery" ? Number(solarKw) || undefined : Number(scenarioSolarKw),
       batteryKwh: scenario.annualDischargeKwh != null ? Number(scenarioBatteryKwh) : undefined,
       solarCost: scenario.label === "Solar only" ? scenario.installedCost : undefined,
       comboCost: scenario.label !== "Solar only" ? scenario.installedCost : undefined,
+      installedCost: scenario.installedCost,
       annualSaving: scenario.annualSaving, top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(),
       consent: { accepted: true, purpose: "Respond to this upgrade enquiry", noticeVersion: LEAD_NOTICE_VERSION, grantedAt: new Date().toISOString() },
     });

@@ -11,6 +11,7 @@ function validComparison() {
     email: 'test@example.com',
     postcode: '3000',
     annualKwh: 5000,
+    top3: [{ rank: 1, brand: 'Example Energy', plan: 'Example Saver', annual: 1400, monthly: 117, link: 'https://example.com/plan' }],
     hasControlledLoad: true,
     provenance: {
       engineVersion: 'aea-electricity-engine-2.2.0',
@@ -64,7 +65,7 @@ test('upgrade enquiries require at least one contact method', async () => {
 test('only three plan summaries are accepted', async () => {
   const { validateLeadPayload } = await validationModule;
   const payload = validComparison();
-  payload.top3 = new Array(6).fill(null).map((_, index) => ({ rank: index + 1, brand: 'Brand', plan: 'Plan' }));
+  payload.top3 = new Array(6).fill(null).map((_, index) => ({ rank: index + 1, brand: 'Brand', plan: 'Plan', annual: 1200 + index }));
   const result = validateLeadPayload(payload);
   assert.equal(result.ok, true);
   assert.equal(result.value.top3.length, 3);
@@ -83,6 +84,40 @@ test('lead validation drops meter identifiers and interval data', async () => {
   assert.equal('filename' in result.value, false);
   assert.equal('intervals' in result.value, false);
   assert.equal('overrideReason' in result.value, false);
+});
+
+test('comparison emails require complete usage and plan results', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const noPlans = validComparison();
+  noPlans.top3 = [];
+  assert.equal(validateLeadPayload(noPlans).ok, false);
+
+  const noUsage = validComparison();
+  noUsage.annualKwh = 0;
+  assert.equal(validateLeadPayload(noUsage).ok, false);
+});
+
+test('gas and electricity upgrade enquiries retain their scenario values', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const electricity = validComparison();
+  electricity.submissionType = 'upgrade';
+  electricity.enquiry = 'electricity-battery';
+  electricity.batteryKwh = 13.5;
+  electricity.installedCost = 8900;
+  electricity.annualSaving = 1280;
+  const electricityResult = validateLeadPayload(electricity);
+  assert.equal(electricityResult.ok, true);
+  assert.equal(electricityResult.value.installedCost, 8900);
+
+  const gas = validComparison();
+  gas.submissionType = 'upgrade';
+  gas.enquiry = 'gas-hot-water';
+  gas.annualMj = 58000;
+  gas.installedCost = 3200;
+  gas.annualSaving = 740;
+  const gasResult = validateLeadPayload(gas);
+  assert.equal(gasResult.ok, true);
+  assert.equal(gasResult.value.annualMj, 58000);
 });
 
 test('direct trade project briefs retain only allowlisted project fields', async () => {

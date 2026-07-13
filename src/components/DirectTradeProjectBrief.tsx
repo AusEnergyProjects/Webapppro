@@ -121,7 +121,7 @@ export function DirectTradeProjectBrief() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Your project brief could not be delivered.");
       setStatusType("ok");
-      setStatus(`Thanks ${name.trim()}. Your project brief has been received. Australian Energy Assessments will review the project before connecting it with a suitable trade.`);
+      setStatus(`Thanks ${name.trim()}. Your project brief has been received.${result.reference ? ` Reference ${result.reference}.` : ""} Australian Energy Assessments will review the project before connecting it with a suitable trade.`);
     } catch (error) {
       setStatusType("err");
       setStatus(error instanceof Error ? error.message : "Your project brief could not be delivered. Please call 1300 241 149.");

@@ -114,7 +114,7 @@ function payback(value: number): string {
   return `${years} year${years === 1 ? "" : "s"}${remaining ? ` ${remaining} month${remaining === 1 ? "" : "s"}` : ""}`;
 }
 
-export function GasUpgradeQuestionnaire({ annualMj, onUsageProfileChange }: { annualMj: string; onUsageProfileChange: (profile: "heating" | "steady") => void }) {
+export function GasUpgradeQuestionnaire({ postcode, annualMj, onUsageProfileChange }: { postcode: string; annualMj: string; onUsageProfileChange: (profile: "heating" | "steady") => void }) {
   const [people, setPeople] = useState("2");
   const [rooms, setRooms] = useState("6");
   const [heating, setHeating] = useState(["gas-ducted"]);
@@ -273,12 +273,11 @@ export function GasUpgradeQuestionnaire({ annualMj, onUsageProfileChange }: { an
           <p className="method-links"><a href="https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/save-energy-in-the-home/heat-your-home-efficiently/calculate-heating-costs" target="_blank" rel="noreferrer">Heating benchmarks</a><a href="https://www.sustainability.vic.gov.au/annual-energy-costs-of-water-heating-in-2025" target="_blank" rel="noreferrer">Hot-water benchmarks</a><a href="https://www.vic.gov.au/sites/default/files/2025-03/building-electrification-regulatory-impact-statement_3785-%281%29.pdf" target="_blank" rel="noreferrer">Cooking reference</a></p>
         </div></details>
       </div>}
-      {enquiryTitle && <UpgradeEnquiryModal title={enquiryTitle} annualMj={annualMj} estimatedSaving={enquiryTitle.includes("hot water") ? estimate.hotWaterSaving : estimate.heatingSaving} onClose={() => setEnquiryTitle("")} />}
+      {enquiryTitle && <UpgradeEnquiryModal enquiryCode={enquiryTitle.includes("hot water") ? "gas-hot-water" : "gas-heating"} title={enquiryTitle} postcode={postcode} annualMj={annualMj} estimatedSaving={enquiryTitle.includes("hot water") ? estimate.hotWaterSaving : estimate.heatingSaving} installedCost={Number(enquiryTitle.includes("hot water") ? hotWaterInstall : heatingInstall) || 0} onClose={() => setEnquiryTitle("")} />}
     </section>
   );
 }
 
 function SavingCard({ title, current, after, saving, install, setInstall, payback: paybackValue, action }: { title: string; current: number; after: number; saving: number; install: string; setInstall: (value: string) => void; payback: number; action: string }) {
-  const subject = encodeURIComponent(`${title} enquiry`);
-  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(current)}/yr <span>→</span> {dollars(after)}/yr</div><p>estimated running cost for this use, now vs after switching</p><div className="saving-row"><span>Annual saving</span><b>{dollars(saving)}/yr</b></div><div className="saving-row"><span>Payback</span><b>{payback(paybackValue)}</b></div><label className="saving-install">Install, after rebates ($)<input type="number" min="0" value={install} onChange={(event) => setInstall(event.target.value)} /></label><a className="saving-cta" href={`mailto:info@ausenergyassessments.com?subject=${subject}`}>{action}</a></article>;
+  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(current)}/yr <span>→</span> {dollars(after)}/yr</div><p>estimated running cost for this use, now vs after switching</p><div className="saving-row"><span>Annual saving</span><b>{dollars(saving)}/yr</b></div><div className="saving-row"><span>Payback</span><b>{payback(paybackValue)}</b></div><label className="saving-install">Install, after rebates ($)<input type="number" min="0" value={install} onChange={(event) => setInstall(event.target.value)} /></label><button className="saving-cta" type="button">{action}</button></article>;
 }

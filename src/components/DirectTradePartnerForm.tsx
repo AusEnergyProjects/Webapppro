@@ -83,7 +83,7 @@ export function DirectTradePartnerForm() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Your expression of interest could not be delivered.");
       setStatusType("ok");
-      setStatus(`Thanks ${name.trim()}. Australian Energy Assessments will review the business and contact you about the participation process.`);
+      setStatus(`Thanks ${name.trim()}.${result.reference ? ` Reference ${result.reference}.` : ""} Australian Energy Assessments will review the business and contact you about the participation process.`);
     } catch (error) {
       setStatusType("err");
       setStatus(error instanceof Error ? error.message : "Your expression of interest could not be delivered. Please call 1300 241 149.");

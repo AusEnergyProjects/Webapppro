@@ -10,6 +10,8 @@ const PROPERTY_RELATIONSHIPS = new Set(["owner-occupier", "landlord-manager", "a
 const PROJECT_PRIORITIES = new Set(["lower-running-costs", "improve-comfort", "replace-equipment", "move-from-gas", "solar-storage", "assessment-compliance", "need-advice"]);
 const CONTACT_METHODS = new Set(["email", "phone", "either"]);
 const PARTNER_TYPES = new Set(["installer", "supplier"]);
+const ELECTRICITY_ENQUIRIES = new Set(["electricity-solar", "electricity-solar-battery", "electricity-battery", "solar", "solar-battery", "battery"]);
+const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
 
 function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -41,7 +43,7 @@ function cleanTopPlans(value) {
     monthly: cleanNumber(plan?.monthly, -100000, 1000000),
     tariffHash: cleanText(plan?.tariffHash, 80),
     link: cleanText(plan?.link, 1000),
-  }));
+  })).filter((plan) => plan.rank && plan.brand && plan.plan && plan.annual !== null);
 }
 
 function cleanProvenance(value) {
@@ -114,6 +116,15 @@ export function validateLeadPayload(raw) {
     if (!serviceStates.length) return { ok: false, error: "Please choose at least one service area." };
     if (!projectCategories.length) return { ok: false, error: "Please choose at least one capability or product category." };
   }
+  if (submissionType === "comparison") {
+    if (!postcode || !annualKwh || annualKwh <= 0) return { ok: false, error: "Complete the comparison before emailing results." };
+    if (!cleanTopPlans(raw.top3).length) return { ok: false, error: "No complete plan results were available to email." };
+  }
+  if (submissionType === "upgrade" && !["direct-trade-project", "direct-trade-partner"].includes(enquiry)) {
+    if (!ELECTRICITY_ENQUIRIES.has(enquiry) && !GAS_ENQUIRIES.has(enquiry)) return { ok: false, error: "Unknown upgrade enquiry." };
+    if (ELECTRICITY_ENQUIRIES.has(enquiry) && (!postcode || !annualKwh || annualKwh <= 0)) return { ok: false, error: "Complete the electricity scenario before sending an enquiry." };
+    if (GAS_ENQUIRIES.has(enquiry) && (!annualMj || annualMj <= 0)) return { ok: false, error: "Enter annual gas usage before sending an enquiry." };
+  }
 
   return {
     ok: true,
@@ -158,6 +169,7 @@ export function validateLeadPayload(raw) {
       batteryKwh: cleanNumber(raw.batteryKwh, 0, 1000),
       solarCost: cleanNumber(raw.solarCost, 0, 100000000),
       comboCost: cleanNumber(raw.comboCost, 0, 100000000),
+      installedCost: cleanNumber(raw.installedCost, 0, 100000000),
       annualSaving: cleanNumber(raw.annualSaving, -100000000, 100000000),
       top3: cleanTopPlans(raw.top3),
       provenance: cleanProvenance(raw.provenance),
