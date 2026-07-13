@@ -44,7 +44,8 @@ h1, h2, h3 { font-family: "Arvo", Georgia, serif; margin: 0; }
 .start-hero > div > p { color: #d5ecde; font-size: 1.02rem; line-height: 1.65; margin: 14px 0 0; max-width: 720px; }
 .start-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
 .start-actions .btn { text-decoration: none; }
-.start-actions .btn.ghost { border-color: rgba(255, 255, 255, .65); color: #fff; }
+.start-actions .btn.ghost { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .72); color: #fff; }
+.start-actions .btn.ghost:hover, .start-actions .btn.ghost:focus-visible { background: #fff; color: var(--color-aea-ink); }
 .start-hero aside { align-self: center; background: rgba(255, 255, 255, .1); border: 1px solid rgba(167, 243, 208, .3); border-radius: 14px; padding: 20px; }
 .start-hero aside strong { font-family: "Arvo", Georgia, serif; font-size: .95rem; }
 .start-hero aside ul { color: #d5ecde; font-size: .8rem; line-height: 1.55; margin: 12px 0 0; padding-left: 19px; }
