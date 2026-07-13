@@ -5,6 +5,7 @@ const PROPERTY_TYPES = new Set(["house", "townhouse-unit", "apartment", "small-b
 const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quotes", "replacement-urgent"]);
 const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
 const CONTACT_METHODS = new Set(["email", "phone", "either"]);
+const PARTNER_TYPES = new Set(["installer", "supplier"]);
 
 function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -89,11 +90,19 @@ export function validateLeadPayload(raw) {
   const projectStage = cleanEnum(raw.projectStage, PROJECT_STAGES);
   const timeframe = cleanEnum(raw.timeframe, PROJECT_TIMEFRAMES);
   const preferredContact = cleanEnum(raw.preferredContact, CONTACT_METHODS);
+  const partnerType = cleanEnum(raw.partnerType, PARTNER_TYPES);
+  const serviceStates = cleanStringArray(raw.serviceStates, DIRECT_TRADE_STATES);
   if (enquiry === "direct-trade-project") {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
     if (!postcode || !state) return { ok: false, error: "Please enter a postcode and choose a state or territory." };
     if (!projectCategories.length) return { ok: false, error: "Please choose at least one service." };
     if (!propertyType || !projectStage || !timeframe || !preferredContact) return { ok: false, error: "Please complete the project details." };
+  }
+  if (enquiry === "direct-trade-partner") {
+    if (submissionType !== "upgrade" || !partnerType) return { ok: false, error: "Please choose a participation type." };
+    if (!cleanText(raw.businessName, 160)) return { ok: false, error: "Please enter the business name." };
+    if (!serviceStates.length) return { ok: false, error: "Please choose at least one service area." };
+    if (!projectCategories.length) return { ok: false, error: "Please choose at least one capability or product category." };
   }
 
   return {
@@ -125,6 +134,11 @@ export function validateLeadPayload(raw) {
       timeframe,
       preferredContact,
       projectNotes: cleanText(raw.projectNotes, 800),
+      partnerType,
+      businessName: cleanText(raw.businessName, 160),
+      businessWebsite: cleanText(raw.businessWebsite, 300),
+      serviceStates,
+      partnerNotes: cleanText(raw.partnerNotes, 800),
       solar: cleanText(raw.solar, 32),
       hasEv: Boolean(raw.hasEv),
       hasControlledLoad: Boolean(raw.hasControlledLoad),

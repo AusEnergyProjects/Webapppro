@@ -16,7 +16,7 @@ export function BrandBar() {
   );
 }
 
-type SiteActive = "start" | "direct-trade-request" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
+type SiteActive = "start" | "direct-trade-request" | "direct-trade-partners" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [

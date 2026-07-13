@@ -66,7 +66,7 @@ export async function POST(request) {
   if (payload.website || startedTooQuickly) return respond({ ok: true, filtered: true }, 200, "bot_filtered", metrics);
 
   const webhook = process.env.AEA_LEAD_WEBHOOK_URL;
-  if (!webhook) return respond({ ok: false, error: "Enquiries are not configured in this local environment." }, 503, "webhook_unconfigured", metrics);
+  if (!webhook) return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "webhook_unconfigured", metrics);
 
   const rateLimit = await leadRateLimiter.check(clientKey(request));
   if (rateLimit.unavailable) return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "rate_limit_unavailable", metrics);

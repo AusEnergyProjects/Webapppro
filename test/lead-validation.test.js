@@ -116,3 +116,36 @@ test('direct trade project briefs require location, service and project details'
   assert.equal(result.ok, false);
   assert.match(result.error, /service/i);
 });
+
+test('direct trade partner enquiries retain allowlisted participation fields', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-partner';
+  payload.partnerType = 'supplier';
+  payload.businessName = 'Example Energy Supply';
+  payload.businessWebsite = 'https://example.com.au';
+  payload.serviceStates = ['Vic', 'NSW', 'not-a-state'];
+  payload.projectCategories = ['battery', 'hot-water', 'not-a-category'];
+  payload.partnerNotes = 'National warranty support and local stock.';
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, true);
+  assert.equal(result.value.partnerType, 'supplier');
+  assert.equal(result.value.businessName, 'Example Energy Supply');
+  assert.deepEqual(result.value.serviceStates, ['Vic', 'NSW']);
+  assert.deepEqual(result.value.projectCategories, ['battery', 'hot-water']);
+});
+
+test('direct trade partner enquiries require business coverage and capability', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-partner';
+  payload.partnerType = 'installer';
+  payload.businessName = 'Example Electrical';
+  payload.serviceStates = [];
+  payload.projectCategories = ['solar'];
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /service area/i);
+});
