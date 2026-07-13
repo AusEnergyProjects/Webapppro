@@ -98,6 +98,7 @@ h1, h2, h3 { font-family: "Arvo", Georgia, serif; margin: 0; }
 .guide-principle-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .guide-card, .guide-principle-grid article, .guide-two-column > div { background: var(--color-aea-card); border: 1px solid var(--color-aea-line); border-radius: 13px; padding: 20px; }
 .guide-card { display: flex; flex-direction: column; min-height: 240px; }
+.guide-card-wide, .start-guide-grid .start-guide-wide { grid-column: 1 / -1; min-height: 0; }
 .guide-card > span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; text-transform: uppercase; }
 .guide-card h3, .guide-two-column h3 { color: var(--color-aea-ink); font-size: .98rem; margin-top: 8px; }
 .guide-card p, .guide-principle-grid p, .guide-two-column p, .guide-two-column li { color: var(--color-aea-muted); font-size: .8rem; line-height: 1.55; }
@@ -472,6 +473,7 @@ input:focus, select:focus { border-color: var(--color-aea-green); outline: 2px s
   .guide-callout { align-items: flex-start; flex-direction: column; }
   .start-support { align-items: flex-start; flex-direction: column; }
   .case-study-card > a { grid-column: auto; }
+  .guide-card-wide, .start-guide-grid .start-guide-wide { grid-column: auto; }
   .gas-questionnaire .question-grid, .gas-questionnaire .question-grid-wide, .gas-household-context, .gas-appliance-grid, .gas-appliance-split, .estimate-inputs, .savings-grid, .gas-bill-period { grid-template-columns: 1fr !important; }
   .gas-appliance-card-wide { grid-column: auto; }
   .gas-savings { padding: 18px 14px; }
