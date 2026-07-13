@@ -21,12 +21,12 @@ type SiteActive = "start" | "direct-trade-request" | "direct-trade-partners" | "
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
     { key: "start", href: "/", label: "Direct Trade Services" },
-    { key: "assessments", href: "/assessments", label: "Assessments" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "guides", href: "/guides", label: "Guides" },
     { key: "rebates", href: "/rebates", label: "Rebates and help" },
     { key: "case-studies", href: "/case-studies", label: "Worked examples" },
+    { key: "assessments", href: "/assessments", label: "Assessments" },
   ] as const;
   return <nav aria-label="Energy services" className="comparator-nav">{links.map((link) => <a className={active === link.key ? "active" : "inactive"} href={link.href} key={link.key} aria-current={active === link.key ? "page" : undefined}>{link.label}</a>)}</nav>;
 }

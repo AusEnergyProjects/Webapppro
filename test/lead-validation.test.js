@@ -117,6 +117,22 @@ test('direct trade project briefs require location, service and project details'
   assert.match(result.error, /service/i);
 });
 
+test('direct trade project briefs reject a known postcode and state mismatch', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-project';
+  payload.state = 'NSW';
+  payload.projectCategories = ['solar'];
+  payload.propertyType = 'house';
+  payload.projectStage = 'seeking-quotes';
+  payload.timeframe = 'one-three-months';
+  payload.preferredContact = 'email';
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /usually in Victoria/i);
+});
+
 test('direct trade partner enquiries retain allowlisted participation fields', async () => {
   const { validateLeadPayload } = await validationModule;
   const payload = validComparison();

@@ -50,7 +50,8 @@ test("future document review is explicitly outside the live public flow", () => 
 
 test("assessment cards align on desktop and stack on mobile", () => {
   assert.match(styles, /\.assessment-card-grid \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.assessment-card \{[^}]*display: flex;[^}]*min-height: 680px/);
+  assert.match(styles, /\.assessment-card \{[^}]*display: grid;[^}]*grid-row: span 5;[^}]*grid-template-rows: subgrid/);
+  assert.match(styles, /@media \(max-width: 1080px\)[\s\S]*\.assessment-card \{ display: flex; grid-row: auto; min-height: 0; \}/);
   assert.match(styles, /\.assessment-home-grid[^\n]*\.assessment-card-grid[^\n]*\.assessment-process[^\n]*\.assessment-two-column/);
 });
 

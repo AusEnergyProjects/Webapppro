@@ -43,6 +43,7 @@ test("shared navigation connects Direct Trade Services, electricity and gas jour
   assert.match(chrome, /href: "\/rebates"/);
   assert.match(rebatesRoute, /RebatesHub/);
   assert.match(rebates, /SiteHeader active="rebates"/);
+  assert.ok(chrome.indexOf('{ key: "assessments"') > chrome.indexOf('{ key: "case-studies"'), "Assessments should remain the final secondary navigation item");
 });
 
 test("direct trade proposition presents the trade network and subscription as live", () => {

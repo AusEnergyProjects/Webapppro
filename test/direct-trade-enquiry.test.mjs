@@ -10,6 +10,8 @@ const route = read("../src/app/direct-trade/page.tsx");
 const brief = read("../src/components/DirectTradeProjectBrief.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
 const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
+const postcodeRules = read("../src/lib/australian-postcodes.mjs");
+const leadValidation = read("../src/lib/lead-validation.mjs");
 
 test("Direct Trade household project brief is routed from the homepage", () => {
   assert.match(route, /DirectTradeProjectBrief/);
@@ -36,4 +38,21 @@ test("existing gas upgrade enquiries use the protected lead route and consent", 
 
 test("Direct Trade project copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(route + brief, /\u2013|\u2014/);
+});
+
+test("project location is checked before trade matching", () => {
+  assert.match(brief, /residentialStateFromPostcode/);
+  assert.match(brief, /locationMismatch/);
+  assert.match(brief, /Location check:/);
+  assert.match(brief, /Postcode.*is usually in/);
+  assert.match(leadValidation, /postcodeMatchesState/);
+  assert.match(leadValidation, /Please check the postcode or state/);
+  assert.match(postcodeRules, /return "ACT"/);
+  assert.match(postcodeRules, /return "NSW"/);
+  assert.match(postcodeRules, /return "NT"/);
+  assert.match(postcodeRules, /return "VIC"/);
+  assert.match(postcodeRules, /return "QLD"/);
+  assert.match(postcodeRules, /return "SA"/);
+  assert.match(postcodeRules, /return "WA"/);
+  assert.match(postcodeRules, /return "TAS"/);
 });
