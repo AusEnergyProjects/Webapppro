@@ -29,6 +29,19 @@ function quietLogger() {
   return { info() {}, error() {} };
 }
 
+function healthyCheckResponse(url) {
+  const value = String(url);
+  if (value.includes("/api/health")) return jsonResponse({ ok: true, service: "aea-energy" });
+  if (value.includes("electricity-plans") || value.includes("gas-plans")) {
+    return jsonResponse({
+      plans: [{ id: "plan-1" }],
+      source: { listSourcesSucceeded: 3, detailPlansSucceeded: 10, plansWithLastUpdated: 10, detailApiVersion: "3", partial: false },
+    });
+  }
+  if (value.includes("lead-webhook-probe")) return jsonResponse({ ok: true, probeId: "probe-1" });
+  return null;
+}
+
 test("operational recorder emits bounded structured fields with a correlation ID", () => {
   const lines = [];
   const recorder = createOperationalRecorder({
@@ -66,19 +79,14 @@ test("first healthy monitor run records state without sending a noisy recovery a
     now: () => 1_800_000_000_000,
     async fetchImpl(url, options) {
       requests.push({ url: String(url), options });
-      if (String(url).includes("electricity-plans")) {
-        return jsonResponse({
-          plans: [{ id: "plan-1" }],
-          source: { listSourcesSucceeded: 3, detailPlansSucceeded: 10, plansWithLastUpdated: 10, detailApiVersion: "3", partial: false },
-        });
-      }
-      return jsonResponse({ ok: true, probeId: "probe-1" });
+      return healthyCheckResponse(url);
     },
   });
 
   assert.equal(result.status, "healthy");
   assert.equal(result.alert.attempted, false);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 4);
+  assert.deepEqual(result.checks.map((check) => check.name), ["site_runtime", "electricity_plans", "gas_plans", "lead_delivery"]);
   assert.equal(store.read().status, "healthy");
   assert.equal(store.read().lastAlertAt, null);
 });
@@ -95,7 +103,8 @@ test("failed plan check sends a privacy-safe alert and records the notification 
     now: () => 1_800_000_000_000,
     async fetchImpl(url, options) {
       if (String(url).includes("electricity-plans")) return jsonResponse({ error: "unavailable" }, 502);
-      if (String(url).includes("lead-webhook-probe")) return jsonResponse({ ok: true });
+      const healthy = healthyCheckResponse(url);
+      if (healthy) return healthy;
       alertBodies.push(options.body);
       return new Response(null, { status: 204 });
     },
@@ -125,7 +134,8 @@ test("repeated failures are suppressed for six hours and recovery is announced",
     now: () => 1_800_000_000_000 + 60 * 60 * 1000,
     async fetchImpl(url) {
       if (String(url).includes("electricity-plans")) return jsonResponse({}, 502);
-      if (String(url).includes("lead-webhook-probe")) return jsonResponse({ ok: true });
+      const healthy = healthyCheckResponse(url);
+      if (healthy) return healthy;
       alertCalls += 1;
       return new Response(null, { status: 204 });
     },
@@ -141,10 +151,8 @@ test("repeated failures are suppressed for six hours and recovery is announced",
     logger: quietLogger(),
     now: () => 1_800_000_000_000 + 2 * 60 * 60 * 1000,
     async fetchImpl(url) {
-      if (String(url).includes("electricity-plans")) {
-        return jsonResponse({ plans: [{}], source: { listSourcesSucceeded: 1, detailPlansSucceeded: 1, plansWithLastUpdated: 1, detailApiVersion: "3" } });
-      }
-      if (String(url).includes("lead-webhook-probe")) return jsonResponse({ ok: true });
+      const healthy = healthyCheckResponse(url);
+      if (healthy) return healthy;
       alertCalls += 1;
       return new Response(null, { status: 204 });
     },
@@ -168,10 +176,8 @@ test("failed alert delivery remains pending for the next scheduled run", async (
     logger: quietLogger(),
     now: () => 1_800_000_000_000 + 60 * 60 * 1000,
     async fetchImpl(url) {
-      if (String(url).includes("electricity-plans")) {
-        return jsonResponse({ plans: [{}], source: { listSourcesSucceeded: 1, detailPlansSucceeded: 1, plansWithLastUpdated: 1, detailApiVersion: "3" } });
-      }
-      if (String(url).includes("lead-webhook-probe")) return jsonResponse({ ok: true });
+      const healthy = healthyCheckResponse(url);
+      if (healthy) return healthy;
       return jsonResponse({ ok: false }, 500);
     },
   });
@@ -190,4 +196,32 @@ test("scheduled function is hourly and uses the dedicated operations store", () 
   assert.match(scheduled, /name: "aea-operations", consistency: "strong"/);
   assert.match(scheduled, /AEA_OPS_ALERT_WEBHOOK_URL/);
   assert.match(scheduled, /AEA_LEAD_WEBHOOK_TEST_TOKEN/);
+});
+
+test("Google Apps monitoring checks the Sites runtime, both plan services and privacy-safe lead delivery", () => {
+  const script = fs.readFileSync(
+    path.join(process.cwd(), "integrations/google-apps-script/lead-email-relay.gs"),
+    "utf8",
+  );
+  assert.match(script, /everyHours\(1\)/);
+  assert.match(script, /\/api\/health/);
+  assert.match(script, /\/api\/electricity-plans\?postcode=3000/);
+  assert.match(script, /\/api\/gas-plans\?postcode=3000&annualMj=58000/);
+  assert.match(script, /\/api\/internal\/lead-webhook-probe/);
+  assert.match(script, /AEA_LEAD_WEBHOOK_TEST_TOKEN/);
+  const monitorBlock = script.slice(
+    script.indexOf("function runOperationalHealthCheck"),
+    script.indexOf("function sheet_"),
+  );
+  assert.doesNotMatch(monitorBlock, /payload\.|writeLead_|sheet_|contact details|annualKwh|\bNMI\b|meter file/i);
+});
+
+test("Sites exposes a no-store service identity endpoint for independent availability checks", () => {
+  const route = fs.readFileSync(
+    path.join(process.cwd(), "src/app/api/health/route.ts"),
+    "utf8",
+  );
+  assert.match(route, /service: "aea-energy"/);
+  assert.match(route, /"Cache-Control": "no-store"/);
+  assert.doesNotMatch(route, /process\.env|request|email|postcode|NMI/i);
 });

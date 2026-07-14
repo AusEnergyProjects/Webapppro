@@ -86,3 +86,11 @@ test("gas comparison keeps loading feedback at the action and presents Direct Tr
   assert.match(styles, /\.gas-action-progress \{[^}]*max-width: 620px;/);
   assert.match(styles, /\.saving-direct-trade \{[^}]*border: 1px solid #6ee7b7;[^}]*display: flex;[^}]*width: 100%;/);
 });
+
+test("gas plan service emits privacy-safe operational evidence and a request ID", () => {
+  assert.match(route, /createOperationalRecorder/);
+  assert.match(route, /event: "api\.gas_plans"/);
+  assert.match(route, /"X-Request-Id": operations\.requestId/);
+  assert.match(route, /detailPlansUnavailable: body\.source\.detailPlansUnavailable/);
+  assert.doesNotMatch(route, /operations\.record\([^)]*(postcode|annualMj)/);
+});

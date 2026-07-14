@@ -11,6 +11,10 @@ const BRAND_SITE = "https://www.ausenergyassessments.com";
 const REPLY_TO = "info@ausenergyassessments.com";
 const TIME_ZONE = "Australia/Sydney";
 const LEGACY_SECRET = "CHANGE-ME-to-any-random-phrase";
+const OPS_SITE_URL = "https://aea-energy-comparison.info294029.chatgpt.site";
+const OPS_ALERT_EMAIL = REPLY_TO;
+const OPS_STATE_KEY = "AEA_OPS_HEALTH_STATE_V1";
+const OPS_REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 
 // Existing column positions are preserved. New operational fields are appended.
 const HEADERS = [
@@ -33,6 +37,114 @@ function setup() {
     if (trigger.getHandlerFunction() === "sendFollowUps") ScriptApp.deleteTrigger(trigger);
   });
   ScriptApp.newTrigger("sendFollowUps").timeBased().everyDays(1).atHour(9).create();
+  setupOperationalMonitoring();
+}
+
+function setupOperationalMonitoring() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === "runOperationalHealthCheck") ScriptApp.deleteTrigger(trigger);
+  });
+  ScriptApp.newTrigger("runOperationalHealthCheck").timeBased().everyHours(1).create();
+}
+
+function runOperationalHealthCheck() {
+  const now = Date.now();
+  const monitorId = "api-health-" + now;
+  const properties = PropertiesService.getScriptProperties();
+  const probeToken = properties.getProperty("AEA_LEAD_WEBHOOK_TEST_TOKEN") || "";
+  const checks = [
+    opsJsonCheck_("site_runtime", OPS_SITE_URL + "/api/health", function(body) {
+      return body && body.ok === true && body.service === "aea-energy";
+    }),
+    opsJsonCheck_("electricity_plans", OPS_SITE_URL + "/api/electricity-plans?postcode=3000&customerType=RESIDENTIAL&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
+    opsJsonCheck_("gas_plans", OPS_SITE_URL + "/api/gas-plans?postcode=3000&annualMj=58000&usageProfile=heating&includeConditional=false&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
+    opsLeadProbe_(probeToken),
+  ];
+  const status = checks.every(function(check) { return check.ok; }) ? "healthy" : "unhealthy";
+  const previous = opsPreviousState_(properties.getProperty(OPS_STATE_KEY));
+  const alertDue = !previous
+    ? status === "unhealthy"
+    : previous.status !== status || status === "unhealthy" && now - Number(previous.lastAlertAt || 0) >= OPS_REPEAT_ALERT_MS;
+  let alertSent = false;
+
+  if (alertDue) {
+    alertSent = opsSendAlert_(status, checks, monitorId, now);
+  }
+
+  properties.setProperty(OPS_STATE_KEY, JSON.stringify({
+    status: alertDue && !alertSent ? previous && previous.status || "notification_pending" : status,
+    checkedAt: now,
+    lastAlertAt: alertSent ? now : previous && previous.lastAlertAt || null,
+  }));
+  console.log(JSON.stringify({ schemaVersion: "1", event: "monitor.api_health", monitorId: monitorId, status: status, checks: checks, alertSent: alertSent }));
+  return { status: status, checks: checks, alertSent: alertSent };
+}
+
+function opsJsonCheck_(name, url, validator) {
+  const startedAt = Date.now();
+  try {
+    const response = UrlFetchApp.fetch(url, { method: "get", muteHttpExceptions: true, headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+    const status = response.getResponseCode();
+    const body = JSON.parse(response.getContentText() || "null");
+    return { name: name, ok: status >= 200 && status < 300 && validator(body), status: status, durationMs: Date.now() - startedAt };
+  } catch (error) {
+    return { name: name, ok: false, status: 0, durationMs: Date.now() - startedAt, errorType: error && error.name || "UnknownError" };
+  }
+}
+
+function opsPlanResponseOk_(body) {
+  return body && Array.isArray(body.plans) && body.plans.length > 0 && body.source
+    && Number(body.source.listSourcesSucceeded) > 0
+    && Number(body.source.detailPlansSucceeded) > 0
+    && Number(body.source.plansWithLastUpdated) > 0
+    && String(body.source.detailApiVersion) === "3";
+}
+
+function opsLeadProbe_(probeToken) {
+  const startedAt = Date.now();
+  if (!probeToken) return { name: "lead_delivery", ok: false, status: 0, durationMs: 0, errorType: "ProbeTokenMissing" };
+  try {
+    const response = UrlFetchApp.fetch(OPS_SITE_URL + "/api/internal/lead-webhook-probe", {
+      method: "post",
+      muteHttpExceptions: true,
+      headers: { Authorization: "Bearer " + probeToken, Accept: "application/json" },
+    });
+    const status = response.getResponseCode();
+    const body = JSON.parse(response.getContentText() || "null");
+    return { name: "lead_delivery", ok: status >= 200 && status < 300 && body && body.ok === true, status: status, durationMs: Date.now() - startedAt, probeId: body && body.probeId || "" };
+  } catch (error) {
+    return { name: "lead_delivery", ok: false, status: 0, durationMs: Date.now() - startedAt, errorType: error && error.name || "UnknownError" };
+  }
+}
+
+function opsPreviousState_(value) {
+  try {
+    const state = JSON.parse(value || "null");
+    return state && typeof state.status === "string" ? state : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function opsSendAlert_(status, checks, monitorId, occurredAt) {
+  try {
+    const failed = checks.filter(function(check) { return !check.ok; }).map(function(check) { return check.name; });
+    const subject = status === "healthy" ? "AEA Energy services recovered" : "AEA Energy service alert";
+    const summary = status === "healthy" ? "All monitored services are healthy." : "Checks requiring attention: " + failed.join(", ") + ".";
+    const rows = checks.map(function(check) {
+      return check.name + ": " + (check.ok ? "healthy" : "failed") + " | HTTP " + check.status + " | " + check.durationMs + " ms";
+    }).join("\n");
+    MailApp.sendEmail({
+      to: OPS_ALERT_EMAIL,
+      name: BRAND + " monitoring",
+      subject: subject,
+      body: summary + "\n\n" + rows + "\n\nMonitor: " + monitorId + "\nTime: " + new Date(occurredAt).toISOString(),
+    });
+    return true;
+  } catch (error) {
+    console.error(JSON.stringify({ schemaVersion: "1", event: "monitor.alert", outcome: "delivery_failed", monitorId: monitorId }));
+    return false;
+  }
 }
 
 function sheet_() {

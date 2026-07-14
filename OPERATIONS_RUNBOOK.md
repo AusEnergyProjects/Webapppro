@@ -1,87 +1,88 @@
 # API monitoring runbook
 
-Status: ready for configuration, not deployed
+Status: Google Apps monitoring source is ready for deployment and activation
 
-This monitoring covers the public electricity-plan API and the lead-delivery path without submitting a customer lead.
+The live service monitor runs from the existing Google Apps Script project so it remains independent of the website runtime it checks. It uses fixed synthetic inputs and never submits a customer lead.
 
 ## What runs
 
-The Netlify scheduled function `api-health-monitor` runs hourly on published production deploys. Each run:
+The `runOperationalHealthCheck` trigger runs hourly. Each run:
 
-1. Requests `/api/electricity-plans` for a fixed synthetic residential comparison in postcode 3000, with a cache-busting monitor ID.
-2. Confirms that the route returns at least one priceable plan and at least one successful list and detail source.
-3. Calls `/api/internal/lead-webhook-probe` with the dedicated probe token.
-4. Confirms that the downstream lead processor acknowledges the `webhook.delivery_probe` test event.
-5. Sends an alert on a healthy-to-unhealthy or unhealthy-to-healthy transition.
-6. Repeats an unresolved failure alert after six hours. Failed alert deliveries remain pending and are retried on the next hourly run.
+1. Requests `/api/health` and confirms the Sites application runtime responds with the expected service identity.
+2. Requests `/api/electricity-plans` for a fixed synthetic residential comparison in postcode 3000.
+3. Requests `/api/gas-plans` for a fixed synthetic annual gas comparison in postcode 3000.
+4. Confirms both plan routes return at least one priceable plan, successful list and detail sources, dated plan evidence and detail API version 3.
+5. Calls `/api/internal/lead-webhook-probe` with a dedicated secret token.
+6. Confirms the downstream lead processor acknowledges the `webhook.delivery_probe` test event.
+7. Emails `info@ausenergyassessments.com` only on a healthy-to-unhealthy or unhealthy-to-healthy transition.
+8. Repeats an unresolved failure alert after six hours. Failed alert delivery remains pending for the next hourly run.
 
-Scheduled functions run only on published deploys. Preview deploys and ordinary `next dev` sessions do not run the hourly schedule.
+## Required configuration
 
-## Required Netlify variables
+The same high-entropy `AEA_LEAD_WEBHOOK_TEST_TOKEN` must be stored in two protected locations:
 
-Configure these as private server-side environment variables. Never prefix them with `NEXT_PUBLIC_`.
+- the Sites production environment;
+- the Google Apps Script project properties.
 
-```text
-AEA_LEAD_WEBHOOK_TEST_TOKEN=<at least 32 random characters>
-AEA_OPS_ALERT_WEBHOOK_URL=https://your-private-alert-receiver.example/endpoint
-```
+Never add the token to repository source, client code, a public URL or a spreadsheet cell. The existing `AEA_LEAD_WEBHOOK_URL` must also remain configured in Sites.
 
-The existing `AEA_LEAD_WEBHOOK_URL` must also remain configured. The alert receiver should accept an HTTP JSON POST, return a 2xx response only after accepting the notification, and notify an on-call person or monitored operations channel.
-
-Do not point `AEA_OPS_ALERT_WEBHOOK_URL` at the customer lead processor unless that processor has a dedicated operations-event branch. Alert events have `eventType` values `ops.health_alert` and `ops.health_recovered` and must never create customer records.
+Run `setupOperationalMonitoring` once after deploying the Apps Script source. It replaces only an existing `runOperationalHealthCheck` trigger and creates one hourly trigger. The normal `setup` function also installs this trigger while preserving the daily comparison reminder trigger.
 
 ## Privacy boundary
 
-Health requests and alerts contain no customer name, email, phone, NMI, meter intervals, annual usage, postcode supplied by a customer, or lead payload. The postcode 3000 check is a fixed synthetic monitor input.
+Health checks and alerts contain no customer name, email, phone, NMI, meter intervals, annual usage supplied by a customer, saved comparison or lead payload. Postcode 3000 and the electricity and gas usage values are fixed synthetic monitor inputs.
 
-Application API logs use one JSON object per event. They contain:
+Operational records contain only:
 
-- event and outcome category;
+- check name and healthy or failed outcome;
 - HTTP status and duration;
-- random request correlation ID;
-- aggregate plan-source counts for the plan API;
-- the categorical submission type for the lead API.
+- random monitor or request correlation ID;
+- aggregate plan-source counts where available;
+- a privacy-safe lead probe ID.
 
-They do not log request bodies, contact details, IP addresses, NMIs, meter data, plan selections, consent text, or downstream webhook URLs.
+They do not log request bodies, contact details, IP addresses, meter data, plan selections, consent text, webhook URLs or the probe token.
 
 ## Alert response
 
-When `electricity_plans` fails:
+When `site_runtime` fails:
 
-1. Open the matching `monitor.api_health` log entry and note the status, safe source counts and plan request ID.
-2. Check `api.electricity_plans` events using that request ID.
-3. Distinguish total upstream failure from tariff validation rejection or unavailable plan details.
-4. Do not disable strict tariff validation to restore plan counts.
+1. Open the live site and `/api/health`.
+2. Check the latest Sites deployment state and platform status.
+3. Do not rotate secrets unless the failure evidence identifies authentication or configuration.
+
+When `electricity_plans` or `gas_plans` fails:
+
+1. Check the matching route using the same fixed synthetic inputs.
+2. Use the request ID and aggregate source counts to distinguish total upstream failure from unavailable retailer sources or rejected tariff structures.
+3. Do not weaken tariff validation merely to restore plan counts.
 
 When `lead_delivery` fails:
 
-1. Check the internal probe response status and the lead processor's operational-event log.
-2. Search downstream records by probe ID only if the processor records it as an operational event.
-3. Confirm that no customer lead was created from `webhook.delivery_probe`.
+1. Check whether the Sites probe route is configured and authorised.
+2. Search downstream operational records by probe ID only if needed.
+3. Confirm the deployed Apps Script source still recognises `webhook.delivery_probe` and returns `ok` without creating a spreadsheet row or email.
 4. Keep the public fallback telephone number available while delivery is impaired.
-5. Confirm the deployed Apps Script source matches `integrations/google-apps-script/lead-email-relay.gs` and that the active web app deployment was updated after the last source change.
 
-When both checks fail, first confirm the production site and Netlify function runtime are reachable, then check environment configuration and provider status.
+When every check fails, first confirm the production site is reachable, then inspect platform status and the Apps Script execution history.
 
-## Recovery and verification
+## Recovery and release checks
 
-A recovery alert is sent only after both checks succeed. After configuration or incident repair, verify the next scheduled run shows:
+A recovery email is sent only after every check succeeds. After configuration or incident repair, run `runOperationalHealthCheck` manually and confirm:
 
 ```text
-event=monitor.api_health
 status=healthy
+site_runtime.ok=true
 electricity_plans.ok=true
+gas_plans.ok=true
 lead_delivery.ok=true
 ```
 
-Do not test recovery by submitting a real lead. Use only the dedicated webhook probe event.
+Before updating the Apps Script deployment:
 
-## Email workflow release check
-
-The lead processor must return the plain text acknowledgement `ok` only after it accepts the event and completes the required sends. Before updating the Apps Script deployment:
-
-1. Confirm the repository relay tests cover all five event types and the operational probe.
-2. Confirm new unsubscribe links use only `?action=unsub&t=<opaque token>`.
-3. Confirm internal messages reply to the supplied customer email when present, while customer messages reply to `info@ausenergyassessments.com`.
+1. Confirm repository tests cover all five customer event types and the operational probe.
+2. Confirm unsubscribe links contain only an opaque token.
+3. Confirm internal and customer reply routing remains correct.
 4. Create a new Apps Script deployment version rather than relying on saved editor source alone.
-5. Run the privacy-safe probe after deployment. Do not create a customer lead as a health check.
+5. Run only the privacy-safe operational check after deployment. Do not submit a real customer lead as a health check.
+
+The older Netlify scheduled implementation remains in the repository for its inactive deployment target. It must not be enabled or deployed without explicit Netlify approval.

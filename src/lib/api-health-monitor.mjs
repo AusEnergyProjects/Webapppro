@@ -2,6 +2,32 @@ const CHECK_TIMEOUT_MS = 12_000;
 const REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 const STATE_KEY = "api-health/v1";
 
+async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
+  const startedAt = now();
+  try {
+    const response = await fetchWithTimeout(fetchImpl, new URL("/api/health", siteUrl), {
+      method: "GET",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => null);
+    return {
+      name: "site_runtime",
+      ok: response.ok && body?.ok === true && body?.service === "aea-energy",
+      status: response.status,
+      durationMs: now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      name: "site_runtime",
+      ok: false,
+      status: 0,
+      durationMs: now() - startedAt,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    };
+  }
+}
+
 async function fetchWithTimeout(fetchImpl, url, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
@@ -53,6 +79,57 @@ async function checkElectricityPlans({ fetchImpl, siteUrl, monitorId, now }) {
   } catch (error) {
     return {
       name: "electricity_plans",
+      ok: false,
+      status: 0,
+      durationMs: now() - startedAt,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    };
+  }
+}
+
+async function checkGasPlans({ fetchImpl, siteUrl, monitorId, now }) {
+  const startedAt = now();
+  try {
+    const url = new URL("/api/gas-plans", siteUrl);
+    url.searchParams.set("postcode", "3000");
+    url.searchParams.set("annualMj", "58000");
+    url.searchParams.set("usageProfile", "heating");
+    url.searchParams.set("includeConditional", "false");
+    url.searchParams.set("monitor", monitorId);
+    const response = await fetchWithTimeout(fetchImpl, url, {
+      method: "GET",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => null);
+    const planCount = Array.isArray(body?.plans) ? body.plans.length : 0;
+    const listSourcesSucceeded = Number(body?.source?.listSourcesSucceeded) || 0;
+    const detailPlansSucceeded = Number(body?.source?.detailPlansSucceeded) || 0;
+    const plansWithLastUpdated = Number(body?.source?.plansWithLastUpdated) || 0;
+    const detailApiVersion = String(body?.source?.detailApiVersion || "");
+    const ok = response.ok
+      && planCount > 0
+      && listSourcesSucceeded > 0
+      && detailPlansSucceeded > 0
+      && plansWithLastUpdated > 0
+      && detailApiVersion === "3";
+    const requestId = response.headers.get("x-request-id")?.slice(0, 100);
+    return {
+      name: "gas_plans",
+      ok,
+      status: response.status,
+      durationMs: now() - startedAt,
+      planCount,
+      listSourcesSucceeded,
+      detailPlansSucceeded,
+      plansWithLastUpdated,
+      detailApiVersion,
+      partial: Boolean(body?.source?.partial),
+      ...(requestId ? { requestId } : {}),
+    };
+  } catch (error) {
+    return {
+      name: "gas_plans",
       ok: false,
       status: 0,
       durationMs: now() - startedAt,
@@ -162,7 +239,9 @@ export async function runApiHealthMonitor({
   const currentTime = now();
   const monitorId = `api-health-${currentTime}`;
   const checks = await Promise.all([
+    checkSiteAvailability({ fetchImpl, siteUrl, now }),
     checkElectricityPlans({ fetchImpl, siteUrl, monitorId, now }),
+    checkGasPlans({ fetchImpl, siteUrl, monitorId, now }),
     checkLeadDelivery({ fetchImpl, siteUrl, leadProbeToken, now }),
   ]);
   const status = checks.every((check) => check.ok) ? "healthy" : "unhealthy";

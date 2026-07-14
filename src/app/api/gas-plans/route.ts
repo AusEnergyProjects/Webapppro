@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { estimateGasContract, type GasUsageProfile } from "@/lib/gas-tariff-engine";
 import { safeCdrBase } from "@/lib/electricity-cdr.mjs";
+import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 import { resolveCustomerPlanUrl, retailerWebsite } from "@/lib/retailer-links.mjs";
 
 const FEED_URL = "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
@@ -25,12 +26,23 @@ function postcodeMatches(postcode: string, values: unknown): boolean {
 }
 
 export async function GET(request: NextRequest) {
+  const operations = createOperationalRecorder({ event: "api.gas_plans" });
+  const respond = (body: unknown, status: number, outcome: string, metrics: Record<string, unknown> = {}) => {
+    operations.record(outcome, status, metrics);
+    return NextResponse.json(body, {
+      status,
+      headers: {
+        "Cache-Control": status === 200 ? "public, s-maxage=3600, stale-while-revalidate=86400" : "no-store",
+        "X-Request-Id": operations.requestId,
+      },
+    });
+  };
   const postcode = request.nextUrl.searchParams.get("postcode") || "";
   const annualMj = Number(request.nextUrl.searchParams.get("annualMj"));
   const includeConditional = request.nextUrl.searchParams.get("includeConditional") === "true";
   const usageProfile = (request.nextUrl.searchParams.get("usageProfile") || "heating") as GasUsageProfile;
   if (!/^\d{4}$/.test(postcode) || !Number.isFinite(annualMj) || !(annualMj > 0) || !["heating", "steady"].includes(usageProfile)) {
-    return NextResponse.json({ error: "A valid postcode, annual MJ and gas-use pattern are required." }, { status: 400 });
+    return respond({ error: "A valid postcode, annual MJ and gas-use pattern are required." }, 400, "invalid_query");
   }
   try {
     const feed: any = await getJson(FEED_URL);
@@ -152,7 +164,7 @@ export async function GET(request: NextRequest) {
         detailsUnavailable: localOutcomes.filter((outcome) => outcome.status === "unavailable").length,
       };
     });
-    return NextResponse.json({
+    const body = {
       plans,
       fetchedAt: new Date().toISOString(),
       usageProfile,
@@ -175,8 +187,25 @@ export async function GET(request: NextRequest) {
         retailerCoverage,
         partial: listFailures > 0 || rejected > 0 || unavailable > 0,
       },
+    };
+    return respond(body, 200, "success", {
+      planCount: plans.length,
+      partial: body.source.partial,
+      listSourcesSucceeded: body.source.listSourcesSucceeded,
+      listSourcesFailed: body.source.listSourcesFailed,
+      detailPlansSucceeded: body.source.detailPlansSucceeded,
+      detailPlansRejected: body.source.detailPlansRejected,
+      detailPlansUnavailable: body.source.detailPlansUnavailable,
+      plansWithLastUpdated: body.source.plansWithLastUpdated,
+      plansMissingLastUpdated: body.source.plansMissingLastUpdated,
+      detailApiVersion: body.source.detailApiVersion,
     });
-  } catch {
-    return NextResponse.json({ error: "The gas-plan service is temporarily unavailable. Please try again shortly." }, { status: 502 });
+  } catch (error) {
+    return respond(
+      { error: "The gas-plan service is temporarily unavailable. Please try again shortly." },
+      502,
+      "upstream_failure",
+      { errorType: error instanceof Error ? error.name : "UnknownError" },
+    );
   }
 }
