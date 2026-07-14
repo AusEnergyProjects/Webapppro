@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -43,4 +43,82 @@ export const verificationDocuments = sqliteTable("verification_documents", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("verification_documents_owner_idx").on(table.firebaseUid),
+]);
+
+export const adminUsers = sqliteTable("admin_users", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull().default(""),
+  role: text("role").notNull().default("support"),
+  status: text("status").notNull().default("active"),
+  invitedByUid: text("invited_by_uid").notNull().default(""),
+  lastLoginAt: text("last_login_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("admin_users_firebase_uid_idx").on(table.firebaseUid),
+  uniqueIndex("admin_users_email_idx").on(table.email),
+  index("admin_users_status_idx").on(table.status),
+]);
+
+export const adminAuditLog = sqliteTable("admin_audit_log", {
+  id: text("id").primaryKey(),
+  adminUid: text("admin_uid").notNull(),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  summary: text("summary").notNull(),
+  metadata: text("metadata").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("admin_audit_log_created_idx").on(table.createdAt),
+  index("admin_audit_log_admin_idx").on(table.adminUid),
+  index("admin_audit_log_entity_idx").on(table.entityType, table.entityId),
+]);
+
+export const tradeAccountNotes = sqliteTable("trade_account_notes", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  note: text("note").notNull(),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
+export const tradeOpportunities = sqliteTable("trade_opportunities", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  projectType: text("project_type").notNull(),
+  postcode: text("postcode").notNull().default(""),
+  state: text("state").notNull(),
+  serviceCategories: text("service_categories").notNull().default("[]"),
+  priority: text("priority").notNull().default("standard"),
+  timing: text("timing").notNull().default("planning"),
+  summary: text("summary").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_opportunities_status_idx").on(table.status, table.updatedAt),
+  index("trade_opportunities_state_idx").on(table.state),
+]);
+
+export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  status: text("status").notNull().default("offered"),
+  adminNote: text("admin_note").notNull().default(""),
+  partnerNote: text("partner_note").notNull().default(""),
+  matchedByUid: text("matched_by_uid").notNull(),
+  matchedAt: text("matched_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_opportunity_matches_unique_idx").on(table.opportunityId, table.firebaseUid),
+  index("trade_opportunity_matches_owner_idx").on(table.firebaseUid, table.updatedAt),
+  index("trade_opportunity_matches_opportunity_idx").on(table.opportunityId),
+  index("trade_opportunity_matches_status_idx").on(table.status),
 ]);
