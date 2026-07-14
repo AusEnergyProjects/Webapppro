@@ -1499,3 +1499,95 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .supplier-bulk-import { align-items: flex-start; flex-direction: column; }
   .supplier-bulk-import > div:last-child { align-items: flex-start; }
 }
+
+/* One control language across calculators, partner forms and dashboards. */
+body input[type="radio"],
+body input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #fff;
+  border: 2px solid #8eaa9f;
+  box-shadow: inset 0 0 0 1px rgba(6, 44, 50, .02);
+  cursor: pointer;
+  display: grid;
+  flex: 0 0 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0;
+  place-content: center;
+  transition: background-color .14s, border-color .14s, box-shadow .14s, transform .14s;
+  width: 20px;
+}
+
+body input[type="radio"] { border-radius: 50%; }
+body input[type="checkbox"] { border-radius: 5px; }
+
+body input[type="radio"]::before,
+body input[type="checkbox"]::before {
+  content: "";
+  display: block;
+  transform: scale(0);
+  transition: transform .12s ease-out;
+}
+
+body input[type="radio"]::before {
+  background: #fff;
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+body input[type="checkbox"]::before {
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  height: 9px;
+  margin-top: -2px;
+  transform: rotate(45deg) scale(0);
+  width: 5px;
+}
+
+body input[type="radio"]:checked,
+body input[type="checkbox"]:checked {
+  background-color: var(--color-aea-green);
+  border-color: var(--color-aea-green);
+  box-shadow: 0 0 0 1px rgba(18, 166, 106, .08);
+}
+
+body input[type="radio"]:checked::before { transform: scale(1); }
+body input[type="checkbox"]:checked::before { transform: rotate(45deg) scale(1); }
+
+body input[type="radio"]:hover,
+body input[type="checkbox"]:hover { border-color: var(--color-aea-green); }
+
+body input[type="radio"]:focus-visible,
+body input[type="checkbox"]:focus-visible {
+  border-color: var(--color-aea-green-dark);
+  box-shadow: 0 0 0 4px rgba(18, 166, 106, .18);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+body input[type="radio"]:disabled,
+body input[type="checkbox"]:disabled {
+  background-color: #eef3f0;
+  border-color: #bdcbc5;
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body input[type="radio"],
+  body input[type="checkbox"],
+  body input[type="radio"]::before,
+  body input[type="checkbox"]::before { transition: none; }
+}
+
+@media (forced-colors: active) {
+  body input[type="radio"],
+  body input[type="checkbox"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+  }
+}

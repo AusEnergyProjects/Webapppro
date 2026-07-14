@@ -120,6 +120,15 @@ test("shared layout and component tokens prevent page-level visual drift", () =>
   assert.match(styles, /\.start-path-card \{[^}]*border-radius: var\(--radius-card\)/);
 });
 
+test("radios and checkboxes use one accessible site wide control language", () => {
+  assert.match(styles, /body input\[type="radio"\],[\s\S]*body input\[type="checkbox"\] \{[\s\S]*appearance: none/);
+  assert.match(styles, /body input\[type="radio"\] \{ border-radius: 50%; \}/);
+  assert.match(styles, /body input\[type="checkbox"\] \{ border-radius: 5px; \}/);
+  assert.match(styles, /body input\[type="radio"\]:checked,[\s\S]*background-color: var\(--color-aea-green\)/);
+  assert.match(styles, /body input\[type="checkbox"\]:focus-visible/);
+  assert.match(styles, /@media \(forced-colors: active\)/);
+});
+
 test("homepage uses the original AEA energy platform artwork", () => {
   assert.match(guide, /className="start-hero-visual"/);
   assert.match(styles, /url\("\/aea-energy-platform-hero\.jpg"\)/);
