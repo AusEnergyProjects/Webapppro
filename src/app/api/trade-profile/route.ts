@@ -68,7 +68,8 @@ export async function GET(request: Request) {
     SELECT business_name, address_line_1, suburb, address_state, postcode,
            contact_name, phone, partner_type, business_website,
            service_states, capabilities, summary, account_status,
-           verification_status, plan_key, billing_status
+           verification_status, plan_key, billing_status, availability_status,
+           email_opportunities, email_weekly_summary, settings_updated_at
     FROM trade_accounts
     WHERE firebase_uid = ?
   `).bind(identity.uid).first<Record<string, unknown>>();
@@ -93,7 +94,59 @@ export async function GET(request: Request) {
       verificationStatus: record.verification_status,
       planKey: record.plan_key,
       billingStatus: record.billing_status,
+      availabilityStatus: record.availability_status,
+      emailOpportunities: Boolean(record.email_opportunities),
+      emailWeeklySummary: Boolean(record.email_weekly_summary),
+      settingsUpdatedAt: record.settings_updated_at,
     },
+  });
+}
+
+type SettingsPayload = {
+  availabilityStatus?: unknown;
+  emailOpportunities?: unknown;
+  emailWeeklySummary?: unknown;
+};
+
+export async function PATCH(request: Request) {
+  if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  const identity = await identityOrResponse(request);
+  if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
+
+  let raw: SettingsPayload;
+  try {
+    raw = await request.json() as SettingsPayload;
+  } catch {
+    return json({ ok: false, error: "Invalid dashboard settings." }, 400);
+  }
+
+  const availabilityStatus = typeof raw.availabilityStatus === "string" ? raw.availabilityStatus : "";
+  if (!["open", "limited", "paused"].includes(availabilityStatus)) {
+    return json({ ok: false, error: "Choose a valid availability setting." }, 400);
+  }
+  if (typeof raw.emailOpportunities !== "boolean" || typeof raw.emailWeeklySummary !== "boolean") {
+    return json({ ok: false, error: "Choose valid email preferences." }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const result = await getD1().prepare(`
+    UPDATE trade_accounts
+    SET availability_status = ?, email_opportunities = ?, email_weekly_summary = ?,
+        settings_updated_at = ?, updated_at = ?
+    WHERE firebase_uid = ?
+  `).bind(
+    availabilityStatus,
+    raw.emailOpportunities ? 1 : 0,
+    raw.emailWeeklySummary ? 1 : 0,
+    now,
+    now,
+    identity.uid,
+  ).run();
+
+  if (!result.meta.changes) return json({ ok: false, error: "Complete the business profile first." }, 404);
+  return json({
+    ok: true,
+    settings: { availabilityStatus, emailOpportunities: raw.emailOpportunities, emailWeeklySummary: raw.emailWeeklySummary, settingsUpdatedAt: now },
   });
 }
 

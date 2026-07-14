@@ -16,7 +16,7 @@ export function BrandBar() {
   );
 }
 
-type SiteActive = "start" | "plan" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
+type SiteActive = "start" | "plan" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-membership" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [

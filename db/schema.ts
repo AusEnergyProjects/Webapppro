@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -19,6 +19,10 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   verificationStatus: text("verification_status").notNull().default("not_started"),
   planKey: text("plan_key").notNull().default("unselected"),
   billingStatus: text("billing_status").notNull().default("not_connected"),
+  availabilityStatus: text("availability_status").notNull().default("paused"),
+  emailOpportunities: integer("email_opportunities", { mode: "boolean" }).notNull().default(true),
+  emailWeeklySummary: integer("email_weekly_summary", { mode: "boolean" }).notNull().default(true),
+  settingsUpdatedAt: text("settings_updated_at").notNull().default(""),
   consentVersion: text("consent_version").notNull(),
   consentAt: text("consent_at").notNull(),
   createdAt: text("created_at").notNull(),
