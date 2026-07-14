@@ -183,6 +183,7 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(styles, /\.planner-layout \{[^}]*grid-template-columns:/);
   assert.match(styles, /\.planner-controls legend \{[^}]*background: #fff;[^}]*display: inline-flex;/);
   assert.match(styles, /\.planner-results-heading h2,[^}]*overflow-wrap: anywhere;/);
+  assert.match(styles, /\.planner-results \.planner-result-actions button \{[^}]*color: #fff;/);
   assert.match(styles, /@media print \{/);
   assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
 });

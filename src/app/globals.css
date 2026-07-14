@@ -250,8 +250,8 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .planner-results-heading p { color: #c9dfe1; font-size: .76rem; line-height: 1.58; margin: 7px 0 0; }
 .planner-results-heading h2, .planner-results-heading p, .planner-results li h3, .planner-results li p, .planner-results li a { max-width: 100%; overflow-wrap: anywhere; }
 .planner-result-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; }
-.planner-result-actions button { background: var(--action-primary); border: 1px solid #43d5a2; border-radius: 999px; color: #fff; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 800; padding: 10px 15px; }
-.planner-result-actions button:hover, .planner-result-actions button:focus-visible { background: var(--action-primary-hover); outline: 2px solid #a7f3d0; outline-offset: 2px; }
+.planner-results .planner-result-actions button { background: var(--action-primary); border: 1px solid #43d5a2; border-radius: 999px; color: #fff; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 800; padding: 10px 15px; }
+.planner-results .planner-result-actions button:hover, .planner-results .planner-result-actions button:focus-visible { background: var(--action-primary-hover); outline: 2px solid #a7f3d0; outline-offset: 2px; }
 .planner-result-actions .planner-reset { background: transparent; color: #fff; }
 .planner-result-actions .planner-reset:hover, .planner-result-actions .planner-reset:focus-visible { background: rgba(255, 255, 255, .1); }
 .planner-results ol { display: grid; gap: 8px; list-style: none; margin: 20px 0 0; padding: 0; }
