@@ -90,6 +90,8 @@ test("upgrade scenarios distinguish editable quotes from model assumptions", () 
   assert.match(component, /using first-year bill saving/);
   assert.match(component, /Indicative scenario, not an installation recommendation/);
   assert.match(component, /SunSPOT calculator/);
+  assert.match(component, /className="native-direct-trade-link"/);
+  assert.match(styles, /\.native-direct-trade-link \{[^}]*border: 1px solid #159b69;[^}]*display: flex;[^}]*width: 100%;/);
 });
 
 test("meter chart uses a vivid lightweight interactive SVG", () => {

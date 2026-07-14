@@ -8,6 +8,7 @@ const directory = __dirname;
 const component = fs.readFileSync(path.resolve(directory, "../src/components/GasComparator.tsx"), "utf8");
 const questionnaire = fs.readFileSync(path.resolve(directory, "../src/components/GasUpgradeQuestionnaire.tsx"), "utf8");
 const route = fs.readFileSync(path.resolve(directory, "../src/app/api/gas-plans/route.ts"), "utf8");
+const styles = fs.readFileSync(path.resolve(directory, "../src/app/globals.css"), "utf8");
 
 test("gas comparison sends an explicit seasonal profile and excludes conditional discounts by default", () => {
   assert.match(component, /useState<GasUsageProfile>\("heating"\)/);
@@ -76,4 +77,12 @@ test("residents can compare up to three gas offers side by side", () => {
   assert.match(component, /Usage rates/);
   assert.match(component, /Conditions to check/);
   assert.match(component, /Comparison full \(3\)/);
+});
+
+test("gas comparison keeps loading feedback at the action and presents Direct Trade as a button", () => {
+  assert.match(component, /progresswrap gas-action-progress/);
+  assert.match(component, /Comparing gas plans\.\.\./);
+  assert.match(questionnaire, /className="saving-direct-trade"/);
+  assert.match(styles, /\.gas-action-progress \{[^}]*max-width: 620px;/);
+  assert.match(styles, /\.saving-direct-trade \{[^}]*border: 1px solid #6ee7b7;[^}]*display: flex;[^}]*width: 100%;/);
 });

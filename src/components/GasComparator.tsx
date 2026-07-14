@@ -156,7 +156,7 @@ export function GasComparator() {
       </form>
 
       {supplyType === "mains" && <GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} onUsageProfileChange={setUsageProfile} />}
-      {supplyType === "mains" && <div className="gas-compare-action"><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>}
+      {supplyType === "mains" && <><div className="gas-compare-action"><button className="btn" form="gas-comparison-form" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>{loading && <div className="progresswrap gas-action-progress" aria-hidden="true"><div className="pbar"><div className="pfill" style={{ width: `${progress}%` }} /></div><div className="pmsg">{status}</div></div>}</>}
 
       {plans.length > 0 && !needsDistributor && <section className="results" aria-live="polite">
         <div className="rsummary">
