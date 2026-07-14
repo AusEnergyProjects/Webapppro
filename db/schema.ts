@@ -178,6 +178,21 @@ export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   index("trade_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
+export const tradeAccountFeatureGrants = sqliteTable("trade_account_feature_grants", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  featureKey: text("feature_key").notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: text("expires_at").notNull().default(""),
+  note: text("note").notNull().default(""),
+  grantedByUid: text("granted_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_account_feature_grants_owner_key_idx").on(table.firebaseUid, table.featureKey),
+  index("trade_account_feature_grants_owner_idx").on(table.firebaseUid, table.status, table.expiresAt),
+]);
+
 export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

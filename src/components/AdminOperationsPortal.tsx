@@ -12,6 +12,10 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import {
+  FEATURE_DEFINITIONS,
+  type FeatureKey,
+} from "@/lib/direct-trade-entitlements";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -64,12 +68,27 @@ type Account = {
   updatedAt: string;
   serviceBasePostcode: string;
   serviceRadiusKm: number;
+  membershipActive: boolean;
+};
+type AdminFeatureGrant = {
+  featureKey: FeatureKey;
+  status: "active" | "revoked";
+  expiresAt: string;
+  note: string;
+  updatedAt?: string;
 };
 type AccountDetail = {
   account: Account;
   documents: Record<string, unknown>[];
   notes: Record<string, unknown>[];
   matches: Record<string, unknown>[];
+  featureGrants: AdminFeatureGrant[];
+  entitlements: {
+    paidMembership: boolean;
+    accessLabel: string;
+    features: Record<FeatureKey, boolean>;
+    activeGrants: FeatureKey[];
+  };
 };
 type OpportunityAllocation = {
   id: string;
@@ -400,7 +419,10 @@ export function AdminOperationsPortal() {
       const result = await api(
         `/api/admin/accounts?uid=${encodeURIComponent(uid)}`,
       );
-      setSelectedAccount(result);
+      setSelectedAccount({
+        ...result,
+        featureGrants: result.featureGrants || [],
+      });
       setAccountNote("");
       setStatus("");
     } catch (error) {
@@ -422,6 +444,21 @@ export function AdminOperationsPortal() {
           availabilityStatus: selectedAccount.account.availabilityStatus,
           planKey: selectedAccount.account.planKey,
           billingStatus: selectedAccount.account.billingStatus,
+          ...(["owner", "admin"].includes(session?.role || "")
+            ? {
+                featureGrants: FEATURE_DEFINITIONS.map((feature) => {
+                  const grant = selectedAccount.featureGrants.find(
+                    (item) => item.featureKey === feature.key,
+                  );
+                  return {
+                    featureKey: feature.key,
+                    enabled: grant?.status === "active",
+                    expiresAt: grant?.expiresAt || "",
+                    note: grant?.note || "",
+                  };
+                }),
+              }
+            : {}),
           note: accountNote,
         }),
       });
@@ -439,6 +476,32 @@ export function AdminOperationsPortal() {
         ? { ...current, account: { ...current.account, [key]: value } }
         : current,
     );
+  }
+
+  function updateFeatureGrant(
+    featureKey: FeatureKey,
+    update: Partial<AdminFeatureGrant>,
+  ) {
+    setSelectedAccount((current) => {
+      if (!current) return current;
+      const existing = current.featureGrants.find(
+        (item) => item.featureKey === featureKey,
+      ) || {
+        featureKey,
+        status: "revoked" as const,
+        expiresAt: "",
+        note: "",
+      };
+      return {
+        ...current,
+        featureGrants: [
+          ...current.featureGrants.filter(
+            (item) => item.featureKey !== featureKey,
+          ),
+          { ...existing, ...update },
+        ],
+      };
+    });
   }
 
   async function downloadEvidence(id: unknown, fileName: unknown) {
@@ -687,6 +750,14 @@ export function AdminOperationsPortal() {
   const opportunityCounts = metrics.opportunities || {};
   const matchCounts = metrics.matches || {};
   const productCounts = metrics.products || {};
+  const paidAccounts = accounts.filter((account) => account.membershipActive).length;
+  const freeAccounts = accounts.filter((account) => !account.membershipActive).length;
+  const hiddenSuppliers = accounts.filter(
+    (account) => account.partnerType === "supplier" && !account.membershipActive,
+  ).length;
+  const leadLockedInstallers = accounts.filter(
+    (account) => account.partnerType === "installer" && !account.membershipActive,
+  ).length;
   const openOpportunities = useMemo(
     () => opportunities.filter((item) => item.status === "open"),
     [opportunities],
@@ -962,6 +1033,12 @@ export function AdminOperationsPortal() {
                   </small>
                 </article>
               </section>
+              <section className="admin-access-metrics" aria-label="Membership access health">
+                <article><span>Paid memberships</span><strong>{paidAccounts}</strong><small>Commercial role tools active</small></article>
+                <article><span>Free profiles</span><strong>{freeAccounts}</strong><small>Setup and verification access only</small></article>
+                <article><span>Hidden wholesalers</span><strong>{hiddenSuppliers}</strong><small>Products excluded from installer selection</small></article>
+                <article><span>Lead-locked installers</span><strong>{leadLockedInstallers}</strong><small>Excluded from opportunity allocation</small></article>
+              </section>
               <div className="admin-overview-grid">
                 <section className="admin-panel">
                   <div className="admin-panel-heading">
@@ -1088,6 +1165,7 @@ export function AdminOperationsPortal() {
                             {account.email}
                             <br />
                             {account.addressState} {account.postcode}
+                            {" · "}{account.membershipActive ? "Paid" : "Free"}
                           </small>
                         </span>
                         <span>
@@ -1275,6 +1353,91 @@ export function AdminOperationsPortal() {
                             ))}
                           </select>
                         </label>
+                        <section className="admin-feature-controls full">
+                          <div>
+                            <span>Access and entitlements</span>
+                            <h3>Premium feature grants</h3>
+                            <p>
+                              Paid membership includes the role-specific commercial
+                              tools. Use grants for trials, service recovery or
+                              individually approved premium add-ons. Every change is audited.
+                            </p>
+                          </div>
+                          <div className="admin-feature-summary">
+                            <strong>{selectedAccount.entitlements.accessLabel}</strong>
+                            <span>
+                              {selectedAccount.account.partnerType === "supplier"
+                                ? "Unpaid wholesalers stay invisible to installers unless visibility is granted."
+                                : "Free installers receive no leads unless lead access is granted."}
+                            </span>
+                          </div>
+                          <div className="admin-feature-grid">
+                            {FEATURE_DEFINITIONS.filter((feature) =>
+                              feature.roles.includes(
+                                selectedAccount.account.partnerType as "installer" | "supplier",
+                              ),
+                            ).map((feature) => {
+                              const grant = selectedAccount.featureGrants.find(
+                                (item) => item.featureKey === feature.key,
+                              );
+                              const enabled = grant?.status === "active";
+                              const included =
+                                feature.tier === "membership" &&
+                                selectedAccount.entitlements.paidMembership;
+                              return (
+                                <article key={feature.key} className={enabled ? "enabled" : ""}>
+                                  <label>
+                                    <input
+                                      type="checkbox"
+                                      checked={enabled}
+                                      disabled={!['owner', 'admin'].includes(session.role)}
+                                      onChange={(event) =>
+                                        updateFeatureGrant(feature.key, {
+                                          status: event.target.checked ? "active" : "revoked",
+                                        })
+                                      }
+                                    />
+                                    <span>
+                                      <strong>{feature.label}</strong>
+                                      <small>{feature.description}</small>
+                                    </span>
+                                  </label>
+                                  <div>
+                                    <span className="admin-feature-tier">
+                                      {included ? "Included in paid plan" : feature.tier === "premium" ? "Premium add-on" : "Membership override"}
+                                    </span>
+                                    <label>
+                                      Grant expiry
+                                      <input
+                                        type="date"
+                                        value={grant?.expiresAt?.slice(0, 10) || ""}
+                                        disabled={!enabled || !['owner', 'admin'].includes(session.role)}
+                                        onChange={(event) =>
+                                          updateFeatureGrant(feature.key, {
+                                            expiresAt: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Grant note
+                                      <input
+                                        value={grant?.note || ""}
+                                        disabled={!enabled || !['owner', 'admin'].includes(session.role)}
+                                        placeholder="Reason, approval or service case"
+                                        onChange={(event) =>
+                                          updateFeatureGrant(feature.key, {
+                                            note: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
                         <label className="full">
                           Internal moderation note
                           <textarea

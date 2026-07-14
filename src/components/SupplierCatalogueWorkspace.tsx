@@ -163,9 +163,15 @@ function readable(value: string) {
 export function SupplierCatalogueWorkspace({
   user,
   businessName,
+  marketplaceVisible,
+  canBulkImport,
+  hasAnalytics,
 }: {
   user: User;
   businessName: string;
+  marketplaceVisible: boolean;
+  canBulkImport: boolean;
+  hasAnalytics: boolean;
 }) {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -533,8 +539,12 @@ export function SupplierCatalogueWorkspace({
         </article>
         <article>
           <span>Live to installers</span>
-          <strong>{liveCount} approved</strong>
-          <small>Published and catalogue-reviewed items</small>
+          <strong>{marketplaceVisible ? `${liveCount} approved` : "Hidden"}</strong>
+          <small>
+            {marketplaceVisible
+              ? "Published and catalogue-reviewed items"
+              : "Paid visibility is not active"}
+          </small>
         </article>
         <article>
           <span>Awaiting review</span>
@@ -546,6 +556,23 @@ export function SupplierCatalogueWorkspace({
           <strong>{availableCount} available</strong>
           <small>In-stock or limited-stock catalogue items</small>
         </article>
+      </section>
+
+      <section className={`dashboard-visibility-banner ${marketplaceVisible ? "is-live" : "is-locked"}`}>
+        <div>
+          <span>{marketplaceVisible ? "Marketplace live" : "Free account"}</span>
+          <h2>
+            {marketplaceVisible
+              ? "Approved products can be selected by installer members"
+              : "Your catalogue is private while you prepare it"}
+          </h2>
+          <p>
+            {marketplaceVisible
+              ? "Keep prices, stock and lead times current so installers can make reliable product choices."
+              : "You can create your profile and build product listings for free. Until paid visibility or an admin grant is active, every product remains invisible in the installer selection dashboard."}
+          </p>
+        </div>
+        <a href="#membership">{marketplaceVisible ? "Manage access" : "Unlock marketplace visibility"}</a>
       </section>
 
       <section className="dashboard-panel supplier-boundary">
@@ -581,7 +608,7 @@ export function SupplierCatalogueWorkspace({
               the record without showing it to installers.
             </p>
           </div>
-          <div className="supplier-bulk-import">
+          {canBulkImport ? <div className="supplier-bulk-import">
             <div>
               <strong>Bulk catalogue import</strong>
               <span>
@@ -612,7 +639,24 @@ export function SupplierCatalogueWorkspace({
                 />
               </label>
             </div>
-          </div>
+          </div> : (
+            <div className="supplier-bulk-import is-locked">
+              <div>
+                <strong>Bulk catalogue import is locked</strong>
+                <span>
+                  Individual product creation stays free. Paid membership or an
+                  administrator grant unlocks CSV import for larger catalogues.
+                </span>
+              </div>
+              <a href="#membership">Unlock bulk tools</a>
+            </div>
+          )}
+          {hasAnalytics && (
+            <div className="supplier-analytics-note">
+              <strong>Advanced analytics enabled</strong>
+              <span>Demand and catalogue performance reporting is active for this account.</span>
+            </div>
+          )}
           <input
             className="supplier-search"
             type="search"

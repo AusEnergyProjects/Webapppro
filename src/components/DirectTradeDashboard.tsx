@@ -10,6 +10,11 @@ import {
   directTradeCheckoutUrl,
   directTradePortalLink,
 } from "@/lib/direct-trade-billing";
+import {
+  FEATURE_DEFINITIONS,
+  type FeatureGrant,
+  type FeatureKey,
+} from "@/lib/direct-trade-entitlements";
 
 type DashboardProfile = {
   businessName: string;
@@ -29,6 +34,13 @@ type DashboardProfile = {
   serviceRadiusKm: number;
   emailOpportunities: boolean;
   emailWeeklySummary: boolean;
+  featureGrants: FeatureGrant[];
+  entitlements: {
+    paidMembership: boolean;
+    accessLabel: string;
+    features: Record<FeatureKey, boolean>;
+    activeGrants: FeatureKey[];
+  };
 };
 
 type DashboardOpportunity = {
@@ -97,6 +109,83 @@ const capabilityLabels: Record<string, string> = {
   "ev-charging": "EV charging",
   other: "Other energy upgrades",
 };
+
+const freeAccountFeatures = [
+  "Create and edit the complete business profile",
+  "Set service areas, capabilities and contact preferences",
+  "Upload verification evidence and track review progress",
+  "Access billing, account settings and membership options",
+];
+
+function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
+  const role = profile.partnerType;
+  const available = FEATURE_DEFINITIONS.filter((feature) =>
+    feature.roles.includes(role),
+  );
+  const includedFree = [
+    ...freeAccountFeatures,
+    role === "supplier"
+      ? "Create and edit draft wholesaler product listings"
+      : "Prepare service coverage and availability before upgrading",
+  ];
+  return (
+    <section className="dashboard-plan-access" aria-labelledby="plan-access-title">
+      <div className="dashboard-plan-summary">
+        <div>
+          <span>Current access</span>
+          <h2 id="plan-access-title">{profile.entitlements.accessLabel}</h2>
+          <p>
+            Free accounts can finish setup and become verification-ready. Paid
+            access controls commercial visibility, leads and marketplace tools.
+          </p>
+        </div>
+        <a href="#membership">
+          {profile.entitlements.paidMembership ? "Manage membership" : "Compare paid access"}
+        </a>
+      </div>
+      <div className="dashboard-tier-grid">
+        <article>
+          <span>Always included</span>
+          <h3>Free account</h3>
+          <ul>{includedFree.map((item) => <li key={item}>{item}</li>)}</ul>
+          <strong>
+            {role === "supplier"
+              ? "Draft products remain private until commercial access is active."
+              : "No household leads are sent to free installers."}
+          </strong>
+        </article>
+        <article className="paid">
+          <span>Commercial access</span>
+          <h3>Paid membership</h3>
+          <ul>
+            {available.filter((feature) => feature.tier === "membership").map((feature) => (
+              <li key={feature.key} className={profile.entitlements.features[feature.key] ? "enabled" : "locked"}>
+                {feature.label}
+              </li>
+            ))}
+          </ul>
+          <strong>
+            {role === "supplier"
+              ? "Unpaid wholesalers remain invisible in installer product selection."
+              : "Only paid or specifically granted installers enter lead matching."}
+          </strong>
+        </article>
+        <article>
+          <span>Admin assigned</span>
+          <h3>Premium features</h3>
+          <ul>
+            {available.filter((feature) => feature.tier === "premium").map((feature) => (
+              <li key={feature.key} className={profile.entitlements.features[feature.key] ? "enabled" : "locked"}>
+                {feature.label}
+              </li>
+            ))}
+          </ul>
+          <strong>Premium add-ons can be enabled per account by an administrator.</strong>
+        </article>
+      </div>
+    </section>
+  );
+}
 
 export function DirectTradeDashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -170,7 +259,10 @@ export function DirectTradeDashboard() {
               headers: { Authorization: `Bearer ${token}` },
               cache: "no-store",
             });
-            if (nextProfile.partnerType !== "supplier") {
+            if (
+              nextProfile.partnerType !== "supplier" &&
+              nextProfile.entitlements?.features?.installer_leads
+            ) {
               const opportunityResponse = await fetch(
                 "/api/trade-opportunities",
                 {
@@ -208,6 +300,10 @@ export function DirectTradeDashboard() {
   }, [user]);
 
   const isSupplier = profile?.partnerType === "supplier";
+  const hasLeadAccess = Boolean(profile?.entitlements?.features?.installer_leads);
+  const hasMarketplaceAccess = Boolean(profile?.entitlements?.features?.installer_marketplace);
+  const hasSupplierVisibility = Boolean(profile?.entitlements?.features?.supplier_visibility);
+  const hasBulkImport = Boolean(profile?.entitlements?.features?.supplier_bulk_import);
   const annualMonthly = isSupplier ? 199 : 99;
   const flexibleMonthly = isSupplier ? 399 : 199;
   const annualTotal = annualMonthly * 12;
@@ -504,6 +600,8 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
+          <PlanAccessPanel profile={profile} />
+
           {isSupplier ? (
             <>
               <nav className="dashboard-subnav" aria-label="Wholesaler account">
@@ -518,6 +616,9 @@ export function DirectTradeDashboard() {
               <SupplierCatalogueWorkspace
                 user={user}
                 businessName={profile.businessName}
+                marketplaceVisible={hasSupplierVisibility}
+                canBulkImport={hasBulkImport}
+                hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
               />
             </>
           ) : (
@@ -569,12 +670,16 @@ export function DirectTradeDashboard() {
                 <article>
                   <span>Opportunity inbox</span>
                   <strong>
-                    {offeredCount
+                    {!hasLeadAccess
+                      ? "Locked on free account"
+                      : offeredCount
                       ? `${offeredCount} awaiting response`
                       : "Nothing awaiting response"}
                   </strong>
                   <small>
-                    {interestedCount
+                    {!hasLeadAccess
+                      ? "No leads can be allocated until access is unlocked."
+                      : interestedCount
                       ? `${interestedCount} expression${interestedCount === 1 ? "" : "s"} of interest active`
                       : "Matching follows coverage and capability."}
                   </small>
@@ -610,7 +715,19 @@ export function DirectTradeDashboard() {
                       address are not exposed in the opportunity feed.
                     </p>
                   </div>
-                  {opportunities.length ? (
+                  {!hasLeadAccess ? (
+                    <div className="dashboard-paywall-state">
+                      <span>Paid feature</span>
+                      <h3>Opportunity delivery is switched off</h3>
+                      <p>
+                        This free account can complete its profile and verification,
+                        but it is excluded from automatic and manual lead allocation.
+                        Start membership or ask an administrator to grant Opportunity
+                        leads to activate this inbox.
+                      </p>
+                      <a href="#membership">Unlock opportunity leads</a>
+                    </div>
+                  ) : opportunities.length ? (
                     <div className="dashboard-opportunity-list">
                       {opportunities.map((opportunity) => (
                         <article
@@ -800,7 +917,11 @@ export function DirectTradeDashboard() {
                       <small>Review the secure verification pathway</small>
                     </li>
                     <li>
-                      <strong>Choose membership</strong>
+                      <strong>
+                        {profile.entitlements.paidMembership
+                          ? "Membership active"
+                          : "Choose membership"}
+                      </strong>
                       <small>
                         {billingLabel[profile.billingStatus] ||
                           "Choose a secure Stripe plan below"}
@@ -867,9 +988,15 @@ export function DirectTradeDashboard() {
                   ))}
                   {!opportunities.length && (
                     <article>
-                      <strong>Opportunity matching ready</strong>
+                      <strong>
+                        {hasLeadAccess
+                          ? "Opportunity matching ready"
+                          : "Opportunity matching locked"}
+                      </strong>
                       <span>
-                        No assignments have been made to this account yet.
+                        {hasLeadAccess
+                          ? "No assignments have been made to this account yet."
+                          : "Free accounts are excluded from lead allocation."}
                       </span>
                     </article>
                   )}
@@ -1039,7 +1166,22 @@ export function DirectTradeDashboard() {
                 </form>
               </section>
 
-              <InstallerProductMarketplace user={user} />
+              {hasMarketplaceAccess ? (
+                <InstallerProductMarketplace user={user} />
+              ) : (
+                <section className="dashboard-panel dashboard-paywall-panel">
+                  <div className="dashboard-paywall-state">
+                    <span>Paid feature</span>
+                    <h2>Wholesale product marketplace</h2>
+                    <p>
+                      Upgrade to compare approved equipment, trade pricing, stock,
+                      warranties and complete kit dependencies. Products from unpaid
+                      wholesalers never appear in this selection workspace.
+                    </p>
+                    <a href="#membership">Unlock product selection</a>
+                  </div>
+                </section>
+              )}
             </>
           )}
 
@@ -1073,6 +1215,11 @@ export function DirectTradeDashboard() {
                 </p>
                 <ul>
                   <li>Full role-specific dashboard access after approval</li>
+                  <li>
+                    {isSupplier
+                      ? "Approved products become visible to installer members"
+                      : "Suitable opportunity leads and product selection unlock"}
+                  </li>
                   <li>No individual lead charges</li>
                   <li>Stop renewal before the next annual charge</li>
                   <li>
@@ -1103,6 +1250,11 @@ export function DirectTradeDashboard() {
                 </p>
                 <ul>
                   <li>The same matching and placement rules</li>
+                  <li>
+                    {isSupplier
+                      ? "Approved products become visible to installer members"
+                      : "Suitable opportunity leads and product selection unlock"}
+                  </li>
                   <li>No individual lead charges</li>
                   <li>No annual commitment or early cancellation fee</li>
                   <li>Manage invoices and payment details in Stripe</li>

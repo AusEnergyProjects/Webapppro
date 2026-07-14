@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 
 export const runtime = "edge";
 
@@ -10,9 +11,12 @@ export async function GET(request: Request) {
   try { identity = await requireFirebaseIdentity(request); }
   catch { return adminJson({ ok: false, error: "Sign in to continue." }, 401); }
   const db = getD1();
-  const account = await db.prepare("SELECT partner_type, account_status FROM trade_accounts WHERE firebase_uid = ?").bind(identity.uid).first<Record<string, unknown>>();
+  const account = await db.prepare("SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?").bind(identity.uid).first<Record<string, unknown>>();
   if (!account || account.account_status !== "active") return adminJson({ ok: false, error: "An active business account is required." }, 403);
   if (account.partner_type !== "installer") return adminJson({ ok: false, error: "The trade product marketplace is reserved for installer accounts." }, 403);
+  if (!await accountHasFeature(identity.uid, "installer", account.billing_status, "installer_marketplace")) {
+    return adminJson({ ok: false, error: "The wholesale product marketplace is available with paid membership or an administrator feature grant." }, 403);
+  }
 
   const url = new URL(request.url);
   const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
@@ -23,10 +27,15 @@ export async function GET(request: Request) {
     FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
     WHERE p.listing_status = 'published' AND p.review_status = 'approved'
       AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
+      AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
+        SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
+          AND fg.feature_key = 'supplier_visibility' AND fg.status = 'active'
+          AND (fg.expires_at = '' OR fg.expires_at > ?)
+      ))
       AND (? = '' OR p.category = ?)
       AND (? = '' OR LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.description) LIKE ?)
     ORDER BY p.category, p.brand, p.name LIMIT 300`)
-    .bind(category, category, search, `%${search}%`).all<Record<string, unknown>>();
+    .bind(new Date().toISOString(), category, category, search, `%${search}%`).all<Record<string, unknown>>();
   const ids = rows.results.map((row) => String(row.id));
   const links = ids.length ? await db.prepare(`SELECT l.product_id, l.relationship, l.default_qty, l.note,
     p.id linked_product_id, p.model_number, p.brand, p.name, p.unit_price_cents_ex_gst
@@ -46,4 +55,3 @@ export async function GET(request: Request) {
     })),
   })) });
 }
-

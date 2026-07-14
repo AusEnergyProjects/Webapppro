@@ -1,5 +1,12 @@
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, parseJsonList, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
+import {
+  FEATURE_KEYS,
+  resolveEntitlements,
+  type FeatureGrant,
+  type FeatureKey,
+  type PartnerType,
+} from "@/lib/direct-trade-entitlements";
 
 export const runtime = "edge";
 
@@ -34,6 +41,17 @@ function shapeAccount(row: Record<string, unknown>) {
     serviceRadiusKm: Number(row.service_radius_km || 50),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    membershipActive: ["trial", "active", "active_cancels_at_period_end"].includes(String(row.billing_status)),
+  };
+}
+
+function shapeGrant(row: Record<string, unknown>): FeatureGrant {
+  return {
+    featureKey: String(row.feature_key) as FeatureKey,
+    status: String(row.status) as "active" | "revoked",
+    expiresAt: String(row.expires_at || ""),
+    note: String(row.note || ""),
+    updatedAt: String(row.updated_at || ""),
   };
 }
 
@@ -47,7 +65,7 @@ export async function GET(request: Request) {
     if (uid) {
       const account = await db.prepare("SELECT * FROM trade_accounts WHERE firebase_uid = ? LIMIT 1").bind(uid).first<Record<string, unknown>>();
       if (!account) return adminJson({ ok: false, error: "Business account not found." }, 404);
-      const [documents, notes, matches] = await Promise.all([
+      const [documents, notes, matches, grantRows] = await Promise.all([
         db.prepare(`SELECT id, category, file_name, content_type, size_bytes, expiry_date, status, created_at, updated_at
           FROM verification_documents WHERE firebase_uid = ? ORDER BY created_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>(),
         db.prepare(`SELECT n.id, n.note, n.created_at, COALESCE(a.display_name, a.email, 'Operations team') author
@@ -57,8 +75,23 @@ export async function GET(request: Request) {
           o.id opportunity_id, o.title, o.project_type, o.state, o.postcode, o.priority, o.timing, o.status opportunity_status
           FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
           WHERE m.firebase_uid = ? ORDER BY m.updated_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>(),
+        db.prepare(`SELECT feature_key, status, expires_at, note, updated_at
+          FROM trade_account_feature_grants WHERE firebase_uid = ? ORDER BY feature_key`).bind(uid).all<Record<string, unknown>>(),
       ]);
-      return adminJson({ ok: true, account: shapeAccount(account), documents: documents.results, notes: notes.results, matches: matches.results });
+      const featureGrants = grantRows.results.map(shapeGrant);
+      return adminJson({
+        ok: true,
+        account: shapeAccount(account),
+        documents: documents.results,
+        notes: notes.results,
+        matches: matches.results,
+        featureGrants,
+        entitlements: resolveEntitlements(
+          String(account.partner_type) as PartnerType,
+          account.billing_status,
+          featureGrants,
+        ),
+      });
     }
 
     const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
@@ -114,20 +147,51 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: false, error: "Reviewers can update verification status and internal notes only." }, 403);
     }
 
+    const rawFeatureGrants = body.featureGrants;
+    if (rawFeatureGrants !== undefined && !["owner", "admin"].includes(admin.role)) {
+      return adminJson({ ok: false, error: "Only owners and administrators can change premium feature access." }, 403);
+    }
+    if (rawFeatureGrants !== undefined && (!Array.isArray(rawFeatureGrants) || rawFeatureGrants.length > FEATURE_KEYS.size)) {
+      return adminJson({ ok: false, error: "Premium feature settings are invalid." }, 400);
+    }
+    const featureGrants = Array.isArray(rawFeatureGrants)
+      ? rawFeatureGrants.map((item) => {
+          const grant = item && typeof item === "object" ? item as Record<string, unknown> : {};
+          const featureKey = cleanAdminText(grant.featureKey, 80) as FeatureKey;
+          const status = grant.enabled === true ? "active" : "revoked";
+          const expiresAt = cleanAdminText(grant.expiresAt, 40);
+          const note = cleanAdminText(grant.note, 500);
+          if (!FEATURE_KEYS.has(featureKey) || (expiresAt && !Number.isFinite(Date.parse(expiresAt)))) throw new Error("INVALID_FEATURE_GRANT");
+          return { featureKey, status, expiresAt, note };
+        })
+      : [];
+
     const note = cleanAdminText(body.note, 1200);
     const now = new Date().toISOString();
     await db.prepare(`UPDATE trade_accounts SET account_status = ?, verification_status = ?, availability_status = ?,
       plan_key = ?, billing_status = ?, updated_at = ? WHERE firebase_uid = ?`)
       .bind(accountStatus, verificationStatus, availabilityStatus, planKey, billingStatus, now, uid).run();
+    if (Array.isArray(rawFeatureGrants) && featureGrants.length) {
+      await db.batch(featureGrants.map((grant) => db.prepare(`INSERT INTO trade_account_feature_grants
+        (id, firebase_uid, feature_key, status, expires_at, note, granted_by_uid, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(firebase_uid, feature_key) DO UPDATE SET status = excluded.status,
+          expires_at = excluded.expires_at, note = excluded.note, granted_by_uid = excluded.granted_by_uid,
+          updated_at = excluded.updated_at`)
+        .bind(crypto.randomUUID(), uid, grant.featureKey, grant.status, grant.expiresAt, grant.note, admin.uid, now, now)));
+    }
     if (note) await db.prepare(`INSERT INTO trade_account_notes (id, firebase_uid, note, created_by_uid, created_at)
       VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), uid, note, admin.uid, now).run();
     await writeAdminAudit(admin, "trade_account.update", "trade_account", uid, "Updated business account moderation settings.", {
       before: current,
-      after: { accountStatus, verificationStatus, availabilityStatus, planKey, billingStatus },
+      after: { accountStatus, verificationStatus, availabilityStatus, planKey, billingStatus, featureGrants },
       noteAdded: Boolean(note),
     });
     return adminJson({ ok: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_FEATURE_GRANT") {
+      return adminJson({ ok: false, error: "Premium feature settings are invalid." }, 400);
+    }
     return adminError(error);
   }
 }

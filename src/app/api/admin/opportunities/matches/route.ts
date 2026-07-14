@@ -13,6 +13,7 @@ import {
   MAX_VISIBLE_INSTALLERS,
 } from "@/lib/opportunity-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
+import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 
 export const runtime = "edge";
 const MATCH_STATUSES = new Set([
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       db
         .prepare(
           `SELECT firebase_uid, business_name, account_status, partner_type, verification_status, availability_status,
-        postcode, service_base_postcode, service_radius_km, service_states, capabilities
+        postcode, service_base_postcode, service_radius_km, service_states, capabilities, billing_status
         FROM trade_accounts WHERE firebase_uid = ?`,
         )
         .bind(firebaseUid)
@@ -88,6 +89,11 @@ export async function POST(request: Request) {
           error: "Wholesaler accounts cannot receive household opportunities.",
         },
         403,
+      );
+    if (!await accountHasFeature(firebaseUid, "installer", account.billing_status, "installer_leads"))
+      return adminJson(
+        { ok: false, error: "Free installer accounts cannot receive leads. Start membership or grant Opportunity leads first." },
+        409,
       );
     if (
       account.verification_status !== "approved" ||

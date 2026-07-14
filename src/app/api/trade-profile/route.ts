@@ -2,6 +2,11 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
 import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
+import {
+  resolveEntitlements,
+  type FeatureGrant,
+  type PartnerType,
+} from "@/lib/direct-trade-entitlements";
 
 export const runtime = "edge";
 
@@ -67,7 +72,8 @@ export async function GET(request: Request) {
   const identity = await identityOrResponse(request);
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
 
-  const record = await getD1().prepare(`
+  const db = getD1();
+  const record = await db.prepare(`
     SELECT business_name, address_line_1, suburb, address_state, postcode,
            contact_name, phone, partner_type, business_website,
            service_states, capabilities, summary, account_status,
@@ -79,6 +85,21 @@ export async function GET(request: Request) {
   `).bind(identity.uid).first<Record<string, unknown>>();
 
   if (!record) return json({ ok: true, profile: null });
+  const grantRows = await db.prepare(`SELECT feature_key, status, expires_at, note, updated_at
+    FROM trade_account_feature_grants WHERE firebase_uid = ? ORDER BY feature_key`)
+    .bind(identity.uid).all<Record<string, unknown>>();
+  const featureGrants = grantRows.results.map((grant: Record<string, unknown>) => ({
+    featureKey: grant.feature_key,
+    status: grant.status,
+    expiresAt: grant.expires_at,
+    note: grant.note,
+    updatedAt: grant.updated_at,
+  })) as FeatureGrant[];
+  const entitlements = resolveEntitlements(
+    String(record.partner_type) as PartnerType,
+    record.billing_status,
+    featureGrants,
+  );
   return json({
     ok: true,
     profile: {
@@ -104,6 +125,8 @@ export async function GET(request: Request) {
       emailOpportunities: Boolean(record.email_opportunities),
       emailWeeklySummary: Boolean(record.email_weekly_summary),
       settingsUpdatedAt: record.settings_updated_at,
+      featureGrants,
+      entitlements,
     },
   });
 }

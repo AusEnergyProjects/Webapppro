@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 
 export const runtime = "edge";
 
@@ -50,14 +51,14 @@ async function supplierIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
   const account = await getD1()
     .prepare(
-      "SELECT partner_type, account_status FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(identity.uid)
     .first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
   if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return identity;
+  return { ...identity, billingStatus: account.billing_status };
 }
 
 function errorResponse(error: unknown) {
@@ -348,6 +349,12 @@ export async function POST(request: Request) {
       return json({ ok: false, error: "Invalid product details." }, 400);
     }
     if (Array.isArray(body.products)) {
+      if (!await accountHasFeature(identity.uid, "supplier", identity.billingStatus, "supplier_bulk_import")) {
+        return json(
+          { ok: false, error: "Bulk catalogue import is available with paid membership or an administrator feature grant." },
+          403,
+        );
+      }
       if (!body.products.length || body.products.length > 100) {
         return json(
           {

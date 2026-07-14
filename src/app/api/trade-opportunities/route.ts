@@ -5,6 +5,7 @@ import {
   allocateNearestInstallers,
   expireStaleOpportunities,
 } from "@/lib/opportunity-server";
+import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
   const db = getD1();
   const account = await db
     .prepare(
-      "SELECT account_status, partner_type FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT account_status, partner_type, billing_status FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(user.uid)
     .first<Record<string, unknown>>();
@@ -58,6 +59,11 @@ export async function GET(request: Request) {
   if (account.account_status !== "active")
     return json(
       { ok: false, error: "This business account is not active." },
+      403,
+    );
+  if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
+    return json(
+      { ok: false, error: "Opportunity leads are available with paid membership or an administrator feature grant." },
       403,
     );
   await expireStaleOpportunities();
@@ -128,7 +134,7 @@ export async function PATCH(request: Request) {
   const db = getD1();
   const account = await db
     .prepare(
-      "SELECT account_status, partner_type FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT account_status, partner_type, billing_status FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(user.uid)
     .first<Record<string, unknown>>();
@@ -144,6 +150,11 @@ export async function PATCH(request: Request) {
         error:
           "Wholesalers cannot access or respond to household opportunities.",
       },
+      403,
+    );
+  if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
+    return json(
+      { ok: false, error: "Opportunity responses require paid lead access." },
       403,
     );
   await expireStaleOpportunities();
