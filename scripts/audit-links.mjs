@@ -3,12 +3,23 @@ import path from "node:path";
 
 const root = process.cwd();
 const sourceRoot = path.join(root, "src");
-const liveOrigin = process.env.SITE_URL || "https://compare.ausenergyassessments.com";
+const liveOrigin = process.env.SITE_URL || "https://aea-energy-comparison.info294029.chatgpt.site";
 const timeoutMs = 12_000;
 const resourceHintOrigins = new Set([
   "https://fonts.googleapis.com",
   "https://fonts.gstatic.com",
 ]);
+const reservedExampleHosts = new Set(["example.com", "example.net", "example.org"]);
+
+function isAuditableUrl(value) {
+  if (value.includes("${")) return false;
+  try {
+    const { hostname } = new URL(value);
+    return !reservedExampleHosts.has(hostname) && !hostname.endsWith(".example");
+  } catch {
+    return false;
+  }
+}
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -21,7 +32,7 @@ const sourceFiles = walk(sourceRoot).filter((file) => /\.(?:js|mjs|ts|tsx)$/.tes
 const literalUrls = [...new Set(sourceFiles.flatMap((file) => {
   const source = fs.readFileSync(file, "utf8");
   return [...source.matchAll(/https:\/\/[^\s"')]+/g)].map((match) => match[0].replace(/[.,;]$/, ""));
-}))].filter((url) => !resourceHintOrigins.has(url));
+}))].filter((url) => !resourceHintOrigins.has(url) && isAuditableUrl(url));
 
 const checks = [
   { label: "live electricity comparer", url: new URL("/compare", liveOrigin).href, kind: "page" },

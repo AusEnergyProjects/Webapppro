@@ -6,7 +6,7 @@ const AEA_LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAB
 
 export function BrandBar() {
   return (
-    <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer" className="brandbar">
+    <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer" className="brandbar" aria-label="Australian Energy Assessments website, opens in a new tab">
       <span className="brandmark" aria-hidden="true"><img src={AEA_LOGO_DATA_URI} alt="" width="30" height="30" decoding="async" /></span>
       <span className="brandtext">
         <strong className="brandname">Australian Energy Assessments</strong>

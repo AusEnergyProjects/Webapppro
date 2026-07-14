@@ -22,6 +22,9 @@ const plannerRoute = read("../src/app/plan/page.tsx");
 const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
+const robots = read("../src/app/robots.ts");
+const sitemap = read("../src/app/sitemap.ts");
+const manifest = read("../src/app/manifest.ts");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
 
@@ -132,6 +135,17 @@ test("social sharing metadata uses one launch-ready AEA energy card", () => {
   assert.equal(fs.existsSync(socialAsset), true);
   assert.ok(fs.statSync(socialAsset).size > 100_000);
   assert.ok(fs.statSync(socialAsset).size < 3_000_000);
+});
+
+test("public discovery metadata is complete and private operations stay excluded", () => {
+  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(layout, /themeColor: "#03192d"/);
+  assert.match(robots, /\/operations\//);
+  assert.match(robots, /\/api\//);
+  assert.match(robots, /sitemap\.xml/);
+  assert.match(sitemap, /\/direct-trade\/membership/);
+  assert.doesNotMatch(sitemap, /\/operations/);
+  assert.match(manifest, /display: "standalone"/);
 });
 
 test("static pages avoid a global client navigation bundle", () => {

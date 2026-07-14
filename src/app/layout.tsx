@@ -1,10 +1,11 @@
 /* The App Router root layout is the document-level font loading surface. */
 /* eslint-disable @next/next/no-page-custom-font */
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://aea-energy-comparison.info294029.chatgpt.site"),
+  applicationName: "Australian Energy Assessments",
   title: "Home Energy Planning | Australian Energy Assessments",
   description: "Build a private home energy roadmap, compare electricity and gas plans, understand upgrades, check support and prepare a clear scope for licensed trades.",
   openGraph: {
@@ -20,6 +21,12 @@ export const metadata: Metadata = {
     description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
     images: ["/aea-home-energy-plan-og.png"],
   },
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  colorScheme: "dark light",
+  themeColor: "#03192d",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -1,10 +1,6 @@
-import { createHmac } from "node:crypto";
-import { getStore } from "@netlify/blobs";
-
 export const LEAD_RATE_LIMIT = 5;
 export const LEAD_RATE_WINDOW_MS = 60 * 60 * 1000;
 
-const STORE_NAME = "aea-lead-rate-limit";
 const SECRET_MIN_LENGTH = 32;
 const MAX_WRITE_ATTEMPTS = 12;
 
@@ -13,8 +9,20 @@ function retryAfterSeconds(timestamps, now) {
   return Math.max(1, Math.ceil((earliest + LEAD_RATE_WINDOW_MS - now) / 1000));
 }
 
-function obscureClientKey(key, secret) {
-  return createHmac("sha256", secret).update(key).digest("hex").slice(0, 40);
+async function obscureClientKey(key, secret) {
+  const encoder = new TextEncoder();
+  const signingKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", signingKey, encoder.encode(key));
+  return [...new Uint8Array(signature)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 40);
 }
 
 function validTimestamps(value) {
@@ -43,14 +51,16 @@ export function createMemoryLeadRateLimiter({ now = Date.now } = {}) {
 export function createSharedLeadRateLimiter({
   env = process.env,
   now = Date.now,
-  getStoreImpl = getStore,
+  getDatabase,
 } = {}) {
   let memoryLimiter;
+  let sharedChecks = 0;
+  const shared = typeof getDatabase === "function" && env.NODE_ENV !== "development";
 
   return {
-    mode: env.NETLIFY === "true" ? "shared" : "memory",
+    mode: shared ? "shared" : "memory",
     async check(clientKey) {
-      if (env.NETLIFY !== "true") {
+      if (!shared) {
         memoryLimiter ||= createMemoryLeadRateLimiter({ now });
         return memoryLimiter.check(clientKey);
       }
@@ -61,17 +71,24 @@ export function createSharedLeadRateLimiter({
       }
 
       const currentTime = now();
-      const clientHash = obscureClientKey(clientKey, secret);
-      const recordKey = `v1/${clientHash}`;
 
       try {
-        const store = getStoreImpl({ name: STORE_NAME, consistency: "strong" });
+        const clientHash = await obscureClientKey(clientKey, secret);
+        const database = getDatabase();
 
         for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
-          const record = await store.getWithMetadata(recordKey, { type: "json" });
-          const timestamps = record?.data?.timestamps ?? [];
+          const record = await database.prepare(
+            "SELECT timestamps, version FROM lead_rate_limits WHERE client_hash = ?",
+          ).bind(clientHash).first();
+          let timestamps = [];
+          if (record) {
+            try {
+              timestamps = JSON.parse(record.timestamps);
+            } catch {
+              return { allowed: false, unavailable: true };
+            }
+          }
           if (!validTimestamps(timestamps)) return { allowed: false, unavailable: true };
-          if (record && typeof record.etag !== "string") return { allowed: false, unavailable: true };
 
           const recent = timestamps.filter((time) => currentTime - time < LEAD_RATE_WINDOW_MS);
           if (recent.length >= LEAD_RATE_LIMIT) {
@@ -81,12 +98,28 @@ export function createSharedLeadRateLimiter({
             };
           }
 
-          const nextRecord = { timestamps: [...recent, currentTime] };
+          const nextTimestamps = JSON.stringify([...recent, currentTime]);
           const write = record
-            ? await store.setJSON(recordKey, nextRecord, { onlyIfMatch: record.etag })
-            : await store.setJSON(recordKey, nextRecord, { onlyIfNew: true });
+            ? await database.prepare(`
+                UPDATE lead_rate_limits
+                SET timestamps = ?, version = version + 1, updated_at = ?
+                WHERE client_hash = ? AND version = ?
+              `).bind(nextTimestamps, currentTime, clientHash, record.version).run()
+            : await database.prepare(`
+                INSERT OR IGNORE INTO lead_rate_limits
+                (client_hash, timestamps, version, updated_at)
+                VALUES (?, ?, 0, ?)
+              `).bind(clientHash, nextTimestamps, currentTime).run();
 
-          if (write.modified) return { allowed: true };
+          if (write.meta?.changes === 1) {
+            sharedChecks += 1;
+            if (sharedChecks % 100 === 0) {
+              await database.prepare(
+                "DELETE FROM lead_rate_limits WHERE updated_at < ?",
+              ).bind(currentTime - (LEAD_RATE_WINDOW_MS * 2)).run().catch(() => undefined);
+            }
+            return { allowed: true };
+          }
         }
 
         return { allowed: false, unavailable: true };

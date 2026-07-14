@@ -4,6 +4,22 @@ const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalid
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
+function secureResponse(response: Response, request: Request) {
+  const headers = new Headers(response.headers);
+  headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "SAMEORIGIN");
+  if (new URL(request.url).protocol === "https:") {
+    headers.set("Strict-Transport-Security", "max-age=31536000");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function isCacheablePageRequest(request: Request) {
   if (request.method !== "GET") return false;
   const url = new URL(request.url);
@@ -21,15 +37,17 @@ function cacheableHtmlResponse(response: Response) {
 
 const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
-    if (!isCacheablePageRequest(request)) return handler.fetch(request, env, ctx);
+    if (!isCacheablePageRequest(request)) {
+      return secureResponse(await handler.fetch(request, env, ctx), request);
+    }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
     if (cache) {
       const cached = await cache.match(request).catch(() => undefined);
-      if (cached) return cached;
+      if (cached) return secureResponse(cached, request);
     }
 
-    const response = await handler.fetch(request, env, ctx);
+    const response = secureResponse(await handler.fetch(request, env, ctx), request);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));

@@ -5,11 +5,13 @@ import test from "node:test";
 
 const routePath = path.join(process.cwd(), "src/app/api/leads/route.js");
 
-test("lead route uses the shared limiter and the Netlify client address", () => {
+test("lead route uses the D1 limiter and trusted proxy client addresses", () => {
   const route = fs.readFileSync(routePath, "utf8");
 
   assert.match(route, /createSharedLeadRateLimiter/);
   assert.match(route, /await leadRateLimiter\.check/);
+  assert.match(route, /getDatabase: getD1/);
+  assert.match(route, /cf-connecting-ip/);
   assert.match(route, /x-nf-client-connection-ip/);
   assert.match(route, /"Retry-After"/);
   assert.match(route, /createOperationalRecorder\(\{ event: "api\.leads" \}\)/);

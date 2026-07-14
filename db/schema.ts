@@ -59,6 +59,15 @@ export const stripeWebhookEvents = sqliteTable("stripe_webhook_events", {
   index("stripe_webhook_events_created_idx").on(table.createdAt),
 ]);
 
+export const leadRateLimits = sqliteTable("lead_rate_limits", {
+  clientHash: text("client_hash").primaryKey(),
+  timestamps: text("timestamps").notNull().default("[]"),
+  version: integer("version").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+}, (table) => [
+  index("lead_rate_limits_updated_idx").on(table.updatedAt),
+]);
+
 export const tradeReferralCodes = sqliteTable("trade_referral_codes", {
   code: text("code").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

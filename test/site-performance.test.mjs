@@ -19,6 +19,15 @@ test("HTML shell caching is short lived and never includes API routes", () => {
   assert.match(worker, /ctx\.waitUntil\(cache\.put/);
 });
 
+test("every worker response receives baseline browser security headers", () => {
+  assert.match(worker, /X-Content-Type-Options/);
+  assert.match(worker, /X-Frame-Options/);
+  assert.match(worker, /Referrer-Policy/);
+  assert.match(worker, /Permissions-Policy/);
+  assert.match(worker, /Strict-Transport-Security/);
+  assert.match(worker, /secureResponse\(await handler\.fetch/);
+});
+
 test("gas comparison bounds slow upstream calls and reuses successful results", () => {
   assert.match(gasRoute, /UPSTREAM_TIMEOUT_MS = 10_000/);
   assert.match(gasRoute, /AbortSignal\.timeout\(UPSTREAM_TIMEOUT_MS\)/);

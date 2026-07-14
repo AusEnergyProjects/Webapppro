@@ -276,12 +276,12 @@ export function DirectTradePartnerForm() {
 
     {referralCode && <section className="trade-referral-banner" role="status"><div><span>Member referral applied</span><strong>{referralCode}</strong></div><p>Complete a new business profile with this link, then start a paid membership. After the first payment clears, you and the referring member each receive one free membership month.</p></section>}
 
-    {!authReady ? <section className="trade-auth-card" aria-live="polite"><p>Loading secure account options...</p></section> : !user ? <section className="trade-auth-card" aria-labelledby="trade-account-title">
+    {!authReady ? <section className="trade-auth-card trade-auth-loading" aria-live="polite"><span className="trade-auth-loader" aria-hidden="true" /><div><strong>Checking your secure sign-in</strong><p>Loading account options...</p></div></section> : !user ? <section className="trade-auth-card" aria-labelledby="trade-account-title">
       <div className="trade-auth-intro"><span>Step 1</span><h2 id="trade-account-title">Create your free trade account</h2><p>Use Google for the quickest setup, or create an account with your business email.</p></div>
       <div className="trade-auth-panel">
         <button className="trade-google-button" type="button" onClick={useGoogle} disabled={authBusy}><img aria-hidden="true" alt="" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />Continue with Google</button>
         <div className="trade-auth-divider"><span>or use email</span></div>
-        <div className="trade-auth-tabs" role="tablist" aria-label="Email account action"><button type="button" role="tab" aria-selected={authMode === "create"} className={authMode === "create" ? "selected" : ""} onClick={() => { setAuthMode("create"); setAuthStatus(""); }}>Create account</button><button type="button" role="tab" aria-selected={authMode === "signin"} className={authMode === "signin" ? "selected" : ""} onClick={() => { setAuthMode("signin"); setAuthStatus(""); }}>Sign in</button></div>
+        <div className="trade-auth-tabs" role="group" aria-label="Email account action"><button type="button" aria-pressed={authMode === "create"} className={authMode === "create" ? "selected" : ""} onClick={() => { setAuthMode("create"); setAuthStatus(""); }}>Create account</button><button type="button" aria-pressed={authMode === "signin"} className={authMode === "signin" ? "selected" : ""} onClick={() => { setAuthMode("signin"); setAuthStatus(""); }}>Sign in</button></div>
         <form className="trade-email-form" onSubmit={useEmail} noValidate>
           {authMode === "create" && <Field label="Your name"><input type="text" value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" /></Field>}
           <Field label="Business email"><input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" /></Field>

@@ -3,11 +3,12 @@ import { createLeadEnvelope } from "@/lib/lead-envelope.mjs";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 import { createOpportunityFromLead } from "@/lib/opportunity-server";
+import { getD1 } from "../../../../db";
 
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 64 * 1024;
-const leadRateLimiter = createSharedLeadRateLimiter();
+const leadRateLimiter = createSharedLeadRateLimiter({ getDatabase: getD1 });
 
 function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
@@ -17,9 +18,10 @@ function json(body, status = 200, extraHeaders = {}) {
 }
 
 function clientKey(request) {
+  const cloudflareIp = request.headers.get("cf-connecting-ip")?.trim();
   const netlifyIp = request.headers.get("x-nf-client-connection-ip")?.trim();
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return netlifyIp || forwarded || request.headers.get("x-real-ip") || "local";
+  return cloudflareIp || netlifyIp || forwarded || request.headers.get("x-real-ip") || "local";
 }
 
 function safeMagicLink(value, requestUrl) {
