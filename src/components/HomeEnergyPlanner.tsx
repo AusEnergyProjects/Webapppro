@@ -15,6 +15,13 @@ export function HomeEnergyPlanner() {
     setFeatures((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
 
+  function resetPlan() {
+    setGoal("lower-bills");
+    setPace("staged");
+    setSituation("owner");
+    setFeatures([]);
+  }
+
   return <main className="wrap planner-page">
     <SiteHeader active="plan" />
     <header className="planner-hero"><div><span>Your home energy roadmap</span><h1>Work out what to do first</h1><p>Choose the decision, property situation and equipment that apply. The roadmap updates on this device and directs you to the right comparison, guide, assessment or project brief.</p></div><aside><strong>Private by design</strong><p>No account, address, bill, meter identifier or contact details are needed. These choices are not sent anywhere.</p></aside></header>
@@ -27,7 +34,7 @@ export function HomeEnergyPlanner() {
         <fieldset><legend><span>4</span>How do you want to proceed?</legend><div className="planner-choice-grid planner-choice-grid-compact">{homeEnergyPlanOptions.paces.map(([value, label]) => <label className={pace === value ? "selected" : ""} key={value}><input type="radio" name="planner-pace" checked={pace === value} onChange={() => setPace(value)} /><span>{label}</span></label>)}</div></fieldset>
       </form>
 
-      <section className="planner-results" aria-live="polite" aria-labelledby="planner-results-title"><div className="planner-results-heading"><span>Your ordered roadmap</span><h2 id="planner-results-title">{plan.title}</h2><p>{plan.summary}</p></div><ol>{plan.items.map((item, index) => <li key={item.id}><span className="planner-order">{String(index + 1).padStart(2, "0")}</span><div><small>{item.stage}</small><h3>{item.title}</h3><p>{item.text}</p><a href={item.href}>{item.action}</a></div></li>)}</ol><div className="planner-boundary"><strong>Before committing</strong><p>Replace indicative assumptions with current written quotes, confirm official incentives and approvals, and use licensed professionals for regulated work.</p></div></section>
+      <section className="planner-results" aria-live="polite" aria-labelledby="planner-results-title"><div className="planner-results-heading"><span>Your ordered roadmap</span><h2 id="planner-results-title">{plan.title}</h2><p>{plan.summary}</p></div><div className="planner-result-actions"><button type="button" onClick={() => window.print()}>Print or save roadmap</button><button type="button" className="planner-reset" onClick={resetPlan}>Start over</button></div><ol>{plan.items.map((item, index) => <li key={item.id}><span className="planner-order">{String(index + 1).padStart(2, "0")}</span><div><small>{item.stage}</small><h3>{item.title}</h3><p>{item.text}</p><a href={item.href}>{item.action}</a></div></li>)}</ol><div className="planner-boundary"><strong>Before committing</strong><p>Replace indicative assumptions with current written quotes, confirm official incentives and approvals, and use licensed professionals for regulated work.</p></div></section>
     </section>
     <SiteFooter>This roadmap is general guidance, not a site assessment, quote, eligibility decision or guarantee of savings. Confirm the property, products, approvals and complete installed scope before committing.</SiteFooter>
   </main>;
