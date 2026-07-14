@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
+import { parseDirectTradeHandoff } from "@/lib/direct-trade-handoff.mjs";
 
 const NOTICE_VERSION = "2026-07-14";
 const services = [
@@ -54,11 +55,23 @@ export function DirectTradeProjectBrief() {
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("");
   const [statusType, setStatusType] = useState<"" | "ok" | "err">("");
+  const [handoff, setHandoff] = useState({ source: "", sourceLabel: "", returnHref: "" });
   const inferredState = postcode.length === 4 ? residentialStateFromPostcode(postcode) : null;
   const locationMismatch = Boolean(inferredState && state && !postcodeMatchesState(postcode, state));
 
   useEffect(() => {
     startedAt.current = Date.now();
+    const restored = parseDirectTradeHandoff(window.location.search);
+    /* Safe handoff values initialize controlled fields after hydration. */
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (restored.services.length) setSelectedServices(restored.services);
+    if (restored.priorities.length) setProjectPriorities(restored.priorities);
+    if (restored.postcode) {
+      setPostcode(restored.postcode);
+      setState(residentialStateFromPostcode(restored.postcode) || "");
+    }
+    if (restored.source) setHandoff({ source: restored.source, sourceLabel: restored.sourceLabel, returnHref: restored.returnHref });
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   function toggleService(value: string) {
@@ -110,6 +123,7 @@ export function DirectTradeProjectBrief() {
           timeframe,
           preferredContact,
           projectNotes,
+          projectSource: handoff.source,
           consent: {
             accepted: true,
             purpose: "Respond to this Direct Trade household project brief",
@@ -135,6 +149,7 @@ export function DirectTradeProjectBrief() {
     <header className="direct-trade-request-hero"><div><span>Direct Trade Services</span><h1>Tell us what your home needs</h1><p>Create a short project brief for Australian Energy Assessments to review before connecting you with a suitable licensed trade. This is not a quote and does not guarantee that a trade is available in every location.</p><a className="direct-trade-hero-link" href="/direct-trade/standards">See how matching, verification and quotes work</a></div><aside><strong>Keep the first brief simple</strong><p>Do not include your street address, NMI, meter file, energy bill, payment details or identity documents. We only need enough information to understand the type and location of the work.</p></aside></header>
 
     <form className="direct-trade-brief" onSubmit={submit} noValidate>
+      {handoff.source && <section className="direct-trade-handoff" aria-label="Comparison handoff"><div><span>Started from your {handoff.sourceLabel}</span><strong>Service choices and postcode were carried into this brief</strong><p>Your usage, meter file, NMI, bill dates, plan results, scenario costs, savings, contact details and adjustment reasons were not placed in this URL. Review the selections below and describe only what a trade needs to understand.</p></div><a href={handoff.returnHref}>Return to the comparison</a></section>}
       <section className="direct-trade-form-section" aria-labelledby="trade-service-title"><div className="direct-trade-form-heading"><span>Step 1</span><h2 id="trade-service-title">What help are you looking for?</h2><p>Select every service that may be relevant. The assessment can refine the scope before a quote is requested.</p></div><div className="direct-trade-service-grid">{services.map(([value, title, description]) => <label className={selectedServices.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={selectedServices.includes(value)} onChange={() => toggleService(value)} /><span><strong>{title}</strong><small>{description}</small></span></label>)}</div></section>
 
       <section className="direct-trade-form-section" aria-labelledby="trade-project-title"><div className="direct-trade-form-heading"><span>Step 2</span><h2 id="trade-project-title">Describe the project</h2><p>Location, priorities and timing help us identify the right capability, licence, service area and scheme requirements.</p></div><div className="direct-trade-field-grid"><Field label="Postcode"><input type="text" inputMode="numeric" maxLength={4} value={postcode} onChange={(event) => { const nextPostcode = event.target.value.replace(/\D/g, "").slice(0, 4); setPostcode(nextPostcode); const nextState = residentialStateFromPostcode(nextPostcode); if (nextState && !state) setState(nextState); }} placeholder="3000" /></Field><Field label="State or territory"><select value={canonicalAustralianState(state) || ""} onChange={(event) => setState(event.target.value)}><option value="">Choose one</option><option value="ACT">ACT</option><option value="NSW">NSW</option><option value="NT">NT</option><option value="QLD">Qld</option><option value="SA">SA</option><option value="TAS">Tas</option><option value="VIC">Vic</option><option value="WA">WA</option></select></Field><Field label="Property type"><select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}><option value="">Choose one</option><option value="house">House</option><option value="townhouse-unit">Townhouse or unit</option><option value="apartment">Apartment</option><option value="small-business">Small business</option><option value="other">Other</option></select></Field><Field label="Project stage"><select value={projectStage} onChange={(event) => setProjectStage(event.target.value)}><option value="">Choose one</option><option value="researching">Researching options</option><option value="assessment-ready">Ready for an assessment</option><option value="seeking-quotes">Ready to seek quotes</option><option value="replacement-urgent">Failed equipment needs replacement</option></select></Field><Field label="Preferred timing"><select value={timeframe} onChange={(event) => setTimeframe(event.target.value)}><option value="">Choose one</option><option value="urgent">As soon as practical</option><option value="one-three-months">Within 1 to 3 months</option><option value="three-six-months">Within 3 to 6 months</option><option value="later">More than 6 months away</option></select></Field></div>{postcode.length === 4 && <p className={`direct-trade-location-check ${locationMismatch ? "mismatch" : "matched"}`} role="status">{locationMismatch ? `Postcode ${postcode} is usually in ${australianStateLabel(inferredState)}. Check the postcode or state.` : inferredState ? `Location check: ${postcode} matches ${australianStateLabel(inferredState)}.` : "Check that this is the postcode for the property."}</p>}<div className="direct-trade-qualifier-grid"><Field label="Your role for this property"><select value={propertyRelationship} onChange={(event) => setPropertyRelationship(event.target.value)}><option value="">Choose one</option>{propertyRelationships.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><fieldset className="direct-trade-priorities"><legend>What matters most?</legend><p>Choose every priority that should guide the assessment or trade match.</p><div>{priorities.map(([value, label]) => <label className={projectPriorities.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={projectPriorities.includes(value)} onChange={() => togglePriority(value)} /><span>{label}</span></label>)}</div></fieldset></div><Field label="Project notes" optional="optional" hint="Maximum 800 characters. Do not include account numbers, meter identifiers, detailed bills or identity documents."><textarea maxLength={800} rows={5} value={projectNotes} onChange={(event) => setProjectNotes(event.target.value)} placeholder="For example: replacing ducted gas heating, interested in room-by-room electric options, double-storey home." /></Field></section>

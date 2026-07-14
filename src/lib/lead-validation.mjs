@@ -8,6 +8,7 @@ const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quot
 const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
 const PROPERTY_RELATIONSHIPS = new Set(["owner-occupier", "landlord-manager", "authorised-tenant", "organisation-representative", "planning-only"]);
 const PROJECT_PRIORITIES = new Set(["lower-running-costs", "improve-comfort", "replace-equipment", "move-from-gas", "solar-storage", "assessment-compliance", "need-advice"]);
+const PROJECT_SOURCES = new Set(["electricity-solar", "electricity-battery", "gas-heating", "gas-hot-water"]);
 const CONTACT_METHODS = new Set(["email", "phone", "either"]);
 const PARTNER_TYPES = new Set(["installer", "supplier"]);
 const ELECTRICITY_ENQUIRIES = new Set(["electricity-solar", "electricity-solar-battery", "electricity-battery", "solar", "solar-battery", "battery"]);
@@ -97,6 +98,7 @@ export function validateLeadPayload(raw) {
   const timeframe = cleanEnum(raw.timeframe, PROJECT_TIMEFRAMES);
   const propertyRelationship = cleanEnum(raw.propertyRelationship, PROPERTY_RELATIONSHIPS);
   const projectPriorities = cleanStringArray(raw.projectPriorities, PROJECT_PRIORITIES, 7);
+  const projectSource = cleanEnum(raw.projectSource, PROJECT_SOURCES);
   const preferredContact = cleanEnum(raw.preferredContact, CONTACT_METHODS);
   const partnerType = cleanEnum(raw.partnerType, PARTNER_TYPES);
   const serviceStates = cleanStringArray(raw.serviceStates, DIRECT_TRADE_STATES);
@@ -153,6 +155,7 @@ export function validateLeadPayload(raw) {
       propertyType,
       propertyRelationship,
       projectPriorities,
+      projectSource,
       projectStage,
       timeframe,
       preferredContact,

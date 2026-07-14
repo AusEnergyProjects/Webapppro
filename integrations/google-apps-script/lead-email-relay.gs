@@ -149,6 +149,7 @@ function enquiryDetails_(payload) {
     propertyType: payload.propertyType || "",
     propertyRelationship: payload.propertyRelationship || "",
     projectPriorities: payload.projectPriorities || [],
+    projectSource: payload.projectSource || "",
     projectStage: payload.projectStage || "",
     timeframe: payload.timeframe || "",
     preferredContact: payload.preferredContact || "",
@@ -423,6 +424,7 @@ function projectRows_(payload) {
     ["Project stage", stageLabel_(payload.projectStage)],
     ["Preferred timing", timeframeLabel_(payload.timeframe)],
     ["Priorities", listLabels_(payload.projectPriorities, priorityLabel_)],
+    ["Journey source", projectSourceLabel_(payload.projectSource)],
     ["Preferred contact", contactLabel_(payload.preferredContact)],
     ["Triage status", triageStatusLabel_(triage.status)],
     ["Review priority", triagePriorityLabel_(triage.priority)],
@@ -620,6 +622,11 @@ function relationshipLabel_(value) {
 
 function priorityLabel_(value) {
   const labels = { "lower-running-costs": "Lower running costs", "improve-comfort": "Improve comfort", "replace-equipment": "Replace ageing or failed equipment", "move-from-gas": "Move away from gas", "solar-storage": "Add solar, storage or backup", "assessment-compliance": "Assessment or compliance evidence", "need-advice": "Not sure yet, need advice" };
+  return labels[value] || value;
+}
+
+function projectSourceLabel_(value) {
+  const labels = { "electricity-solar": "Electricity solar scenario", "electricity-battery": "Electricity battery scenario", "gas-heating": "Gas heating upgrade estimate", "gas-hot-water": "Gas hot-water upgrade estimate" };
   return labels[value] || value;
 }
 

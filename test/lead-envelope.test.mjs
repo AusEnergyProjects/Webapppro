@@ -21,7 +21,7 @@ test("lead envelopes add one reference and infer state without adding contact da
   const envelope = createLeadEnvelope({ ...base, enquiry: "gas-hot-water", email: "person@example.com", phone: "0400000000" }, {
     createId: () => "12345678-abcd-4000-8000-123456789abc",
   });
-  assert.equal(envelope.schemaVersion, "4");
+  assert.equal(envelope.schemaVersion, "5");
   assert.equal(envelope.eventType, "gas.upgrade");
   assert.equal(envelope.reference, "AEA-20260714-12345678AB");
   assert.equal(envelope.state, "VIC");

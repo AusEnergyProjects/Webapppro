@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { UpgradeEnquiryModal } from "./UpgradeEnquiryModal";
+import { createDirectTradeHandoffUrl } from "@/lib/direct-trade-handoff.mjs";
 
 type ApplianceOption = { value: string; label: string };
 
@@ -261,8 +262,8 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, onUsageProfileChan
       {(estimate.hasHeating || estimate.hasHotWater) && <div className="gas-savings" onClick={(event) => { const target = event.target as HTMLElement; const cta = target.closest(".saving-cta"); if (cta) { event.preventDefault(); setEnquiryTitle(cta.textContent?.trim() || "upgrade"); } }}>
         <h3>What could getting off gas save?</h3>
         <div className="savings-grid">
-          {estimate.hasHeating && <SavingCard title="Gas heating to reverse cycle" current={estimate.heatingCurrent} after={estimate.heatingAfter} saving={estimate.heatingSaving} install={heatingInstall} setInstall={setHeatingInstall} payback={estimate.heatingPayback} action="Enquire about reverse cycle heating" />}
-          {estimate.hasHotWater && <SavingCard title="Gas hot water to heat pump" current={estimate.hotWaterCurrent} after={estimate.hotWaterAfter} saving={estimate.hotWaterSaving} install={hotWaterInstall} setInstall={setHotWaterInstall} payback={estimate.hotWaterPayback} action="Enquire about heat pump hot water" />}
+          {estimate.hasHeating && <SavingCard title="Gas heating to reverse cycle" current={estimate.heatingCurrent} after={estimate.heatingAfter} saving={estimate.heatingSaving} install={heatingInstall} setInstall={setHeatingInstall} payback={estimate.heatingPayback} action="Enquire about reverse cycle heating" directTradeHref={createDirectTradeHandoffUrl({ source: "gas-heating", services: ["assessment", "heating-cooling"], priorities: ["lower-running-costs", "improve-comfort", "move-from-gas"], postcode })} />}
+          {estimate.hasHotWater && <SavingCard title="Gas hot water to heat pump" current={estimate.hotWaterCurrent} after={estimate.hotWaterAfter} saving={estimate.hotWaterSaving} install={hotWaterInstall} setInstall={setHotWaterInstall} payback={estimate.hotWaterPayback} action="Enquire about heat pump hot water" directTradeHref={createDirectTradeHandoffUrl({ source: "gas-hot-water", services: ["assessment", "hot-water"], priorities: ["lower-running-costs", "replace-equipment", "move-from-gas"], postcode })} />}
         </div>
         <p className="savings-note"><b>Modelled electrification saving:</b> about {dollars(estimate.fullElectricSaving)}/yr{gasSpa ? ". Pool or spa replacement energy and the gas supply charge are not included because the remaining gas appliance would keep the connection active." : ", including roughly $310/yr from disconnecting gas and dropping the daily supply charge once every gas appliance is removed."}</p>
         <details className="savings-explain"><summary>How we estimate these savings</summary><div>
@@ -278,6 +279,6 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, onUsageProfileChan
   );
 }
 
-function SavingCard({ title, current, after, saving, install, setInstall, payback: paybackValue, action }: { title: string; current: number; after: number; saving: number; install: string; setInstall: (value: string) => void; payback: number; action: string }) {
-  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(current)}/yr <span>→</span> {dollars(after)}/yr</div><p>estimated running cost for this use, now vs after switching</p><div className="saving-row"><span>Annual saving</span><b>{dollars(saving)}/yr</b></div><div className="saving-row"><span>Payback</span><b>{payback(paybackValue)}</b></div><label className="saving-install">Install, after rebates ($)<input type="number" min="0" value={install} onChange={(event) => setInstall(event.target.value)} /></label><button className="saving-cta" type="button">{action}</button></article>;
+function SavingCard({ title, current, after, saving, install, setInstall, payback: paybackValue, action, directTradeHref }: { title: string; current: number; after: number; saving: number; install: string; setInstall: (value: string) => void; payback: number; action: string; directTradeHref: string }) {
+  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(current)}/yr <span>→</span> {dollars(after)}/yr</div><p>estimated running cost for this use, now vs after switching</p><div className="saving-row"><span>Annual saving</span><b>{dollars(saving)}/yr</b></div><div className="saving-row"><span>Payback</span><b>{payback(paybackValue)}</b></div><label className="saving-install">Install, after rebates ($)<input type="number" min="0" value={install} onChange={(event) => setInstall(event.target.value)} /></label><button className="saving-cta" type="button">{action}</button><a className="saving-direct-trade" href={directTradeHref}>Start a Direct Trade project brief</a></article>;
 }

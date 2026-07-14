@@ -69,3 +69,9 @@ test("project briefs capture structured matching priorities and show a review su
   assert.match(leadValidation, /PROPERTY_RELATIONSHIPS/);
   assert.match(leadValidation, /PROJECT_PRIORITIES/);
 });
+
+test("comparison handoffs prefill only safe project choices", () => {
+  assert.match(brief, /parseDirectTradeHandoff/);
+  assert.match(brief, /Your usage, meter file, NMI, bill dates, plan results, scenario costs, savings, contact details and adjustment reasons were not placed in this URL/);
+  assert.match(brief, /projectSource: handoff\.source/);
+});

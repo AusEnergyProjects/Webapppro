@@ -51,7 +51,7 @@ export function createLeadEnvelope(payload, options = {}) {
 
   return {
     ...payload,
-    schemaVersion: "4",
+    schemaVersion: "5",
     eventType,
     reference,
     submittedAt,

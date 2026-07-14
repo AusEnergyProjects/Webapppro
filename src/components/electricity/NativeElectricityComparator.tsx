@@ -19,6 +19,7 @@ import {
 } from "@/lib/electricity/energy-flow";
 import { allocateNem12Registers, parseNem12, scaleNem12AnnualAllocation } from "@/lib/electricity/nem12";
 import type { HalfHourlyGrid, Nem12Success, RegisterRole } from "@/lib/electricity/nem12-types";
+import { createDirectTradeHandoffUrl } from "@/lib/direct-trade-handoff.mjs";
 import {
   DISTRIBUTOR_INFO,
   cleanNmi,
@@ -750,6 +751,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           <div><b>{scenario.best.name}</b><span> best scenario plan, {scenario.best.brand}</span></div>
           <button type="button" className="audit-button" onClick={(event) => { auditReturnRef.current = event.currentTarget; setAuditPlan(scenario.best); }}>Open scenario calculation audit</button>
           <button type="button" className="btn native-enquiry-button" onClick={() => setEnquiryScenario(scenario)}>Enquire about this option</button>
+          <a className="native-direct-trade-link" href={createDirectTradeHandoffUrl({ source: scenario.label === "Solar only" ? "electricity-solar" : "electricity-battery", services: scenario.label === "Solar only" ? ["assessment", "solar"] : scenario.label === "Solar + battery" ? ["assessment", "solar", "battery"] : ["assessment", "battery"], priorities: ["lower-running-costs", "solar-storage"], postcode })}>Build a Direct Trade project brief</a>
         </article>)}</div>
         <div className="native-scenario-caveat"><b>Indicative scenario, not an installation recommendation.</b> The simple payback holds first-year usage, tariffs and savings constant. It excludes finance costs, maintenance, insurance, component replacement, degradation, warranty limits, VPP income or control, backup reserve and future tariff changes. The energy model does not inspect roof area, orientation, tilt, shading, inverter limits, network export limits, curtailment, switchboard work, battery location or product compatibility. Confirm annual generation, usable and nominal battery capacity, federal and state incentive eligibility, connection approval and the complete installed price through a site assessment and written quotes. For an independent roof-specific cross-check, use the <a href="https://www.sunspot.org.au/" target="_blank" rel="noreferrer">government-supported SunSPOT calculator</a> and the <a href="https://www.energy.gov.au/solar/solar-retailers-and-installation/choose-your-solar-retailer-and-installer" target="_blank" rel="noreferrer">Australian Government quote checklist</a>.</div>
       </div>}
