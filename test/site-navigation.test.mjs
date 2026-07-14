@@ -57,13 +57,13 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("direct trade proposition presents the trade network and subscription as live", () => {
+test("direct trade proposition presents the trade network and subscription model honestly", () => {
   assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
   assert.match(guide, /through an active trade network/i);
-  assert.match(guide, /Participating installers fund the service through a current subscription/);
-  assert.match(guide, /not a margin added to household equipment/);
-  assert.doesNotMatch(guide, /planned revenue model|installer subscriptions and applications are in development|Future Direct Trade members/);
+  assert.match(guide, /Paid membership will support the service/);
+  assert.match(guide, /without adding a margin to household equipment, selling individual leads or auctioning placement/);
+  assert.doesNotMatch(guide, /Participating installers fund the service through a current subscription/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 

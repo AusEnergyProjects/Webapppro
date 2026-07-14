@@ -1,9 +1,13 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
   email: text("email").notNull(),
   businessName: text("business_name").notNull(),
+  addressLine1: text("address_line_1").notNull().default(""),
+  suburb: text("suburb").notNull().default(""),
+  addressState: text("address_state").notNull().default(""),
+  postcode: text("postcode").notNull().default(""),
   contactName: text("contact_name").notNull(),
   phone: text("phone").notNull().default(""),
   partnerType: text("partner_type").notNull().default("installer"),
@@ -13,8 +17,8 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   summary: text("summary").notNull().default(""),
   accountStatus: text("account_status").notNull().default("active"),
   verificationStatus: text("verification_status").notNull().default("not_started"),
-  planKey: text("plan_key").notNull().default("try_one_lead"),
-  freeLeadsRemaining: integer("free_leads_remaining").notNull().default(1),
+  planKey: text("plan_key").notNull().default("unselected"),
+  billingStatus: text("billing_status").notNull().default("not_connected"),
   consentVersion: text("consent_version").notNull(),
   consentAt: text("consent_at").notNull(),
   createdAt: text("created_at").notNull(),

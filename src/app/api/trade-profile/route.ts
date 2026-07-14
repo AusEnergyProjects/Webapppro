@@ -18,6 +18,10 @@ const CAPABILITIES = new Set([
 
 type ProfilePayload = {
   businessName?: unknown;
+  addressLine1?: unknown;
+  suburb?: unknown;
+  addressState?: unknown;
+  postcode?: unknown;
   contactName?: unknown;
   phone?: unknown;
   partnerType?: unknown;
@@ -61,9 +65,10 @@ export async function GET(request: Request) {
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
 
   const record = await getD1().prepare(`
-    SELECT business_name, contact_name, phone, partner_type, business_website,
+    SELECT business_name, address_line_1, suburb, address_state, postcode,
+           contact_name, phone, partner_type, business_website,
            service_states, capabilities, summary, account_status,
-           verification_status, plan_key, free_leads_remaining
+           verification_status, plan_key, billing_status
     FROM trade_accounts
     WHERE firebase_uid = ?
   `).bind(identity.uid).first<Record<string, unknown>>();
@@ -73,6 +78,10 @@ export async function GET(request: Request) {
     ok: true,
     profile: {
       businessName: record.business_name,
+      addressLine1: record.address_line_1,
+      suburb: record.suburb,
+      addressState: record.address_state,
+      postcode: record.postcode,
       contactName: record.contact_name,
       phone: record.phone,
       partnerType: record.partner_type,
@@ -83,7 +92,7 @@ export async function GET(request: Request) {
       accountStatus: record.account_status,
       verificationStatus: record.verification_status,
       planKey: record.plan_key,
-      freeLeadsRemaining: record.free_leads_remaining,
+      billingStatus: record.billing_status,
     },
   });
 }
@@ -101,6 +110,10 @@ export async function POST(request: Request) {
   }
 
   const businessName = cleanText(raw.businessName, 160);
+  const addressLine1 = cleanText(raw.addressLine1, 180);
+  const suburb = cleanText(raw.suburb, 100);
+  const addressState = cleanText(raw.addressState, 12);
+  const postcode = cleanText(raw.postcode, 4);
   const contactName = cleanText(raw.contactName, 120);
   const phone = cleanText(raw.phone, 40);
   const partnerType = raw.partnerType === "supplier" ? "supplier" : "installer";
@@ -111,6 +124,10 @@ export async function POST(request: Request) {
   const consent = raw.consent === true;
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
+  if (!addressLine1) return json({ ok: false, error: "Enter the business street address." }, 400);
+  if (!suburb) return json({ ok: false, error: "Enter the business suburb or locality." }, 400);
+  if (!STATES.has(addressState)) return json({ ok: false, error: "Choose the business state or territory." }, 400);
+  if (!/^\d{4}$/.test(postcode)) return json({ ok: false, error: "Enter a four digit business postcode." }, 400);
   if (!contactName) return json({ ok: false, error: "Enter the contact name." }, 400);
   if (!serviceStates.length) return json({ ok: false, error: "Choose at least one service area." }, 400);
   if (!capabilities.length) return json({ ok: false, error: "Choose at least one capability." }, 400);
@@ -119,14 +136,19 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   await getD1().prepare(`
     INSERT INTO trade_accounts (
-      firebase_uid, email, business_name, contact_name, phone, partner_type,
+      firebase_uid, email, business_name, address_line_1, suburb, address_state,
+      postcode, contact_name, phone, partner_type,
       business_website, service_states, capabilities, summary, account_status,
-      verification_status, plan_key, free_leads_remaining, consent_version,
+      verification_status, plan_key, billing_status, consent_version,
       consent_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'try_one_lead', 1, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, ?, ?)
     ON CONFLICT(firebase_uid) DO UPDATE SET
       email = excluded.email,
       business_name = excluded.business_name,
+      address_line_1 = excluded.address_line_1,
+      suburb = excluded.suburb,
+      address_state = excluded.address_state,
+      postcode = excluded.postcode,
       contact_name = excluded.contact_name,
       phone = excluded.phone,
       partner_type = excluded.partner_type,
@@ -141,6 +163,10 @@ export async function POST(request: Request) {
     identity.uid,
     identity.email,
     businessName,
+    addressLine1,
+    suburb,
+    addressState,
+    postcode,
     contactName,
     phone,
     partnerType,
@@ -161,8 +187,8 @@ export async function POST(request: Request) {
       emailVerified: identity.emailVerified,
       accountStatus: "active",
       verificationStatus: "not_started",
-      planKey: "try_one_lead",
-      freeLeadsRemaining: 1,
+      planKey: "unselected",
+      billingStatus: "not_connected",
     },
   });
 }

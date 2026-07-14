@@ -22,7 +22,7 @@ test("standards separate membership from licensing and scheme approval", () => {
 
 test("matching and funding rules do not permit paid ranking claims", () => {
   assert.match(standards, /subscription does not buy higher placement, exclusivity or a guaranteed volume of opportunities/);
-  assert.match(standards, /does not purchase a favourable ranking/);
+  assert.match(standards, /will not replace verification, purchase a favourable ranking or create a separate charge for each opportunity/);
   assert.match(standards, /Location, work type, verified capability, service coverage and availability guide a connection/);
 });
 

@@ -9,12 +9,15 @@ const homepage = read("../src/components/GettingStarted.tsx");
 const route = read("../src/app/api/leads/route.js");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
 const firebaseClient = read("../src/lib/firebase-client.ts");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const dashboardPage = read("../src/app/direct-trade/dashboard/page.tsx");
 
 test("the homepage connects installers and suppliers to a participation route", () => {
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
-  assert.match(form, /Create a free account/);
-  assert.match(form, /one included matched lead/i);
+  assert.match(form, /Create your free trade account/);
+  assert.match(form, /No per-lead fees/i);
+  assert.doesNotMatch(form, /free lead|included lead|paid lead/i);
   assert.match(page, /DirectTradePartnerForm/);
 });
 
@@ -29,8 +32,30 @@ test("trade accounts use Firebase identity and protected same-origin profile sto
   assert.match(form, /partnerType/);
   assert.match(form, /serviceStates/);
   assert.match(form, /capabilities/);
+  assert.match(form, /addressLine1/);
+  assert.match(form, /addressState/);
+  assert.match(form, /postcode/);
   assert.match(form, /consent: true/);
+  assert.match(profileRoute, /Enter the business street address/);
+  assert.match(profileRoute, /Enter a four digit business postcode/);
+  assert.match(profileRoute, /billingStatus: "not_connected"/);
+  assert.doesNotMatch(profileRoute, /free_leads_remaining|try_one_lead/);
   assert.doesNotMatch(form, /script\.google\.com|no-cors/);
+});
+
+test("Google sign in uses the official identity mark rather than a simulated badge", () => {
+  assert.match(form, /www\.gstatic\.com\/firebasejs\/ui\/2\.0\.0\/images\/auth\/google\.svg/);
+  assert.doesNotMatch(form, /aria-hidden="true">G<\/span>/);
+});
+
+test("the starter dashboard separates membership from opportunity matching", () => {
+  assert.match(dashboardPage, /DirectTradeDashboard/);
+  assert.match(dashboard, /No opportunities assigned/);
+  assert.match(dashboard, /No per-lead purchase or bidding is required/);
+  assert.match(dashboard, /Stripe billing is not connected yet/);
+  assert.match(dashboard, /including GST/);
+  assert.match(dashboard, /both businesses receive one month of membership credit/);
+  assert.match(dashboard, /partnerType === "supplier"/);
 });
 
 test("partner form avoids collecting sensitive verification documents", () => {
@@ -38,13 +63,16 @@ test("partner form avoids collecting sensitive verification documents", () => {
   assert.match(form, /does not replace licensing, accreditation, insurance or scheme requirements/);
 });
 
-test("partner form uses visible shared controls and explicit input types", () => {
+test("partner form uses visible shared controls and required address fields", () => {
   const css = read("../src/app/globals.css");
-  assert.match(form, /Business name"><input type="text"/);
+  assert.match(form, /Business name"><input required type="text"/);
   assert.match(form, /Business website" optional="optional"><input type="url"/);
+  assert.match(form, /Business street address"><input required type="text"/);
+  assert.match(form, /State or territory"><select required/);
   assert.match(form, /Contact name"><input type="text"/);
   assert.match(css, /--color-aea-line-strong: #a9c9bd/);
   assert.match(css, /\.direct-trade-form-section \.field-control > input/);
+  assert.match(css, /\.direct-trade-form-section \.field-control > select/);
   assert.match(css, /\.partner-type-grid label:focus-within/);
 });
 
@@ -53,6 +81,6 @@ test("unconfigured enquiry copy is suitable for any hosted environment", () => {
   assert.match(route, /temporarily unavailable\. Please call 1300 241 149/);
 });
 
-test("new Direct Trade participation copy contains no prohibited dash characters", () => {
-  assert.doesNotMatch(page + form, /[—–]/);
+test("new Direct Trade account and dashboard copy contains no prohibited dash characters", () => {
+  assert.doesNotMatch(page + form + dashboard + dashboardPage, /[\u2013\u2014]/);
 });
