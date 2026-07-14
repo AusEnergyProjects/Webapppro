@@ -11,6 +11,7 @@ export type FeatureKey =
   | "installer_marketplace"
   | "supplier_visibility"
   | "supplier_bulk_import"
+  | "business_operations"
   | "advanced_analytics"
   | "featured_placement"
   | "team_access"
@@ -59,6 +60,13 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     label: "Bulk catalogue tools",
     description: "Import and maintain larger product catalogues using CSV workflows.",
     roles: ["supplier"],
+    tier: "membership",
+  },
+  {
+    key: "business_operations",
+    label: "Expanded Business Hub",
+    description: "Expand privacy-safe work management beyond the free five-record allowance and convert eligible platform work into operations records.",
+    roles: ["installer", "supplier"],
     tier: "membership",
   },
   {

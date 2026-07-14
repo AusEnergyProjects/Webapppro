@@ -257,6 +257,59 @@ export const tradeAccountFeatureGrants = sqliteTable("trade_account_feature_gran
   index("trade_account_feature_grants_owner_idx").on(table.firebaseUid, table.status, table.expiresAt),
 ]);
 
+export const tradeWorkOrders = sqliteTable("trade_work_orders", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  partnerType: text("partner_type").notNull(),
+  workType: text("work_type").notNull().default("job"),
+  sourceType: text("source_type").notNull().default("internal"),
+  sourceReference: text("source_reference").notNull().default(""),
+  workNumber: text("work_number").notNull(),
+  title: text("title").notNull(),
+  serviceCategory: text("service_category").notNull().default("other"),
+  siteArea: text("site_area").notNull().default(""),
+  stage: text("stage").notNull().default("backlog"),
+  priority: text("priority").notNull().default("standard"),
+  scheduledStart: text("scheduled_start").notNull().default(""),
+  scheduledEnd: text("scheduled_end").notNull().default(""),
+  assigneeLabel: text("assignee_label").notNull().default(""),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_work_orders_owner_number_idx").on(table.firebaseUid, table.workNumber),
+  index("trade_work_orders_owner_stage_idx").on(table.firebaseUid, table.recordStatus, table.stage, table.updatedAt),
+  index("trade_work_orders_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
+]);
+
+export const tradeWorkOrderTasks = sqliteTable("trade_work_order_tasks", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  title: text("title").notNull(),
+  dueAt: text("due_at").notNull().default(""),
+  status: text("status").notNull().default("pending"),
+  completedAt: text("completed_at").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_work_order_tasks_owner_idx").on(table.firebaseUid, table.status, table.dueAt),
+  index("trade_work_order_tasks_order_idx").on(table.workOrderId, table.sortOrder, table.createdAt),
+]);
+
+export const tradeWorkOrderEvents = sqliteTable("trade_work_order_events", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_work_order_events_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("trade_work_order_events_order_idx").on(table.workOrderId, table.createdAt),
+]);
+
 export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

@@ -19,10 +19,12 @@ test("free, paid and administrator-granted access resolve independently", () => 
   const freeInstaller = resolveEntitlements("installer", "not_connected");
   assert.equal(freeInstaller.features.installer_leads, false);
   assert.equal(freeInstaller.features.installer_marketplace, false);
+  assert.equal(freeInstaller.features.business_operations, false);
 
   const paidInstaller = resolveEntitlements("installer", "active");
   assert.equal(paidInstaller.features.installer_leads, true);
   assert.equal(paidInstaller.features.installer_marketplace, true);
+  assert.equal(paidInstaller.features.business_operations, true);
   assert.equal(paidInstaller.features.advanced_analytics, false);
 
   const grantedInstaller = resolveEntitlements("installer", "not_connected", [

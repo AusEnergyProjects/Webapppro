@@ -7,6 +7,7 @@ import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
 import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
+import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -129,6 +130,7 @@ const freeAccountFeatures = [
   "Create and edit the complete business profile",
   "Set service areas, capabilities and contact preferences",
   "Upload verification evidence and track review progress",
+  "Manage up to five privacy-safe internal work records",
   "Access billing, account settings and membership options",
 ];
 
@@ -319,6 +321,8 @@ export function DirectTradeDashboard() {
   const hasMarketplaceAccess = Boolean(profile?.entitlements?.features?.installer_marketplace);
   const hasSupplierVisibility = Boolean(profile?.entitlements?.features?.supplier_visibility);
   const hasBulkImport = Boolean(profile?.entitlements?.features?.supplier_bulk_import);
+  const hasBusinessOperations = Boolean(profile?.entitlements?.features?.business_operations);
+  const hasTeamAccess = Boolean(profile?.entitlements?.features?.team_access);
   const annualMonthly = isSupplier ? 199 : 99;
   const flexibleMonthly = isSupplier ? 399 : 199;
   const annualTotal = annualMonthly * 12;
@@ -579,11 +583,18 @@ export function DirectTradeDashboard() {
                 <a aria-current="page" href="/direct-trade/dashboard">
                   Product catalogue
                 </a>
+                <a href="#business-hub">Business Hub</a>
                 <a href="/direct-trade/dashboard/verification">
                   Verification centre
                 </a>
                 <a href="/direct-trade/membership">Membership and referrals</a>
               </nav>
+              <TradeBusinessHub
+                user={user}
+                partnerType="supplier"
+                fullAccess={hasBusinessOperations}
+                teamAccess={hasTeamAccess}
+              />
               <SupplierCatalogueWorkspace
                 user={user}
                 businessName={profile.businessName}
@@ -604,11 +615,19 @@ export function DirectTradeDashboard() {
                 <a href="#opportunity-inbox">
                   Opportunity inbox {offeredCount ? `(${offeredCount})` : ""}
                 </a>
+                <a href="#business-hub">Business Hub</a>
                 <a href="/direct-trade/dashboard/verification">
                   Verification centre
                 </a>
                 <a href="/direct-trade/membership">Membership and referrals</a>
               </nav>
+
+              <TradeBusinessHub
+                user={user}
+                partnerType="installer"
+                fullAccess={hasBusinessOperations}
+                teamAccess={hasTeamAccess}
+              />
 
               <section
                 className="dashboard-status-grid"
