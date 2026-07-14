@@ -96,10 +96,12 @@ export function GasComparator() {
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     if (!annualisedUsage.ok) { setError(annualisedUsage.error); return; }
     setLoading(true); setProgress(12); setStatus("Loading current gas offers...");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const query = new URLSearchParams({ postcode, annualMj: String(Math.round(annualisedUsage.annualMj)), usageProfile, includeConditional: String(includeConditional) });
       setProgress(35);
-      const response = await fetch("/api/gas-plans?" + query);
+      const response = await fetch("/api/gas-plans?" + query, { signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load gas plans.");
       const nextPlans: Plan[] = data.plans || [];
@@ -108,8 +110,8 @@ export function GasComparator() {
       if (nextDistributors.length === 1) setDistributor(nextDistributors[0]);
       setStatus(!nextPlans.length ? "No priceable gas offers were found for this postcode. Check the postcode or try again shortly." : nextDistributors.length > 1 ? "Choose the gas distributor or network printed on your bill before viewing ranked offers." : "");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load gas plans."); setStatus("");
-    } finally { setLoading(false); }
+      setError(controller.signal.aborted ? "The gas comparison took too long. Please try again shortly." : caught instanceof Error ? caught.message : "Could not load gas plans."); setStatus("");
+    } finally { window.clearTimeout(timeout); setLoading(false); }
   }
 
   const visiblePlans = useMemo(() => plans
@@ -191,7 +193,7 @@ function GasPlanCard({ plan, index, selected, compareFull, onToggleCompare }: { 
   const badges = [<span className="badge" key="type">{plan.type === "STANDING" ? "Standing offer" : "Market offer"}</span>, ...(plan.seasonal ? [<span className="badge info" key="seasonal">Seasonal rates</span>] : []), ...plan.conditionalDiscounts.slice(0, 2).map((discount) => <span className="badge info" key={discount}>Conditional discount published: {discount}</span>), ...(plan.eligibilityConfirmations.length ? [<span className="badge warn" key="eligibility">Eligibility must be confirmed</span>] : []), ...(plan.feeCount ? [<span className="badge warn" key="fees">Published fees not included</span>] : []), ...(plan.incentiveCount || plan.limitations.some((item) => item !== "published fees not costed") ? [<span className="badge warn" key="limitations">Some benefits or charges not included</span>] : [])];
   const toggleOpen = (event: React.KeyboardEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>) => { if ("key" in event && event.key !== "Enter" && event.key !== " ") return; event.currentTarget.closest(".plan")?.classList.toggle("open"); };
   return <article className="plan">
-    <div><div className="top"><span className={`rank${index === 0 ? " r1" : ""}`}>#{index + 1}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} onError={(event) => { event.currentTarget.style.display = "none"; }} /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div><RateLine plan={plan} /><div className="badges">{badges}</div><div className="bd-toggle" role="button" tabIndex={0} onClick={toggleOpen} onKeyDown={toggleOpen}>Show cost breakdown</div></div>
+    <div><div className="top"><span className={`rank${index === 0 ? " r1" : ""}`}>#{index + 1}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.display = "none"; }} /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div><RateLine plan={plan} /><div className="badges">{badges}</div><div className="bd-toggle" role="button" tabIndex={0} onClick={toggleOpen} onKeyDown={toggleOpen}>Show cost breakdown</div></div>
     <div className="price"><div className="annual">{fmt$(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400, color: "var(--color-aea-muted)" }}>/yr</span></div><div className="permo">about {fmt$(plan.annualCost / 12)} per month</div>{plan.link ? <a href={plan.link} target="_blank" rel="noreferrer">View retailer plan</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className={`gas-compare-toggle${selected ? " selected" : ""}`} disabled={!selected && compareFull} onClick={() => onToggleCompare(plan.id)}>{selected ? "Remove from comparison" : compareFull ? "Comparison full (3)" : "Add to comparison"}</button><div className="offerid">Offer ID: {plan.id.split("@")[0]}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
     <div className="breakdown">Supply charges {fmtD2(plan.supply)} + usage {fmtD2(plan.usage)}{plan.discounts > 0 ? ` - discounts ${fmtD2(plan.discounts)}` : ""} = {fmtD2(plan.annualCost)} inc GST{plan.seasons?.length ? <><br />{plan.seasons.map((season) => `${season.label}: ${season.days} days, ${Math.round(season.usageMj).toLocaleString()} MJ, ${fmtD2(season.usage)} usage`).join(" | ")}</> : ""}{plan.eligibilityConfirmations.length ? <><br />Confirm with retailer: {plan.eligibilityConfirmations.join("; ").slice(0, 320)}</> : ""}{plan.limitations.length ? <><br />Not included: {plan.limitations.join("; ")}</> : ""}{plan.terms ? <><br />Published terms: {plan.terms.slice(0, 320)}</> : ""}</div>
   </article>;

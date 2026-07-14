@@ -446,8 +446,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     let annualExport = hasSolar ? Math.max(0, Number(exportKwh)) : 0;
     if (hasSolar && !(annualExport > 0) && systemSize > 0) annualExport = Math.round(systemSize * solarYieldForPostcode(postcode) * (hasBattery ? 0.3 : 0.55));
     setLoading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
-      const response = await fetch(`/api/electricity-plans?postcode=${encodeURIComponent(postcode)}&customerType=${encodeURIComponent(customerType)}`);
+      const response = await fetch(`/api/electricity-plans?postcode=${encodeURIComponent(postcode)}&customerType=${encodeURIComponent(customerType)}`, { signal: controller.signal });
       const data = await response.json() as PlanBundle & { error?: string };
       if (!response.ok || !Array.isArray(data.plans)) throw new Error(data.error || "Could not load electricity plans.");
       setBundle(data);
@@ -520,8 +522,9 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence, customerType, hasIntervalMeter: Boolean(meter) });
       if (!priced.length) setError("Plans were published, but none met the comparison engine's strict priceability rules for these inputs.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load electricity plans.");
+      setError(controller.signal.aborted ? "The electricity comparison took too long. Please try again shortly." : caught instanceof Error ? caught.message : "Could not load electricity plans.");
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   }
@@ -825,7 +828,7 @@ function NativeUpgradeDialog({ scenario, onSubmit, onClose }: { scenario: Scenar
 function NativePlanCard({ plan, rank, onAudit }: { plan: NativePlanResult; rank: number; onAudit: (button: HTMLButtonElement) => void }) {
   const retailerLink = plan.link || plan.retailerUrl;
   return <article className="plan">
-    <div><div className="top"><span className={`rank${rank === 1 ? " r1" : ""}`}>#{rank}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div>
+    <div><div className="top"><span className={`rank${rank === 1 ? " r1" : ""}`}>#{rank}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} loading="lazy" decoding="async" /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div>
       <div className="rateline"><span className="r"><b>{fmtCents(plan.supplyCentsPerDay)}c</b>/day <span>supply</span></span>{[...plan.rates, ...plan.controlledRates].slice(0, 6).map((rate, index) => <span className="r" key={`${rate.label}-${index}`}><b>{fmtCents(rate.centsPerKwh)}c</b>/kWh <span>{rate.label}</span></span>)}<span className="r"><span>prices inc GST</span></span></div>
       <div className="badges"><span className="badge">{plan.tariffKind === "tou" ? "Time of use" : plan.tariffKind === "demand" ? "Demand tariff" : "Single rate"}</span>{plan.demand > 0 && <span className="badge info">Measured peak {plan.demandPeakKw.toFixed(1)} kW</span>}{plan.feedIn > 0 && <span className="badge info">Feed-in credit {fmtCents(plan.feedInCentsPerKwh)}c/kWh effective</span>}{plan.controlled > 0 && <span className="badge info">Controlled load costed separately</span>}{plan.fees ? <span className="badge warn">Published fees not included</span> : null}{plan.validation?.limitations?.some((item) => item !== "fees_not_costed") && <span className="badge warn">Some published benefits not included</span>}{plan.eligibilityConfirmations.length > 0 && <span className="badge warn">Retailer eligibility must be confirmed</span>}</div>
     </div>

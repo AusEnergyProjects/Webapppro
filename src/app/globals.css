@@ -42,8 +42,6 @@
 * { box-sizing: border-box; }
 html { background: var(--surface-page); }
 body { background: radial-gradient(circle at 8% -4%, rgba(18, 126, 167, .38), transparent 34rem), radial-gradient(circle at 94% 18%, rgba(18, 166, 106, .16), transparent 30rem), radial-gradient(circle at 48% 92%, rgba(19, 79, 120, .25), transparent 42rem), linear-gradient(155deg, #020713 0%, #031529 42%, #061d30 70%, #020b18 100%); color: var(--color-aea-text); font-family: "Manrope", Arial, sans-serif; line-height: 1.55; margin: 0; min-height: 100vh; }
-html.route-loading body::before { animation: route-progress 1.1s ease-in-out infinite; background: linear-gradient(90deg, var(--color-aea-teal), #6ee7b7, var(--color-aea-gold)); box-shadow: 0 0 14px rgba(32, 203, 184, .65); content: ""; height: 3px; left: 0; position: fixed; right: 0; top: 0; transform-origin: left; z-index: 1000; }
-@keyframes route-progress { 0% { transform: scaleX(.08); } 55% { transform: scaleX(.7); } 100% { transform: scaleX(.96); } }
 button, input, select, textarea { font: inherit; }
 a { text-underline-offset: 3px; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid rgba(20, 168, 100, .32); outline-offset: 3px; }
@@ -85,6 +83,7 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .start-hero aside { backdrop-filter: blur(10px); background: rgba(3, 25, 45, .55); border: 1px solid rgba(86, 224, 199, .23); border-radius: 16px; box-shadow: inset 0 1px rgba(255, 255, 255, .08); margin-top: 24px; padding: 16px 18px; }
 .start-hero aside strong { font-family: "Source Serif 4", Georgia, serif; font-size: 1rem; }
 .start-hero aside ul { color: #c9dfe1; display: grid; font-size: .72rem; gap: 6px 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); line-height: 1.45; margin: 10px 0 0; padding-left: 17px; }
+.start-section, .home-support-grid, .start-privacy, .direct-trade-installer, .site-footer { contain-intrinsic-size: auto 520px; content-visibility: auto; }
 .direct-trade-section { margin: 54px 0; scroll-margin-top: 20px; }
 .direct-trade-section > .start-heading { max-width: 880px; }
 .direct-trade-grid { counter-reset: direct-trade; display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -684,7 +683,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-aea-green)
 .filters { align-items: center; display: flex; flex-wrap: wrap; font-size: .85rem; gap: 10px; margin-bottom: 12px; }
 .filters input { max-width: 240px; }
 .results > .filters .toggle { color: var(--canvas-text); }
-.plan { align-items: center; background: var(--color-aea-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); display: grid; gap: 6px 18px; grid-template-columns: 1fr auto; margin-bottom: 12px; padding: 16px 18px; transition: box-shadow .15s, border-color .15s; }
+.plan { align-items: center; background: var(--color-aea-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); contain-intrinsic-size: auto 230px; content-visibility: auto; display: grid; gap: 6px 18px; grid-template-columns: 1fr auto; margin-bottom: 12px; padding: 16px 18px; transition: box-shadow .15s, border-color .15s; }
 .plan:hover { border-color: #b9dcc8; box-shadow: 0 6px 18px rgba(11, 61, 46, .12); }
 .plan .top { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
 .plan .logo-box { align-items: center; display: inline-flex; flex: 0 0 110px; height: 34px; justify-content: center; width: 110px; }
@@ -1012,7 +1011,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-aea-green)
   .membership-rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
-  .site-header { align-items: stretch; flex-direction: column; gap: 10px; padding: 14px; }
+  .site-header { align-items: stretch; backdrop-filter: none; flex-direction: column; gap: 10px; padding: 14px; }
+  .start-hero aside { backdrop-filter: none; }
   .comparator-nav { margin-left: -2px; overflow-x: auto; padding: 2px 2px 5px; scrollbar-width: none; }
   .start-hero, .home-entry-grid, .home-upgrade-grid, .home-support-grid, .planner-hero, .direct-trade-grid, .direct-trade-economics, .direct-trade-installer, .start-path-grid, .start-step-grid, .start-guide-grid, .assessment-home-grid, .assessment-card-grid, .assessment-process, .assessment-two-column, .guide-card-grid, .guide-principle-grid, .guide-two-column, .guide-checklist, .guide-program dl, .rebate-card-grid, .rebate-location-panel, .case-study-card, .standards-intro, .standards-grid, .standards-checklist, .standards-boundaries { grid-template-columns: 1fr; }
   .start-hero { align-items: flex-start; min-height: 940px; padding: 36px 24px 240px; }
@@ -1120,5 +1120,5 @@ footer a { color: #6ee7b7; font-weight: 700; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
-  html.route-loading body::before { animation: none; transform: scaleX(.7); }
+  .site-header, .start-hero aside { backdrop-filter: none; }
 }

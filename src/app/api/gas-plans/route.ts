@@ -8,8 +8,15 @@ import { resolveCustomerPlanUrl, retailerWebsite } from "@/lib/retailer-links.mj
 
 const FEED_URL = "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
 const DETAIL_API_VERSION = "3";
+const UPSTREAM_TIMEOUT_MS = 10_000;
+const MEMORY_TTL_MS = 60 * 60 * 1000;
+const planCache = new Map<string, { createdAt: number; body: unknown }>();
 async function getJson(url: string, version?: string): Promise<any> {
-  const response = await fetch(url, { headers: version ? { "x-v": version, "x-min-v": version } : {}, cache: "no-store" });
+  const response = await fetch(url, {
+    headers: version ? { "x-v": version, "x-min-v": version } : {},
+    cache: "no-store",
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);
   return response.json();
 }
@@ -43,6 +50,11 @@ export async function GET(request: NextRequest) {
   const usageProfile = (request.nextUrl.searchParams.get("usageProfile") || "heating") as GasUsageProfile;
   if (!/^\d{4}$/.test(postcode) || !Number.isFinite(annualMj) || !(annualMj > 0) || !["heating", "steady"].includes(usageProfile)) {
     return respond({ error: "A valid postcode, annual MJ and gas-use pattern are required." }, 400, "invalid_query");
+  }
+  const cacheKey = [postcode, annualMj, includeConditional, usageProfile].join(":");
+  const cached = planCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < MEMORY_TTL_MS) {
+    return respond(cached.body, 200, "success", { cache: "memory_hit" });
   }
   try {
     const feed: any = await getJson(FEED_URL);
@@ -188,7 +200,9 @@ export async function GET(request: NextRequest) {
         partial: listFailures > 0 || rejected > 0 || unavailable > 0,
       },
     };
+    planCache.set(cacheKey, { createdAt: Date.now(), body });
     return respond(body, 200, "success", {
+      cache: "miss",
       planCount: plans.length,
       partial: body.source.partial,
       listSourcesSucceeded: body.source.listSourcesSucceeded,

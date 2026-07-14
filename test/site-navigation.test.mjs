@@ -22,7 +22,6 @@ const plannerRoute = read("../src/app/plan/page.tsx");
 const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
-const fastNavigation = read("../src/components/FastNavigation.tsx");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
 
@@ -135,13 +134,11 @@ test("social sharing metadata uses one launch-ready AEA energy card", () => {
   assert.ok(fs.statSync(socialAsset).size < 3_000_000);
 });
 
-test("internal navigation prefetches and transitions without full document reloads", () => {
-  assert.match(layout, /<FastNavigation \/>/);
-  assert.match(fastNavigation, /router\.prefetch/);
-  assert.match(fastNavigation, /router\.push/);
-  assert.match(fastNavigation, /document\.addEventListener\("click"/);
-  assert.match(fastNavigation, /route-loading/);
-  assert.match(styles, /html\.route-loading body::before/);
+test("static pages avoid a global client navigation bundle", () => {
+  assert.doesNotMatch(layout, /FastNavigation/);
+  assert.doesNotMatch(styles, /route-loading/);
+  assert.match(styles, /content-visibility: auto/);
+  assert.match(styles, /contain-intrinsic-size: auto 520px/);
 });
 
 test("rebates hub makes location boundaries and source confirmation visible", () => {
