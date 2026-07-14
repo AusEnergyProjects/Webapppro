@@ -20,6 +20,7 @@ Build a trustworthy Australian Energy Assessments site for independent energy-pl
 - Keep gas and electricity pricing engines separate.
 - Prefer server routes for retailer-data requests.
 - Do not deploy, submit leads, or change external services without explicit approval.
+- After validated changes, publish to Sites and GitHub without a separate release prompt. Never deploy to Netlify unless the user explicitly requests it.
 - No em dashes or en dashes in user-facing copy.
 - Before finishing code work, run npm run build.
 - Use Next.js App Router. Read relevant local Next documentation before unfamiliar APIs.
