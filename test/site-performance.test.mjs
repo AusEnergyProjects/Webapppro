@@ -12,7 +12,8 @@ test("HTML shell caching is short lived and never includes API routes", () => {
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /includes\("text\/html"\)/);
-  assert.match(worker, /caches\.default/);
+  assert.match(worker, /globalThis[\s\S]*caches\?\.default/);
+  assert.match(worker, /if \(cache\)/);
   assert.match(worker, /s-maxage=120/);
   assert.match(worker, /stale-while-revalidate=600/);
   assert.match(worker, /ctx\.waitUntil\(cache\.put/);

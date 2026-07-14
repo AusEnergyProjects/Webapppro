@@ -2,6 +2,8 @@ import handler from "vinext/server/app-router-entry";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 
+type RuntimeCacheStorage = CacheStorage & { default?: Cache };
+
 function isCacheablePageRequest(request: Request) {
   if (request.method !== "GET") return false;
   const url = new URL(request.url);
@@ -21,14 +23,16 @@ const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
     if (!isCacheablePageRequest(request)) return handler.fetch(request, env, ctx);
 
-    const cache = caches.default;
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
+    if (cache) {
+      const cached = await cache.match(request).catch(() => undefined);
+      if (cached) return cached;
+    }
 
     const response = await handler.fetch(request, env, ctx);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
-    ctx.waitUntil(cache.put(request, cacheable.clone()));
+    if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
     return cacheable;
   },
 };
