@@ -10,7 +10,8 @@ const route = read("../src/app/api/leads/route.js");
 
 test("the homepage connects installers and suppliers to a participation route", () => {
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
-  assert.match(homepage, /Product, warranty, support and supply evidence/);
+  assert.match(homepage, /reputable suppliers/i);
+  assert.match(form, /reviews credentials, service coverage, insurance, product evidence and customer support/);
   assert.match(page, /DirectTradePartnerForm/);
 });
 

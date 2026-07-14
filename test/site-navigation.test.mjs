@@ -17,39 +17,49 @@ const rebatesRoute = read("../src/app/rebates/page.tsx");
 const guideShell = read("../src/components/GuideShell.tsx");
 const caseStudies = read("../src/app/case-studies/page.tsx");
 const assessments = read("../src/app/assessments/page.tsx");
+const planner = read("../src/components/HomeEnergyPlanner.tsx");
+const plannerRoute = read("../src/app/plan/page.tsx");
+const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
 const fastNavigation = read("../src/components/FastNavigation.tsx");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
+const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
 
-test("the homepage provides a direct trade journey instead of redirecting", () => {
+test("the homepage provides one clear starting journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);
   assert.doesNotMatch(home, /redirect\(/);
-  assert.match(guide, /Go direct to the licensed trades who do the work/);
+  assert.match(guide, /One clear plan for a more comfortable, lower-cost home/);
+  assert.match(guide, /Build my home energy plan/);
+  assert.match(guide, /What do you need today/);
   assert.match(guide, /Direct Trade Services/);
   assert.match(guide, /Bring a recent bill/);
-  assert.match(guide, /Confirm before switching/);
+  assert.match(guide, /Check before committing/);
 });
 
-test("shared navigation connects Direct Trade Services, electricity and gas journeys", () => {
+test("shared navigation prioritises the planner, electricity and gas journeys", () => {
   assert.match(chrome, /export function SiteHeader/);
   assert.match(chrome, /className="site-header"/);
-  assert.match(chrome, /href: "\/", label: "Direct Trade Services"/);
-  assert.match(chrome, /href: "\/compare"/);
-  assert.match(chrome, /href: "\/gas-compare"/);
-  assert.match(chrome, /href: "\/assessments"/);
+  assert.match(chrome, /href: "\/", label: "Start"/);
+  assert.match(chrome, /href: "\/plan", label: "My energy plan"/);
+  assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
+  assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
+  assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
+  assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);
-  assert.match(chrome, /href: "\/rebates"/);
+  assert.match(planner, /SiteHeader active="plan"/);
+  assert.match(plannerRoute, /HomeEnergyPlanner/);
   assert.match(rebatesRoute, /RebatesHub/);
   assert.match(rebates, /SiteHeader active="rebates"/);
-  assert.ok(chrome.indexOf('{ key: "assessments"') > chrome.indexOf('{ key: "case-studies"'), "Assessments should remain the final secondary navigation item");
+  assert.match(guide, /href="\/rebates"/);
+  assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
 test("direct trade proposition presents the trade network and subscription as live", () => {
   assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /through an active trade network/);
+  assert.match(guide, /through an active trade network/i);
   assert.match(guide, /Participating installers fund the service through a current subscription/);
   assert.match(guide, /not a margin added to household equipment/);
   assert.doesNotMatch(guide, /planned revenue model|installer subscriptions and applications are in development|Future Direct Trade members/);
@@ -57,9 +67,8 @@ test("direct trade proposition presents the trade network and subscription as li
 });
 
 test("direct trade marketplace includes reputable wholesalers", () => {
-  assert.match(guide, /For wholesalers/);
-  assert.match(guide, /Quality products into customers’ homes/);
-  assert.match(guide, /reputable suppliers to connect proven products with qualified trades and suitable households/);
+  assert.match(guide, /For licensed installers and reputable suppliers/);
+  assert.match(guide, /reputable suppliers (?:can|to) connect proven products with qualified trades and suitable households/i);
 });
 
 test("installer membership does not imply government accreditation", () => {
@@ -79,7 +88,8 @@ test("customer-facing pages use the shared powered-by footer", () => {
   assert.match(guideShell, /<SiteFooter>/);
   assert.match(caseStudies, /<SiteFooter>/);
   assert.match(assessments, /<SiteFooter>/);
-  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}`, /Provided by/);
+  assert.match(planner, /<SiteFooter>/);
+  assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}${planner}`, /Provided by/);
 });
 
 test("shared visual foundation uses the polished responsive system", () => {
@@ -113,6 +123,15 @@ test("homepage uses the original AEA energy platform artwork", () => {
   assert.equal(fs.existsSync(heroAsset), true);
   assert.ok(fs.statSync(heroAsset).size > 100_000);
   assert.ok(fs.statSync(heroAsset).size < 500_000);
+});
+
+test("social sharing metadata uses one launch-ready AEA energy card", () => {
+  assert.match(layout, /openGraph:/);
+  assert.match(layout, /twitter:/);
+  assert.match(layout, /\/aea-home-energy-plan-og\.png/);
+  assert.equal(fs.existsSync(socialAsset), true);
+  assert.ok(fs.statSync(socialAsset).size > 100_000);
+  assert.ok(fs.statSync(socialAsset).size < 3_000_000);
 });
 
 test("internal navigation prefetches and transitions without full document reloads", () => {
@@ -149,8 +168,16 @@ test("homepage hero actions keep visible text on distinct backgrounds", () => {
 
 test("getting-started copy preserves comparison and privacy boundaries", () => {
   assert.match(guide, /Mains gas plans only, not LPG/);
-  assert.match(guide, /Your meter file stays on your device/);
-  assert.match(guide, /not included in saved comparison links or enquiry data/);
+  assert.match(guide, /Your plan and meter file stay on your device/);
+  assert.match(guide, /not included in saved links or enquiry data/);
   assert.match(guide, /Estimates are indicative/);
   assert.doesNotMatch(guide, /[–—]/);
+});
+
+test("integrated planner is private, ordered and responsive", () => {
+  assert.match(planner, /No account, address, bill, meter identifier or contact details are needed/);
+  assert.match(planner, /aria-live="polite"/);
+  assert.match(planner, /Before committing/);
+  assert.match(styles, /\.planner-layout \{[^}]*grid-template-columns:/);
+  assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
 });

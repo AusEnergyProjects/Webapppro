@@ -5,8 +5,22 @@ import { FastNavigation } from "@/components/FastNavigation";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Direct Trade Services | Australian Energy Assessments",
-  description: "Independent energy comparison and a direct-to-trade service connecting households, licensed installers and reputable energy-product wholesalers.",
+  metadataBase: new URL("https://aea-energy-comparison.info294029.chatgpt.site"),
+  title: "Home Energy Planning | Australian Energy Assessments",
+  description: "Build a private home energy roadmap, compare electricity and gas plans, understand upgrades, check support and prepare a clear scope for licensed trades.",
+  openGraph: {
+    title: "One Clear Home Energy Plan",
+    description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
+    type: "website",
+    siteName: "Australian Energy Assessments",
+    images: [{ url: "/aea-home-energy-plan-og.png", width: 1736, height: 907, alt: "One clear home energy plan with coordinated solar, battery, efficient appliances and EV charging" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "One Clear Home Energy Plan",
+    description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
+    images: ["/aea-home-energy-plan-og.png"],
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

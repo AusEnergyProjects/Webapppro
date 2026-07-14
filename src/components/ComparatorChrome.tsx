@@ -16,16 +16,15 @@ export function BrandBar() {
   );
 }
 
-type SiteActive = "start" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
+type SiteActive = "start" | "plan" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
-    { key: "start", href: "/", label: "Direct Trade Services" },
+    { key: "start", href: "/", label: "Start" },
+    { key: "plan", href: "/plan", label: "My energy plan" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
-    { key: "guides", href: "/guides", label: "Guides" },
-    { key: "rebates", href: "/rebates", label: "Rebates and help" },
-    { key: "case-studies", href: "/case-studies", label: "Worked examples" },
+    { key: "guides", href: "/guides", label: "Guides and rebates" },
     { key: "assessments", href: "/assessments", label: "Assessments" },
   ] as const;
   return <nav aria-label="Energy services" className="comparator-nav">{links.map((link) => <a className={active === link.key ? "active" : "inactive"} href={link.href} key={link.key} aria-current={active === link.key ? "page" : undefined}>{link.label}</a>)}</nav>;

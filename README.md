@@ -16,6 +16,15 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Site journeys
+
+- `/` is the simplified home energy starting point.
+- `/plan` creates a private, no-account roadmap from the household's goal, property situation, existing equipment and preferred pace.
+- `/guides` connects the whole-home guidance library, including building fabric, heating, hot water, electric cooking, solar, batteries and EV charging.
+- `/rebates` separates official federal support from state, territory and provider programs and sends users to the current source before relying on eligibility.
+- `/assessments` explains the NatHERS, existing-home rating and BASIX pathways.
+- `/direct-trade` turns a defined project into a privacy-safe brief for manual review.
+
 ## Comparison routes
 
 - `/compare` is the primary typed electricity comparer.

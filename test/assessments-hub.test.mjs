@@ -14,7 +14,7 @@ const styles = read("../src/app/globals.css");
 
 test("assessment services are first class routes across the site", () => {
   assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
-  assert.match(home, /NatHERS and BASIX, from design evidence to practical decisions/);
+  assert.match(home, /Use NatHERS, BASIX or an existing-home rating where it fits/);
   assert.match(home, /href="\/assessments"/);
   assert.match(guides, /Need a NatHERS or BASIX assessment/);
   assert.match(guides, /href="\/assessments"/);

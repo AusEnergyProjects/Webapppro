@@ -13,6 +13,8 @@ const batteries = read("../src/app/guides/batteries/page.tsx");
 const heating = read("../src/app/guides/heating/page.tsx");
 const hotWater = read("../src/app/guides/hot-water/page.tsx");
 const insulation = read("../src/app/guides/insulation-draught-proofing/page.tsx");
+const cooking = read("../src/app/guides/cooking/page.tsx");
+const evCharging = read("../src/app/guides/ev-charging/page.tsx");
 const start = read("../src/components/GettingStarted.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const rebates = read("../src/components/RebatesHub.tsx");
@@ -24,14 +26,27 @@ test("solar and battery guides are connected to the shared journey", () => {
   assert.match(overview, /href="\/guides\/heating"/);
   assert.match(overview, /href="\/guides\/hot-water"/);
   assert.match(overview, /href="\/guides\/insulation-draught-proofing"/);
-  assert.match(start, /href="\/guides\/solar"/);
-  assert.match(start, /href="\/guides\/batteries"/);
-  assert.match(start, /href="\/guides\/heating"/);
-  assert.match(start, /href="\/guides\/hot-water"/);
-  assert.match(start, /href="\/guides\/insulation-draught-proofing"/);
+  assert.match(overview, /href="\/guides\/cooking"/);
+  assert.match(overview, /href="\/guides\/ev-charging"/);
+  assert.match(overview, /href="\/plan"/);
+  assert.match(start, /"\/guides\/solar"/);
+  assert.match(start, /"\/guides\/batteries"/);
+  assert.match(start, /"\/guides\/heating"/);
+  assert.match(start, /"\/guides\/hot-water"/);
+  assert.match(start, /"\/guides\/insulation-draught-proofing"/);
   assert.match(start, /href="\/rebates"/);
   assert.match(overview, /href="\/rebates"/);
   assert.match(rebates, /href="\/guides"/);
+});
+
+test("cooking and EV charging guides cover enabling work and authority", () => {
+  assert.match(cooking, /electrical capacity/);
+  assert.match(cooking, /Gas isolation, capping and appliance removal/);
+  assert.match(cooking, /Australian Government electrification guidance/);
+  assert.match(evCharging, /daily driving/);
+  assert.match(evCharging, /load management/);
+  assert.match(evCharging, /owners corporation approval/);
+  assert.match(evCharging, /Australian Government charging guidance/);
 });
 
 test("solar guidance distinguishes household use, exports and written quote evidence", () => {
@@ -85,5 +100,5 @@ test("heating and hot water copy avoids prohibited dash characters", () => {
 });
 
 test("guide copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${overview}${solar}${batteries}`, /[–—]/);
+  assert.doesNotMatch(`${overview}${solar}${batteries}${cooking}${evCharging}`, /[–—]/);
 });

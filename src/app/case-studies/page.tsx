@@ -64,7 +64,7 @@ export default function CaseStudiesPage() {
 
     <section className="guide-section" aria-labelledby="publication-title"><div className="guide-section-heading"><span>Trust boundary</span><h2 id="publication-title">What a real published case study would need</h2></div><p className="case-study-intro">A future customer case study should be evidence-led, privacy-safe and clear about changes that are not caused by the energy decision itself.</p><ul className="guide-checklist">{publicationChecks.map((item) => <li key={item}>{item}</li>)}</ul></section>
 
-    <section className="guide-callout"><div><h2>Use your own evidence</h2><p>The comparison tools keep electricity and gas separate, preserve material assumptions and show what should be confirmed before switching or buying equipment.</p></div><a href="/getting-started">Explore Direct Trade Services</a></section>
+    <section className="guide-callout"><div><h2>Use your own evidence</h2><p>The comparison tools keep electricity and gas separate, preserve material assumptions and show what should be confirmed before switching or buying equipment.</p></div><a href="/plan">Build your home energy roadmap</a></section>
     <SiteFooter>Worked examples are educational and indicative. They are not customer testimonials, current retailer quotes or guarantees of cost, savings or payback.</SiteFooter>
   </main>;
 }
