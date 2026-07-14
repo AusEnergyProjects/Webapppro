@@ -159,6 +159,7 @@ function enquiryDetails_(payload) {
     serviceStates: payload.serviceStates || [],
     partnerNotes: payload.partnerNotes || "",
     directTradeTriage: payload.directTradeTriage || null,
+    participantReview: payload.participantReview || null,
     annualKwh: valueOrBlank_(payload.annualKwh),
     annualMj: valueOrBlank_(payload.annualMj),
     solarKw: valueOrBlank_(payload.solarKw),
@@ -451,13 +452,23 @@ function triageFlagLabel_(value) {
 }
 
 function partnerRows_(payload) {
+  const review = payload.participantReview || {};
   return compactRows_([
     ["Participation type", payload.partnerType === "supplier" ? "Product supplier or wholesaler" : "Licensed installer"],
     ["Business", payload.businessName],
     ["Business website", payload.businessWebsite],
     ["Service areas", listLabels_(payload.serviceStates, stateLabel_)],
     ["Capabilities or products", listLabels_(payload.projectCategories, categoryLabel_)],
+    ["Application status", review.status === "application_received" ? "Application received for manual review" : review.status],
+    ["Review checks", participantReviewChecks_(review.checks)],
+    ["Automatic approval", review.autoApprove === false ? "Off. Direct review required." : "Not specified"],
+    ["Public listing", review.publicListing === false ? "Off until review and consent are complete." : "Not specified"],
   ]);
+}
+
+function participantReviewChecks_(checks) {
+  if (!Array.isArray(checks)) return "";
+  return checks.filter(function(check) { return check && check.label; }).map(function(check) { return check.label; }).join("; ");
 }
 
 function internalNotes_(payload) {

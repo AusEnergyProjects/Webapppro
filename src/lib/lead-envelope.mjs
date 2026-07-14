@@ -1,5 +1,6 @@
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import { buildDirectTradeTriage } from "./direct-trade-matching.mjs";
+import { buildParticipantApplicationReview } from "./direct-trade-participants.mjs";
 
 const EVENT_TYPES = new Set([
   "comparison.results",
@@ -44,15 +45,19 @@ export function createLeadEnvelope(payload, options = {}) {
   const directTradeTriage = eventType === "direct_trade.project"
     ? buildDirectTradeTriage({ ...payload, state: payload.state || inferredState || "" })
     : null;
+  const participantReview = eventType === "direct_trade.partner"
+    ? buildParticipantApplicationReview(payload)
+    : null;
 
   return {
     ...payload,
-    schemaVersion: "3",
+    schemaVersion: "4",
     eventType,
     reference,
     submittedAt,
     state: payload.state || inferredState || "",
     source: "aea-energy-web",
     ...(directTradeTriage ? { directTradeTriage } : {}),
+    ...(participantReview ? { participantReview } : {}),
   };
 }

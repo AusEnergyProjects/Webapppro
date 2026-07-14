@@ -18,6 +18,18 @@ const project = {
   timeframe: "one-three-months",
 };
 
+const participantEvidence = {
+  status: "approved",
+  partnerType: "installer",
+  businessName: "Example Trade",
+  businessVerified: true,
+  reviewedAt: "2026-07-01T00:00:00.000Z",
+  reviewDueAt: "2027-07-01T00:00:00.000Z",
+  credentials: [{ verified: true, expiresAt: "2027-06-01T00:00:00.000Z" }],
+  insurance: { verified: true, expiresAt: "2027-06-01T00:00:00.000Z" },
+  requiredSchemeCapabilities: [],
+};
+
 test("project triage produces manual matching criteria and never auto-sends", () => {
   const triage = buildDirectTradeTriage(project);
   assert.equal(triage.status, "manual_matching_review");
@@ -36,16 +48,16 @@ test("triage holds planning-only projects for authority review", () => {
 
 test("participant matching excludes unverified, uncovered and partial capability records", () => {
   const candidates = matchDirectTradeParticipants(project, [
-    { id: "local-fit", status: "approved", credentialsVerified: true, insuranceVerified: true, serviceStates: ["VIC"], capabilities: ["solar", "battery"], postcodePrefixes: ["30"] },
-    { id: "state-fit", status: "approved", credentialsVerified: true, insuranceVerified: true, serviceStates: ["Vic"], capabilities: ["solar", "battery"] },
-    { id: "not-verified", status: "approved", credentialsVerified: false, insuranceVerified: true, serviceStates: ["VIC"], capabilities: ["solar", "battery"] },
-    { id: "partial", status: "approved", credentialsVerified: true, insuranceVerified: true, serviceStates: ["VIC"], capabilities: ["solar"] },
-  ]);
+    { ...participantEvidence, id: "local-fit", serviceStates: ["VIC"], capabilities: ["solar", "battery"], postcodePrefixes: ["30"] },
+    { ...participantEvidence, id: "state-fit", serviceStates: ["Vic"], capabilities: ["solar", "battery"] },
+    { ...participantEvidence, id: "not-verified", businessVerified: false, serviceStates: ["VIC"], capabilities: ["solar", "battery"] },
+    { ...participantEvidence, id: "partial", serviceStates: ["VIC"], capabilities: ["solar"] },
+  ], { now: new Date("2026-07-14T01:00:00.000Z") });
   assert.equal(candidates[0].participantId, "local-fit");
   assert.equal(candidates[0].score, 110);
   assert.equal(candidates[0].autoSend, false);
   assert.equal(candidates.find((item) => item.participantId === "state-fit").eligibleForReview, true);
-  assert.deepEqual(candidates.find((item) => item.participantId === "not-verified").reasons, ["credentials_not_verified"]);
+  assert.deepEqual(candidates.find((item) => item.participantId === "not-verified").reasons, ["business_not_verified"]);
   assert.deepEqual(candidates.find((item) => item.participantId === "partial").reasons, ["capability_mismatch"]);
 });
 

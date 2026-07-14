@@ -1,3 +1,5 @@
+import { assessParticipantRecord } from "./direct-trade-participants.mjs";
+
 const CATEGORY_REQUIREMENTS = {
   assessment: ["assessment"],
   solar: ["solar"],
@@ -78,20 +80,19 @@ export function buildDirectTradeTriage(project) {
   };
 }
 
-function participantRejection(project, participant) {
-  if (participant?.status !== "approved") return "participant_not_approved";
-  if (participant?.credentialsVerified !== true) return "credentials_not_verified";
-  if (participant?.insuranceVerified !== true) return "insurance_not_verified";
+function participantRejection(project, participant, options) {
+  const assessment = assessParticipantRecord(participant, options);
+  if (!assessment.matchingEligible) return assessment.matchingFlags[0];
   if (!uniqueStrings(participant?.serviceStates).map(canonicalState).includes(canonicalState(project?.state))) return "outside_service_area";
   const capabilities = uniqueStrings(participant?.capabilities);
   if (!projectCapabilities(project).every((capability) => capabilities.includes(capability))) return "capability_mismatch";
   return "";
 }
 
-export function matchDirectTradeParticipants(project, participants) {
+export function matchDirectTradeParticipants(project, participants, options = {}) {
   const postcodePrefix = String(project?.postcode || "").slice(0, 2);
   return (Array.isArray(participants) ? participants : []).map((participant) => {
-    const rejection = participantRejection(project, participant);
+    const rejection = participantRejection(project, participant, options);
     const localPrefixes = uniqueStrings(participant?.postcodePrefixes);
     const localFit = Boolean(postcodePrefix && localPrefixes.includes(postcodePrefix));
     return {
