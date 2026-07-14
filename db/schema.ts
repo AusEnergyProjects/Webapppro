@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
@@ -28,3 +28,19 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const verificationDocuments = sqliteTable("verification_documents", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  category: text("category").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  expiryDate: text("expiry_date").notNull().default(""),
+  status: text("status").notNull().default("uploaded"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("verification_documents_owner_idx").on(table.firebaseUid),
+]);

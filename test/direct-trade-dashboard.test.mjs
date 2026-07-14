@@ -7,7 +7,9 @@ const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const verification = read("../src/components/DirectTradeVerificationCentre.tsx");
 const membership = read("../src/app/direct-trade/membership/page.tsx");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
+const verificationRoute = read("../src/app/api/trade-verification/documents/route.ts");
 const schema = read("../db/schema.ts");
+const hosting = read("../.openai/hosting.json");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const partners = read("../src/components/DirectTradePartnerForm.tsx");
 
@@ -24,15 +26,34 @@ test("dashboard availability and email preferences are durable and owner protect
   assert.match(dashboard, /Matching remains inactive until verification and paid membership launch/);
 });
 
-test("verification centre changes evidence guidance by business role", () => {
+test("verification centre changes private evidence workflow by business role", () => {
   assert.match(verification, /const installerChecks/);
   assert.match(verification, /const supplierChecks/);
   assert.match(verification, /profile\?\.partnerType === "supplier"/);
   assert.match(verification, /Trade licence or registration/);
   assert.match(verification, /Product compliance evidence/);
-  assert.match(verification, /Document upload is not open yet/);
-  assert.match(verification, /private, access-controlled storage/);
-  assert.doesNotMatch(verification, /type="file"|FormData|R2/);
+  assert.match(verification, /type="file"/);
+  assert.match(verification, /accept="application\/pdf,image\/jpeg,image\/png/);
+  assert.match(verification, /Store document privately/);
+  assert.match(verification, /No public file links/);
+  assert.match(verification, /Keep personal identity records out unless requested/);
+});
+
+test("verification evidence is private, bounded and owner protected", () => {
+  assert.match(hosting, /"r2": "EVIDENCE"/);
+  assert.match(schema, /sqliteTable\("verification_documents"/);
+  assert.match(schema, /verification_documents_owner_idx/);
+  assert.match(verificationRoute, /MAX_FILE_BYTES = 8 \* 1024 \* 1024/);
+  assert.match(verificationRoute, /application\/pdf/);
+  assert.match(verificationRoute, /image\/jpeg/);
+  assert.match(verificationRoute, /image\/png/);
+  assert.match(verificationRoute, /requireFirebaseIdentity/);
+  assert.match(verificationRoute, /sameOrigin/);
+  assert.match(verificationRoute, /WHERE id = \? AND firebase_uid = \?/);
+  assert.match(verificationRoute, /WHERE firebase_uid = \?/);
+  assert.match(verificationRoute, /verification\/\$\{identity\.uid\}\/\$\{crypto\.randomUUID\(\)\}/);
+  assert.match(verificationRoute, /Cache-Control": "private, no-store"/);
+  assert.doesNotMatch(verificationRoute, /publicUrl|signedUrl/);
 });
 
 test("membership page presents all approved prices and no per-lead model", () => {
