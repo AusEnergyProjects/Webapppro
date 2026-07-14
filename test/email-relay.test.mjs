@@ -85,7 +85,7 @@ test("customer and internal acknowledgements are tailored to each workflow", () 
   const payloads = [
     { ...comparison, eventType: "electricity.upgrade", enquiry: "electricity-battery", type: "Electricity upgrade enquiry: Add a battery", solarKw: 6.6, batteryKwh: 13.5, installedCost: 8900, annualSaving: 1280 },
     { ...comparison, eventType: "gas.upgrade", enquiry: "gas-hot-water", type: "Gas upgrade enquiry: Heat pump hot water", annualMj: 58000, installedCost: 3200, annualSaving: 740 },
-    { ...comparison, eventType: "direct_trade.project", enquiry: "direct-trade-project", projectCategories: ["assessment", "solar"], propertyType: "house", propertyRelationship: "owner-occupier", projectPriorities: ["need-advice"], projectStage: "researching", timeframe: "urgent", preferredContact: "phone", projectNotes: "Review the home before recommending equipment." },
+    { ...comparison, eventType: "direct_trade.project", enquiry: "direct-trade-project", projectCategories: ["assessment", "solar"], propertyType: "house", propertyRelationship: "owner-occupier", projectPriorities: ["need-advice"], projectStage: "researching", timeframe: "urgent", preferredContact: "phone", projectNotes: "Review the home before recommending equipment.", directTradeTriage: { status: "manual_matching_review", priority: "urgent_manual_review", autoSend: false, reviewFlags: ["assessment_or_advice_may_be_needed_first"] } },
     { ...comparison, eventType: "direct_trade.partner", enquiry: "direct-trade-partner", partnerType: "supplier", businessName: "Example Supply", serviceStates: ["VIC", "NSW"], projectCategories: ["battery"], partnerNotes: "Local stock and warranty support." },
   ];
 
@@ -97,6 +97,8 @@ test("customer and internal acknowledgements are tailored to each workflow", () 
   assert.match(sent[0].htmlBody, /13\.5 kWh/);
   assert.match(sent[2].htmlBody, /58,000 MJ/);
   assert.match(sent[4].htmlBody, /Independent energy assessment, Rooftop solar/);
+  assert.match(sent[5].htmlBody, /Ready for manual matching review/);
+  assert.match(sent[5].htmlBody, /Off\. Manual approval required\./);
   assert.match(sent[6].htmlBody, /Product supplier or wholesaler/);
   for (const message of sent) {
     assert.match(message.subject, /AEA-20260714-12345678AB/);

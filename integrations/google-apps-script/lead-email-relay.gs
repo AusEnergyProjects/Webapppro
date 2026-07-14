@@ -158,6 +158,7 @@ function enquiryDetails_(payload) {
     businessWebsite: payload.businessWebsite || "",
     serviceStates: payload.serviceStates || [],
     partnerNotes: payload.partnerNotes || "",
+    directTradeTriage: payload.directTradeTriage || null,
     annualKwh: valueOrBlank_(payload.annualKwh),
     annualMj: valueOrBlank_(payload.annualMj),
     solarKw: valueOrBlank_(payload.solarKw),
@@ -412,6 +413,7 @@ function gasRows_(payload) {
 }
 
 function projectRows_(payload) {
+  const triage = payload.directTradeTriage || {};
   return compactRows_([
     ["Services", listLabels_(payload.projectCategories, categoryLabel_)],
     ["Location", location_(payload)],
@@ -421,7 +423,31 @@ function projectRows_(payload) {
     ["Preferred timing", timeframeLabel_(payload.timeframe)],
     ["Priorities", listLabels_(payload.projectPriorities, priorityLabel_)],
     ["Preferred contact", contactLabel_(payload.preferredContact)],
+    ["Triage status", triageStatusLabel_(triage.status)],
+    ["Review priority", triagePriorityLabel_(triage.priority)],
+    ["Review flags", listLabels_(triage.reviewFlags, triageFlagLabel_)],
+    ["Automatic distribution", triage.autoSend === false ? "Off. Manual approval required." : "Not specified"],
   ]);
+}
+
+function triageStatusLabel_(value) {
+  const labels = { manual_matching_review: "Ready for manual matching review", hold_for_authority_review: "Hold until property authority is reviewed" };
+  return labels[value] || value;
+}
+
+function triagePriorityLabel_(value) {
+  const labels = { urgent_manual_review: "Urgent manual review", quote_ready_review: "Quote-ready review", standard_review: "Standard review" };
+  return labels[value] || value;
+}
+
+function triageFlagLabel_(value) {
+  const labels = {
+    property_authority_unconfirmed: "Property authority is not confirmed",
+    custom_scope_requires_clarification: "Custom scope needs clarification",
+    assessment_or_advice_may_be_needed_first: "Assessment or advice may be needed first",
+    owners_corporation_or_shared_property_checks_may_apply: "Shared property approvals may apply",
+  };
+  return labels[value] || value;
 }
 
 function partnerRows_(payload) {

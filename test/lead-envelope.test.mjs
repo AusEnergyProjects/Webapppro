@@ -21,12 +21,27 @@ test("lead envelopes add one reference and infer state without adding contact da
   const envelope = createLeadEnvelope({ ...base, enquiry: "gas-hot-water", email: "person@example.com", phone: "0400000000" }, {
     createId: () => "12345678-abcd-4000-8000-123456789abc",
   });
-  assert.equal(envelope.schemaVersion, "2");
+  assert.equal(envelope.schemaVersion, "3");
   assert.equal(envelope.eventType, "gas.upgrade");
   assert.equal(envelope.reference, "AEA-20260714-12345678AB");
   assert.equal(envelope.state, "VIC");
   assert.equal(envelope.source, "aea-energy-web");
   assert.doesNotMatch(envelope.reference, /person|example|0400/i);
+});
+
+test("Direct Trade project envelopes carry a manual triage contract", () => {
+  const envelope = createLeadEnvelope({
+    ...base,
+    enquiry: "direct-trade-project",
+    projectCategories: ["solar"],
+    propertyRelationship: "planning-only",
+    projectStage: "researching",
+    projectPriorities: ["need-advice"],
+    timeframe: "later",
+  }, { createId: () => "12345678-abcd-4000-8000-123456789abc" });
+  assert.equal(envelope.directTradeTriage.status, "hold_for_authority_review");
+  assert.equal(envelope.directTradeTriage.autoSend, false);
+  assert.equal(envelope.directTradeTriage.matchCriteria.state, "VIC");
 });
 
 test("lead envelopes reject unsupported upgrade events", () => {
