@@ -15,6 +15,9 @@ const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const customerBrief = read("../src/components/DirectTradeProjectBrief.tsx");
+const billing = read("../src/lib/direct-trade-billing.ts");
+const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
+const membership = read("../src/app/direct-trade/membership/page.tsx");
 
 test("opportunity allocation is capped, proximity based and load balanced", () => {
   assert.match(opportunityServer, /MAX_VISIBLE_INSTALLERS = 6/);
@@ -87,9 +90,28 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(supplierRoute, /min_order_qty/);
   assert.match(supplierRoute, /order_increment/);
   assert.match(supplierRoute, /DEPENDENCY_OWNERSHIP/);
+  assert.match(supplierRoute, /cleanModelDependencies/);
+  assert.match(supplierRoute, /linkedModelNumber/);
+  assert.match(supplierRoute, /dependenciesImported/);
   assert.match(supplierRoute, /Import between 1 and 100 catalogue rows/);
   assert.match(supplierUi, /Bulk catalogue import/);
-  assert.match(supplierUi, /Download CSV template/);
+  assert.match(supplierUi, /Download completed CSV demo/);
+  assert.match(supplierUi, /dependency_model_numbers/);
+  assert.match(supplierUi, /EASYFIT-250\|PLINTH-250/);
   assert.match(supplierUi, /Linked products and kit dependencies/);
   assert.match(installerUi, /Prices are wholesaler-supplied before GST/);
+});
+
+test("Stripe memberships are account matched, signed and term aware", () => {
+  assert.match(billing, /client_reference_id/);
+  assert.match(billing, /prefilled_email/);
+  assert.match(billing, /billing\.stripe\.com\/p\/login/);
+  assert.match(stripeWebhook, /verifyStripeSignature/);
+  assert.match(stripeWebhook, /PLAN_BY_PAYMENT_LINK/);
+  assert.match(stripeWebhook, /checkout\.session\.completed/);
+  assert.match(stripeWebhook, /customer\.subscription\.updated/);
+  assert.match(stripeWebhook, /active_cancels_at_period_end/);
+  assert.match(membership, /Cancel any time/);
+  assert.match(membership, /prepaid 12-month term/i);
+  assert.match(membership, /Australian Consumer Law/);
 });

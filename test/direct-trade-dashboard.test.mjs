@@ -84,10 +84,10 @@ test("membership page presents all approved prices and no per-lead model", () =>
   assert.match(membership, /\$399/);
   assert.match(membership, /All prices include GST/);
   assert.match(membership, /One subscription, no per-lead fees/);
-  assert.match(membership, /Stripe is not connected/);
+  assert.match(membership, /Secure Stripe billing is live/);
   assert.match(
     membership,
-    /both businesses receive one month of membership credit/,
+    /The referral system is not active yet/,
   );
   assert.match(
     membership,

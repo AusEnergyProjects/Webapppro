@@ -154,6 +154,43 @@ type DependencyInput = {
   note: string;
 };
 
+type ModelDependencyInput = {
+  linkedModelNumber: string;
+  relationship: string;
+  defaultQty: number;
+  note: string;
+};
+
+function cleanModelDependencies(
+  value: unknown,
+  modelNumber: string,
+): ModelDependencyInput[] | null {
+  if (!Array.isArray(value) || value.length > 30)
+    return value === undefined ? [] : null;
+  const results: ModelDependencyInput[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    const linkedModelNumber = text(record.linkedModelNumber, 100).toUpperCase();
+    const relationship = text(record.relationship, 30);
+    const defaultQty = integer(record.defaultQty, 1, 100000);
+    const note = text(record.note, 300);
+    const key = `${linkedModelNumber}:${relationship}`;
+    if (
+      !linkedModelNumber ||
+      linkedModelNumber === modelNumber ||
+      !RELATIONSHIPS.has(relationship) ||
+      defaultQty === null ||
+      seen.has(key)
+    )
+      return null;
+    seen.add(key);
+    results.push({ linkedModelNumber, relationship, defaultQty, note });
+  }
+  return results;
+}
+
 function cleanDependencies(
   value: unknown,
   productId: string,
@@ -320,13 +357,24 @@ export async function POST(request: Request) {
           400,
         );
       }
-      const rows = body.products.map((item) =>
+      const sourceRows = body.products as unknown[];
+      const rows = sourceRows.map((item) =>
         item && typeof item === "object"
           ? cleanProduct(item as Record<string, unknown>)
           : null,
       );
+      const modelDependencies = sourceRows.map((item, index) =>
+        item && typeof item === "object" && rows[index]
+          ? cleanModelDependencies(
+              (item as Record<string, unknown>).dependencies,
+              rows[index]!.modelNumber,
+            )
+          : null,
+      );
       const invalidRows = rows
-        .map((item, index) => (item ? 0 : index + 2))
+        .map((item, index) =>
+          item && modelDependencies[index] ? 0 : index + 2,
+        )
         .filter(Boolean);
       if (invalidRows.length) {
         return json(
@@ -338,6 +386,41 @@ export async function POST(request: Request) {
         );
       }
       const db = getD1();
+      const importedModels = new Set(rows.map((row) => row!.modelNumber));
+      if (importedModels.size !== rows.length) {
+        return json(
+          {
+            ok: false,
+            error:
+              "Each CSV row must use a unique model number. Combine linked items in the dependency columns.",
+          },
+          400,
+        );
+      }
+      const existingModels = await db
+        .prepare(
+          "SELECT model_number FROM supplier_products WHERE firebase_uid = ?",
+        )
+        .bind(identity.uid)
+        .all<{ model_number: string }>();
+      const availableModels = new Set([
+        ...existingModels.results.map((item) => item.model_number),
+        ...importedModels,
+      ]);
+      const missingDependency = modelDependencies
+        .flatMap((items, rowIndex) =>
+          (items || []).map((item) => ({ item, rowIndex })),
+        )
+        .find(({ item }) => !availableModels.has(item.linkedModelNumber));
+      if (missingDependency) {
+        return json(
+          {
+            ok: false,
+            error: `CSV row ${missingDependency.rowIndex + 2} links to model ${missingDependency.item.linkedModelNumber}, but that model is not in this file or catalogue.`,
+          },
+          400,
+        );
+      }
       const now = new Date().toISOString();
       await db.batch(
         rows.map((row) => {
@@ -379,10 +462,37 @@ export async function POST(request: Request) {
             );
         }),
       );
+      const storedProducts = await db
+        .prepare(
+          "SELECT id, model_number FROM supplier_products WHERE firebase_uid = ?",
+        )
+        .bind(identity.uid)
+        .all<{ id: string; model_number: string }>();
+      const idByModel = new Map(
+        storedProducts.results.map((item) => [item.model_number, item.id]),
+      );
+      for (let index = 0; index < rows.length; index += 1) {
+        const productId = idByModel.get(rows[index]!.modelNumber);
+        if (!productId) throw new Error("IMPORTED_PRODUCT_MISSING");
+        await replaceDependencies(
+          identity.uid,
+          productId,
+          (modelDependencies[index] || []).map((item) => ({
+            linkedProductId: idByModel.get(item.linkedModelNumber) || "",
+            relationship: item.relationship,
+            defaultQty: item.defaultQty,
+            note: item.note,
+          })),
+        );
+      }
       return json(
         {
           ok: true,
           imported: rows.length,
+          dependenciesImported: modelDependencies.reduce(
+            (total, items) => total + (items?.length || 0),
+            0,
+          ),
           products: await catalogue(identity.uid),
         },
         201,

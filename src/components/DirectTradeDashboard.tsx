@@ -6,6 +6,10 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
+import {
+  directTradeCheckoutUrl,
+  directTradePortalLink,
+} from "@/lib/direct-trade-billing";
 
 type DashboardProfile = {
   businessName: string;
@@ -166,6 +170,38 @@ export function DirectTradeDashboard() {
   const annualMonthly = isSupplier ? 199 : 99;
   const flexibleMonthly = isSupplier ? 399 : 199;
   const annualTotal = annualMonthly * 12;
+  const annualCheckout =
+    user && profile
+      ? directTradeCheckoutUrl({
+          partnerType: profile.partnerType,
+          cadence: "annual",
+          firebaseUid: user.uid,
+          email: user.email || "",
+        })
+      : "";
+  const monthlyCheckout =
+    user && profile
+      ? directTradeCheckoutUrl({
+          partnerType: profile.partnerType,
+          cadence: "monthly",
+          firebaseUid: user.uid,
+          email: user.email || "",
+        })
+      : "";
+  const billingLabel: Record<string, string> = {
+    not_connected: "No membership selected",
+    processing: "Payment confirmation in progress",
+    trial: "Trial membership active",
+    active: "Membership active",
+    active_cancels_at_period_end: "Active until the current paid term ends",
+    past_due: "Payment action required",
+    paused: "Membership paused",
+    cancelled: "Membership ended",
+  };
+  const canStartMembership = Boolean(
+    profile &&
+      ["not_connected", "cancelled"].includes(profile.billingStatus),
+  );
   const profileComplete = Boolean(
     profile?.businessName &&
     profile.addressLine1 &&
@@ -688,7 +724,10 @@ export function DirectTradeDashboard() {
                     </li>
                     <li>
                       <strong>Choose membership</strong>
-                      <small>Available when Stripe billing is connected</small>
+                      <small>
+                        {billingLabel[profile.billingStatus] ||
+                          "Choose a secure Stripe plan below"}
+                      </small>
                     </li>
                     <li
                       className={
@@ -930,15 +969,17 @@ export function DirectTradeDashboard() {
           <section
             className="dashboard-panel dashboard-membership"
             aria-labelledby="dashboard-membership-title"
+            id="membership"
           >
             <div className="dashboard-panel-heading">
-              <span>Membership preview</span>
+              <span>Secure membership billing</span>
               <h2 id="dashboard-membership-title">
                 Simple subscription pricing with no per-lead fees
               </h2>
               <p>
-                Prices below include GST. Billing is not active and no payment
-                details are being collected yet.
+                Prices include GST. Stripe securely collects payment details,
+                issues invoices and keeps subscription controls separate from
+                marketplace matching.
               </p>
             </div>
             <div className="dashboard-pricing-grid">
@@ -951,16 +992,26 @@ export function DirectTradeDashboard() {
                 </strong>
                 <p>
                   Billed as ${annualTotal.toLocaleString("en-AU")} once each
-                  year, including GST.
+                  year, including GST. This is a prepaid 12-month term.
                 </p>
                 <ul>
-                  <li>Full dashboard and opportunity access after approval</li>
+                  <li>Full role-specific dashboard access after approval</li>
                   <li>No individual lead charges</li>
-                  <li>Referral rewards when billing launches</li>
+                  <li>Stop renewal before the next annual charge</li>
+                  <li>
+                    No early cancellation or refund except where Australian
+                    Consumer Law requires it
+                  </li>
                 </ul>
-                <button type="button" disabled>
-                  Stripe billing coming next
-                </button>
+                {canStartMembership ? (
+                  <a className="billing-checkout-link" href={annualCheckout}>
+                    Start annual membership with Stripe
+                  </a>
+                ) : (
+                  <span className="billing-checkout-link is-disabled">
+                    Manage the current membership below
+                  </span>
+                )}
               </article>
               <article>
                 <span>Flexible</span>
@@ -970,17 +1021,37 @@ export function DirectTradeDashboard() {
                   <small>/month</small>
                 </strong>
                 <p>
-                  Charged monthly, including GST, with no annual commitment.
+                  Charged monthly, including GST. Cancel any time and access
+                  continues until the end of the paid monthly billing period.
                 </p>
                 <ul>
                   <li>The same matching and placement rules</li>
                   <li>No individual lead charges</li>
-                  <li>Manage the plan from the dashboard</li>
+                  <li>No annual commitment or early cancellation fee</li>
+                  <li>Manage invoices and payment details in Stripe</li>
                 </ul>
-                <button type="button" disabled>
-                  Stripe billing coming next
-                </button>
+                {canStartMembership ? (
+                  <a className="billing-checkout-link" href={monthlyCheckout}>
+                    Start monthly membership with Stripe
+                  </a>
+                ) : (
+                  <span className="billing-checkout-link is-disabled">
+                    Manage the current membership below
+                  </span>
+                )}
               </article>
+            </div>
+            <div className="dashboard-billing-actions">
+              <a
+                className="btn ghost"
+                href={directTradePortalLink}
+                rel="noreferrer"
+              >
+                Manage an existing Stripe membership
+              </a>
+              <a className="btn ghost" href="/direct-trade/membership/terms">
+                Read membership and cancellation terms
+              </a>
             </div>
           </section>
 

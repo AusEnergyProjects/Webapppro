@@ -31,6 +31,34 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const stripeMemberships = sqliteTable("stripe_memberships", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  partnerType: text("partner_type").notNull(),
+  planKey: text("plan_key").notNull(),
+  paymentLinkId: text("payment_link_id").notNull(),
+  stripeCustomerId: text("stripe_customer_id").notNull().default(""),
+  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
+  status: text("status").notNull(),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", {
+    mode: "boolean",
+  }).notNull().default(false),
+  currentPeriodEnd: integer("current_period_end").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("stripe_memberships_subscription_idx").on(table.stripeSubscriptionId),
+  index("stripe_memberships_owner_idx").on(table.firebaseUid, table.updatedAt),
+]);
+
+export const stripeWebhookEvents = sqliteTable("stripe_webhook_events", {
+  id: text("id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("stripe_webhook_events_created_idx").on(table.createdAt),
+]);
+
 export const verificationDocuments = sqliteTable("verification_documents", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

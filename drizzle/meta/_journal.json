@@ -43,6 +43,13 @@
       "when": 1784015219979,
       "tag": "0005_yielding_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784021479156,
+      "tag": "0006_silky_wild_pack",
+      "breakpoints": true
     }
   ]
 }

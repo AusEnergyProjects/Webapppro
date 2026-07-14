@@ -54,8 +54,10 @@ test("the starter dashboard separates membership from opportunity matching", () 
   assert.match(dashboard, /No per-lead purchase or bidding is required/);
   assert.match(
     dashboard,
-    /Billing is not active and no payment\s+details are being collected\s+yet/,
+    /Stripe securely collects payment details/,
   );
+  assert.match(dashboard, /Start annual membership with Stripe/);
+  assert.match(dashboard, /Cancel any time/);
   assert.match(dashboard, /including GST/);
   assert.match(
     dashboard,

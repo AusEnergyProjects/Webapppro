@@ -1216,9 +1216,12 @@ export function AdminOperationsPortal() {
                           >
                             {[
                               "not_connected",
+                              "processing",
                               "trial",
                               "active",
+                              "active_cancels_at_period_end",
                               "past_due",
+                              "paused",
                               "cancelled",
                             ].map((value) => (
                               <option key={value}>{value}</option>

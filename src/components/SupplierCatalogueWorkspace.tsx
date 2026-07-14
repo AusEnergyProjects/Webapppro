@@ -103,7 +103,28 @@ const csvHeaders = [
   "warranty_years",
   "datasheet_url",
   "listing_status",
+  "dependency_model_numbers",
+  "dependency_relationships",
+  "dependency_default_quantities",
+  "dependency_notes",
 ];
+
+function csvLine(values: string[]) {
+  return values
+    .map((value) => `"${value.replaceAll('"', '""')}"`)
+    .join(",");
+}
+
+function pipeValues(value: string) {
+  return value
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function pipeColumns(value: string) {
+  return value.split("|").map((item) => item.trim());
+}
 
 function parseCsv(source: string) {
   const rows: string[][] = [];
@@ -314,32 +335,78 @@ export function SupplierCatalogueWorkspace({
   }
 
   function downloadCsvTemplate() {
-    const example = [
-      "HPHW-250",
-      "Example brand",
-      "250 L heat pump hot water system",
-      "hot-water",
-      "250 litre system with stated application and inclusions",
-      "2450.00",
-      "1",
-      "1",
-      "each",
-      "in_stock",
-      "0",
-      "7",
-      "https://example.com.au/product",
-      "draft",
+    const examples = [
+      [
+        "EASYFIT-250",
+        "Example brand",
+        "Easy-fit connection kit",
+        "plumbing",
+        "Valves and connection hardware for the example 250 litre system.",
+        "285.00",
+        "1",
+        "1",
+        "kit",
+        "in_stock",
+        "0",
+        "2",
+        "https://example.com.au/easy-fit-kit",
+        "draft",
+        "",
+        "",
+        "",
+        "",
+      ],
+      [
+        "PLINTH-250",
+        "Example brand",
+        "Equipment plinth",
+        "mounting-hardware",
+        "Optional equipment plinth compatible with the example hot water system.",
+        "145.00",
+        "1",
+        "1",
+        "each",
+        "limited",
+        "3",
+        "5",
+        "https://example.com.au/plinth",
+        "draft",
+        "",
+        "",
+        "",
+        "",
+      ],
+      [
+        "HPHW-250",
+        "Example brand",
+        "250 L heat pump hot water system",
+        "hot-water",
+        "250 litre heat pump system with stated application and inclusions.",
+        "2450.00",
+        "1",
+        "1",
+        "each",
+        "order_in",
+        "10",
+        "7",
+        "https://example.com.au/heat-pump",
+        "draft",
+        "EASYFIT-250|PLINTH-250",
+        "required|recommended",
+        "1|1",
+        "Required connection kit|Offer where the site needs a raised base",
+      ],
     ];
     const blob = new Blob(
       [
-        `${csvHeaders.join(",")}\n${example.map((value) => `"${value.replaceAll('"', '""')}"`).join(",")}\n`,
+        `${csvHeaders.join(",")}\n${examples.map(csvLine).join("\n")}\n`,
       ],
       { type: "text/csv;charset=utf-8" },
     );
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "aea-wholesaler-catalogue-template.csv";
+    anchor.download = "aea-wholesaler-catalogue-demo.csv";
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -367,24 +434,55 @@ export function SupplierCatalogueWorkspace({
       const index = Object.fromEntries(
         headers.map((header, position) => [header, position]),
       );
-      const productsToImport = rows.slice(1).map((values) => ({
-        modelNumber: values[index.model_number] || "",
-        brand: values[index.brand] || "",
-        name: values[index.name] || "",
-        category: values[index.category] || "",
-        description: values[index.description] || "",
-        unitPriceCentsExGst: Math.round(
-          Number(values[index.price_ex_gst]) * 100,
-        ),
-        minOrderQty: Number(values[index.min_order_qty]),
-        orderIncrement: Number(values[index.order_increment]),
-        unitLabel: values[index.unit_label] || "each",
-        stockStatus: values[index.stock_status] || "order_in",
-        leadTimeDays: Number(values[index.lead_time_days] || 0),
-        warrantyYears: Number(values[index.warranty_years] || 0),
-        datasheetUrl: values[index.datasheet_url] || "",
-        listingStatus: values[index.listing_status] || "draft",
-      }));
+      const productsToImport = rows.slice(1).map((values, rowIndex) => {
+        const dependencyModels = pipeValues(
+          values[index.dependency_model_numbers] || "",
+        );
+        const dependencyRelationships = pipeColumns(
+          values[index.dependency_relationships] || "",
+        );
+        const dependencyQuantities = pipeColumns(
+          values[index.dependency_default_quantities] || "",
+        );
+        const dependencyNotes = pipeColumns(
+          values[index.dependency_notes] || "",
+        );
+        if (
+          !dependencyModels.length &&
+          (dependencyRelationships.some(Boolean) ||
+            dependencyQuantities.some(Boolean) ||
+            dependencyNotes.some(Boolean))
+        ) {
+          throw new Error(
+            `CSV row ${rowIndex + 2} has dependency settings without a dependency model number.`,
+          );
+        }
+        return {
+          modelNumber: values[index.model_number] || "",
+          brand: values[index.brand] || "",
+          name: values[index.name] || "",
+          category: values[index.category] || "",
+          description: values[index.description] || "",
+          unitPriceCentsExGst: Math.round(
+            Number(values[index.price_ex_gst]) * 100,
+          ),
+          minOrderQty: Number(values[index.min_order_qty]),
+          orderIncrement: Number(values[index.order_increment]),
+          unitLabel: values[index.unit_label] || "each",
+          stockStatus: values[index.stock_status] || "order_in",
+          leadTimeDays: Number(values[index.lead_time_days] || 0),
+          warrantyYears: Number(values[index.warranty_years] || 0),
+          datasheetUrl: values[index.datasheet_url] || "",
+          listingStatus: values[index.listing_status] || "draft",
+          dependencies: dependencyModels.map((linkedModelNumber, position) => ({
+            linkedModelNumber,
+            relationship:
+              dependencyRelationships[position] || "recommended",
+            defaultQty: Number(dependencyQuantities[position] || 1),
+            note: dependencyNotes[position] || "",
+          })),
+        };
+      });
       const token = await user.getIdToken();
       let imported = 0;
       for (let offset = 0; offset < productsToImport.length; offset += 100) {
@@ -407,7 +505,7 @@ export function SupplierCatalogueWorkspace({
         setProducts(result.products || []);
       }
       setStatus(
-        `${imported} catalogue row${imported === 1 ? "" : "s"} imported or updated. Imported items are pending review; add model dependencies from the editor.`,
+        `${imported} catalogue row${imported === 1 ? "" : "s"} imported or updated with matching model dependencies. Imported items are pending review.`,
       );
     } catch (error) {
       setStatus(
@@ -488,12 +586,17 @@ export function SupplierCatalogueWorkspace({
               <strong>Bulk catalogue import</strong>
               <span>
                 Import up to 100 rows per secure batch. Existing model numbers
-                are updated and returned to review.
+                and dependency bundles are updated and returned to review.
               </span>
+              <small>
+                The demo shows valid categories, ex-GST pricing, order rules
+                and pipe-separated linked models. Keep dependent products in
+                the same file or add them to the catalogue first.
+              </small>
             </div>
             <div>
               <button type="button" onClick={downloadCsvTemplate}>
-                Download CSV template
+                Download completed CSV demo
               </button>
               <label>
                 <span>{busy ? "Importing..." : "Choose catalogue CSV"}</span>
