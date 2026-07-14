@@ -286,6 +286,10 @@ export function AdminOperationsPortal() {
     unread: 0,
     action_required: 0,
     urgent: 0,
+    unassigned: 0,
+    overdue: 0,
+    due_soon: 0,
+    mine: 0,
     resolved: 0,
   });
   const [directoryTarget, setDirectoryTarget] = useState<{ type: string; uid: string; nonce: number } | null>(null);
@@ -1147,7 +1151,7 @@ export function AdminOperationsPortal() {
                 <article>
                   <span>Action notifications</span>
                   <strong>{notificationCounts.action_required || 0}</strong>
-                  <small>{notificationCounts.unread || 0} unread events</small>
+                  <small>{notificationCounts.overdue || 0} overdue | {notificationCounts.unassigned || 0} unassigned</small>
                 </article>
                 <article>
                   <span>Business network</span>
@@ -1192,6 +1196,14 @@ export function AdminOperationsPortal() {
                     <h2>What needs attention</h2>
                   </div>
                   <div className="admin-queue-list">
+                    <button onClick={() => setTab("inbox")}>
+                      <strong>{notificationCounts.overdue || 0}</strong>
+                      <span>Operations cases past their response target</span>
+                    </button>
+                    <button onClick={() => setTab("inbox")}>
+                      <strong>{notificationCounts.unassigned || 0}</strong>
+                      <span>Actionable cases without a responsible administrator</span>
+                    </button>
                     <button onClick={() => setTab("inbox")}>
                       <strong>{notificationCounts.action_required || 0}</strong>
                       <span>Inbox items requiring action or approval</span>

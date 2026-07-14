@@ -5,6 +5,7 @@ import fs from "node:fs";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0012_elite_whizzer.sql");
+const workflowMigration = read("../drizzle/0013_magenta_vivisector.sql");
 const notificationServer = read("../src/lib/admin-notifications.ts");
 const notificationRoute = read("../src/app/api/admin/notifications/route.ts");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
@@ -36,6 +37,18 @@ test("operations notifications are durable, deduplicated and action oriented", (
   assert.match(notificationServer, /statements\.slice\(index, index \+ 50\)/);
 });
 
+test("operations cases have ownership, response targets and indexed queues", () => {
+  assert.match(schema, /assignedToUid: text\("assigned_to_uid"\)/);
+  assert.match(schema, /dueAt: text\("due_at"\)/);
+  assert.match(schema, /admin_notifications_assignee_idx/);
+  assert.match(schema, /admin_notifications_due_idx/);
+  assert.match(workflowMigration, /ADD `assigned_to_uid`/);
+  assert.match(workflowMigration, /WHEN 'urgent'.*\+2 hours/s);
+  assert.match(workflowMigration, /WHERE `requires_action` = 1 AND `status` != 'resolved'/);
+  assert.match(notificationServer, /adminNotificationDueAt/);
+  assert.match(notificationServer, /urgent: 2, high: 8, normal: 24, low: 72/);
+});
+
 test("every primary signup, enquiry, approval and trade response boundary creates an operations event", () => {
   assert.match(customerAccount, /eventType: "customer\.signup"/);
   assert.match(customerProjects, /eventType: "customer\.enquiry_submitted"/);
@@ -60,6 +73,14 @@ test("the notification API is filtered, role protected and auditable", () => {
   assert.match(notificationRoute, /Record how the action was resolved/);
   assert.match(notificationRoute, /writeAdminAudit\(admin, "notification\.resolve"/);
   assert.match(notificationRoute, /\["owner", "admin", "reviewer"\]/);
+  assert.match(notificationRoute, /queue === "mine"/);
+  assert.match(notificationRoute, /queue === "overdue"/);
+  assert.match(notificationRoute, /action === "assign"/);
+  assert.match(notificationRoute, /action === "set_due"/);
+  assert.match(notificationRoute, /action === "set_priority"/);
+  assert.match(notificationRoute, /action === "add_note"/);
+  assert.match(notificationRoute, /Your operations role can only assign a case to yourself/);
+  assert.match(notificationRoute, /WHERE l\.entity_type = 'admin_notification'/);
   assert.match(adminAccounts, /event_type IN \('trade\.signup', 'trade\.verification_evidence_uploaded'\)/);
   assert.match(adminProducts, /Catalogue review: \$\{reviewStatus\}/);
   assert.match(adminReferrals, /Referral decision: \$\{action\}/);
@@ -90,6 +111,13 @@ test("the operations portal prioritises alerts and provides a filterable account
   assert.match(inbox, /Enable browser alerts/);
   assert.match(inbox, /Action required only/);
   assert.match(inbox, /Open record/);
+  assert.match(inbox, /My queue/);
+  assert.match(inbox, /Unassigned/);
+  assert.match(inbox, /Response target/);
+  assert.match(inbox, /Internal case note/);
+  assert.match(inbox, /Case history/);
+  assert.match(inbox, /aea-admin-inbox-queue/);
+  assert.doesNotMatch(inbox, /window\.prompt/);
   assert.match(directory, /All account types/);
   assert.match(directory, /Safe account access/);
   assert.match(directory, /never signs in as that person/);

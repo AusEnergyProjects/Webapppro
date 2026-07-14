@@ -187,6 +187,9 @@ export const adminNotifications = sqliteTable("admin_notifications", {
   resolvedAt: text("resolved_at").notNull().default(""),
   resolvedByUid: text("resolved_by_uid").notNull().default(""),
   resolutionNote: text("resolution_note").notNull().default(""),
+  assignedToUid: text("assigned_to_uid").notNull().default(""),
+  assignedAt: text("assigned_at").notNull().default(""),
+  dueAt: text("due_at").notNull().default(""),
   metadata: text("metadata").notNull().default("{}"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -196,6 +199,8 @@ export const adminNotifications = sqliteTable("admin_notifications", {
   index("admin_notifications_action_idx").on(table.requiresAction, table.status, table.createdAt),
   index("admin_notifications_category_idx").on(table.category, table.createdAt),
   index("admin_notifications_entity_idx").on(table.entityType, table.entityId),
+  index("admin_notifications_assignee_idx").on(table.assignedToUid, table.status, table.dueAt),
+  index("admin_notifications_due_idx").on(table.status, table.dueAt),
 ]);
 
 export const tradeAccountNotes = sqliteTable("trade_account_notes", {

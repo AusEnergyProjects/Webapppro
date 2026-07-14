@@ -92,6 +92,13 @@
       "when": 1784066680631,
       "tag": "0012_elite_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1784067820811,
+      "tag": "0013_magenta_vivisector",
+      "breakpoints": true
     }
   ]
 }

@@ -39,13 +39,21 @@ function metadataJson(value: Record<string, unknown> | undefined) {
   }
 }
 
+export function adminNotificationDueAt(input: Pick<AdminNotificationInput, "occurredAt" | "priority" | "requiresAction">) {
+  if (!input.requiresAction) return "";
+  const openedAt = new Date(input.occurredAt || new Date().toISOString());
+  if (Number.isNaN(openedAt.getTime())) return "";
+  const hours = { urgent: 2, high: 8, normal: 24, low: 72 }[input.priority || "normal"];
+  return new Date(openedAt.getTime() + hours * 60 * 60 * 1000).toISOString();
+}
+
 export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: AdminNotificationInput) {
   const now = input.occurredAt || new Date().toISOString();
   return db.prepare(`INSERT INTO admin_notifications
     (id, event_key, event_type, category, priority, title, summary, entity_type, entity_id,
      actor_type, actor_uid, requires_action, status, read_at, read_by_uid, resolved_at,
-     resolved_by_uid, resolution_note, metadata, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', '', '', '', '', ?, ?, ?)
+     resolved_by_uid, resolution_note, assigned_to_uid, assigned_at, due_at, metadata, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', '', '', '', '', '', '', ?, ?, ?, ?)
     ON CONFLICT(event_key) DO NOTHING`)
     .bind(
       crypto.randomUUID(),
@@ -60,6 +68,7 @@ export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: 
       input.actorType || "system",
       bounded(input.actorUid || "", 180),
       input.requiresAction ? 1 : 0,
+      adminNotificationDueAt(input),
       metadataJson(input.metadata),
       now,
       now,
@@ -194,10 +203,10 @@ export async function backfillActionableAdminNotifications() {
   await db.prepare(`INSERT INTO admin_notifications
     (id, event_key, event_type, category, priority, title, summary, entity_type, entity_id,
      actor_type, actor_uid, requires_action, status, read_at, read_by_uid, resolved_at,
-     resolved_by_uid, resolution_note, metadata, created_at, updated_at)
+     resolved_by_uid, resolution_note, assigned_to_uid, assigned_at, due_at, metadata, created_at, updated_at)
     VALUES (?, 'platform:notification-backfill:v1', 'platform.backfill_marker', 'platform', 'low',
       'Notification history prepared', 'Existing actionable items were added to the operations inbox.',
       'platform', 'notification-backfill-v1', 'system', '', 0, 'resolved', ?, 'system', ?, 'system',
-      'Automatic migration marker.', '{}', ?, ?)
+      'Automatic migration marker.', '', '', '', '{}', ?, ?)
     ON CONFLICT(event_key) DO NOTHING`).bind(crypto.randomUUID(), now, now, now, now).run();
 }
