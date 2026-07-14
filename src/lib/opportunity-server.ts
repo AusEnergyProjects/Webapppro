@@ -257,12 +257,13 @@ export async function allocateNearestInstallers(
     .bind(opportunityId)
     .all<Record<string, unknown>>();
   const previouslyMatched = new Set(
-    existing.results.map((item) => String(item.firebase_uid)),
+    existing.results.map((item: Record<string, unknown>) => String(item.firebase_uid)),
   );
-  const activeCount = existing.results.filter((item) =>
+  const activeCount = existing.results.filter((item: Record<string, unknown>) =>
     ACTIVE_MATCH_STATUSES.has(String(item.status)),
   ).length;
-  const openSlots = Math.max(0, MAX_VISIBLE_INSTALLERS - activeCount);
+  const lifetimeRecipientCount = existing.results.length;
+  const openSlots = Math.max(0, MAX_VISIBLE_INSTALLERS - lifetimeRecipientCount);
   if (!openSlots) return { allocated: [], activeCount, eligibleCount: 0 };
 
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -286,11 +287,11 @@ export async function allocateNearestInstallers(
     .all<Record<string, unknown>>();
 
   const candidates = rows.results
-    .filter((row) => !previouslyMatched.has(String(row.firebase_uid)))
-    .map((row) => candidateFromRow(row, opportunity))
-    .filter((item): item is InstallerCandidate => Boolean(item))
+    .filter((row: Record<string, unknown>) => !previouslyMatched.has(String(row.firebase_uid)))
+    .map((row: Record<string, unknown>) => candidateFromRow(row, opportunity))
+    .filter((item: InstallerCandidate | null): item is InstallerCandidate => Boolean(item))
     .sort(
-      (left, right) =>
+      (left: InstallerCandidate, right: InstallerCandidate) =>
         left.distanceBand - right.distanceBand ||
         left.fairnessLoad - right.fairnessLoad ||
         left.distanceKm - right.distanceKm ||
@@ -301,7 +302,7 @@ export async function allocateNearestInstallers(
   const now = new Date().toISOString();
   if (selected.length)
     await db.batch(
-      selected.map((candidate, index) =>
+      selected.map((candidate: InstallerCandidate, index: number) =>
         db
           .prepare(
             `INSERT INTO trade_opportunity_matches
@@ -316,7 +317,7 @@ export async function allocateNearestInstallers(
             candidate.firebaseUid,
             JSON.stringify(candidate.matchedCategories),
             Math.round(candidate.distanceKm * 1000),
-            activeCount + index + 1,
+            lifetimeRecipientCount + index + 1,
             matchedByUid,
             now,
             now,

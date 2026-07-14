@@ -85,6 +85,7 @@ test("moderation, evidence and matching actions have durable audit records", () 
 test("opportunities remain privacy-safe and partner responses stay owner scoped", () => {
   assert.match(schema, /sqliteTable\("trade_opportunities"/);
   assert.match(schema, /trade_opportunity_matches_unique_idx/);
+  assert.match(schema, /sqliteTable\("customer_project_quotes"/);
   assert.match(opportunitiesRoute, /privacy-safe project summary/i);
   assert.doesNotMatch(
     schema,
@@ -92,10 +93,28 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   );
   assert.match(partnerOpportunities, /WHERE m\.firebase_uid = \?/);
   assert.match(partnerOpportunities, /WHERE id = \? AND firebase_uid = \?/);
+  assert.match(partnerOpportunities, /postcode: ""/);
+  assert.match(
+    partnerOpportunities,
+    /distanceBand: distanceBand\(row\.distance_metres\)/,
+  );
+  assert.match(
+    partnerOpportunities,
+    /Direct customer contact is not available\. Respond through the structured platform workflow/,
+  );
+  assert.match(
+    partnerOpportunities,
+    /Wholesalers cannot access or respond to household opportunities/,
+  );
+  assert.match(partnerOpportunities, /action === "submit_quote"/);
   assert.match(
     dashboard,
-    /Household identity and street\s+address are not exposed/,
+    /Household identity, exact location and contact details\s+stay outside the trade workspace/,
   );
+  assert.match(dashboard, /structured platform controls only/);
+  assert.match(dashboard, /Platform coordination active/);
+  assert.match(dashboard, /Customer contact details remain private/);
+  assert.match(dashboard, /<InstallerPlatformQuote/);
   assert.match(dashboard, /I’m interested/);
 });
 

@@ -1,0 +1,399 @@
+"use client";
+
+/* eslint-disable @next/next/no-html-link-for-pages */
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, sendEmailVerification, signOut, type User } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase-client";
+import { createHomeEnergyPlan, homeEnergyPlanOptions as rawHomeEnergyPlanOptions } from "@/lib/home-energy-plan.mjs";
+import { customerProjectOptions as rawCustomerProjectOptions, platformQuoteOptions as rawPlatformQuoteOptions } from "@/lib/customer-projects.mjs";
+import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
+import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
+
+type DashboardView = "overview" | "editor" | "profile" | "detail";
+type Option = [string, string];
+
+const homeEnergyPlanOptions = rawHomeEnergyPlanOptions as {
+  goals: Option[];
+  paces: Option[];
+  situations: Option[];
+  features: Option[];
+};
+const customerProjectOptions = rawCustomerProjectOptions as {
+  states: string[];
+  propertyTypes: Option[];
+  serviceCategories: Option[];
+  priorities: Option[];
+  stages: Option[];
+  timings: Option[];
+  budgets: Option[];
+};
+const platformQuoteOptions = rawPlatformQuoteOptions as {
+  quoteTypes: Option[];
+  inclusions: Option[];
+  startWindows: Option[];
+};
+
+type CustomerProfile = {
+  displayName: string;
+  postcode: string;
+  addressState: string;
+  propertyType: string;
+  householdSituation: string;
+  accountUpdates: boolean;
+  accountStatus: string;
+  accountTier: string;
+  updatedAt: string;
+};
+
+type ProjectQuote = {
+  id: string;
+  optionLabel: string;
+  inclusions: string[];
+  products: Array<{ brand: string; name: string; modelNumber: string; quantity: number; unitLabel: string; unitPriceCentsExGst: number }>;
+  productSubtotalCentsExGst: number;
+  labourCentsExGst: number;
+  otherCentsExGst: number;
+  totalCentsExGst: number;
+  quoteType: string;
+  startWindow: string;
+  durationWeeks: number;
+  workmanshipWarrantyYears: number;
+  customerDecision: "reviewing" | "shortlisted" | "declined";
+  submittedAt: string;
+};
+
+type CustomerProject = {
+  id: string;
+  title: string;
+  homeNickname: string;
+  postcode: string;
+  addressState: string;
+  propertyType: string;
+  householdSituation: string;
+  goal: string;
+  pace: string;
+  existingFeatures: string[];
+  serviceCategories: string[];
+  priorities: string[];
+  projectStage: string;
+  timing: string;
+  budgetRange: string;
+  privateNotes: string;
+  planSnapshot: { title?: string; summary?: string; items?: Array<{ id: string; stage: string; title: string; text: string; href: string; action: string }> };
+  completedPlanItems: string[];
+  status: string;
+  displayStatus: string;
+  submittedAt: string;
+  archivedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  progress: { installerCount: number; reviewingCount: number; responseCount: number; quoteCount: number; opportunityStatus: string; expiresAt: string };
+  quotes: ProjectQuote[];
+};
+
+type ProjectDraft = Pick<CustomerProject, "title" | "homeNickname" | "postcode" | "addressState" | "propertyType" | "householdSituation" | "goal" | "pace" | "existingFeatures" | "serviceCategories" | "priorities" | "projectStage" | "timing" | "budgetRange" | "privateNotes">;
+
+type AccountResult = {
+  profile: CustomerProfile | null;
+  emailVerified: boolean;
+  tradeWorkspace: null | { partnerType: "installer" | "supplier" };
+};
+
+const optionLabel = (options: Array<[string, string]>, value: string) => options.find(([key]) => key === value)?.[1] || value.replaceAll("_", " ");
+const currency = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
+const statusLabels: Record<string, string> = {
+  draft: "Draft",
+  matching: "Installer matching",
+  responses: "Responses received",
+  quote_review: "Quote review",
+  completed: "Complete",
+  withdrawn: "Withdrawn",
+  archived: "Archived",
+};
+
+function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
+  return {
+    title: "",
+    homeNickname: "My home",
+    postcode: profile?.postcode || "",
+    addressState: profile?.addressState || "",
+    propertyType: profile?.propertyType || "house",
+    householdSituation: profile?.householdSituation || "owner",
+    goal: "lower-bills",
+    pace: "staged",
+    existingFeatures: [],
+    serviceCategories: [],
+    priorities: ["lower-bills"],
+    projectStage: "exploring",
+    timing: "planning",
+    budgetRange: "not_set",
+    privateNotes: "",
+  };
+}
+
+function projectDefaultsWithSelection(profile: CustomerProfile | null, selection?: { goal?: string; pace?: string; situation?: string; features?: string[]; categories?: string[]; postcode?: string }): ProjectDraft {
+  const draft = projectDefaults(profile);
+  if (!selection) return draft;
+  return {
+    ...draft,
+    goal: selection.goal || draft.goal,
+    pace: selection.pace || draft.pace,
+    householdSituation: selection.situation || draft.householdSituation,
+    existingFeatures: selection.features || draft.existingFeatures,
+    serviceCategories: selection.categories || draft.serviceCategories,
+    postcode: selection.postcode || draft.postcode,
+  };
+}
+
+function ProfileForm({ user, profile, onSaved }: { user: User; profile: CustomerProfile | null; onSaved: (profile: CustomerProfile) => void }) {
+  const [draft, setDraft] = useState(() => ({
+    displayName: profile?.displayName || user.displayName || "",
+    postcode: profile?.postcode || "",
+    addressState: profile?.addressState || "",
+    propertyType: profile?.propertyType || "house",
+    householdSituation: profile?.householdSituation || "owner",
+    accountUpdates: profile?.accountUpdates ?? false,
+    consent: Boolean(profile),
+  }));
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setStatus("Saving your private household profile...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/customer-account", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(draft) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "Your profile could not be saved.");
+      onSaved(result.profile);
+      setStatus("Saved. Your customer account remains free and your household details stay private.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Your profile could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="customer-profile-panel" aria-labelledby="customer-profile-title">
+    <div className="customer-panel-heading"><span>{profile ? "Privacy and profile" : "One quick setup step"}</span><h2 id="customer-profile-title">Set the defaults for your home projects</h2><p>We ask for a postcode to guide local planning and match service coverage. We do not ask for a street address or phone number.</p></div>
+    <form onSubmit={save} noValidate>
+      <div className="customer-field-grid">
+        <Field label="Name shown in your account"><input value={draft.displayName} onChange={(event) => setDraft({ ...draft, displayName: event.target.value })} autoComplete="name" /></Field>
+        <Field label="Account email"><input value={user.email || ""} readOnly aria-readonly="true" /></Field>
+        <Field label="Home postcode"><input value={draft.postcode} onChange={(event) => setDraft({ ...draft, postcode: event.target.value.replace(/\D/g, "").slice(0, 4) })} inputMode="numeric" maxLength={4} autoComplete="postal-code" /></Field>
+        <Field label="State or territory"><select value={draft.addressState} onChange={(event) => setDraft({ ...draft, addressState: event.target.value })}><option value="">Choose one</option>{customerProjectOptions.states.map((state: string) => <option value={state} key={state}>{state}</option>)}</select></Field>
+        <Field label="Usual property type"><select value={draft.propertyType} onChange={(event) => setDraft({ ...draft, propertyType: event.target.value })}>{customerProjectOptions.propertyTypes.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field>
+        <Field label="Property situation"><select value={draft.householdSituation} onChange={(event) => setDraft({ ...draft, householdSituation: event.target.value })}>{homeEnergyPlanOptions.situations.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field>
+      </div>
+      <label className="customer-check-row"><input type="checkbox" checked={draft.accountUpdates} onChange={(event) => setDraft({ ...draft, accountUpdates: event.target.checked })} /><span><strong>Optional project updates</strong><small>Allow helpful project progress emails. Security and account notices are separate. No marketing list is created.</small></span></label>
+      <label className="customer-check-row"><input type="checkbox" checked={draft.consent} onChange={(event) => setDraft({ ...draft, consent: event.target.checked })} /><span><strong>Private account notice</strong><small>I understand my account email and home defaults are stored for my own dashboard. Trades cannot access them.</small></span></label>
+      <div className="customer-form-actions"><button className="btn" disabled={busy}>{busy ? "Saving..." : profile ? "Update private profile" : "Open my free dashboard"}</button></div>
+      {status && <p className="customer-inline-status" role="status">{status}</p>}
+    </form>
+  </section>;
+}
+
+function ProjectEditor({ initial, existingId, emailVerified, onCancel, onSave, onSubmit }: {
+  initial: ProjectDraft;
+  existingId?: string;
+  emailVerified: boolean;
+  onCancel: () => void;
+  onSave: (draft: ProjectDraft, id?: string) => Promise<string>;
+  onSubmit: (draft: ProjectDraft, id?: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<ProjectDraft>(initial);
+  const [step, setStep] = useState(1);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const [savedId, setSavedId] = useState(existingId || "");
+  const plan = useMemo(() => createHomeEnergyPlan({ goal: draft.goal, pace: draft.pace, situation: draft.householdSituation, features: draft.existingFeatures }), [draft.goal, draft.pace, draft.householdSituation, draft.existingFeatures]);
+  const set = <K extends keyof ProjectDraft>(key: K, value: ProjectDraft[K]) => { setDraft((current) => ({ ...current, [key]: value })); setDirty(true); setStatus(""); };
+  const toggle = (key: "existingFeatures" | "serviceCategories" | "priorities", value: string) => set(key, draft[key].includes(value) ? draft[key].filter((item) => item !== value) : [...draft[key], value]);
+
+  useEffect(() => {
+    const protect = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
+    window.addEventListener("beforeunload", protect);
+    return () => window.removeEventListener("beforeunload", protect);
+  }, [dirty]);
+
+  function validate(nextStep: number) {
+    if (step === 1 && (!draft.title.trim() || !/^\d{4}$/.test(draft.postcode) || !draft.addressState)) { setStatus("Add a private project name, postcode and state before continuing."); return false; }
+    if (step === 4 && (!draft.serviceCategories.length || !draft.priorities.length)) { setStatus("Choose at least one type of work and one priority before reviewing the enquiry."); return false; }
+    setStatus(""); setStep(nextStep); window.scrollTo({ top: 0, behavior: "smooth" }); return true;
+  }
+
+  async function saveDraft() {
+    setBusy(true); setStatus("Saving your draft...");
+    try {
+      const id = await onSave(draft, savedId || undefined);
+      setSavedId(id); setDirty(false); setStatus("Draft saved to your private account.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The draft could not be saved."); }
+    finally { setBusy(false); }
+  }
+
+  async function submitProject() {
+    if (!emailVerified) { setStatus("Verify your account email before requesting installer responses."); return; }
+    if (!draft.serviceCategories.length || !draft.priorities.length) { setStatus("Choose the work and priorities before submitting."); setStep(4); return; }
+    setBusy(true); setStatus("Creating the anonymised installer scope...");
+    try { await onSubmit(draft, savedId || undefined); setDirty(false); }
+    catch (error) { setStatus(error instanceof Error ? error.message : "The enquiry could not be submitted."); }
+    finally { setBusy(false); }
+  }
+
+  const propertyLabel = optionLabel(customerProjectOptions.propertyTypes, draft.propertyType);
+  const categoryLabels = draft.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item));
+  return <section className="customer-project-editor" aria-labelledby="project-editor-title">
+    <header className="customer-editor-header"><div><span>{savedId ? "Edit private draft" : "Create a home project"}</span><h1 id="project-editor-title">{draft.title || "Build a guided project plan"}</h1><p>One step at a time. Save the draft whenever you want and return from any device.</p></div><button type="button" onClick={onCancel}>Exit project</button></header>
+    <div className="customer-stepper" aria-label={`Project builder step ${step} of 5`}><div style={{ width: `${step * 20}%` }} /><ol>{["Home", "Goals", "Roadmap", "Scope", "Privacy review"].map((label, index) => <li className={step === index + 1 ? "active" : step > index + 1 ? "complete" : ""} key={label}><span>{index + 1}</span>{label}</li>)}</ol></div>
+    {status && <p className="customer-editor-status" role="alert">{status}</p>}
+    <div className="customer-editor-body">
+      {step === 1 && <section className="customer-editor-step"><div className="customer-step-heading"><span>Step 1</span><h2>Which home and project is this?</h2><p>The name and home nickname stay inside your account. Installers receive no customer-created titles.</p></div><div className="customer-field-grid"><Field label="Private project name"><input value={draft.title} onChange={(event) => set("title", event.target.value)} placeholder="Example: Winter comfort plan" /></Field><Field label="Home nickname"><input value={draft.homeNickname} onChange={(event) => set("homeNickname", event.target.value)} placeholder="My home" /></Field><Field label="Project postcode"><input value={draft.postcode} onChange={(event) => set("postcode", event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" maxLength={4} /></Field><Field label="State or territory"><select value={draft.addressState} onChange={(event) => set("addressState", event.target.value)}><option value="">Choose one</option>{customerProjectOptions.states.map((state: string) => <option key={state}>{state}</option>)}</select></Field><Field label="Property type"><select value={draft.propertyType} onChange={(event) => set("propertyType", event.target.value)}>{customerProjectOptions.propertyTypes.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="Property situation"><select value={draft.householdSituation} onChange={(event) => set("householdSituation", event.target.value)}>{homeEnergyPlanOptions.situations.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field></div></section>}
+      {step === 2 && <section className="customer-editor-step"><div className="customer-step-heading"><span>Step 2</span><h2>What should the home plan solve?</h2><p>These choices build your private roadmap. They do not send an enquiry.</p></div><fieldset className="customer-choice-group"><legend>Main goal</legend><div className="customer-choice-grid">{homeEnergyPlanOptions.goals.map(([value, label]: [string, string]) => <label className={draft.goal === value ? "selected" : ""} key={value}><input type="radio" name="customer-goal" checked={draft.goal === value} onChange={() => set("goal", value)} /><span>{label}</span></label>)}</div></fieldset><fieldset className="customer-choice-group"><legend>What is already in the home?</legend><div className="customer-choice-grid">{homeEnergyPlanOptions.features.map(([value, label]: [string, string]) => <label className={draft.existingFeatures.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={draft.existingFeatures.includes(value)} onChange={() => toggle("existingFeatures", value)} /><span>{label}</span></label>)}</div></fieldset><fieldset className="customer-choice-group"><legend>Preferred pace</legend><div className="customer-choice-grid compact">{homeEnergyPlanOptions.paces.map(([value, label]: [string, string]) => <label className={draft.pace === value ? "selected" : ""} key={value}><input type="radio" name="customer-pace" checked={draft.pace === value} onChange={() => set("pace", value)} /><span>{label}</span></label>)}</div></fieldset></section>}
+      {step === 3 && <section className="customer-editor-step"><div className="customer-step-heading"><span>Step 3</span><h2>{plan.title}</h2><p>{plan.summary}</p></div><ol className="customer-roadmap-preview">{plan.items.map((item: { id: string; stage: string; title: string; text: string }, index: number) => <li key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{item.stage}</small><h3>{item.title}</h3><p>{item.text}</p></div></li>)}</ol><div className="customer-guidance-note"><strong>This roadmap remains useful without an enquiry</strong><p>You can save it, mark steps complete and keep research notes. Installer matching is optional and starts only after the privacy review.</p></div></section>}
+      {step === 4 && <section className="customer-editor-step"><div className="customer-step-heading"><span>Step 4</span><h2>Define the work you may want priced</h2><p>Select structured details for installer matching. Your free-form notes stay private.</p></div><fieldset className="customer-choice-group"><legend>Types of work</legend><div className="customer-choice-grid">{customerProjectOptions.serviceCategories.map(([value, label]: [string, string]) => <label className={draft.serviceCategories.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={draft.serviceCategories.includes(value)} onChange={() => toggle("serviceCategories", value)} /><span>{label}</span></label>)}</div></fieldset><fieldset className="customer-choice-group"><legend>Priorities</legend><div className="customer-choice-grid">{customerProjectOptions.priorities.map(([value, label]: [string, string]) => <label className={draft.priorities.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={draft.priorities.includes(value)} onChange={() => toggle("priorities", value)} /><span>{label}</span></label>)}</div></fieldset><div className="customer-field-grid"><Field label="Project stage"><select value={draft.projectStage} onChange={(event) => set("projectStage", event.target.value)}>{customerProjectOptions.stages.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="Timing"><select value={draft.timing} onChange={(event) => set("timing", event.target.value)}>{customerProjectOptions.timings.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label="Private planning budget"><select value={draft.budgetRange} onChange={(event) => set("budgetRange", event.target.value)}>{customerProjectOptions.budgets.map(([value, label]: [string, string]) => <option value={value} key={value}>{label}</option>)}</select></Field></div><Field label="Private project notes" optional="never shared with trades" hint="Use this for questions, product ideas or reminders. Do not store passwords, identity documents, bills or meter identifiers."><textarea rows={6} maxLength={2000} value={draft.privateNotes} onChange={(event) => set("privateNotes", event.target.value)} /></Field></section>}
+      {step === 5 && <section className="customer-editor-step"><div className="customer-step-heading"><span>Step 5</span><h2>Review exactly what installers can see</h2><p>The platform generates this summary from controlled choices. Your name, email, home nickname, project name, private notes and exact postcode stay hidden.</p></div><div className="customer-privacy-preview"><div className="customer-preview-visible"><span>Installer view</span><h3>{categoryLabels.length === 1 ? `${categoryLabels[0]} project` : "Multi-upgrade home project"}</h3><dl><div><dt>Region</dt><dd>{draft.addressState}, exact location withheld</dd></div><div><dt>Property</dt><dd>{propertyLabel}</dd></div><div><dt>Stage</dt><dd>{optionLabel(customerProjectOptions.stages, draft.projectStage)}</dd></div><div><dt>Timing</dt><dd>{optionLabel(customerProjectOptions.timings, draft.timing)}</dd></div><div><dt>Work</dt><dd>{categoryLabels.join(", ") || "Choose work types"}</dd></div><div><dt>Priorities</dt><dd>{draft.priorities.map((item) => optionLabel(customerProjectOptions.priorities, item)).join(", ") || "Choose priorities"}</dd></div></dl></div><aside><strong>Never included</strong><ul><li>Name or account email</li><li>Phone or street address</li><li>Exact postcode or precise distance</li><li>Private project names and notes</li><li>Bills, NMI or meter data</li></ul></aside></div><label className="customer-submit-consent"><input type="checkbox" defaultChecked readOnly /><span>I understand that eligible paid installers can see only this anonymised scope and respond through structured platform controls. No direct messages or contact details are exchanged.</span></label></section>}
+    </div>
+    <footer className="customer-editor-actions"><div><button type="button" onClick={() => void saveDraft()} disabled={busy}>{busy ? "Working..." : savedId ? "Save changes" : "Save private draft"}</button><small>{dirty ? "Changes not yet saved" : savedId ? "Saved to your account" : "Nothing is sent until you choose"}</small></div><div>{step > 1 && <button type="button" onClick={() => setStep(step - 1)} disabled={busy}>Back</button>}{step < 5 ? <button className="primary" type="button" onClick={() => validate(step + 1)} disabled={busy}>Continue</button> : <button className="primary" type="button" onClick={() => void submitProject()} disabled={busy || !emailVerified}>{busy ? "Submitting..." : emailVerified ? "Request private installer responses" : "Verify email to submit"}</button>}</div></footer>
+  </section>;
+}
+
+function ProjectDetail({ project, busy, onAction }: { project: CustomerProject; busy: boolean; onAction: (action: string, extra?: Record<string, unknown>) => Promise<void> }) {
+  const planItems = project.planSnapshot.items || [];
+  const progressSteps = [
+    ["Scope saved", Boolean(project.submittedAt)],
+    ["Eligible installers matched", project.progress.installerCount > 0],
+    ["Structured response received", project.progress.responseCount > 0],
+    ["Quote option ready", project.quotes.length > 0],
+  ] as const;
+  return <section className="customer-project-detail" aria-labelledby="customer-project-title">
+    <header className="customer-project-detail-header"><div><span>{statusLabels[project.displayStatus] || project.displayStatus}</span><h1 id="customer-project-title">{project.title}</h1><p>{project.homeNickname} | {project.addressState} {project.postcode} | Updated {new Date(project.updatedAt).toLocaleDateString("en-AU")}</p></div><div><a href="/account">All projects</a>{project.status === "draft" && <a className="primary" href={`/account/projects/${project.id}?edit=1`}>Edit draft</a>}</div></header>
+    <div className="customer-project-detail-grid">
+      <div className="customer-project-primary">
+        <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Saved roadmap</span><h2>{project.planSnapshot.title || "Your ordered home energy plan"}</h2><p>{project.planSnapshot.summary}</p></div><ol className="customer-saved-roadmap">{planItems.map((item, index) => { const complete = project.completedPlanItems.includes(item.id); return <li className={complete ? "complete" : ""} key={item.id}><button type="button" aria-pressed={complete} onClick={() => void onAction("toggle_milestone", { itemId: item.id, complete: !complete })} disabled={busy}><span>{complete ? "✓" : String(index + 1).padStart(2, "0")}</span></button><div><small>{item.stage}</small><h3>{item.title}</h3><p>{item.text}</p><a href={item.href}>{item.action}</a></div></li>; })}</ol></section>
+        {project.status !== "draft" && <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Platform progress</span><h2>Your enquiry stays inside the platform</h2><p>Installers can review and submit structured options. They cannot call, email or message you.</p></div><ol className="customer-progress-list">{progressSteps.map(([label, complete], index) => <li className={complete ? "complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{complete ? "Complete" : "Waiting"}</small></div></li>)}</ol><div className="customer-progress-stats"><div><strong>{project.progress.installerCount}</strong><span>eligible installers allocated</span></div><div><strong>{project.progress.responseCount}</strong><span>expressions of interest</span></div><div><strong>{project.progress.quoteCount}</strong><span>structured quote options</span></div></div></section>}
+        {project.quotes.length > 0 && <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Compare safely</span><h2>Structured quote options</h2><p>Prices are shown without installer contact details. Product lines preserve the wholesaler price selected by the installer at submission.</p></div><div className="customer-quote-grid">{project.quotes.map((quote) => <article className={quote.customerDecision === "shortlisted" ? "shortlisted" : quote.customerDecision === "declined" ? "declined" : ""} key={quote.id}><header><div><span>{quote.optionLabel}</span><h3>{optionLabel(platformQuoteOptions.quoteTypes, quote.quoteType)}</h3></div>{quote.customerDecision === "shortlisted" && <strong>Shortlisted</strong>}</header><div className="customer-quote-total"><span>Indicative total</span><strong>{currency(Math.round(quote.totalCentsExGst * 1.1))}</strong><small>{currency(quote.totalCentsExGst)} ex GST</small></div><dl><div><dt>Products</dt><dd>{currency(quote.productSubtotalCentsExGst)} ex GST</dd></div><div><dt>Labour</dt><dd>{currency(quote.labourCentsExGst)} ex GST</dd></div><div><dt>Other services</dt><dd>{currency(quote.otherCentsExGst)} ex GST</dd></div><div><dt>Start window</dt><dd>{optionLabel(platformQuoteOptions.startWindows, quote.startWindow)}</dd></div><div><dt>Expected duration</dt><dd>{quote.durationWeeks ? `${quote.durationWeeks} week${quote.durationWeeks === 1 ? "" : "s"}` : "To confirm"}</dd></div><div><dt>Workmanship warranty</dt><dd>{quote.workmanshipWarrantyYears ? `${quote.workmanshipWarrantyYears} years` : "To confirm"}</dd></div></dl>{quote.products.length > 0 && <details><summary>Fixed-price products ({quote.products.length})</summary><ul>{quote.products.map((product) => <li key={`${product.brand}-${product.modelNumber}`}><span>{product.brand} {product.name}<small>{product.modelNumber} | {product.quantity} {product.unitLabel}</small></span><strong>{currency(product.quantity * product.unitPriceCentsExGst)} ex GST</strong></li>)}</ul></details>}<details><summary>Included services</summary><ul>{quote.inclusions.map((item) => <li key={item}>{optionLabel(platformQuoteOptions.inclusions, item)}</li>)}</ul></details><div className="customer-quote-actions"><button type="button" className="primary" disabled={busy || quote.customerDecision === "shortlisted"} onClick={() => void onAction("quote_decision", { quoteId: quote.id, decision: "shortlisted" })}>{quote.customerDecision === "shortlisted" ? "Shortlisted" : "Shortlist this option"}</button><button type="button" disabled={busy || quote.customerDecision === "declined"} onClick={() => void onAction("quote_decision", { quoteId: quote.id, decision: "declined" })}>Not for me</button></div></article>)}</div><div className="customer-guidance-note"><strong>No direct acceptance yet</strong><p>Shortlisting helps the platform coordinate the next safe step. It does not create a contract, release your details or authorise work.</p></div></section>}
+      </div>
+      <aside className="customer-project-sidebar"><section><span>Private project record</span><h2>Scope at a glance</h2><dl><div><dt>Work</dt><dd>{project.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item)).join(", ") || "Not selected"}</dd></div><div><dt>Timing</dt><dd>{optionLabel(customerProjectOptions.timings, project.timing)}</dd></div><div><dt>Private budget</dt><dd>{optionLabel(customerProjectOptions.budgets, project.budgetRange)}</dd></div><div><dt>Completed roadmap steps</dt><dd>{project.completedPlanItems.length} of {planItems.length}</dd></div></dl></section><section className="customer-private-notes"><span>Only you can see this</span><h2>Private notes</h2><p>{project.privateNotes || "No private notes saved yet."}</p></section><section className="customer-project-controls"><span>Project controls</span>{project.status === "draft" && <button className="primary" type="button" onClick={() => void onAction("submit")} disabled={busy}>Request installer responses</button>}<button type="button" onClick={() => void onAction("duplicate")} disabled={busy}>Duplicate as a new draft</button>{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("withdraw")} disabled={busy}>Withdraw enquiry</button>}{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("complete")} disabled={busy}>Mark project complete</button>}{["draft", "withdrawn", "completed"].includes(project.status) && <button type="button" onClick={() => void onAction("archive")} disabled={busy}>Archive project</button>}</section></aside>
+    </div>
+  </section>;
+}
+
+export function CustomerDashboard({ initialView = "overview", initialProjectId = "", initialEdit = false, initialPlannerSelection }: { initialView?: "overview" | "new" | "profile"; initialProjectId?: string; initialEdit?: boolean; initialPlannerSelection?: { goal?: string; pace?: string; situation?: string; features?: string[]; categories?: string[]; postcode?: string } }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [account, setAccount] = useState<AccountResult>({ profile: null, emailVerified: false, tradeWorkspace: null });
+  const [projects, setProjects] = useState<CustomerProject[]>([]);
+  const [view, setView] = useState<DashboardView>(initialProjectId ? initialEdit ? "editor" : "detail" : initialView === "new" ? "editor" : initialView === "profile" ? "profile" : "overview");
+  const [selectedId, setSelectedId] = useState(initialProjectId);
+  const [editingId, setEditingId] = useState(initialEdit ? initialProjectId : "");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => onAuthStateChanged(firebaseAuth, (nextUser) => { setUser(nextUser); setAuthReady(true); if (!nextUser) { setAccount({ profile: null, emailVerified: false, tradeWorkspace: null }); setProjects([]); } }), []);
+
+  async function load(nextUser: User) {
+    setLoading(true); setStatus("");
+    try {
+      const token = await nextUser.getIdToken();
+      const accountResponse = await fetch("/api/customer-account", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const accountResult = await accountResponse.json().catch(() => ({}));
+      if (!accountResponse.ok || !accountResult.ok) throw new Error(accountResult.error || "The customer account could not be loaded.");
+      setAccount({ profile: accountResult.profile, emailVerified: Boolean(accountResult.emailVerified), tradeWorkspace: accountResult.tradeWorkspace || null });
+      if (!accountResult.profile) { setView("profile"); return; }
+      const projectsResponse = await fetch("/api/customer-projects", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const projectsResult = await projectsResponse.json().catch(() => ({}));
+      if (!projectsResponse.ok || !projectsResult.ok) throw new Error(projectsResult.error || "Your projects could not be loaded.");
+      setProjects(projectsResult.projects || []);
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Your dashboard could not be loaded."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    if (!user) return;
+    const frame = window.requestAnimationFrame(() => void load(user));
+    return () => window.cancelAnimationFrame(frame);
+  }, [user]);
+
+  async function saveProfile(profile: CustomerProfile) {
+    setAccount((current) => ({ ...current, profile }));
+    setView(initialView === "new" ? "editor" : "overview");
+    if (user) await load(user);
+  }
+
+  async function projectRequest(method: "POST" | "PATCH", body: Record<string, unknown>) {
+    if (!user) throw new Error("Sign in to continue.");
+    const token = await user.getIdToken();
+    const response = await fetch("/api/customer-projects", { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.error || "The project could not be updated.");
+    setProjects(result.projects || []);
+    return result;
+  }
+
+  async function saveProject(draft: ProjectDraft, id?: string) {
+    const result = await projectRequest(id ? "PATCH" : "POST", id ? { ...draft, id, action: "update" } : draft);
+    return id || String(result.id);
+  }
+
+  async function submitProject(draft: ProjectDraft, id?: string) {
+    const projectId = await saveProject(draft, id);
+    const result = await projectRequest("PATCH", { id: projectId, action: "submit" });
+    setSelectedId(projectId); setEditingId(""); setView("detail"); setStatus("Your anonymised project is now in private installer matching.");
+    setProjects(result.projects || []);
+    window.history.replaceState({}, "", `/account/projects/${projectId}`);
+  }
+
+  async function projectAction(project: CustomerProject, action: string, extra: Record<string, unknown> = {}) {
+    setBusy(true); setStatus("");
+    try {
+      const result = await projectRequest("PATCH", { id: project.id, action, ...extra });
+      const nextProjects = result.projects || [];
+      setProjects(nextProjects);
+      if (action === "duplicate") { setEditingId(result.id); setSelectedId(""); setView("editor"); window.history.replaceState({}, "", `/account/projects/${result.id}?edit=1`); }
+      else if (action === "archive") { setView("overview"); setSelectedId(""); window.history.replaceState({}, "", "/account"); }
+      else setStatus(action === "quote_decision" ? "Quote preference saved. Your details remain private." : "Project updated.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The project could not be updated."); }
+    finally { setBusy(false); }
+  }
+
+  async function verifyEmail() {
+    if (!user) return;
+    setBusy(true);
+    try { await sendEmailVerification(user); setStatus("A fresh verification link has been sent to your account email."); }
+    catch { setStatus("The verification email could not be sent. Try again shortly."); }
+    finally { setBusy(false); }
+  }
+
+  const selected = projects.find((project) => project.id === selectedId);
+  const editing = projects.find((project) => project.id === editingId);
+  const activeProjects = projects.filter((project) => ["draft", "matching", "quote_review"].includes(project.status));
+  const completedSteps = projects.reduce((sum, project) => sum + project.completedPlanItems.length, 0);
+  const responseCount = projects.reduce((sum, project) => sum + project.progress.responseCount, 0);
+
+  return <main id="main-content" className="wrap customer-account-page">
+    <SiteHeader active="account" />
+    {!authReady || loading ? <section className="customer-loading-state" aria-live="polite"><span /><div><strong>Preparing your private dashboard</strong><p>Loading saved homes, projects and roadmaps...</p></div></section> : !user ? <>
+      <header className="customer-account-hero"><div><span>Private home energy workspace</span><h1>Plan every upgrade without opening the door to sales calls</h1><p>Create projects, save a whole-home roadmap and request structured installer options. Your identity stays inside your account.</p><div><strong>Always free for households</strong><small>No paid tier, lead fee or feature paywall.</small></div></div><aside><span>What trades can see</span><strong>An anonymised project scope</strong><ul><li>Controlled work categories and timing</li><li>State and service-area eligibility</li><li>No name, email, phone or exact address</li></ul></aside></header>
+      <FirebaseAccountPanel />
+      <section className="customer-public-benefits"><article><span>01</span><h2>Build more than one project</h2><p>Keep heating, solar, hot water, insulation and EV plans separate or coordinate them as one staged roadmap.</p></article><article><span>02</span><h2>Return to your decisions</h2><p>Save recommendations, mark roadmap steps complete and keep private notes without resubmitting your details.</p></article><article><span>03</span><h2>Compare inside the platform</h2><p>Review structured scope and price options without direct messages or contact handover.</p></article></section>
+    </> : !account.profile || view === "profile" ? <>
+      <header className="customer-compact-hero"><div><span>{account.profile ? "Household settings" : "Welcome to your free account"}</span><h1>{account.profile ? "Keep your defaults and privacy choices current" : "Set up your private household workspace"}</h1><p>{account.profile ? "Changes apply to future projects. Existing submitted scopes remain locked." : "A few private defaults make each new project faster. Nothing is sent to installers during setup."}</p></div><div className="customer-account-controls"><span>{user.email}</span>{account.profile && <a href="/account">Back to dashboard</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></header>
+      <ProfileForm user={user} profile={account.profile} onSaved={(profile) => void saveProfile(profile)} />
+    </> : <>
+      <header className="customer-dashboard-hero"><div><span>Welcome back, {account.profile.displayName}</span><h1>Your home energy workspace</h1><p>Continue a roadmap, create another project or review installer progress without exposing your contact details.</p></div><aside><span>Household membership</span><strong>Always free</strong><small>All customer planning, projects and response tools are included.</small></aside></header>
+      <nav className="customer-dashboard-nav" aria-label="Customer account"><a className={view === "overview" ? "active" : ""} href="/account">Overview</a><a className={view === "editor" && !editingId ? "active" : ""} href="/account/projects/new">New project</a><a href="/account/profile">Privacy and profile</a>{account.tradeWorkspace && <a href="/direct-trade/dashboard">Trade workspace</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></nav>
+      {!account.emailVerified && <section className="customer-verification-banner" role="status"><div><strong>Verify your email before sending an enquiry</strong><p>You can create and save projects now. Verification is required only when you ask installers to respond.</p></div><button type="button" onClick={() => void verifyEmail()} disabled={busy}>Send verification link</button></section>}
+      {status && <p className="customer-dashboard-status" role="status">{status}</p>}
+      {view === "editor" ? <ProjectEditor key={editing?.id || "new"} initial={editing ? { title: editing.title, homeNickname: editing.homeNickname, postcode: editing.postcode, addressState: editing.addressState, propertyType: editing.propertyType, householdSituation: editing.householdSituation, goal: editing.goal, pace: editing.pace, existingFeatures: editing.existingFeatures, serviceCategories: editing.serviceCategories, priorities: editing.priorities, projectStage: editing.projectStage, timing: editing.timing, budgetRange: editing.budgetRange, privateNotes: editing.privateNotes } : projectDefaultsWithSelection(account.profile, initialPlannerSelection)} existingId={editing?.id} emailVerified={account.emailVerified} onCancel={() => { setView("overview"); setEditingId(""); }} onSave={saveProject} onSubmit={submitProject} /> : view === "detail" && selected ? <ProjectDetail project={selected} busy={busy} onAction={(action, extra) => projectAction(selected, action, extra)} /> : <>
+        <section className="customer-metric-grid"><article><span>Active projects</span><strong>{activeProjects.length}</strong><small>{projects.length ? `${projects.length} saved in total` : "Create your first saved plan"}</small></article><article><span>Roadmap progress</span><strong>{completedSteps}</strong><small>steps completed across your homes</small></article><article><span>Installer responses</span><strong>{responseCount}</strong><small>structured, platform-only replies</small></article><article className="privacy"><span>Privacy mode</span><strong>Protected</strong><small>no customer contact handover</small></article></section>
+        <div className="customer-overview-grid"><section className="customer-project-list-panel"><div className="customer-panel-heading"><span>My projects</span><h2>Continue where you left off</h2><p>Each draft, roadmap and enquiry is stored separately in your free account.</p></div>{projects.filter((project) => project.status !== "archived").length ? <div className="customer-project-list">{projects.filter((project) => project.status !== "archived").map((project) => <article key={project.id}><header><div><span>{statusLabels[project.displayStatus] || project.displayStatus}</span><h3>{project.title}</h3></div><strong>{project.addressState}</strong></header><p>{project.serviceCategories.length ? project.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item)).join(", ") : "Roadmap only, no installer scope selected"}</p><div className="customer-project-card-progress"><span><i style={{ width: `${Math.round((project.completedPlanItems.length / Math.max(1, project.planSnapshot.items?.length || 1)) * 100)}%` }} /></span><small>{project.completedPlanItems.length} of {project.planSnapshot.items?.length || 0} roadmap steps</small></div><footer><small>Updated {new Date(project.updatedAt).toLocaleDateString("en-AU")}</small><a href={`/account/projects/${project.id}`}>{project.status === "draft" ? "Continue project" : "Open project"}</a></footer></article>)}</div> : <div className="customer-empty-state"><span>Start with one decision</span><h3>Create your first home project</h3><p>Build an ordered roadmap first. You decide later whether to request installer responses.</p><a className="btn" href="/account/projects/new">Create a project</a></div>}</section><aside className="customer-overview-sidebar"><section><span>Your privacy boundary</span><h2>Personal information stays on this side</h2><ul><li>Trades cannot access your account profile</li><li>Exact postcode is used for matching, then hidden</li><li>Private notes never enter the trade scope</li><li>There is no direct message or contact feature</li></ul><a href="/account/profile">Review privacy settings</a></section><section><span>Next useful action</span><h2>{activeProjects.length ? "Complete the next roadmap step" : "Start a whole-home plan"}</h2><p>{activeProjects.length ? `Open ${activeProjects[0].title} and mark the next completed decision.` : "A saved project turns the existing energy planner into a roadmap you can revisit."}</p><a href={activeProjects.length ? `/account/projects/${activeProjects[0].id}` : "/account/projects/new"}>{activeProjects.length ? "Continue project" : "Build a project"}</a></section></aside></div>
+      </>}
+    </>}
+    <SiteFooter>Customer accounts, saved roadmaps and project enquiries remain free. Installer responses are indicative until the complete property, products, approvals and installed scope are confirmed in writing.</SiteFooter>
+  </main>;
+}

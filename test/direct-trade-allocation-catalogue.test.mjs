@@ -42,20 +42,35 @@ test("opportunity allocation is capped, proximity based and load balanced", () =
   );
 });
 
-test("household opportunity exposure, handover, contact and expiry have hard server limits", () => {
+test("household opportunity exposure, platform response and expiry have hard server limits", () => {
   assert.match(opportunityServer, /DEFAULT_CONNECTED_INSTALLERS = 3/);
-  assert.match(opportunityServer, /DEFAULT_CONTACT_LIMIT = 2/);
   assert.match(opportunityServer, /OPPORTUNITY_LIFETIME_DAYS = 30/);
   assert.match(opportunityServer, /status = 'expired'/);
-  assert.match(partnerRoute, /contact_attempt_count < \(SELECT contact_limit/);
+  assert.match(opportunityServer, /const lifetimeRecipientCount = existing\.results\.length/);
+  assert.match(
+    opportunityServer,
+    /MAX_VISIBLE_INSTALLERS - lifetimeRecipientCount/,
+  );
+  assert.match(opportunityServer, /!previouslyMatched\.has/);
+  assert.match(partnerRoute, /action === "record_contact"/);
+  assert.match(partnerRoute, /Direct customer contact is not available/);
+  assert.match(partnerRoute, /action === "submit_quote"/);
+  assert.match(partnerRoute, /normalizePlatformQuote/);
+  assert.match(partnerRoute, /INSERT INTO customer_project_quotes/);
+  assert.match(partnerRoute, /postcode: ""/);
+  assert.match(partnerRoute, /distanceBand: distanceBand/);
+  assert.match(partnerRoute, /This opportunity response cannot be reversed/);
   assert.match(adminMatches, /reached its six-installer visibility limit/);
-  assert.match(adminMatches, /reached its installer handover limit/);
+  assert.match(adminMatches, /progress to platform coordination/);
+  assert.match(adminMatches, /reached its platform coordination limit/);
   assert.match(standards, /no more than six eligible installers/i);
-  assert.match(standards, /no more than two contact attempts/i);
+  assert.match(standards, /Household contact stays private/i);
+  assert.match(standards, /respond through structured platform controls/i);
   assert.match(
     customerBrief,
-    /up to\s+six\s+eligible installers for up to 30 days/i,
+    /without direct trade contact/i,
   );
+  assert.match(customerBrief, /No direct messages or contact details are exchanged/i);
 });
 
 test("wholesalers cannot access leads and installers only see approved published products", () => {

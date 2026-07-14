@@ -6,6 +6,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
+import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -47,7 +48,6 @@ type DashboardOpportunity = {
   matchId: string;
   matchStatus:
     "offered" | "viewed" | "interested" | "declined" | "connected" | "closed";
-  partnerNote: string;
   matchedAt: string;
   updatedAt: string;
   id: string;
@@ -57,7 +57,7 @@ type DashboardOpportunity = {
   state: string;
   serviceCategories: string[];
   matchedCategories: string[];
-  distanceKm: number;
+  distanceBand: string;
   allocationRank: number;
   contactAttemptCount: number;
   contactLimit: number;
@@ -68,6 +68,21 @@ type DashboardOpportunity = {
   timing: string;
   summary: string;
   opportunityStatus: string;
+  platformOnly: boolean;
+  quote: null | {
+    productListId: string;
+    inclusions: string[];
+    productSubtotalCentsExGst: number;
+    labourCentsExGst: number;
+    otherCentsExGst: number;
+    totalCentsExGst: number;
+    quoteType: string;
+    startWindow: string;
+    durationWeeks: number;
+    workmanshipWarrantyYears: number;
+    status: string;
+    customerDecision: string;
+  };
 };
 
 type ReferralData = {
@@ -476,7 +491,7 @@ export function DirectTradeDashboard() {
       );
       setOpportunityStatus(
         status === "interested"
-          ? "Interest recorded. The operations team can now coordinate the next privacy-safe handover step."
+          ? "Interest recorded. You can now prepare a structured platform response when the project supports it."
           : status === "declined"
             ? "Opportunity declined. This will help improve future matching."
             : "Opportunity marked as reviewed.",
@@ -486,50 +501,6 @@ export function DirectTradeDashboard() {
         responseError instanceof Error
           ? responseError.message
           : "The opportunity response could not be saved.",
-      );
-    } finally {
-      setOpportunityBusy("");
-    }
-  }
-
-  async function recordContactAttempt(matchId: string) {
-    if (!user) return;
-    setOpportunityBusy(matchId);
-    setOpportunityStatus("Recording customer contact attempt...");
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/trade-opportunities", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ matchId, action: "record_contact" }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok)
-        throw new Error(
-          result.error || "The contact attempt could not be recorded.",
-        );
-      setOpportunities((current) =>
-        current.map((item) =>
-          item.matchId === matchId
-            ? {
-                ...item,
-                contactAttemptCount: result.contactAttemptCount,
-                lastContactAt: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
-      setOpportunityStatus(
-        "Contact attempt recorded. The two-attempt limit protects the household from repeated follow-up.",
-      );
-    } catch (contactError) {
-      setOpportunityStatus(
-        contactError instanceof Error
-          ? contactError.message
-          : "The contact attempt could not be recorded.",
       );
     } finally {
       setOpportunityBusy("");
@@ -709,10 +680,10 @@ export function DirectTradeDashboard() {
                       Privacy-safe scopes matched to this business
                     </h2>
                     <p>
-                      At most six eligible installers see a scope. Contact
-                      details are withheld until an interested installer is
-                      selected for handover. Household identity and street
-                      address are not exposed in the opportunity feed.
+                      At most six eligible installers ever see a scope.
+                      Household identity, exact location and contact details
+                      stay outside the trade workspace. Respond through the
+                      structured platform controls only.
                     </p>
                   </div>
                   {!hasLeadAccess ? (
@@ -737,11 +708,7 @@ export function DirectTradeDashboard() {
                           <header>
                             <div>
                               <span>
-                                {opportunity.state}{" "}
-                                {opportunity.postcode || "region withheld"} ·
-                                approximately{" "}
-                                {opportunity.distanceKm.toFixed(1)} km from
-                                service base
+                                {opportunity.state} region | {opportunity.distanceBand}
                               </span>
                               <h3>{opportunity.title}</h3>
                             </div>
@@ -779,29 +746,12 @@ export function DirectTradeDashboard() {
                           {opportunity.matchStatus === "connected" ? (
                             <div className="dashboard-contact-allowance">
                               <div>
-                                <strong>Customer handover active</strong>
+                                <strong>Platform coordination active</strong>
                                 <span>
-                                  {opportunity.contactAttemptCount} of{" "}
-                                  {opportunity.contactLimit} contact attempts
-                                  recorded
+                                  The household has progressed this option.
+                                  Customer contact details remain private.
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                disabled={
-                                  opportunityBusy === opportunity.matchId ||
-                                  opportunity.contactAttemptCount >=
-                                    opportunity.contactLimit
-                                }
-                                onClick={() =>
-                                  void recordContactAttempt(opportunity.matchId)
-                                }
-                              >
-                                {opportunity.contactAttemptCount >=
-                                opportunity.contactLimit
-                                  ? "Contact limit reached"
-                                  : "Record a contact attempt"}
-                              </button>
                             </div>
                           ) : (
                             <div className="dashboard-opportunity-actions">
@@ -858,6 +808,7 @@ export function DirectTradeDashboard() {
                               )}
                             </div>
                           )}
+                          {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
                         </article>
                       ))}
                     </div>

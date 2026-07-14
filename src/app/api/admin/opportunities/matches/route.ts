@@ -139,10 +139,10 @@ export async function POST(request: Request) {
         },
         409,
       );
-    const active = await db
+    const recipients = await db
       .prepare(
         `SELECT COUNT(*) count FROM trade_opportunity_matches
-      WHERE opportunity_id = ? AND status IN ('offered', 'viewed', 'interested', 'connected')`,
+      WHERE opportunity_id = ?`,
       )
       .bind(opportunityId)
       .first<{ count: number }>();
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
       )
       .bind(opportunityId, firebaseUid)
       .first();
-    if (!existing && Number(active?.count || 0) >= MAX_VISIBLE_INSTALLERS)
+    if (!existing && Number(recipients?.count || 0) >= MAX_VISIBLE_INSTALLERS)
       return adminJson(
         {
           ok: false,
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
         adminNote,
         JSON.stringify(matchedCategories),
         Math.round(distanceKm * 1000),
-        Number(active?.count || 0) + 1,
+        Number(recipients?.count || 0) + 1,
         admin.uid,
         now,
         now,
@@ -238,7 +238,7 @@ export async function PATCH(request: Request) {
           {
             ok: false,
             error:
-              "Only an interested installer on an open opportunity can progress to customer handover.",
+              "Only an interested installer on an open opportunity can progress to platform coordination.",
           },
           409,
         );
@@ -255,7 +255,7 @@ export async function PATCH(request: Request) {
         return adminJson(
           {
             ok: false,
-            error: "This opportunity has reached its installer handover limit.",
+            error: "This opportunity has reached its platform coordination limit.",
           },
           409,
         );

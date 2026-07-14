@@ -36,7 +36,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {
     key: "installer_leads",
     label: "Opportunity leads",
-    description: "Receive matched household opportunities and complete customer handovers.",
+    description: "Receive matched household opportunities and submit structured platform quote options.",
     roles: ["installer"],
     tier: "membership",
   },

@@ -1,0 +1,137 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import {
+  buildAnonymizedOpportunity,
+  MAX_CUSTOMER_PROJECTS,
+  normalizeCustomerProject,
+  normalizePlatformQuote,
+  validateCustomerProfile,
+} from "../src/lib/customer-projects.mjs";
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const schema = read("../db/schema.ts");
+const accountRoute = read("../src/app/api/customer-account/route.ts");
+const projectsRoute = read("../src/app/api/customer-projects/route.ts");
+const publicLeadRoute = read("../src/app/api/leads/route.js");
+const tradeRoute = read("../src/app/api/trade-opportunities/route.ts");
+const accountPanel = read("../src/components/FirebaseAccountPanel.tsx");
+const dashboard = read("../src/components/CustomerDashboard.tsx");
+const chrome = read("../src/components/ComparatorChrome.tsx");
+const legacyComparator = read("../public/electricity-comparator.html");
+
+test("customer profiles are private, free and optional updates default off", () => {
+  const profile = validateCustomerProfile({
+    displayName: "Jamie Household",
+    postcode: "3000",
+    addressState: "Vic",
+    propertyType: "house",
+    householdSituation: "owner",
+    consent: true,
+  });
+  assert.equal(profile.ok, true);
+  assert.equal(profile.profile.accountUpdates, false);
+  assert.match(schema, /accountUpdates: integer\("account_updates"[\s\S]*?default\(false\)/);
+  assert.match(accountRoute, /accountTier: "Always free"/);
+  assert.match(dashboard, /No paid tier, lead fee or feature paywall/);
+  assert.doesNotMatch(accountRoute + projectsRoute, /accountHasFeature|billing_status|subscription|paywall/);
+});
+
+test("customer auth supports Google, email, verification and password recovery", () => {
+  assert.match(accountPanel, /GoogleAuthProvider/);
+  assert.match(accountPanel, /signInWithPopup/);
+  assert.match(accountPanel, /createUserWithEmailAndPassword/);
+  assert.match(accountPanel, /signInWithEmailAndPassword/);
+  assert.match(accountPanel, /sendEmailVerification/);
+  assert.match(accountPanel, /sendPasswordResetEmail/);
+  assert.match(projectsRoute, /if \(!user\.emailVerified\)/);
+});
+
+test("customer projects are owner scoped and support separate saved roadmaps", () => {
+  assert.equal(MAX_CUSTOMER_PROJECTS, 40);
+  assert.match(schema, /sqliteTable\("customer_accounts"/);
+  assert.match(schema, /sqliteTable\("customer_projects"/);
+  assert.match(schema, /sqliteTable\("customer_consent_receipts"/);
+  assert.match(schema, /sqliteTable\("customer_project_quotes"/);
+  assert.match(projectsRoute, /WHERE id = \? AND firebase_uid = \?/);
+  assert.match(projectsRoute, /action === "duplicate"/);
+  assert.match(projectsRoute, /action === "toggle_milestone"/);
+  assert.match(projectsRoute, /action === "archive"/);
+  assert.match(projectsRoute, /MAX_CUSTOMER_PROJECTS/);
+});
+
+test("project normalization keeps notes private and rejects uncontrolled selections", () => {
+  const result = normalizeCustomerProject({
+    title: "My exact project name",
+    homeNickname: "Home on Smith Street",
+    postcode: "3000",
+    addressState: "Vic",
+    propertyType: "house",
+    householdSituation: "owner",
+    goal: "lower-bills",
+    pace: "staged",
+    serviceCategories: ["solar", "not-a-service"],
+    priorities: ["lower-bills", "not-a-priority"],
+    projectStage: "ready-for-pricing",
+    timing: "within_3_months",
+    privateNotes: "Jamie, 0400 000 000, call after 6pm",
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.project.serviceCategories, ["solar"]);
+  assert.deepEqual(result.project.priorities, ["lower-bills"]);
+  const opportunity = buildAnonymizedOpportunity(result.project, "safe-project");
+  assert.doesNotMatch(JSON.stringify(opportunity), /Jamie|0400 000 000|Smith Street|My exact project name/);
+  assert.equal("privateNotes" in opportunity, false);
+  assert.match(opportunity.summary, /Identity, exact location, contact details, private notes and usage records are withheld/);
+});
+
+test("state and postcode integrity is checked before records or opportunities are written", () => {
+  assert.match(accountRoute, /postcodeMatchesState\(profile\.postcode, profile\.addressState\)/);
+  assert.match(projectsRoute, /postcodeMatchesState\(project\.postcode, project\.addressState\)/);
+  assert.match(projectsRoute, /postcodeCoordinate\(project\.postcode\)/);
+  assert.match(projectsRoute, /buildAnonymizedOpportunity/);
+});
+
+test("customer enquiries bypass the public lead relay and use explicit consent receipts", () => {
+  assert.match(projectsRoute, /requireFirebaseIdentity/);
+  assert.match(projectsRoute, /if \(!sameOrigin\(request\)\)/);
+  assert.match(projectsRoute, /customer-project-submit:\$\{id\}/);
+  assert.match(projectsRoute, /anonymized_installer_matching/);
+  assert.match(projectsRoute, /allocateNearestInstallers/);
+  assert.doesNotMatch(projectsRoute, /\/api\/leads|LEAD_WEBHOOK|script\.google\.com|customer_email|customer_phone/);
+  assert.match(publicLeadRoute, /raw\?\.submissionType !== "comparison"/);
+  assert.match(publicLeadRoute, /Upgrade projects must be created inside a free private customer account/);
+  assert.doesNotMatch(publicLeadRoute, /createOpportunityFromLead/);
+});
+
+test("installer responses are structured, anonymous and unavailable to wholesalers", () => {
+  const invalid = normalizePlatformQuote({ inclusions: [], labourCentsExGst: 0 });
+  assert.equal(invalid.ok, false);
+  const valid = normalizePlatformQuote({
+    quoteType: "indicative",
+    inclusions: ["site-assessment", "installation-commissioning", "free-text"],
+    startWindow: "1_3_months",
+    labourCentsExGst: 250000,
+    otherCentsExGst: 50000,
+    durationWeeks: 2,
+    workmanshipWarrantyYears: 5,
+  });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.quote.inclusions, ["site-assessment", "installation-commissioning"]);
+  assert.match(tradeRoute, /Household opportunities are never available to wholesaler accounts/);
+  assert.match(tradeRoute, /postcode: ""/);
+  assert.match(tradeRoute, /distanceBand: distanceBand/);
+  assert.match(tradeRoute, /Direct customer contact is not available/);
+  assert.match(tradeRoute, /normalizePlatformQuote/);
+  assert.match(projectsRoute, /optionLabel: `Verified installer option/);
+  assert.doesNotMatch(projectsRoute, /installer_uid|partner_note|business_name|contact_email|contact_phone/);
+});
+
+test("Account access is always visible in both comparison shells", () => {
+  assert.match(chrome, /href="\/account"[\s\S]*?Account/);
+  assert.match(legacyComparator, /href="\/account"[\s\S]*?Account/);
+});
+
+test("new customer-facing sources avoid prohibited dash characters", () => {
+  assert.doesNotMatch(accountPanel + dashboard + chrome + accountRoute + projectsRoute, /[\u2013\u2014]/);
+});

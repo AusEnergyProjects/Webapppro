@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildAnonymizedOpportunity } from "../src/lib/customer-projects.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
@@ -10,74 +11,119 @@ const route = read("../src/app/direct-trade/page.tsx");
 const brief = read("../src/components/DirectTradeProjectBrief.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
 const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
-const postcodeRules = read("../src/lib/australian-postcodes.mjs");
-const leadValidation = read("../src/lib/lead-validation.mjs");
+const customerDashboard = read("../src/components/CustomerDashboard.tsx");
+const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
+const customerProjectsRoute = read("../src/app/api/customer-projects/route.ts");
+const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
+const customerProjectRules = read("../src/lib/customer-projects.mjs");
 
-test("Direct Trade household project brief is routed from the homepage", () => {
+test("Direct Trade household projects are routed through the private account gateway", () => {
   assert.match(route, /DirectTradeProjectBrief/);
   assert.match(route, /Direct Trade Project Brief/);
   assert.match(homepage, /href="\/direct-trade">Start a project brief/);
+  assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
+  assert.match(brief, /href="\/account">Open my account/);
+  assert.match(brief, /No public lead form/);
+  assert.match(brief, /Always free for households/);
   assert.doesNotMatch(homepage, /direct-trade-status|Live service, expanding tool/);
 });
 
-test("project brief uses the same-origin consented lead route", () => {
-  assert.match(brief, /fetch\("\/api\/leads"/);
-  assert.match(brief, /submissionType: "upgrade"/);
-  assert.match(brief, /enquiry: "direct-trade-project"/);
-  assert.match(
-    brief,
-    /Respond to this Direct Trade brief and apply the disclosed six-installer/,
+test("public project and upgrade entry points do not submit household lead records", () => {
+  assert.doesNotMatch(brief, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
+  assert.doesNotMatch(brief, /<form|type="email"|type="tel"/);
+  assert.match(brief, /Customer-authored names and notes never enter it/);
+  assert.match(brief, /No direct messages or contact details are exchanged/);
+
+  assert.doesNotMatch(upgradeModal, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
+  assert.doesNotMatch(upgradeModal, /type="email"|type="tel"/);
+  assert.match(upgradeModal, /new URLSearchParams/);
+  assert.match(upgradeModal, /href=\{`\/account\/projects\/new\?\$\{params\.toString\(\)\}`\}/);
+  assert.match(upgradeModal, /Creating a project does not submit an enquiry/);
+});
+
+test("customer project records require an authenticated owner and stay out of the lead relay", () => {
+  assert.match(customerProjectsRoute, /requireFirebaseIdentity/);
+  assert.match(customerProjectsRoute, /if \(!sameOrigin\(request\)\)/);
+  assert.match(customerProjectsRoute, /customer_accounts WHERE firebase_uid = \?/);
+  assert.match(customerProjectsRoute, /customer_projects WHERE id = \? AND firebase_uid = \?/);
+  assert.match(customerProjectsRoute, /WHERE firebase_uid = \? ORDER BY/);
+  assert.match(customerProjectsRoute, /if \(!user\.emailVerified\)/);
+  assert.match(customerProjectsRoute, /buildAnonymizedOpportunity/);
+  assert.match(customerProjectsRoute, /const opportunityId = `customer-project:\$\{id\}`/);
+  assert.match(customerProjectsRoute, /allocateNearestInstallers/);
+  assert.doesNotMatch(customerProjectsRoute, /\/api\/leads|script\.google\.com|LEAD_WEBHOOK/);
+});
+
+test("anonymised matching is built only from controlled project choices", () => {
+  const opportunity = buildAnonymizedOpportunity({
+    title: "Jamie and Taylor's solar plan",
+    homeNickname: "Our exact home name",
+    postcode: "3000",
+    addressState: "Vic",
+    propertyType: "house",
+    householdSituation: "owner",
+    serviceCategories: ["solar", "battery"],
+    priorities: ["lower-bills", "resilience"],
+    projectStage: "ready-for-pricing",
+    timing: "within_3_months",
+    pace: "staged",
+    privateNotes: "Call Jamie after 6pm on 0400 000 000",
+  }, "project-123");
+
+  assert.equal(opportunity.title, "Multi-upgrade home project");
+  assert.equal(opportunity.sourceReference, "customer-project:project-123");
+  assert.deepEqual(opportunity.serviceCategories, ["solar", "battery"]);
+  assert.match(opportunity.summary, /Identity, exact location, contact details, private notes and usage records are withheld/);
+  assert.doesNotMatch(JSON.stringify(opportunity), /Jamie|Taylor|0400 000 000|Our exact home name/);
+  assert.equal("privateNotes" in opportunity, false);
+});
+
+test("installer matching masks location and permits only structured platform responses", () => {
+  assert.match(tradeOpportunitiesRoute, /function distanceBand/);
+  assert.match(tradeOpportunitiesRoute, /distanceBand: distanceBand\(row\.distance_metres\)/);
+  assert.match(tradeOpportunitiesRoute, /postcode: ""/);
+  assert.match(tradeOpportunitiesRoute, /Household opportunities are never available to wholesaler accounts/);
+  assert.match(tradeOpportunitiesRoute, /if \(action === "record_contact"\)/);
+  assert.match(tradeOpportunitiesRoute, /Direct customer contact is not available/);
+  assert.match(tradeOpportunitiesRoute, /if \(action === "submit_quote"\)/);
+  assert.match(tradeOpportunitiesRoute, /normalizePlatformQuote/);
+  assert.match(tradeOpportunitiesRoute, /customer_project_quotes/);
+  assert.match(customerProjectRules, /Choose at least one included service/);
+});
+
+test("the customer dashboard supports guided, saved and separately managed projects", () => {
+  assert.match(customerDashboard, /Project builder step \$\{step\} of 5/);
+  assert.match(customerDashboard, /\["Home", "Goals", "Roadmap", "Scope", "Privacy review"\]/);
+  assert.match(customerDashboard, /Build more than one project/);
+  assert.match(customerDashboard, /fetch\("\/api\/customer-projects"/);
+  assert.match(customerDashboard, /Duplicate as a new draft/);
+  assert.match(customerDashboard, /mark steps complete/i);
+  assert.match(customerDashboard, /Review exactly what installers can see/);
+  assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and exact postcode stay hidden/);
+  assert.match(customerDashboard, /No direct messages or contact details are exchanged/);
+  assert.match(customerDashboard, /No paid tier, lead fee or feature paywall/);
+});
+
+test("comparison handoffs prefill only controlled project planning choices", () => {
+  assert.match(newProjectRoute, /goal: typeof query\.goal === "string"/);
+  assert.match(newProjectRoute, /pace: typeof query\.pace === "string"/);
+  assert.match(newProjectRoute, /situation: typeof query\.situation === "string"/);
+  assert.match(newProjectRoute, /features: values\(query\.feature\)/);
+  assert.match(newProjectRoute, /categories: values\(query\.category\)/);
+  assert.match(newProjectRoute, /postcode: typeof query\.postcode === "string"/);
+  assert.doesNotMatch(newProjectRoute, /query\.(?:email|phone|name|address|notes|nmi|meter)/i);
+});
+
+test("project postcodes are checked before installer allocation", () => {
+  assert.match(customerProjectsRoute, /postcodeCoordinate\(project\.postcode\)/);
+  assert.match(customerProjectsRoute, /Enter a recognised Australian project postcode/);
+  assert.match(customerProjectRules, /Enter a four digit project postcode/);
+  assert.match(customerProjectRules, /states: \["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"\]/);
+});
+
+test("private customer project copy avoids prohibited dash characters", () => {
+  assert.doesNotMatch(
+    route + brief + upgradeModal + customerDashboard + newProjectRoute,
+    /\u2013|\u2014/,
   );
-  assert.match(brief, /projectCategories: selectedServices/);
-  assert.match(brief, /Do not include your street address, NMI, meter file, energy bill/);
-  assert.doesNotMatch(brief, /script\.google\.com|mode: "no-cors"/);
-});
-
-test("existing gas upgrade enquiries use the protected lead route and consent", () => {
-  assert.match(upgradeModal, /fetch\("\/api\/leads"/);
-  assert.match(upgradeModal, /consent: \{ accepted: true/);
-  assert.doesNotMatch(upgradeModal, /script\.google\.com|mode: "no-cors"/);
-});
-
-test("Direct Trade project copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(route + brief, /\u2013|\u2014/);
-});
-
-test("project location is checked before trade matching", () => {
-  assert.match(brief, /residentialStateFromPostcode/);
-  assert.match(brief, /locationMismatch/);
-  assert.match(brief, /Location check:/);
-  assert.match(brief, /Postcode.*is usually in/);
-  assert.match(leadValidation, /postcodeMatchesState/);
-  assert.match(leadValidation, /Please check the postcode or state/);
-  assert.match(postcodeRules, /return "ACT"/);
-  assert.match(postcodeRules, /return "NSW"/);
-  assert.match(postcodeRules, /return "NT"/);
-  assert.match(postcodeRules, /return "VIC"/);
-  assert.match(postcodeRules, /return "QLD"/);
-  assert.match(postcodeRules, /return "SA"/);
-  assert.match(postcodeRules, /return "WA"/);
-  assert.match(postcodeRules, /return "TAS"/);
-});
-
-test("project briefs capture structured matching priorities and show a review summary", () => {
-  assert.match(brief, /const priorities =/);
-  assert.match(brief, /const propertyRelationships =/);
-  assert.match(brief, /Choose at least one project priority/);
-  assert.match(brief, /propertyRelationship,/);
-  assert.match(brief, /projectPriorities,/);
-  assert.match(brief, /className="direct-trade-review"/);
-  assert.match(brief, /Project brief summary/);
-  assert.match(brief, /Planning before authority is confirmed/);
-  assert.match(leadValidation, /PROPERTY_RELATIONSHIPS/);
-  assert.match(leadValidation, /PROJECT_PRIORITIES/);
-});
-
-test("comparison handoffs prefill only safe project choices", () => {
-  assert.match(brief, /parseDirectTradeHandoff/);
-  assert.match(
-    brief,
-    /Your usage, meter file, NMI, bill dates, plan results, scenario\s+costs, savings, contact details and adjustment reasons were not\s+placed in this URL/,
-  );
-  assert.match(brief, /projectSource: handoff\.source/);
 });

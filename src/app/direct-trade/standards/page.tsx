@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from "next";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 
@@ -30,8 +31,8 @@ const standards = [
   },
   {
     number: "05",
-    title: "Contact is deliberately limited",
-    text: "The initial match does not reveal household contact details. No more than three interested installers can progress to a controlled handover, and each connected installer may make no more than two contact attempts for that opportunity.",
+    title: "Household contact stays private",
+    text: "Installers can review an anonymised scope and respond through structured platform controls. Customer names, emails, phone numbers, street addresses and direct messaging are not available to trade accounts.",
   },
   {
     number: "06",
@@ -46,7 +47,7 @@ const standards = [
   {
     number: "08",
     title: "Households stay in control",
-    text: "A connection is not an instruction to buy. Households can ask questions, compare quotes, confirm credentials with the issuing authority and decline without creating an installation contract.",
+    text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract or releasing contact details.",
   },
 ];
 
@@ -78,7 +79,8 @@ export default function DirectTradeStandardsPage() {
             Direct Trade Services is designed to shorten the path between a
             household, qualified installers and reputable product suppliers.
             Participation is reviewed, matching is based on project fit and the
-            household receives the trade&apos;s own scope and quote.
+            household receives structured scope and price options inside its
+            private account.
           </p>
         </div>
         <aside>
@@ -177,8 +179,8 @@ export default function DirectTradeStandardsPage() {
           </h2>
           <p>
             Expired or unverifiable credentials, misleading rebate or savings
-            claims, pressure selling, repeated contact after the two-attempt
-            limit, scope or warranty failures, privacy breaches and unresolved
+            claims, attempts to bypass the platform, hidden contact details,
+            scope or warranty failures, privacy breaches and unresolved
             serious complaints can trigger review, suspension or removal.
           </p>
         </div>
@@ -200,13 +202,13 @@ export default function DirectTradeStandardsPage() {
           <span>Choose your path</span>
           <h2>Use the standards before making a connection</h2>
           <p>
-            Households can prepare a project brief. Installers and suppliers can
-            create a business profile for direct review.
+            Households can create a free private project. Installers and
+            suppliers can create a business profile for direct review.
           </p>
         </div>
         <div>
-          <a className="btn" href="/direct-trade">
-            Start a household brief
+          <a className="btn" href="/account/projects/new">
+            Create a private project
           </a>
           <a className="btn ghost" href="/direct-trade/partners">
             Trade and supplier participation

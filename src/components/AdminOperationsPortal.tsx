@@ -647,7 +647,7 @@ export function AdminOperationsPortal() {
   async function updateAllocation(id: string, nextStatus: string) {
     setStatus(
       nextStatus === "connected"
-        ? "Opening the controlled customer handover..."
+        ? "Opening platform coordination for this option..."
         : "Updating the installer allocation...",
     );
     try {
@@ -659,7 +659,7 @@ export function AdminOperationsPortal() {
       setOpportunities(result.opportunities || []);
       setStatus(
         nextStatus === "connected"
-          ? "Customer handover opened. This installer may record no more than two contact attempts before the opportunity expires."
+          ? "Platform coordination opened. Customer contact details remain private."
           : `Installer allocation marked ${nextStatus}.`,
       );
     } catch (error) {
@@ -1024,8 +1024,8 @@ export function AdminOperationsPortal() {
             <strong>Privacy boundary</strong>
             <p>
               Wholesalers never see household opportunities. Installer
-              allocations exclude names, street addresses and contact details
-              until a controlled handover is approved.
+              allocations exclude names, street addresses and contact details.
+              The platform does not release them to trade accounts.
             </p>
           </aside>
         </nav>
@@ -1782,10 +1782,7 @@ export function AdminOperationsPortal() {
                                   </span>
                                 </div>
                                 <div>
-                                  <small>
-                                    {allocation.contactAttemptCount} of{" "}
-                                    {opportunity.contactLimit} contacts
-                                  </small>
+                                  <small>Platform-only response</small>
                                   {allocation.status === "interested" &&
                                     opportunity.connectedCount <
                                       opportunity.maximumConnectedInstallers && (
@@ -1798,7 +1795,7 @@ export function AdminOperationsPortal() {
                                           )
                                         }
                                       >
-                                        Approve handover
+                                        Progress in platform
                                       </button>
                                     )}
                                 </div>

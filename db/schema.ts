@@ -241,6 +241,97 @@ export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", 
   index("trade_opportunity_matches_status_idx").on(table.status),
 ]);
 
+export const customerAccounts = sqliteTable("customer_accounts", {
+  firebaseUid: text("firebase_uid").primaryKey(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  postcode: text("postcode").notNull().default(""),
+  addressState: text("address_state").notNull().default(""),
+  propertyType: text("property_type").notNull().default("house"),
+  householdSituation: text("household_situation").notNull().default("owner"),
+  accountUpdates: integer("account_updates", { mode: "boolean" }).notNull().default(false),
+  accountStatus: text("account_status").notNull().default("active"),
+  consentVersion: text("consent_version").notNull(),
+  consentAt: text("consent_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_accounts_email_idx").on(table.email),
+  index("customer_accounts_status_idx").on(table.accountStatus, table.updatedAt),
+]);
+
+export const customerProjects = sqliteTable("customer_projects", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  title: text("title").notNull(),
+  homeNickname: text("home_nickname").notNull().default("My home"),
+  postcode: text("postcode").notNull(),
+  addressState: text("address_state").notNull(),
+  propertyType: text("property_type").notNull(),
+  householdSituation: text("household_situation").notNull(),
+  goal: text("goal").notNull(),
+  pace: text("pace").notNull(),
+  existingFeatures: text("existing_features").notNull().default("[]"),
+  serviceCategories: text("service_categories").notNull().default("[]"),
+  priorities: text("priorities").notNull().default("[]"),
+  projectStage: text("project_stage").notNull().default("exploring"),
+  timing: text("timing").notNull().default("planning"),
+  budgetRange: text("budget_range").notNull().default("not_set"),
+  privateNotes: text("private_notes").notNull().default(""),
+  planSnapshot: text("plan_snapshot").notNull().default("{}"),
+  completedPlanItems: text("completed_plan_items").notNull().default("[]"),
+  status: text("status").notNull().default("draft"),
+  opportunityId: text("opportunity_id").notNull().default(""),
+  submittedAt: text("submitted_at").notNull().default(""),
+  archivedAt: text("archived_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("customer_projects_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("customer_projects_opportunity_idx").on(table.opportunityId),
+]);
+
+export const customerConsentReceipts = sqliteTable("customer_consent_receipts", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  projectId: text("project_id").notNull().default(""),
+  purpose: text("purpose").notNull(),
+  noticeVersion: text("notice_version").notNull(),
+  grantedAt: text("granted_at").notNull(),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("customer_consent_receipts_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("customer_consent_receipts_project_idx").on(table.projectId, table.createdAt),
+]);
+
+export const customerProjectQuotes = sqliteTable("customer_project_quotes", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  opportunityId: text("opportunity_id").notNull(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  productListId: text("product_list_id").notNull().default(""),
+  inclusions: text("inclusions").notNull().default("[]"),
+  productSnapshot: text("product_snapshot").notNull().default("[]"),
+  productSubtotalCentsExGst: integer("product_subtotal_cents_ex_gst").notNull().default(0),
+  labourCentsExGst: integer("labour_cents_ex_gst").notNull().default(0),
+  otherCentsExGst: integer("other_cents_ex_gst").notNull().default(0),
+  totalCentsExGst: integer("total_cents_ex_gst").notNull().default(0),
+  quoteType: text("quote_type").notNull().default("indicative"),
+  startWindow: text("start_window").notNull().default("to_confirm"),
+  durationWeeks: integer("duration_weeks").notNull().default(0),
+  workmanshipWarrantyYears: integer("workmanship_warranty_years").notNull().default(0),
+  status: text("status").notNull().default("submitted"),
+  customerDecision: text("customer_decision").notNull().default("reviewing"),
+  submittedAt: text("submitted_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_quotes_match_idx").on(table.opportunityMatchId),
+  index("customer_project_quotes_project_idx").on(table.projectId, table.status, table.updatedAt),
+  index("customer_project_quotes_installer_idx").on(table.installerUid, table.updatedAt),
+]);
+
 export const supplierProducts = sqliteTable("supplier_products", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

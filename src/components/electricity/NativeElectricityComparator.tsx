@@ -84,7 +84,6 @@ type ScenarioResult = {
   installedCost: number;
 };
 
-type ContactDetails = { name: string; email: string; phone: string; website: string };
 type ChoiceOption<T extends string> = { value: T; title: string; description: string };
 const LEAD_NOTICE_VERSION = "2026-07-13";
 
@@ -233,10 +232,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [sharedUrl, setSharedUrl] = useState("");
   const [leadName, setLeadName] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
-  const [leadPhone, setLeadPhone] = useState("");
   const [leadWebsite, setLeadWebsite] = useState("");
   const [leadConsent, setLeadConsent] = useState(false);
-  const [leadUpgrades, setLeadUpgrades] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
   const [leadSending, setLeadSending] = useState(false);
   const [enquiryScenario, setEnquiryScenario] = useState<ScenarioResult | null>(null);
@@ -594,7 +591,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     try {
       const reference = await postLead({
         submissionType: "comparison", clientStartedAt: pageStartedAt.current, website: leadWebsite,
-        name: leadName, email: leadEmail, phone: leadPhone, upgrades: leadUpgrades,
+        name: leadName, email: leadEmail, upgrades: false,
         postcode, annualKwh: Math.round(Number(annualKwh)), solar: setupMode, hasEv,
         hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
         top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(), recheckMonths: 6,
@@ -605,24 +602,6 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     finally { setLeadSending(false); }
   }
 
-  async function sendUpgradeEnquiry(contact: ContactDetails) {
-    if (!enquiryScenario) return;
-    const scenario = enquiryScenario;
-    const enquiry = scenario.label === "Solar only" ? "electricity-solar" : scenario.label === "Solar + battery" ? "electricity-solar-battery" : "electricity-battery";
-    await postLead({
-      submissionType: "upgrade", clientStartedAt: pageStartedAt.current,
-      enquiry, type: `Electricity upgrade enquiry: ${scenario.label}`,
-      upgrades: true, ...contact, postcode, annualKwh: Math.round(Number(annualKwh)), solar: setupMode, hasEv,
-      hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
-      solarKw: scenario.label === "Add a battery" ? Number(solarKw) || undefined : Number(scenarioSolarKw),
-      batteryKwh: scenario.annualDischargeKwh != null ? Number(scenarioBatteryKwh) : undefined,
-      solarCost: scenario.label === "Solar only" ? scenario.installedCost : undefined,
-      comboCost: scenario.label !== "Solar only" ? scenario.installedCost : undefined,
-      installedCost: scenario.installedCost,
-      annualSaving: scenario.annualSaving, top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(),
-      consent: { accepted: true, purpose: "Respond to this upgrade enquiry", noticeVersion: LEAD_NOTICE_VERSION, grantedAt: new Date().toISOString() },
-    });
-  }
   function closeAudit() {
     setAuditPlan(null);
     queueMicrotask(() => auditReturnRef.current?.focus());
@@ -769,58 +748,43 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       {bundle?.source?.retailerCoverage && <details className="note"><summary>Retailer source coverage</summary><ul>{bundle.source.retailerCoverage.filter((coverage) => !coverage.listAvailable || coverage.candidatePlans > 0).map((coverage) => <li key={coverage.retailer}><b>{coverage.retailer}:</b> {coverage.listAvailable ? `${coverage.detailsPassed} of ${coverage.candidatePlans} local plan details passed` : "plan list unavailable"}{coverage.detailsRejected ? `; ${coverage.detailsRejected} rejected by tariff validation` : ""}{coverage.detailsUnavailable ? `; ${coverage.detailsUnavailable} unavailable` : ""}</li>)}</ul></details>}
       <div className="native-followup-grid">
         <section className="native-followup-card"><h2>Save this comparison privately</h2><p>The link contains only comparison assumptions. It never contains an NMI, meter intervals, filename, annual-adjustment reason or contact details.</p><button type="button" className="btn ghost" onClick={() => void copyPrivateLink()}>Copy private-safe link</button>{shareStatus && <p className="native-action-status" role="status">{shareStatus}</p>}{sharedUrl && <Field label="Private-safe link"><input readOnly value={sharedUrl} onFocus={(event) => event.currentTarget.select()} /></Field>}</section>
-        <form className="native-followup-card" onSubmit={sendTopPlans}><h2>Email my top three</h2><p>Receive the three cheapest currently visible plans and a reminder to compare again every six months.</p><div className="grid c3"><Field label="Name"><input required autoComplete="name" value={leadName} onChange={(event) => setLeadName(event.target.value)} /></Field><Field label="Email"><input required type="email" autoComplete="email" value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} /></Field><Field label="Phone (optional)"><input autoComplete="tel" value={leadPhone} onChange={(event) => setLeadPhone(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={leadWebsite} onChange={(event) => setLeadWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={leadConsent} onChange={(event) => setLeadConsent(event.target.checked)} /> I agree that Australian Energy Assessments may email these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label><label className="toggle"><input type="checkbox" checked={leadUpgrades} onChange={(event) => setLeadUpgrades(event.target.checked)} /> I would also like information about independent solar or battery assessments.</label><button className="btn" disabled={leadSending}>{leadSending ? "Sending..." : "Send my top three"}</button>{leadStatus && <p className="native-action-status" role="status">{leadStatus}</p>}<details className="native-privacy-details"><summary>How my details are used</summary><p>Your details are sent only when you submit this form. Meter files, NMI values and interval data stay in your browser and are not included. Upgrade follow-up occurs only if you select it.</p></details></form>
+        <form className="native-followup-card" onSubmit={sendTopPlans}><h2>Email my top three</h2><p>Receive the three cheapest currently visible plans and a reminder to compare again every six months.</p><div className="grid c2"><Field label="Name"><input required autoComplete="name" value={leadName} onChange={(event) => setLeadName(event.target.value)} /></Field><Field label="Email"><input required type="email" autoComplete="email" value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={leadWebsite} onChange={(event) => setLeadWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={leadConsent} onChange={(event) => setLeadConsent(event.target.checked)} /> I agree that Australian Energy Assessments may email these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label><button className="btn" disabled={leadSending}>{leadSending ? "Sending..." : "Send my top three"}</button>{leadStatus && <p className="native-action-status" role="status">{leadStatus}</p>}<details className="native-privacy-details"><summary>How my details are used</summary><p>Your name and email are sent only when you submit this form, and only for results and comparison reminders. No phone number is collected. Meter files, NMI values and interval data stay in your browser and are not included. Use your free account for upgrade projects.</p></details></form>
       </div>
     </section>}
     {auditPlan && <NativeAuditDialog plan={auditPlan} bundle={bundle} onClose={closeAudit} />}
-    {enquiryScenario && <NativeUpgradeDialog scenario={enquiryScenario} onSubmit={sendUpgradeEnquiry} onClose={() => setEnquiryScenario(null)} />}
+    {enquiryScenario && <NativeUpgradeDialog scenario={enquiryScenario} postcode={postcode} onClose={() => setEnquiryScenario(null)} />}
   </>;
 }
 
-function NativeUpgradeDialog({ scenario, onSubmit, onClose }: { scenario: ScenarioResult; onSubmit: (contact: ContactDetails) => Promise<void>; onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [website, setWebsite] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [status, setStatus] = useState("");
-  const [sending, setSending] = useState(false);
+function NativeUpgradeDialog({ scenario, postcode, onClose }: { scenario: ScenarioResult; postcode: string; onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const nameRef = useRef<HTMLInputElement | null>(null);
+  const actionRef = useRef<HTMLAnchorElement | null>(null);
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    nameRef.current?.focus();
+    actionRef.current?.focus();
     return () => { document.body.style.overflow = previousOverflow; };
   }, []);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") { event.preventDefault(); onClose(); return; }
     if (event.key !== "Tab" || !dialogRef.current) return;
-    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute("disabled"));
+    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute("disabled"));
     if (!focusable.length) return;
     const first = focusable[0]; const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!email.trim() && !phone.trim()) { setStatus("Enter an email address or phone number so we can respond."); return; }
-    if (!consent) { setStatus("Please confirm that we may use your details to respond to this enquiry."); return; }
-    setSending(true); setStatus("Sending...");
-    try {
-      await onSubmit({ name, email, phone, website });
-      setStatus("Thanks. Your independent upgrade assessment enquiry has been received.");
-    } catch (caught) { setStatus(caught instanceof Error ? caught.message : "Could not send right now."); }
-    finally { setSending(false); }
-  }
-
+  const category = scenario.label === "Add a battery" ? "battery" : scenario.label === "Solar only" ? "solar" : "solar,battery";
+  const params = new URLSearchParams({ goal: "add-solar-storage", pace: "staged", category });
+  if (/^\d{4}$/.test(postcode)) params.set("postcode", postcode);
   return <div className="audit-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={handleKeyDown}>
     <div className="audit-dialog native-enquiry-dialog" role="dialog" aria-modal="true" aria-labelledby="native-enquiry-title" ref={dialogRef}>
-      <div className="audit-heading"><div><h2 id="native-enquiry-title">Enquire about {scenario.label.toLowerCase()}</h2><p>{scenario.description} | estimated {fmtMoney(scenario.annualSaving)}/year bill saving | {fmtMoney(scenario.installedCost)} scenario cost</p></div></div>
-      <p>This sends only the scenario summary, your non-sensitive comparison assumptions and the contact details below. Your NMI, meter file and interval data remain in this browser.</p>
-      <form onSubmit={submit}><div className="grid c3"><Field label="Name"><input required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} ref={nameRef} /></Field><Field label="Email"><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field><Field label="Phone"><input autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /> I agree that Australian Energy Assessments may use my details to respond to this upgrade enquiry.</label><div className="native-dialog-actions"><button className="btn" disabled={sending}>{sending ? "Sending..." : "Send enquiry"}</button><button type="button" className="btn ghost" onClick={onClose}>Cancel</button></div>{status && <p className="native-action-status" role="status">{status}</p>}</form>
+      <div className="audit-heading"><div><span>Private account project</span><h2 id="native-enquiry-title">Save {scenario.label.toLowerCase()} without sharing contact details</h2><p>{scenario.description} | estimated {fmtMoney(scenario.annualSaving)}/year bill saving | {fmtMoney(scenario.installedCost)} scenario cost</p></div></div>
+      <p>Create a free project with this upgrade preselected. Your comparison remains in this browser, and no NMI, meter file, interval data or customer contact details are sent to trades.</p>
+      <div className="customer-guidance-note"><strong>Review before any installer sees it</strong><p>The account project shows the exact anonymised scope first. Installer responses stay structured inside the platform.</p></div>
+      <div className="native-dialog-actions"><a ref={actionRef} className="btn" href={`/account/projects/new?${params.toString()}`}>Save as a free project</a><button type="button" className="btn ghost" onClick={onClose}>Keep comparing</button></div>
     </div>
   </div>;
 }
