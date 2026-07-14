@@ -11,7 +11,7 @@ const partners = read("../src/components/DirectTradePartnerForm.tsx");
 test("Direct Trade standards are connected to every marketplace entry journey", () => {
   assert.match(homepage, /href="\/direct-trade\/standards">Read the marketplace standards/);
   assert.match(household, /href="\/direct-trade\/standards">See how matching, verification and quotes work/);
-  assert.match(partners, /href="\/direct-trade\/standards">Review the participation and customer standards/);
+  assert.match(partners, /href="\/direct-trade\/standards">Read the marketplace and customer standards/);
 });
 
 test("standards separate membership from licensing and scheme approval", () => {

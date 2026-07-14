@@ -1,0 +1,20 @@
+CREATE TABLE `trade_accounts` (
+	`firebase_uid` text PRIMARY KEY NOT NULL,
+	`email` text NOT NULL,
+	`business_name` text NOT NULL,
+	`contact_name` text NOT NULL,
+	`phone` text DEFAULT '' NOT NULL,
+	`partner_type` text DEFAULT 'installer' NOT NULL,
+	`business_website` text DEFAULT '' NOT NULL,
+	`service_states` text DEFAULT '[]' NOT NULL,
+	`capabilities` text DEFAULT '[]' NOT NULL,
+	`summary` text DEFAULT '' NOT NULL,
+	`account_status` text DEFAULT 'active' NOT NULL,
+	`verification_status` text DEFAULT 'not_started' NOT NULL,
+	`plan_key` text DEFAULT 'try_one_lead' NOT NULL,
+	`free_leads_remaining` integer DEFAULT 1 NOT NULL,
+	`consent_version` text NOT NULL,
+	`consent_at` text NOT NULL,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL
+);

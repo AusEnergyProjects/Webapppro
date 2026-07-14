@@ -7,27 +7,35 @@ const page = read("../src/app/direct-trade/partners/page.tsx");
 const form = read("../src/components/DirectTradePartnerForm.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
 const route = read("../src/app/api/leads/route.js");
+const profileRoute = read("../src/app/api/trade-profile/route.ts");
+const firebaseClient = read("../src/lib/firebase-client.ts");
 
 test("the homepage connects installers and suppliers to a participation route", () => {
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
-  assert.match(form, /reviews credentials, service coverage, insurance, product evidence and customer support/);
+  assert.match(form, /Create a free account/);
+  assert.match(form, /one included matched lead/i);
   assert.match(page, /DirectTradePartnerForm/);
 });
 
-test("partner expressions use the protected same-origin lead route", () => {
-  assert.match(form, /fetch\("\/api\/leads"/);
-  assert.match(form, /enquiry: "direct-trade-partner"/);
+test("trade accounts use Firebase identity and protected same-origin profile storage", () => {
+  assert.match(form, /createUserWithEmailAndPassword/);
+  assert.match(form, /signInWithPopup/);
+  assert.match(firebaseClient, /australian-energy-assessments\.firebaseapp\.com/);
+  assert.match(form, /fetch\("\/api\/trade-profile"/);
+  assert.match(form, /Authorization: `Bearer \$\{token\}`/);
+  assert.match(profileRoute, /requireFirebaseIdentity/);
+  assert.match(profileRoute, /sameOrigin/);
   assert.match(form, /partnerType/);
   assert.match(form, /serviceStates/);
-  assert.match(form, /projectCategories/);
-  assert.match(form, /consent:/);
+  assert.match(form, /capabilities/);
+  assert.match(form, /consent: true/);
   assert.doesNotMatch(form, /script\.google\.com|no-cors/);
 });
 
 test("partner form avoids collecting sensitive verification documents", () => {
   assert.match(form, /Do not upload or paste licence documents, identity records, customer lists, wholesale price files or confidential contracts/);
-  assert.match(form, /does not create membership, accreditation, exclusivity or guaranteed opportunity volume/);
+  assert.match(form, /does not replace licensing, accreditation, insurance or scheme requirements/);
 });
 
 test("partner form uses visible shared controls and explicit input types", () => {
