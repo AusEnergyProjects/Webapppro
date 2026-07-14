@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const admin = await requireAdminIdentity(request);
     const db = getD1();
     await expireStaleOpportunities();
-    const [accounts, opportunities, matches, verification, products, audit] = await Promise.all([
+    const [accounts, opportunities, matches, verification, products, notifications, audit] = await Promise.all([
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
         SUM(CASE WHEN account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
@@ -45,6 +45,11 @@ export async function GET(request: Request) {
         SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
         SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live
         FROM supplier_products`).first<Record<string, number>>(),
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) unread,
+        SUM(CASE WHEN requires_action = 1 AND status != 'resolved' THEN 1 ELSE 0 END) action_required,
+        SUM(CASE WHEN priority = 'urgent' AND status != 'resolved' THEN 1 ELSE 0 END) urgent
+        FROM admin_notifications`).first<Record<string, number>>(),
       db.prepare(`SELECT l.id, l.action, l.entity_type, l.entity_id, l.summary, l.created_at,
         COALESCE(a.display_name, a.email, 'Former administrator') administrator
         FROM admin_audit_log l LEFT JOIN admin_users a ON a.firebase_uid = l.admin_uid
@@ -53,7 +58,7 @@ export async function GET(request: Request) {
     return adminJson({
       ok: true,
       admin: { email: admin.email, displayName: admin.displayName, role: admin.role },
-      metrics: { accounts, opportunities, matches, verification, products },
+      metrics: { accounts, opportunities, matches, verification, products, notifications },
       audit: audit.results,
     });
   } catch (error) {

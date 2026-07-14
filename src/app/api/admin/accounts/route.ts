@@ -182,6 +182,13 @@ export async function PATCH(request: Request) {
     }
     if (note) await db.prepare(`INSERT INTO trade_account_notes (id, firebase_uid, note, created_by_uid, created_at)
       VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), uid, note, admin.uid, now).run();
+    if (["approved", "needs_information", "rejected"].includes(verificationStatus)) {
+      await db.prepare(`UPDATE admin_notifications SET status = 'resolved', read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END,
+        read_by_uid = CASE WHEN read_by_uid = '' THEN ? ELSE read_by_uid END, resolved_at = ?, resolved_by_uid = ?,
+        resolution_note = ?, updated_at = ? WHERE actor_uid = ? AND category = 'approval' AND status != 'resolved'
+          AND event_type IN ('trade.signup', 'trade.verification_evidence_uploaded')`)
+        .bind(now, admin.uid, now, admin.uid, `Verification review: ${verificationStatus}`, now, uid).run();
+    }
     await writeAdminAudit(admin, "trade_account.update", "trade_account", uid, "Updated business account moderation settings.", {
       before: current,
       after: { accountStatus, verificationStatus, availabilityStatus, planKey, billingStatus, featureGrants },

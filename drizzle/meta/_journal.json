@@ -85,6 +85,13 @@
       "when": 1784063295445,
       "tag": "0011_even_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784066680631,
+      "tag": "0012_elite_whizzer",
+      "breakpoints": true
     }
   ]
 }

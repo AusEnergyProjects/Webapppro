@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import { adminNotificationStatement } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -16,7 +17,7 @@ function integer(value: unknown, minimum: number, maximum: number) {
 
 async function installerIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status
+  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
     FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid)
     .first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
@@ -25,7 +26,7 @@ async function installerIdentity(request: Request) {
   if (!await accountHasFeature(identity.uid, "installer", account.billing_status, "installer_marketplace")) {
     throw new Error("MARKETPLACE_REQUIRED");
   }
-  return identity;
+  return { ...identity, businessName: String(account.business_name || "Installer") };
 }
 
 function errorResponse(error: unknown) {
@@ -180,6 +181,21 @@ export async function POST(request: Request) {
           .bind(crypto.randomUUID(), listId, identity.uid, supplier.supplier_uid, message, now, now)),
         db.prepare("UPDATE installer_product_lists SET status = 'submitted', submitted_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
           .bind(now, now, listId, identity.uid),
+        adminNotificationStatement(db, {
+          eventKey: `installer-product-enquiry:${listId}`,
+          eventType: "installer.product_enquiry_submitted",
+          category: "trade",
+          priority: "normal",
+          title: "Installer sent a product enquiry",
+          summary: `${identity.businessName} sent a saved product list to ${suppliers.results.length} wholesaler${suppliers.results.length === 1 ? "" : "s"}.`,
+          entityType: "installer_product_list",
+          entityId: listId,
+          actorType: "installer",
+          actorUid: identity.uid,
+          requiresAction: false,
+          metadata: { supplierCount: suppliers.results.length },
+          occurredAt: now,
+        }),
       ]);
       return adminJson({ ok: true, lists: await selections(identity.uid) });
     }

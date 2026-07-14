@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
+import { adminNotificationStatement } from "@/lib/admin-notifications";
 import {
   CUSTOMER_NOTICE_VERSION,
   validateCustomerProfile,
@@ -104,6 +105,22 @@ export async function POST(request: Request) {
       (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
       VALUES (?, ?, '', 'customer_account', ?, ?, '', ?)`)
       .bind(receiptId, user.uid, CUSTOMER_NOTICE_VERSION, now, now));
+  }
+  if (!existing) {
+    statements.push(adminNotificationStatement(db, {
+      eventKey: `customer-signup:${user.uid}`,
+      eventType: "customer.signup",
+      category: "customer",
+      priority: "low",
+      title: "New customer account",
+      summary: "A customer created a private, always-free household account.",
+      entityType: "customer_account",
+      entityId: user.uid,
+      actorType: "customer",
+      actorUid: user.uid,
+      requiresAction: false,
+      occurredAt: now,
+    }));
   }
   await db.batch(statements);
   return json({

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       (SELECT COUNT(*) FROM supplier_product_links l WHERE l.product_id = p.id) linked_count
       FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
       ORDER BY CASE p.review_status WHEN 'pending' THEN 0 WHEN 'needs_changes' THEN 1 ELSE 2 END, p.updated_at DESC LIMIT 500`).all<Record<string, unknown>>();
-    return adminJson({ ok: true, products: rows.results.map((row) => ({
+    return adminJson({ ok: true, products: rows.results.map((row: Record<string, unknown>) => ({
       id: row.id, firebaseUid: row.firebase_uid, supplierName: row.supplier_name, supplierEmail: row.supplier_email,
       modelNumber: row.model_number, brand: row.brand, name: row.name, category: row.category, description: row.description,
       unitPriceCentsExGst: Number(row.unit_price_cents_ex_gst), minOrderQty: Number(row.min_order_qty), stockStatus: row.stock_status,
@@ -40,8 +40,15 @@ export async function PATCH(request: Request) {
     if (!current) return adminJson({ ok: false, error: "Product not found." }, 404);
     const nextListing = listingStatus || String(current.listing_status);
     if (admin.role === "reviewer" && nextListing !== current.listing_status) return adminJson({ ok: false, error: "Reviewers can decide evidence status but cannot change listing availability." }, 403);
+    const now = new Date().toISOString();
     await db.prepare("UPDATE supplier_products SET review_status = ?, review_note = ?, listing_status = ?, updated_at = ? WHERE id = ?")
-      .bind(reviewStatus, reviewNote, nextListing, new Date().toISOString(), id).run();
+      .bind(reviewStatus, reviewNote, nextListing, now, id).run();
+    if (reviewStatus !== "pending") {
+      await db.prepare(`UPDATE admin_notifications SET status = 'resolved', read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END,
+        read_by_uid = CASE WHEN read_by_uid = '' THEN ? ELSE read_by_uid END, resolved_at = ?, resolved_by_uid = ?,
+        resolution_note = ?, updated_at = ? WHERE entity_type = 'supplier_product' AND entity_id = ? AND status != 'resolved'`)
+        .bind(now, admin.uid, now, admin.uid, `Catalogue review: ${reviewStatus}`, now, id).run();
+    }
     await writeAdminAudit(admin, "catalogue.review", "supplier_product", id,
       `Reviewed ${current.model_number} ${current.name}: ${reviewStatus}.`, { before: current, listingStatus: nextListing, reviewNote: Boolean(reviewNote) });
     return adminJson({ ok: true });

@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -8,12 +9,12 @@ const STATUSES = new Set(["new", "viewed", "responded", "closed"]);
 
 async function supplierIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare("SELECT partner_type, account_status FROM trade_accounts WHERE firebase_uid = ?")
+  const account = await getD1().prepare("SELECT partner_type, account_status, business_name FROM trade_accounts WHERE firebase_uid = ?")
     .bind(identity.uid).first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
   if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return identity;
+  return { ...identity, businessName: String(account.business_name || "Wholesaler") };
 }
 
 function errorResponse(error: unknown) {
@@ -98,6 +99,21 @@ export async function PATCH(request: Request) {
       SET status = ?, supplier_note = ?, updated_at = ? WHERE id = ? AND supplier_uid = ?`)
       .bind(status, supplierNote, now, id, identity.uid).run();
     if (!result.meta.changes) return adminJson({ ok: false, error: "Product enquiry not found." }, 404);
+    await createAdminNotification({
+      eventKey: `supplier-product-enquiry:${id}:${status}:${now}`,
+      eventType: `supplier.product_enquiry_${status}`,
+      category: "trade",
+      priority: status === "responded" ? "normal" : "low",
+      title: status === "responded" ? "Wholesaler responded to a product enquiry" : "Wholesaler updated a product enquiry",
+      summary: `${identity.businessName} marked an installer product enquiry as ${status}.`,
+      entityType: "supplier_product_enquiry",
+      entityId: id,
+      actorType: "supplier",
+      actorUid: identity.uid,
+      requiresAction: false,
+      metadata: { status },
+      occurredAt: now,
+    });
     return adminJson({ ok: true, enquiries: await enquiries(identity.uid) });
   } catch (error) {
     return errorResponse(error);

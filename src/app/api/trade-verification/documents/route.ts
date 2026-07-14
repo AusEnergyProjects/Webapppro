@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -113,8 +114,8 @@ export async function POST(request: Request) {
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
 
   const account = await getD1().prepare(`
-    SELECT partner_type FROM trade_accounts WHERE firebase_uid = ?
-  `).bind(identity.uid).first<{ partner_type: string }>();
+    SELECT partner_type, business_name FROM trade_accounts WHERE firebase_uid = ?
+  `).bind(identity.uid).first<{ partner_type: string; business_name: string }>();
   if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
 
   let form: FormData;
@@ -162,6 +163,22 @@ export async function POST(request: Request) {
     await bucket.delete(objectKey);
     throw error;
   }
+
+  await createAdminNotification({
+    eventKey: `verification-evidence:${id}`,
+    eventType: "trade.verification_evidence_uploaded",
+    category: "approval",
+    priority: "high",
+    title: "Verification evidence uploaded",
+    summary: `${account.business_name} uploaded ${category.replaceAll("-", " ")} evidence for review.`,
+    entityType: "verification_document",
+    entityId: id,
+    actorType: role,
+    actorUid: identity.uid,
+    requiresAction: true,
+    metadata: { category, role, expiryDate },
+    occurredAt: now,
+  });
 
   return json({ ok: true, document: publicRecord({ id, firebase_uid: identity.uid, category, file_name: file.name.slice(0, 180), content_type: file.type, size_bytes: file.size, object_key: objectKey, expiry_date: expiryDate, status: "uploaded", created_at: now }) }, 201);
 }

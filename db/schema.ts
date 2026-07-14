@@ -168,6 +168,36 @@ export const adminAuditLog = sqliteTable("admin_audit_log", {
   index("admin_audit_log_entity_idx").on(table.entityType, table.entityId),
 ]);
 
+export const adminNotifications = sqliteTable("admin_notifications", {
+  id: text("id").primaryKey(),
+  eventKey: text("event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  category: text("category").notNull(),
+  priority: text("priority").notNull().default("normal"),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  actorType: text("actor_type").notNull().default("system"),
+  actorUid: text("actor_uid").notNull().default(""),
+  requiresAction: integer("requires_action", { mode: "boolean" }).notNull().default(false),
+  status: text("status").notNull().default("open"),
+  readAt: text("read_at").notNull().default(""),
+  readByUid: text("read_by_uid").notNull().default(""),
+  resolvedAt: text("resolved_at").notNull().default(""),
+  resolvedByUid: text("resolved_by_uid").notNull().default(""),
+  resolutionNote: text("resolution_note").notNull().default(""),
+  metadata: text("metadata").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("admin_notifications_event_key_idx").on(table.eventKey),
+  index("admin_notifications_status_idx").on(table.status, table.createdAt),
+  index("admin_notifications_action_idx").on(table.requiresAction, table.status, table.createdAt),
+  index("admin_notifications_category_idx").on(table.category, table.createdAt),
+  index("admin_notifications_entity_idx").on(table.entityType, table.entityId),
+]);
+
 export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -176,6 +206,16 @@ export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   createdAt: text("created_at").notNull(),
 }, (table) => [
   index("trade_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
+export const customerAccountNotes = sqliteTable("customer_account_notes", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  note: text("note").notNull(),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("customer_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
 export const tradeAccountFeatureGrants = sqliteTable("trade_account_feature_grants", {

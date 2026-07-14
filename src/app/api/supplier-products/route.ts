@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -51,14 +52,14 @@ async function supplierIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
   const account = await getD1()
     .prepare(
-      "SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT partner_type, account_status, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(identity.uid)
     .first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
   if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return { ...identity, billingStatus: account.billing_status };
+  return { ...identity, billingStatus: account.billing_status, businessName: String(account.business_name || "Wholesaler") };
 }
 
 function errorResponse(error: unknown) {
@@ -132,11 +133,11 @@ async function catalogue(firebaseUid: string) {
       .bind(firebaseUid)
       .all<Record<string, unknown>>(),
   ]);
-  return products.results.map((row) => ({
+  return products.results.map((row: Record<string, unknown>) => ({
     ...product(row),
     dependencies: links.results
-      .filter((link) => link.product_id === row.id)
-      .map((link) => ({
+      .filter((link: Record<string, unknown>) => link.product_id === row.id)
+      .map((link: Record<string, unknown>) => ({
         id: link.id,
         linkedProductId: link.linked_product_id,
         relationship: link.relationship,
@@ -411,7 +412,7 @@ export async function POST(request: Request) {
         .bind(identity.uid)
         .all<{ model_number: string }>();
       const availableModels = new Set([
-        ...existingModels.results.map((item) => item.model_number),
+        ...existingModels.results.map((item: { model_number: string }) => item.model_number),
         ...importedModels,
       ]);
       const missingDependency = modelDependencies
@@ -475,8 +476,8 @@ export async function POST(request: Request) {
         )
         .bind(identity.uid)
         .all<{ id: string; model_number: string }>();
-      const idByModel = new Map(
-        storedProducts.results.map((item) => [item.model_number, item.id]),
+      const idByModel = new Map<string, string>(
+        storedProducts.results.map((item: { id: string; model_number: string }) => [item.model_number, item.id]),
       );
       for (let index = 0; index < rows.length; index += 1) {
         const productId = idByModel.get(rows[index]!.modelNumber);
@@ -492,6 +493,21 @@ export async function POST(request: Request) {
           })),
         );
       }
+      await createAdminNotification({
+        eventKey: `supplier-catalogue-import:${identity.uid}:${now}`,
+        eventType: "supplier.catalogue_imported",
+        category: "catalogue",
+        priority: "high",
+        title: "Wholesaler catalogue import awaiting review",
+        summary: `${identity.businessName} imported ${rows.length} products. Published items require catalogue approval before installers can select them.`,
+        entityType: "trade_account",
+        entityId: identity.uid,
+        actorType: "supplier",
+        actorUid: identity.uid,
+        requiresAction: rows.some((item) => item?.listingStatus === "published"),
+        metadata: { productCount: rows.length },
+        occurredAt: now,
+      });
       return json(
         {
           ok: true,
@@ -574,6 +590,21 @@ export async function POST(request: Request) {
         409,
       );
     }
+    await createAdminNotification({
+      eventKey: `supplier-product:${id}:${now}`,
+      eventType: "supplier.product_created",
+      category: "catalogue",
+      priority: values.listingStatus === "published" ? "high" : "normal",
+      title: "Wholesaler product awaiting review",
+      summary: `${identity.businessName} added ${values.brand} ${values.name} to its catalogue.`,
+      entityType: "supplier_product",
+      entityId: id,
+      actorType: "supplier",
+      actorUid: identity.uid,
+      requiresAction: values.listingStatus === "published",
+      metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
+      occurredAt: now,
+    });
     return json({ ok: true, products: await catalogue(identity.uid) }, 201);
   } catch (error) {
     return errorResponse(error);
@@ -652,6 +683,21 @@ export async function PATCH(request: Request) {
         409,
       );
     }
+    await createAdminNotification({
+      eventKey: `supplier-product-update:${id}:${now}`,
+      eventType: "supplier.product_updated",
+      category: "catalogue",
+      priority: values.listingStatus === "published" ? "high" : "normal",
+      title: "Wholesaler product changed",
+      summary: `${identity.businessName} updated ${values.brand} ${values.name}. The catalogue review was reset to pending.`,
+      entityType: "supplier_product",
+      entityId: id,
+      actorType: "supplier",
+      actorUid: identity.uid,
+      requiresAction: values.listingStatus === "published",
+      metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
+      occurredAt: now,
+    });
     return json({ ok: true, products: await catalogue(identity.uid) });
   } catch (error) {
     return errorResponse(error);

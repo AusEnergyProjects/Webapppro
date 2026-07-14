@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       GROUP BY r.id
       ORDER BY r.updated_at DESC LIMIT 250
     `).all<Record<string, unknown>>();
-    return adminJson({ ok: true, referrals: rows.results.map((row) => ({
+    return adminJson({ ok: true, referrals: rows.results.map((row: Record<string, unknown>) => ({
       id: row.id,
       code: row.referral_code,
       status: row.status,
@@ -83,6 +83,10 @@ export async function PATCH(request: Request) {
       `).bind(nextStatus, admin.uid, now, now, id).run();
       if (current.first_paid_at) await rewardReferral(id);
     }
+    await db.prepare(`UPDATE admin_notifications SET status = 'resolved', read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END,
+      read_by_uid = CASE WHEN read_by_uid = '' THEN ? ELSE read_by_uid END, resolved_at = ?, resolved_by_uid = ?,
+      resolution_note = ?, updated_at = ? WHERE entity_type = 'trade_referral' AND entity_id = ? AND status != 'resolved'`)
+      .bind(now, admin.uid, now, admin.uid, `Referral decision: ${action}`, now, id).run();
     await writeAdminAudit(
       admin,
       `referral.${action}`,

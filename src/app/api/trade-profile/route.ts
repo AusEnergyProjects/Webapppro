@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
 import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
+import { createAdminNotification } from "@/lib/admin-notifications";
 import {
   resolveEntitlements,
   type FeatureGrant,
@@ -286,6 +287,24 @@ export async function POST(request: Request) {
     now,
   ).run();
 
+  if (!existingAccount) {
+    await createAdminNotification({
+      eventKey: `trade-signup:${identity.uid}`,
+      eventType: "trade.signup",
+      category: "approval",
+      priority: "high",
+      title: partnerType === "supplier" ? "New wholesaler account" : "New installer account",
+      summary: `${businessName} created a ${partnerType === "supplier" ? "wholesaler" : "installer"} profile and is ready for operations review.`,
+      entityType: "trade_account",
+      entityId: identity.uid,
+      actorType: partnerType,
+      actorUid: identity.uid,
+      requiresAction: true,
+      metadata: { partnerType, addressState, postcode },
+      occurredAt: now,
+    });
+  }
+
   let referral: { accepted: boolean; message: string } | null = null;
   if (cleanText(raw.referralCode, 40)) {
     if (existingAccount) {
@@ -325,6 +344,7 @@ export async function POST(request: Request) {
         const riskReason = duplicate
           ? "An existing business profile has the same business name and postcode."
           : "";
+        const referralId = crypto.randomUUID();
         const inserted = await db.prepare(`
           INSERT INTO trade_referrals
           (id, referral_code, referrer_uid, referred_uid, status, risk_reason,
@@ -333,7 +353,7 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?, ?, '', ?, '', '', '', '', ?, ?)
           ON CONFLICT(referred_uid) DO NOTHING
         `).bind(
-          crypto.randomUUID(),
+          referralId,
           referralCode,
           codeOwner.firebase_uid,
           identity.uid,
@@ -343,6 +363,23 @@ export async function POST(request: Request) {
           now,
           now,
         ).run();
+        if (inserted.meta.changes && referralStatus === "review_required") {
+          await createAdminNotification({
+            eventKey: `referral-review:${referralId}`,
+            eventType: "trade.referral_review_required",
+            category: "approval",
+            priority: "high",
+            title: "Referral eligibility needs review",
+            summary: `${businessName} matched an existing business name and postcode during referral registration.`,
+            entityType: "trade_referral",
+            entityId: referralId,
+            actorType: partnerType,
+            actorUid: identity.uid,
+            requiresAction: true,
+            metadata: { riskReason },
+            occurredAt: now,
+          });
+        }
         referral = inserted.meta.changes
           ? {
               accepted: true,

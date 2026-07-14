@@ -3,6 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
 import { allocateNearestInstallers, DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, opportunityExpiry } from "@/lib/opportunity-server";
+import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_NOTICE_VERSION,
@@ -249,6 +250,21 @@ export async function PATCH(request: Request) {
         (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
         VALUES (?, ?, ?, 'anonymized_installer_matching', ?, ?, '', ?) ON CONFLICT(id) DO NOTHING`)
         .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_NOTICE_VERSION, submittedAt, submittedAt),
+      adminNotificationStatement(db, {
+        eventKey: `customer-enquiry:${id}`,
+        eventType: "customer.enquiry_submitted",
+        category: "customer",
+        priority: "high",
+        title: "Customer enquiry submitted",
+        summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
+        entityType: "customer_project",
+        entityId: id,
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: { opportunityId, state: opportunity.state, serviceCategories: opportunity.serviceCategories },
+        occurredAt: submittedAt,
+      }),
     ]);
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
   } else if (action === "toggle_milestone") {
@@ -292,6 +308,21 @@ export async function PATCH(request: Request) {
       db.prepare("UPDATE customer_consent_receipts SET withdrawn_at = ? WHERE project_id = ? AND purpose = 'anonymized_installer_matching' AND withdrawn_at = ''")
         .bind(now, id),
     ]);
+    await createAdminNotification({
+      eventKey: `customer-project-${action}:${id}:${now}`,
+      eventType: `customer.project_${action === "complete" ? "completed" : "withdrawn"}`,
+      category: "customer",
+      priority: action === "complete" ? "low" : "normal",
+      title: action === "complete" ? "Customer completed a project" : "Customer withdrew an enquiry",
+      summary: `${String(current.title).slice(0, 120)} was marked ${nextStatus} by the customer.`,
+      entityType: "customer_project",
+      entityId: id,
+      actorType: "customer",
+      actorUid: user.uid,
+      requiresAction: false,
+      metadata: { opportunityId: current.opportunity_id, status: nextStatus },
+      occurredAt: now,
+    });
   } else if (action === "archive") {
     if (!["draft", "withdrawn", "completed"].includes(String(current.status))) return json({ ok: false, error: "Withdraw or complete an active enquiry before archiving it." }, 409);
     await db.prepare("UPDATE customer_projects SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
@@ -307,6 +338,21 @@ export async function PATCH(request: Request) {
     if (decision === "shortlisted") statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = 'reviewing', updated_at = ? WHERE project_id = ? AND status = 'submitted'").bind(now, id));
     statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = ?, updated_at = ? WHERE id = ? AND project_id = ?").bind(decision, now, quoteId, id));
     await db.batch(statements);
+    await createAdminNotification({
+      eventKey: `customer-quote-decision:${quoteId}:${decision}:${now}`,
+      eventType: `customer.quote_${decision}`,
+      category: "customer",
+      priority: decision === "shortlisted" ? "high" : "normal",
+      title: decision === "shortlisted" ? "Customer shortlisted a quote" : "Customer updated a quote decision",
+      summary: `${String(current.title).slice(0, 120)} has a quote marked ${decision}.`,
+      entityType: "customer_project_quote",
+      entityId: quoteId,
+      actorType: "customer",
+      actorUid: user.uid,
+      requiresAction: decision === "shortlisted",
+      metadata: { projectId: id, decision },
+      occurredAt: now,
+    });
   } else {
     return json({ ok: false, error: "Choose a valid project action." }, 400);
   }

@@ -16,6 +16,12 @@ import {
   FEATURE_DEFINITIONS,
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
+import {
+  AdminNotificationInbox,
+  type AdminNotification,
+  type AdminNotificationCounts,
+} from "@/components/AdminNotificationInbox";
+import { AdminAccountDirectory } from "@/components/AdminAccountDirectory";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -35,6 +41,7 @@ type Metrics = {
     pending?: number;
     live?: number;
   };
+  notifications?: { total?: number; unread?: number; action_required?: number; urgent?: number };
 };
 type AuditItem = {
   id: string;
@@ -243,8 +250,8 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "overview" | "partners" | "opportunities" | "catalogue" | "enquiries" | "referrals" | "access"
-  >("overview");
+    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "referrals" | "access"
+  >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -274,6 +281,14 @@ export function AdminOperationsPortal() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("support");
+  const [notificationCounts, setNotificationCounts] = useState<AdminNotificationCounts>({
+    total: 0,
+    unread: 0,
+    action_required: 0,
+    urgent: 0,
+    resolved: 0,
+  });
+  const [directoryTarget, setDirectoryTarget] = useState<{ type: string; uid: string; nonce: number } | null>(null);
   const [opportunityDraft, setOpportunityDraft] = useState({
     title: "",
     projectType: "",
@@ -348,6 +363,10 @@ export function AdminOperationsPortal() {
       const result = await api("/api/admin/session");
       setSession(result.admin);
       setMetrics(result.metrics || {});
+      setNotificationCounts((current) => ({
+        ...current,
+        ...(result.metrics?.notifications || {}),
+      }));
       setAudit(result.audit || []);
       setCanBootstrap(false);
       await loadWorkspace(result.admin);
@@ -465,6 +484,42 @@ export function AdminOperationsPortal() {
     } catch (error) {
       setStatus(authMessage(error));
     }
+  }
+
+  function openNotificationRecord(notification: AdminNotification) {
+    if (notification.actorType === "customer" || ["customer_account", "customer_project"].includes(notification.entityType)) {
+      if (!notification.actorUid) {
+        setStatus("The customer record could not be identified from this notification.");
+        return;
+      }
+      setDirectoryTarget({ type: "customer", uid: notification.actorUid, nonce: Date.now() });
+      setTab("directory");
+      return;
+    }
+    if (notification.entityType === "supplier_product") {
+      setTab("catalogue");
+      return;
+    }
+    if (notification.entityType === "trade_referral") {
+      setTab("referrals");
+      return;
+    }
+    if (["supplier_product_enquiry", "installer_product_list"].includes(notification.entityType)) {
+      setTab("enquiries");
+      return;
+    }
+    if (["trade_opportunity_match", "customer_project_quote"].includes(notification.entityType)) {
+      setTab("opportunities");
+      return;
+    }
+    if (["trade_account", "verification_document"].includes(notification.entityType) || ["installer", "supplier"].includes(notification.actorType)) {
+      if (notification.actorUid) {
+        setTab("partners");
+        void openAccount(notification.actorUid);
+        return;
+      }
+    }
+    setTab("opportunities");
   }
 
   async function saveAccount(event: FormEvent) {
@@ -962,6 +1017,10 @@ export function AdminOperationsPortal() {
           </div>
         </div>
         <div className="admin-topbar-account">
+          <button type="button" className="admin-notification-button" onClick={() => setTab("inbox")}>
+            Alerts
+            <strong>{notificationCounts.unread || 0}</strong>
+          </button>
           <span className={`admin-role admin-role-${session.role}`}>
             {session.role}
           </span>
@@ -977,47 +1036,60 @@ export function AdminOperationsPortal() {
       <div className="admin-layout">
         <nav className="admin-sidebar" aria-label="Operations sections">
           <button
+            className={tab === "inbox" ? "active" : ""}
+            onClick={() => setTab("inbox")}
+          >
+            <span>01</span>Inbox
+            {notificationCounts.action_required > 0 && <strong className="admin-nav-count">{notificationCounts.action_required}</strong>}
+          </button>
+          <button
             className={tab === "overview" ? "active" : ""}
             onClick={() => setTab("overview")}
           >
-            <span>01</span>Overview
+            <span>02</span>Overview
+          </button>
+          <button
+            className={tab === "directory" ? "active" : ""}
+            onClick={() => setTab("directory")}
+          >
+            <span>03</span>All accounts
           </button>
           <button
             className={tab === "partners" ? "active" : ""}
             onClick={() => setTab("partners")}
           >
-            <span>02</span>Partners
+            <span>04</span>Partners
           </button>
           <button
             className={tab === "opportunities" ? "active" : ""}
             onClick={() => setTab("opportunities")}
           >
-            <span>03</span>Opportunities
+            <span>05</span>Opportunities
           </button>
           <button
             className={tab === "catalogue" ? "active" : ""}
             onClick={() => setTab("catalogue")}
           >
-            <span>04</span>Catalogue
+            <span>06</span>Catalogue
           </button>
           <button
             className={tab === "enquiries" ? "active" : ""}
             onClick={() => setTab("enquiries")}
           >
-            <span>05</span>Product enquiries
+            <span>07</span>Product enquiries
           </button>
           <button
             className={tab === "referrals" ? "active" : ""}
             onClick={() => setTab("referrals")}
           >
-            <span>06</span>Referrals
+            <span>08</span>Referrals
           </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>07</span>Access & audit
+              <span>09</span>Access & audit
             </button>
           )}
           <aside>
@@ -1038,6 +1110,29 @@ export function AdminOperationsPortal() {
               </button>
             </div>
           )}
+          <div hidden={tab !== "inbox"}>
+            <AdminNotificationInbox
+              api={api}
+              role={session.role}
+              onOpen={openNotificationRecord}
+              onCounts={setNotificationCounts}
+            />
+          </div>
+          {tab === "directory" && (
+            <AdminAccountDirectory
+              api={api}
+              role={session.role}
+              target={directoryTarget}
+              onManageTrade={(uid) => {
+                setTab("partners");
+                void openAccount(uid);
+              }}
+              onManageAdmin={() => {
+                if (session.role === "owner") setTab("access");
+                else setStatus("Only an owner can change operations access.");
+              }}
+            />
+          )}
           {tab === "overview" && (
             <>
               <header className="admin-page-heading">
@@ -1049,6 +1144,11 @@ export function AdminOperationsPortal() {
                 </p>
               </header>
               <section className="admin-metric-grid">
+                <article>
+                  <span>Action notifications</span>
+                  <strong>{notificationCounts.action_required || 0}</strong>
+                  <small>{notificationCounts.unread || 0} unread events</small>
+                </article>
                 <article>
                   <span>Business network</span>
                   <strong>{accountCounts.total || 0}</strong>
@@ -1092,6 +1192,10 @@ export function AdminOperationsPortal() {
                     <h2>What needs attention</h2>
                   </div>
                   <div className="admin-queue-list">
+                    <button onClick={() => setTab("inbox")}>
+                      <strong>{notificationCounts.action_required || 0}</strong>
+                      <span>Inbox items requiring action or approval</span>
+                    </button>
                     <button
                       onClick={() => {
                         setTab("partners");

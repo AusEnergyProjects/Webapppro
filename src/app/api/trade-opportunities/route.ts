@@ -7,6 +7,7 @@ import {
 } from "@/lib/opportunity-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { normalizePlatformQuote, parseStoredJson } from "@/lib/customer-projects.mjs";
+import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
   const db = getD1();
   const account = await db
     .prepare(
-      "SELECT account_status, partner_type, billing_status FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT account_status, partner_type, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(user.uid)
     .first<Record<string, unknown>>();
@@ -195,7 +196,7 @@ export async function PATCH(request: Request) {
   const db = getD1();
   const account = await db
     .prepare(
-      "SELECT account_status, partner_type, billing_status FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT account_status, partner_type, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(user.uid)
     .first<Record<string, unknown>>();
@@ -274,6 +275,21 @@ export async function PATCH(request: Request) {
           quote.workmanshipWarrantyYears, now, now),
       db.prepare("UPDATE customer_projects SET status = 'quote_review', updated_at = ? WHERE id = ? AND status = 'matching'")
         .bind(now, match.project_id),
+      adminNotificationStatement(db, {
+        eventKey: `installer-quote:${matchId}:${now}`,
+        eventType: "installer.quote_submitted",
+        category: "response",
+        priority: "high",
+        title: "Installer submitted a quote option",
+        summary: `${String(account.business_name || "An installer").slice(0, 160)} submitted a structured platform quote for a customer enquiry.`,
+        entityType: "customer_project_quote",
+        entityId: quoteId,
+        actorType: "installer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: { matchId, opportunityId: match.opportunity_id, projectId: match.project_id, totalCentsExGst },
+        occurredAt: now,
+      }),
     ]);
     return json({ ok: true, quote: { totalCentsExGst, productSubtotalCentsExGst: snapshot.subtotalCentsExGst, submittedAt: now } });
   }
@@ -281,6 +297,20 @@ export async function PATCH(request: Request) {
     const result = await db.prepare(`UPDATE customer_project_quotes SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?
       WHERE opportunity_match_id = ? AND installer_uid = ? AND status = 'submitted'`).bind(now, matchId, user.uid).run();
     if (!result.meta.changes) return json({ ok: false, error: "No active quote option was found." }, 404);
+    await createAdminNotification({
+      eventKey: `installer-quote-withdrawn:${matchId}:${now}`,
+      eventType: "installer.quote_withdrawn",
+      category: "response",
+      priority: "normal",
+      title: "Installer withdrew a quote option",
+      summary: `${String(account.business_name || "An installer").slice(0, 160)} withdrew a structured quote from a customer enquiry.`,
+      entityType: "trade_opportunity_match",
+      entityId: matchId,
+      actorType: "installer",
+      actorUid: user.uid,
+      requiresAction: false,
+      occurredAt: now,
+    });
     return json({ ok: true });
   }
   if (!PARTNER_STATUSES.has(status))
@@ -288,9 +318,9 @@ export async function PATCH(request: Request) {
       { ok: false, error: "Choose a valid opportunity response." },
       400,
     );
-  const current = await db.prepare(`SELECT m.status FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
+  const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ? AND o.status = 'open' AND o.expires_at > ?`)
-    .bind(matchId, user.uid, now).first<{ status: string }>();
+    .bind(matchId, user.uid, now).first<{ status: string; opportunity_id: string; title: string }>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const transitions: Record<string, Set<string>> = {
     offered: new Set(["viewed", "interested", "declined"]),
@@ -313,17 +343,26 @@ export async function PATCH(request: Request) {
       404,
     );
   if (status === "declined") {
-    const match = await db
-      .prepare(
-        "SELECT opportunity_id FROM trade_opportunity_matches WHERE id = ? AND firebase_uid = ?",
-      )
-      .bind(matchId, user.uid)
-      .first<{ opportunity_id: string }>();
-    if (match?.opportunity_id)
+    if (current.opportunity_id)
       await allocateNearestInstallers(
-        match.opportunity_id,
+        current.opportunity_id,
         "automatic-decline-refill",
       ).catch(() => null);
   }
+  await createAdminNotification({
+    eventKey: `installer-response:${matchId}:${status}`,
+    eventType: `installer.lead_${status}`,
+    category: "response",
+    priority: status === "interested" ? "high" : status === "declined" ? "normal" : "low",
+    title: status === "interested" ? "Installer is interested in a lead" : status === "declined" ? "Installer declined a lead" : "Installer viewed a lead",
+    summary: `${String(account.business_name || "An installer").slice(0, 160)} marked ${String(current.title).slice(0, 160)} as ${status}.`,
+    entityType: "trade_opportunity_match",
+    entityId: matchId,
+    actorType: "installer",
+    actorUid: user.uid,
+    requiresAction: status === "interested",
+    metadata: { opportunityId: current.opportunity_id, status },
+    occurredAt: now,
+  });
   return json({ ok: true });
 }
