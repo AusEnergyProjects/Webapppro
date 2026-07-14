@@ -86,16 +86,18 @@ An `ok: true` response proves that the application reached the processor and rec
 
 ### API monitoring and alerts
 
-The Google Apps Script monitor checks the Sites runtime, electricity and gas plan services, and the privacy-safe lead delivery probe every hour. Lead failures, billing incidents and administrator access changes are also written to the durable operations inbox.
+The Google Apps Script monitor checks the Sites runtime, electricity and gas plan services, and the privacy-safe lead delivery probe every hour. Lead failures, billing incidents and administrator access changes are also written to the durable operations inbox. The existing Google Workspace relay is the default off-screen alert channel, so no additional paid notification provider is required.
 
-For off-screen delivery, configure a private alert destination in the hosted Sites environment:
+The default Google Workspace path reuses `AEA_LEAD_WEBHOOK_URL` and `AEA_LEAD_WEBHOOK_TEST_TOKEN`. Store the same high-entropy token in Sites and the Apps Script project properties. Operations alerts are wrapped in a short-lived HMAC-signed envelope, verified by Apps Script, deduplicated by notification ID and delivered to the administrator Gmail inbox. Apps Script rejects expired, altered or unsigned alerts.
+
+An independent HTTPS destination can override the Google Workspace path when required:
 
 ```text
 AEA_OPS_ALERT_WEBHOOK_URL=https://your-private-operations-alert.example/endpoint
 AEA_OPS_ALERT_WEBHOOK_SECRET=replace-with-a-private-bearer-secret
 ```
 
-Actionable, high and urgent notifications are queued, retried and recorded in the admin portal. Payloads contain only the notification title, operational summary, priority, category, timestamp and portal path. They never contain customer contact details, street addresses, account tokens, uploaded files, meter identifiers or interval data. The secret is optional when the private destination authenticates another way, but it must never use a public browser variable. API responses include an `X-Request-Id`, and server logs contain structured outcomes without request bodies or personal data.
+Actionable, high and urgent notifications are queued, retried and recorded in the admin portal. Payloads contain only the notification title, operational summary, priority, category, timestamp and portal path. They never contain customer contact details, street addresses, account tokens, uploaded files, meter identifiers or interval data. A custom destination secret is optional when that destination authenticates another way, but it must never use a public browser variable. API responses include an `X-Request-Id`, and server logs contain structured outcomes without request bodies or personal data.
 
 See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert behavior, privacy boundaries and incident response steps.
 

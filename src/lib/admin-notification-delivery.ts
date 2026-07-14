@@ -2,6 +2,7 @@ import { getD1 } from "../../db";
 import {
   adminNotificationRetryAt,
   buildAdminNotificationDeliveryPayload,
+  createGoogleWorkspaceAdminAlertEnvelope,
 } from "@/lib/admin-notification-delivery-payload.mjs";
 
 type DeliveryOptions = {
@@ -18,40 +19,69 @@ function clean(value: unknown, maximum: number) {
   return String(value || "").trim().slice(0, maximum);
 }
 
-function deliveryConfiguration() {
-  const runtime = process.env as unknown as Record<string, unknown>;
-  const url = clean(runtime.AEA_OPS_ALERT_WEBHOOK_URL, 1000);
-  const secret = clean(runtime.AEA_OPS_ALERT_WEBHOOK_SECRET, 1000);
+type DeliveryProvider = "google_workspace" | "custom_webhook" | "not_configured";
+
+type DeliveryConfiguration = {
+  configured: boolean;
+  url: string;
+  secret: string;
+  provider: DeliveryProvider;
+};
+
+function secureUrl(value: unknown) {
+  const url = clean(value, 1000);
   try {
     const parsed = new URL(url);
-    return { configured: parsed.protocol === "https:", url, secret };
+    return parsed.protocol === "https:" ? url : "";
   } catch {
-    return { configured: false, url: "", secret: "" };
+    return "";
   }
+}
+
+function deliveryConfiguration(): DeliveryConfiguration {
+  const runtime = process.env as unknown as Record<string, unknown>;
+  const customUrl = secureUrl(runtime.AEA_OPS_ALERT_WEBHOOK_URL);
+  const customSecret = clean(runtime.AEA_OPS_ALERT_WEBHOOK_SECRET, 1000);
+  if (customUrl) return { configured: true, url: customUrl, secret: customSecret, provider: "custom_webhook" };
+
+  const googleUrl = secureUrl(runtime.AEA_LEAD_WEBHOOK_URL);
+  const googleSecret = clean(runtime.AEA_LEAD_WEBHOOK_TEST_TOKEN, 1000);
+  if (googleUrl && googleSecret.length >= 32) {
+    return { configured: true, url: googleUrl, secret: googleSecret, provider: "google_workspace" };
+  }
+  return { configured: false, url: "", secret: "", provider: "not_configured" };
 }
 
 export function adminNotificationDeliveryConfiguration() {
   const config = deliveryConfiguration();
-  return { configured: config.configured, channel: "webhook" as const };
+  return { configured: config.configured, channel: "webhook" as const, provider: config.provider };
 }
 
-async function deliver(row: DeliveryRow, url: string, secret: string, fetchImpl: typeof fetch) {
+async function deliver(row: DeliveryRow, config: DeliveryConfiguration, fetchImpl: typeof fetch) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
   try {
+    const payload = buildAdminNotificationDeliveryPayload(row);
+    const googleWorkspace = config.provider === "google_workspace";
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+      "Content-Type": googleWorkspace ? "text/plain; charset=utf-8" : "application/json",
       "X-AEA-Event-Type": "admin.notification",
     };
-    if (secret) headers.Authorization = `Bearer ${secret}`;
-    const response = await fetchImpl(url, {
+    if (!googleWorkspace && config.secret) headers.Authorization = `Bearer ${config.secret}`;
+    const body = googleWorkspace
+      ? JSON.stringify(await createGoogleWorkspaceAdminAlertEnvelope(payload, config.secret))
+      : JSON.stringify(payload);
+    const response = await fetchImpl(config.url, {
       method: "POST",
       headers,
-      body: JSON.stringify(buildAdminNotificationDeliveryPayload(row)),
+      body,
       cache: "no-store",
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Alert destination returned HTTP ${response.status}`);
+    if (googleWorkspace && (await response.text()).trim() !== "ok") {
+      throw new Error("Google Workspace did not acknowledge alert delivery.");
+    }
     return response.status;
   } finally {
     clearTimeout(timer);
@@ -97,7 +127,7 @@ export async function dispatchAdminNotificationDeliveries({
     const attempts = Number(row.attempts || 0) + 1;
     const attemptedAt = new Date().toISOString();
     try {
-      const responseCode = await deliver(row, config.url, config.secret, fetchImpl);
+      const responseCode = await deliver(row, config, fetchImpl);
       await db.prepare(`UPDATE admin_notification_deliveries SET status = 'delivered', attempts = ?, last_attempt_at = ?,
         delivered_at = ?, last_error = '', response_code = ?, next_attempt_at = '', updated_at = ? WHERE id = ?`)
         .bind(attempts, attemptedAt, attemptedAt, responseCode, attemptedAt, row.id).run();

@@ -1,6 +1,6 @@
 # API monitoring runbook
 
-Status: Google Apps monitoring source is ready for deployment and activation
+Status: Google Workspace monitoring and administrator alert relay is active
 
 The live service monitor runs from the existing Google Apps Script project so it remains independent of the website runtime it checks. It uses fixed synthetic inputs and never submits a customer lead.
 
@@ -32,14 +32,18 @@ Run `setupOperationalMonitoring` once after deploying the Apps Script source. It
 
 The Sites application keeps a durable administrator notification and delivery ledger in D1. Actionable, high and urgent events are queued automatically. This includes customer enquiries, trade responses, approval work, verified billing problems, comparison-enquiry delivery failures and administrator access changes.
 
-To send those summaries to a private operations channel, configure:
+By default the application reuses the existing Google Apps Script endpoint in `AEA_LEAD_WEBHOOK_URL`. It signs each alert with the same protected `AEA_LEAD_WEBHOOK_TEST_TOKEN` already stored in Sites and Apps Script project properties. Apps Script accepts only a valid HMAC-SHA256 signature created within the previous ten minutes, validates the privacy-safe payload, deduplicates retries by notification ID and emails `info@ausenergyassessments.com`.
+
+The protected administrator email contains the operational title, summary, priority, category, creation time and a link to the protected control centre. It does not expose customer contact details. The existing Google Workspace account provides this route without an additional alerting subscription.
+
+To override Google Workspace with an independent private operations channel, configure:
 
 ```text
 AEA_OPS_ALERT_WEBHOOK_URL=https://your-private-operations-alert.example/endpoint
 AEA_OPS_ALERT_WEBHOOK_SECRET=replace-with-a-private-bearer-secret
 ```
 
-The destination must use HTTPS. The secret is sent only as a server-side bearer credential and is optional when the destination uses another private authentication boundary. Never place either value in browser code or a `NEXT_PUBLIC_` variable.
+The override destination must use HTTPS. The secret is sent only as a server-side bearer credential and is optional when the destination uses another private authentication boundary. Never place any alert secret in browser code or a `NEXT_PUBLIC_` variable.
 
 Owners and administrators can see whether the channel is connected, inspect delivered, waiting and failed counts, send a privacy-safe test alert, and retry an individual failure. Failed attempts retry after 5 minutes, 30 minutes, 2 hours, 6 hours and then 12 hours. The durable inbox remains the source of truth even when no off-screen channel is connected.
 
@@ -85,6 +89,14 @@ When `lead_delivery` fails:
 3. Confirm the deployed Apps Script source still recognises `webhook.delivery_probe` and returns `ok` without creating a spreadsheet row or email.
 4. Keep the public fallback telephone number available while delivery is impaired.
 
+When an administrator email alert fails:
+
+1. Check the delivery attempt and privacy-safe error type in the protected operations inbox.
+2. Confirm the Sites and Apps Script copies of `AEA_LEAD_WEBHOOK_TEST_TOKEN` still match without printing either value.
+3. Confirm the Apps Script web app is running the current deployment version and executes as its owner.
+4. Send the built-in privacy-safe test alert from the operations inbox.
+5. Use Retry alert only after the channel is healthy. Duplicate Gmail messages are suppressed by notification ID.
+
 When every check fails, first confirm the production site is reachable, then inspect platform status and the Apps Script execution history.
 
 ## Recovery and release checks
@@ -105,6 +117,7 @@ Before updating the Apps Script deployment:
 2. Confirm unsubscribe links contain only an opaque token.
 3. Confirm internal and customer reply routing remains correct.
 4. Create a new Apps Script deployment version rather than relying on saved editor source alone.
-5. Run only the privacy-safe operational check after deployment. Do not submit a real customer lead as a health check.
+5. Send the built-in privacy-safe administrator test alert and confirm one Gmail message is received.
+6. Run only the privacy-safe operational check after deployment. Do not submit a real customer lead as a health check.
 
 The older Netlify scheduled implementation remains in the repository for its inactive deployment target. It must not be enabled or deployed without explicit Netlify approval.

@@ -15,6 +15,9 @@ const OPS_SITE_URL = "https://aea-energy-comparison.info294029.chatgpt.site";
 const OPS_ALERT_EMAIL = REPLY_TO;
 const OPS_STATE_KEY = "AEA_OPS_HEALTH_STATE_V1";
 const OPS_REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
+const OPS_ADMIN_ALERT_PROPERTY_PREFIX = "AEA_ADMIN_ALERT_V1_";
+const OPS_ADMIN_ALERT_MAX_AGE_MS = 10 * 60 * 1000;
+const OPS_ADMIN_ALERT_DEDUPE_MS = 90 * 24 * 60 * 60 * 1000;
 
 // Existing column positions are preserved. New operational fields are appended.
 const HEADERS = [
@@ -163,6 +166,7 @@ function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
     if (payload.eventType === "webhook.delivery_probe" && payload.test === true) return out_("ok");
+    if (payload.eventType === "admin.notification") return handleAdminNotification_(payload);
     if (payload.website) return out_("ok");
 
     const eventType = eventType_(payload);
@@ -176,6 +180,109 @@ function doPost(e) {
   } catch (error) {
     return out_("error: " + error.message);
   }
+}
+
+function handleAdminNotification_(envelope) {
+  const alert = verifyAdminNotificationEnvelope_(envelope);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error("Operations alert delivery is busy");
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const dedupeKey = OPS_ADMIN_ALERT_PROPERTY_PREFIX + digestHex_(alert.notification.id).slice(0, 40);
+    if (properties.getProperty(dedupeKey)) return out_("ok");
+    sendAdminNotification_(alert);
+    properties.setProperty(dedupeKey, String(Date.now()));
+    pruneAdminNotificationDedupe_(properties, Date.now());
+    console.log(JSON.stringify({ schemaVersion: "1", event: "admin.notification", outcome: "delivered", notificationIdHash: digestHex_(alert.notification.id).slice(0, 12) }));
+    return out_("ok");
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function verifyAdminNotificationEnvelope_(envelope) {
+  if (!envelope || envelope.schemaVersion !== "1" || envelope.eventType !== "admin.notification") throw new Error("Invalid operations alert envelope");
+  const sentAt = String(envelope.sentAt || "");
+  const sentAtMs = new Date(sentAt).getTime();
+  if (!sentAtMs || Math.abs(Date.now() - sentAtMs) > OPS_ADMIN_ALERT_MAX_AGE_MS) throw new Error("Expired operations alert envelope");
+  const encodedPayload = String(envelope.payload || "");
+  const signature = String(envelope.signature || "");
+  if (!/^[A-Za-z0-9_-]{20,5000}$/.test(encodedPayload) || !/^[A-Za-z0-9_-]{43}$/.test(signature)) throw new Error("Invalid operations alert signature");
+  const secret = PropertiesService.getScriptProperties().getProperty("AEA_LEAD_WEBHOOK_TEST_TOKEN") || "";
+  if (secret.length < 32) throw new Error("Operations alert signing is not configured");
+  const expected = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(sentAt + "." + encodedPayload, secret)).replace(/=+$/, "");
+  if (!constantTimeEqual_(signature, expected)) throw new Error("Invalid operations alert signature");
+  const decoded = Utilities.newBlob(Utilities.base64DecodeWebSafe(encodedPayload)).getDataAsString();
+  return validateAdminNotification_(JSON.parse(decoded));
+}
+
+function validateAdminNotification_(payload) {
+  const categories = ["approval", "customer", "trade", "response", "catalogue", "billing", "security", "platform"];
+  const priorities = ["low", "normal", "high", "urgent"];
+  if (!payload || payload.schemaVersion !== "1" || payload.eventType !== "admin.notification" || payload.actionPath !== "/operations/control-centre") throw new Error("Invalid operations alert payload");
+  const notification = payload.notification || {};
+  const clean = {
+    id: requiredAlertText_(notification.id, 180),
+    type: requiredAlertText_(notification.type, 100),
+    category: requiredAlertText_(notification.category, 30),
+    priority: requiredAlertText_(notification.priority, 30),
+    title: requiredAlertText_(notification.title, 180),
+    summary: requiredAlertText_(notification.summary, 600),
+    requiresAction: notification.requiresAction === true,
+    createdAt: requiredAlertText_(notification.createdAt, 60),
+  };
+  if (categories.indexOf(clean.category) < 0 || priorities.indexOf(clean.priority) < 0 || !validDate_(clean.createdAt)) throw new Error("Invalid operations alert values");
+  return { notification: clean, actionPath: payload.actionPath };
+}
+
+function requiredAlertText_(value, maximum) {
+  if (typeof value !== "string" || !value.trim() || value.length > maximum || /[\u0000-\u001f\u007f]/.test(value)) throw new Error("Invalid operations alert text");
+  return value.trim();
+}
+
+function constantTimeEqual_(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index++) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
+function digestHex_(value) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value).map(function(byte) {
+    return ((byte & 0xff) + 0x100).toString(16).slice(1);
+  }).join("");
+}
+
+function pruneAdminNotificationDedupe_(properties, now) {
+  const values = properties.getProperties();
+  Object.keys(values).forEach(function(key) {
+    if (key.indexOf(OPS_ADMIN_ALERT_PROPERTY_PREFIX) === 0 && now - Number(values[key] || 0) > OPS_ADMIN_ALERT_DEDUPE_MS) properties.deleteProperty(key);
+  });
+}
+
+function sendAdminNotification_(alert) {
+  const notification = alert.notification;
+  const portalUrl = OPS_SITE_URL + alert.actionPath;
+  const subject = "AEA " + notification.priority.toUpperCase() + ": " + notification.title;
+  const body = notification.title + "\n\n" + notification.summary
+    + "\n\nPriority: " + notification.priority
+    + "\nCategory: " + notification.category
+    + "\nAction required: " + (notification.requiresAction ? "Yes" : "No")
+    + "\nCreated: " + notification.createdAt
+    + "\n\nOpen the protected operations portal: " + portalUrl
+    + "\n\nThis message contains an operational summary only. Customer contacts, addresses, files and account credentials are excluded.";
+  const content = paragraph_(notification.summary)
+    + summaryGrid_([["Priority", notification.priority], ["Category", notification.category], ["Action required", notification.requiresAction ? "Yes" : "No"], ["Created", notification.createdAt]])
+    + button_(portalUrl, "Open protected operations portal")
+    + muted_("This message contains an operational summary only. Customer contacts, addresses, files and account credentials are excluded.");
+  MailApp.sendEmail({
+    to: OPS_ALERT_EMAIL,
+    name: BRAND + " operations",
+    replyTo: REPLY_TO,
+    subject: subject,
+    body: body,
+    htmlBody: wrap_(notification.title, "OPERATIONS ALERT", content, { internal: true }),
+  });
 }
 
 function eventType_(payload) {

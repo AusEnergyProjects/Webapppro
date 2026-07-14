@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
   adminNotificationRetryAt,
   buildAdminNotificationDeliveryPayload,
+  createGoogleWorkspaceAdminAlertEnvelope,
 } from "../src/lib/admin-notification-delivery-payload.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -18,6 +20,7 @@ const leads = read("../src/app/api/leads/route.js");
 const probe = read("../src/app/api/internal/lead-webhook-probe/route.js");
 const stripe = read("../src/app/api/stripe/webhook/route.ts");
 const admins = read("../src/app/api/admin/admins/route.ts");
+const appsScript = read("../integrations/google-apps-script/lead-email-relay.gs");
 
 test("actionable admin alerts receive a durable delivery ledger entry", () => {
   assert.match(schema, /sqliteTable\("admin_notification_deliveries"/);
@@ -65,7 +68,7 @@ test("off-screen payloads exclude private account and customer fields", () => {
     category: "customer",
     priority: "high",
     title: "Customer enquiry submitted",
-    summary: "A privacy-safe project is ready for review.",
+    summary: "A privacy-safe project is ready\nfor review.",
     requires_action: 1,
     created_at: "2026-07-15T00:00:00.000Z",
     actor_uid: "private-user-id",
@@ -80,6 +83,46 @@ test("off-screen payloads exclude private account and customer fields", () => {
   assert.equal(payload.actionPath, "/operations/control-centre");
   assert.doesNotMatch(serialized, /private-user-id|private-project-id|private@example|0400000000|Private Street|secret/);
   assert.deepEqual(Object.keys(payload.notification), ["id", "type", "category", "priority", "title", "summary", "requiresAction", "createdAt"]);
+});
+
+test("Google Workspace alert envelopes are short-lived, signed and privacy-safe", async () => {
+  const secret = "test-secret-with-at-least-32-characters-long";
+  const payload = buildAdminNotificationDeliveryPayload({
+    notification_id: "notice-google-1",
+    event_type: "customer.enquiry_submitted",
+    category: "customer",
+    priority: "high",
+    title: "Customer enquiry submitted",
+    summary: "A privacy-safe project is ready for review.",
+    requires_action: 1,
+    created_at: "2026-07-15T00:00:00.000Z",
+    email: "private@example.test",
+    token: "private-token",
+  });
+  const envelope = await createGoogleWorkspaceAdminAlertEnvelope(payload, secret, Date.parse("2026-07-15T00:01:00.000Z"));
+  const decoded = JSON.parse(Buffer.from(envelope.payload, "base64url").toString("utf8"));
+  const expected = createHmac("sha256", secret).update(`${envelope.sentAt}.${envelope.payload}`).digest("base64url");
+  assert.equal(envelope.eventType, "admin.notification");
+  assert.equal(envelope.sentAt, "2026-07-15T00:01:00.000Z");
+  assert.equal(envelope.signature, expected);
+  assert.deepEqual(decoded, payload);
+  assert.equal(decoded.notification.summary, "A privacy-safe project is ready for review.");
+  assert.doesNotMatch(JSON.stringify(envelope), /private@example|private-token|test-secret/);
+});
+
+test("Google Workspace delivery reuses the private lead relay with verification and deduplication", () => {
+  assert.match(delivery, /AEA_LEAD_WEBHOOK_URL/);
+  assert.match(delivery, /AEA_LEAD_WEBHOOK_TEST_TOKEN/);
+  assert.match(delivery, /provider: "google_workspace"/);
+  assert.match(delivery, /createGoogleWorkspaceAdminAlertEnvelope/);
+  assert.match(delivery, /Google Workspace did not acknowledge alert delivery/);
+  assert.match(appsScript, /function handleAdminNotification_/);
+  assert.match(appsScript, /computeHmacSha256Signature/);
+  assert.match(appsScript, /constantTimeEqual_/);
+  assert.match(appsScript, /LockService\.getScriptLock/);
+  assert.match(appsScript, /OPS_ADMIN_ALERT_PROPERTY_PREFIX/);
+  assert.match(appsScript, /MailApp\.sendEmail/);
+  assert.match(appsScript, /to: OPS_ALERT_EMAIL/);
 });
 
 test("failed delivery retries back off without losing the durable record", () => {
@@ -115,7 +158,7 @@ test("administrators can see delivery health, test a channel and retry failures"
 });
 
 test("new operations delivery copy avoids prohibited dash characters", () => {
-  for (const source of [delivery, notifications, route, inbox, leads, probe, stripe, admins]) {
+  for (const source of [delivery, notifications, route, inbox, leads, probe, stripe, admins, appsScript]) {
     assert.doesNotMatch(source, /[\u2013\u2014]/);
   }
 });

@@ -20,6 +20,7 @@ type AdminAssignee = {
 type AdminDeliveryHealth = {
   configured: boolean;
   channel: string;
+  provider: "google_workspace" | "custom_webhook" | "not_configured";
   counts: {
     total: number;
     delivered: number;
@@ -112,6 +113,7 @@ const emptyCounts: AdminNotificationCounts = {
 const emptyDelivery: AdminDeliveryHealth = {
   configured: false,
   channel: "webhook",
+  provider: "not_configured",
   counts: { total: 0, delivered: 0, failed: 0, pending: 0, waiting_for_channel: 0, skipped: 0 },
 };
 
@@ -299,9 +301,11 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
       <section className={`admin-delivery-health ${delivery.configured ? "connected" : "waiting"}`} aria-label="Off-screen notification delivery">
         <div>
           <span>Off-screen operations alerts</span>
-          <strong>{delivery.configured ? "Private delivery channel connected" : "Private delivery channel ready for connection"}</strong>
+          <strong>{delivery.provider === "google_workspace" ? "Google Workspace email connected" : delivery.configured ? "Private delivery channel connected" : "Private delivery channel ready for connection"}</strong>
           <p>{delivery.configured
-            ? "Actionable and high-priority events are sent outside the portal with privacy-safe summaries and recorded delivery attempts."
+            ? delivery.provider === "google_workspace"
+              ? "Signed, privacy-safe operations summaries are sent to the administrator Gmail inbox through the existing Google Apps Script, with duplicate protection and recorded delivery attempts."
+              : "Actionable and high-priority events are sent outside the portal with privacy-safe summaries and recorded delivery attempts."
             : "The durable delivery queue is active, but no private destination is connected yet. Customer contacts, addresses, files and account credentials are never placed in alert payloads."}</p>
         </div>
         <dl>
