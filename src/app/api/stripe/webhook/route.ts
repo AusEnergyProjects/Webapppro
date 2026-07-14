@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { qualifyReferralFromFirstPayment } from "@/lib/stripe-referral-server";
+import { createAdminNotification, resolveSystemAdminNotifications } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -27,6 +28,14 @@ const PLAN_BY_PAYMENT_LINK: Record<
 };
 
 type StripeObject = Record<string, unknown>;
+type BillingChange = {
+  subscriptionId: string;
+  firebaseUid: string;
+  businessName: string;
+  partnerType: string;
+  billingStatus: string;
+  cancelAtPeriodEnd: boolean;
+};
 
 function json(body: object, status = 200) {
   return Response.json(body, {
@@ -126,16 +135,16 @@ async function applyCheckout(
       : "";
   const paymentLinkId = stringId(session.payment_link);
   const plan = PLAN_BY_PAYMENT_LINK[paymentLinkId];
-  if (!firebaseUid || !plan) return;
+  if (!firebaseUid || !plan) return undefined;
   const subscriptionId = stringId(session.subscription);
   if (!subscriptionId) throw new Error("SUBSCRIPTION_REFERENCE_MISSING");
   const db = getD1();
   const account = await db
     .prepare(
-      "SELECT partner_type FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT partner_type, business_name FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(firebaseUid)
-    .first<{ partner_type: string }>();
+    .first<{ partner_type: string; business_name: string }>();
   if (!account) throw new Error("TRADE_PROFILE_MISSING");
   if (account.partner_type !== plan.partnerType)
     throw new Error("MEMBERSHIP_ROLE_MISMATCH");
@@ -186,19 +195,28 @@ async function applyCheckout(
     (eventType === "checkout.session.async_payment_succeeded" || paymentStatus === "paid")
   )
     await qualifyReferralFromFirstPayment(firebaseUid, subscriptionId);
+  return {
+    subscriptionId,
+    firebaseUid,
+    businessName: account.business_name,
+    partnerType: plan.partnerType,
+    billingStatus,
+    cancelAtPeriodEnd: false,
+  } satisfies BillingChange;
 }
 
 async function applySubscription(subscription: StripeObject, deleted: boolean) {
   const subscriptionId = stringId(subscription.id);
-  if (!subscriptionId) return;
+  if (!subscriptionId) return undefined;
   const db = getD1();
   const membership = await db
     .prepare(
-      "SELECT firebase_uid FROM stripe_memberships WHERE stripe_subscription_id = ?",
+      `SELECT m.firebase_uid, m.partner_type, a.business_name FROM stripe_memberships m
+       LEFT JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid WHERE m.stripe_subscription_id = ?`,
     )
     .bind(subscriptionId)
-    .first<{ firebase_uid: string }>();
-  if (!membership) return;
+    .first<{ firebase_uid: string; partner_type: string; business_name: string }>();
+  if (!membership) return undefined;
   const status = deleted ? "canceled" : String(subscription.status || "");
   const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   const metadata = subscription.metadata as StripeObject | undefined;
@@ -230,6 +248,82 @@ async function applySubscription(subscription: StripeObject, deleted: boolean) {
       )
       .bind(billingStatus, now, membership.firebase_uid),
   ]);
+  return {
+    subscriptionId,
+    firebaseUid: membership.firebase_uid,
+    businessName: membership.business_name || "A trade account",
+    partnerType: membership.partner_type,
+    billingStatus,
+    cancelAtPeriodEnd,
+  } satisfies BillingChange;
+}
+
+function invoiceSubscriptionId(invoice: StripeObject) {
+  const direct = stringId(invoice.subscription);
+  if (direct) return direct;
+  const parent = invoice.parent as StripeObject | undefined;
+  const details = parent?.subscription_details as StripeObject | undefined;
+  return stringId(details?.subscription);
+}
+
+async function billingChangeForInvoice(invoice: StripeObject, billingStatus: string) {
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId) return undefined;
+  const membership = await getD1().prepare(`SELECT m.firebase_uid, m.partner_type, a.business_name
+    FROM stripe_memberships m LEFT JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
+    WHERE m.stripe_subscription_id = ?`).bind(subscriptionId)
+    .first<{ firebase_uid: string; partner_type: string; business_name: string }>();
+  if (!membership) return undefined;
+  return {
+    subscriptionId,
+    firebaseUid: membership.firebase_uid,
+    businessName: membership.business_name || "A trade account",
+    partnerType: membership.partner_type,
+    billingStatus,
+    cancelAtPeriodEnd: false,
+  } satisfies BillingChange;
+}
+
+async function recordBillingChange(change: BillingChange, eventId: string, eventType: string) {
+  const attention = ["past_due", "cancelled", "paused", "active_cancels_at_period_end"].includes(change.billingStatus);
+  if (attention) {
+    await createAdminNotification({
+      eventKey: `billing-attention:${eventId}`,
+      eventType: "billing.membership_attention_required",
+      category: "billing",
+      priority: "high",
+      title: "Membership billing needs attention",
+      summary: `${change.businessName.slice(0, 160)} has a ${change.partnerType} membership marked ${change.billingStatus.replaceAll("_", " ")}. Review billing before commercial access is affected.`,
+      entityType: "stripe_subscription",
+      entityId: change.subscriptionId,
+      actorType: "system",
+      requiresAction: true,
+      metadata: { billingStatus: change.billingStatus, sourceEvent: eventType },
+    });
+    return;
+  }
+  if (change.billingStatus === "active") {
+    await resolveSystemAdminNotifications({
+      eventTypes: ["billing.membership_attention_required"],
+      entityType: "stripe_subscription",
+      entityId: change.subscriptionId,
+      note: "Stripe reported the membership as active and the billing incident recovered.",
+    });
+    if (eventType.startsWith("checkout.session")) {
+      await createAdminNotification({
+        eventKey: `billing-activated:${eventId}`,
+        eventType: "billing.membership_activated",
+        category: "billing",
+        priority: "normal",
+        title: "Paid membership activated",
+        summary: `${change.businessName.slice(0, 160)} activated a paid ${change.partnerType} membership.`,
+        entityType: "stripe_subscription",
+        entityId: change.subscriptionId,
+        actorType: "system",
+        requiresAction: false,
+      });
+    }
+  }
 }
 
 export async function POST(request: Request) {
@@ -268,6 +362,7 @@ export async function POST(request: Request) {
   if (!stripeObject)
     return json({ ok: false, error: "Webhook data was incomplete." }, 400);
   try {
+    let billingChange: BillingChange | undefined;
     if (
       [
         "checkout.session.completed",
@@ -275,19 +370,37 @@ export async function POST(request: Request) {
         "checkout.session.async_payment_failed",
       ].includes(eventType)
     )
-      await applyCheckout(stripeObject, eventType);
+      billingChange = await applyCheckout(stripeObject, eventType);
     else if (eventType === "customer.subscription.updated")
-      await applySubscription(stripeObject, false);
+      billingChange = await applySubscription(stripeObject, false);
     else if (eventType === "customer.subscription.deleted")
-      await applySubscription(stripeObject, true);
+      billingChange = await applySubscription(stripeObject, true);
+    else if (["invoice.payment_failed", "invoice.payment_action_required"].includes(eventType))
+      billingChange = await billingChangeForInvoice(stripeObject, "past_due");
+    else if (eventType === "invoice.payment_succeeded")
+      billingChange = await billingChangeForInvoice(stripeObject, "active");
     await db
       .prepare(
         "INSERT INTO stripe_webhook_events (id, event_type, created_at) VALUES (?, ?, ?)",
       )
       .bind(eventId, eventType, new Date().toISOString())
       .run();
+    if (billingChange) await recordBillingChange(billingChange, eventId, eventType).catch(() => null);
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    await createAdminNotification({
+      eventKey: `billing-webhook-failure:${eventId}`,
+      eventType: "billing.webhook_processing_failed",
+      category: "billing",
+      priority: "urgent",
+      title: "Verified billing event could not be applied",
+      summary: "A verified Stripe event could not be matched or applied to the membership ledger. Review the billing audit before changing account access.",
+      entityType: "stripe_event",
+      entityId: eventId,
+      actorType: "system",
+      requiresAction: true,
+      metadata: { eventType, failureCode: code || "UNKNOWN" },
+    }).catch(() => null);
     if (
       [
         "TRADE_PROFILE_MISSING",

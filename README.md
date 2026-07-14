@@ -65,7 +65,7 @@ AEA_LEAD_WEBHOOK_URL=https://your-private-lead-processor.example/endpoint
 AEA_LEAD_RATE_LIMIT_SECRET=replace-with-at-least-32-random-characters
 ```
 
-Do not expose either value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a durable shared rate limit through the site-scoped `aea-lead-rate-limit` Netlify Blobs store, and only reports success after the downstream processor returns the exact acknowledgement `ok`. Raw IP addresses are never stored: the limiter uses an HMAC-obscured client key and an atomic rolling list of recent request times. Local Next.js development uses an in-memory fallback because Netlify Blobs requires `netlify dev` outside production.
+Do not expose either value through a `NEXT_PUBLIC_` variable. The route validates the request, checks consent evidence, applies a durable shared rate limit through the Sites D1 database, and only reports success after the downstream processor returns the exact acknowledgement `ok`. Raw IP addresses are never stored: the limiter uses an HMAC-obscured client key and an atomic rolling list of recent request times. Local development uses an isolated in-memory fallback.
 
 The current Google Apps Script processor is tracked at `integrations/google-apps-script/lead-email-relay.gs`. Website submissions use schema version 6 and one of five explicit events: electricity comparison results, electricity upgrades, gas upgrades, Direct Trade household projects and Direct Trade partner applications. Eligible household briefs enter privacy-safe allocation automatically unless property authority is unconfirmed. Up to six approved installers can see a limited opportunity summary, no more than three can receive a customer handover, each connected installer can record no more than two contact attempts, and the opportunity closes after 30 days. Suppliers cannot access household opportunities. Solar, battery, heating and hot-water scenarios can start a Direct Trade brief with only an allowlisted journey source, service selection, priority selection and postcode in the URL. Usage, meter files, NMIs, bill dates, plan results, scenario costs, savings, contact details and adjustment reasons are never placed in that handoff URL. Partner applications begin a structured review that cannot automatically approve or publicly list the applicant. Every delivered request receives an `AEA` reference shared by the browser acknowledgement, customer email, internal email and spreadsheet row. Customer and internal messages use the same navy, teal, emerald and restrained gold visual system as the website, include plain text fallbacks and show only fields relevant to that request.
 
@@ -86,7 +86,16 @@ An `ok: true` response proves that the application reached the processor and rec
 
 ### API monitoring and alerts
 
-An hourly Netlify scheduled function checks `/api/electricity-plans` and the privacy-safe lead delivery probe. Configure `AEA_OPS_ALERT_WEBHOOK_URL` to an alert receiver that accepts JSON and notifies an operations channel. Failure and recovery notifications are deduplicated through the site-scoped `aea-operations` Netlify Blobs store. API responses include an `X-Request-Id`, and server logs contain structured outcome and aggregate source metrics without request bodies, contact details, IP addresses, NMIs or meter data.
+The Google Apps Script monitor checks the Sites runtime, electricity and gas plan services, and the privacy-safe lead delivery probe every hour. Lead failures, billing incidents and administrator access changes are also written to the durable operations inbox.
+
+For off-screen delivery, configure a private alert destination in the hosted Sites environment:
+
+```text
+AEA_OPS_ALERT_WEBHOOK_URL=https://your-private-operations-alert.example/endpoint
+AEA_OPS_ALERT_WEBHOOK_SECRET=replace-with-a-private-bearer-secret
+```
+
+Actionable, high and urgent notifications are queued, retried and recorded in the admin portal. Payloads contain only the notification title, operational summary, priority, category, timestamp and portal path. They never contain customer contact details, street addresses, account tokens, uploaded files, meter identifiers or interval data. The secret is optional when the private destination authenticates another way, but it must never use a public browser variable. API responses include an `X-Request-Id`, and server logs contain structured outcomes without request bodies or personal data.
 
 See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert behavior, privacy boundaries and incident response steps.
 

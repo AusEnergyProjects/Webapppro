@@ -28,6 +28,21 @@ Never add the token to repository source, client code, a public URL or a spreads
 
 Run `setupOperationalMonitoring` once after deploying the Apps Script source. It replaces only an existing `runOperationalHealthCheck` trigger and creates one hourly trigger. The normal `setup` function also installs this trigger while preserving the daily comparison reminder trigger.
 
+## Operations inbox and off-screen delivery
+
+The Sites application keeps a durable administrator notification and delivery ledger in D1. Actionable, high and urgent events are queued automatically. This includes customer enquiries, trade responses, approval work, verified billing problems, comparison-enquiry delivery failures and administrator access changes.
+
+To send those summaries to a private operations channel, configure:
+
+```text
+AEA_OPS_ALERT_WEBHOOK_URL=https://your-private-operations-alert.example/endpoint
+AEA_OPS_ALERT_WEBHOOK_SECRET=replace-with-a-private-bearer-secret
+```
+
+The destination must use HTTPS. The secret is sent only as a server-side bearer credential and is optional when the destination uses another private authentication boundary. Never place either value in browser code or a `NEXT_PUBLIC_` variable.
+
+Owners and administrators can see whether the channel is connected, inspect delivered, waiting and failed counts, send a privacy-safe test alert, and retry an individual failure. Failed attempts retry after 5 minutes, 30 minutes, 2 hours, 6 hours and then 12 hours. The durable inbox remains the source of truth even when no off-screen channel is connected.
+
 ## Privacy boundary
 
 Health checks and alerts contain no customer name, email, phone, NMI, meter intervals, annual usage supplied by a customer, saved comparison or lead payload. Postcode 3000 and the electricity and gas usage values are fixed synthetic monitor inputs.
@@ -40,7 +55,14 @@ Operational records contain only:
 - aggregate plan-source counts where available;
 - a privacy-safe lead probe ID.
 
-They do not log request bodies, contact details, IP addresses, meter data, plan selections, consent text, webhook URLs or the probe token.
+Off-screen admin notification payloads contain only:
+
+- notification ID, event type, category and priority;
+- operational title and privacy-safe summary;
+- action-required flag and creation time;
+- the relative path to the protected operations portal.
+
+They do not include or log request bodies, customer names, emails, phones, street addresses, account identifiers, IP addresses, meter data, plan selections, consent text, uploaded files, webhook URLs, account tokens or probe secrets.
 
 ## Alert response
 

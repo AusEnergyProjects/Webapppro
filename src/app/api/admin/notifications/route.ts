@@ -4,7 +4,12 @@ import {
   ADMIN_NOTIFICATION_PRIORITIES,
   adminNotificationDueAt,
   backfillActionableAdminNotifications,
+  createAdminNotification,
 } from "@/lib/admin-notifications";
+import {
+  adminNotificationDeliveryConfiguration,
+  dispatchAdminNotificationDeliveries,
+} from "@/lib/admin-notification-delivery";
 import {
   adminError,
   adminJson,
@@ -58,6 +63,11 @@ function shape(row: Record<string, unknown>, assignees: Map<string, string>, act
     readAt: row.read_at,
     resolvedAt: row.resolved_at,
     resolutionNote: row.resolution_note,
+    deliveryStatus: row.delivery_status || "not_queued",
+    deliveryAttempts: Number(row.delivery_attempts || 0),
+    deliveryLastAttemptAt: row.delivery_last_attempt_at || "",
+    deliveryDeliveredAt: row.delivery_delivered_at || "",
+    deliveryLastError: row.delivery_last_error || "",
     assignedToUid: row.assigned_to_uid,
     assignedToName: assignees.get(String(row.assigned_to_uid || "")) || "",
     assignedAt: row.assigned_at,
@@ -77,6 +87,7 @@ export async function GET(request: Request) {
   try {
     const admin = await requireAdminIdentity(request);
     await backfillActionableAdminNotifications();
+    await dispatchAdminNotificationDeliveries();
     const url = new URL(request.url);
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const category = cleanAdminText(url.searchParams.get("category"), 30);
@@ -109,10 +120,16 @@ export async function GET(request: Request) {
     else if (assignedTo) { clauses.push("assigned_to_uid = ?"); bindings.push(assignedTo); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const db = getD1();
-    const statement = db.prepare(`SELECT * FROM admin_notifications ${where}
+    const statement = db.prepare(`SELECT n.*,
+      COALESCE((SELECT d.status FROM admin_notification_deliveries d WHERE d.notification_id = n.id AND d.channel = 'webhook' LIMIT 1), 'not_queued') delivery_status,
+      COALESCE((SELECT d.attempts FROM admin_notification_deliveries d WHERE d.notification_id = n.id AND d.channel = 'webhook' LIMIT 1), 0) delivery_attempts,
+      COALESCE((SELECT d.last_attempt_at FROM admin_notification_deliveries d WHERE d.notification_id = n.id AND d.channel = 'webhook' LIMIT 1), '') delivery_last_attempt_at,
+      COALESCE((SELECT d.delivered_at FROM admin_notification_deliveries d WHERE d.notification_id = n.id AND d.channel = 'webhook' LIMIT 1), '') delivery_delivered_at,
+      COALESCE((SELECT d.last_error FROM admin_notification_deliveries d WHERE d.notification_id = n.id AND d.channel = 'webhook' LIMIT 1), '') delivery_last_error
+      FROM admin_notifications n ${where}
       ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
         CASE status WHEN 'open' THEN 0 WHEN 'read' THEN 1 ELSE 2 END, created_at DESC LIMIT 250`);
-    const [rows, counts, adminRows, auditRows] = await Promise.all([
+    const [rows, counts, adminRows, auditRows, deliveryCounts] = await Promise.all([
       bindings.length
         ? statement.bind(...bindings).all<Record<string, unknown>>()
         : statement.all<Record<string, unknown>>(),
@@ -136,6 +153,13 @@ export async function GET(request: Request) {
         FROM admin_audit_log l LEFT JOIN admin_users a ON a.firebase_uid = l.admin_uid
         WHERE l.entity_type = 'admin_notification' ORDER BY l.created_at DESC LIMIT 500`)
         .all<Record<string, unknown>>(),
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) delivered,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) failed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN status = 'waiting_for_channel' THEN 1 ELSE 0 END) waiting_for_channel,
+        SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) skipped
+        FROM admin_notification_deliveries`).first<Record<string, number>>(),
     ]);
     const assigneeNames = new Map<string, string>(adminRows.results.map((row: Record<string, unknown>) => [
       String(row.firebase_uid),
@@ -165,6 +189,10 @@ export async function GET(request: Request) {
         email: row.email,
         role: row.role,
       })),
+      delivery: {
+        ...adminNotificationDeliveryConfiguration(),
+        counts: deliveryCounts || {},
+      },
     });
   } catch (error) {
     return adminError(error);
@@ -189,6 +217,29 @@ export async function PATCH(request: Request) {
         .bind(now, admin.uid, now).run();
       return adminJson({ ok: true });
     }
+    if (action === "send_test") {
+      if (!["owner", "admin"].includes(admin.role)) {
+        return adminJson({ ok: false, error: "Only owners and administrators can test off-screen delivery." }, 403);
+      }
+      if (!adminNotificationDeliveryConfiguration().configured) {
+        return adminJson({ ok: false, error: "Connect a private off-screen alert destination before sending a test." }, 503);
+      }
+      await createAdminNotification({
+        eventKey: `platform:admin-alert-test:${crypto.randomUUID()}`,
+        eventType: "platform.admin_alert_test",
+        category: "platform",
+        priority: "high",
+        title: "AEA operations alert test",
+        summary: "The private off-screen operations alert channel is connected and accepting privacy-safe notifications.",
+        entityType: "platform_service",
+        entityId: "admin_alert_delivery",
+        actorType: "admin",
+        actorUid: admin.uid,
+        requiresAction: false,
+      });
+      await writeAdminAudit(admin, "notification.delivery_test", "platform_service", "admin_alert_delivery", "Sent a privacy-safe operations alert test.");
+      return adminJson({ ok: true });
+    }
     if (!id) return adminJson({ ok: false, error: "Choose a notification." }, 400);
     const current = await db.prepare("SELECT id, title, status, priority, requires_action, assigned_to_uid, due_at FROM admin_notifications WHERE id = ?")
       .bind(id).first<Record<string, unknown>>();
@@ -200,6 +251,17 @@ export async function PATCH(request: Request) {
         read_by_uid = CASE WHEN read_by_uid = '' THEN ? ELSE read_by_uid END, updated_at = ? WHERE id = ?`)
         .bind(now, admin.uid, now, id).run();
       return adminJson({ ok: true });
+    }
+    if (action === "retry_delivery") {
+      if (!["owner", "admin"].includes(admin.role)) {
+        return adminJson({ ok: false, error: "Only owners and administrators can retry off-screen delivery." }, 403);
+      }
+      if (!adminNotificationDeliveryConfiguration().configured) {
+        return adminJson({ ok: false, error: "Connect a private off-screen alert destination before retrying delivery." }, 503);
+      }
+      const result = await dispatchAdminNotificationDeliveries({ notificationId: id, force: true });
+      await writeAdminAudit(admin, "notification.delivery_retry", "admin_notification", id, `Retried off-screen notification delivery.`, result);
+      return adminJson({ ok: true, delivery: result });
     }
     if (action === "add_note") {
       if (!note) return adminJson({ ok: false, error: "Enter an internal case note." }, 400);
@@ -250,6 +312,14 @@ export async function PATCH(request: Request) {
       const priority = cleanAdminText(body.priority, 30);
       if (!PRIORITIES.has(priority)) return adminJson({ ok: false, error: "Choose a valid case priority." }, 400);
       await db.prepare("UPDATE admin_notifications SET priority = ?, updated_at = ? WHERE id = ?").bind(priority, now, id).run();
+      if (Boolean(current.requires_action) || ["high", "urgent"].includes(priority)) {
+        await db.prepare(`INSERT OR IGNORE INTO admin_notification_deliveries
+          (id, notification_id, channel, status, attempts, next_attempt_at, last_attempt_at, delivered_at,
+           last_error, response_code, created_at, updated_at)
+          VALUES (?, ?, 'webhook', 'pending', 0, '', '', '', '', 0, ?, ?)`)
+          .bind(crypto.randomUUID(), id, now, now).run();
+        await dispatchAdminNotificationDeliveries({ notificationId: id });
+      }
       await writeAdminAudit(admin, "notification.priority", "admin_notification", id, `Changed case priority from ${String(current.priority)} to ${priority}.`, { before: current.priority, priority });
       return adminJson({ ok: true });
     }
@@ -264,6 +334,9 @@ export async function PATCH(request: Request) {
         read_by_uid = CASE WHEN read_by_uid = '' THEN ? ELSE read_by_uid END, resolved_at = ?, resolved_by_uid = ?,
         resolution_note = ?, updated_at = ? WHERE id = ?`)
         .bind(now, admin.uid, now, admin.uid, note, now, id).run();
+      await db.prepare(`UPDATE admin_notification_deliveries SET status = CASE WHEN status = 'delivered' THEN status ELSE 'skipped' END,
+        last_error = CASE WHEN status = 'delivered' THEN last_error ELSE 'Notification was resolved before off-screen delivery.' END,
+        updated_at = ? WHERE notification_id = ?`).bind(now, id).run();
       await writeAdminAudit(admin, "notification.resolve", "admin_notification", id, `Resolved notification: ${String(current.title).slice(0, 180)}.`, { note });
       return adminJson({ ok: true });
     }
@@ -278,6 +351,10 @@ export async function PATCH(request: Request) {
       });
       await db.prepare("UPDATE admin_notifications SET status = 'open', resolved_at = '', resolved_by_uid = '', resolution_note = '', due_at = ?, updated_at = ? WHERE id = ?")
         .bind(dueAt, now, id).run();
+      await db.prepare(`UPDATE admin_notification_deliveries SET status = 'pending', attempts = 0, next_attempt_at = '',
+        last_attempt_at = '', delivered_at = '', last_error = '', response_code = 0, updated_at = ? WHERE notification_id = ?`)
+        .bind(now, id).run();
+      await dispatchAdminNotificationDeliveries({ notificationId: id });
       await writeAdminAudit(admin, "notification.reopen", "admin_notification", id, `Reopened notification: ${String(current.title).slice(0, 180)}.`);
       return adminJson({ ok: true });
     }

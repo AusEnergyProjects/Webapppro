@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../../db";
 import { ADMIN_ROLES, adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit, type AdminRole } from "@/lib/admin-server";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 const STATUSES = new Set(["active", "suspended"]);
@@ -37,6 +38,20 @@ export async function POST(request: Request) {
       return adminJson({ ok: false, error: "That email already has an operations account or invitation." }, 409);
     }
     await writeAdminAudit(admin, "admin.invite", "admin_user", id, `Invited ${email} as ${role}.`);
+    await createAdminNotification({
+      eventKey: `admin-invite:${id}`,
+      eventType: "security.admin_invited",
+      category: "security",
+      priority: role === "owner" || role === "admin" ? "high" : "normal",
+      title: "Operations account invited",
+      summary: `An operations account was invited with the ${role} role. Owners can review the access register and revoke the invitation if it was not expected.`,
+      entityType: "admin_user",
+      entityId: id,
+      actorType: "admin",
+      actorUid: admin.uid,
+      requiresAction: false,
+      metadata: { role },
+    });
     return adminJson({ ok: true }, 201);
   } catch (error) { return adminError(error); }
 }
@@ -63,7 +78,20 @@ export async function PATCH(request: Request) {
     const now = new Date().toISOString();
     await db.prepare("UPDATE admin_users SET role = ?, status = ?, updated_at = ? WHERE id = ?").bind(role, status, now, id).run();
     await writeAdminAudit(admin, "admin.update", "admin_user", id, `Updated ${target.email} to ${role}, ${status}.`, { before: { role: target.role, status: target.status } });
+    await createAdminNotification({
+      eventKey: `admin-access-update:${id}:${now}`,
+      eventType: "security.admin_access_changed",
+      category: "security",
+      priority: target.role === "owner" || role === "owner" || status === "suspended" ? "high" : "normal",
+      title: "Operations access changed",
+      summary: `An operations account changed from ${String(target.role)}, ${String(target.status)} to ${role}, ${status}. The full decision remains in the administrator audit history.`,
+      entityType: "admin_user",
+      entityId: id,
+      actorType: "admin",
+      actorUid: admin.uid,
+      requiresAction: false,
+      metadata: { beforeRole: target.role, beforeStatus: target.status, role, status },
+    });
     return adminJson({ ok: true });
   } catch (error) { return adminError(error); }
 }
-

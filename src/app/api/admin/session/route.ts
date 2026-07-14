@@ -3,6 +3,7 @@ import { getD1 } from "../../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminError, adminJson, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { expireStaleOpportunities } from "@/lib/opportunity-server";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
@@ -103,5 +104,18 @@ export async function POST(request: Request) {
   if (!result.meta.changes) return adminJson({ ok: false, error: "The owner account has already been created. Ask an owner for an invitation." }, 409);
 
   await writeAdminAudit(identity, "admin.bootstrap", "admin_user", identity.uid, `Created the first owner account for ${identity.email}.`);
+  await createAdminNotification({
+    eventKey: `admin-owner-bootstrap:${identity.uid}`,
+    eventType: "security.owner_account_created",
+    category: "security",
+    priority: "high",
+    title: "First operations owner created",
+    summary: "The initial owner account was created. Confirm the access register and keep at least one verified owner available for recovery.",
+    entityType: "admin_user",
+    entityId: identity.uid,
+    actorType: "admin",
+    actorUid: identity.uid,
+    requiresAction: false,
+  });
   return adminJson({ ok: true, admin: { email: identity.email, displayName: "", role: "owner" } });
 }

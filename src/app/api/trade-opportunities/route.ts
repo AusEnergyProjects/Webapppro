@@ -8,6 +8,7 @@ import {
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { normalizePlatformQuote, parseStoredJson } from "@/lib/customer-projects.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
+import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
@@ -291,6 +292,7 @@ export async function PATCH(request: Request) {
         occurredAt: now,
       }),
     ]);
+    await dispatchAdminNotificationDeliveries();
     return json({ ok: true, quote: { totalCentsExGst, productSubtotalCentsExGst: snapshot.subtotalCentsExGst, submittedAt: now } });
   }
   if (action === "withdraw_quote") {

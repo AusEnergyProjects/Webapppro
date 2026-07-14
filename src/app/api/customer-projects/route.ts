@@ -4,6 +4,7 @@ import { postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
 import { allocateNearestInstallers, DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, opportunityExpiry } from "@/lib/opportunity-server";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
+import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_NOTICE_VERSION,
@@ -266,6 +267,7 @@ export async function PATCH(request: Request) {
         occurredAt: submittedAt,
       }),
     ]);
+    await dispatchAdminNotificationDeliveries();
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
   } else if (action === "toggle_milestone") {
     if (current.status === "archived") return json({ ok: false, error: "Restore or duplicate this project before changing its roadmap." }, 409);

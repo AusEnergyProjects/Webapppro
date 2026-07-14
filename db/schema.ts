@@ -203,6 +203,25 @@ export const adminNotifications = sqliteTable("admin_notifications", {
   index("admin_notifications_due_idx").on(table.status, table.dueAt),
 ]);
 
+export const adminNotificationDeliveries = sqliteTable("admin_notification_deliveries", {
+  id: text("id").primaryKey(),
+  notificationId: text("notification_id").notNull(),
+  channel: text("channel").notNull().default("webhook"),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  responseCode: integer("response_code").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("admin_notification_deliveries_notification_channel_idx").on(table.notificationId, table.channel),
+  index("admin_notification_deliveries_status_idx").on(table.status, table.nextAttemptAt),
+  index("admin_notification_deliveries_notification_idx").on(table.notificationId, table.createdAt),
+]);
+
 export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

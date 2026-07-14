@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 
 export const ADMIN_NOTIFICATION_CATEGORIES = [
   "approval",
@@ -6,6 +7,8 @@ export const ADMIN_NOTIFICATION_CATEGORIES = [
   "trade",
   "response",
   "catalogue",
+  "billing",
+  "security",
   "platform",
 ] as const;
 
@@ -47,7 +50,7 @@ export function adminNotificationDueAt(input: Pick<AdminNotificationInput, "occu
   return new Date(openedAt.getTime() + hours * 60 * 60 * 1000).toISOString();
 }
 
-export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: AdminNotificationInput) {
+export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: AdminNotificationInput, id = crypto.randomUUID()) {
   const now = input.occurredAt || new Date().toISOString();
   return db.prepare(`INSERT INTO admin_notifications
     (id, event_key, event_type, category, priority, title, summary, entity_type, entity_id,
@@ -56,7 +59,7 @@ export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', '', '', '', '', '', '', ?, ?, ?, ?)
     ON CONFLICT(event_key) DO NOTHING`)
     .bind(
-      crypto.randomUUID(),
+      id,
       bounded(input.eventKey, 240),
       bounded(input.eventType, 100),
       input.category,
@@ -76,7 +79,39 @@ export function adminNotificationStatement(db: ReturnType<typeof getD1>, input: 
 }
 
 export async function createAdminNotification(input: AdminNotificationInput) {
-  return adminNotificationStatement(getD1(), input).run();
+  const id = crypto.randomUUID();
+  const result = await adminNotificationStatement(getD1(), input, id).run();
+  await dispatchAdminNotificationDeliveries({ notificationId: id });
+  return result;
+}
+
+export async function resolveSystemAdminNotifications({
+  eventTypes,
+  entityType = "",
+  entityId = "",
+  note,
+}: {
+  eventTypes: string[];
+  entityType?: string;
+  entityId?: string;
+  note: string;
+}) {
+  const cleanTypes = eventTypes.map((value) => bounded(value, 100)).filter(Boolean).slice(0, 12);
+  if (!cleanTypes.length) return;
+  const db = getD1();
+  const now = new Date().toISOString();
+  const identityClauses = [`event_type IN (${cleanTypes.map(() => "?").join(", ")})`];
+  const bindings: Array<string> = [...cleanTypes];
+  if (entityType) { identityClauses.push("entity_type = ?"); bindings.push(bounded(entityType, 80)); }
+  if (entityId) { identityClauses.push("entity_id = ?"); bindings.push(bounded(entityId, 180)); }
+  await db.prepare(`UPDATE admin_notifications SET status = 'resolved', read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END,
+    read_by_uid = CASE WHEN read_by_uid = '' THEN 'system' ELSE read_by_uid END, resolved_at = ?, resolved_by_uid = 'system',
+    resolution_note = ?, updated_at = ? WHERE ${identityClauses.join(" AND ")} AND status != 'resolved'`)
+    .bind(now, now, bounded(note, 800), now, ...bindings).run();
+  await db.prepare(`UPDATE admin_notification_deliveries SET status = 'skipped', last_error = 'The incident recovered before delivery.',
+    updated_at = ? WHERE status IN ('pending', 'failed', 'waiting_for_channel')
+    AND notification_id IN (SELECT id FROM admin_notifications WHERE ${identityClauses.join(" AND ")} AND status = 'resolved')`)
+    .bind(now, ...bindings).run();
 }
 
 export async function backfillActionableAdminNotifications() {
@@ -209,4 +244,5 @@ export async function backfillActionableAdminNotifications() {
       'platform', 'notification-backfill-v1', 'system', '', 0, 'resolved', ?, 'system', ?, 'system',
       'Automatic migration marker.', '', '', '', '{}', ?, ?)
     ON CONFLICT(event_key) DO NOTHING`).bind(crypto.randomUUID(), now, now, now, now).run();
+  await dispatchAdminNotificationDeliveries();
 }

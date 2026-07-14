@@ -17,6 +17,19 @@ type AdminAssignee = {
   role: string;
 };
 
+type AdminDeliveryHealth = {
+  configured: boolean;
+  channel: string;
+  counts: {
+    total: number;
+    delivered: number;
+    failed: number;
+    pending: number;
+    waiting_for_channel: number;
+    skipped: number;
+  };
+};
+
 export type AdminNotification = {
   id: string;
   eventType: string;
@@ -33,6 +46,11 @@ export type AdminNotification = {
   readAt: string;
   resolvedAt: string;
   resolutionNote: string;
+  deliveryStatus: "not_queued" | "pending" | "waiting_for_channel" | "delivered" | "failed" | "skipped";
+  deliveryAttempts: number;
+  deliveryLastAttemptAt: string;
+  deliveryDeliveredAt: string;
+  deliveryLastError: string;
   assignedToUid: string;
   assignedToName: string;
   assignedAt: string;
@@ -91,12 +109,18 @@ const emptyCounts: AdminNotificationCounts = {
   mine: 0,
   resolved: 0,
 };
+const emptyDelivery: AdminDeliveryHealth = {
+  configured: false,
+  channel: "webhook",
+  counts: { total: 0, delivered: 0, failed: 0, pending: 0, waiting_for_channel: 0, skipped: 0 },
+};
 
 export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [counts, setCounts] = useState<AdminNotificationCounts>(emptyCounts);
   const [assignees, setAssignees] = useState<AdminAssignee[]>([]);
   const [currentAdminUid, setCurrentAdminUid] = useState("");
+  const [delivery, setDelivery] = useState<AdminDeliveryHealth>(emptyDelivery);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [priority, setPriority] = useState("");
@@ -131,6 +155,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
       setCounts(nextCounts);
       setAssignees((result.assignees || []) as AdminAssignee[]);
       setCurrentAdminUid(String(result.currentAdminUid || ""));
+      setDelivery({ ...emptyDelivery, ...((result.delivery || {}) as Partial<AdminDeliveryHealth>), counts: { ...emptyDelivery.counts, ...(((result.delivery as Partial<AdminDeliveryHealth> | undefined)?.counts) || {}) } });
       onCounts(nextCounts);
       if (!background) setStatus("Operations queue refreshed.");
     } catch (error) {
@@ -266,10 +291,25 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         </div>
         <div className="admin-alert-controls">
           <button type="button" onClick={() => void load()} className="secondary">Refresh now</button>
+          {["owner", "admin"].includes(role) && <button type="button" onClick={() => void update("send_test")} disabled={!delivery.configured}>Send test alert</button>}
           <button type="button" onClick={() => void enableBrowserAlerts()}>{browserAlerts ? "Disable browser alerts" : "Enable browser alerts"}</button>
         </div>
       </header>
       {status && <div className="admin-inline-status" role="status">{status}</div>}
+      <section className={`admin-delivery-health ${delivery.configured ? "connected" : "waiting"}`} aria-label="Off-screen notification delivery">
+        <div>
+          <span>Off-screen operations alerts</span>
+          <strong>{delivery.configured ? "Private delivery channel connected" : "Private delivery channel ready for connection"}</strong>
+          <p>{delivery.configured
+            ? "Actionable and high-priority events are sent outside the portal with privacy-safe summaries and recorded delivery attempts."
+            : "The durable delivery queue is active, but no private destination is connected yet. Customer contacts, addresses, files and account credentials are never placed in alert payloads."}</p>
+        </div>
+        <dl>
+          <div><dt>Delivered</dt><dd>{delivery.counts.delivered || 0}</dd></div>
+          <div><dt>Failed</dt><dd>{delivery.counts.failed || 0}</dd></div>
+          <div><dt>Waiting</dt><dd>{(delivery.counts.pending || 0) + (delivery.counts.waiting_for_channel || 0)}</dd></div>
+        </dl>
+      </section>
       <section className="admin-metric-grid admin-notification-metrics">
         <article className={queue === "overdue" ? "active" : ""}><button type="button" onClick={() => setQueue("overdue")}><span>Overdue</span><strong>{counts.overdue || 0}</strong><small>Past their response target</small></button></article>
         <article className={queue === "due_soon" ? "active" : ""}><button type="button" onClick={() => setQueue("due_soon")}><span>Due soon</span><strong>{counts.due_soon || 0}</strong><small>Due within four hours</small></button></article>
@@ -282,7 +322,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         <input aria-label="Search notifications" placeholder="Search title, event or record ID" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="Notification category" value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">All categories</option>
-          {["approval", "customer", "trade", "response", "catalogue", "platform"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
+          {["approval", "customer", "trade", "response", "catalogue", "billing", "security", "platform"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
         </select>
         <select aria-label="Notification priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
           <option value="">All priorities</option>
@@ -314,6 +354,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
                 <span>{readable(item.category)}</span>
                 {item.requiresAction && item.status !== "resolved" && <strong>Action required</strong>}
                 {item.slaState !== "none" && item.status !== "resolved" && <span className={`admin-sla admin-sla-${item.slaState}`}>{readable(item.slaState)}</span>}
+                {item.deliveryStatus !== "not_queued" && <span className={`admin-delivery-state state-${item.deliveryStatus}`}>Off-screen: {readable(item.deliveryStatus)}</span>}
                 <time dateTime={item.createdAt}>{dateTime(item.createdAt)}</time>
               </div>
               <h2>{item.title}</h2>
@@ -322,6 +363,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
                 <div><dt>Owner</dt><dd>{item.assignedToName || "Unassigned"}</dd></div>
                 <div><dt>Response target</dt><dd>{item.dueAt ? dateTime(item.dueAt) : "No due date"}</dd></div>
                 <div><dt>Record</dt><dd>{readable(item.entityType)} | {item.entityId}</dd></div>
+                <div><dt>Off-screen delivery</dt><dd>{item.deliveryStatus === "not_queued" ? "Inbox only" : readable(item.deliveryStatus)}{item.deliveryAttempts ? ` | ${item.deliveryAttempts} attempt${item.deliveryAttempts === 1 ? "" : "s"}` : ""}</dd></div>
               </dl>
               {item.resolutionNote && <div className="admin-resolution-note"><strong>Resolution</strong><span>{item.resolutionNote}</span></div>}
               {expandedId === item.id && (
@@ -383,6 +425,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
               <button type="button" onClick={() => { void update("mark_read", item.id); onOpen(item); }}>Open record</button>
               <button type="button" className="secondary" onClick={() => manageCase(item)}>{expandedId === item.id ? "Close case" : "Manage case"}</button>
               {item.status === "open" && <button type="button" className="secondary" onClick={() => void update("mark_read", item.id)}>Mark read</button>}
+              {["failed", "waiting_for_channel"].includes(item.deliveryStatus) && delivery.configured && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("retry_delivery", item.id)}>Retry alert</button>}
               {item.status === "resolved" && ["owner", "admin"].includes(role) && <button type="button" className="secondary" onClick={() => void update("reopen", item.id)}>Reopen</button>}
             </div>
           </article>

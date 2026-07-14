@@ -1605,7 +1605,17 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-alert-controls { display: flex; flex: 0 0 auto; gap: 8px; }
 .admin-alert-controls button, .admin-notification-actions button, .admin-customer-account-form button, .admin-directory-detail > button { background: var(--action-primary); border: 1px solid transparent; border-radius: 9px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 38px; padding: 8px 11px; }
 .admin-alert-controls button.secondary, .admin-notification-actions button.secondary, .admin-filterbar button.secondary { background: #fff; border: 1px solid #9fc8b9; color: #225847; }
+.admin-alert-controls button:disabled { cursor: not-allowed; opacity: .5; }
 .admin-content > .admin-inline-status { background: #e8f5f0; border-left: 3px solid var(--color-aea-green); color: #254e41; font-size: .65rem; margin: -8px 0 16px; padding: 9px 11px; }
+.admin-delivery-health { align-items: center; background: #fff; border: 1px solid #cbded7; border-left: 4px solid #d39b2f; border-radius: 13px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) auto; margin-bottom: 16px; padding: 14px 16px; }
+.admin-delivery-health.connected { border-left-color: #2c9a70; }
+.admin-delivery-health span { color: var(--color-aea-green-dark); display: block; font-size: .52rem; font-weight: 900; text-transform: uppercase; }
+.admin-delivery-health strong { color: var(--color-aea-ink); display: block; font-size: .75rem; margin-top: 3px; }
+.admin-delivery-health p { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.45; margin: 3px 0 0; max-width: 760px; }
+.admin-delivery-health dl { display: grid; gap: 7px; grid-template-columns: repeat(3, minmax(72px, 1fr)); margin: 0; }
+.admin-delivery-health dl div { background: #f3f8f6; border-radius: 8px; padding: 7px 9px; text-align: center; }
+.admin-delivery-health dt { color: #56766b; font-size: .48rem; font-weight: 850; }
+.admin-delivery-health dd { color: var(--color-aea-ink); font-size: .8rem; font-weight: 900; margin: 2px 0 0; }
 .admin-notification-filter { grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(120px, .55fr)) minmax(150px, auto) auto auto; }
 .admin-check-filter { align-items: center; background: #fff; border: 1px solid #a9c9bd; border-radius: 10px; color: var(--color-aea-text); display: flex; font-size: .6rem; font-weight: 800; gap: 7px; min-height: 43px; padding: 8px 10px; }
 .admin-check-filter input { accent-color: var(--color-aea-green); height: 17px; width: 17px; }
@@ -1634,6 +1644,10 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-notification-meta .admin-sla-overdue { background: #ffe3e0; color: #9b2d26; }
 .admin-notification-meta .admin-sla-due_soon { background: #fff0cf; color: #795506; }
 .admin-notification-meta .admin-sla-on_track { background: #e2f4ed; color: #146146; }
+.admin-notification-meta .admin-delivery-state { border-radius: 999px; font-weight: 850; padding: 3px 6px; }
+.admin-notification-meta .admin-delivery-state.state-delivered { background: #e2f4ed; color: #146146; }
+.admin-notification-meta .admin-delivery-state.state-failed { background: #ffe3e0; color: #9b2d26; }
+.admin-notification-meta .admin-delivery-state.state-pending, .admin-notification-meta .admin-delivery-state.state-waiting_for_channel { background: #fff0cf; color: #795506; }
 .admin-priority-urgent { background: #ffe3e0; color: #9b2d26; }
 .admin-priority-high { background: #fff0cf; color: #795506; }
 .admin-priority-normal { background: #e2f4ed; color: #146146; }
@@ -1730,6 +1744,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-filterbar, .admin-notification-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-case-workflow { grid-template-columns: 1fr; }
   .admin-inbox-heading { align-items: flex-start; flex-direction: column; }
+  .admin-delivery-health { align-items: stretch; grid-template-columns: 1fr; }
   .supplier-boundary { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
@@ -1747,6 +1762,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-queue-summary { align-items: flex-start; flex-direction: column; }
   .admin-queue-summary button { margin-left: 0; }
   .admin-case-control-row { align-items: stretch; flex-direction: column; }
+  .admin-delivery-health dl { grid-template-columns: 1fr; }
   .admin-directory-list .admin-table-header { display: none; }
   .admin-directory-list > button { grid-template-columns: 1fr 1fr; }
   .admin-directory-list > button > span:first-child { grid-column: 1 / -1; }

@@ -25,6 +25,8 @@ export function createLeadWebhookProbeHandler({
   fetchImpl = fetch,
   now = () => new Date(),
   createId = randomUUID,
+  onFailure = async () => {},
+  onRecovery = async () => {},
 } = {}) {
   return async function postLeadWebhookProbe(request) {
     const expectedToken = env.AEA_LEAD_WEBHOOK_TEST_TOKEN;
@@ -41,7 +43,10 @@ export function createLeadWebhookProbeHandler({
     }
 
     const webhook = env.AEA_LEAD_WEBHOOK_URL;
-    if (!webhook) return json({ ok: false, error: "Lead delivery is not configured." }, 503);
+    if (!webhook) {
+      await onFailure({ kind: "unconfigured", probeId: "" });
+      return json({ ok: false, error: "Lead delivery is not configured." }, 503);
+    }
 
     const probeId = createId();
     const probe = {
@@ -68,8 +73,10 @@ export function createLeadWebhookProbeHandler({
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`Lead processor returned ${response.status}`);
+      await onRecovery({ probeId });
       return json({ ok: true, probeId });
     } catch {
+      await onFailure({ kind: "delivery_failed", probeId });
       return json({ ok: false, error: "The lead processor did not acknowledge the probe.", probeId }, 502);
     } finally {
       clearTimeout(timeout);

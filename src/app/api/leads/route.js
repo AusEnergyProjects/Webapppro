@@ -3,11 +3,31 @@ import { createLeadEnvelope } from "@/lib/lead-envelope.mjs";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 import { getD1 } from "../../../../db";
+import { createAdminNotification, resolveSystemAdminNotifications } from "@/lib/admin-notifications";
 
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const leadRateLimiter = createSharedLeadRateLimiter({ getDatabase: getD1 });
+
+function incidentBucket() {
+  return new Date().toISOString().slice(0, 13);
+}
+
+async function recordLeadIncident(eventType, title, summary, priority = "urgent") {
+  await createAdminNotification({
+    eventKey: `${eventType}:${incidentBucket()}`,
+    eventType,
+    category: "platform",
+    priority,
+    title,
+    summary,
+    entityType: "platform_service",
+    entityId: "comparison_lead_delivery",
+    actorType: "system",
+    requiresAction: true,
+  }).catch(() => null);
+}
 
 function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
@@ -77,10 +97,25 @@ export async function POST(request) {
   if (payload.website || startedTooQuickly) return respond({ ok: true, filtered: true }, 200, "bot_filtered", metrics);
 
   const webhook = process.env.AEA_LEAD_WEBHOOK_URL;
-  if (!webhook) return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "webhook_unconfigured", metrics);
+  if (!webhook) {
+    await recordLeadIncident(
+      "platform.lead_delivery_unconfigured",
+      "Comparison enquiry delivery is not configured",
+      "The public comparison enquiry service cannot deliver requests to the private processor. No customer details are included in this alert.",
+    );
+    return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "webhook_unconfigured", metrics);
+  }
 
   const rateLimit = await leadRateLimiter.check(clientKey(request));
-  if (rateLimit.unavailable) return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "rate_limit_unavailable", metrics);
+  if (rateLimit.unavailable) {
+    await recordLeadIncident(
+      "platform.lead_rate_limit_unavailable",
+      "Comparison enquiry protection is unavailable",
+      "The durable enquiry rate limiter could not be reached, so public submissions were safely stopped.",
+      "high",
+    );
+    return respond({ ok: false, error: "Enquiries are temporarily unavailable. Please call 1300 241 149." }, 503, "rate_limit_unavailable", metrics);
+  }
   if (!rateLimit.allowed) return respond(
     { ok: false, error: "Too many requests. Please try again later." },
     429,
@@ -102,8 +137,19 @@ export async function POST(request) {
     });
     const acknowledgement = await response.text();
     if (!response.ok || acknowledgement.trim() !== "ok") throw new Error("Lead processor did not acknowledge delivery.");
+    await resolveSystemAdminNotifications({
+      eventTypes: ["platform.lead_delivery_unconfigured", "platform.lead_delivery_failed", "platform.lead_rate_limit_unavailable"],
+      entityType: "platform_service",
+      entityId: "comparison_lead_delivery",
+      note: "A comparison enquiry was delivered successfully and the service recovered.",
+    }).catch(() => null);
     return respond({ ok: true, reference: payload.reference }, 200, "delivered", metrics);
   } catch (error) {
+    await recordLeadIncident(
+      "platform.lead_delivery_failed",
+      "Comparison enquiry delivery failed",
+      "The private enquiry processor did not acknowledge a valid comparison request. The customer was told to retry or call, and no customer details are included in this alert.",
+    );
     return respond(
       { ok: false, error: "Your request could not be delivered. Please try again or call 1300 241 149." },
       502,
