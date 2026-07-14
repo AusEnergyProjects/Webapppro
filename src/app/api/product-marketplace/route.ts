@@ -23,7 +23,8 @@ export async function GET(request: Request) {
   const category = cleanAdminText(url.searchParams.get("category"), 40);
   const rows = await db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
     p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
-    p.lead_time_days, p.warranty_years, p.datasheet_url, a.business_name supplier_name, a.business_website supplier_website
+    p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
+    a.business_name supplier_name, a.business_website supplier_website
     FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
     WHERE p.listing_status = 'published' AND p.review_status = 'approved'
       AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     description: row.description, unitPriceCentsExGst: Number(row.unit_price_cents_ex_gst), minOrderQty: Number(row.min_order_qty),
     orderIncrement: Number(row.order_increment), unitLabel: row.unit_label, stockStatus: row.stock_status,
     leadTimeDays: Number(row.lead_time_days), warrantyYears: Number(row.warranty_years), datasheetUrl: row.datasheet_url,
-    supplierName: row.supplier_name, supplierWebsite: row.supplier_website,
+    supplierUid: row.supplier_uid, supplierName: row.supplier_name, supplierWebsite: row.supplier_website,
     dependencies: links.results.filter((link) => link.product_id === row.id).map((link) => ({
       relationship: link.relationship, defaultQty: Number(link.default_qty), note: link.note,
       productId: link.linked_product_id, modelNumber: link.model_number, brand: link.brand, name: link.name,

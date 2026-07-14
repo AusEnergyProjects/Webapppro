@@ -284,3 +284,48 @@ export const supplierProductLinks = sqliteTable("supplier_product_links", {
   index("supplier_product_links_owner_idx").on(table.firebaseUid),
   index("supplier_product_links_product_idx").on(table.productId),
 ]);
+
+export const installerProductLists = sqliteTable("installer_product_lists", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  name: text("name").notNull(),
+  projectPostcode: text("project_postcode").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  submittedAt: text("submitted_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("installer_product_lists_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
+export const installerProductListItems = sqliteTable("installer_product_list_items", {
+  id: text("id").primaryKey(),
+  listId: text("list_id").notNull(),
+  productId: text("product_id").notNull(),
+  supplierUid: text("supplier_uid").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  unitPriceCentsExGst: integer("unit_price_cents_ex_gst").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("installer_product_list_items_unique_idx").on(table.listId, table.productId),
+  index("installer_product_list_items_list_idx").on(table.listId),
+  index("installer_product_list_items_supplier_idx").on(table.supplierUid, table.updatedAt),
+]);
+
+export const supplierProductEnquiries = sqliteTable("supplier_product_enquiries", {
+  id: text("id").primaryKey(),
+  listId: text("list_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  supplierUid: text("supplier_uid").notNull(),
+  status: text("status").notNull().default("new"),
+  message: text("message").notNull().default(""),
+  supplierNote: text("supplier_note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("supplier_product_enquiries_list_supplier_idx").on(table.listId, table.supplierUid),
+  index("supplier_product_enquiries_supplier_idx").on(table.supplierUid, table.status, table.updatedAt),
+  index("supplier_product_enquiries_installer_idx").on(table.installerUid, table.updatedAt),
+]);

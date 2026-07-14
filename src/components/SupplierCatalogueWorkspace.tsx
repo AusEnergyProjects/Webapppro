@@ -33,6 +33,34 @@ type SupplierProduct = {
   updatedAt: string;
 };
 
+type SupplierEnquiry = {
+  id: string;
+  listId: string;
+  status: "new" | "viewed" | "responded" | "closed";
+  message: string;
+  supplierNote: string;
+  createdAt: string;
+  updatedAt: string;
+  listName: string;
+  projectPostcode: string;
+  listNotes: string;
+  installerBusiness: string;
+  installerContact: string;
+  installerEmail: string;
+  installerPhone: string;
+  installerWebsite: string;
+  items: Array<{
+    id: string;
+    productId: string;
+    quantity: number;
+    unitPriceCentsExGst: number;
+    modelNumber: string;
+    brand: string;
+    name: string;
+    unitLabel: string;
+  }>;
+};
+
 type Draft = {
   id: string;
   modelNumber: string;
@@ -174,6 +202,8 @@ export function SupplierCatalogueWorkspace({
   hasAnalytics: boolean;
 }) {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
+  const [enquiries, setEnquiries] = useState<SupplierEnquiry[]>([]);
+  const [enquiryNotes, setEnquiryNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -183,16 +213,23 @@ export function SupplierCatalogueWorkspace({
   const loadProducts = useCallback(async () => {
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/supplier-products", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok)
+      const [productResponse, enquiryResponse] = await Promise.all([
+        fetch("/api/supplier-products", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+        fetch("/api/supplier-enquiries", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+      ]);
+      const [result, enquiryResult] = await Promise.all([
+        productResponse.json().catch(() => ({})),
+        enquiryResponse.json().catch(() => ({})),
+      ]);
+      if (!productResponse.ok || !result.ok)
         throw new Error(
           result.error || "The product catalogue could not be loaded.",
         );
       setProducts(result.products || []);
+      if (enquiryResponse.ok && enquiryResult.ok) {
+        setEnquiries(enquiryResult.enquiries || []);
+        setEnquiryNotes(Object.fromEntries((enquiryResult.enquiries || []).map((item: SupplierEnquiry) => [item.id, item.supplierNote || ""])));
+      }
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -230,6 +267,33 @@ export function SupplierCatalogueWorkspace({
   const availableCount = products.filter(
     (item) => item.stockStatus === "in_stock" || item.stockStatus === "limited",
   ).length;
+  const newEnquiryCount = enquiries.filter((item) => item.status === "new").length;
+
+  async function updateEnquiry(
+    enquiry: SupplierEnquiry,
+    status: SupplierEnquiry["status"],
+    supplierNote = enquiryNotes[enquiry.id] ?? enquiry.supplierNote,
+  ) {
+    setBusy(true);
+    setStatus("Updating the product enquiry...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/supplier-enquiries", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: enquiry.id, status, supplierNote }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The enquiry could not be updated.");
+      setEnquiries(result.enquiries || []);
+      setEnquiryNotes(Object.fromEntries((result.enquiries || []).map((item: SupplierEnquiry) => [item.id, item.supplierNote || ""])));
+      setStatus("Product enquiry updated.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The enquiry could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function editProduct(product: SupplierProduct) {
     setDraft({
@@ -556,6 +620,11 @@ export function SupplierCatalogueWorkspace({
           <strong>{availableCount} available</strong>
           <small>In-stock or limited-stock catalogue items</small>
         </article>
+        <article>
+          <span>Installer enquiries</span>
+          <strong>{newEnquiryCount} new</strong>
+          <small>{enquiries.length} total product selection request{enquiries.length === 1 ? "" : "s"}</small>
+        </article>
       </section>
 
       <section className={`dashboard-visibility-banner ${marketplaceVisible ? "is-live" : "is-locked"}`}>
@@ -573,6 +642,86 @@ export function SupplierCatalogueWorkspace({
           </p>
         </div>
         <a href="#membership">{marketplaceVisible ? "Manage access" : "Unlock marketplace visibility"}</a>
+      </section>
+
+      <section className="dashboard-panel supplier-enquiry-workspace" aria-labelledby="supplier-enquiry-title">
+        <div className="dashboard-panel-heading">
+          <span>Installer demand inbox</span>
+          <h2 id="supplier-enquiry-title">Product selection enquiries</h2>
+          <p>
+            Paid installers can send model-level quantities from their project lists.
+            This inbox contains installer business details and commercial scope only,
+            with no household names, street addresses or customer contact details.
+          </p>
+        </div>
+        {enquiries.length ? (
+          <div className="supplier-enquiry-list">
+            {enquiries.map((enquiry) => {
+              const subtotal = enquiry.items.reduce(
+                (total, item) => total + item.quantity * item.unitPriceCentsExGst,
+                0,
+              );
+              return (
+                <article key={enquiry.id} className={`status-${enquiry.status}`}>
+                  <header>
+                    <div>
+                      <span>{enquiry.installerBusiness} · {enquiry.projectPostcode || "postcode not supplied"}</span>
+                      <h3>{enquiry.listName}</h3>
+                      <small>Received {new Date(enquiry.createdAt).toLocaleDateString("en-AU")}</small>
+                    </div>
+                    <strong className={`admin-pill admin-pill-${enquiry.status}`}>{readable(enquiry.status)}</strong>
+                  </header>
+                  {(enquiry.message || enquiry.listNotes) && (
+                    <div className="supplier-enquiry-message">
+                      {enquiry.message && <p>{enquiry.message}</p>}
+                      {enquiry.listNotes && <small>Project scope: {enquiry.listNotes}</small>}
+                    </div>
+                  )}
+                  <div className="supplier-enquiry-items">
+                    {enquiry.items.map((item) => (
+                      <div key={item.id}>
+                        <span>{item.brand} {item.modelNumber}</span>
+                        <strong>{item.quantity} × {item.name}</strong>
+                        <small>{money.format((item.quantity * item.unitPriceCentsExGst) / 100)} ex GST indicative</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="supplier-enquiry-contact">
+                    <div>
+                      <span>Installer contact</span>
+                      <strong>{enquiry.installerContact}</strong>
+                      <a href={`mailto:${enquiry.installerEmail}`}>{enquiry.installerEmail}</a>
+                      {enquiry.installerPhone && <a href={`tel:${enquiry.installerPhone}`}>{enquiry.installerPhone}</a>}
+                    </div>
+                    <div>
+                      <span>Indicative subtotal</span>
+                      <strong>{money.format(subtotal / 100)} ex GST</strong>
+                      <small>Confirm price, stock, freight and account terms directly.</small>
+                    </div>
+                  </div>
+                  <label className="supplier-enquiry-note">
+                    Internal response note
+                    <textarea
+                      value={enquiryNotes[enquiry.id] ?? enquiry.supplierNote}
+                      onChange={(event) => setEnquiryNotes((current) => ({ ...current, [enquiry.id]: event.target.value }))}
+                      placeholder="Record availability, pricing follow-up or response details."
+                    />
+                  </label>
+                  <div className="supplier-enquiry-actions">
+                    {enquiry.status === "new" && <button type="button" disabled={busy} onClick={() => void updateEnquiry(enquiry, "viewed")}>Mark reviewed</button>}
+                    {!['responded', 'closed'].includes(enquiry.status) && <button type="button" disabled={busy} onClick={() => void updateEnquiry(enquiry, "responded")}>Mark responded</button>}
+                    {enquiry.status !== "closed" && <button type="button" className="ghost" disabled={busy} onClick={() => void updateEnquiry(enquiry, "closed")}>Close enquiry</button>}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="dashboard-empty-state">
+            <strong>No installer product enquiries yet</strong>
+            <p>{marketplaceVisible ? "New requests will appear when an installer sends a project product list containing your items." : "Your products are not currently visible to installers, so no new enquiries can be created."}</p>
+          </div>
+        )}
       </section>
 
       <section className="dashboard-panel supplier-boundary">

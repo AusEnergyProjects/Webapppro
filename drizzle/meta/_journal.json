@@ -71,6 +71,13 @@
       "when": 1784058719692,
       "tag": "0009_groovy_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1784060070415,
+      "tag": "0010_wealthy_ultragirl",
+      "breakpoints": true
     }
   ]
 }
