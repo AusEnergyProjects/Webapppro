@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title:
     "Direct Trade membership and referrals | Australian Energy Assessments",
   description:
-    "Compare live installer and wholesaler membership pricing, cancellation terms, matching rules and the planned referral reward.",
+    "Compare live installer and wholesaler membership pricing, cancellation terms, matching rules and the two-sided referral reward.",
 };
 
 const plans = [
@@ -164,14 +164,16 @@ export default function DirectTradeMembershipPage() {
         aria-labelledby="membership-referral-title"
       >
         <div>
-          <span>Planned referral reward</span>
+          <span>Live referral reward</span>
           <h2 id="membership-referral-title">
             A month of membership credit for both businesses
           </h2>
           <p>
-            The referral system is not active yet. When launched, a reward is
-            earned only after a new eligible business starts a paid membership
-            and its first payment clears.
+            Active paying members can generate a unique link in the dashboard.
+            A reward is earned after a new eligible business creates its first
+            profile with that link, starts a paid membership and its first
+            payment clears. A monthly member receives the second month free;
+            an annual member receives month 13 free.
           </p>
         </div>
         <aside>
@@ -180,7 +182,8 @@ export default function DirectTradeMembershipPage() {
             <li>The referred business must be new and independently eligible</li>
             <li>The first paid invoice must clear and remain valid</li>
             <li>Self-referrals and duplicate businesses are excluded</li>
-            <li>Credits apply to membership invoices and are not cash</li>
+            <li>Each renewal date moves forward by one calendar month</li>
+            <li>Rewards are membership time and are not cash</li>
           </ul>
         </aside>
       </section>

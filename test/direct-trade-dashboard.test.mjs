@@ -87,12 +87,14 @@ test("membership page presents all approved prices and no per-lead model", () =>
   assert.match(membership, /Secure Stripe billing is live/);
   assert.match(
     membership,
-    /The referral system is not active yet/,
+    /monthly member receives the second month free/,
   );
   assert.match(
     membership,
     /Self-referrals and duplicate businesses are excluded/,
   );
+  assert.match(dashboard, /Generate my referral link/);
+  assert.match(dashboard, /Annual plan: the next renewal moves out to month 13/);
 });
 
 test("membership and verification routes are connected across the account journey", () => {

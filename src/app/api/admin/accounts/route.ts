@@ -7,7 +7,7 @@ const ACCOUNT_STATUSES = new Set(["active", "suspended", "closed"]);
 const VERIFICATION_STATUSES = new Set(["not_started", "submitted", "under_review", "needs_information", "approved", "rejected", "expired"]);
 const AVAILABILITY_STATUSES = new Set(["open", "limited", "paused"]);
 const PLAN_KEYS = new Set(["unselected", "installer_annual", "installer_monthly", "supplier_annual", "supplier_monthly"]);
-const BILLING_STATUSES = new Set(["not_connected", "trial", "active", "past_due", "cancelled"]);
+const BILLING_STATUSES = new Set(["not_connected", "processing", "trial", "active", "active_cancels_at_period_end", "past_due", "paused", "cancelled"]);
 
 function shapeAccount(row: Record<string, unknown>) {
   return {

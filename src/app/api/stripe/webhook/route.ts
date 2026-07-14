@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
+import { qualifyReferralFromFirstPayment } from "@/lib/stripe-referral-server";
 
 export const runtime = "edge";
 
@@ -85,8 +86,17 @@ async function verifyStripeSignature(
   return signatures.some((signature) => timingSafeEqual(signature, expected));
 }
 
-function subscriptionBillingStatus(status: string, cancelAtPeriodEnd: boolean) {
-  if (status === "trialing") return "trial";
+function subscriptionBillingStatus(
+  status: string,
+  cancelAtPeriodEnd: boolean,
+  referralExtension: boolean,
+) {
+  if (status === "trialing")
+    return referralExtension
+      ? cancelAtPeriodEnd
+        ? "active_cancels_at_period_end"
+        : "active"
+      : "trial";
   if (status === "active")
     return cancelAtPeriodEnd ? "active_cancels_at_period_end" : "active";
   if (["past_due", "unpaid"].includes(status)) return "past_due";
@@ -171,6 +181,11 @@ async function applyCheckout(
       )
       .bind(plan.planKey, billingStatus, now, firebaseUid),
   ]);
+  if (
+    billingStatus === "active" &&
+    (eventType === "checkout.session.async_payment_succeeded" || paymentStatus === "paid")
+  )
+    await qualifyReferralFromFirstPayment(firebaseUid, subscriptionId);
 }
 
 async function applySubscription(subscription: StripeObject, deleted: boolean) {
@@ -186,7 +201,12 @@ async function applySubscription(subscription: StripeObject, deleted: boolean) {
   if (!membership) return;
   const status = deleted ? "canceled" : String(subscription.status || "");
   const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
-  const billingStatus = subscriptionBillingStatus(status, cancelAtPeriodEnd);
+  const metadata = subscription.metadata as StripeObject | undefined;
+  const billingStatus = subscriptionBillingStatus(
+    status,
+    cancelAtPeriodEnd,
+    metadata?.aea_referral_extension === "true",
+  );
   const periodEnd = subscriptionPeriodEnd(subscription);
   const now = new Date().toISOString();
   await db.batch([

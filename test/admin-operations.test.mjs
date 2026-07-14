@@ -17,6 +17,7 @@ const allocationRoute = read(
   "../src/app/api/admin/opportunities/allocate/route.ts",
 );
 const productRoute = read("../src/app/api/admin/products/route.ts");
+const referralsRoute = read("../src/app/api/admin/referrals/route.ts");
 const partnerOpportunities = read(
   "../src/app/api/trade-opportunities/route.ts",
 );
@@ -38,6 +39,7 @@ test("operations portal is unlisted and every administrator API has server-side 
     matchesRoute,
     allocationRoute,
     productRoute,
+    referralsRoute,
   ]) {
     assert.match(route, /sameOrigin\(request\)/);
     assert.match(route, /requireAdminIdentity\(request/);
@@ -108,6 +110,7 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Create an opportunity/);
   assert.match(portal, /Allocate nearest eligible installers/);
   assert.match(portal, /Catalogue review and availability/);
+  assert.match(portal, /Referral rewards and eligibility/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);

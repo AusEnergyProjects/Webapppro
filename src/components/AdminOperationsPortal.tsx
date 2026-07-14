@@ -136,6 +136,22 @@ type AdminUser = {
   last_login_at: string;
   created_at: string;
 };
+type ReferralRecord = {
+  id: string;
+  code: string;
+  status: string;
+  riskReason: string;
+  referrerBusiness: string;
+  referrerEmail: string;
+  referredBusiness: string;
+  referredEmail: string;
+  registeredAt: string;
+  firstPaidAt: string;
+  rewardedAt: string;
+  appliedCredits: number;
+  failedCredits: number;
+  updatedAt: string;
+};
 
 const states = ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"];
 const categories = [
@@ -191,7 +207,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "overview" | "partners" | "opportunities" | "catalogue" | "access"
+    "overview" | "partners" | "opportunities" | "catalogue" | "referrals" | "access"
   >("overview");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -213,6 +229,7 @@ export function AdminOperationsPortal() {
     >
   >({});
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
   const [selectedOpportunity, setSelectedOpportunity] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -252,15 +269,17 @@ export function AdminOperationsPortal() {
 
   const loadWorkspace = useCallback(
     async (nextSession: AdminSession) => {
-      const [accountResult, opportunityResult, productResult] =
+      const [accountResult, opportunityResult, productResult, referralResult] =
         await Promise.all([
           api("/api/admin/accounts"),
           api("/api/admin/opportunities"),
           api("/api/admin/products"),
+          api("/api/admin/referrals"),
         ]);
       setAccounts(accountResult.accounts || []);
       setOpportunities(opportunityResult.opportunities || []);
       setProducts(productResult.products || []);
+      setReferrals(referralResult.referrals || []);
       setProductReview(
         Object.fromEntries(
           (productResult.products || []).map((product: CatalogueProduct) => [
@@ -601,6 +620,28 @@ export function AdminOperationsPortal() {
     }
   }
 
+  async function moderateReferral(
+    referral: ReferralRecord,
+    action: "approve" | "reject" | "retry",
+  ) {
+    const note = action === "reject"
+      ? window.prompt("Record the reason this referral is not eligible:", referral.riskReason || "") || ""
+      : "";
+    if (action === "reject" && !note.trim()) return;
+    setStatus(`${readable(action)} referral reward...`);
+    try {
+      await api("/api/admin/referrals", {
+        method: "PATCH",
+        body: JSON.stringify({ id: referral.id, action, note }),
+      });
+      const result = await api("/api/admin/referrals");
+      setReferrals(result.referrals || []);
+      setStatus("Referral decision saved and added to the audit history.");
+    } catch (error) {
+      setStatus(authMessage(error));
+    }
+  }
+
   async function inviteAdmin(event: FormEvent) {
     event.preventDefault();
     setStatus("Creating operations invitation...");
@@ -848,12 +889,18 @@ export function AdminOperationsPortal() {
           >
             <span>04</span>Catalogue
           </button>
+          <button
+            className={tab === "referrals" ? "active" : ""}
+            onClick={() => setTab("referrals")}
+          >
+            <span>05</span>Referrals
+          </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>05</span>Access & audit
+              <span>06</span>Access & audit
             </button>
           )}
           <aside>
@@ -1869,6 +1916,57 @@ export function AdminOperationsPortal() {
                       No products match this catalogue search.
                     </p>
                   )}
+                </div>
+              </section>
+            </>
+          )}
+
+          {tab === "referrals" && (
+            <>
+              <header className="admin-page-heading">
+                <span>Member growth controls</span>
+                <h1>Referral rewards and eligibility</h1>
+                <p>
+                  Follow each new-business referral from signup to first paid
+                  membership and confirm that both one-month extensions were
+                  applied. Exact duplicate signals pause a reward for review.
+                </p>
+              </header>
+              <section className="admin-metric-grid">
+                <article><span>Total referrals</span><strong>{referrals.length}</strong><small>One reward maximum per new business</small></article>
+                <article><span>Awaiting payment</span><strong>{referrals.filter((item) => item.status === "registered").length}</strong><small>Profile created, first payment not yet cleared</small></article>
+                <article><span>Needs review</span><strong>{referrals.filter((item) => ["review_required", "reward_failed"].includes(item.status)).length}</strong><small>Eligibility or Stripe retry attention</small></article>
+                <article><span>Completed</span><strong>{referrals.filter((item) => item.status === "rewarded").length}</strong><small>Two membership months applied</small></article>
+              </section>
+              <section className="admin-panel admin-referral-workspace">
+                <div className="admin-panel-heading">
+                  <span>Two-sided ledger</span>
+                  <h2>Referral history</h2>
+                  <p>Monthly members receive their second month free; annual members receive month 13 free.</p>
+                </div>
+                <div className="admin-referral-list">
+                  {referrals.length ? referrals.map((item) => (
+                    <article key={item.id}>
+                      <div className="admin-referral-parties">
+                        <div><span>Referrer</span><strong>{item.referrerBusiness}</strong><small>{item.referrerEmail}</small></div>
+                        <b aria-hidden="true">to</b>
+                        <div><span>New member</span><strong>{item.referredBusiness}</strong><small>{item.referredEmail}</small></div>
+                      </div>
+                      <div className="admin-referral-status">
+                        <span className={`admin-pill admin-pill-${item.status}`}>{readable(item.status)}</span>
+                        <small>{item.code} · joined {dateTime(item.registeredAt)}</small>
+                        <small>{item.appliedCredits}/2 free months applied</small>
+                        {item.riskReason && <p>{item.riskReason}</p>}
+                      </div>
+                      {["owner", "admin"].includes(session.role) && (
+                        <div className="admin-referral-actions">
+                          {item.status === "review_required" && <button onClick={() => void moderateReferral(item, "approve")}>Approve eligibility</button>}
+                          {item.status === "reward_failed" && <button onClick={() => void moderateReferral(item, "retry")}>Retry reward</button>}
+                          {!['rewarded', 'rejected'].includes(item.status) && <button className="danger" onClick={() => void moderateReferral(item, "reject")}>Reject</button>}
+                        </div>
+                      )}
+                    </article>
+                  )) : <p className="admin-empty">No referral links have produced a new member yet.</p>}
                 </div>
               </section>
             </>

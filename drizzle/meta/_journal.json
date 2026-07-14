@@ -50,6 +50,13 @@
       "when": 1784021479156,
       "tag": "0006_silky_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1784052682181,
+      "tag": "0007_gifted_silhouette",
+      "breakpoints": true
     }
   ]
 }

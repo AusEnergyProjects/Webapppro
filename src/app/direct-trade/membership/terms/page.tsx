@@ -31,7 +31,7 @@ const sections = [
   },
   {
     title: "Referral credits",
-    body: "Referral credits are not active yet. Any future referral program will have separate eligibility, anti-abuse, invoice-credit and expiry rules published before members can earn a credit. A planned feature is not a current entitlement.",
+    body: "An active paying member may generate one unique referral link. If a new eligible business first creates its profile with that link and its first paid membership payment clears, the referred business and the referrer each receive one calendar month added to the end of their current membership term. For a monthly membership this makes the second month free; for an annual membership it moves the next renewal to month 13. Each referred business can create one reward only. The referring membership must be active when the profile is created and when payment clears. Rewards are not cash, cannot be transferred, and may be withheld or reversed for self-referrals, existing subscribers, duplicate businesses, refunds, chargebacks, fraud or misuse. Australian Energy Assessments may review eligibility before applying a reward.",
   },
 ];
 
@@ -100,4 +100,3 @@ export default function DirectTradeMembershipTermsPage() {
     </main>
   );
 }
-

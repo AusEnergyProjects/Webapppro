@@ -61,8 +61,10 @@ test("the starter dashboard separates membership from opportunity matching", () 
   assert.match(dashboard, /including GST/);
   assert.match(
     dashboard,
-    /both businesses\s+receive one\s+month of membership credit/,
+    /both renewal dates move forward by one full calendar\s+month/,
   );
+  assert.match(form, /Member referral applied/);
+  assert.match(form, /referralCode/);
   assert.match(dashboard, /partnerType === "supplier"/);
 });
 

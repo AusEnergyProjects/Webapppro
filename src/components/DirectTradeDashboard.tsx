@@ -58,6 +58,35 @@ type DashboardOpportunity = {
   opportunityStatus: string;
 };
 
+type ReferralData = {
+  eligible: boolean;
+  billingStatus: string;
+  code: string;
+  link: string;
+  stats: {
+    joined: number;
+    awaitingPayment: number;
+    rewarded: number;
+    earnedMonths: number;
+  };
+  referrals: Array<{
+    id: string;
+    businessName: string;
+    status: string;
+    statusLabel: string;
+    registeredAt: string;
+    firstPaidAt: string;
+    rewardedAt: string;
+  }>;
+  receivedReferral: null | {
+    status: string;
+    statusLabel: string;
+    registeredAt: string;
+    firstPaidAt: string;
+    rewardedAt: string;
+  };
+};
+
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
   solar: "Rooftop solar",
@@ -89,6 +118,9 @@ export function DirectTradeDashboard() {
   );
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
+  const [referrals, setReferrals] = useState<ReferralData | null>(null);
+  const [referralBusy, setReferralBusy] = useState(false);
+  const [referralStatus, setReferralStatus] = useState("");
 
   useEffect(
     () =>
@@ -98,6 +130,7 @@ export function DirectTradeDashboard() {
         if (!nextUser) {
           setLoading(false);
           setOpportunities([]);
+          setReferrals(null);
         }
       }),
     [],
@@ -133,6 +166,10 @@ export function DirectTradeDashboard() {
               nextProfile.serviceBasePostcode || nextProfile.postcode,
             );
             setServiceRadiusKm(Number(nextProfile.serviceRadiusKm || 50));
+            const referralResponsePromise = fetch("/api/trade-referrals", {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            });
             if (nextProfile.partnerType !== "supplier") {
               const opportunityResponse = await fetch(
                 "/api/trade-opportunities",
@@ -147,6 +184,10 @@ export function DirectTradeDashboard() {
               if (opportunityResponse.ok && !cancelled)
                 setOpportunities(opportunityResult.opportunities || []);
             } else if (!cancelled) setOpportunities([]);
+            const referralResponse = await referralResponsePromise;
+            const referralResult = await referralResponse.json().catch(() => ({}));
+            if (referralResponse.ok && !cancelled)
+              setReferrals(referralResult.referrals || null);
           }
         }
       } catch (loadError) {
@@ -215,6 +256,42 @@ export function DirectTradeDashboard() {
   const interestedCount = opportunities.filter(
     (item) => item.matchStatus === "interested",
   ).length;
+
+  async function generateReferralLink() {
+    if (!user) return;
+    setReferralBusy(true);
+    setReferralStatus("Generating your secure member referral link...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-referrals", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok)
+        throw new Error(result.error || "The referral link could not be generated.");
+      setReferrals(result.referrals);
+      setReferralStatus("Your referral link is ready to share.");
+    } catch (referralError) {
+      setReferralStatus(
+        referralError instanceof Error
+          ? referralError.message
+          : "The referral link could not be generated.",
+      );
+    } finally {
+      setReferralBusy(false);
+    }
+  }
+
+  async function copyReferralLink() {
+    if (!referrals?.link) return;
+    try {
+      await navigator.clipboard.writeText(referrals.link);
+      setReferralStatus("Referral link copied. It is ready to send to a trusted business.");
+    } catch {
+      setReferralStatus("Copy the referral link from the field below.");
+    }
+  }
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1060,29 +1137,99 @@ export function DirectTradeDashboard() {
             aria-labelledby="dashboard-referral-title"
           >
             <div>
-              <span>Referral rewards</span>
+              <span>Live referral rewards</span>
               <h2 id="dashboard-referral-title">
-                Grow the network by recommending trusted businesses
+                Give a free month and earn a free month
               </h2>
               <p>
-                When paid membership launches, every paying member will receive
-                a unique referral code. After a referred business starts a paid
-                plan and its first payment clears, both businesses receive one
-                month of membership credit.
+                Active paying members can create one unique link and share it
+                with trusted trade or wholesale businesses. After a new
+                referred business starts a paid plan and its first payment
+                clears, both renewal dates move forward by one full calendar
+                month.
               </p>
+              {referrals?.eligible ? (
+                referrals.link ? (
+                  <div className="dashboard-referral-link">
+                    <label htmlFor="member-referral-link">Your member link</label>
+                    <div>
+                      <input
+                        id="member-referral-link"
+                        value={referrals.link}
+                        readOnly
+                        aria-readonly="true"
+                      />
+                      <button type="button" onClick={() => void copyReferralLink()}>
+                        Copy link
+                      </button>
+                    </div>
+                    <small>Referral code {referrals.code}</small>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn dashboard-referral-generate"
+                    disabled={referralBusy}
+                    onClick={() => void generateReferralLink()}
+                  >
+                    {referralBusy ? "Generating..." : "Generate my referral link"}
+                  </button>
+                )
+              ) : (
+                <div className="dashboard-referral-locked">
+                  <strong>Available with active paid membership</strong>
+                  <p>
+                    Start a monthly or annual membership above to unlock your
+                    personal referral link.
+                  </p>
+                </div>
+              )}
+              {referralStatus && (
+                <p className="dashboard-settings-status" role="status">
+                  {referralStatus}
+                </p>
+              )}
             </div>
             <aside>
-              <strong>Planned safeguards</strong>
+              <strong>How the free month works</strong>
               <ul>
-                <li>One reward for each new referred business</li>
-                <li>Credits apply to membership, not cash withdrawals</li>
+                <li>Monthly plan: the second month is free</li>
+                <li>Annual plan: the next renewal moves out to month 13</li>
+                <li>Each additional eligible referral adds another month</li>
                 <li>
-                  Self-referrals, duplicate businesses and misuse can be
-                  rejected
+                  Self-referrals, existing subscribers and duplicate businesses
+                  are excluded or reviewed
                 </li>
-                <li>Referral history will be visible in the dashboard</li>
+                <li>Rewards are membership time, not cash or lead credits</li>
               </ul>
             </aside>
+            {referrals && (
+              <div className="dashboard-referral-history">
+                <div className="dashboard-referral-metrics" aria-label="Referral summary">
+                  <article><span>Businesses joined</span><strong>{referrals.stats.joined}</strong></article>
+                  <article><span>Waiting for payment</span><strong>{referrals.stats.awaitingPayment}</strong></article>
+                  <article><span>Rewards completed</span><strong>{referrals.stats.rewarded}</strong></article>
+                  <article><span>Your free months</span><strong>{referrals.stats.earnedMonths}</strong></article>
+                </div>
+                {referrals.receivedReferral && (
+                  <p className="dashboard-received-referral">
+                    <strong>Your signup referral:</strong>{" "}
+                    {referrals.receivedReferral.statusLabel}
+                  </p>
+                )}
+                {referrals.referrals.length > 0 && (
+                  <div className="dashboard-referral-list">
+                    <strong>Referral history</strong>
+                    {referrals.referrals.map((item) => (
+                      <article key={item.id}>
+                        <div><strong>{item.businessName}</strong><small>Joined {new Date(item.registeredAt).toLocaleDateString("en-AU")}</small></div>
+                        <span className={`referral-status referral-status-${item.status}`}>{item.statusLabel}</span>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </>
       )}

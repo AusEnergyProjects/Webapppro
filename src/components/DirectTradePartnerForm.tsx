@@ -16,6 +16,7 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
 
 const states = ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"];
@@ -86,6 +87,7 @@ export function DirectTradePartnerForm() {
   const [statusType, setStatusType] = useState<"" | "ok" | "err">("");
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
 
   useEffect(() => onAuthStateChanged(firebaseAuth, (nextUser) => {
     setUser(nextUser);
@@ -95,6 +97,15 @@ export function DirectTradePartnerForm() {
       setProfileSaved(false);
     }
   }), []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setReferralCode(normalizeReferralCode(
+        new URLSearchParams(window.location.search).get("ref"),
+      ));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!user || profileLoaded) return;
@@ -240,13 +251,17 @@ export function DirectTradePartnerForm() {
           contactName: name.trim(),
           phone: phone.trim(),
           consent: true,
+          referralCode,
         }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Your business profile could not be saved.");
       setProfileSaved(true);
-      setStatusType("ok");
-      setStatus("Your business profile is ready. Open the dashboard to review verification, membership and opportunity readiness.");
+      const referral = result.referral as { accepted?: boolean; message?: string } | null;
+      setStatusType(referral && referral.accepted === false ? "err" : "ok");
+      setStatus(referral?.message
+        ? `Your business profile is ready. ${referral.message}`
+        : "Your business profile is ready. Open the dashboard to review verification, membership and opportunity readiness.");
     } catch (error) {
       setStatusType("err");
       setStatus(error instanceof Error ? error.message : "Your business profile could not be saved. Please try again.");
@@ -258,6 +273,8 @@ export function DirectTradePartnerForm() {
   return <main className="wrap direct-trade-request-page">
     <SiteHeader active="direct-trade-partners" />
     <header className="direct-trade-request-hero trade-account-hero"><div><span>Direct Trade accounts</span><h1>Join the network and start serving more homes</h1><p>Create a free business profile, define where your team works and prepare for a subscription that supports fair, capability-based project matching without per-lead charges.</p><div className="trade-account-hero-links"><a className="direct-trade-hero-link" href="/direct-trade/standards">Read the marketplace and customer standards</a><a className="direct-trade-hero-link" href="/direct-trade/membership">View membership pricing</a></div></div><aside><strong>Membership, not lead fees</strong><p>Paid membership will support the platform and dashboard. Matching will continue to follow verified capability, service coverage and availability rather than the highest bidder.</p><span className="trade-trial-badge">No per-lead fees</span></aside></header>
+
+    {referralCode && <section className="trade-referral-banner" role="status"><div><span>Member referral applied</span><strong>{referralCode}</strong></div><p>Complete a new business profile with this link, then start a paid membership. After the first payment clears, you and the referring member each receive one free membership month.</p></section>}
 
     {!authReady ? <section className="trade-auth-card" aria-live="polite"><p>Loading secure account options...</p></section> : !user ? <section className="trade-auth-card" aria-labelledby="trade-account-title">
       <div className="trade-auth-intro"><span>Step 1</span><h2 id="trade-account-title">Create your free trade account</h2><p>Use Google for the quickest setup, or create an account with your business email.</p></div>

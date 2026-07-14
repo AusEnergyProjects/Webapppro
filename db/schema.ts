@@ -59,6 +59,58 @@ export const stripeWebhookEvents = sqliteTable("stripe_webhook_events", {
   index("stripe_webhook_events_created_idx").on(table.createdAt),
 ]);
 
+export const tradeReferralCodes = sqliteTable("trade_referral_codes", {
+  code: text("code").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_referral_codes_owner_idx").on(table.firebaseUid),
+  index("trade_referral_codes_status_idx").on(table.status),
+]);
+
+export const tradeReferrals = sqliteTable("trade_referrals", {
+  id: text("id").primaryKey(),
+  referralCode: text("referral_code").notNull(),
+  referrerUid: text("referrer_uid").notNull(),
+  referredUid: text("referred_uid").notNull(),
+  status: text("status").notNull().default("registered"),
+  riskReason: text("risk_reason").notNull().default(""),
+  referredSubscriptionId: text("referred_subscription_id").notNull().default(""),
+  registeredAt: text("registered_at").notNull(),
+  firstPaidAt: text("first_paid_at").notNull().default(""),
+  rewardedAt: text("rewarded_at").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_referrals_referred_idx").on(table.referredUid),
+  index("trade_referrals_referrer_idx").on(table.referrerUid, table.createdAt),
+  index("trade_referrals_code_idx").on(table.referralCode),
+  index("trade_referrals_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const tradeMembershipCredits = sqliteTable("trade_membership_credits", {
+  id: text("id").primaryKey(),
+  referralId: text("referral_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  beneficiaryRole: text("beneficiary_role").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  extensionStart: integer("extension_start").notNull().default(0),
+  extensionEnd: integer("extension_end").notNull().default(0),
+  stripeRequestId: text("stripe_request_id").notNull().default(""),
+  failureCode: text("failure_code").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_membership_credits_beneficiary_idx").on(table.referralId, table.firebaseUid),
+  index("trade_membership_credits_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("trade_membership_credits_status_idx").on(table.status, table.updatedAt),
+]);
+
 export const verificationDocuments = sqliteTable("verification_documents", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

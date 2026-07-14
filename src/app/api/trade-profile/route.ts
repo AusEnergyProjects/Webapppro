@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
+import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
 
 export const runtime = "edge";
 
@@ -31,6 +32,7 @@ type ProfilePayload = {
   capabilities?: unknown;
   summary?: unknown;
   consent?: unknown;
+  referralCode?: unknown;
 };
 
 function json(body: object, status = 200) {
@@ -197,6 +199,7 @@ export async function POST(request: Request) {
   const capabilities = cleanList(raw.capabilities, CAPABILITIES);
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
+  const referralCode = normalizeReferralCode(raw.referralCode);
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
   if (!addressLine1) return json({ ok: false, error: "Enter the business street address." }, 400);
@@ -209,7 +212,11 @@ export async function POST(request: Request) {
   if (!consent) return json({ ok: false, error: "Confirm the account and contact consent." }, 400);
 
   const now = new Date().toISOString();
-  await getD1().prepare(`
+  const db = getD1();
+  const existingAccount = await db.prepare(
+    "SELECT firebase_uid FROM trade_accounts WHERE firebase_uid = ?",
+  ).bind(identity.uid).first<{ firebase_uid: string }>();
+  await db.prepare(`
     INSERT INTO trade_accounts (
       firebase_uid, email, business_name, address_line_1, suburb, address_state,
       postcode, contact_name, phone, partner_type,
@@ -256,6 +263,78 @@ export async function POST(request: Request) {
     now,
   ).run();
 
+  let referral: { accepted: boolean; message: string } | null = null;
+  if (cleanText(raw.referralCode, 40)) {
+    if (existingAccount) {
+      referral = {
+        accepted: false,
+        message: "Referral rewards apply only when a new business profile is first created.",
+      };
+    } else if (!referralCode) {
+      referral = { accepted: false, message: "The referral code was not recognised." };
+    } else {
+      const codeOwner = await db.prepare(`
+        SELECT c.firebase_uid, c.status,
+          EXISTS(
+            SELECT 1 FROM stripe_memberships m
+            WHERE m.firebase_uid = c.firebase_uid
+              AND m.status IN ('active', 'active_cancels_at_period_end')
+          ) paying
+        FROM trade_referral_codes c
+        WHERE c.code = ?
+      `).bind(referralCode).first<{ firebase_uid: string; status: string; paying: number }>();
+      if (!codeOwner || codeOwner.status !== "active") {
+        referral = { accepted: false, message: "The referral link is no longer active." };
+      } else if (codeOwner.firebase_uid === identity.uid) {
+        referral = { accepted: false, message: "A business cannot refer its own account." };
+      } else if (!codeOwner.paying) {
+        referral = {
+          accepted: false,
+          message: "The referring membership must be active when the new profile is created.",
+        };
+      } else {
+        const duplicate = await db.prepare(`
+          SELECT firebase_uid FROM trade_accounts
+          WHERE firebase_uid <> ? AND LOWER(TRIM(business_name)) = LOWER(TRIM(?)) AND postcode = ?
+          LIMIT 1
+        `).bind(identity.uid, businessName, postcode).first<{ firebase_uid: string }>();
+        const referralStatus = duplicate ? "review_required" : "registered";
+        const riskReason = duplicate
+          ? "An existing business profile has the same business name and postcode."
+          : "";
+        const inserted = await db.prepare(`
+          INSERT INTO trade_referrals
+          (id, referral_code, referrer_uid, referred_uid, status, risk_reason,
+           referred_subscription_id, registered_at, first_paid_at, rewarded_at,
+           reviewed_by_uid, reviewed_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, '', ?, '', '', '', '', ?, ?)
+          ON CONFLICT(referred_uid) DO NOTHING
+        `).bind(
+          crypto.randomUUID(),
+          referralCode,
+          codeOwner.firebase_uid,
+          identity.uid,
+          referralStatus,
+          riskReason,
+          now,
+          now,
+          now,
+        ).run();
+        referral = inserted.meta.changes
+          ? {
+              accepted: true,
+              message: duplicate
+                ? "Referral saved. Eligibility review is required before either free month is applied."
+                : "Referral saved. Both free months will be applied after the first membership payment clears.",
+            }
+          : {
+              accepted: false,
+              message: "This business account already has a referral recorded.",
+            };
+      }
+    }
+  }
+
   return json({
     ok: true,
     profile: {
@@ -266,5 +345,6 @@ export async function POST(request: Request) {
       planKey: "unselected",
       billingStatus: "not_connected",
     },
+    referral,
   });
 }
