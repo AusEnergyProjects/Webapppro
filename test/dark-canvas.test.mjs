@@ -4,11 +4,11 @@ import fs from "node:fs";
 
 const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
-test("the application uses one fixed deep-blue gradient canvas", () => {
+test("the application uses one repaint-efficient deep-blue gradient canvas", () => {
   assert.match(css, /--surface-page: #020b18/);
   assert.match(css, /body \{ background: radial-gradient\(circle at 8% -4%, rgba\(18, 126, 167, \.38\)/);
   assert.match(css, /linear-gradient\(155deg, #020713 0%, #031529 42%, #061d30 70%, #020b18 100%\)/);
-  assert.match(css, /background-attachment: fixed/);
+  assert.doesNotMatch(css, /background-attachment: fixed/);
 });
 
 test("canvas headings and footer remain readable on the dark background", () => {

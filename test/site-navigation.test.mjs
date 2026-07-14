@@ -19,6 +19,7 @@ const caseStudies = read("../src/app/case-studies/page.tsx");
 const assessments = read("../src/app/assessments/page.tsx");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
 const plannerRoute = read("../src/app/plan/page.tsx");
+const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
 const fastNavigation = read("../src/components/FastNavigation.tsx");
@@ -48,7 +49,7 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
   assert.match(gas, /SiteHeader active="gas"/);
-  assert.match(planner, /SiteHeader active="plan"/);
+  assert.match(plannerRoute, /SiteHeader active="plan"/);
   assert.match(plannerRoute, /HomeEnergyPlanner/);
   assert.match(rebatesRoute, /RebatesHub/);
   assert.match(rebates, /SiteHeader active="rebates"/);
@@ -88,7 +89,7 @@ test("customer-facing pages use the shared powered-by footer", () => {
   assert.match(guideShell, /<SiteFooter>/);
   assert.match(caseStudies, /<SiteFooter>/);
   assert.match(assessments, /<SiteFooter>/);
-  assert.match(planner, /<SiteFooter>/);
+  assert.match(plannerRoute, /<SiteFooter>/);
   assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}${planner}`, /Provided by/);
 });
 
@@ -175,15 +176,22 @@ test("getting-started copy preserves comparison and privacy boundaries", () => {
 });
 
 test("integrated planner is private, ordered and responsive", () => {
-  assert.match(planner, /No account, address, bill, meter identifier or contact details are needed/);
+  assert.match(plannerRoute, /No account, address, bill, meter identifier or contact details are needed/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
-  assert.match(planner, /Print or save roadmap/);
+  assert.match(planner, /Open fast print view/);
   assert.match(planner, /Start over/);
+  assert.doesNotMatch(planner, /target="_blank"/);
+  assert.doesNotMatch(planner, /window\.print/);
+  assert.match(plannerPrintRoute, /PrintRoadmapButton/);
+  assert.match(plannerPrintRoute, /robots: \{ index: false, follow: false \}/);
+  assert.match(plannerRoute, /initialSelection=/);
+  assert.match(plannerPrintRoute, /returnParams\.append\("feature", item\)/);
   assert.match(styles, /\.planner-layout \{[^}]*grid-template-columns:/);
   assert.match(styles, /\.planner-controls legend \{[^}]*background: #fff;[^}]*display: inline-flex;/);
   assert.match(styles, /\.planner-results-heading h2,[^}]*overflow-wrap: anywhere;/);
-  assert.match(styles, /\.planner-results \.planner-result-actions button \{[^}]*color: #fff;/);
+  assert.match(styles, /\.planner-results \.planner-result-actions button, \.planner-results \.planner-result-actions a \{[^}]*color: #fff;/);
+  assert.doesNotMatch(styles, /background-attachment: fixed/);
   assert.match(styles, /@media print \{/);
   assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
 });
