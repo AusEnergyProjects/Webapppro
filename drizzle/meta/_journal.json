@@ -36,6 +36,13 @@
       "when": 1784012742213,
       "tag": "0004_mixed_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784015219979,
+      "tag": "0005_yielding_gideon",
+      "breakpoints": true
     }
   ]
 }

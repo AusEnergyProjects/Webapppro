@@ -4,10 +4,17 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
-const verification = read("../src/components/DirectTradeVerificationCentre.tsx");
+const supplierCatalogue = read(
+  "../src/components/SupplierCatalogueWorkspace.tsx",
+);
+const verification = read(
+  "../src/components/DirectTradeVerificationCentre.tsx",
+);
 const membership = read("../src/app/direct-trade/membership/page.tsx");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
-const verificationRoute = read("../src/app/api/trade-verification/documents/route.ts");
+const verificationRoute = read(
+  "../src/app/api/trade-verification/documents/route.ts",
+);
 const schema = read("../db/schema.ts");
 const hosting = read("../.openai/hosting.json");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
@@ -23,7 +30,14 @@ test("dashboard availability and email preferences are durable and owner protect
   assert.match(profileRoute, /\["open", "limited", "paused"\]/);
   assert.match(profileRoute, /WHERE firebase_uid = \?/);
   assert.match(dashboard, /Save dashboard preferences/);
-  assert.match(dashboard, /Matching remains inactive until verification and paid membership launch/);
+  assert.match(
+    dashboard,
+    /Future allocation will use the service-base postcode, radius, verified capability and recent opportunity load/,
+  );
+  assert.match(
+    supplierCatalogue,
+    /Wholesaler accounts never receive or view household opportunities/,
+  );
 });
 
 test("verification centre changes private evidence workflow by business role", () => {
@@ -36,7 +50,10 @@ test("verification centre changes private evidence workflow by business role", (
   assert.match(verification, /accept="application\/pdf,image\/jpeg,image\/png/);
   assert.match(verification, /Store document privately/);
   assert.match(verification, /No public file links/);
-  assert.match(verification, /Keep personal identity records out unless requested/);
+  assert.match(
+    verification,
+    /Keep personal identity records out unless requested/,
+  );
 });
 
 test("verification evidence is private, bounded and owner protected", () => {
@@ -51,7 +68,10 @@ test("verification evidence is private, bounded and owner protected", () => {
   assert.match(verificationRoute, /sameOrigin/);
   assert.match(verificationRoute, /WHERE id = \? AND firebase_uid = \?/);
   assert.match(verificationRoute, /WHERE firebase_uid = \?/);
-  assert.match(verificationRoute, /verification\/\$\{identity\.uid\}\/\$\{crypto\.randomUUID\(\)\}/);
+  assert.match(
+    verificationRoute,
+    /verification\/\$\{identity\.uid\}\/\$\{crypto\.randomUUID\(\)\}/,
+  );
   assert.match(verificationRoute, /Cache-Control": "private, no-store"/);
   assert.doesNotMatch(verificationRoute, /publicUrl|signedUrl/);
 });
@@ -65,8 +85,14 @@ test("membership page presents all approved prices and no per-lead model", () =>
   assert.match(membership, /All prices include GST/);
   assert.match(membership, /One subscription, no per-lead fees/);
   assert.match(membership, /Stripe is not connected/);
-  assert.match(membership, /both businesses receive one month of membership credit/);
-  assert.match(membership, /Self-referrals and duplicate businesses are excluded/);
+  assert.match(
+    membership,
+    /both businesses receive one month of membership credit/,
+  );
+  assert.match(
+    membership,
+    /Self-referrals and duplicate businesses are excluded/,
+  );
 });
 
 test("membership and verification routes are connected across the account journey", () => {

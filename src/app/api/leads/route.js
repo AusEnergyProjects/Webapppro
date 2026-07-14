@@ -2,6 +2,7 @@ import { validateLeadPayload } from "@/lib/lead-validation.mjs";
 import { createLeadEnvelope } from "@/lib/lead-envelope.mjs";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
+import { createOpportunityFromLead } from "@/lib/opportunity-server";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,9 @@ export async function POST(request) {
     });
     const acknowledgement = await response.text();
     if (!response.ok || acknowledgement.trim() !== "ok") throw new Error("Lead processor did not acknowledge delivery.");
+    if (payload.eventType === "direct_trade.project") {
+      await createOpportunityFromLead(payload).catch(() => null);
+    }
     return respond({ ok: true, reference: payload.reference }, 200, "delivered", metrics);
   } catch (error) {
     return respond(

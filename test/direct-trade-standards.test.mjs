@@ -10,20 +10,38 @@ const partners = read("../src/components/DirectTradePartnerForm.tsx");
 
 test("Direct Trade standards are connected to every marketplace entry journey", () => {
   assert.match(homepage, /href="\/direct-trade\/standards">Read the marketplace standards/);
-  assert.match(household, /href="\/direct-trade\/standards">See how matching, verification and quotes work/);
+  assert.match(
+    household,
+    /href="\/direct-trade\/standards"[\s\S]*See how matching, verification and quotes work/,
+  );
   assert.match(partners, /href="\/direct-trade\/standards">Read the marketplace and customer standards/);
 });
 
 test("standards separate membership from licensing and scheme approval", () => {
   assert.match(standards, /Direct Trade membership does not replace it/);
-  assert.match(standards, /legal, licensing, safety, scheme and consumer obligation/);
-  assert.match(standards, /marketplace standards do not replace Australian Consumer Law, trade licensing, safety rules, scheme requirements/);
+  assert.match(
+    standards,
+    /legal, licensing, safety, scheme and\s+consumer obligation/,
+  );
+  assert.match(
+    standards,
+    /marketplace standards do not replace Australian Consumer Law,\s+trade licensing, safety rules, scheme requirements/,
+  );
 });
 
 test("matching and funding rules do not permit paid ranking claims", () => {
-  assert.match(standards, /subscription does not buy higher placement, exclusivity or a guaranteed volume of opportunities/);
-  assert.match(standards, /will not replace verification, purchase a favourable ranking or create a separate charge for each opportunity/);
-  assert.match(standards, /Location, work type, verified capability, service coverage and availability guide a connection/);
+  assert.match(
+    standards,
+    /subscription does not buy higher placement, exclusivity or\s+guaranteed work/,
+  );
+  assert.match(
+    standards,
+    /will not replace\s+verification, purchase a favourable ranking or create a separate\s+charge for each opportunity/,
+  );
+  assert.match(
+    standards,
+    /Postcode distance, the installer service radius, capability, verification, availability and recent allocation load guide the selection/,
+  );
 });
 
 test("standards cover quote evidence, customer choice and participant review", () => {

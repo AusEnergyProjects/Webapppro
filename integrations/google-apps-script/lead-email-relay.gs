@@ -541,17 +541,17 @@ function projectRows_(payload) {
     ["Triage status", triageStatusLabel_(triage.status)],
     ["Review priority", triagePriorityLabel_(triage.priority)],
     ["Review flags", listLabels_(triage.reviewFlags, triageFlagLabel_)],
-    ["Automatic distribution", triage.autoSend === false ? "Off. Manual approval required." : "Not specified"],
+    ["Privacy-safe allocation", triage.autoSend === false ? "Held for authority review." : "On. Up to six eligible installers; contact details remain withheld."],
   ]);
 }
 
 function triageStatusLabel_(value) {
-  const labels = { manual_matching_review: "Ready for manual matching review", hold_for_authority_review: "Hold until property authority is reviewed" };
+  const labels = { automatic_privacy_safe_allocation: "Privacy-safe installer allocation active", hold_for_authority_review: "Hold until property authority is reviewed" };
   return labels[value] || value;
 }
 
 function triagePriorityLabel_(value) {
-  const labels = { urgent_manual_review: "Urgent manual review", quote_ready_review: "Quote-ready review", standard_review: "Standard review" };
+  const labels = { urgent_allocation_review: "Urgent allocation oversight", quote_ready_allocation: "Quote-ready allocation", standard_allocation: "Standard allocation" };
   return labels[value] || value;
 }
 

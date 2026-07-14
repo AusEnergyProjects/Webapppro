@@ -24,7 +24,10 @@ test("project brief uses the same-origin consented lead route", () => {
   assert.match(brief, /fetch\("\/api\/leads"/);
   assert.match(brief, /submissionType: "upgrade"/);
   assert.match(brief, /enquiry: "direct-trade-project"/);
-  assert.match(brief, /Respond to this Direct Trade household project brief/);
+  assert.match(
+    brief,
+    /Respond to this Direct Trade brief and apply the disclosed six-installer/,
+  );
   assert.match(brief, /projectCategories: selectedServices/);
   assert.match(brief, /Do not include your street address, NMI, meter file, energy bill/);
   assert.doesNotMatch(brief, /script\.google\.com|mode: "no-cors"/);
@@ -72,6 +75,9 @@ test("project briefs capture structured matching priorities and show a review su
 
 test("comparison handoffs prefill only safe project choices", () => {
   assert.match(brief, /parseDirectTradeHandoff/);
-  assert.match(brief, /Your usage, meter file, NMI, bill dates, plan results, scenario costs, savings, contact details and adjustment reasons were not placed in this URL/);
+  assert.match(
+    brief,
+    /Your usage, meter file, NMI, bill dates, plan results, scenario\s+costs, savings, contact details and adjustment reasons were not\s+placed in this URL/,
+  );
   assert.match(brief, /projectSource: handoff\.source/);
 });

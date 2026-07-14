@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminError, adminJson, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
+import { expireStaleOpportunities } from "@/lib/opportunity-server";
 
 export const runtime = "edge";
 
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
   try {
     const admin = await requireAdminIdentity(request);
     const db = getD1();
-    const [accounts, opportunities, matches, verification, audit] = await Promise.all([
+    await expireStaleOpportunities();
+    const [accounts, opportunities, matches, verification, products, audit] = await Promise.all([
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
         SUM(CASE WHEN account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
@@ -32,12 +34,17 @@ export async function GET(request: Request) {
         FROM trade_opportunities`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN status = 'offered' THEN 1 ELSE 0 END) offered,
-        SUM(CASE WHEN status = 'interested' THEN 1 ELSE 0 END) interested
+        SUM(CASE WHEN status = 'interested' THEN 1 ELSE 0 END) interested,
+        SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) connected
         FROM trade_opportunity_matches`).first<Record<string, number>>(),
       db.prepare(`SELECT
         SUM(CASE WHEN verification_status IN ('submitted', 'under_review') THEN 1 ELSE 0 END) awaiting,
         SUM(CASE WHEN verification_status = 'approved' THEN 1 ELSE 0 END) approved
         FROM trade_accounts`).first<Record<string, number>>(),
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live
+        FROM supplier_products`).first<Record<string, number>>(),
       db.prepare(`SELECT l.id, l.action, l.entity_type, l.entity_id, l.summary, l.created_at,
         COALESCE(a.display_name, a.email, 'Former administrator') administrator
         FROM admin_audit_log l LEFT JOIN admin_users a ON a.firebase_uid = l.admin_uid
@@ -46,7 +53,7 @@ export async function GET(request: Request) {
     return adminJson({
       ok: true,
       admin: { email: admin.email, displayName: admin.displayName, role: admin.role },
-      metrics: { accounts, opportunities, matches, verification },
+      metrics: { accounts, opportunities, matches, verification, products },
       audit: audit.results,
     });
   } catch (error) {

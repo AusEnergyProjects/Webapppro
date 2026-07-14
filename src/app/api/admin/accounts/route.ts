@@ -30,6 +30,8 @@ function shapeAccount(row: Record<string, unknown>) {
     planKey: row.plan_key,
     billingStatus: row.billing_status,
     availabilityStatus: row.availability_status,
+    serviceBasePostcode: row.service_base_postcode || row.postcode,
+    serviceRadiusKm: Number(row.service_radius_km || 50),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -76,7 +78,7 @@ export async function GET(request: Request) {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const statement = db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
-      plan_key, billing_status, availability_status, created_at, updated_at
+      plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, created_at, updated_at
       FROM trade_accounts ${where} ORDER BY updated_at DESC LIMIT 100`);
     const rows = bindings.length ? await statement.bind(...bindings).all<Record<string, unknown>>() : await statement.all<Record<string, unknown>>();
     return adminJson({ ok: true, accounts: rows.results.map(shapeAccount) });
@@ -129,4 +131,3 @@ export async function PATCH(request: Request) {
     return adminError(error);
   }
 }
-

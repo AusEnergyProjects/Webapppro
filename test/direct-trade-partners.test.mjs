@@ -52,9 +52,15 @@ test("the starter dashboard separates membership from opportunity matching", () 
   assert.match(dashboardPage, /DirectTradeDashboard/);
   assert.match(dashboard, /No opportunities assigned/);
   assert.match(dashboard, /No per-lead purchase or bidding is required/);
-  assert.match(dashboard, /Billing is not active and no payment details are being collected yet/);
+  assert.match(
+    dashboard,
+    /Billing is not active and no payment\s+details are being collected\s+yet/,
+  );
   assert.match(dashboard, /including GST/);
-  assert.match(dashboard, /both businesses receive one month of membership credit/);
+  assert.match(
+    dashboard,
+    /both businesses\s+receive one\s+month of membership credit/,
+  );
   assert.match(dashboard, /partnerType === "supplier"/);
 });
 

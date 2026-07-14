@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { postcodeCoordinate } from "@/lib/postcode-distance";
 
 export const runtime = "edge";
 
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
            contact_name, phone, partner_type, business_website,
            service_states, capabilities, summary, account_status,
            verification_status, plan_key, billing_status, availability_status,
+           service_base_postcode, service_radius_km,
            email_opportunities, email_weekly_summary, settings_updated_at
     FROM trade_accounts
     WHERE firebase_uid = ?
@@ -95,6 +97,8 @@ export async function GET(request: Request) {
       planKey: record.plan_key,
       billingStatus: record.billing_status,
       availabilityStatus: record.availability_status,
+      serviceBasePostcode: record.service_base_postcode || record.postcode,
+      serviceRadiusKm: Number(record.service_radius_km || 50),
       emailOpportunities: Boolean(record.email_opportunities),
       emailWeeklySummary: Boolean(record.email_weekly_summary),
       settingsUpdatedAt: record.settings_updated_at,
@@ -104,6 +108,8 @@ export async function GET(request: Request) {
 
 type SettingsPayload = {
   availabilityStatus?: unknown;
+  serviceBasePostcode?: unknown;
+  serviceRadiusKm?: unknown;
   emailOpportunities?: unknown;
   emailWeeklySummary?: unknown;
 };
@@ -128,14 +134,30 @@ export async function PATCH(request: Request) {
     return json({ ok: false, error: "Choose valid email preferences." }, 400);
   }
 
+  const account = await getD1().prepare("SELECT partner_type, postcode, service_base_postcode, service_radius_km FROM trade_accounts WHERE firebase_uid = ?")
+    .bind(identity.uid).first<Record<string, unknown>>();
+  if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
+  const requestedBase = cleanText(raw.serviceBasePostcode, 4);
+  const requestedRadius = Number(raw.serviceRadiusKm);
+  const serviceBasePostcode = account.partner_type === "installer" ? (requestedBase || String(account.service_base_postcode || account.postcode)) : String(account.service_base_postcode || account.postcode);
+  const serviceRadiusKm = account.partner_type === "installer" ? requestedRadius : Number(account.service_radius_km || 50);
+  if (account.partner_type === "installer" && (!/^\d{4}$/.test(serviceBasePostcode) || !postcodeCoordinate(serviceBasePostcode))) {
+    return json({ ok: false, error: "Enter a recognised Australian service-base postcode." }, 400);
+  }
+  if (account.partner_type === "installer" && (!Number.isInteger(serviceRadiusKm) || serviceRadiusKm < 10 || serviceRadiusKm > 1000)) {
+    return json({ ok: false, error: "Choose a service radius from 10 to 1,000 kilometres." }, 400);
+  }
+
   const now = new Date().toISOString();
   const result = await getD1().prepare(`
     UPDATE trade_accounts
-    SET availability_status = ?, email_opportunities = ?, email_weekly_summary = ?,
+    SET availability_status = ?, service_base_postcode = ?, service_radius_km = ?, email_opportunities = ?, email_weekly_summary = ?,
         settings_updated_at = ?, updated_at = ?
     WHERE firebase_uid = ?
   `).bind(
     availabilityStatus,
+    serviceBasePostcode,
+    serviceRadiusKm,
     raw.emailOpportunities ? 1 : 0,
     raw.emailWeeklySummary ? 1 : 0,
     now,
@@ -146,7 +168,7 @@ export async function PATCH(request: Request) {
   if (!result.meta.changes) return json({ ok: false, error: "Complete the business profile first." }, 404);
   return json({
     ok: true,
-    settings: { availabilityStatus, emailOpportunities: raw.emailOpportunities, emailWeeklySummary: raw.emailWeeklySummary, settingsUpdatedAt: now },
+    settings: { availabilityStatus, serviceBasePostcode, serviceRadiusKm, emailOpportunities: raw.emailOpportunities, emailWeeklySummary: raw.emailWeeklySummary, settingsUpdatedAt: now },
   });
 }
 
@@ -193,8 +215,8 @@ export async function POST(request: Request) {
       postcode, contact_name, phone, partner_type,
       business_website, service_states, capabilities, summary, account_status,
       verification_status, plan_key, billing_status, consent_version,
-      consent_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, ?, ?)
+      service_base_postcode, service_radius_km, consent_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, 50, ?, ?, ?)
     ON CONFLICT(firebase_uid) DO UPDATE SET
       email = excluded.email,
       business_name = excluded.business_name,
@@ -228,6 +250,7 @@ export async function POST(request: Request) {
     JSON.stringify(capabilities),
     summary,
     NOTICE_VERSION,
+    postcode,
     now,
     now,
     now,
