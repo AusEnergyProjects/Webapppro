@@ -43,6 +43,7 @@ function projectShape(
   progress: Record<string, unknown> | undefined,
   quotes: Record<string, unknown>[],
   handovers: Record<string, unknown>[],
+  hasRetainedAssetHistory: boolean,
 ) {
   const status = String(row.status);
   const responseCount = Number(progress?.response_count || 0);
@@ -77,6 +78,7 @@ function projectShape(
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    hasRetainedAssetHistory,
     progress: {
       installerCount: Number(progress?.installer_count || 0),
       reviewingCount: Number(progress?.reviewing_count || 0),
@@ -111,6 +113,7 @@ function projectShape(
       assets: handover.assets || [],
       complianceItems: handover.complianceItems || [],
       documents: handover.documents || [],
+      corrections: handover.corrections || [],
     })),
   };
 }
@@ -138,11 +141,17 @@ async function projectsForOwner(firebaseUid: string) {
     quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, submitted_at, updated_at
     FROM customer_project_quotes WHERE project_id IN (${projectIds.map(() => "?").join(",")}) AND status = 'submitted'
     ORDER BY submitted_at, id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const retainedHandoverRows = projectIds.length ? await db.prepare(`SELECT DISTINCT customer_project_id
+    FROM trade_handover_packs WHERE customer_project_id IN (${projectIds.map(() => "?").join(",")})
+      AND status = 'published'`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const handoverRows = projectIds.length ? await db.prepare(`SELECT p.id, p.customer_project_id, p.service_category,
     p.published_at, p.updated_at, w.work_number
     FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
     WHERE p.customer_project_id IN (${projectIds.map(() => "?").join(",")}) AND p.status = 'published'
-    ORDER BY p.published_at DESC`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+      AND (NOT EXISTS (SELECT 1 FROM customer_asset_ownerships history WHERE history.handover_pack_id = p.id)
+        OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
+          WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
+    ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const handoverIds = handoverRows.results.map((row: Record<string, unknown>) => String(row.id));
   const assetRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
     model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
@@ -156,6 +165,11 @@ async function projectsForOwner(firebaseUid: string) {
     content_type, size_bytes, created_at FROM trade_handover_documents
     WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND customer_visible = 1
     ORDER BY created_at DESC`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const correctionRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_id, version_number,
+    field_key, previous_value, proposed_value, reason, published_at
+    FROM trade_handover_corrections WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
+      AND status = 'published' ORDER BY version_number DESC`)
+    .bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const shapedHandovers = handoverRows.results.map((handover: Record<string, unknown>) => ({
     ...handover,
     assets: assetRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
@@ -185,12 +199,23 @@ async function projectsForOwner(firebaseUid: string) {
       sizeBytes: Number(item.size_bytes || 0),
       createdAt: item.created_at,
     })),
+    corrections: correctionRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
+      id: item.id,
+      assetId: item.asset_id,
+      versionNumber: Number(item.version_number),
+      fieldKey: item.field_key,
+      previousValue: item.previous_value,
+      approvedValue: item.proposed_value,
+      reason: item.reason,
+      publishedAt: item.published_at,
+    })),
   }));
   return rows.results.map((row: Record<string, unknown>) => projectShape(
     row,
     progressRows.results.find((progress: Record<string, unknown>) => progress.opportunity_id === row.opportunity_id),
     quoteRows.results.filter((quote: Record<string, unknown>) => quote.project_id === row.id),
     shapedHandovers.filter((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
+    retainedHandoverRows.results.some((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
   ));
 }
 

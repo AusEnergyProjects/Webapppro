@@ -7,6 +7,7 @@ import {
   HANDOVER_DOCUMENT_CATEGORIES,
 } from "@/lib/trade-handover.mjs";
 import { TradeAssetLifecycle } from "@/components/TradeAssetLifecycle";
+import { TradeHandoverCorrections } from "@/components/TradeHandoverCorrections";
 
 type InstalledAsset = {
   id: string;
@@ -302,6 +303,7 @@ export function TradeHandoverCentre({
       </section>
 
       {pack.assets.length > 0 && <TradeAssetLifecycle user={user} workOrderId={workOrderId} assets={pack.assets} />}
+      {pack.status === "published" && pack.assets.length > 0 && <TradeHandoverCorrections user={user} workOrderId={workOrderId} assets={pack.assets} />}
 
       <section className="handover-compliance">
         <header><div><span>Completion checklist</span><h4>Resolve the evidence expected for this work category</h4></div><small>These prompts organise the handover. They do not replace the installer&apos;s legal or scheme obligations.</small></header>

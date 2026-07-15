@@ -127,6 +127,13 @@
       "when": 1784094692878,
       "tag": "0017_brief_timeslip",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1784115821011,
+      "tag": "0018_military_starhawk",
+      "breakpoints": true
     }
   ]
 }

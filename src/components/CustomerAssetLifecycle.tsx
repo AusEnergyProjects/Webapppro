@@ -14,7 +14,7 @@ type Result = { ok?: boolean; assets?: Asset[]; plans?: Plan[]; events?: Event[]
 const serviceLabels = Object.fromEntries(ASSET_SERVICE_TYPES as Array<[string, string]>) as Record<string, string>;
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export function CustomerAssetLifecycle({ user, projectId }: { user: User; projectId: string }) {
+export function CustomerAssetLifecycle({ user, projectId = "", packId = "" }: { user: User; projectId?: string; packId?: string }) {
   const [result, setResult] = useState<Result>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -22,16 +22,17 @@ export function CustomerAssetLifecycle({ user, projectId }: { user: User; projec
 
   const request = useCallback(async (body?: Record<string, unknown>) => {
     const token = await user.getIdToken();
-    const response = await fetch(body ? "/api/customer-asset-lifecycle" : `/api/customer-asset-lifecycle?projectId=${encodeURIComponent(projectId)}`, {
+    const query = packId ? `packId=${encodeURIComponent(packId)}` : `projectId=${encodeURIComponent(projectId)}`;
+    const response = await fetch(body ? "/api/customer-asset-lifecycle" : `/api/customer-asset-lifecycle?${query}`, {
       method: body ? "PATCH" : "GET",
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-      body: body ? JSON.stringify({ ...body, projectId }) : undefined,
+      body: body ? JSON.stringify({ ...body, projectId, packId }) : undefined,
       cache: "no-store",
     });
     const payload = await response.json().catch(() => ({})) as Result;
     if (!response.ok || payload.ok === false) throw new Error(payload.error || "Your asset lifecycle library could not be loaded.");
     setResult(payload);
-  }, [projectId, user]);
+  }, [packId, projectId, user]);
 
   useEffect(() => {
     let active = true;

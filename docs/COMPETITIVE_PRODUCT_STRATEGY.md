@@ -182,11 +182,20 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - Administrator-sourced product safety notices using category, brand or model matching.
 - Private customer acknowledgement records and audited publication or withdrawal.
 
-### Next release: private ownership and record corrections
+### Delivered release: private ownership and record corrections
 
-- Asset ownership transfer between private household accounts with explicit approval.
-- Versioned handover corrections without removing a previously approved record.
+- Private asset ownership transfer using expiring one-time codes stored only as secure hashes.
+- Separate current and receiving household consent followed by administrator approval.
+- Immediate removal of the former household's live documents and lifecycle access after an approved transfer.
+- Immutable transfer events without exposing one household's identity to the other.
+- Versioned one-field handover corrections with administrator review and conflict protection.
+- Customer-visible correction history that retains every previously approved value.
+
+### Next release: product identity and Google-first safeguards
+
+- Product identifier normalization for serial, batch and warranty references.
 - Serial-range and batch-aware product notice matching after supplier identifier quality improves.
+- Consented Google Workspace schedule and document integration with strict business-only destinations.
 
 ### Following release: Google-first business integrations
 
@@ -206,7 +215,7 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 
 ## Recommended decision
 
-Continue with explicit private asset ownership transfer, versioned handover corrections and consented Google Workspace integrations before rate cards or accounting. The installed asset, reviewed handover and lifecycle foundation now creates the structured information needed for safe transfers and future quoting controls.
+Continue with product identifier normalization and consented Google Workspace integrations before rate cards or accounting. The private ownership and correction layer now gives the platform a durable asset passport, while better supplier identifiers are the next prerequisite for targeted safety notices, warranty support and future quoting controls.
 
 ## Further questions
 

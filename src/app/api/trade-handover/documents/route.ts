@@ -4,6 +4,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { HANDOVER_DOCUMENT_CATEGORIES } from "@/lib/trade-handover.mjs";
 import { requireAdminIdentity, writeAdminAudit } from "@/lib/admin-server";
+import { canCustomerAccessHandover } from "@/lib/customer-asset-ownership-server";
 
 export const runtime = "edge";
 
@@ -26,8 +27,8 @@ type DocumentAccessRecord = {
   object_key: string;
   customer_visible: number;
   pack_status: string;
+  handover_pack_id: string;
   owner_uid: string;
-  customer_uid: string | null;
 };
 
 function json(body: object, status = 200) {
@@ -74,14 +75,14 @@ export async function GET(request: Request) {
   const documentId = new URL(request.url).searchParams.get("download") || "";
   if (!documentId) return json({ ok: false, error: "Choose a handover document." }, 400);
   const record = await getD1().prepare(`SELECT d.id, d.file_name, d.content_type, d.object_key,
-    d.customer_visible, p.status pack_status, p.firebase_uid owner_uid, c.firebase_uid customer_uid
+    d.customer_visible, p.status pack_status, p.id handover_pack_id, p.firebase_uid owner_uid
     FROM trade_handover_documents d
     JOIN trade_handover_packs p ON p.id = d.handover_pack_id
-    LEFT JOIN customer_projects c ON c.id = p.customer_project_id
     WHERE d.id = ?`).bind(documentId).first<DocumentAccessRecord>();
   if (!record) return json({ ok: false, error: "Handover document not found." }, 404);
   const ownerAccess = record.owner_uid === identity.uid;
-  const customerAccess = record.customer_uid === identity.uid && record.pack_status === "published" && Boolean(record.customer_visible);
+  const customerAccess = record.pack_status === "published" && Boolean(record.customer_visible)
+    && await canCustomerAccessHandover(identity.uid, record.handover_pack_id);
   let adminAccess = false;
   if (!ownerAccess && !customerAccess) {
     try {

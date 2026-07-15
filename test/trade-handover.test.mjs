@@ -77,7 +77,7 @@ test("trade handover actions are authenticated, same-origin, installer-only, own
 test("protected documents use R2 and customers can download only published visible records they own", () => {
   assert.match(documentRoute, /EVIDENCE/);
   assert.match(documentRoute, /handovers\/\$\{identity\.uid\}/);
-  assert.match(documentRoute, /record\.customer_uid === identity\.uid/);
+  assert.match(documentRoute, /canCustomerAccessHandover\(identity\.uid, record\.handover_pack_id\)/);
   assert.match(documentRoute, /record\.pack_status === "published"/);
   assert.match(documentRoute, /Boolean\(record\.customer_visible\)/);
   assert.match(documentRoute, /requireAdminIdentity/);

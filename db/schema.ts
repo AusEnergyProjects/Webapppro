@@ -478,6 +478,86 @@ export const assetSafetyAcknowledgements = sqliteTable("asset_safety_acknowledge
   index("asset_safety_acknowledgements_owner_idx").on(table.customerUid, table.updatedAt),
 ]);
 
+export const customerAssetOwnerships = sqliteTable("customer_asset_ownerships", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  activeKey: text("active_key"),
+  status: text("status").notNull().default("active"),
+  sourceType: text("source_type").notNull().default("original"),
+  transferId: text("transfer_id").notNull().default(""),
+  startedAt: text("started_at").notNull(),
+  endedAt: text("ended_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_asset_ownerships_active_key_idx").on(table.activeKey),
+  index("customer_asset_ownerships_owner_idx").on(table.customerUid, table.status, table.updatedAt),
+  index("customer_asset_ownerships_pack_idx").on(table.handoverPackId, table.startedAt),
+]);
+
+export const customerAssetTransferRequests = sqliteTable("customer_asset_transfer_requests", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  fromCustomerUid: text("from_customer_uid").notNull(),
+  toCustomerUid: text("to_customer_uid").notNull().default(""),
+  claimCodeHash: text("claim_code_hash").notNull(),
+  status: text("status").notNull().default("awaiting_recipient"),
+  senderConsentAt: text("sender_consent_at").notNull(),
+  recipientConsentAt: text("recipient_consent_at").notNull().default(""),
+  expiresAt: text("expires_at").notNull(),
+  reviewNote: text("review_note").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_asset_transfer_requests_code_idx").on(table.claimCodeHash),
+  index("customer_asset_transfer_requests_pack_idx").on(table.handoverPackId, table.status, table.updatedAt),
+  index("customer_asset_transfer_requests_sender_idx").on(table.fromCustomerUid, table.status, table.updatedAt),
+  index("customer_asset_transfer_requests_recipient_idx").on(table.toCustomerUid, table.status, table.updatedAt),
+  index("customer_asset_transfer_requests_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const customerAssetTransferEvents = sqliteTable("customer_asset_transfer_events", {
+  id: text("id").primaryKey(),
+  transferId: text("transfer_id").notNull(),
+  eventType: text("event_type").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull().default(""),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("customer_asset_transfer_events_transfer_idx").on(table.transferId, table.createdAt),
+  index("customer_asset_transfer_events_actor_idx").on(table.actorUid, table.createdAt),
+]);
+
+export const tradeHandoverCorrections = sqliteTable("trade_handover_corrections", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  assetId: text("asset_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  fieldKey: text("field_key").notNull(),
+  previousValue: text("previous_value").notNull().default(""),
+  proposedValue: text("proposed_value").notNull().default(""),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("submitted"),
+  submittedAt: text("submitted_at").notNull(),
+  publishedAt: text("published_at").notNull().default(""),
+  reviewNote: text("review_note").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_handover_corrections_pack_version_idx").on(table.handoverPackId, table.versionNumber),
+  index("trade_handover_corrections_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_handover_corrections_pack_idx").on(table.handoverPackId, table.status, table.versionNumber),
+  index("trade_handover_corrections_asset_idx").on(table.assetId, table.versionNumber),
+]);
+
 export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

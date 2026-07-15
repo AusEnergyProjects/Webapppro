@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { lifecycleStatus, safetyNoticeMatchesAsset } from "@/lib/asset-lifecycle.mjs";
+import { canCustomerAccessHandover } from "@/lib/customer-asset-ownership-server";
 
 export const runtime = "edge";
 
@@ -40,8 +41,17 @@ function customerError(error: unknown) {
   return json({ ok: false, error: "The private asset lifecycle record could not be completed." }, 500);
 }
 
-async function ownedPublishedAssets(customerUid: string, projectId: string) {
+async function ownedPublishedAssets(customerUid: string, projectId: string, packId: string) {
   const db = getD1();
+  if (packId) {
+    if (!await canCustomerAccessHandover(customerUid, packId)) throw new Error("ASSET_NOT_FOUND");
+    return db.prepare(`SELECT a.id, a.handover_pack_id, a.asset_category, a.brand, a.model_number, a.serial_number,
+      a.installed_at, a.warranty_end, p.service_category, w.work_number
+      FROM trade_installed_assets a JOIN trade_handover_packs p ON p.id = a.handover_pack_id
+      JOIN trade_work_orders w ON w.id = p.work_order_id
+      WHERE p.id = ? AND p.status = 'published' AND a.record_status = 'active'
+      ORDER BY a.created_at`).bind(packId).all<Record<string, unknown>>();
+  }
   const project = await db.prepare("SELECT id FROM customer_projects WHERE id = ? AND firebase_uid = ?")
     .bind(projectId, customerUid).first();
   if (!project) throw new Error("PROJECT_NOT_FOUND");
@@ -50,12 +60,15 @@ async function ownedPublishedAssets(customerUid: string, projectId: string) {
     FROM trade_installed_assets a JOIN trade_handover_packs p ON p.id = a.handover_pack_id
     JOIN trade_work_orders w ON w.id = p.work_order_id
     WHERE p.customer_project_id = ? AND p.status = 'published' AND a.record_status = 'active'
-    ORDER BY a.created_at`).bind(projectId).all<Record<string, unknown>>();
+      AND (NOT EXISTS (SELECT 1 FROM customer_asset_ownerships history WHERE history.handover_pack_id = p.id)
+        OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
+          WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
+    ORDER BY a.created_at`).bind(projectId, customerUid).all<Record<string, unknown>>();
 }
 
-async function payload(customerUid: string, projectId: string) {
+async function payload(customerUid: string, projectId: string, packId: string) {
   const db = getD1();
-  const assetRows = await ownedPublishedAssets(customerUid, projectId);
+  const assetRows = await ownedPublishedAssets(customerUid, projectId, packId);
   const assets: CustomerLifecycleAsset[] = assetRows.results.map((row: Record<string, unknown>): CustomerLifecycleAsset => ({
     id: String(row.id), handoverPackId: String(row.handover_pack_id), assetCategory: String(row.asset_category),
     brand: String(row.brand), modelNumber: String(row.model_number), serialNumber: String(row.serial_number || ""),
@@ -111,8 +124,10 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await customerIdentity(request);
-    const projectId = cleanAdminText(new URL(request.url).searchParams.get("projectId"), 180);
-    return json({ ok: true, ...(await payload(identity.uid, projectId)) });
+    const url = new URL(request.url);
+    const projectId = cleanAdminText(url.searchParams.get("projectId"), 180);
+    const packId = cleanAdminText(url.searchParams.get("packId"), 180);
+    return json({ ok: true, ...(await payload(identity.uid, projectId, packId)) });
   } catch (error) { return customerError(error); }
 }
 
@@ -122,9 +137,10 @@ export async function PATCH(request: Request) {
     const identity = await customerIdentity(request);
     const body = await request.json() as Record<string, unknown>;
     const projectId = cleanAdminText(body.projectId, 180);
+    const packId = cleanAdminText(body.packId, 180);
     const action = cleanAdminText(body.action, 40);
     const assetId = cleanAdminText(body.assetId, 180);
-    const assets = await ownedPublishedAssets(identity.uid, projectId);
+    const assets = await ownedPublishedAssets(identity.uid, projectId, packId);
     const assetRow = assets.results.find((row: Record<string, unknown>) => row.id === assetId);
     if (!assetRow) throw new Error("ASSET_NOT_FOUND");
     const db = getD1();
@@ -139,7 +155,7 @@ export async function PATCH(request: Request) {
         ON CONFLICT(customer_uid, asset_id) DO UPDATE SET reminders_enabled = excluded.reminders_enabled,
           reminder_lead_days = excluded.reminder_lead_days, updated_at = excluded.updated_at`)
         .bind(crypto.randomUUID(), identity.uid, assetId, enabled ? 1 : 0, leadDays, now, now).run();
-      return json({ ok: true, ...(await payload(identity.uid, projectId)) });
+      return json({ ok: true, ...(await payload(identity.uid, projectId, packId)) });
     }
     if (action !== "acknowledge_notice") return json({ ok: false, error: "Unsupported lifecycle preference action." }, 400);
     const noticeId = cleanAdminText(body.noticeId, 180);
@@ -154,7 +170,7 @@ export async function PATCH(request: Request) {
       ON CONFLICT(customer_uid, notice_id, asset_id) DO UPDATE SET status = 'acknowledged',
         acknowledged_at = excluded.acknowledged_at, updated_at = excluded.updated_at`)
       .bind(crypto.randomUUID(), noticeId, assetId, identity.uid, now, now).run();
-    return json({ ok: true, ...(await payload(identity.uid, projectId)) });
+    return json({ ok: true, ...(await payload(identity.uid, projectId, packId)) });
   } catch (error) {
     if (error instanceof SyntaxError) return json({ ok: false, error: "Invalid lifecycle preference request." }, 400);
     return customerError(error);
