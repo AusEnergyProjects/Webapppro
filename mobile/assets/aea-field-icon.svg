@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="224" fill="#063a31"/>
+  <path d="M195 540c0-174 142-316 317-316s317 142 317 316v34H195v-34Z" fill="#f7f5ef"/>
+  <path d="M459 155h106c28 0 51 23 51 51v61H408v-61c0-28 23-51 51-51Z" fill="#07966f"/>
+  <rect x="154" y="548" width="716" height="110" rx="55" fill="#f7f5ef"/>
+  <path d="m410 674 78 78 152-170" fill="none" stroke="#e7a61a" stroke-width="65" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="512" y="895" fill="#f7f5ef" font-family="Arial, sans-serif" font-size="126" font-weight="800" text-anchor="middle" letter-spacing="14">AEA</text>
+</svg>

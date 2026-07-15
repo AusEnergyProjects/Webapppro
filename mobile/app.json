@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "AEA Field",
+    "slug": "aea-field",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "aeafield",
+    "userInterfaceStyle": "light",
+    "description": "Secure offline field service for Australian Energy Assessments installer teams.",
+    "ios": {
+      "bundleIdentifier": "au.com.australianenergyassessments.field",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIFileSharingEnabled": false,
+        "LSSupportsOpeningDocumentsInPlace": false
+      }
+    },
+    "android": {
+      "package": "au.com.australianenergyassessments.field",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#063a31",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "allowBackup": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#063a31",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true,
+          "enableFTS": true
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false,
+          "faceIDPermission": "Allow AEA Field to unlock protected offline work."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow AEA Field to attach job photos.",
+          "cameraPermission": "Allow AEA Field to photograph job progress and evidence.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker",
+      "expo-notifications",
+      "expo-background-task"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

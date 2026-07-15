@@ -65,4 +65,11 @@ If the object was assembled but the final database response was interrupted, a r
 
 ## Native application build layer
 
-The server foundation is ready for the native application shells. The next implementation should build the iOS and Android clients around an encrypted local database, background sync scheduler, camera and document capture, upload queue, conflict review screen and the device-registration flow defined here.
+The `mobile/` workspace now implements the iOS and Android field client on Expo SDK 57 and React Native 0.86. It uses a custom development build because SQLCipher is enabled through native configuration.
+
+- Job, action, conflict and upload metadata is held in SQLCipher.
+- Photos and documents are divided into 5 MB AES-256-GCM encrypted chunks. The file key remains in the platform secure store and only one decrypted chunk is held in memory during upload.
+- Bootstrap, delta pages, action replay, tombstones, resumable uploads, app-version enforcement and remote revocation use contract version 2.
+- Sync runs when the app opens, reception returns, a private push notification is opened, the user requests it or the operating system grants a background window.
+- The technician interface is limited to assigned work, job stage, checklists, time and evidence. Device registration, sync state and actionable conflicts are visible without exposing the underlying complexity during normal work.
+- Native store credentials, Firebase mobile configuration files and platform OAuth client IDs remain release prerequisites and must not enter source control.

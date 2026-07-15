@@ -125,4 +125,8 @@ Progress as at 16 July 2026:
 - Assigned-job changes now create data-free push outbox events. Notification payloads contain only an opaque job reference and an instruction to perform an authorised sync.
 - Field photos and PDFs now use idempotent 24-hour multipart upload sessions with resumable 5 MB parts, a 50 MB limit, completion recovery and CRM revision updates after assembly.
 - Interrupted queued actions now use processing leases, safe retry responses and durable completion receipts so a network failure cannot leave the mobile queue permanently blocked.
-- The remaining Phase 5 work is the native iOS and Android client application layer using the completed version 2 contract.
+- A native Expo SDK 57 field app now implements the version 2 contract for iOS and Android. Its focused technician experience covers assigned work, system job IDs, job stages, checklists, time, camera and document evidence, sync status, conflicts and account security.
+- Field metadata is encrypted with SQLCipher. Photos and documents are split into authenticated AES-256-GCM chunks with a secure-store key, then decrypted one part at a time for resumable upload.
+- Native devices now bootstrap, process deltas and tombstones, replay offline actions, recover uploads, register native push tokens, sync after reconnection and use operating-system background windows without exposing protected household information.
+- Remote revocation and sign-out purge the encrypted database, queued evidence, address cache and encryption key. Direct customer addresses expire from the offline cache after 24 hours.
+- Phase 5 implementation is ready for physical-device acceptance testing. Store distribution still requires the business Apple and Google developer accounts, Firebase mobile configuration files, native Google OAuth client IDs and APNs or FCM release credentials.
