@@ -304,7 +304,7 @@ export async function PATCH(request: Request) {
         JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
         project.timing, project.budgetRange, project.privateNotes, JSON.stringify(project.planSnapshot), now, id, user.uid).run();
   } else if (action === "submit") {
-    if (!user.emailVerified) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
+    if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
     const stored = {
       ...current,

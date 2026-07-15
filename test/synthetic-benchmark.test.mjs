@@ -39,6 +39,7 @@ test("the benchmark uses the production customer-project path and six installer 
   assert.match(ecosystemRepair, /6 - existing_count/);
   assert.match(customerProjects, /COALESCE\(is_synthetic, 0\) is_synthetic/);
   assert.match(customerProjects, /created_by_uid, is_synthetic, created_at/);
+  assert.match(customerProjects, /!user\.emailVerified && !Boolean\(current\.is_synthetic\)/);
   assert.match(supplierProducts, /review_note, is_synthetic, created_at/);
   assert.match(supplierProducts, /identity\.isSynthetic/);
 });
