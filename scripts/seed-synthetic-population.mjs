@@ -93,7 +93,7 @@ async function mapLimit(items, limit, task) {
         try { output[index] = await task(items[index], index); break; }
         catch (error) {
           attempt += 1;
-          if (attempt >= 5 || !/TOO_MANY_ATTEMPTS|QUOTA|UNAVAILABLE|INTERNAL/i.test(String(error))) throw error;
+          if (attempt >= 8 || !/TOO_MANY_ATTEMPTS|QUOTA|UNAVAILABLE|INTERNAL|broker|provider|paused|fetch failed/i.test(String(error))) throw error;
           await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
         }
       }
@@ -304,7 +304,7 @@ async function main() {
   fs.writeFileSync(checkpointPath, JSON.stringify(drafts, null, 2), { mode: 0o600 });
   let completed = drafts.filter((record) => record.firebaseUid);
   const pending = drafts.filter((record) => !record.firebaseUid);
-  const created = await mapLimit(pending, 4, async (record) => {
+  const created = await mapLimit(pending, brokerUrl ? 2 : 4, async (record) => {
     const result = await createAccount(record);
     const index = drafts.findIndex((draft) => draft.email === record.email);
     drafts[index] = result;

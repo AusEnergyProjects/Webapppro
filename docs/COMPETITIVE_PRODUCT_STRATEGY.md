@@ -221,13 +221,25 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - System-generated job numbers and the existing AEA protected-customer boundary on every generated job.
 - Field app sync summaries for assigned technical forms, ready for offline form editing in the next native release.
 
-### Next release: dispatch, purchasing and native forms
+### Delivered release: purchasing and simplified CRM navigation
+
+- Structured purchase orders created from approved wholesaler responses.
+- System-generated purchase order and warranty claim numbers.
+- Product, quantity, price and warranty snapshots that remain stable after catalogue changes.
+- Installer and wholesaler fulfilment milestones with a durable event history.
+- Warranty claims linked to order items without exposing household identity or addresses.
+- A simplified CRM shell with four primary work areas and advanced tools under More.
+- List and visual pipeline views with predictable filter behaviour.
+- Clearly marked demo records that administrators can include, isolate or exclude.
+
+### Next release: dispatch, imports and native forms
 
 - Offline field-form completion with conflict-safe draft and completion actions.
 - Administrator-published recommended form versions after state and trade review.
 - Calendar-aware dispatch, workload conflicts and crew capacity.
 - Job costing, proposal templates and progress payment schedules after the parked rate-card research is complete.
-- Wholesaler purchase orders, fulfilment milestones and warranty claims.
+- Guided CSV import for existing customers, jobs and products with preview, validation and rollback.
+- Duplicate detection and a field-mapping assistant for businesses leaving another CRM.
 
 ### Later release: enterprise programs and deeper automation
 
@@ -243,13 +255,13 @@ The public BoomPower platform uses generous white space, large lifestyle photogr
 
 ServiceM8 exposes far more operational detail. Its pricing page communicates a broad baseline of jobs, schedules, quotes, invoices, payments, recurring jobs, templates, forms, assets, routes, costing and knowledge features. The comparison is dense and horizontally demanding, which makes discovery harder for a small operator. AEA should group capability around the workday instead of exposing every tool at once.
 
-The AEA signed-in desktop journey now has the right foundation: a calm Today view, separate work areas and a two-panel job view. The phone audit found that eight CRM destinations were previously presented as a horizontally scrolling strip, leaving important destinations easy to miss. The navigation is now a visible four-column, two-row control. Reusable templates also remove repeated data entry without making the new-job form longer.
+The AEA signed-in desktop journey now has the right foundation: a calm My day view, separate work areas and a two-panel job view. The phone audit found that exposing every CRM destination at once made the workspace feel more complex than it needed to be. The navigation now presents My day, Jobs, Schedule and Customers as the primary work areas, with advanced tools grouped under More. Reusable templates remove repeated data entry without making the new-job form longer.
 
 The public access story is now explicit. Customers remain free, installer and wholesaler profiles are free to prepare, unpaid installers receive no household opportunities, unpaid wholesaler products remain invisible, and administrator-assigned premium controls are separate from paid membership. This clarity is important because the live AEA memberships bundle marketplace, catalogue and operating tools and therefore should not be marketed as universally cheaper than a standalone CRM.
 
 ## Recommended decision
 
-Build offline field-form completion next, using the versioned form snapshots and sync summaries now in place. In parallel, add wholesaler purchase orders and fulfilment milestones so installer product selections can continue into supply operations without waiting for the parked rate-card assumptions. Complete the external release-account steps for Google OAuth, iOS registration and internal mobile builds.
+Run a structured field usability pilot next, then build the guided import and migration assistant. Existing customer, job and product data is the largest practical barrier for trades leaving Monday CRM, Tradify, ServiceM8 or spreadsheets. In parallel, continue offline field-form completion using the versioned form snapshots and sync summaries now in place. Complete the external release-account steps for Google OAuth, iOS registration and internal mobile builds.
 
 ## Further questions
 

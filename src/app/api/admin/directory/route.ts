@@ -34,6 +34,7 @@ function directoryItem(row: Record<string, unknown>, revealCustomer: boolean) {
     accountStatus: row.account_status,
     verificationStatus: row.verification_status,
     planKey: row.plan_key,
+    isSynthetic: Boolean(row.is_synthetic),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
         }
         const account = await db.prepare(`SELECT firebase_uid, email, display_name, postcode, address_state,
           property_type, household_situation, account_updates, account_status, consent_version, consent_at,
-          created_at, updated_at FROM customer_accounts WHERE firebase_uid = ?`).bind(uid).first<Record<string, unknown>>();
+          is_synthetic, created_at, updated_at FROM customer_accounts WHERE firebase_uid = ?`).bind(uid).first<Record<string, unknown>>();
         if (!account) return adminJson({ ok: false, error: "Customer account not found." }, 404);
         const includePrivateNotes = ["owner", "admin"].includes(admin.role);
         const [projects, quotes, notes] = await Promise.all([
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
             householdSituation: account.household_situation,
             accountUpdates: Boolean(account.account_updates),
             accountStatus: account.account_status,
+            isSynthetic: Boolean(account.is_synthetic),
             consentVersion: account.consent_version,
             consentAt: account.consent_at,
             createdAt: account.created_at,
@@ -140,7 +142,7 @@ export async function GET(request: Request) {
       if (requestedType === "installer" || requestedType === "supplier") {
         const account = await db.prepare(`SELECT firebase_uid, email, business_name, contact_name, phone, partner_type,
           business_website, address_line_1, suburb, address_state, postcode, service_states, capabilities, summary,
-          account_status, verification_status, plan_key, billing_status, availability_status, created_at, updated_at
+          account_status, verification_status, plan_key, billing_status, availability_status, is_synthetic, created_at, updated_at
           FROM trade_accounts WHERE firebase_uid = ? AND partner_type = ?`).bind(uid, requestedType).first<Record<string, unknown>>();
         if (!account) return adminJson({ ok: false, error: "Business account not found." }, 404);
         return adminJson({ ok: true, accountType: requestedType, canEdit: false, impersonationAllowed: false, account: {
@@ -162,6 +164,7 @@ export async function GET(request: Request) {
           planKey: account.plan_key,
           billingStatus: account.billing_status,
           availabilityStatus: account.availability_status,
+          isSynthetic: Boolean(account.is_synthetic),
           createdAt: account.created_at,
           updatedAt: account.updated_at,
         } });
@@ -176,22 +179,25 @@ export async function GET(request: Request) {
 
     const [customers, trades, administrators] = await Promise.all([
       db.prepare(`SELECT firebase_uid, email, display_name name, 'Household profile' secondary, 'customer' account_type,
-        address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, created_at, updated_at
+        address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, is_synthetic, created_at, updated_at
         FROM customer_accounts ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
       db.prepare(`SELECT firebase_uid, email, business_name name, contact_name secondary, partner_type account_type,
-        address_state, postcode, account_status, verification_status, plan_key, created_at, updated_at
+        address_state, postcode, account_status, verification_status, plan_key, is_synthetic, created_at, updated_at
         FROM trade_accounts ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
       db.prepare(`SELECT id firebase_uid, email, COALESCE(NULLIF(display_name, ''), email) name, role secondary,
         'admin' account_type, '' address_state, '' postcode, status account_status, '' verification_status,
-        role plan_key, created_at, updated_at FROM admin_users ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
+        role plan_key, 0 is_synthetic, created_at, updated_at FROM admin_users ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
     ]);
     const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
     const type = cleanAdminText(url.searchParams.get("type"), 30);
     const status = cleanAdminText(url.searchParams.get("status"), 30);
+    const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
     const revealCustomer = ["owner", "admin", "support"].includes(admin.role);
     const all = [...customers.results, ...trades.results, ...administrators.results]
       .filter((row) => !type || row.account_type === type)
       .filter((row) => !status || row.account_status === status)
+      .filter((row) => synthetic !== "only" || Boolean(row.is_synthetic))
+      .filter((row) => synthetic !== "exclude" || !Boolean(row.is_synthetic))
       .filter((row) => !search || row.account_type !== "customer" || revealCustomer)
       .filter((row) => !search || `${row.name} ${row.email} ${row.secondary} ${row.postcode}`.toLowerCase().includes(search))
       .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)));

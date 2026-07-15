@@ -16,6 +16,7 @@ type DirectoryAccount = {
   accountStatus: string;
   verificationStatus: string;
   planKey: string;
+  isSynthetic: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -99,6 +100,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [accountStatus, setAccountStatus] = useState("");
+  const [synthetic, setSynthetic] = useState("");
   const [selected, setSelected] = useState<AccountDetail | null>(null);
   const [note, setNote] = useState("");
   const [status, setStatus] = useState("");
@@ -108,6 +110,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
     if (search.trim()) params.set("search", search.trim());
     if (type) params.set("type", type);
     if (accountStatus) params.set("status", accountStatus);
+    if (synthetic) params.set("synthetic", synthetic);
     try {
       const result = await api(`/api/admin/directory?${params}`);
       const next = (result.accounts || []) as DirectoryAccount[];
@@ -117,7 +120,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The account directory could not be loaded.");
     }
-  }, [accountStatus, api, search, type]);
+  }, [accountStatus, api, search, synthetic, type]);
 
   const openAccount = useCallback(async (accountType: string, uid: string) => {
     setStatus("Opening the audited account record...");
@@ -210,6 +213,11 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
           <option value="suspended">Suspended</option>
           <option value="closed">Closed</option>
         </select>
+        <select aria-label="Test account marker" value={synthetic} onChange={(event) => setSynthetic(event.target.value)}>
+          <option value="">Live and demo accounts</option>
+          <option value="exclude">Live accounts only</option>
+          <option value="only">Demo accounts only</option>
+        </select>
         <button type="submit">Apply filters</button>
       </form>
       <div className="admin-directory-layout">
@@ -220,7 +228,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
             return (
               <button key={account.accountKey} type="button" disabled={restricted} className={selected?.account.firebaseUid === account.firebaseUid ? "selected" : ""}
                 onClick={() => void openAccount(account.accountType, account.firebaseUid)}>
-                <span><strong>{account.name}</strong><small>{account.email || (restricted ? "Private record restricted" : account.secondary)}{account.postcode ? <><br />{account.addressState} {account.postcode}</> : null}</small></span>
+                <span><strong>{account.name}{account.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</strong><small>{account.email || (restricted ? "Private record restricted" : account.secondary)}{account.postcode ? <><br />{account.addressState} {account.postcode}</> : null}</small></span>
                 <span>{accountLabel(account.accountType)}</span>
                 <span className={`admin-pill admin-pill-${account.accountStatus}`}>{readable(account.accountStatus)}</span>
                 <span>{dateTime(account.updatedAt)}</span>

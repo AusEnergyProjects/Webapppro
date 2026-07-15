@@ -24,6 +24,7 @@
 /dist/
 /.netlify/
 /.wrangler/
+/.openai/*.tar.gz
 tailwindcss-*.log
 
 # misc

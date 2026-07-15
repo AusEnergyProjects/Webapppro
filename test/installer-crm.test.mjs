@@ -71,7 +71,7 @@ test("direct customers have full addresses while job IDs are chronological and r
 test("paid installers receive a complete progressive CRM while free accounts keep the foundation", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
-  for (const label of ["Today", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Money", "Notes", "Handover"]) {
+  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Money", "Notes", "Handover"]) {
     assert.match(crm, new RegExp(label));
   }
   assert.match(crm, /NewJobForm/);

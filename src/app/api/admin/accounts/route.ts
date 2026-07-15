@@ -42,6 +42,7 @@ function shapeAccount(row: Record<string, unknown>) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     membershipActive: ["trial", "active", "active_cancels_at_period_end"].includes(String(row.billing_status)),
+    isSynthetic: Boolean(row.is_synthetic),
   };
 }
 
@@ -98,6 +99,7 @@ export async function GET(request: Request) {
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const partnerType = cleanAdminText(url.searchParams.get("partnerType"), 20);
     const verification = cleanAdminText(url.searchParams.get("verification"), 30);
+    const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
     const clauses: string[] = [];
     const bindings: string[] = [];
     if (search) {
@@ -108,10 +110,12 @@ export async function GET(request: Request) {
     if (ACCOUNT_STATUSES.has(status)) { clauses.push("account_status = ?"); bindings.push(status); }
     if (["installer", "supplier"].includes(partnerType)) { clauses.push("partner_type = ?"); bindings.push(partnerType); }
     if (VERIFICATION_STATUSES.has(verification)) { clauses.push("verification_status = ?"); bindings.push(verification); }
+    if (synthetic === "only") clauses.push("COALESCE(is_synthetic, 0) = 1");
+    if (synthetic === "exclude") clauses.push("COALESCE(is_synthetic, 0) = 0");
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const statement = db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
-      plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, created_at, updated_at
+      plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, is_synthetic, created_at, updated_at
       FROM trade_accounts ${where} ORDER BY updated_at DESC LIMIT 100`);
     const rows = bindings.length ? await statement.bind(...bindings).all<Record<string, unknown>>() : await statement.all<Record<string, unknown>>();
     return adminJson({ ok: true, accounts: rows.results.map(shapeAccount) });

@@ -80,6 +80,7 @@ type Account = {
   serviceBasePostcode: string;
   serviceRadiusKm: number;
   membershipActive: boolean;
+  isSynthetic: boolean;
 };
 type AdminFeatureGrant = {
   featureKey: FeatureKey;
@@ -262,6 +263,7 @@ export function AdminOperationsPortal() {
   const [accountSearch, setAccountSearch] = useState("");
   const [accountType, setAccountType] = useState("");
   const [accountVerification, setAccountVerification] = useState("");
+  const [accountSynthetic, setAccountSynthetic] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<AccountDetail | null>(
     null,
   );
@@ -454,6 +456,7 @@ export function AdminOperationsPortal() {
       if (accountSearch.trim()) params.set("search", accountSearch.trim());
       if (accountType) params.set("partnerType", accountType);
       if (accountVerification) params.set("verification", accountVerification);
+      if (accountSynthetic) params.set("synthetic", accountSynthetic);
       const result = await api(`/api/admin/accounts?${params}`);
       setAccounts(result.accounts || []);
       setStatus(`${result.accounts?.length || 0} business accounts shown.`);
@@ -1325,6 +1328,11 @@ export function AdminOperationsPortal() {
                   <option value="installer">Installers</option>
                   <option value="supplier">Wholesalers</option>
                 </select>
+                <select aria-label="Test account marker" value={accountSynthetic} onChange={(event) => setAccountSynthetic(event.target.value)}>
+                  <option value="">Live and demo accounts</option>
+                  <option value="exclude">Live accounts only</option>
+                  <option value="only">Demo accounts only</option>
+                </select>
                 <select
                   aria-label="Verification status"
                   value={accountVerification}
@@ -1370,7 +1378,7 @@ export function AdminOperationsPortal() {
                         onClick={() => void openAccount(account.firebaseUid)}
                       >
                         <span>
-                          <strong>{account.businessName}</strong>
+                          <strong>{account.businessName}{account.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</strong>
                           <small>
                             {account.email}
                             <br />
