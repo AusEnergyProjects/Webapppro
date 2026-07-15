@@ -8,6 +8,7 @@ import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
 import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
 import { TradeBusinessHub } from "./TradeBusinessHub";
+import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -227,7 +228,7 @@ export function DirectTradeDashboard() {
   const [referrals, setReferrals] = useState<ReferralData | null>(null);
   const [referralBusy, setReferralBusy] = useState(false);
   const [referralStatus, setReferralStatus] = useState("");
-  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "account">("work");
+  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "account">("work");
 
   useEffect(
     () =>
@@ -583,6 +584,7 @@ export function DirectTradeDashboard() {
               <nav className="dashboard-workspace-nav" aria-label="Wholesaler workspace">
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Catalogue and stock</small></button>
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Requests and tasks</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><span>Orders</span><small>Supply and warranties</small></button>
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Profile and membership</small></button>
               </nav>
               {workspace === "work" && <TradeBusinessHub
@@ -598,6 +600,7 @@ export function DirectTradeDashboard() {
                 canBulkImport={hasBulkImport}
                 hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
               />}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
               {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile, verification and membership</h2><p>Keep occasional administration separate from daily work.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a><a href="/direct-trade/membership"><strong>Membership and referrals</strong><span>Plans, invoices and rewards</span></a></div></section>}
             </>
           ) : (
@@ -609,6 +612,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Today, jobs and customers</small></button>
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><span>Orders</span><small>Supply and warranties</small></button>
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Settings and membership</small></button>
               </nav>
 
@@ -1142,6 +1146,7 @@ export function DirectTradeDashboard() {
                   </div>
                 </section>
               ))}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="installer" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds system-numbered purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
             </>
           )}
 

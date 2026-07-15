@@ -24,6 +24,7 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   serviceRadiusKm: integer("service_radius_km").notNull().default(50),
   emailOpportunities: integer("email_opportunities", { mode: "boolean" }).notNull().default(true),
   emailWeeklySummary: integer("email_weekly_summary", { mode: "boolean" }).notNull().default(true),
+  isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   settingsUpdatedAt: text("settings_updated_at").notNull().default(""),
   consentVersion: text("consent_version").notNull(),
   consentAt: text("consent_at").notNull(),
@@ -768,6 +769,7 @@ export const tradeOpportunities = sqliteTable("trade_opportunities", {
   expiresAt: text("expires_at").notNull().default(""),
   expiredAt: text("expired_at").notNull().default(""),
   createdByUid: text("created_by_uid").notNull(),
+  isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
@@ -1126,6 +1128,7 @@ export const customerAccounts = sqliteTable("customer_accounts", {
   householdSituation: text("household_situation").notNull().default("owner"),
   accountUpdates: integer("account_updates", { mode: "boolean" }).notNull().default(false),
   accountStatus: text("account_status").notNull().default("active"),
+  isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   consentVersion: text("consent_version").notNull(),
   consentAt: text("consent_at").notNull(),
   createdAt: text("created_at").notNull(),
@@ -1159,6 +1162,7 @@ export const customerProjects = sqliteTable("customer_projects", {
   opportunityId: text("opportunity_id").notNull().default(""),
   submittedAt: text("submitted_at").notNull().default(""),
   archivedAt: text("archived_at").notNull().default(""),
+  isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
@@ -1226,6 +1230,7 @@ export const supplierProducts = sqliteTable("supplier_products", {
   listingStatus: text("listing_status").notNull().default("draft"),
   reviewStatus: text("review_status").notNull().default("pending"),
   reviewNote: text("review_note").notNull().default(""),
+  isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
@@ -1294,4 +1299,89 @@ export const supplierProductEnquiries = sqliteTable("supplier_product_enquiries"
   uniqueIndex("supplier_product_enquiries_list_supplier_idx").on(table.listId, table.supplierUid),
   index("supplier_product_enquiries_supplier_idx").on(table.supplierUid, table.status, table.updatedAt),
   index("supplier_product_enquiries_installer_idx").on(table.installerUid, table.updatedAt),
+]);
+
+export const tradePurchaseOrders = sqliteTable("trade_purchase_orders", {
+  id: text("id").primaryKey(),
+  orderNumber: text("order_number").notNull(),
+  enquiryId: text("enquiry_id").notNull(),
+  listId: text("list_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  supplierUid: text("supplier_uid").notNull(),
+  status: text("status").notNull().default("submitted"),
+  installerReference: text("installer_reference").notNull().default(""),
+  supplierReference: text("supplier_reference").notNull().default(""),
+  deliveryMethod: text("delivery_method").notNull().default("confirm_with_supplier"),
+  deliveryNotes: text("delivery_notes").notNull().default(""),
+  supplierNote: text("supplier_note").notNull().default(""),
+  expectedAt: text("expected_at").notNull().default(""),
+  subtotalCentsExGst: integer("subtotal_cents_ex_gst").notNull().default(0),
+  gstCents: integer("gst_cents").notNull().default(0),
+  totalCentsIncGst: integer("total_cents_inc_gst").notNull().default(0),
+  submittedAt: text("submitted_at").notNull(),
+  confirmedAt: text("confirmed_at").notNull().default(""),
+  fulfilledAt: text("fulfilled_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_purchase_orders_number_idx").on(table.orderNumber),
+  uniqueIndex("trade_purchase_orders_enquiry_idx").on(table.enquiryId),
+  index("trade_purchase_orders_installer_idx").on(table.installerUid, table.status, table.updatedAt),
+  index("trade_purchase_orders_supplier_idx").on(table.supplierUid, table.status, table.updatedAt),
+]);
+
+export const tradePurchaseOrderItems = sqliteTable("trade_purchase_order_items", {
+  id: text("id").primaryKey(),
+  purchaseOrderId: text("purchase_order_id").notNull(),
+  supplierProductId: text("supplier_product_id").notNull(),
+  modelNumber: text("model_number").notNull(),
+  brand: text("brand").notNull(),
+  productName: text("product_name").notNull(),
+  unitLabel: text("unit_label").notNull().default("each"),
+  quantity: integer("quantity").notNull().default(1),
+  fulfilledQuantity: integer("fulfilled_quantity").notNull().default(0),
+  unitPriceCentsExGst: integer("unit_price_cents_ex_gst").notNull(),
+  warrantyYears: integer("warranty_years").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_purchase_order_items_product_idx").on(table.purchaseOrderId, table.supplierProductId),
+  index("trade_purchase_order_items_order_idx").on(table.purchaseOrderId),
+]);
+
+export const tradePurchaseOrderEvents = sqliteTable("trade_purchase_order_events", {
+  id: text("id").primaryKey(),
+  purchaseOrderId: text("purchase_order_id").notNull(),
+  eventType: text("event_type").notNull(),
+  status: text("status").notNull(),
+  summary: text("summary").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_purchase_order_events_order_idx").on(table.purchaseOrderId, table.createdAt),
+]);
+
+export const tradeWarrantyClaims = sqliteTable("trade_warranty_claims", {
+  id: text("id").primaryKey(),
+  claimNumber: text("claim_number").notNull(),
+  purchaseOrderId: text("purchase_order_id").notNull(),
+  purchaseOrderItemId: text("purchase_order_item_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  supplierUid: text("supplier_uid").notNull(),
+  status: text("status").notNull().default("submitted"),
+  issueCategory: text("issue_category").notNull(),
+  summary: text("summary").notNull(),
+  serialNumber: text("serial_number").notNull().default(""),
+  supplierResponse: text("supplier_response").notNull().default(""),
+  resolution: text("resolution").notNull().default(""),
+  submittedAt: text("submitted_at").notNull(),
+  resolvedAt: text("resolved_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_warranty_claims_number_idx").on(table.claimNumber),
+  index("trade_warranty_claims_installer_idx").on(table.installerUid, table.status, table.updatedAt),
+  index("trade_warranty_claims_supplier_idx").on(table.supplierUid, table.status, table.updatedAt),
+  index("trade_warranty_claims_order_idx").on(table.purchaseOrderId, table.updatedAt),
 ]);

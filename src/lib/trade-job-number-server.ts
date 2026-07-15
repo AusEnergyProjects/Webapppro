@@ -1,7 +1,7 @@
 export async function nextTradeWorkNumber(
   db: D1Database,
   firebaseUid: string,
-  prefix: "JOB" | "FUL",
+  prefix: "JOB" | "FUL" | "PO" | "WTY",
   now: string,
 ) {
   const row = await db.prepare(`INSERT INTO trade_crm_counters

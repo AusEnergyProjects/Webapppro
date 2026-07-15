@@ -218,6 +218,20 @@
       "when": 1784135533458,
       "tag": "0030_gifted_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1784136874926,
+      "tag": "0031_steep_random",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1784137334494,
+      "tag": "0032_windy_fixer",
+      "breakpoints": true
     }
   ]
 }
