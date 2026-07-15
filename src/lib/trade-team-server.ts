@@ -59,9 +59,9 @@ export function canManageTeam(access: TeamAccess) {
 }
 
 export async function assignedJob(access: TeamAccess, workOrderId: string) {
-  const row = await getD1().prepare(`SELECT id, source_type, assignee_member_id, revision FROM trade_work_orders
+  const row = await getD1().prepare(`SELECT id, source_type, source_reference, assignee_member_id, revision FROM trade_work_orders
     WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
-    .bind(workOrderId, access.ownerUid).first<{ id: string; source_type: string; assignee_member_id: string; revision: number }>();
+    .bind(workOrderId, access.ownerUid).first<{ id: string; source_type: string; source_reference: string; assignee_member_id: string; revision: number }>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   if (!access.isOwner && access.role === "technician" && row.assignee_member_id !== access.memberId) {
     throw new Error("JOB_NOT_ASSIGNED");

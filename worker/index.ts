@@ -1,4 +1,6 @@
 import handler from "vinext/server/app-router-entry";
+import { getD1 } from "../db";
+import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 
@@ -52,6 +54,11 @@ const worker = {
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
     return cacheable;
+  },
+  async scheduled(_controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
+    ctx.waitUntil(generateDueServiceJobs(getD1(), { limit: 200 }).catch((error) => {
+      console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
+    }));
   },
 };
 

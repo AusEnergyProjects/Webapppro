@@ -574,12 +574,31 @@ export const tradeAssetServicePlans = sqliteTable("trade_asset_service_plans", {
   cadenceMonths: integer("cadence_months").notNull(),
   nextDueAt: text("next_due_at").notNull(),
   status: text("status").notNull().default("active"),
+  jobTemplateId: text("job_template_id").notNull().default(""),
+  autoCreateEnabled: integer("auto_create_enabled", { mode: "boolean" }).notNull().default(false),
+  jobLeadDays: integer("job_lead_days").notNull().default(14),
+  lastGeneratedDueAt: text("last_generated_due_at").notNull().default(""),
+  lastGeneratedWorkOrderId: text("last_generated_work_order_id").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_asset_service_plans_asset_type_idx").on(table.assetId, table.serviceType),
   index("trade_asset_service_plans_owner_due_idx").on(table.firebaseUid, table.status, table.nextDueAt),
   index("trade_asset_service_plans_pack_idx").on(table.handoverPackId, table.status, table.nextDueAt),
+]);
+
+export const tradeServiceJobGenerations = sqliteTable("trade_service_job_generations", {
+  id: text("id").primaryKey(),
+  servicePlanId: text("service_plan_id").notNull(),
+  sourceWorkOrderId: text("source_work_order_id").notNull(),
+  generatedWorkOrderId: text("generated_work_order_id").notNull().default(""),
+  firebaseUid: text("firebase_uid").notNull(),
+  dueAt: text("due_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_service_job_generations_plan_due_idx").on(table.servicePlanId, table.dueAt),
+  index("trade_service_job_generations_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("trade_service_job_generations_work_idx").on(table.generatedWorkOrderId),
 ]);
 
 export const tradeAssetServiceEvents = sqliteTable("trade_asset_service_events", {
@@ -865,6 +884,27 @@ export const tradeCrmJobTemplates = sqliteTable("trade_crm_job_templates", {
 }, (table) => [
   index("trade_crm_job_templates_owner_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
   uniqueIndex("trade_crm_job_templates_owner_name_idx").on(table.firebaseUid, table.name),
+]);
+
+export const tradeJobForms = sqliteTable("trade_job_forms", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  templateKey: text("template_key").notNull(),
+  templateVersion: integer("template_version").notNull(),
+  templateName: text("template_name").notNull(),
+  jurisdiction: text("jurisdiction").notNull().default("AU"),
+  templateSnapshot: text("template_snapshot").notNull(),
+  answers: text("answers").notNull().default("{}"),
+  status: text("status").notNull().default("draft"),
+  completedByUid: text("completed_by_uid").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_job_forms_work_template_idx").on(table.workOrderId, table.templateKey, table.templateVersion),
+  index("trade_job_forms_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_job_forms_work_idx").on(table.workOrderId, table.updatedAt),
 ]);
 
 export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {

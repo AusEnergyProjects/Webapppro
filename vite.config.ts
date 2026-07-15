@@ -20,6 +20,7 @@ export default defineConfig(async () => {
         config: {
           main: "./worker/index.ts",
           compatibility_flags: ["nodejs_compat"],
+          triggers: { crons: ["15 20 * * *"] },
           d1_databases: d1 ? [{ binding: d1, database_name: "aea-energy", database_id: "00000000-0000-4000-8000-000000000000" }] : [],
           r2_buckets: r2 ? [{ binding: r2, bucket_name: "aea-energy" }] : [],
         },

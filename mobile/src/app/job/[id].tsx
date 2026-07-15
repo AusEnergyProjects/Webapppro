@@ -88,6 +88,7 @@ export default function JobScreen() {
   if (!job) return <Screen><View style={styles.empty}><MaterialCommunityIcons name="briefcase-remove-outline" size={42} color={colours.muted} /><Text style={styles.title}>Job is not available</Text><Text style={styles.body}>It may have been unassigned or removed during sync.</Text></View></Screen>;
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
+  const fieldForms = job.forms || [];
   return (
     <Screen>
       <View style={styles.hero}>
@@ -109,6 +110,12 @@ export default function JobScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeading}><View><Text style={styles.label}>CHECKLIST</Text><Text style={styles.cardTitle}>What needs doing</Text></View><Text style={styles.progress}>{completed}/{job.tasks.length}</Text></View>
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeading}><View><Text style={styles.label}>FIELD FORMS</Text><Text style={styles.cardTitle}>Technical records</Text></View><Text style={styles.progress}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length}</Text></View>
+        <Text style={styles.body}>Versioned supporting forms assigned by the office are shown here. Offline form completion is planned for the next app release.</Text>
+        {fieldForms.length ? fieldForms.map((form) => <View style={styles.formRow} key={form.id}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-decagram-outline' : 'clipboard-text-outline'} size={25} color={form.status === 'complete' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.jurisdiction} | {form.status === 'complete' ? 'Complete' : 'Complete in the web portal'}</Text></View></View>) : <Text style={styles.body}>No field forms have been assigned to this job.</Text>}
       </View>
 
       <View style={styles.card}>
@@ -154,6 +161,7 @@ const styles = StyleSheet.create({
   task: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },
   taskTitle: { color: colours.ink, fontSize: 16, fontWeight: '600' },
   taskDone: { color: colours.muted, textDecorationLine: 'line-through' },
+  formRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },
   meta: { color: colours.muted, fontSize: 12, lineHeight: 17 },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   inputLabel: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },

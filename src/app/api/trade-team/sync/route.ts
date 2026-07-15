@@ -65,7 +65,7 @@ function cursorValue(value: string | null) {
 
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
-  const [jobRows, taskRows, mediaRows] = await Promise.all([
+  const [jobRows, taskRows, mediaRows, formRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
@@ -88,6 +88,12 @@ async function accessibleJobs(access: TeamAccess) {
       WHERE m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
       ORDER BY m.created_at DESC`)
+      .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+    db.prepare(`SELECT f.id, f.work_order_id, f.template_name, f.jurisdiction, f.status, f.completed_at, f.updated_at
+      FROM trade_job_forms f JOIN trade_work_orders w ON w.id = f.work_order_id
+      WHERE f.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
+        AND (? <> 'technician' OR w.assignee_member_id = ?)
+      ORDER BY f.status = 'complete', f.created_at`)
       .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
   ]);
   return new Map(jobRows.results.map((row) => {
@@ -128,6 +134,10 @@ async function accessibleJobs(access: TeamAccess) {
         id: media.id, category: media.category, fileName: protectedJob ? "Protected field file" : media.file_name,
         contentType: media.content_type, sizeBytes: Number(media.size_bytes),
         caption: protectedJob ? "" : media.caption, createdAt: media.created_at,
+      })),
+      forms: formRows.results.filter((form) => form.work_order_id === row.id).map((form) => ({
+        id: form.id, name: form.template_name, jurisdiction: form.jurisdiction, status: form.status,
+        completedAt: form.completed_at, updatedAt: form.updated_at,
       })),
     }];
   }));

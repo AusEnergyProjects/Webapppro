@@ -21,6 +21,15 @@ export type FieldMedia = {
   createdAt: string;
 };
 
+export type FieldForm = {
+  id: string;
+  name: string;
+  jurisdiction: string;
+  status: 'draft' | 'complete';
+  completedAt: string;
+  updatedAt: string;
+};
+
 export type FieldJob = {
   id: string;
   workNumber: string;
@@ -44,6 +53,7 @@ export type FieldJob = {
   };
   tasks: FieldTask[];
   media: FieldMedia[];
+  forms: FieldForm[];
 };
 
 export type SyncChange = {

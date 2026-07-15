@@ -211,11 +211,20 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - Protected platform jobs remain redacted and separate from direct trade customers.
 - Offline-first mobile foundation for iOS and Android field work.
 
-### Next release: regulated forms and recurring operations
+### Delivered release: regulated forms and recurring operations
 
-- State and trade-specific completion, safety and commissioning form library.
-- Template versioning and administrator-published recommended templates.
-- Recurring CRM jobs generated from asset lifecycle schedules.
+- Trade-aware pre-start, safety, completion, commissioning and service supporting forms.
+- Immutable template snapshots and versions on every job form record.
+- Clear boundaries stating that supporting records do not replace licences, permits, certificates, standards or scheme documents.
+- Recurring CRM jobs generated from asset lifecycle schedules with saved checklist templates.
+- Daily and manual due-job generation with one durable job per service plan and due date.
+- System-generated job numbers and the existing AEA protected-customer boundary on every generated job.
+- Field app sync summaries for assigned technical forms, ready for offline form editing in the next native release.
+
+### Next release: dispatch, purchasing and native forms
+
+- Offline field-form completion with conflict-safe draft and completion actions.
+- Administrator-published recommended form versions after state and trade review.
 - Calendar-aware dispatch, workload conflicts and crew capacity.
 - Job costing, proposal templates and progress payment schedules after the parked rate-card research is complete.
 - Wholesaler purchase orders, fulfilment milestones and warranty claims.
@@ -240,7 +249,7 @@ The public access story is now explicit. Customers remain free, installer and wh
 
 ## Recommended decision
 
-Build the regulated form and recurring-job layer next. Templates now reduce repeated setup, while lifecycle schedules already hold the information needed to create planned maintenance work. Linking the two will produce immediate daily value without requiring the parked rate-card assumptions. In parallel, complete the external release-account steps for Google OAuth, iOS registration and internal mobile builds.
+Build offline field-form completion next, using the versioned form snapshots and sync summaries now in place. In parallel, add wholesaler purchase orders and fulfilment milestones so installer product selections can continue into supply operations without waiting for the parked rate-card assumptions. Complete the external release-account steps for Google OAuth, iOS registration and internal mobile builds.
 
 ## Further questions
 

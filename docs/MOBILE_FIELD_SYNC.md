@@ -72,4 +72,6 @@ The `mobile/` workspace now implements the iOS and Android field client on Expo 
 - Bootstrap, delta pages, action replay, tombstones, resumable uploads, app-version enforcement and remote revocation use contract version 2.
 - Sync runs when the app opens, reception returns, a private push notification is opened, the user requests it or the operating system grants a background window.
 - The technician interface is limited to assigned work, job stage, checklists, time and evidence. Device registration, sync state and actionable conflicts are visible without exposing the underlying complexity during normal work.
+- Assigned job payloads include versioned technical form names, jurisdiction and completion state. The current app presents these as read-only field records so the office and technician share one checklist of required evidence.
+- Offline form editing will use stable client action IDs and form revisions in a later contract version. The app must not invent, alter or silently upgrade a saved template snapshot.
 - Native store credentials, Firebase mobile configuration files and platform OAuth client IDs remain release prerequisites and must not enter source control.

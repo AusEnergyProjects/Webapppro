@@ -4,6 +4,7 @@ import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { ASSET_SERVICE_TYPES, addMonthsToIsoDate, lifecycleStatus, safetyNoticeMatchesAsset } from "@/lib/asset-lifecycle.mjs";
 import { isIsoDate } from "@/lib/trade-handover.mjs";
+import { generateDueServiceJobs } from "@/lib/trade-recurring-jobs-server";
 
 export const runtime = "edge";
 
@@ -88,11 +89,12 @@ function workEvent(db: ReturnType<typeof getD1>, uid: string, workOrderId: strin
 
 async function lifecyclePayload(identity: TradeIdentity, workOrderId: string) {
   const db = getD1();
-  const [assetsResult, plansResult, eventsResult, noticesResult] = await Promise.all([
+  const [assetsResult, plansResult, eventsResult, noticesResult, templatesResult] = await Promise.all([
     db.prepare(`SELECT id, handover_pack_id, asset_category, brand, model_number, serial_number, installed_at, warranty_end
       FROM trade_installed_assets WHERE work_order_id = ? AND firebase_uid = ? AND record_status = 'active'
       ORDER BY created_at`).bind(workOrderId, identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT id, asset_id, service_type, cadence_months, next_due_at, status, created_at, updated_at
+    db.prepare(`SELECT id, asset_id, service_type, cadence_months, next_due_at, status, job_template_id,
+      auto_create_enabled, job_lead_days, last_generated_due_at, last_generated_work_order_id, created_at, updated_at
       FROM trade_asset_service_plans WHERE work_order_id = ? AND firebase_uid = ?
       ORDER BY status = 'active' DESC, next_due_at`).bind(workOrderId, identity.uid).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, service_plan_id, asset_id, event_type, serviced_at, summary, provider_reference, next_due_at, created_at
@@ -103,6 +105,9 @@ async function lifecyclePayload(identity: TradeIdentity, workOrderId: string) {
       WHERE status = 'published' AND (expires_at = '' OR expires_at >= ?)
       ORDER BY CASE severity WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END, published_at DESC`)
       .bind(new Date().toISOString().slice(0, 10)).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, name, title, service_category, task_titles FROM trade_crm_job_templates
+      WHERE firebase_uid = ? AND record_status = 'active' ORDER BY name COLLATE NOCASE LIMIT 60`)
+      .bind(identity.uid).all<Record<string, unknown>>(),
   ]);
   const assets: LifecycleAsset[] = assetsResult.results.map((row: Record<string, unknown>): LifecycleAsset => ({
     id: String(row.id),
@@ -117,6 +122,9 @@ async function lifecyclePayload(identity: TradeIdentity, workOrderId: string) {
   const plans = plansResult.results.map((row: Record<string, unknown>) => ({
     id: String(row.id), assetId: String(row.asset_id), serviceType: String(row.service_type),
     cadenceMonths: Number(row.cadence_months), nextDueAt: String(row.next_due_at), status: String(row.status),
+    jobTemplateId: String(row.job_template_id || ""), autoCreateEnabled: Boolean(row.auto_create_enabled),
+    jobLeadDays: Number(row.job_lead_days || 14), lastGeneratedDueAt: String(row.last_generated_due_at || ""),
+    lastGeneratedWorkOrderId: String(row.last_generated_work_order_id || ""),
     lifecycleStatus: row.status === "active" ? lifecycleStatus(row.next_due_at) : "paused",
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   }));
@@ -132,7 +140,16 @@ async function lifecyclePayload(identity: TradeIdentity, workOrderId: string) {
     expiresAt: String(row.expires_at || ""), publishedAt: String(row.published_at),
     affectedAssetIds: assets.filter((asset) => safetyNoticeMatchesAsset(row, asset)).map((asset) => asset.id),
   })).filter((notice: { affectedAssetIds: string[] }) => notice.affectedAssetIds.length > 0);
-  return { assets, plans, events, notices, access: { fullAccess: identity.fullAccess } };
+  const jobTemplates = templatesResult.results.map((row) => ({
+    id: String(row.id), name: String(row.name), title: String(row.title || ""),
+    serviceCategory: String(row.service_category || "other"), taskCount: storedTaskCount(row.task_titles),
+  }));
+  return { assets, plans, events, notices, jobTemplates, access: { fullAccess: identity.fullAccess } };
+}
+
+function storedTaskCount(value: unknown) {
+  try { const parsed = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed.length : 0; }
+  catch { return 0; }
 }
 
 export async function GET(request: Request) {
@@ -165,19 +182,37 @@ export async function POST(request: Request) {
       const serviceType = cleanAdminText(body.serviceType, 50);
       const cadenceMonths = Math.round(Number(body.cadenceMonths));
       const nextDueAt = dateValue(body.nextDueAt, true);
+      const jobTemplateId = cleanAdminText(body.jobTemplateId, 180);
+      const autoCreateEnabled = body.autoCreateEnabled === true;
+      const jobLeadDays = Math.round(Number(body.jobLeadDays || 14));
       if (!SERVICE_TYPES.has(serviceType) || cadenceMonths < 1 || cadenceMonths > 120) {
         return adminJson({ ok: false, error: "Choose a supported service type and a cadence from 1 to 120 months." }, 400);
       }
+      if (jobLeadDays < 0 || jobLeadDays > 90) return adminJson({ ok: false, error: "Choose a job lead time from 0 to 90 days." }, 400);
+      if (jobTemplateId) {
+        const template = await db.prepare(`SELECT id FROM trade_crm_job_templates
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(jobTemplateId, identity.uid).first();
+        if (!template) return adminJson({ ok: false, error: "Choose a job template from this installer account." }, 400);
+      }
       await db.batch([
         db.prepare(`INSERT INTO trade_asset_service_plans
-          (id, asset_id, handover_pack_id, work_order_id, firebase_uid, service_type, cadence_months, next_due_at, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+          (id, asset_id, handover_pack_id, work_order_id, firebase_uid, service_type, cadence_months, next_due_at,
+           status, job_template_id, auto_create_enabled, job_lead_days, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
           ON CONFLICT(asset_id, service_type) DO UPDATE SET cadence_months = excluded.cadence_months,
-            next_due_at = excluded.next_due_at, status = 'active', updated_at = excluded.updated_at`)
-          .bind(crypto.randomUUID(), asset.id, asset.handover_pack_id, workOrderId, identity.uid, serviceType, cadenceMonths, nextDueAt, now, now),
+            next_due_at = excluded.next_due_at, status = 'active', job_template_id = excluded.job_template_id,
+            auto_create_enabled = excluded.auto_create_enabled, job_lead_days = excluded.job_lead_days,
+            updated_at = excluded.updated_at`)
+          .bind(crypto.randomUUID(), asset.id, asset.handover_pack_id, workOrderId, identity.uid, serviceType,
+            cadenceMonths, nextDueAt, jobTemplateId, autoCreateEnabled ? 1 : 0, jobLeadDays, now, now),
         workEvent(db, identity.uid, workOrderId, "asset_service_scheduled", `Service schedule created for ${asset.brand} ${asset.model_number}.`, now),
       ]);
       return adminJson({ ok: true, ...(await lifecyclePayload(identity, workOrderId)) }, 201);
+    }
+
+    if (action === "generate_due_jobs") {
+      const generation = await generateDueServiceJobs(db, { ownerUid: identity.uid, sourceWorkOrderId: workOrderId });
+      return adminJson({ ok: true, generation, ...(await lifecyclePayload(identity, workOrderId)) });
     }
 
     if (action !== "record_service") return adminJson({ ok: false, error: "Unsupported asset lifecycle action." }, 400);
