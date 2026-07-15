@@ -164,14 +164,22 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - Activity history.
 - Premium crew assignment.
 
-### Next release: assets, evidence and handover
+### Delivered release: assets, evidence and handover
 
 - Installed-product and serial-number records.
 - Warranty start, expiry and document storage.
 - Trade-specific completion checklists.
-- Compliance certificate placeholders and review status.
-- Customer-visible handover pack generated without exposing direct contact details.
+- Protected compliance, commissioning, warranty, manual, datasheet and installation evidence.
+- Administrator approval before customer publication.
+- Customer-visible handover packs without direct contact details.
+- Always-free customer asset, warranty and document access.
+
+### Next release: ownership and lifecycle automation
+
 - Recurring service and warranty reminders.
+- Asset ownership transfer between private household accounts with explicit approval.
+- Product recall and warranty notice workflows using model and serial references.
+- Versioned handover corrections without removing a previously approved record.
 
 ### Following release: Google-first business integrations
 
@@ -191,7 +199,7 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 
 ## Recommended decision
 
-Continue with the Business Hub as the trade onboarding engine, then build the asset, warranty, compliance and handover layer before rate cards or accounting. That sequence creates operational value, strengthens customer trust and produces the structured information later quoting features will need.
+Continue with lifecycle automation and Google-first business integrations before rate cards or accounting. The installed asset and reviewed handover foundation now creates the structured information needed for reminders, service history and future quoting controls.
 
 ## Further questions
 

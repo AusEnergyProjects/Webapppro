@@ -38,7 +38,12 @@ async function identity(request: Request) {
   }
 }
 
-function projectShape(row: Record<string, unknown>, progress: Record<string, unknown> | undefined, quotes: Record<string, unknown>[]) {
+function projectShape(
+  row: Record<string, unknown>,
+  progress: Record<string, unknown> | undefined,
+  quotes: Record<string, unknown>[],
+  handovers: Record<string, unknown>[],
+) {
   const status = String(row.status);
   const responseCount = Number(progress?.response_count || 0);
   const quoteCount = quotes.length;
@@ -97,6 +102,16 @@ function projectShape(row: Record<string, unknown>, progress: Record<string, unk
       submittedAt: quote.submitted_at,
       updatedAt: quote.updated_at,
     })),
+    handoverPacks: handovers.map((handover) => ({
+      id: handover.id,
+      workNumber: handover.work_number,
+      serviceCategory: handover.service_category,
+      publishedAt: handover.published_at,
+      updatedAt: handover.updated_at,
+      assets: handover.assets || [],
+      complianceItems: handover.complianceItems || [],
+      documents: handover.documents || [],
+    })),
   };
 }
 
@@ -123,10 +138,59 @@ async function projectsForOwner(firebaseUid: string) {
     quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, submitted_at, updated_at
     FROM customer_project_quotes WHERE project_id IN (${projectIds.map(() => "?").join(",")}) AND status = 'submitted'
     ORDER BY submitted_at, id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const handoverRows = projectIds.length ? await db.prepare(`SELECT p.id, p.customer_project_id, p.service_category,
+    p.published_at, p.updated_at, w.work_number
+    FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
+    WHERE p.customer_project_id IN (${projectIds.map(() => "?").join(",")}) AND p.status = 'published'
+    ORDER BY p.published_at DESC`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const handoverIds = handoverRows.results.map((row: Record<string, unknown>) => String(row.id));
+  const assetRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
+    model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
+    warranty_start, warranty_end FROM trade_installed_assets
+    WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND record_status = 'active'
+    ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const complianceRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, label, status, completed_at
+    FROM trade_compliance_items WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
+    ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const documentRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, category, file_name,
+    content_type, size_bytes, created_at FROM trade_handover_documents
+    WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND customer_visible = 1
+    ORDER BY created_at DESC`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const shapedHandovers = handoverRows.results.map((handover: Record<string, unknown>) => ({
+    ...handover,
+    assets: assetRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
+      id: item.id,
+      assetCategory: item.asset_category,
+      brand: item.brand,
+      modelNumber: item.model_number,
+      serialNumber: item.serial_number,
+      quantity: Number(item.quantity || 1),
+      installedAt: item.installed_at,
+      warrantyProvider: item.warranty_provider,
+      warrantyReference: item.warranty_reference,
+      warrantyStart: item.warranty_start,
+      warrantyEnd: item.warranty_end,
+    })),
+    complianceItems: complianceRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
+      id: item.id,
+      label: item.label,
+      status: item.status,
+      completedAt: item.completed_at,
+    })),
+    documents: documentRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
+      id: item.id,
+      category: item.category,
+      fileName: item.file_name,
+      contentType: item.content_type,
+      sizeBytes: Number(item.size_bytes || 0),
+      createdAt: item.created_at,
+    })),
+  }));
   return rows.results.map((row: Record<string, unknown>) => projectShape(
     row,
     progressRows.results.find((progress: Record<string, unknown>) => progress.opportunity_id === row.opportunity_id),
     quoteRows.results.filter((quote: Record<string, unknown>) => quote.project_id === row.id),
+    shapedHandovers.filter((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
   ));
 }
 
@@ -327,6 +391,9 @@ export async function PATCH(request: Request) {
     });
   } else if (action === "archive") {
     if (!["draft", "withdrawn", "completed"].includes(String(current.status))) return json({ ok: false, error: "Withdraw or complete an active enquiry before archiving it." }, 409);
+    const publishedHandover = await db.prepare(`SELECT id FROM trade_handover_packs
+      WHERE customer_project_id = ? AND status = 'published' LIMIT 1`).bind(id).first();
+    if (publishedHandover) return json({ ok: false, error: "Projects with an approved asset and handover history stay available in your completed project library." }, 409);
     await db.prepare("UPDATE customer_projects SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
       .bind(now, now, id, user.uid).run();
   } else if (action === "quote_decision") {

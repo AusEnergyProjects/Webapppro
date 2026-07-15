@@ -103,6 +103,7 @@ function errorResponse(error: unknown) {
   if (code === "SOURCE_ALREADY_USED") return adminJson({ ok: false, error: "That platform work item already has a Business Hub record." }, 409);
   if (code === "PRIVATE_DATA") return adminJson({ ok: false, error: "Keep names, email addresses and phone numbers out of Business Hub labels and checklists." }, 400);
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid schedule or due date." }, 400);
+  if (code === "ASSET_RECORD_RETAINED") return adminJson({ ok: false, error: "Work records with an installed asset or handover history stay available in the completed view." }, 409);
   return adminJson({ ok: false, error: "The Business Hub request could not be completed." }, 500);
 }
 
@@ -165,8 +166,9 @@ async function workOrderPayload(identity: TradeIdentity) {
   const ids = orderRows.results.map((row: Record<string, unknown>) => String(row.id));
   let tasks: Record<string, unknown>[] = [];
   let events: Record<string, unknown>[] = [];
+  let handoverPacks: Record<string, unknown>[] = [];
   if (ids.length) {
-    const [taskRows, eventRows] = await Promise.all([
+    const [taskRows, eventRows, handoverRows] = await Promise.all([
       db.prepare(`SELECT id, work_order_id, title, due_at, status, completed_at, sort_order, created_at, updated_at
         FROM trade_work_order_tasks t
         WHERE t.firebase_uid = ? AND EXISTS (
@@ -183,15 +185,22 @@ async function workOrderPayload(identity: TradeIdentity) {
         )
         ORDER BY created_at DESC LIMIT 100`)
         .bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
+      db.prepare(`SELECT work_order_id, status FROM trade_handover_packs p
+        WHERE p.firebase_uid = ? AND EXISTS (
+          SELECT 1 FROM trade_work_orders w
+          WHERE w.id = p.work_order_id AND w.firebase_uid = ? AND w.record_status = 'active'
+        )`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
     ]);
     tasks = taskRows.results;
     events = eventRows.results;
+    handoverPacks = handoverRows.results;
   }
   const activeCount = orderRows.results.filter((row: Record<string, unknown>) => !["completed", "cancelled"].includes(String(row.stage))).length;
   return {
     workOrders: orderRows.results.map((row: Record<string, unknown>) => {
       const workTasks = tasks.filter((task) => task.work_order_id === row.id);
       const lastEvent = events.find((event) => event.work_order_id === row.id);
+      const handover = handoverPacks.find((item) => item.work_order_id === row.id);
       return {
         id: row.id,
         partnerType: row.partner_type,
@@ -207,6 +216,7 @@ async function workOrderPayload(identity: TradeIdentity) {
         scheduledStart: row.scheduled_start,
         scheduledEnd: row.scheduled_end,
         assigneeLabel: row.assignee_label,
+        handoverStatus: handover?.status || "",
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         tasks: workTasks.map((task) => ({
@@ -411,6 +421,9 @@ export async function PATCH(request: Request) {
       if (!["completed", "cancelled"].includes(String(current.stage))) {
         return adminJson({ ok: false, error: "Complete or cancel the work record before archiving it." }, 409);
       }
+      const handover = await db.prepare("SELECT status FROM trade_handover_packs WHERE work_order_id = ? AND firebase_uid = ?")
+        .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
+      if (handover) throw new Error("ASSET_RECORD_RETAINED");
       await db.batch([
         db.prepare("UPDATE trade_work_orders SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?")
           .bind(now, workOrderId, identity.uid),

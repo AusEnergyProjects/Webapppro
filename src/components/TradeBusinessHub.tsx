@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import { TradeHandoverCentre } from "./TradeHandoverCentre";
 
 type PartnerType = "installer" | "supplier";
 type WorkTask = {
@@ -25,6 +26,7 @@ type WorkOrder = {
   scheduledStart: string;
   scheduledEnd: string;
   assigneeLabel: string;
+  handoverStatus: string;
   createdAt: string;
   updatedAt: string;
   tasks: WorkTask[];
@@ -417,10 +419,18 @@ export function TradeBusinessHub({
                   </form>
                 )}
 
+                {partnerType === "installer" && <TradeHandoverCentre
+                  user={user}
+                  workOrderId={order.id}
+                  fullAccess={access.fullAccess}
+                />}
+
                 <footer>
                   <span>{order.lastEvent?.summary || "Work record created."}</span>
                   <small>Updated {new Date(order.updatedAt).toLocaleDateString("en-AU")}</small>
-                  {["completed", "cancelled"].includes(order.stage) && <button type="button" disabled={busy === order.id} onClick={() => void requestHub("PATCH", { action: "archive_work_order", workOrderId: order.id }, order.id)}>Archive</button>}
+                  {order.handoverStatus
+                    ? <small>Asset and warranty history retained</small>
+                    : ["completed", "cancelled"].includes(order.stage) && <button type="button" disabled={busy === order.id} onClick={() => void requestHub("PATCH", { action: "archive_work_order", workOrderId: order.id }, order.id)}>Archive</button>}
                 </footer>
               </article>
             );

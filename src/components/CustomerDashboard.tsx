@@ -63,6 +63,29 @@ type ProjectQuote = {
   submittedAt: string;
 };
 
+type CustomerHandoverPack = {
+  id: string;
+  workNumber: string;
+  serviceCategory: string;
+  publishedAt: string;
+  updatedAt: string;
+  assets: Array<{
+    id: string;
+    assetCategory: string;
+    brand: string;
+    modelNumber: string;
+    serialNumber: string;
+    quantity: number;
+    installedAt: string;
+    warrantyProvider: string;
+    warrantyReference: string;
+    warrantyStart: string;
+    warrantyEnd: string;
+  }>;
+  complianceItems: Array<{ id: string; label: string; status: string; completedAt: string }>;
+  documents: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string }>;
+};
+
 type CustomerProject = {
   id: string;
   title: string;
@@ -90,6 +113,7 @@ type CustomerProject = {
   updatedAt: string;
   progress: { installerCount: number; reviewingCount: number; responseCount: number; quoteCount: number; opportunityStatus: string; expiresAt: string };
   quotes: ProjectQuote[];
+  handoverPacks: CustomerHandoverPack[];
 };
 
 type ProjectDraft = Pick<CustomerProject, "title" | "homeNickname" | "postcode" | "addressState" | "propertyType" | "householdSituation" | "goal" | "pace" | "existingFeatures" | "serviceCategories" | "priorities" | "projectStage" | "timing" | "budgetRange" | "privateNotes">;
@@ -102,6 +126,7 @@ type AccountResult = {
 
 const optionLabel = (options: Array<[string, string]>, value: string) => options.find(([key]) => key === value)?.[1] || value.replaceAll("_", " ");
 const currency = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
+const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const statusLabels: Record<string, string> = {
   draft: "Draft",
   matching: "Installer matching",
@@ -261,13 +286,14 @@ function ProjectEditor({ initial, existingId, emailVerified, onCancel, onSave, o
   </section>;
 }
 
-function ProjectDetail({ project, busy, onAction }: { project: CustomerProject; busy: boolean; onAction: (action: string, extra?: Record<string, unknown>) => Promise<void> }) {
+function ProjectDetail({ project, busy, onAction, onDownloadHandover }: { project: CustomerProject; busy: boolean; onAction: (action: string, extra?: Record<string, unknown>) => Promise<void>; onDownloadHandover: (document: CustomerHandoverPack["documents"][number]) => Promise<void> }) {
   const planItems = project.planSnapshot.items || [];
   const progressSteps = [
     ["Scope saved", Boolean(project.submittedAt)],
     ["Eligible installers matched", project.progress.installerCount > 0],
     ["Structured response received", project.progress.responseCount > 0],
     ["Quote option ready", project.quotes.length > 0],
+    ["Digital handover published", project.handoverPacks.length > 0],
   ] as const;
   return <section className="customer-project-detail" aria-labelledby="customer-project-title">
     <header className="customer-project-detail-header"><div><span>{statusLabels[project.displayStatus] || project.displayStatus}</span><h1 id="customer-project-title">{project.title}</h1><p>{project.homeNickname} | {project.addressState} {project.postcode} | Updated {new Date(project.updatedAt).toLocaleDateString("en-AU")}</p></div><div><a href="/account">All projects</a>{project.status === "draft" && <a className="primary" href={`/account/projects/${project.id}?edit=1`}>Edit draft</a>}</div></header>
@@ -276,8 +302,15 @@ function ProjectDetail({ project, busy, onAction }: { project: CustomerProject; 
         <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Saved roadmap</span><h2>{project.planSnapshot.title || "Your ordered home energy plan"}</h2><p>{project.planSnapshot.summary}</p></div><ol className="customer-saved-roadmap">{planItems.map((item, index) => { const complete = project.completedPlanItems.includes(item.id); return <li className={complete ? "complete" : ""} key={item.id}><button type="button" aria-pressed={complete} onClick={() => void onAction("toggle_milestone", { itemId: item.id, complete: !complete })} disabled={busy}><span>{complete ? "✓" : String(index + 1).padStart(2, "0")}</span></button><div><small>{item.stage}</small><h3>{item.title}</h3><p>{item.text}</p><a href={item.href}>{item.action}</a></div></li>; })}</ol></section>
         {project.status !== "draft" && <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Platform progress</span><h2>Your enquiry stays inside the platform</h2><p>Installers can review and submit structured options. They cannot call, email or message you.</p></div><ol className="customer-progress-list">{progressSteps.map(([label, complete], index) => <li className={complete ? "complete" : ""} key={label}><span>{complete ? "✓" : index + 1}</span><div><strong>{label}</strong><small>{complete ? "Complete" : "Waiting"}</small></div></li>)}</ol><div className="customer-progress-stats"><div><strong>{project.progress.installerCount}</strong><span>eligible installers allocated</span></div><div><strong>{project.progress.responseCount}</strong><span>expressions of interest</span></div><div><strong>{project.progress.quoteCount}</strong><span>structured quote options</span></div></div></section>}
         {project.quotes.length > 0 && <section className="customer-detail-panel"><div className="customer-panel-heading"><span>Compare safely</span><h2>Structured quote options</h2><p>Prices are shown without installer contact details. Product lines preserve the wholesaler price selected by the installer at submission.</p></div><div className="customer-quote-grid">{project.quotes.map((quote) => <article className={quote.customerDecision === "shortlisted" ? "shortlisted" : quote.customerDecision === "declined" ? "declined" : ""} key={quote.id}><header><div><span>{quote.optionLabel}</span><h3>{optionLabel(platformQuoteOptions.quoteTypes, quote.quoteType)}</h3></div>{quote.customerDecision === "shortlisted" && <strong>Shortlisted</strong>}</header><div className="customer-quote-total"><span>Indicative total</span><strong>{currency(Math.round(quote.totalCentsExGst * 1.1))}</strong><small>{currency(quote.totalCentsExGst)} ex GST</small></div><dl><div><dt>Products</dt><dd>{currency(quote.productSubtotalCentsExGst)} ex GST</dd></div><div><dt>Labour</dt><dd>{currency(quote.labourCentsExGst)} ex GST</dd></div><div><dt>Other services</dt><dd>{currency(quote.otherCentsExGst)} ex GST</dd></div><div><dt>Start window</dt><dd>{optionLabel(platformQuoteOptions.startWindows, quote.startWindow)}</dd></div><div><dt>Expected duration</dt><dd>{quote.durationWeeks ? `${quote.durationWeeks} week${quote.durationWeeks === 1 ? "" : "s"}` : "To confirm"}</dd></div><div><dt>Workmanship warranty</dt><dd>{quote.workmanshipWarrantyYears ? `${quote.workmanshipWarrantyYears} years` : "To confirm"}</dd></div></dl>{quote.products.length > 0 && <details><summary>Fixed-price products ({quote.products.length})</summary><ul>{quote.products.map((product) => <li key={`${product.brand}-${product.modelNumber}`}><span>{product.brand} {product.name}<small>{product.modelNumber} | {product.quantity} {product.unitLabel}</small></span><strong>{currency(product.quantity * product.unitPriceCentsExGst)} ex GST</strong></li>)}</ul></details>}<details><summary>Included services</summary><ul>{quote.inclusions.map((item) => <li key={item}>{optionLabel(platformQuoteOptions.inclusions, item)}</li>)}</ul></details><div className="customer-quote-actions"><button type="button" className="primary" disabled={busy || quote.customerDecision === "shortlisted"} onClick={() => void onAction("quote_decision", { quoteId: quote.id, decision: "shortlisted" })}>{quote.customerDecision === "shortlisted" ? "Shortlisted" : "Shortlist this option"}</button><button type="button" disabled={busy || quote.customerDecision === "declined"} onClick={() => void onAction("quote_decision", { quoteId: quote.id, decision: "declined" })}>Not for me</button></div></article>)}</div><div className="customer-guidance-note"><strong>No direct acceptance yet</strong><p>Shortlisting helps the platform coordinate the next safe step. It does not create a contract, release your details or authorise work.</p></div></section>}
+        {project.handoverPacks.length > 0 && <section className="customer-detail-panel customer-handover-library"><div className="customer-panel-heading"><span>Keep for the life of your home</span><h2>Your digital asset and handover library</h2><p>Approved installed products, warranty records, completion checks and documents stay in this free household account. The installer still cannot access your name, email, phone or street address.</p></div><div className="customer-handover-list">{project.handoverPacks.map((handover) => <article key={handover.id}>
+          <header><div><span>{handover.workNumber}</span><h3>{optionLabel(customerProjectOptions.serviceCategories, handover.serviceCategory)}</h3><small>Platform reviewed and published {new Date(handover.publishedAt).toLocaleDateString("en-AU")}</small></div><strong>Approved handover</strong></header>
+          <div className="customer-handover-metrics"><span>{handover.assets.length} installed asset{handover.assets.length === 1 ? "" : "s"}</span><span>{handover.complianceItems.length} completion checks</span><span>{handover.documents.length} protected document{handover.documents.length === 1 ? "" : "s"}</span></div>
+          <div className="customer-handover-assets">{handover.assets.map((asset) => <section key={asset.id}><div><span>{asset.assetCategory.replaceAll("-", " ")}</span><h4>{asset.brand} {asset.modelNumber}</h4><small>{asset.serialNumber ? `Serial ${asset.serialNumber}` : "Serial not recorded"} | Quantity {asset.quantity}</small></div><dl><div><dt>Installed</dt><dd>{asset.installedAt || "Not recorded"}</dd></div><div><dt>Warranty provider</dt><dd>{asset.warrantyProvider || "Not recorded"}</dd></div><div><dt>Warranty reference</dt><dd>{asset.warrantyReference || "Not recorded"}</dd></div><div><dt>Warranty end</dt><dd>{asset.warrantyEnd || "Not recorded"}</dd></div></dl></section>)}</div>
+          <details><summary>Completion record</summary><ul>{handover.complianceItems.map((item) => <li key={item.id}><span>{item.label}</span><strong>{item.status === "not_applicable" ? "Not applicable" : "Complete"}</strong></li>)}</ul></details>
+          <div className="customer-handover-documents"><h4>Documents to keep</h4>{handover.documents.map((document) => <section key={document.id}><div><span>{document.category.replaceAll("-", " ")}</span><strong>{document.fileName}</strong><small>{fileSize(document.sizeBytes)}</small></div><button type="button" disabled={busy} onClick={() => void onDownloadHandover(document)}>Download</button></section>)}</div>
+        </article>)}</div></section>}
       </div>
-      <aside className="customer-project-sidebar"><section><span>Private project record</span><h2>Scope at a glance</h2><dl><div><dt>Work</dt><dd>{project.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item)).join(", ") || "Not selected"}</dd></div><div><dt>Timing</dt><dd>{optionLabel(customerProjectOptions.timings, project.timing)}</dd></div><div><dt>Private budget</dt><dd>{optionLabel(customerProjectOptions.budgets, project.budgetRange)}</dd></div><div><dt>Completed roadmap steps</dt><dd>{project.completedPlanItems.length} of {planItems.length}</dd></div></dl></section><section className="customer-private-notes"><span>Only you can see this</span><h2>Private notes</h2><p>{project.privateNotes || "No private notes saved yet."}</p></section><section className="customer-project-controls"><span>Project controls</span>{project.status === "draft" && <button className="primary" type="button" onClick={() => void onAction("submit")} disabled={busy}>Request installer responses</button>}<button type="button" onClick={() => void onAction("duplicate")} disabled={busy}>Duplicate as a new draft</button>{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("withdraw")} disabled={busy}>Withdraw enquiry</button>}{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("complete")} disabled={busy}>Mark project complete</button>}{["draft", "withdrawn", "completed"].includes(project.status) && <button type="button" onClick={() => void onAction("archive")} disabled={busy}>Archive project</button>}</section></aside>
+      <aside className="customer-project-sidebar"><section><span>Private project record</span><h2>Scope at a glance</h2><dl><div><dt>Work</dt><dd>{project.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item)).join(", ") || "Not selected"}</dd></div><div><dt>Timing</dt><dd>{optionLabel(customerProjectOptions.timings, project.timing)}</dd></div><div><dt>Private budget</dt><dd>{optionLabel(customerProjectOptions.budgets, project.budgetRange)}</dd></div><div><dt>Completed roadmap steps</dt><dd>{project.completedPlanItems.length} of {planItems.length}</dd></div></dl></section><section className="customer-private-notes"><span>Only you can see this</span><h2>Private notes</h2><p>{project.privateNotes || "No private notes saved yet."}</p></section><section className="customer-project-controls"><span>Project controls</span>{project.status === "draft" && <button className="primary" type="button" onClick={() => void onAction("submit")} disabled={busy}>Request installer responses</button>}<button type="button" onClick={() => void onAction("duplicate")} disabled={busy}>Duplicate as a new draft</button>{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("withdraw")} disabled={busy}>Withdraw enquiry</button>}{["matching", "quote_review"].includes(project.status) && <button type="button" onClick={() => void onAction("complete")} disabled={busy}>Mark project complete</button>}{project.handoverPacks.length > 0 ? <small>Asset and handover history stays in your completed project library.</small> : ["draft", "withdrawn", "completed"].includes(project.status) && <button type="button" onClick={() => void onAction("archive")} disabled={busy}>Archive project</button>}</section></aside>
     </div>
   </section>;
 }
@@ -361,6 +394,31 @@ export function CustomerDashboard({ initialView = "overview", initialProjectId =
     finally { setBusy(false); }
   }
 
+  async function downloadHandoverDocument(document: CustomerHandoverPack["documents"][number]) {
+    if (!user) return;
+    setBusy(true); setStatus("Preparing your protected handover document...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/trade-handover/documents?download=${encodeURIComponent(document.id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "The handover document could not be downloaded.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = document.fileName;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus("Protected handover document download started.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The handover document could not be downloaded.");
+    } finally { setBusy(false); }
+  }
+
   async function verifyEmail() {
     if (!user) return;
     setBusy(true);
@@ -389,7 +447,7 @@ export function CustomerDashboard({ initialView = "overview", initialProjectId =
       <nav className="customer-dashboard-nav" aria-label="Customer account"><a className={view === "overview" ? "active" : ""} href="/account">Overview</a><a className={view === "editor" && !editingId ? "active" : ""} href="/account/projects/new">New project</a><a href="/account/profile">Privacy and profile</a>{account.tradeWorkspace && <a href="/direct-trade/dashboard">Trade workspace</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></nav>
       {!account.emailVerified && <section className="customer-verification-banner" role="status"><div><strong>Verify your email before sending an enquiry</strong><p>You can create and save projects now. Verification is required only when you ask installers to respond.</p></div><button type="button" onClick={() => void verifyEmail()} disabled={busy}>Send verification link</button></section>}
       {status && <p className="customer-dashboard-status" role="status">{status}</p>}
-      {view === "editor" ? <ProjectEditor key={editing?.id || "new"} initial={editing ? { title: editing.title, homeNickname: editing.homeNickname, postcode: editing.postcode, addressState: editing.addressState, propertyType: editing.propertyType, householdSituation: editing.householdSituation, goal: editing.goal, pace: editing.pace, existingFeatures: editing.existingFeatures, serviceCategories: editing.serviceCategories, priorities: editing.priorities, projectStage: editing.projectStage, timing: editing.timing, budgetRange: editing.budgetRange, privateNotes: editing.privateNotes } : projectDefaultsWithSelection(account.profile, initialPlannerSelection)} existingId={editing?.id} emailVerified={account.emailVerified} onCancel={() => { setView("overview"); setEditingId(""); }} onSave={saveProject} onSubmit={submitProject} /> : view === "detail" && selected ? <ProjectDetail project={selected} busy={busy} onAction={(action, extra) => projectAction(selected, action, extra)} /> : <>
+      {view === "editor" ? <ProjectEditor key={editing?.id || "new"} initial={editing ? { title: editing.title, homeNickname: editing.homeNickname, postcode: editing.postcode, addressState: editing.addressState, propertyType: editing.propertyType, householdSituation: editing.householdSituation, goal: editing.goal, pace: editing.pace, existingFeatures: editing.existingFeatures, serviceCategories: editing.serviceCategories, priorities: editing.priorities, projectStage: editing.projectStage, timing: editing.timing, budgetRange: editing.budgetRange, privateNotes: editing.privateNotes } : projectDefaultsWithSelection(account.profile, initialPlannerSelection)} existingId={editing?.id} emailVerified={account.emailVerified} onCancel={() => { setView("overview"); setEditingId(""); }} onSave={saveProject} onSubmit={submitProject} /> : view === "detail" && selected ? <ProjectDetail project={selected} busy={busy} onAction={(action, extra) => projectAction(selected, action, extra)} onDownloadHandover={downloadHandoverDocument} /> : <>
         <section className="customer-metric-grid"><article><span>Active projects</span><strong>{activeProjects.length}</strong><small>{projects.length ? `${projects.length} saved in total` : "Create your first saved plan"}</small></article><article><span>Roadmap progress</span><strong>{completedSteps}</strong><small>steps completed across your homes</small></article><article><span>Installer responses</span><strong>{responseCount}</strong><small>structured, platform-only replies</small></article><article className="privacy"><span>Privacy mode</span><strong>Protected</strong><small>no customer contact handover</small></article></section>
         <div className="customer-overview-grid"><section className="customer-project-list-panel"><div className="customer-panel-heading"><span>My projects</span><h2>Continue where you left off</h2><p>Each draft, roadmap and enquiry is stored separately in your free account.</p></div>{projects.filter((project) => project.status !== "archived").length ? <div className="customer-project-list">{projects.filter((project) => project.status !== "archived").map((project) => <article key={project.id}><header><div><span>{statusLabels[project.displayStatus] || project.displayStatus}</span><h3>{project.title}</h3></div><strong>{project.addressState}</strong></header><p>{project.serviceCategories.length ? project.serviceCategories.map((item) => optionLabel(customerProjectOptions.serviceCategories, item)).join(", ") : "Roadmap only, no installer scope selected"}</p><div className="customer-project-card-progress"><span><i style={{ width: `${Math.round((project.completedPlanItems.length / Math.max(1, project.planSnapshot.items?.length || 1)) * 100)}%` }} /></span><small>{project.completedPlanItems.length} of {project.planSnapshot.items?.length || 0} roadmap steps</small></div><footer><small>Updated {new Date(project.updatedAt).toLocaleDateString("en-AU")}</small><a href={`/account/projects/${project.id}`}>{project.status === "draft" ? "Continue project" : "Open project"}</a></footer></article>)}</div> : <div className="customer-empty-state"><span>Start with one decision</span><h3>Create your first home project</h3><p>Build an ordered roadmap first. You decide later whether to request installer responses.</p><a className="btn" href="/account/projects/new">Create a project</a></div>}</section><aside className="customer-overview-sidebar"><section><span>Your privacy boundary</span><h2>Personal information stays on this side</h2><ul><li>Trades cannot access your account profile</li><li>Exact postcode is used for matching, then hidden</li><li>Private notes never enter the trade scope</li><li>There is no direct message or contact feature</li></ul><a href="/account/profile">Review privacy settings</a></section><section><span>Next useful action</span><h2>{activeProjects.length ? "Complete the next roadmap step" : "Start a whole-home plan"}</h2><p>{activeProjects.length ? `Open ${activeProjects[0].title} and mark the next completed decision.` : "A saved project turns the existing energy planner into a roadmap you can revisit."}</p><a href={activeProjects.length ? `/account/projects/${activeProjects[0].id}` : "/account/projects/new"}>{activeProjects.length ? "Continue project" : "Build a project"}</a></section></aside></div>
       </>}

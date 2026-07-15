@@ -65,7 +65,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {
     key: "business_operations",
     label: "Expanded Business Hub",
-    description: "Expand privacy-safe work management beyond the free five-record allowance and convert eligible platform work into operations records.",
+    description: "Expand privacy-safe work management, convert eligible platform work, and give installers asset, warranty, compliance and reviewed customer handover tools.",
     roles: ["installer", "supplier"],
     tier: "membership",
   },

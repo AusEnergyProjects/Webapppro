@@ -310,6 +310,86 @@ export const tradeWorkOrderEvents = sqliteTable("trade_work_order_events", {
   index("trade_work_order_events_order_idx").on(table.workOrderId, table.createdAt),
 ]);
 
+export const tradeHandoverPacks = sqliteTable("trade_handover_packs", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  customerProjectId: text("customer_project_id").notNull().default(""),
+  serviceCategory: text("service_category").notNull().default("other"),
+  status: text("status").notNull().default("draft"),
+  submittedAt: text("submitted_at").notNull().default(""),
+  publishedAt: text("published_at").notNull().default(""),
+  reviewNote: text("review_note").notNull().default(""),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_handover_packs_work_order_idx").on(table.workOrderId),
+  index("trade_handover_packs_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_handover_packs_customer_project_idx").on(table.customerProjectId, table.status, table.publishedAt),
+]);
+
+export const tradeInstalledAssets = sqliteTable("trade_installed_assets", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  assetCategory: text("asset_category").notNull(),
+  brand: text("brand").notNull(),
+  modelNumber: text("model_number").notNull(),
+  serialNumber: text("serial_number").notNull().default(""),
+  quantity: integer("quantity").notNull().default(1),
+  installedAt: text("installed_at").notNull().default(""),
+  warrantyProvider: text("warranty_provider").notNull().default(""),
+  warrantyReference: text("warranty_reference").notNull().default(""),
+  warrantyStart: text("warranty_start").notNull().default(""),
+  warrantyEnd: text("warranty_end").notNull().default(""),
+  supplierProductId: text("supplier_product_id").notNull().default(""),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_installed_assets_pack_idx").on(table.handoverPackId, table.recordStatus, table.createdAt),
+  index("trade_installed_assets_owner_idx").on(table.firebaseUid, table.workOrderId, table.recordStatus),
+  index("trade_installed_assets_warranty_idx").on(table.firebaseUid, table.warrantyEnd),
+]);
+
+export const tradeComplianceItems = sqliteTable("trade_compliance_items", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  templateKey: text("template_key").notNull(),
+  label: text("label").notNull(),
+  guidance: text("guidance").notNull().default(""),
+  status: text("status").notNull().default("pending"),
+  completedAt: text("completed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_compliance_items_pack_key_idx").on(table.handoverPackId, table.templateKey),
+  index("trade_compliance_items_owner_idx").on(table.firebaseUid, table.workOrderId, table.status),
+]);
+
+export const tradeHandoverDocuments = sqliteTable("trade_handover_documents", {
+  id: text("id").primaryKey(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  category: text("category").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  objectKey: text("object_key").notNull().unique(),
+  customerVisible: integer("customer_visible", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_handover_documents_pack_idx").on(table.handoverPackId, table.createdAt),
+  index("trade_handover_documents_owner_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
+]);
+
 export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
