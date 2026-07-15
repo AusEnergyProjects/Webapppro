@@ -264,6 +264,7 @@ export function AdminOperationsPortal() {
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<AdminSession | null>(null);
   const [canBootstrap, setCanBootstrap] = useState(false);
+  const [canRecoverOwner, setCanRecoverOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [email, setEmail] = useState("");
@@ -402,14 +403,16 @@ export function AdminOperationsPortal() {
       }));
       setAudit(result.audit || []);
       setCanBootstrap(false);
+      setCanRecoverOwner(false);
       await loadWorkspace(result.admin);
     } catch (error) {
       const result =
         typeof error === "object" && error && "result" in error
-          ? (error as { result?: { canBootstrap?: boolean } }).result
+          ? (error as { result?: { canBootstrap?: boolean; canRecoverOwner?: boolean } }).result
           : undefined;
       setSession(null);
       setCanBootstrap(result?.canBootstrap === true);
+      setCanRecoverOwner(result?.canRecoverOwner === true);
       setStatus(authMessage(error));
     } finally {
       setLoading(false);
@@ -426,6 +429,7 @@ export function AdminOperationsPortal() {
           setSession(null);
           setLoading(false);
           setCanBootstrap(false);
+          setCanRecoverOwner(false);
         }
       }),
     [loadSession],
@@ -511,6 +515,17 @@ export function AdminOperationsPortal() {
         body: JSON.stringify({ code: bootstrapCode }),
       });
       setBootstrapCode("");
+      await loadSession();
+    } catch (error) {
+      setStatus(authMessage(error));
+    }
+  }
+
+  async function recoverOwnerAccess() {
+    setStatus("Reconnecting the verified owner identity...");
+    try {
+      await api("/api/admin/recovery", { method: "POST" });
+      setCanRecoverOwner(false);
       await loadSession();
     } catch (error) {
       setStatus(authMessage(error));
@@ -1075,7 +1090,28 @@ export function AdminOperationsPortal() {
               <small>{user.email}</small>
             </div>
           </div>
-          {canBootstrap ? (
+          {canRecoverOwner ? (
+            <>
+              <span>Verified owner recovery</span>
+              <h1>Reconnect this owner account</h1>
+              <p>
+                This exact verified email matches the active owner register,
+                but the secure identity changed. Continue only after signing in
+                with the password you just recovered.
+              </p>
+              <button
+                className="admin-recovery-button"
+                type="button"
+                onClick={() => void recoverOwnerAccess()}
+              >
+                Reconnect owner access
+              </button>
+              <small className="admin-security-note">
+                This one-time recovery requires recent password authentication
+                and creates a permanent security audit entry.
+              </small>
+            </>
+          ) : canBootstrap ? (
             <>
               <span>One-time owner setup</span>
               <h1>Create the first protected owner</h1>

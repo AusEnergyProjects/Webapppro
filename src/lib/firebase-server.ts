@@ -10,6 +10,8 @@ export type FirebaseIdentity = {
   uid: string;
   email: string;
   emailVerified: boolean;
+  authTime: number;
+  signInProvider: string;
 };
 
 export async function requireFirebaseIdentity(request: Request): Promise<FirebaseIdentity> {
@@ -26,5 +28,17 @@ export async function requireFirebaseIdentity(request: Request): Promise<Firebas
   const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
   if (!uid || !email) throw new Error("AUTH_REQUIRED");
 
-  return { uid, email, emailVerified: payload.email_verified === true };
+  const firebase = payload.firebase && typeof payload.firebase === "object"
+    ? payload.firebase as Record<string, unknown>
+    : {};
+  return {
+    uid,
+    email,
+    emailVerified: payload.email_verified === true,
+    authTime: typeof payload.auth_time === "number" ? payload.auth_time : 0,
+    signInProvider:
+      typeof firebase.sign_in_provider === "string"
+        ? firebase.sign_in_provider
+        : "",
+  };
 }

@@ -64,8 +64,19 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     try {
-      await requireFirebaseIdentity(request);
-      const count = await getD1().prepare("SELECT COUNT(*) count FROM admin_users").first<{ count: number }>();
+      const identity = await requireFirebaseIdentity(request);
+      const db = getD1();
+      if (identity.emailVerified) {
+        const recoverable = await db.prepare(`SELECT id FROM admin_users
+          WHERE email = ? AND firebase_uid != ? AND role = 'owner' AND status = 'active' LIMIT 1`)
+          .bind(identity.email, identity.uid).first();
+        if (recoverable) return adminJson({
+          ok: false,
+          canRecoverOwner: true,
+          error: "This verified owner email is recognised, but its secure identity needs to be reconnected.",
+        }, 403);
+      }
+      const count = await db.prepare("SELECT COUNT(*) count FROM admin_users").first<{ count: number }>();
       if (!count?.count) return adminJson({ ok: false, canBootstrap: true, error: "Use the one-time owner setup code to create the first operations account." }, 403);
     } catch { /* use standard response */ }
     return adminError(error);

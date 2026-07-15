@@ -19,6 +19,8 @@ const allocationRoute = read(
 const ecosystemHealthRoute = read(
   "../src/app/api/admin/ecosystem-health/route.ts",
 );
+const recoveryRoute = read("../src/app/api/admin/recovery/route.ts");
+const firebaseServer = read("../src/lib/firebase-server.ts");
 const productRoute = read("../src/app/api/admin/products/route.ts");
 const referralsRoute = read("../src/app/api/admin/referrals/route.ts");
 const partnerOpportunities = read(
@@ -73,6 +75,25 @@ test("administration is least privilege and protects the final owner", () => {
   assert.match(adminsRoute, /At least one active owner account is required/);
   assert.match(adminsRoute, /cannot suspend or demote your own owner account/);
   assert.match(adminsRoute, /pending:\$\{id\}/);
+});
+
+test("owner identity recovery is explicit, recent, password based and audited", () => {
+  assert.match(firebaseServer, /authTime: number/);
+  assert.match(firebaseServer, /signInProvider: string/);
+  assert.match(firebaseServer, /payload\.auth_time/);
+  assert.match(firebaseServer, /sign_in_provider/);
+  assert.match(sessionRoute, /canRecoverOwner: true/);
+  assert.match(sessionRoute, /role = 'owner' AND status = 'active'/);
+  assert.match(recoveryRoute, /identity\.emailVerified/);
+  assert.match(recoveryRoute, /identity\.signInProvider !== "password"/);
+  assert.match(recoveryRoute, /RECENT_AUTH_SECONDS = 15 \* 60/);
+  assert.match(recoveryRoute, /firebase_uid = \?/);
+  assert.match(recoveryRoute, /admin\.owner_recovery/);
+  assert.match(recoveryRoute, /security\.owner_identity_recovered/);
+  assert.match(recoveryRoute, /recentPasswordAuthentication: true/);
+  assert.doesNotMatch(recoveryRoute, /export async function GET/);
+  assert.match(portal, /Reconnect owner access/);
+  assert.doesNotMatch(recoveryRoute + portal, /[\u2013\u2014]/);
 });
 
 test("moderation, evidence and matching actions have durable audit records", () => {
