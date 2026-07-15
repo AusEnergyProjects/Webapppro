@@ -191,31 +191,56 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - Versioned one-field handover corrections with administrator review and conflict protection.
 - Customer-visible correction history that retains every previously approved value.
 
-### Next release: product identity and Google-first safeguards
+### Delivered release: product identity and business integrations
 
 - Product identifier normalization for serial, batch and warranty references.
 - Serial-range and batch-aware product notice matching after supplier identifier quality improves.
-- Consented Google Workspace schedule and document integration with strict business-only destinations.
-
-### Following release: Google-first business integrations
-
 - Google Calendar schedule sync with owner-controlled calendars.
 - Google Drive document destinations for authorised business files.
 - Gmail-based platform notices without disclosing customer contact addresses.
-- CSV export before paid accounting integrations.
-- Xero, QuickBooks Online and MYOB only after the financial workflow is stable and budget allows.
+- Xero and MYOB accounting connection pathways.
+- Stripe and Square payment connection pathways.
 
-### Later release: quoting, costing and enterprise programs
+### Delivered release: installer CRM refinement
+
+- Business-owned customer records with full addresses and no map dependency.
+- System-generated, chronological job identifiers that cannot be edited.
+- A focused Today view, separate jobs, schedule, customers, tasks, templates, reports and integrations.
+- Reusable job templates that prefill job details and copy practical task checklists.
+- Responsive two-row phone navigation without a hidden horizontal menu.
+- Protected platform jobs remain redacted and separate from direct trade customers.
+- Offline-first mobile foundation for iOS and Android field work.
+
+### Next release: regulated forms and recurring operations
+
+- State and trade-specific completion, safety and commissioning form library.
+- Template versioning and administrator-published recommended templates.
+- Recurring CRM jobs generated from asset lifecycle schedules.
+- Calendar-aware dispatch, workload conflicts and crew capacity.
+- Job costing, proposal templates and progress payment schedules after the parked rate-card research is complete.
+- Wholesaler purchase orders, fulfilment milestones and warranty claims.
+
+### Later release: enterprise programs and deeper automation
 
 - Rate cards after trade categories, labour structures and compliance needs are fully researched.
 - Quote templates, product and labour bundles, deposits and progress states.
 - Job costing and margin analysis.
 - Enterprise program dashboards, installer service levels and outcome reporting.
-- Mobile-first and reduced-connectivity field experience.
+- Native app distribution, device notifications and tested conflict resolution after release accounts are connected.
+
+## Visual and journey audit, July 16 2026
+
+The public BoomPower platform uses generous white space, large lifestyle photography and simplified illustrated portal scenes. It explains the three-sided household, enterprise and installer model clearly, but the public imagery does not demonstrate a detailed field-service workflow. AEA should retain its stronger operational depth while matching that level of public clarity through a single platform overview and role-specific access boundaries.
+
+ServiceM8 exposes far more operational detail. Its pricing page communicates a broad baseline of jobs, schedules, quotes, invoices, payments, recurring jobs, templates, forms, assets, routes, costing and knowledge features. The comparison is dense and horizontally demanding, which makes discovery harder for a small operator. AEA should group capability around the workday instead of exposing every tool at once.
+
+The AEA signed-in desktop journey now has the right foundation: a calm Today view, separate work areas and a two-panel job view. The phone audit found that eight CRM destinations were previously presented as a horizontally scrolling strip, leaving important destinations easy to miss. The navigation is now a visible four-column, two-row control. Reusable templates also remove repeated data entry without making the new-job form longer.
+
+The public access story is now explicit. Customers remain free, installer and wholesaler profiles are free to prepare, unpaid installers receive no household opportunities, unpaid wholesaler products remain invisible, and administrator-assigned premium controls are separate from paid membership. This clarity is important because the live AEA memberships bundle marketplace, catalogue and operating tools and therefore should not be marketed as universally cheaper than a standalone CRM.
 
 ## Recommended decision
 
-Continue with product identifier normalization and consented Google Workspace integrations before rate cards or accounting. The private ownership and correction layer now gives the platform a durable asset passport, while better supplier identifiers are the next prerequisite for targeted safety notices, warranty support and future quoting controls.
+Build the regulated form and recurring-job layer next. Templates now reduce repeated setup, while lifecycle schedules already hold the information needed to create planned maintenance work. Linking the two will produce immediate daily value without requiring the parked rate-card assumptions. In parallel, complete the external release-account steps for Google OAuth, iOS registration and internal mobile builds.
 
 ## Further questions
 

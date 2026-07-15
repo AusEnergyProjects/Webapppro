@@ -17,6 +17,7 @@ const routes = [
   "/rebates",
   "/assessments",
   "/case-studies",
+  "/platform",
   "/direct-trade",
   "/direct-trade/partners",
   "/direct-trade/membership",
@@ -25,7 +26,7 @@ const routes = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date("2026-07-15T00:00:00.000Z");
+  const lastModified = new Date("2026-07-16T00:00:00.000Z");
   return routes.map((route) => ({
     url: `${SITE_ORIGIN}${route}`,
     lastModified,

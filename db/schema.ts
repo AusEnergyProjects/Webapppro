@@ -850,6 +850,23 @@ export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   index("trade_crm_appointments_work_order_idx").on(table.workOrderId, table.startsAt),
 ]);
 
+export const tradeCrmJobTemplates = sqliteTable("trade_crm_job_templates", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  name: text("name").notNull(),
+  title: text("title").notNull().default(""),
+  serviceCategory: text("service_category").notNull().default("other"),
+  priority: text("priority").notNull().default("standard"),
+  description: text("description").notNull().default(""),
+  taskTitles: text("task_titles").notNull().default("[]"),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_job_templates_owner_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
+  uniqueIndex("trade_crm_job_templates_owner_name_idx").on(table.firebaseUid, table.name),
+]);
+
 export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),

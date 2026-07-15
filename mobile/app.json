@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "au.com.australianenergyassessments.field",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#063a31",

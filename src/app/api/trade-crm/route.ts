@@ -9,6 +9,7 @@ export const runtime = "edge";
 
 const MEMBER_ACTIVE_JOB_LIMIT = 500;
 const CRM_CUSTOMER_LIMIT = 5000;
+const CRM_TEMPLATE_LIMIT = 60;
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
@@ -64,11 +65,16 @@ function cleanList(value: unknown, limit = 12) {
   return [...new Set(input.map((item) => cleanAdminText(item, 40).toLowerCase()).filter(Boolean))].slice(0, limit);
 }
 
-function storedList(value: unknown) {
+function storedList(value: unknown, limit = 12) {
   try {
     const parsed = JSON.parse(String(value || "[]"));
-    return Array.isArray(parsed) ? parsed.map((item) => String(item)).slice(0, 12) : [];
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).slice(0, limit) : [];
   } catch { return []; }
+}
+
+function cleanTemplateTasks(value: unknown) {
+  const input = Array.isArray(value) ? value : String(value || "").split(/\r?\n/);
+  return [...new Set(input.map((item) => cleanAdminText(item, 180)).filter(Boolean))].slice(0, 24);
 }
 
 function dateValue(value: unknown, dateOnly = false) {
@@ -91,7 +97,7 @@ function customerDisplayName(row: Record<string, unknown>) {
 
 async function crmPayload(identity: CrmIdentity) {
   const db = getD1();
-  const [customerRows, jobRows, taskRows, appointmentRows, noteRows, handoverRows] = await Promise.all([
+  const [customerRows, jobRows, taskRows, appointmentRows, noteRows, handoverRows, templateRows] = await Promise.all([
     db.prepare(`SELECT * FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'
       ORDER BY updated_at DESC LIMIT 1000`).bind(identity.uid).all<Record<string, unknown>>(),
     db.prepare(`SELECT w.*, d.id detail_id, d.crm_customer_id, d.customer_source, d.pipeline_stage,
@@ -115,6 +121,9 @@ async function crmPayload(identity: CrmIdentity) {
       ORDER BY n.created_at DESC LIMIT 1000`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
     db.prepare(`SELECT p.work_order_id, p.status FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
       WHERE p.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, name, title, service_category, priority, description, task_titles, created_at, updated_at
+      FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'
+      ORDER BY name COLLATE NOCASE LIMIT 60`).bind(identity.uid).all<Record<string, unknown>>(),
   ]);
   const customers = customerRows.results.map((row) => ({
     id: row.id,
@@ -183,7 +192,18 @@ async function crmPayload(identity: CrmIdentity) {
       updatedAt: row.updated_at,
     };
   });
-  return { customers, jobs, teamAccess: identity.teamAccess };
+  const templates = templateRows.results.map((row) => ({
+    id: row.id,
+    name: row.name,
+    title: row.title,
+    serviceCategory: row.service_category,
+    priority: row.priority,
+    description: row.description,
+    taskTitles: storedList(row.task_titles),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+  return { customers, jobs, templates, teamAccess: identity.teamAccess };
 }
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
@@ -212,6 +232,24 @@ export async function POST(request: Request) {
     const db = getD1();
     const action = cleanAdminText(body.action, 40);
     const now = new Date().toISOString();
+
+    if (action === "create_template") {
+      const templateCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'")
+        .bind(identity.uid).first<Record<string, unknown>>();
+      if (Number(templateCount?.count || 0) >= CRM_TEMPLATE_LIMIT) return adminJson({ ok: false, error: "This workspace has reached its 60-template fair-use limit." }, 409);
+      const name = cleanAdminText(body.name, 100);
+      if (!name) return adminJson({ ok: false, error: "Add a clear template name." }, 400);
+      const serviceCategory = SERVICE_CATEGORIES.has(cleanAdminText(body.serviceCategory, 60)) ? cleanAdminText(body.serviceCategory, 60) : "other";
+      const priority = PRIORITIES.has(cleanAdminText(body.priority, 20)) ? cleanAdminText(body.priority, 20) : "standard";
+      try {
+        await db.prepare(`INSERT INTO trade_crm_job_templates
+          (id, firebase_uid, name, title, service_category, priority, description, task_titles, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+          .bind(crypto.randomUUID(), identity.uid, name, cleanAdminText(body.title, 160), serviceCategory, priority,
+            cleanAdminText(body.description, 3000), JSON.stringify(cleanTemplateTasks(body.taskTitles)), now, now).run();
+      } catch { return adminJson({ ok: false, error: "A template with this name already exists." }, 409); }
+      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+    }
 
     if (action === "create_customer") {
       const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
@@ -252,10 +290,16 @@ export async function POST(request: Request) {
           .bind(customerId, identity.uid).first<Record<string, unknown>>();
         if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
       }
-      const title = cleanAdminText(body.title, 160);
+      const templateId = cleanAdminText(body.templateId, 180);
+      const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
+        WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
+      if (templateId && !template) return adminJson({ ok: false, error: "Job template not found." }, 404);
+      const title = cleanAdminText(body.title, 160) || cleanAdminText(template?.title, 160);
       if (!title) return adminJson({ ok: false, error: "Add a short job title." }, 400);
-      const serviceCategory = SERVICE_CATEGORIES.has(cleanAdminText(body.serviceCategory, 60)) ? cleanAdminText(body.serviceCategory, 60) : "other";
-      const priority = PRIORITIES.has(cleanAdminText(body.priority, 20)) ? cleanAdminText(body.priority, 20) : "standard";
+      const requestedCategory = cleanAdminText(body.serviceCategory, 60) || cleanAdminText(template?.service_category, 60);
+      const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
+      const requestedPriority = cleanAdminText(body.priority, 20) || cleanAdminText(template?.priority, 20);
+      const priority = PRIORITIES.has(requestedPriority) ? requestedPriority : "standard";
       const scheduledStart = dateValue(body.scheduledStart, true);
       const scheduledEnd = dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
@@ -263,6 +307,7 @@ export async function POST(request: Request) {
       const workNumber = await nextTradeWorkNumber(db, identity.uid, "JOB", now);
       const assignee = cleanAdminText(body.assigneeLabel, 80);
       if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
+      const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       await db.batch([
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
@@ -277,10 +322,14 @@ export async function POST(request: Request) {
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, customerId ? "trade_owned" : "internal",
-            cleanAdminText(body.description, 3000), "", cleanAdminText(body.nextAction, 200),
+            cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
+        ...templateTasks.map((taskTitle, index) => db.prepare(`INSERT INTO trade_work_order_tasks
+          (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
+          VALUES (?, ?, ?, ?, '', 'pending', '', 1, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), workOrderId, identity.uid, taskTitle, index, now, now)),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
       return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
@@ -365,6 +414,14 @@ export async function PATCH(request: Request) {
           audienceMemberId: String(job.assignee_member_id || "") }));
       }
       await db.batch(statements);
+      return adminJson({ ok: true, ...(await crmPayload(identity)) });
+    }
+
+    if (action === "archive_template") {
+      const templateId = cleanAdminText(body.templateId, 180);
+      const result = await db.prepare(`UPDATE trade_crm_job_templates SET record_status = 'archived', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(now, templateId, identity.uid).run();
+      if (!result.meta.changes) return adminJson({ ok: false, error: "Job template not found." }, 404);
       return adminJson({ ok: true, ...(await crmPayload(identity)) });
     }
 

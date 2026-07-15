@@ -18,6 +18,10 @@ type Customer = {
 type Task = { id: string; title: string; dueAt: string; status: "pending" | "done"; completedAt: string };
 type Appointment = { id: string; appointmentType: string; title: string; startsAt: string; endsAt: string; assigneeLabel: string; status: string; notes: string };
 type Note = { id: string; noteType: "internal" | "issue"; body: string; issueStatus: string; createdAt: string; updatedAt: string };
+type JobTemplate = {
+  id: string; name: string; title: string; serviceCategory: string; priority: string;
+  description: string; taskTitles: string[]; createdAt: string; updatedAt: string;
+};
 type Job = {
   id: string; workNumber: string; title: string; serviceCategory: string; siteArea: string; stage: string;
   priority: string; scheduledStart: string; scheduledEnd: string; assigneeLabel: string; sourceType: string;
@@ -27,8 +31,8 @@ type Job = {
   invoiceStatus: string; paymentDueAt: string; handoverStatus: string; tasks: Task[];
   appointments: Appointment[]; notes: Note[]; createdAt: string; updatedAt: string;
 };
-type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; teamAccess?: boolean; error?: string };
-type View = "today" | "jobs" | "schedule" | "customers" | "reports" | "integrations" | "team";
+type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamAccess?: boolean; error?: string };
+type View = "today" | "jobs" | "schedule" | "customers" | "templates" | "reports" | "integrations" | "team";
 
 const serviceLabels: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
@@ -61,6 +65,7 @@ const isoDay = () => new Date().toISOString().slice(0, 10);
 export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAccess: boolean }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [hasTeamAccess, setHasTeamAccess] = useState(teamAccess);
   const [view, setView] = useState<View>("today");
   const [creating, setCreating] = useState<"" | "job" | "customer">("");
@@ -77,6 +82,7 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
     const nextCustomers = result.customers || [];
     setJobs(nextJobs);
     setCustomers(nextCustomers);
+    setTemplates(result.templates || []);
     if (typeof result.teamAccess === "boolean") setHasTeamAccess(result.teamAccess);
     setSelectedJobId((current) => current && nextJobs.some((item) => item.id === current) ? current : nextJobs[0]?.id || "");
     setSelectedCustomerId((current) => current && nextCustomers.some((item) => item.id === current) ? current : nextCustomers[0]?.id || "");
@@ -169,12 +175,23 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     const saved = await crmRequest("POST", {
       action: "create_job", crmCustomerId: data.get("crmCustomerId"), title: data.get("title"),
+      templateId: data.get("templateId"),
       serviceCategory: data.get("serviceCategory"), siteArea: data.get("siteArea"), priority: data.get("priority"),
       scheduledStart: data.get("scheduledStart"), scheduledEnd: data.get("scheduledEnd"),
       description: data.get("description"),
       estimatedValueCents: cents(data.get("estimatedValue")),
     }, "create-job", "Job created in your private CRM.");
     if (saved) { form.reset(); setCreating(""); setView("jobs"); }
+  }
+
+  async function createTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    const saved = await crmRequest("POST", {
+      action: "create_template", name: data.get("name"), title: data.get("title"),
+      serviceCategory: data.get("serviceCategory"), priority: data.get("priority"),
+      description: data.get("description"), taskTitles: data.get("taskTitles"),
+    }, "create-template", "Reusable job template saved.");
+    if (saved) form.reset();
   }
 
   if (loading) return <section className="crm-loading"><span /><div><strong>Opening your business workspace</strong><p>Loading customers, jobs, schedule and financial records...</p></div></section>;
@@ -185,7 +202,7 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
       <div className="crm-primary-actions"><button type="button" onClick={() => { setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => { setView("customers"); setCreating("customer"); }}>New customer</button></div>
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
-      {(["today", "jobs", "schedule", "customers", "reports", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "Today" : item[0].toUpperCase() + item.slice(1)}</button>)}
+      {(["today", "jobs", "schedule", "customers", "templates", "reports", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "Today" : item[0].toUpperCase() + item.slice(1)}</button>)}
     </nav>
     <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>AEA protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>
 
@@ -200,7 +217,7 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
 
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><span>New job</span><h3>Create a clear work record</h3><p>Only the essentials are needed now. The system assigns the next chronological job ID after saving.</p></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to jobs</button></div>
-      <section className="crm-create-card"><div className="crm-create-guidance"><strong>Before you start</strong><p>Choose a direct customer if they already belong to your business. AEA protected work enters from the Leads area automatically and never exposes household details.</p></div><NewJobForm customers={customers} busy={busy} onSubmit={createJob} /></section>
+      <section className="crm-create-card"><div className="crm-create-guidance"><strong>Before you start</strong><p>Choose a direct customer if they already belong to your business. AEA protected work enters from the Leads area automatically and never exposes household details.</p></div><NewJobForm customers={customers} templates={templates} busy={busy} onSubmit={createJob} /></section>
     </div>}
 
     {view === "jobs" && creating !== "job" && <div className="crm-view">
@@ -227,6 +244,14 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
       <div className="crm-customers-layout"><aside className="crm-customer-list">{customers.length ? customers.map((customer) => <button key={customer.id} type="button" className={selectedCustomerId === customer.id ? "active" : ""} onClick={() => setSelectedCustomerId(customer.id)}><strong>{customer.displayName}</strong><span>{customer.customerNumber}</span><small>{customer.phone || customer.email || `${customer.suburb} ${customer.addressState}`.trim() || "Contact details not added"}</small></button>) : <div className="crm-empty"><strong>No direct customers yet</strong><span>Add customers your business already owns.</span></div>}</aside>{selectedCustomer ? <CustomerDetail key={selectedCustomer.id} customer={selectedCustomer} jobs={jobs.filter((job) => job.crmCustomerId === selectedCustomer.id)} busy={busy} onSave={crmRequest} onOpenJob={(id) => { setSelectedJobId(id); setView("jobs"); }} /> : <section className="crm-card"><div className="crm-empty"><strong>Select a customer</strong><span>The private contact record will open here.</span></div></section>}</div>
     </div>}
 
+    {view === "templates" && <div className="crm-view crm-template-view">
+      <div className="crm-page-heading"><div><span>Repeatable quality</span><h3>Job templates</h3><p>Save the scope and checklist once, then start consistent jobs without rebuilding the same record in the office or field.</p></div><button type="button" className="crm-new-button" onClick={() => { setView("jobs"); setCreating("job"); }}>Use a template</button></div>
+      <div className="crm-template-layout">
+        <section className="crm-card crm-template-create"><header><div><span>New reusable workflow</span><h3>Create a template</h3></div></header><form className="crm-form" onSubmit={createTemplate}><div className="crm-form-grid"><label><span>Template name</span><input name="name" required maxLength={100} placeholder="Standard heat pump install" /></label><label><span>Default job title</span><input name="title" maxLength={160} placeholder="Heat pump hot water installation" /></label><label><span>Work type</span><select name="serviceCategory">{Object.entries(serviceLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority"><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><label className="wide"><span>Default scope and access notes</span><textarea name="description" maxLength={3000} rows={4} placeholder="The repeatable scope, exclusions and site preparation" /></label><label className="wide"><span>Checklist, one item per line</span><textarea name="taskTitles" maxLength={4200} rows={7} placeholder={"Confirm isolation and site safety\nRecord installed model and serial\nPhotograph completed work\nComplete customer handover"} /><small>Up to 24 clear tasks are copied into every job created from this template.</small></label></div><button className="btn" disabled={busy === "create-template"}>{busy === "create-template" ? "Saving..." : "Save template"}</button></form></section>
+        <section className="crm-card crm-template-library"><header><div><span>Template library</span><h3>{templates.length} saved workflow{templates.length === 1 ? "" : "s"}</h3></div></header>{templates.length ? <div>{templates.map((template) => <article key={template.id}><div><span>{serviceLabels[template.serviceCategory] || template.serviceCategory}</span><strong>{template.name}</strong><p>{template.title || "Job title added when used"}</p><small>{template.taskTitles.length} checklist item{template.taskTitles.length === 1 ? "" : "s"} | {template.priority} priority</small></div><button type="button" disabled={busy === `template:${template.id}`} onClick={() => void crmRequest("PATCH", { action: "archive_template", templateId: template.id }, `template:${template.id}`, "Template archived.")}>Archive</button></article>)}</div> : <div className="crm-empty"><strong>No templates yet</strong><span>Create the first repeatable workflow for your most common job.</span></div>}</section>
+      </div>
+    </div>}
+
     {view === "reports" && <div className="crm-view">
       <div className="crm-page-heading"><div><span>Business snapshot</span><h3>Reports</h3><p>A simple operational view using the records in this workspace.</p></div></div>
       <section className="crm-metrics crm-report-metrics"><article><span>Quoted</span><strong>{money(quotedCents)}</strong><small>Current job records</small></article><article><span>Invoiced</span><strong>{money(jobs.reduce((sum, job) => sum + job.invoicedValueCents, 0))}</strong><small>Including paid invoices</small></article><article><span>Paid</span><strong>{money(paidCents)}</strong><small>Recorded receipts</small></article><article className={outstandingCents ? "attention" : ""}><span>Outstanding</span><strong>{money(outstandingCents)}</strong><small>Still to collect</small></article></section>
@@ -238,8 +263,10 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
   </section>;
 }
 
-function NewJobForm({ customers, busy, onSubmit }: { customers: Customer[]; busy: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form className="crm-form" onSubmit={onSubmit}><div className="crm-system-id-note"><span>Job ID</span><strong>Assigned automatically</strong><small>The next number follows your business sequence, such as JOB-000124.</small></div><div className="crm-form-grid"><label><span>Your customer, optional</span><select name="crmCustomerId"><option value="">No customer linked</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.displayName} | {customer.customerNumber}</option>)}</select><small>AEA protected leads enter automatically and cannot be linked to contact records.</small></label><label><span>Job title</span><input name="title" required maxLength={160} placeholder="Heat pump hot water installation" /></label><label><span>Work type</span><select name="serviceCategory">{Object.entries(serviceLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Service area</span><input name="siteArea" maxLength={80} placeholder="Suburb or region" /></label><label><span>Priority</span><select name="priority"><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><label><span>Planned start</span><input type="date" name="scheduledStart" /></label><label><span>Planned finish</span><input type="date" name="scheduledEnd" /></label><label><span>Estimated value</span><input type="number" min="0" step="0.01" name="estimatedValue" placeholder="0.00" /></label><label className="wide"><span>Job description</span><textarea name="description" maxLength={3000} rows={3} placeholder="Scope, access notes and what must happen next" /></label></div><button className="btn" disabled={busy === "create-job"}>{busy === "create-job" ? "Creating..." : "Create job"}</button></form>;
+function NewJobForm({ customers, templates, busy, onSubmit }: { customers: Customer[]; templates: JobTemplate[]; busy: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  const [templateId, setTemplateId] = useState("");
+  const template = templates.find((item) => item.id === templateId);
+  return <form className="crm-form" onSubmit={onSubmit}><div className="crm-system-id-note"><span>Job ID</span><strong>Assigned automatically</strong><small>The next number follows your business sequence, such as JOB-000124.</small></div>{templates.length > 0 && <label className="crm-template-picker"><span>Start from a template, optional</span><select name="templateId" value={templateId} onChange={(event) => setTemplateId(event.target.value)}><option value="">Blank job</option>{templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>{template ? `${template.taskTitles.length} checklist items will be added automatically.` : "Templates keep common scopes and checklists consistent."}</small></label>}<div className="crm-form-grid" key={templateId || "blank"}><label><span>Your customer, optional</span><select name="crmCustomerId"><option value="">No customer linked</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.displayName} | {customer.customerNumber}</option>)}</select><small>AEA protected leads enter automatically and cannot be linked to contact records.</small></label><label><span>Job title</span><input name="title" required maxLength={160} defaultValue={template?.title || ""} placeholder="Heat pump hot water installation" /></label><label><span>Work type</span><select name="serviceCategory" defaultValue={template?.serviceCategory || "assessment"}>{Object.entries(serviceLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Service area</span><input name="siteArea" maxLength={80} placeholder="Suburb or region" /></label><label><span>Priority</span><select name="priority" defaultValue={template?.priority || "standard"}><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><label><span>Planned start</span><input type="date" name="scheduledStart" /></label><label><span>Planned finish</span><input type="date" name="scheduledEnd" /></label><label><span>Estimated value</span><input type="number" min="0" step="0.01" name="estimatedValue" placeholder="0.00" /></label><label className="wide"><span>Job description</span><textarea name="description" maxLength={3000} rows={3} defaultValue={template?.description || ""} placeholder="Scope, access notes and what must happen next" /></label></div><button className="btn" disabled={busy === "create-job"}>{busy === "create-job" ? "Creating..." : "Create job"}</button></form>;
 }
 
 function CustomerForm({ busy, onSubmit }: { busy: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {

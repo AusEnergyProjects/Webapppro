@@ -43,6 +43,39 @@ const plans = [
   },
 ];
 
+const accessGroups = [
+  {
+    title: "Household account",
+    badge: "Always free",
+    included: ["Unlimited private projects", "Guided upgrade plans and saved comparisons", "Protected enquiries and structured quote comparison", "Asset, warranty, service and safety history"],
+    locked: ["Nothing is locked behind a household subscription", "Household contact data is never sold as a lead"],
+  },
+  {
+    title: "Installer profile",
+    badge: "Free profile",
+    included: ["Business profile and service coverage", "Verification preparation and evidence", "Availability and notification preferences", "Account readiness checklist"],
+    locked: ["No household opportunities", "No installer CRM or platform job conversion", "No approved wholesale catalogue selection"],
+  },
+  {
+    title: "Installer membership",
+    badge: "Paid access",
+    included: ["Protected opportunity responses", "Customers, jobs, schedule and reusable templates", "Tasks, issues, evidence and handovers", "Quotes, invoices, payments and integration pathways"],
+    locked: ["Team access and advanced analytics require an admin grant", "Matching is never improved by paying more"],
+  },
+  {
+    title: "Wholesaler profile",
+    badge: "Free profile",
+    included: ["Business profile and verification preparation", "Draft product records", "Account readiness checklist", "No household leads under any plan"],
+    locked: ["Products stay invisible to installers", "No bulk catalogue or fulfilment workflow", "No platform product-request conversion"],
+  },
+  {
+    title: "Wholesaler membership",
+    badge: "Paid access",
+    included: ["Approved catalogue visibility", "Bulk product maintenance", "Installer product enquiries", "Order and fulfilment workflow"],
+    locked: ["Team access and advanced analytics require an admin grant", "No access to household contact data"],
+  },
+];
+
 export default function DirectTradeMembershipPage() {
   return (
     <main className="wrap direct-trade-membership-page">
@@ -116,6 +149,24 @@ export default function DirectTradeMembershipPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="membership-access" aria-labelledby="membership-access-title">
+        <div className="guide-section-heading">
+          <span>Know what is included</span>
+          <h2 id="membership-access-title">Free profiles are useful, paid access operates the platform</h2>
+          <p>Customers never pay. Business profiles can be created and prepared for free, while leads, marketplace visibility and operating tools remain behind the membership boundary.</p>
+        </div>
+        <div className="membership-access-grid">
+          {accessGroups.map((group) => <article key={group.title}>
+            <header><span>{group.badge}</span><h3>{group.title}</h3></header>
+            <strong>Included</strong>
+            <ul>{group.included.map((item) => <li key={item}>{item}</li>)}</ul>
+            <strong>Boundaries</strong>
+            <ul className="locked">{group.locked.map((item) => <li key={item}>{item}</li>)}</ul>
+          </article>)}
+        </div>
+        <a className="platform-pricing-link" href="/platform">See how all four workspaces connect</a>
       </section>
 
       <section
