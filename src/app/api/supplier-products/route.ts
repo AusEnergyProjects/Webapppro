@@ -52,14 +52,14 @@ async function supplierIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
   const account = await getD1()
     .prepare(
-      "SELECT partner_type, account_status, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
+      "SELECT partner_type, account_status, billing_status, business_name, COALESCE(is_synthetic, 0) is_synthetic FROM trade_accounts WHERE firebase_uid = ?",
     )
     .bind(identity.uid)
     .first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
   if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return { ...identity, billingStatus: account.billing_status, businessName: String(account.business_name || "Wholesaler") };
+  return { ...identity, billingStatus: account.billing_status, businessName: String(account.business_name || "Wholesaler"), isSynthetic: Number(account.is_synthetic || 0) };
 }
 
 function errorResponse(error: unknown) {
@@ -438,8 +438,8 @@ export async function POST(request: Request) {
               `INSERT INTO supplier_products
               (id, firebase_uid, model_number, brand, name, category, description, unit_price_cents_ex_gst,
                min_order_qty, order_increment, unit_label, stock_status, lead_time_days, warranty_years, datasheet_url,
-               listing_status, review_status, review_note, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)
+               listing_status, review_status, review_note, is_synthetic, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)
               ON CONFLICT(firebase_uid, model_number) DO UPDATE SET
                 brand = excluded.brand, name = excluded.name, category = excluded.category, description = excluded.description,
                 unit_price_cents_ex_gst = excluded.unit_price_cents_ex_gst, min_order_qty = excluded.min_order_qty,
@@ -465,6 +465,7 @@ export async function POST(request: Request) {
               values.warrantyYears,
               values.datasheetUrl,
               values.listingStatus,
+              identity.isSynthetic,
               now,
               now,
             );
@@ -548,8 +549,8 @@ export async function POST(request: Request) {
           `INSERT INTO supplier_products
         (id, firebase_uid, model_number, brand, name, category, description, unit_price_cents_ex_gst,
          min_order_qty, order_increment, unit_label, stock_status, lead_time_days, warranty_years, datasheet_url,
-         listing_status, review_status, review_note, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)`,
+         listing_status, review_status, review_note, is_synthetic, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)`,
         )
         .bind(
           id,
@@ -568,6 +569,7 @@ export async function POST(request: Request) {
           values.warrantyYears,
           values.datasheetUrl,
           values.listingStatus,
+          identity.isSynthetic,
           now,
           now,
         )

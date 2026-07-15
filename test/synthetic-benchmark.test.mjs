@@ -11,6 +11,8 @@ const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
 const accountRoute = read("../src/app/api/admin/accounts/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
+const customerProjects = read("../src/app/api/customer-projects/route.ts");
+const supplierProducts = read("../src/app/api/supplier-products/route.ts");
 
 test("synthetic records are explicitly marked and removable from operational views", () => {
   for (const table of ["trade_accounts", "customer_accounts", "customer_projects", "supplier_products", "trade_opportunities"]) {
@@ -35,6 +37,10 @@ test("the benchmark uses the production customer-project path and six installer 
   assert.match(validator, /matches: 1200/);
   assert.match(ecosystemRepair, /SET `source_reference` = `id`/);
   assert.match(ecosystemRepair, /6 - existing_count/);
+  assert.match(customerProjects, /COALESCE\(is_synthetic, 0\) is_synthetic/);
+  assert.match(customerProjects, /created_by_uid, is_synthetic, created_at/);
+  assert.match(supplierProducts, /review_note, is_synthetic, created_at/);
+  assert.match(supplierProducts, /identity\.isSynthetic/);
 });
 
 test("seed data is notification free and maintains the protected household boundary", () => {
