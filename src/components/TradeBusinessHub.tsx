@@ -69,6 +69,10 @@ const serviceLabels: Record<string, string> = {
   "hot-water": "Hot water",
   "insulation-draughts": "Insulation and draught control",
   "ev-charging": "EV charging",
+  electrical: "Electrical services",
+  plumbing: "Plumbing services",
+  "mounting-hardware": "Mounting and hardware",
+  controls: "Energy controls",
   "product-fulfilment": "Product fulfilment",
   other: "Other work",
 };

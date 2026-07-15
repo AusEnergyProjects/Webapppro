@@ -9,6 +9,7 @@ import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
 import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
+import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -124,6 +125,10 @@ const capabilityLabels: Record<string, string> = {
   "hot-water": "Hot water",
   "insulation-draughts": "Insulation and draught control",
   "ev-charging": "EV charging",
+  electrical: "Electrical services",
+  plumbing: "Plumbing services",
+  "mounting-hardware": "Mounting and hardware",
+  controls: "Energy controls",
   other: "Other energy upgrades",
 };
 
@@ -228,7 +233,7 @@ export function DirectTradeDashboard() {
   const [referrals, setReferrals] = useState<ReferralData | null>(null);
   const [referralBusy, setReferralBusy] = useState(false);
   const [referralStatus, setReferralStatus] = useState("");
-  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "account">("work");
+  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "import" | "account">("work");
 
   useEffect(
     () =>
@@ -585,6 +590,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Catalogue and stock</small></button>
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Requests and tasks</small></button>
                 <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><span>Orders</span><small>Supply and warranties</small></button>
+                <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><span>Import</span><small>Guided data migration</small></button>
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Profile and membership</small></button>
               </nav>
               {workspace === "work" && <TradeBusinessHub
@@ -601,6 +607,7 @@ export function DirectTradeDashboard() {
                 hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
               />}
               {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
+              {workspace === "import" && (hasBusinessOperations && hasBulkImport ? <TradeDataImportWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Guided catalogue migration is locked</strong><p>Paid wholesaler access adds preview, duplicate review and rollback for catalogue imports.</p><a href="#membership">Compare membership</a></section>)}
               {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile, verification and membership</h2><p>Keep occasional administration separate from daily work.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a><a href="/direct-trade/membership"><strong>Membership and referrals</strong><span>Plans, invoices and rewards</span></a></div></section>}
             </>
           ) : (

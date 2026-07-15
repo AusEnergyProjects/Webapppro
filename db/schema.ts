@@ -223,6 +223,68 @@ export const adminNotificationDeliveries = sqliteTable("admin_notification_deliv
   index("admin_notification_deliveries_notification_idx").on(table.notificationId, table.createdAt),
 ]);
 
+export const adminUsabilityPilots = sqliteTable("admin_usability_pilots", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  goal: text("goal").notNull(),
+  targetParticipants: integer("target_participants").notNull().default(5),
+  status: text("status").notNull().default("recruiting"),
+  startsAt: text("starts_at").notNull().default(""),
+  endsAt: text("ends_at").notNull().default(""),
+  successCriteria: text("success_criteria").notNull().default("[]"),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("admin_usability_pilots_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const adminUsabilityPilotParticipants = sqliteTable("admin_usability_pilot_participants", {
+  id: text("id").primaryKey(),
+  pilotId: text("pilot_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  slotNumber: integer("slot_number").notNull(),
+  businessNameSnapshot: text("business_name_snapshot").notNull(),
+  baselineSystem: text("baseline_system").notNull().default(""),
+  teamSize: integer("team_size").notNull().default(1),
+  primaryTrade: text("primary_trade").notNull().default(""),
+  status: text("status").notNull().default("invited"),
+  ownerUid: text("owner_uid").notNull().default(""),
+  nextAction: text("next_action").notNull().default(""),
+  invitedAt: text("invited_at").notNull(),
+  completedAt: text("completed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("admin_usability_pilot_participant_account_idx").on(table.pilotId, table.firebaseUid),
+  uniqueIndex("admin_usability_pilot_participant_slot_idx").on(table.pilotId, table.slotNumber),
+  index("admin_usability_pilot_participant_status_idx").on(table.pilotId, table.status, table.updatedAt),
+]);
+
+export const adminUsabilityPilotSessions = sqliteTable("admin_usability_pilot_sessions", {
+  id: text("id").primaryKey(),
+  pilotId: text("pilot_id").notNull(),
+  participantId: text("participant_id").notNull(),
+  sessionType: text("session_type").notNull(),
+  status: text("status").notNull().default("scheduled"),
+  scheduledAt: text("scheduled_at").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
+  durationMinutes: integer("duration_minutes").notNull().default(0),
+  tasksAttempted: integer("tasks_attempted").notNull().default(0),
+  tasksCompleted: integer("tasks_completed").notNull().default(0),
+  easeScore: integer("ease_score").notNull().default(0),
+  confidenceScore: integer("confidence_score").notNull().default(0),
+  feedback: text("feedback").notNull().default(""),
+  observedFrictions: text("observed_frictions").notNull().default("[]"),
+  nextAction: text("next_action").notNull().default(""),
+  facilitatorUid: text("facilitator_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("admin_usability_pilot_sessions_participant_idx").on(table.participantId, table.scheduledAt),
+  index("admin_usability_pilot_sessions_status_idx").on(table.pilotId, table.status, table.scheduledAt),
+]);
+
 export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -886,6 +948,54 @@ export const tradeCrmJobTemplates = sqliteTable("trade_crm_job_templates", {
 }, (table) => [
   index("trade_crm_job_templates_owner_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
   uniqueIndex("trade_crm_job_templates_owner_name_idx").on(table.firebaseUid, table.name),
+]);
+
+export const tradeDataImportBatches = sqliteTable("trade_data_import_batches", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  partnerType: text("partner_type").notNull(),
+  importType: text("import_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSizeBytes: integer("file_size_bytes").notNull().default(0),
+  rowCount: integer("row_count").notNull().default(0),
+  readyCount: integer("ready_count").notNull().default(0),
+  warningCount: integer("warning_count").notNull().default(0),
+  duplicateCount: integer("duplicate_count").notNull().default(0),
+  errorCount: integer("error_count").notNull().default(0),
+  importedCount: integer("imported_count").notNull().default(0),
+  skippedCount: integer("skipped_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  status: text("status").notNull().default("preview"),
+  committedAt: text("committed_at").notNull().default(""),
+  rollbackUntil: text("rollback_until").notNull().default(""),
+  rolledBackAt: text("rolled_back_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_data_import_batches_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("trade_data_import_batches_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
+export const tradeDataImportRows = sqliteTable("trade_data_import_rows", {
+  id: text("id").primaryKey(),
+  batchId: text("batch_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  rowNumber: integer("row_number").notNull(),
+  rowKey: text("row_key").notNull().default(""),
+  normalizedData: text("normalized_data").notNull(),
+  validationStatus: text("validation_status").notNull(),
+  issues: text("issues").notNull().default("[]"),
+  resolution: text("resolution").notNull().default("import"),
+  resultStatus: text("result_status").notNull().default("pending"),
+  targetEntityType: text("target_entity_type").notNull().default(""),
+  targetEntityId: text("target_entity_id").notNull().default(""),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_data_import_rows_batch_row_idx").on(table.batchId, table.rowNumber),
+  index("trade_data_import_rows_batch_status_idx").on(table.batchId, table.validationStatus, table.resultStatus),
+  index("trade_data_import_rows_target_idx").on(table.firebaseUid, table.targetEntityType, table.targetEntityId),
 ]);
 
 export const tradeJobForms = sqliteTable("trade_job_forms", {

@@ -9,6 +9,7 @@ import { TradePaymentPanel } from "./TradePaymentPanel";
 import { TradeFieldWorkPanel } from "./TradeFieldWorkPanel";
 import { TradeTeamCentre } from "./TradeTeamCentre";
 import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
+import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 
 type Customer = {
   id: string; customerNumber: string; customerType: string; displayName: string; firstName: string;
@@ -33,12 +34,14 @@ type Job = {
   appointments: Appointment[]; notes: Note[]; createdAt: string; updatedAt: string;
 };
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamAccess?: boolean; error?: string };
-type View = "today" | "jobs" | "schedule" | "customers" | "templates" | "reports" | "integrations" | "team";
+type View = "today" | "jobs" | "schedule" | "customers" | "templates" | "reports" | "import" | "integrations" | "team";
 
 const serviceLabels: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
   "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
-  "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other work",
+  "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging",
+  electrical: "Electrical services", plumbing: "Plumbing services",
+  "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
 };
 const pipelineLabels: Record<string, string> = {
   enquiry: "New enquiry", qualifying: "Checking the job", quoting: "Quote in progress", approved: "Approved",
@@ -207,7 +210,7 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
       {(["today", "jobs", "schedule", "customers"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item[0].toUpperCase() + item.slice(1)}</button>)}
-      <details className="crm-more-nav"><summary className={["templates", "reports", "integrations", "team"].includes(view) ? "active" : ""}>{["templates", "reports", "integrations", "team"].includes(view) ? `More: ${view[0].toUpperCase() + view.slice(1)}` : "More"}</summary><div>{(["templates", "reports", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></details>
+      <details className="crm-more-nav"><summary className={["templates", "reports", "import", "integrations", "team"].includes(view) ? "active" : ""}>{["templates", "reports", "import", "integrations", "team"].includes(view) ? `More: ${view[0].toUpperCase() + view.slice(1)}` : "More"}</summary><div>{(["templates", "reports", "import", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}</div></details>
     </nav>
     <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>AEA protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>
 
@@ -263,6 +266,7 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
       <section className="crm-metrics crm-report-metrics"><article><span>Quoted</span><strong>{money(quotedCents)}</strong><small>Current job records</small></article><article><span>Invoiced</span><strong>{money(jobs.reduce((sum, job) => sum + job.invoicedValueCents, 0))}</strong><small>Including paid invoices</small></article><article><span>Paid</span><strong>{money(paidCents)}</strong><small>Recorded receipts</small></article><article className={outstandingCents ? "attention" : ""}><span>Outstanding</span><strong>{money(outstandingCents)}</strong><small>Still to collect</small></article></section>
       <div className="crm-report-grid"><section className="crm-card"><header><div><span>Sales flow</span><h3>Jobs by stage</h3></div></header><div className="crm-pipeline-report">{Object.entries(pipelineLabels).map(([stage, label]) => { const count = jobs.filter((job) => job.pipelineStage === stage).length; return <div key={stage}><span>{label}</span><meter min="0" max={Math.max(1, jobs.length)} value={count} /><strong>{count}</strong></div>; })}</div></section><section className="crm-card"><header><div><span>Work health</span><h3>Operational checks</h3></div></header><dl className="crm-report-list"><div><dt>Open jobs</dt><dd>{openJobs.length}</dd></div><div><dt>Jobs waiting</dt><dd>{jobs.filter((job) => job.stage === "blocked").length}</dd></div><div><dt>Open issues</dt><dd>{openIssues.length}</dd></div><div><dt>Overdue tasks</dt><dd>{overdueTasks.length}</dd></div><div><dt>Completed jobs</dt><dd>{jobs.filter((job) => job.stage === "completed").length}</dd></div></dl></section></div>
     </div>}
+    {view === "import" && <div className="crm-view"><TradeDataImportWorkspace user={user} partnerType="installer" onImported={load} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     {view === "team" && hasTeamAccess && <div className="crm-view"><TradeTeamCentre user={user} /></div>}
     {status && <p className="crm-status" role="status">{status}</p>}
