@@ -52,7 +52,8 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
   if (provider === "myob") return {
     provider, label: "MYOB", purpose: "Accounting and invoice sync", clientId: values.MYOB_CLIENT_ID || "",
     clientSecret: values.MYOB_CLIENT_SECRET || "", authorizeUrl: "https://secure.myob.com/oauth2/account/authorize",
-    tokenUrl: "https://secure.myob.com/oauth2/v1/authorize", scopes: ["sme-company-settings", "sme-sales"],
+    tokenUrl: "https://secure.myob.com/oauth2/v1/authorize",
+    scopes: ["sme-company-settings", "sme-sales", "sme-contacts-customer", "sme-general-ledger"],
   };
   if (provider === "stripe") return {
     provider, label: "Stripe", purpose: "Secure customer payment requests", clientId: values.STRIPE_CONNECT_CLIENT_ID || "",

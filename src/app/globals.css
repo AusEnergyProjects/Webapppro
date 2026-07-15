@@ -165,8 +165,8 @@
 .crm-integration-grid > article { border: 1px solid var(--color-aea-line); border-radius: 14px; display: flex; flex-direction: column; min-height: 280px; padding: 17px; }
 .crm-integration-grid > article.connected { background: linear-gradient(145deg, #fff, #f0faf6); border-color: #9dd4c0; }
 .crm-integration-grid header { align-items: center; display: grid; gap: 10px; grid-template-columns: 42px 1fr auto; }
-.crm-integration-grid header span, .crm-google-service span, .crm-payment-panel header span, .crm-property-address span { color: var(--color-aea-muted); display: block; font-size: .52rem; font-weight: 850; text-transform: uppercase; }
-.crm-integration-grid h4, .crm-google-service h4, .crm-payment-panel h4 { color: var(--color-aea-ink); font-size: .82rem; margin-top: 3px; }
+.crm-integration-grid header span, .crm-google-service span, .crm-payment-panel header span, .crm-accounting-panel header span, .crm-property-address span { color: var(--color-aea-muted); display: block; font-size: .52rem; font-weight: 850; text-transform: uppercase; }
+.crm-integration-grid h4, .crm-google-service h4, .crm-payment-panel h4, .crm-accounting-panel h4 { color: var(--color-aea-ink); font-size: .82rem; margin-top: 3px; }
 .crm-integration-grid header > strong { background: #f2f5f4; border-radius: 999px; color: #66766f; font-size: .5rem; padding: 5px 8px; }
 .crm-integration-grid article.connected header > strong { background: #ddf4ea; color: #176046; }
 .crm-provider-mark { align-items: center; border-radius: 10px; color: #fff; display: flex; font-size: 1rem; font-weight: 950; height: 42px; justify-content: center; width: 42px; }
@@ -208,6 +208,25 @@
 .crm-property-placeholder { align-items: center; background: repeating-linear-gradient(135deg, #f5f8f7, #f5f8f7 12px, #eef3f1 12px, #eef3f1 24px); border: 1px dashed #bed1ca; border-radius: 11px; color: var(--color-aea-muted); display: flex; flex-direction: column; font-size: .57rem; justify-content: center; margin-top: 13px; min-height: 190px; padding: 25px; text-align: center; }
 .crm-property-placeholder strong { color: var(--color-aea-ink); font-size: .7rem; margin-bottom: 4px; }
 .crm-map-link { color: #17674e; display: inline-block; font-size: .58rem; font-weight: 900; margin-top: 11px; }
+.crm-accounting-panel { border-top: 1px solid #dfe9e5; margin-top: 18px; padding-top: 17px; }
+.crm-accounting-panel header p { color: var(--color-aea-muted); font-size: .57rem; line-height: 1.45; margin-top: 4px; }
+.crm-accounting-create { align-items: center; background: #f5f8f7; border-radius: 10px; display: grid; gap: 9px; grid-template-columns: minmax(150px, 1fr) auto auto; margin-top: 11px; padding: 10px; }
+.crm-accounting-create > div:first-child strong { color: var(--color-aea-ink); display: block; font-size: .72rem; }
+.crm-accounting-create > div:first-child span, .crm-accounting-create > div:first-child small { color: var(--color-aea-muted); display: block; font-size: .51rem; margin-top: 2px; }
+.crm-accounting-create button, .crm-accounting-document button { background: #176f54; border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .56rem; font-weight: 900; min-height: 38px; padding: 8px 11px; white-space: nowrap; }
+.crm-accounting-create button:disabled, .crm-accounting-document button:disabled { cursor: not-allowed; opacity: .5; }
+.crm-myob-export { align-items: end; display: flex; gap: 8px; }
+.crm-myob-export label > span { color: var(--color-aea-muted); display: block; font-size: .5rem; font-weight: 850; margin-bottom: 4px; text-transform: uppercase; }
+.crm-myob-export select { background: #fff; border: 1px solid #c8d7d2; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .56rem; min-height: 38px; max-width: 260px; padding: 7px 9px; }
+.crm-accounting-document { align-items: center; background: #f6faf8; border: 1px solid #cee2da; border-radius: 10px; display: flex; gap: 12px; justify-content: space-between; margin-top: 11px; padding: 11px 13px; }
+.crm-accounting-document > div:first-child > span { color: var(--color-aea-muted); display: block; font-size: .5rem; font-weight: 850; text-transform: uppercase; }
+.crm-accounting-document > div:first-child > strong { color: var(--color-aea-ink); display: block; font-size: .68rem; margin-top: 3px; }
+.crm-accounting-document small, .crm-accounting-document em { color: var(--color-aea-muted); display: block; font-size: .51rem; font-style: normal; margin-top: 3px; }
+.crm-accounting-document em { color: #8a4b1b; }
+.crm-accounting-document > div:last-child { align-items: center; display: flex; gap: 7px; }
+.crm-accounting-document a { background: #e8f5f0; border-radius: 7px; color: #185c45; font-size: .54rem; font-weight: 900; padding: 9px 10px; text-decoration: none; white-space: nowrap; }
+.crm-accounting-document.accounting-paid { background: #f0faf6; border-color: #9dd4c0; }
+.crm-accounting-document.accounting-overdue, .crm-accounting-document.accounting-error { background: #fff5f3; border-color: #e6b4ab; }
 .crm-payment-panel { border-top: 1px solid #dfe9e5; margin-top: 18px; padding-top: 17px; }
 .crm-payment-panel header p, .crm-payment-boundary p { color: var(--color-aea-muted); font-size: .57rem; line-height: 1.45; margin-top: 4px; }
 .crm-payment-create { align-items: end; background: #f5f8f7; border-radius: 10px; display: grid; gap: 8px; grid-template-columns: minmax(150px, 1fr) auto auto auto; margin-top: 11px; padding: 10px; }
@@ -262,6 +281,9 @@
   .crm-google-service { align-items: start; grid-template-columns: 42px 1fr; }
   .crm-google-service > strong { grid-column: 2; width: max-content; }
   .crm-property-address { align-items: stretch; flex-direction: column; }
+  .crm-accounting-create { align-items: stretch; grid-template-columns: 1fr; }
+  .crm-myob-export, .crm-accounting-document, .crm-accounting-document > div:last-child { align-items: stretch; flex-direction: column; }
+  .crm-myob-export select { max-width: none; width: 100%; }
   .crm-payment-create { grid-template-columns: 1fr; }
   .crm-page-heading { align-items: stretch; flex-direction: column; }
   .crm-page-heading > details { align-self: flex-start; }

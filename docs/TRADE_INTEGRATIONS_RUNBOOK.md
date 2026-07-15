@@ -23,6 +23,34 @@ Use the SaaS platform model where each installer is the merchant and collects pa
 
 The existing account webhook remains responsible for AEA membership billing. Its signing secret stays separate in `STRIPE_WEBHOOK_SECRET`.
 
+## Xero accounting
+
+1. Register the production Xero OAuth application and allow:
+
+   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/xero`
+
+2. Store the client ID as `XERO_CLIENT_ID` and client secret as `XERO_CLIENT_SECRET`.
+3. Confirm the app is approved for `offline_access`, `accounting.transactions` and `accounting.contacts`.
+4. Connect a test organisation from an installer account.
+5. Export a direct-customer job and confirm a draft invoice is created. The platform must not email the customer.
+6. Approve and pay the test invoice in Xero, then use Refresh status in the installer CRM. Confirm the invoice total and paid amount update once.
+
+Xero exports remain drafts so the installer can check account coding and tax treatment before approval or sending.
+
+## MYOB accounting
+
+1. Register the production MYOB OAuth application and allow:
+
+   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/myob`
+
+2. Store the API key as `MYOB_CLIENT_ID` and API secret as `MYOB_CLIENT_SECRET`.
+3. Confirm the app requests `sme-company-settings`, `sme-sales`, `sme-contacts-customer` and `sme-general-ledger`.
+4. Reconnect any MYOB account that was authorised before the customer and general ledger scopes were added.
+5. Export a direct-customer job, choose the correct income account, and confirm a tax-inclusive service invoice is created without automatic email delivery.
+6. Record a test payment in MYOB, then use Refresh status in the installer CRM. Confirm the balance changes once.
+
+The MYOB income account is selected for each first export. This avoids guessing how the installer has structured its chart of accounts.
+
 ## Square
 
 1. Create the production OAuth application and register:
@@ -57,3 +85,6 @@ After changing any runtime value, deploy a saved Sites version so the new enviro
 - Webhooks reject unsigned requests.
 - The installer integration centre shows only providers with complete server configuration as ready.
 - A provider-signed test payment updates one direct-customer job once and creates one payment audit event.
+- Xero and MYOB reject AEA protected jobs before any provider request is made.
+- One direct-customer job creates at most one accounting invoice record.
+- Accounting refresh never reduces a payment already verified by Stripe or Square.

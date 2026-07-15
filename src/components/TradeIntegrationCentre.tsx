@@ -19,8 +19,8 @@ type Provider = {
 type IntegrationResult = { ok?: boolean; providers?: Provider[]; propertySearchConfigured?: boolean; error?: string };
 
 const providerNotes: Record<Provider["provider"], string> = {
-  xero: "Secure the accounting connection now. Job invoice export and payment reconciliation can then use this authorised account without sharing a Xero password.",
-  myob: "Authorise the MYOB business connection without giving AEA your MYOB login. The next accounting layer can export approved invoices through this connection.",
+  xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
+  myob: "Export a direct-customer job as a draft MYOB service invoice, then refresh its total and payment status without giving AEA your MYOB login.",
   stripe: "Create secure checkout links from a direct customer job. Card details stay with Stripe and never enter this CRM.",
   square: "Create secure Square checkout links from a direct customer job using the connected business location.",
 };

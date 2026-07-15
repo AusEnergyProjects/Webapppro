@@ -768,6 +768,52 @@ export const tradeCrmPaymentEvents = sqliteTable("trade_crm_payment_events", {
   index("trade_crm_payment_events_owner_idx").on(table.firebaseUid, table.receivedAt),
 ]);
 
+export const tradeCrmAccountingDocuments = sqliteTable("trade_crm_accounting_documents", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  provider: text("provider").notNull(),
+  documentType: text("document_type").notNull().default("invoice"),
+  externalContactId: text("external_contact_id").notNull().default(""),
+  externalDocumentId: text("external_document_id").notNull().default(""),
+  externalNumber: text("external_number").notNull().default(""),
+  externalUrl: text("external_url").notNull().default(""),
+  accountReference: text("account_reference").notNull().default(""),
+  amountCents: integer("amount_cents").notNull().default(0),
+  paidAmountCents: integer("paid_amount_cents").notNull().default(0),
+  currency: text("currency").notNull().default("AUD"),
+  status: text("status").notNull().default("exporting"),
+  providerStatus: text("provider_status").notNull().default(""),
+  dueAt: text("due_at").notNull().default(""),
+  lastSyncedAt: text("last_synced_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_accounting_documents_job_type_idx").on(table.firebaseUid, table.workOrderId, table.documentType),
+  index("trade_crm_accounting_documents_provider_external_idx").on(table.provider, table.externalDocumentId),
+  index("trade_crm_accounting_documents_owner_idx").on(table.firebaseUid, table.updatedAt),
+  index("trade_crm_accounting_documents_status_idx").on(table.status, table.lastSyncedAt),
+]);
+
+export const tradeCrmAccountingEvents = sqliteTable("trade_crm_accounting_events", {
+  id: text("id").primaryKey(),
+  accountingDocumentId: text("accounting_document_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  provider: text("provider").notNull(),
+  action: text("action").notNull(),
+  status: text("status").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  amountCents: integer("amount_cents").notNull().default(0),
+  paidAmountCents: integer("paid_amount_cents").notNull().default(0),
+  detail: text("detail").notNull().default(""),
+  occurredAt: text("occurred_at").notNull(),
+}, (table) => [
+  index("trade_crm_accounting_events_document_idx").on(table.accountingDocumentId, table.occurredAt),
+  index("trade_crm_accounting_events_owner_idx").on(table.firebaseUid, table.occurredAt),
+]);
+
 export const tradeCrmPropertyViews = sqliteTable("trade_crm_property_views", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
