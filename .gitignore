@@ -19,7 +19,8 @@
 /out/
 
 # production
-/build
+/build/*
+!/build/sites-vite-plugin.ts
 /dist/
 /.netlify/
 /.wrangler/
