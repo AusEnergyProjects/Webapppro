@@ -44,7 +44,8 @@ test("customer auth supports Google, email, verification and password recovery",
   assert.match(accountPanel, /signInWithEmailAndPassword/);
   assert.match(accountPanel, /sendEmailVerification/);
   assert.match(accountPanel, /sendPasswordResetEmail/);
-  assert.match(projectsRoute, /if \(!user\.emailVerified\)/);
+  assert.match(projectsRoute, /if \(!user\.emailVerified && !Boolean\(current\.is_synthetic\)\)/);
+  assert.match(projectsRoute, /COALESCE\(is_synthetic, 0\) is_synthetic/);
 });
 
 test("customer projects are owner scoped and support separate saved roadmaps", () => {

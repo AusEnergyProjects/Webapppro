@@ -47,7 +47,8 @@ test("customer project records require an authenticated owner and stay out of th
   assert.match(customerProjectsRoute, /customer_accounts WHERE firebase_uid = \?/);
   assert.match(customerProjectsRoute, /customer_projects WHERE id = \? AND firebase_uid = \?/);
   assert.match(customerProjectsRoute, /WHERE firebase_uid = \? ORDER BY/);
-  assert.match(customerProjectsRoute, /if \(!user\.emailVerified\)/);
+  assert.match(customerProjectsRoute, /if \(!user\.emailVerified && !Boolean\(current\.is_synthetic\)\)/);
+  assert.match(customerProjectsRoute, /COALESCE\(is_synthetic, 0\) is_synthetic/);
   assert.match(customerProjectsRoute, /buildAnonymizedOpportunity/);
   assert.match(customerProjectsRoute, /const opportunityId = `customer-project:\$\{id\}`/);
   assert.match(customerProjectsRoute, /allocateNearestInstallers/);
