@@ -2,21 +2,25 @@ import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
+  requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
 
 export const runtime = "edge";
 
-const CONTRACT_VERSION = 1;
+const CONTRACT_VERSION = MOBILE_CONTRACT_VERSION;
 const MAX_ACTIONS = 50;
 const MAX_CHANGES = 200;
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const TASK_STATUSES = new Set(["pending", "done"]);
-const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
 
 type OfflineAction = Record<string, unknown>;
 
 function syncError(error: unknown) {
+  const mobile = mobileErrorResponse(error);
+  if (mobile) return adminJson({ ok: false, code: mobile.code, error: mobile.error,
+    ...(mobile.minimumVersion ? { minimumVersion: mobile.minimumVersion } : {}) }, mobile.status);
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_MEMBERSHIP_REQUIRED") return adminJson({ ok: false, error: "No active installer team membership was found." }, 404);
@@ -61,7 +65,7 @@ function cursorValue(value: string | null) {
 
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
-  const [jobRows, taskRows] = await Promise.all([
+  const [jobRows, taskRows, mediaRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
@@ -78,6 +82,12 @@ async function accessibleJobs(access: TeamAccess) {
       WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
       ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at`)
+      .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+    db.prepare(`SELECT m.id, m.work_order_id, m.category, m.file_name, m.content_type, m.size_bytes, m.caption, m.created_at
+      FROM trade_crm_job_media m JOIN trade_work_orders w ON w.id = m.work_order_id
+      WHERE m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
+        AND (? <> 'technician' OR w.assignee_member_id = ?)
+      ORDER BY m.created_at DESC`)
       .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
   ]);
   return new Map(jobRows.results.map((row) => {
@@ -114,6 +124,11 @@ async function accessibleJobs(access: TeamAccess) {
         revision: Number(task.revision || 1),
         updatedAt: task.updated_at,
       })),
+      media: mediaRows.results.filter((media) => media.work_order_id === row.id).map((media) => ({
+        id: media.id, category: media.category, fileName: protectedJob ? "Protected field file" : media.file_name,
+        contentType: media.content_type, sizeBytes: Number(media.size_bytes),
+        caption: protectedJob ? "" : media.caption, createdAt: media.created_at,
+      })),
     }];
   }));
 }
@@ -130,6 +145,9 @@ export async function GET(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request);
     const url = new URL(request.url);
+    const deviceId = cleanAdminText(url.searchParams.get("deviceId") || request.headers.get("x-aea-device-id"), 120);
+    const device = await requireRegisteredMobileDevice(request, access, deviceId,
+      cleanAdminText(url.searchParams.get("platform"), 20), cleanAdminText(url.searchParams.get("appVersion"), 40));
     const cursor = cursorValue(url.searchParams.get("cursor"));
     if (Number.isNaN(cursor)) return adminJson({ ok: false, error: "The sync cursor is invalid. Start a fresh sync." }, 400);
     const requestedLimit = Number(url.searchParams.get("limit") || 100);
@@ -141,7 +159,8 @@ export async function GET(request: Request) {
       const jobs = await accessibleJobs(access);
       return adminJson({ ok: true, contractVersion: CONTRACT_VERSION, bootstrap: true, serverTime,
         nextCursor: `v1:${next}`, hasMore: false,
-        devicePolicy: { encryptedStorageRequired: true, purgeOnSignOut: true, protectedCustomerContactDataAllowed: false },
+        device: { id: device.deviceId, name: device.deviceName, platform: device.platform },
+        devicePolicy: mobileAppPolicy(device.platform),
         changes: [...jobs.values()].map((entity) => ({ sequence: next, entityType: "job", entityId: entity.id,
           operation: "upsert", revision: entity.revision, entity })) });
     }
@@ -164,11 +183,11 @@ export async function GET(request: Request) {
     });
     const next = page.length ? Number(page.at(-1)?.sequence || cursor) : cursor;
     return adminJson({ ok: true, contractVersion: CONTRACT_VERSION, bootstrap: false, serverTime,
-      nextCursor: `v1:${next}`, hasMore, changes });
+      nextCursor: `v1:${next}`, hasMore, devicePolicy: mobileAppPolicy(device.platform), changes });
   } catch (error) { return syncError(error); }
 }
 
-function actionRecordStatement(
+function actionReceiptStatement(
   db: D1Database,
   access: TeamAccess,
   deviceId: string,
@@ -179,31 +198,62 @@ function actionRecordStatement(
   resultRevision: number,
   now: string,
 ) {
-  return db.prepare(`INSERT INTO trade_offline_actions
-    (id, owner_uid, actor_uid, member_id, device_id, client_action_id, payload_hash, action_type,
-     entity_type, entity_id, base_revision, result_revision, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'job', ?, ?, ?, 'applied', ?)`)
-    .bind(crypto.randomUUID(), access.ownerUid, access.actorUid, access.memberId, deviceId,
-      cleanAdminText(action.clientActionId, 120), hash, cleanAdminText(action.type, 40), entityId,
-      baseRevision, resultRevision, now);
+  return db.prepare(`UPDATE trade_offline_actions SET result_revision = ?, status = 'applied', lease_until = '',
+    error_code = '', updated_at = ? WHERE owner_uid = ? AND client_action_id = ? AND payload_hash = ?
+      AND device_id = ? AND entity_id = ? AND base_revision = ? AND status = 'processing'`)
+    .bind(resultRevision, now, access.ownerUid, cleanAdminText(action.clientActionId, 120), hash,
+      deviceId, entityId, baseRevision);
 }
 
 async function replayResult(access: TeamAccess, action: OfflineAction, hash: string) {
   const clientActionId = cleanAdminText(action.clientActionId, 120);
-  const existing = await getD1().prepare(`SELECT payload_hash, action_type, entity_id, result_revision, status, created_at
+  const existing = await getD1().prepare(`SELECT id, payload_hash, action_type, entity_id, base_revision, result_revision,
+      status, lease_until, error_code, created_at, updated_at
     FROM trade_offline_actions WHERE owner_uid = ? AND client_action_id = ?`)
     .bind(access.ownerUid, clientActionId).first<Record<string, unknown>>();
   if (!existing) return null;
   if (existing.payload_hash !== hash) return { clientActionId, status: "rejected", code: "IDEMPOTENCY_MISMATCH",
     error: "This action ID was already used for different content." };
+  if (existing.status === "processing") {
+    const now = new Date().toISOString();
+    if (String(existing.lease_until || "") <= now) {
+      await getD1().prepare(`DELETE FROM trade_offline_actions WHERE id = ? AND owner_uid = ?
+        AND status = 'processing' AND lease_until <= ?`).bind(existing.id, access.ownerUid, now).run();
+      return null;
+    }
+    return { clientActionId, status: "retry", code: "ACTION_IN_PROGRESS",
+      retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(String(existing.lease_until)) - Date.now()) / 1000)) };
+  }
+  if (existing.status === "conflict") return { clientActionId, status: "conflict", code: existing.error_code || "REVISION_CONFLICT",
+    entityId: existing.entity_id, baseRevision: Number(existing.base_revision), currentRevision: Number(existing.result_revision) };
   return { clientActionId, status: "duplicate", actionType: existing.action_type, entityId: existing.entity_id,
-    resultRevision: Number(existing.result_revision), appliedAt: existing.created_at };
+    resultRevision: Number(existing.result_revision), appliedAt: existing.updated_at || existing.created_at };
+}
+
+async function reserveAction(access: TeamAccess, deviceId: string, action: OfflineAction, hash: string,
+  entityId: string, baseRevision: number, now: string) {
+  const leaseUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const result = await getD1().prepare(`INSERT OR IGNORE INTO trade_offline_actions
+    (id, owner_uid, actor_uid, member_id, device_id, client_action_id, payload_hash, action_type,
+     entity_type, entity_id, base_revision, result_revision, status, lease_until, error_code, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'job', ?, ?, 0, 'processing', ?, '', ?, ?)`)
+    .bind(crypto.randomUUID(), access.ownerUid, access.actorUid, access.memberId, deviceId,
+      cleanAdminText(action.clientActionId, 120), hash, cleanAdminText(action.type, 40), entityId,
+      baseRevision, leaseUntil, now, now).run();
+  if (result.meta.changes) return null;
+  return replayResult(access, action, hash);
+}
+
+async function releaseConflict(access: TeamAccess, action: OfflineAction, currentRevision: number, now: string) {
+  await getD1().prepare(`UPDATE trade_offline_actions SET status = 'conflict', result_revision = ?, lease_until = '',
+    error_code = 'REVISION_CONFLICT', updated_at = ? WHERE owner_uid = ? AND client_action_id = ? AND status = 'processing'`)
+    .bind(currentRevision, now, access.ownerUid, cleanAdminText(action.clientActionId, 120)).run();
 }
 
 async function applyAction(access: TeamAccess, deviceId: string, action: OfflineAction) {
   const clientActionId = cleanAdminText(action.clientActionId, 120);
   const actionType = cleanAdminText(action.type, 40);
-  if (!CLIENT_ID_PATTERN.test(clientActionId)) return { clientActionId, status: "rejected", code: "INVALID_ACTION_ID",
+  if (!MOBILE_CLIENT_ID_PATTERN.test(clientActionId)) return { clientActionId, status: "rejected", code: "INVALID_ACTION_ID",
     error: "Use a stable action ID with at least eight letters or numbers." };
   const hash = await payloadHash(action);
   const replay = await replayResult(access, action, hash);
@@ -221,12 +271,15 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const job = await assignedJob(access, workOrderId);
     if (Number(job.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
       entityId: workOrderId, baseRevision, currentRevision: Number(job.revision) };
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
+    if (reserved) return reserved;
     const resultRevision = nextJobRevision(job.revision);
     const update = await db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(stage, resultRevision, now, workOrderId, access.ownerUid, baseRevision).run();
-    if (!update.meta.changes) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId };
+    if (!update.meta.changes) { await releaseConflict(access, action, Number(job.revision), now);
+      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId }; }
     await db.batch([
-      actionRecordStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, resultRevision, now),
+      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, resultRevision, now),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'offline_stage_update', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid,
         `Field app changed the job stage to ${stage.replaceAll("_", " ")}.`, now),
@@ -251,16 +304,19 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const workOrderId = String(task.work_order_id); const job = await assignedJob(access, workOrderId);
     if (Number(task.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
       entityId: taskId, baseRevision, currentRevision: Number(task.revision) };
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
+    if (reserved) return reserved;
     const taskRevision = nextJobRevision(task.revision);
     const update = await db.prepare(`UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND revision = ?`)
       .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid, baseRevision).run();
-    if (!update.meta.changes) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: taskId };
+    if (!update.meta.changes) { await releaseConflict(access, action, Number(task.revision), now);
+      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: taskId }; }
     const jobRevision = nextJobRevision(job.revision);
     await db.batch([
       db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(jobRevision, now, workOrderId, access.ownerUid),
-      actionRecordStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, jobRevision, now),
+      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, jobRevision, now),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'offline_task_update', 'Field app updated a checklist item.', ?)`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now),
@@ -284,6 +340,8 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     if (job.source_type === "opportunity" && privateDataDetected(notes)) {
       return { clientActionId, status: "rejected", code: "PROTECTED_CUSTOMER_DATA", error: "Remove contact details from protected job notes." };
     }
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, Number(job.revision), now);
+    if (reserved) return reserved;
     const resultRevision = nextJobRevision(job.revision);
     await db.batch([
       db.prepare(`INSERT INTO trade_crm_time_entries
@@ -292,7 +350,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, access.displayName, workDate, durationMinutes, notes, now, now),
       db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(resultRevision, now, workOrderId, access.ownerUid),
-      actionRecordStatement(db, access, deviceId, action, hash, workOrderId, Number(job.revision), resultRevision, now),
+      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, Number(job.revision), resultRevision, now),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'offline_time_added', 'Field app added a technician time entry.', ?)`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now),
@@ -314,7 +372,9 @@ export async function POST(request: Request) {
     catch { return adminJson({ ok: false, error: "The offline action batch is invalid." }, 400); }
     const deviceId = cleanAdminText(body.deviceId, 100);
     const actions = Array.isArray(body.actions) ? body.actions.filter((item): item is OfflineAction => Boolean(item && typeof item === "object")) : [];
-    if (!CLIENT_ID_PATTERN.test(deviceId)) return adminJson({ ok: false, error: "Register a stable device ID before syncing field actions." }, 400);
+    if (!MOBILE_CLIENT_ID_PATTERN.test(deviceId)) return adminJson({ ok: false, error: "Register a stable device ID before syncing field actions." }, 400);
+    const device = await requireRegisteredMobileDevice(request, access, deviceId,
+      cleanAdminText(body.platform, 20), cleanAdminText(body.appVersion, 40));
     if (!actions.length || actions.length > MAX_ACTIONS) return adminJson({ ok: false, error: `Send between 1 and ${MAX_ACTIONS} offline actions at a time.` }, 400);
     const results = [];
     for (const action of actions) {
@@ -327,6 +387,8 @@ export async function POST(request: Request) {
     }
     return adminJson({ ok: true, contractVersion: CONTRACT_VERSION, serverTime: new Date().toISOString(),
       accepted: results.filter((item) => item.status === "applied" || item.status === "duplicate").length,
-      conflicts: results.filter((item) => item.status === "conflict").length, results });
+      conflicts: results.filter((item) => item.status === "conflict").length,
+      retrying: results.filter((item) => item.status === "retry").length,
+      devicePolicy: mobileAppPolicy(device.platform), results });
   } catch (error) { return syncError(error); }
 }

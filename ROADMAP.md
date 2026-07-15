@@ -121,3 +121,8 @@ Progress as at 16 July 2026:
 - Field actions accept stable client action IDs, record hashed idempotency receipts and safely recognise duplicate delivery.
 - The first versioned sync API supports bootstrap snapshots, opaque cursors, bounded change pages, job-stage changes, checklist completion and technician time entries.
 - Direct-customer addresses are limited to assigned jobs with a 24-hour offline cache policy. AEA protected jobs remain region-only with a seven-day non-contact cache policy.
+- Registered iOS and Android installations now have server-enforced minimum app versions, private push-token storage, last-seen records and immediate owner-controlled revocation from the CRM Team area.
+- Assigned-job changes now create data-free push outbox events. Notification payloads contain only an opaque job reference and an instruction to perform an authorised sync.
+- Field photos and PDFs now use idempotent 24-hour multipart upload sessions with resumable 5 MB parts, a 50 MB limit, completion recovery and CRM revision updates after assembly.
+- Interrupted queued actions now use processing leases, safe retry responses and durable completion receipts so a network failure cannot leave the mobile queue permanently blocked.
+- The remaining Phase 5 work is the native iOS and Android client application layer using the completed version 2 contract.

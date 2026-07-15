@@ -13,12 +13,14 @@ The installer web CRM is the system of record. Future iOS and Android apps will 
 - Signing out must purge all locally cached business data.
 - The server remains authoritative. Device storage is a temporary working copy.
 
-## Version 1 transport
+## Version 2 transport
 
-- Bootstrap: `GET /api/trade-team/sync` returns the current accessible job snapshot and an opaque `v1` cursor.
-- Delta: `GET /api/trade-team/sync?cursor=v1:<sequence>` returns bounded upsert and delete changes after that cursor.
-- Replay: `POST /api/trade-team/sync` accepts up to 50 queued actions with a stable device ID and a unique client action ID for every action.
+- Registration: `POST /api/trade-team/devices` records one installation-specific device ID, platform, app version and optional push token.
+- Bootstrap: `GET /api/trade-team/sync?deviceId=<id>` returns the current accessible job snapshot and an opaque `v1` cursor.
+- Delta: `GET /api/trade-team/sync?deviceId=<id>&cursor=v1:<sequence>` returns bounded upsert and delete changes after that cursor.
+- Replay: `POST /api/trade-team/sync` accepts up to 50 queued actions from an active registered device with a unique client action ID for every action.
 - Authentication: requests use the existing Firebase bearer identity. Native clients normally omit the browser Origin header.
+- Version enforcement: every native request identifies its platform and semantic app version. Clients below the configured minimum receive HTTP 426 with the required version.
 - Caching: every response is private and no-store. The app owns encrypted temporary persistence.
 
 ## Supported queued actions
@@ -27,7 +29,26 @@ The installer web CRM is the system of record. Future iOS and Android apps will 
 - `set_task_status` requires the checklist revision that the device edited.
 - `add_time_entry` is append-only and can be replayed safely.
 
-The server returns `applied`, `duplicate`, `conflict` or `rejected` for each action. A conflict includes the current revision so the app can refresh the job and ask the technician to review the newer state. Reusing an action ID with different content is rejected.
+The server returns `applied`, `duplicate`, `conflict`, `retry` or `rejected` for each action. A conflict includes the current revision so the app can refresh the job and ask the technician to review the newer state. Reusing an action ID with different content is rejected. Processing receipts carry a five-minute lease. An interrupted request can be retried safely after the lease expires without leaving an action permanently blocked.
+
+## Resumable field media
+
+- Initiate: `POST /api/trade-team/media` with `action: initiate` creates an idempotent 24-hour upload session.
+- Parts: multipart `POST /api/trade-team/media` with `action: upload_part` uploads numbered 5 MB parts. Re-sending a part replaces only that part.
+- Resume: `GET /api/trade-team/media` returns the uploaded part numbers and ETags so a device can continue after losing reception or restarting.
+- Complete: `POST /api/trade-team/media` with `action: complete` assembles the R2 object, creates the CRM media record and advances job sync in one controlled workflow.
+- Abort: `DELETE /api/trade-team/media` stops the multipart upload and removes its part receipts.
+- Limits: JPEG, PNG, WebP and PDF files are accepted up to 50 MB. AEA protected job filenames and captions are checked for contact details.
+
+If the object was assembled but the final database response was interrupted, a repeated completion request verifies the object and safely finalises the CRM record. The client upload ID cannot be reused with different metadata.
+
+## Device and notification controls
+
+- Installer owners can see registered field devices in the CRM Team area and revoke a lost, replaced or retired device.
+- Revocation blocks sync, queued actions and media uploads immediately, clears its push token and marks active upload sessions as aborted.
+- A device cannot reactivate itself after revocation. The business owner must authorise it before secure registration can continue.
+- Push tokens are private server records. Job changes create a data-free outbox event containing only a sync instruction, contract version and opaque job identifier.
+- Notification titles and bodies must remain generic. The app fetches authorised data through sync after opening a notification.
 
 ## Native client responsibilities
 
@@ -36,10 +57,12 @@ The server returns `applied`, `duplicate`, `conflict` or `rejected` for each act
 - Store queued actions and cached jobs in an encrypted local database.
 - Apply server tombstones before showing the next screen.
 - Upload actions in order, but treat every response independently so one conflict does not block unrelated work.
-- Keep photos and documents in a separate encrypted upload queue. Version 1 does not place file bytes in the structured sync batch.
+- Keep photos and documents in a separate encrypted upload queue and retain their stable client upload IDs until the server reports completion.
 - Refresh authentication before sync and stop processing immediately after account suspension, membership removal or sign-out.
+- On HTTP 403 device revocation, purge the encrypted local database, queued files, cached addresses and push token before returning to sign-in.
+- On HTTP 426, stop all sync and direct the user to the current app release without deleting queued work.
 - Never place tokens, customer details or field notes in diagnostics, push notification text or crash reports.
 
-## Next contract layer
+## Native application build layer
 
-The next mobile foundation should add resumable idempotent media uploads, device registration and revocation, push notification tokens, app-version enforcement and a controlled recovery flow for actions left in progress after a device or network failure.
+The server foundation is ready for the native application shells. The next implementation should build the iOS and Android clients around an encrypted local database, background sync scheduler, camera and document capture, upload queue, conflict review screen and the device-registration flow defined here.

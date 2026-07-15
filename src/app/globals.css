@@ -3243,6 +3243,26 @@ body input[type="checkbox"]:disabled {
 .crm-team-list > article > div span, .crm-team-list > article > div small { color: #6a7f78; font-size: .55rem; overflow: hidden; text-overflow: ellipsis; }
 .crm-team-list form { display: grid; gap: 6px; grid-template-columns: 1fr 1fr auto; }
 .crm-team-list select { font-size: .58rem; min-width: 0; }
+.crm-device-centre { background: #fff; border: 1px solid #c6ddd5; border-radius: 16px; overflow: hidden; }
+.crm-device-centre > header { align-items: center; background: #f6faf8; border-bottom: 1px solid #d7e6e1; display: flex; gap: 24px; justify-content: space-between; padding: 20px; }
+.crm-device-centre > header span { color: #078052; font-size: .57rem; font-weight: 900; text-transform: uppercase; }
+.crm-device-centre > header h4 { color: #113a2f; font-size: .88rem; margin-top: 4px; }
+.crm-device-centre > header p, .crm-device-centre > footer p { color: #657b74; font-size: .61rem; line-height: 1.55; margin-top: 5px; max-width: 720px; }
+.crm-device-centre > header aside { background: #eaf8f3; border: 1px solid #b9decf; border-radius: 11px; min-width: 150px; padding: 12px; text-align: center; }
+.crm-device-centre > header aside strong { color: #08704e; display: block; font-size: 1.15rem; }
+.crm-device-centre > header aside span { color: #527068; font-size: .52rem; text-transform: none; }
+.crm-device-list article { align-items: center; border-bottom: 1px solid #e1ece8; display: grid; gap: 13px; grid-template-columns: auto minmax(190px, 1fr) minmax(150px, auto) auto; padding: 15px 18px; }
+.crm-device-list article.revoked { background: #f7f7f7; opacity: .78; }
+.crm-device-icon { align-items: center; background: #e8f7f1; border-radius: 10px; color: #08704e; display: flex; font-size: .58rem; font-weight: 900; height: 42px; justify-content: center; width: 42px; }
+.crm-device-list article > div:nth-child(2), .crm-device-activity { display: grid; gap: 3px; }
+.crm-device-list article strong { color: #12382e; font-size: .69rem; }
+.crm-device-list article span, .crm-device-list article small { color: #667e76; font-size: .55rem; }
+.crm-device-activity { text-align: right; }
+.crm-device-activity > span { color: #08704e !important; font-weight: 850; }
+.crm-device-list button { background: #fff; border: 1px solid #b8d5ca; border-radius: 8px; color: #166148; cursor: pointer; font-size: .58rem; font-weight: 850; min-height: 37px; padding: 0 12px; }
+.crm-device-list article:not(.revoked) button { border-color: #e1b7ae; color: #974433; }
+.crm-device-centre > footer { background: #fbfdfc; padding: 16px 20px; }
+.crm-device-centre > footer strong { color: #173f34; font-size: .64rem; }
 .crm-reissue-button { background: #eef8f4; color: #08714d; grid-column: 2; justify-self: end; min-height: 32px; }
 
 .trade-team-page { background: #f3f8f6; min-height: 100vh; }
@@ -3307,6 +3327,9 @@ body input[type="checkbox"]:disabled {
   .crm-dispatch-list article { align-items: start; grid-template-columns: 44px minmax(0, 1fr); padding: 13px; }
   .crm-dispatch-list article > label { grid-column: 1 / -1; }
   .crm-team-list > article { grid-template-columns: 1fr; }
+  .crm-device-list article { grid-template-columns: auto 1fr; }
+  .crm-device-activity { text-align: left; }
+  .crm-device-list button { grid-column: 1 / -1; }
   .crm-team-list form { grid-template-columns: 1fr 1fr; }
   .crm-team-list form button { grid-column: 1 / -1; }
   .crm-reissue-button { grid-column: 1; justify-self: stretch; }

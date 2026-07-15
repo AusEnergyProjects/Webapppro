@@ -346,11 +346,104 @@ export const tradeOfflineActions = sqliteTable("trade_offline_actions", {
   baseRevision: integer("base_revision").notNull().default(0),
   resultRevision: integer("result_revision").notNull().default(0),
   status: text("status").notNull().default("applied"),
+  leaseUntil: text("lease_until").notNull().default(""),
+  errorCode: text("error_code").notNull().default(""),
   createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
 }, (table) => [
   uniqueIndex("trade_offline_actions_owner_client_idx").on(table.ownerUid, table.clientActionId),
   index("trade_offline_actions_actor_idx").on(table.ownerUid, table.actorUid, table.createdAt),
   index("trade_offline_actions_entity_idx").on(table.ownerUid, table.entityType, table.entityId, table.createdAt),
+]);
+
+export const tradeMobileDevices = sqliteTable("trade_mobile_devices", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  memberId: text("member_id").notNull().default(""),
+  deviceId: text("device_id").notNull(),
+  platform: text("platform").notNull(),
+  deviceName: text("device_name").notNull().default("Field device"),
+  appVersion: text("app_version").notNull(),
+  pushProvider: text("push_provider").notNull().default("fcm"),
+  pushToken: text("push_token").notNull().default(""),
+  pushTokenUpdatedAt: text("push_token_updated_at").notNull().default(""),
+  status: text("status").notNull().default("active"),
+  registeredAt: text("registered_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  revokedAt: text("revoked_at").notNull().default(""),
+  revokedByUid: text("revoked_by_uid").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_mobile_devices_owner_device_idx").on(table.ownerUid, table.deviceId),
+  index("trade_mobile_devices_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),
+  index("trade_mobile_devices_actor_status_idx").on(table.actorUid, table.status, table.lastSeenAt),
+  index("trade_mobile_devices_member_status_idx").on(table.ownerUid, table.memberId, table.status),
+]);
+
+export const tradeMobilePushOutbox = sqliteTable("trade_mobile_push_outbox", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  audienceMemberId: text("audience_member_id").notNull(),
+  eventKey: text("event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  payload: text("payload").notNull().default("{}"),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_mobile_push_outbox_event_idx").on(table.eventKey),
+  index("trade_mobile_push_outbox_pending_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+  index("trade_mobile_push_outbox_audience_idx").on(table.ownerUid, table.audienceMemberId, table.createdAt),
+]);
+
+export const tradeMobileUploadSessions = sqliteTable("trade_mobile_upload_sessions", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  memberId: text("member_id").notNull().default(""),
+  deviceId: text("device_id").notNull(),
+  clientUploadId: text("client_upload_id").notNull(),
+  metadataHash: text("metadata_hash").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  uploadId: text("upload_id").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  category: text("category").notNull().default("progress"),
+  caption: text("caption").notNull().default(""),
+  partSizeBytes: integer("part_size_bytes").notNull(),
+  status: text("status").notNull().default("initiated"),
+  mediaId: text("media_id").notNull().default(""),
+  expiresAt: text("expires_at").notNull(),
+  completedAt: text("completed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_mobile_upload_sessions_owner_client_idx").on(table.ownerUid, table.clientUploadId),
+  uniqueIndex("trade_mobile_upload_sessions_object_idx").on(table.objectKey),
+  index("trade_mobile_upload_sessions_device_idx").on(table.ownerUid, table.deviceId, table.status, table.updatedAt),
+  index("trade_mobile_upload_sessions_job_idx").on(table.ownerUid, table.workOrderId, table.createdAt),
+  index("trade_mobile_upload_sessions_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const tradeMobileUploadParts = sqliteTable("trade_mobile_upload_parts", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  partNumber: integer("part_number").notNull(),
+  etag: text("etag").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_mobile_upload_parts_session_part_idx").on(table.sessionId, table.partNumber),
+  index("trade_mobile_upload_parts_session_idx").on(table.sessionId, table.partNumber),
 ]);
 
 export const tradeCrmCounters = sqliteTable("trade_crm_counters", {
