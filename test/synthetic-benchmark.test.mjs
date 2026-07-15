@@ -14,6 +14,7 @@ const directoryRoute = read("../src/app/api/admin/directory/route.ts");
 const accountRoute = read("../src/app/api/admin/accounts/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const customerProjects = read("../src/app/api/customer-projects/route.ts");
+const customerAccount = read("../src/app/api/customer-account/route.ts");
 const supplierProducts = read("../src/app/api/supplier-products/route.ts");
 
 test("synthetic records are explicitly marked and removable from operational views", () => {
@@ -42,6 +43,7 @@ test("the benchmark uses the production customer-project path and six installer 
   assert.match(customerProjects, /COALESCE\(is_synthetic, 0\) is_synthetic/);
   assert.match(customerProjects, /created_by_uid, is_synthetic, created_at/);
   assert.match(customerProjects, /!user\.emailVerified && !Boolean\(current\.is_synthetic\)/);
+  assert.match(customerAccount, /user\.emailVerified \|\| Boolean\(record\?\.is_synthetic\)/);
   assert.match(supplierProducts, /review_note, is_synthetic, created_at/);
   assert.match(supplierProducts, /identity\.isSynthetic/);
   assert.match(journeyReadiness, /service_radius_km` = 5000/);

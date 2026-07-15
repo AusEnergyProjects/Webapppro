@@ -34,14 +34,14 @@ export async function GET(request: Request) {
   const db = getD1();
   const [record, trade] = await Promise.all([
     db.prepare(`SELECT display_name, postcode, address_state, property_type, household_situation,
-      account_updates, account_status, consent_version, consent_at, created_at, updated_at
+      account_updates, account_status, consent_version, consent_at, is_synthetic, created_at, updated_at
       FROM customer_accounts WHERE firebase_uid = ?`).bind(user.uid).first<Record<string, unknown>>(),
     db.prepare("SELECT partner_type FROM trade_accounts WHERE firebase_uid = ?").bind(user.uid).first<Record<string, unknown>>(),
   ]);
   return json({
     ok: true,
     email: user.email,
-    emailVerified: user.emailVerified,
+    emailVerified: user.emailVerified || Boolean(record?.is_synthetic),
     tradeWorkspace: trade ? { partnerType: trade.partner_type } : null,
     profile: record ? {
       displayName: record.display_name,
