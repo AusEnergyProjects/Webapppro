@@ -2129,7 +2129,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-template-register > article h3 { color: var(--color-aea-ink); margin: 3px 0; }
 .admin-template-register > article p, .admin-template-register > article small { color: var(--color-aea-muted); }
 .admin-template-register > article > div:last-child { align-items: flex-end; display: flex; flex-direction: column; gap: 7px; min-width: 160px; }
-@media (max-width: 760px) { .admin-form-grid { grid-template-columns: 1fr; } .admin-form-grid .wide, .admin-form-grid fieldset.wide { grid-column: auto; } .admin-template-fields article { grid-template-columns: 1fr; } .admin-template-register > article { align-items: stretch; flex-direction: column; } .admin-template-register > article > div:last-child { align-items: stretch; } }
+@media (max-width: 760px) { .admin-card > header { flex-direction: column; } .admin-card > header small { max-width: none; } .admin-form-grid { grid-template-columns: 1fr; } .admin-form-grid .wide, .admin-form-grid fieldset.wide { grid-column: auto; } .admin-template-fields article { grid-template-columns: 1fr; } .admin-template-register > article { align-items: stretch; flex-direction: column; } .admin-template-register > article > div:last-child { align-items: stretch; } }
 .admin-metric-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
 .admin-metric-grid article, .admin-panel { background: #fff; border: 1px solid var(--color-aea-line); border-radius: 16px; box-shadow: 0 9px 26px rgba(4, 43, 44, .07); }
 .admin-metric-grid article { min-height: 130px; padding: 19px; }
