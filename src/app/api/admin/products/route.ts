@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       unitPriceCentsExGst: Number(row.unit_price_cents_ex_gst), minOrderQty: Number(row.min_order_qty), stockStatus: row.stock_status,
       leadTimeDays: Number(row.lead_time_days), warrantyYears: Number(row.warranty_years), listingStatus: row.listing_status,
       reviewStatus: row.review_status, reviewNote: row.review_note, linkedCount: Number(row.linked_count), updatedAt: row.updated_at,
+      isSynthetic: Boolean(row.is_synthetic),
     })) });
   } catch (error) { return adminError(error); }
 }

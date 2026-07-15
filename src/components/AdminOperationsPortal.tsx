@@ -133,8 +133,10 @@ type Opportunity = {
   connectedCount: number;
   contactLimit: number;
   maximumConnectedInstallers: number;
+  isSynthetic: boolean;
   expiresAt: string;
   updatedAt: string;
+  isSynthetic: boolean;
   allocations: OpportunityAllocation[];
 };
 type CatalogueProduct = {
@@ -270,8 +272,10 @@ export function AdminOperationsPortal() {
   );
   const [accountNote, setAccountNote] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [opportunitySynthetic, setOpportunitySynthetic] = useState("");
   const [products, setProducts] = useState<CatalogueProduct[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [productSynthetic, setProductSynthetic] = useState("");
   const [productReview, setProductReview] = useState<
     Record<
       string,
@@ -878,19 +882,22 @@ export function AdminOperationsPortal() {
   const respondedProductEnquiries = productEnquiries.filter((item) => item.status === "responded").length;
   const enquiryValueCents = productEnquiries.reduce((total, item) => total + item.subtotalCentsExGst, 0);
   const openOpportunities = useMemo(
-    () => opportunities.filter((item) => item.status === "open"),
-    [opportunities],
+    () => opportunities.filter((item) => item.status === "open" && (opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true)),
+    [opportunities, opportunitySynthetic],
+  );
+  const visibleOpportunities = useMemo(
+    () => opportunities.filter((item) => opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true),
+    [opportunities, opportunitySynthetic],
   );
   const visibleProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
-    return term
-      ? products.filter((item) =>
+    return products
+      .filter((item) => productSynthetic === "only" ? item.isSynthetic : productSynthetic === "exclude" ? !item.isSynthetic : true)
+      .filter((item) => !term ||
           `${item.supplierName} ${item.modelNumber} ${item.brand} ${item.name} ${item.category}`
             .toLowerCase()
-            .includes(term),
-        )
-      : products;
-  }, [productSearch, products]);
+            .includes(term));
+  }, [productSearch, productSynthetic, products]);
 
   if (!authReady || loading)
     return (
@@ -1748,6 +1755,17 @@ export function AdminOperationsPortal() {
                   assign suitable verified businesses.
                 </p>
               </header>
+              <div className="admin-context-filter">
+                <label>
+                  Opportunity data
+                  <select aria-label="Opportunity data marker" value={opportunitySynthetic} onChange={(event) => setOpportunitySynthetic(event.target.value)}>
+                    <option value="">Live and demo enquiries</option>
+                    <option value="exclude">Live enquiries only</option>
+                    <option value="only">Demo enquiries only</option>
+                  </select>
+                </label>
+                <span>{visibleOpportunities.length} enquiries shown</span>
+              </div>
               <div className="admin-opportunity-layout">
                 <form
                   className="admin-panel admin-opportunity-form"
@@ -1917,15 +1935,15 @@ export function AdminOperationsPortal() {
                     <span>Pipeline</span>
                     <h2>Current opportunities</h2>
                   </div>
-                  {opportunities.length ? (
-                    opportunities.map((opportunity) => (
+                  {visibleOpportunities.length ? (
+                    visibleOpportunities.map((opportunity) => (
                       <article key={opportunity.id}>
                         <header>
                           <div>
                             <span>
                               {opportunity.state} {opportunity.postcode}
                             </span>
-                            <h3>{opportunity.title}</h3>
+                            <h3>{opportunity.title}{opportunity.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</h3>
                           </div>
                           <span
                             className={`admin-pill admin-pill-${opportunity.status}`}
@@ -2113,6 +2131,17 @@ export function AdminOperationsPortal() {
                   data and wholesalers never enter the opportunity workflow.
                 </p>
               </header>
+              <div className="admin-context-filter">
+                <label>
+                  Catalogue data
+                  <select aria-label="Catalogue data marker" value={productSynthetic} onChange={(event) => setProductSynthetic(event.target.value)}>
+                    <option value="">Live and demo products</option>
+                    <option value="exclude">Live products only</option>
+                    <option value="only">Demo products only</option>
+                  </select>
+                </label>
+                <span>{visibleProducts.length} products shown</span>
+              </div>
               <section className="admin-metric-grid">
                 <article>
                   <span>Total products</span>
@@ -2186,7 +2215,7 @@ export function AdminOperationsPortal() {
                                 {product.supplierName} · {product.supplierEmail}
                               </span>
                               <h3>
-                                {product.brand} {product.modelNumber}
+                                {product.brand} {product.modelNumber}{product.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}
                               </h3>
                               <strong>{product.name}</strong>
                             </div>

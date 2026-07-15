@@ -169,6 +169,10 @@
 .crm-pipeline-board button em { color: #4d6a60; font-size: .52rem; font-style: normal; margin-top: 4px; }
 .crm-pipeline-board section p { color: var(--color-aea-muted); font-size: .56rem; padding: 14px 6px; text-align: center; }
 .admin-synthetic-marker { background: #e8f0fb; border-radius: 999px; color: #315f8a; display: inline-block; font-size: .48rem; margin-left: 6px; padding: 3px 6px; text-transform: uppercase; vertical-align: middle; }
+.admin-context-filter { align-items: end; background: #eaf6f1; border: 1px solid #b8d8cc; border-radius: 12px; display: flex; gap: 14px; justify-content: space-between; margin-bottom: 14px; padding: 10px 12px; }
+.admin-context-filter label { color: #194f40; display: grid; font-size: .62rem; font-weight: 850; gap: 5px; }
+.admin-context-filter select { background: #fff; border: 1px solid #9fc8b9; border-radius: 9px; color: var(--color-aea-text); min-height: 40px; padding: 8px 10px; }
+.admin-context-filter > span { color: #416f63; font-size: .68rem; font-weight: 750; }
 .crm-field-privacy { border-left: 4px solid #148b66; border-radius: 10px; display: grid; gap: 4px; margin-bottom: 14px; padding: 13px 15px; }
 .crm-field-privacy.owned { background: #edf8f3; }
 .crm-field-privacy.protected { background: #fff6df; border-left-color: #db9d27; }

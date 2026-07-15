@@ -19,6 +19,7 @@ function shape(row: Record<string, unknown>) {
     serviceCategories: parseJsonList(row.service_categories), priority: row.priority, timing: row.timing,
     summary: row.summary, status: row.status, sourceReference: row.source_reference,
     contactLimit: Number(row.contact_limit || DEFAULT_CONTACT_LIMIT), maximumConnectedInstallers: Number(row.maximum_connected_installers || DEFAULT_CONNECTED_INSTALLERS),
+    isSynthetic: Boolean(row.is_synthetic),
     expiresAt: row.expires_at, expiredAt: row.expired_at, createdAt: row.created_at, updatedAt: row.updated_at,
     matchCount: Number(row.match_count || 0), interestedCount: Number(row.interested_count || 0), connectedCount: Number(row.connected_count || 0) };
 }
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
       SUM(CASE WHEN m.status = 'interested' THEN 1 ELSE 0 END) interested_count,
       SUM(CASE WHEN m.status = 'connected' THEN 1 ELSE 0 END) connected_count
       FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
-      GROUP BY o.id ORDER BY o.updated_at DESC LIMIT 100`).all<Record<string, unknown>>();
+      GROUP BY o.id ORDER BY o.updated_at DESC LIMIT 500`).all<Record<string, unknown>>();
     const ids = rows.results.map((row) => String(row.id));
     const allocations = ids.length ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
       m.distance_metres, m.allocation_rank, m.match_source, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at,

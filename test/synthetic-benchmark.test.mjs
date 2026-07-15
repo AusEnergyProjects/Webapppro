@@ -5,6 +5,7 @@ import fs from "node:fs";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const markerMigration = read("../drizzle/0032_windy_fixer.sql");
 const population = read("../drizzle/0033_synthetic_benchmark_population.sql");
+const ecosystemRepair = read("../drizzle/0035_ecosystem_flow_repair.sql");
 const generator = read("../scripts/seed-synthetic-population.mjs");
 const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
@@ -26,6 +27,14 @@ test("the benchmark generator targets reserved accounts and the exact requested 
   assert.match(generator, /consumers: 200/);
   assert.match(validator, /installers: 100, wholesalers: 50, consumers: 200, products: 150/);
   assert.match(validator, /Every synthetic trade account must be approved and premium/);
+});
+
+test("the benchmark uses the production customer-project path and six installer recipients", () => {
+  assert.match(generator, /sql\(opportunityId\)/);
+  assert.match(generator, /rank < 6/);
+  assert.match(validator, /matches: 1200/);
+  assert.match(ecosystemRepair, /SET `source_reference` = `id`/);
+  assert.match(ecosystemRepair, /6 - existing_count/);
 });
 
 test("seed data is notification free and maintains the protected household boundary", () => {

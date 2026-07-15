@@ -116,7 +116,7 @@ export async function GET(request: Request) {
     const statement = db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
       plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, is_synthetic, created_at, updated_at
-      FROM trade_accounts ${where} ORDER BY updated_at DESC LIMIT 100`);
+      FROM trade_accounts ${where} ORDER BY updated_at DESC LIMIT 500`);
     const rows = bindings.length ? await statement.bind(...bindings).all<Record<string, unknown>>() : await statement.all<Record<string, unknown>>();
     return adminJson({ ok: true, accounts: rows.results.map(shapeAccount) });
   } catch (error) {

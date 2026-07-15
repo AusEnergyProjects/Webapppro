@@ -20,7 +20,7 @@ const summary = {
   appointments: count("trade_crm_appointments"),
   tasks: count("trade_work_order_tasks"),
 };
-const expected = { installers: 100, wholesalers: 50, consumers: 200, products: 150, projects: 200, opportunities: 200, matches: 600, crmCustomers: 500, crmJobs: 800, appointments: 800, tasks: 2400 };
+const expected = { installers: 100, wholesalers: 50, consumers: 200, products: 150, projects: 200, opportunities: 200, matches: 1200, crmCustomers: 500, crmJobs: 800, appointments: 800, tasks: 2400 };
 for (const [key, value] of Object.entries(expected)) if (summary[key] !== value) throw new Error(`${key} expected ${value} but found ${summary[key]}`);
 const invalidSupplierCounts = db.prepare(`SELECT COUNT(*) count FROM (
   SELECT firebase_uid FROM supplier_products WHERE is_synthetic = 1 GROUP BY firebase_uid HAVING COUNT(*) != 3

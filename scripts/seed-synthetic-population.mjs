@@ -280,10 +280,10 @@ function buildSql(records) {
        contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
       VALUES (${sql(opportunityId)}, ${sql(title)}, ${sql(category)}, ${sql(consumer.state.postcode)}, ${sql(consumer.state.code)}, ${sql(json(categories))},
       ${sql(consumerIndex % 10 === 0 ? "high" : "standard")}, ${sql(consumerIndex % 3 === 0 ? "soon" : "planning")},
-      ${sql(`Synthetic anonymised ${categories.join(" and ")} enquiry in ${consumer.state.code}.`)}, 'open', ${sql(`synthetic:${projectId}`)}, 2, 3,
+      ${sql(`Synthetic anonymised ${categories.join(" and ")} enquiry in ${consumer.state.code}.`)}, 'open', ${sql(opportunityId)}, 2, 3,
       ${sql(day(30))}, '', ${sql(consumer.firebaseUid)}, 1, ${sql(now)}, ${sql(now)});`);
     const eligible = installers.filter((installer) => installer.capabilities.includes(category));
-    for (let rank = 0; rank < 3; rank += 1) {
+    for (let rank = 0; rank < 6; rank += 1) {
       const installer = eligible[(consumerIndex + rank) % eligible.length];
       statements.push(`INSERT OR IGNORE INTO trade_opportunity_matches
         (id, opportunity_id, firebase_uid, status, admin_note, partner_note, matched_categories, distance_metres,

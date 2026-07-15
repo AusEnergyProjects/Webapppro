@@ -235,7 +235,7 @@ export async function allocateNearestInstallers(
   const db = getD1();
   const opportunity = await db
     .prepare(
-      `SELECT id, title, postcode, state, service_categories, status, expires_at
+      `SELECT id, title, postcode, state, service_categories, status, expires_at, COALESCE(is_synthetic, 0) is_synthetic
     FROM trade_opportunities WHERE id = ?`,
     )
     .bind(opportunityId)
@@ -276,6 +276,7 @@ export async function allocateNearestInstallers(
       WHERE am.firebase_uid = a.firebase_uid AND am.status IN ('offered', 'viewed', 'interested', 'connected') AND ao.status = 'open') active_assignments
     FROM trade_accounts a
     WHERE a.partner_type = 'installer' AND a.account_status = 'active' AND a.verification_status = 'approved'
+      AND COALESCE(a.is_synthetic, 0) = ?
       AND a.availability_status IN ('open', 'limited')
       AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
         SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
@@ -283,7 +284,7 @@ export async function allocateNearestInstallers(
           AND (fg.expires_at = '' OR fg.expires_at > ?)
       ))`,
     )
-    .bind(cutoff, new Date().toISOString())
+    .bind(cutoff, Number(opportunity.is_synthetic || 0), new Date().toISOString())
     .all<Record<string, unknown>>();
 
   const candidates = rows.results
