@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     const db = getD1();
     const record = await db.prepare(`SELECT id, firebase_uid, email, role, status
-      FROM admin_users WHERE email = ? LIMIT 1`).bind(identity.email)
+      FROM admin_users WHERE lower(trim(email)) = ? LIMIT 1`).bind(identity.email)
       .first<Record<string, unknown>>();
     if (!record || record.role !== "owner" || record.status !== "active")
       return adminJson({ ok: false, error: "This verified email is not an active operations owner." }, 403);
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const result = await db.prepare(`UPDATE admin_users
       SET firebase_uid = ?, last_login_at = ?, updated_at = ?
-      WHERE id = ? AND firebase_uid = ? AND email = ? AND role = 'owner' AND status = 'active'`)
+      WHERE id = ? AND firebase_uid = ? AND lower(trim(email)) = ? AND role = 'owner' AND status = 'active'`)
       .bind(identity.uid, now, now, record.id, record.firebase_uid, identity.email).run();
     if (!result.meta.changes)
       return adminJson({ ok: false, error: "Owner recovery changed while it was being completed. Sign in again and retry." }, 409);

@@ -1090,14 +1090,14 @@ export function AdminOperationsPortal() {
               <small>{user.email}</small>
             </div>
           </div>
-          {canRecoverOwner ? (
+          {canRecoverOwner || (!canBootstrap && user.email) ? (
             <>
               <span>Verified owner recovery</span>
               <h1>Reconnect this owner account</h1>
               <p>
-                This exact verified email matches the active owner register,
-                but the secure identity changed. Continue only after signing in
-                with the password you just recovered.
+                If this is the verified owner email, reconnect its secure
+                identity after signing in with the password you just recovered.
+                Other accounts are rejected automatically.
               </p>
               <button
                 className="admin-recovery-button"

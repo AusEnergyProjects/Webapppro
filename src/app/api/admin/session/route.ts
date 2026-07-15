@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       const db = getD1();
       if (identity.emailVerified) {
         const recoverable = await db.prepare(`SELECT id FROM admin_users
-          WHERE email = ? AND firebase_uid != ? AND role = 'owner' AND status = 'active' LIMIT 1`)
+          WHERE lower(trim(email)) = ? AND firebase_uid != ? AND role = 'owner' AND status = 'active' LIMIT 1`)
           .bind(identity.email, identity.uid).first();
         if (recoverable) return adminJson({
           ok: false,
