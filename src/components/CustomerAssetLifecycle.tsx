@@ -62,11 +62,12 @@ export function CustomerAssetLifecycle({ user, projectId = "", packId = "" }: { 
     return groups;
   }, {});
 
-  if (loading) return <section className="customer-detail-panel customer-lifecycle-library"><p>Loading your free asset reminders...</p></section>;
+  if (loading) return <section className="customer-detail-panel customer-lifecycle-library"><p>Loading care and warranty reminders...</p></section>;
   if (!assets.length) return null;
-  return <section className="customer-detail-panel customer-lifecycle-library">
-    <div className="customer-panel-heading"><span>Free for the life of your home</span><h2>Service, warranty and product safety centre</h2><p>Keep upcoming maintenance and trusted safety notices beside the approved asset record. Your preferences stay private, and adding a date to Google Calendar is always your choice.</p></div>
-    <div className="customer-lifecycle-metrics"><article><strong>{plans.filter((plan) => plan.status === "active").length}</strong><span>active service schedules</span></article><article><strong>{dueCount}</strong><span>due within 30 days or overdue</span></article><article><strong>{events.length}</strong><span>service history entries</span></article><article><strong>{unacknowledged}</strong><span>safety notices to review</span></article></div>
+  return <details className="customer-detail-panel customer-lifecycle-library customer-lifecycle-simple">
+    <summary><div><span>Free care reminders</span><strong>Warranty, servicing and product safety</strong><small>{dueCount ? `${dueCount} item${dueCount === 1 ? "" : "s"} need attention` : unacknowledged ? `${unacknowledged} safety notice${unacknowledged === 1 ? "" : "s"} to review` : "Nothing needs attention right now"}</small></div><b>View details</b></summary>
+    <div className="customer-lifecycle-simple-body"><div className="customer-panel-heading"><span>Optional details</span><h2>Care and warranty reminders</h2><p>See service dates, warranty cover and trusted safety notices. You choose whether to add anything to Google Calendar.</p></div>
+    <div className="customer-lifecycle-metrics"><article><strong>{dueCount}</strong><span>care items due soon</span></article><article><strong>{unacknowledged}</strong><span>safety notices to review</span></article><article><strong>{plans.filter((plan) => plan.status === "active").length}</strong><span>care schedules</span></article><article><strong>{events.length}</strong><span>completed services</span></article></div>
     {notices.length > 0 && <div className="customer-safety-notices"><h3>Matched product safety notices</h3>{notices.map((notice) => { const asset = assets.find((item) => item.id === notice.assetId); return <article className={`severity-${notice.severity}`} key={`${notice.id}:${notice.assetId}`}><div><span>{readable(notice.severity)}</span><h4>{notice.title}</h4><p>{notice.summary}</p><small>Matched to {asset?.brand} {asset?.modelNumber}. No contact details were shared.</small></div><div><a href={notice.sourceUrl} target="_blank" rel="noreferrer">Open {notice.sourceLabel}</a><button type="button" disabled={Boolean(notice.acknowledgedAt) || busy === `notice:${notice.id}:${notice.assetId}`} onClick={() => void update({ action: "acknowledge_notice", noticeId: notice.id, assetId: notice.assetId }, `notice:${notice.id}:${notice.assetId}`, "Safety notice marked as reviewed in your private account.")}>{notice.acknowledgedAt ? "Reviewed" : "Mark reviewed"}</button></div></article>; })}</div>}
     <div className="customer-lifecycle-assets">{assets.map((asset) => {
       const preference = preferences.find((item) => item.assetId === asset.id) || { assetId: asset.id, remindersEnabled: true, reminderLeadDays: 30 };
@@ -78,5 +79,5 @@ export function CustomerAssetLifecycle({ user, projectId = "", packId = "" }: { 
       </article>;
     })}</div>
     {status && <p className="customer-dashboard-status" role="status">{status}</p>}
-  </section>;
+  </div></details>;
 }

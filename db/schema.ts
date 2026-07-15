@@ -606,6 +606,90 @@ export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", 
   index("trade_opportunity_matches_status_idx").on(table.status),
 ]);
 
+export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  customerNumber: text("customer_number").notNull(),
+  customerType: text("customer_type").notNull().default("residential"),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  businessName: text("business_name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  addressLine1: text("address_line_1").notNull().default(""),
+  addressLine2: text("address_line_2").notNull().default(""),
+  suburb: text("suburb").notNull().default(""),
+  addressState: text("address_state").notNull().default(""),
+  postcode: text("postcode").notNull().default(""),
+  tags: text("tags").notNull().default("[]"),
+  privateNotes: text("private_notes").notNull().default(""),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_customers_owner_number_idx").on(table.firebaseUid, table.customerNumber),
+  index("trade_crm_customers_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
+  index("trade_crm_customers_owner_name_idx").on(table.firebaseUid, table.lastName, table.businessName),
+]);
+
+export const tradeCrmJobDetails = sqliteTable("trade_crm_job_details", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull().default(""),
+  customerSource: text("customer_source").notNull().default("internal"),
+  pipelineStage: text("pipeline_stage").notNull().default("enquiry"),
+  description: text("description").notNull().default(""),
+  customerReference: text("customer_reference").notNull().default(""),
+  nextAction: text("next_action").notNull().default(""),
+  tags: text("tags").notNull().default("[]"),
+  estimatedValueCents: integer("estimated_value_cents").notNull().default(0),
+  quotedValueCents: integer("quoted_value_cents").notNull().default(0),
+  invoicedValueCents: integer("invoiced_value_cents").notNull().default(0),
+  paidValueCents: integer("paid_value_cents").notNull().default(0),
+  quoteStatus: text("quote_status").notNull().default("not_started"),
+  invoiceStatus: text("invoice_status").notNull().default("not_started"),
+  paymentDueAt: text("payment_due_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_job_details_work_order_idx").on(table.workOrderId),
+  index("trade_crm_job_details_owner_pipeline_idx").on(table.firebaseUid, table.pipelineStage, table.updatedAt),
+  index("trade_crm_job_details_customer_idx").on(table.crmCustomerId, table.updatedAt),
+]);
+
+export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  appointmentType: text("appointment_type").notNull().default("site_visit"),
+  title: text("title").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull().default(""),
+  assigneeLabel: text("assignee_label").notNull().default(""),
+  status: text("status").notNull().default("scheduled"),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_appointments_owner_start_idx").on(table.firebaseUid, table.status, table.startsAt),
+  index("trade_crm_appointments_work_order_idx").on(table.workOrderId, table.startsAt),
+]);
+
+export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  noteType: text("note_type").notNull().default("internal"),
+  body: text("body").notNull(),
+  issueStatus: text("issue_status").notNull().default("not_applicable"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_job_notes_owner_idx").on(table.firebaseUid, table.noteType, table.updatedAt),
+  index("trade_crm_job_notes_work_order_idx").on(table.workOrderId, table.createdAt),
+]);
+
 export const customerAccounts = sqliteTable("customer_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
   email: text("email").notNull(),

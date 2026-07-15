@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
+import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
 
 type PartnerType = "installer" | "supplier";
 type WorkTask = {
@@ -114,7 +115,19 @@ function displayDate(value: string) {
   });
 }
 
-export function TradeBusinessHub({
+export function TradeBusinessHub(props: {
+  user: User;
+  partnerType: PartnerType;
+  fullAccess: boolean;
+  teamAccess: boolean;
+}) {
+  if (props.partnerType === "installer" && props.fullAccess) {
+    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} />;
+  }
+  return <BusinessHubFoundation {...props} />;
+}
+
+function BusinessHubFoundation({
   user,
   partnerType,
   fullAccess,

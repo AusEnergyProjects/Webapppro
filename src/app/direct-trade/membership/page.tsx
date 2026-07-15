@@ -106,6 +106,7 @@ export default function DirectTradeMembershipPage() {
               <ul>
                 <li>Role-specific dashboard access after approval</li>
                 <li>Verification pathway for the business role</li>
+                <li>{plan.audience === "Trades and installers" ? "Installer CRM for customers, jobs, scheduling, tasks, issues and financial progress" : "Catalogue, installer enquiries and fulfilment workflow in one Business Hub"}</li>
                 <li>No individual lead fee or paid placement</li>
                 <li>{plan.term}</li>
               </ul>

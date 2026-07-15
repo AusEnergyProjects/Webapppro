@@ -80,8 +80,8 @@ test("active ownership overrides the original project link across documents and 
   assert.match(lifecycleRoute, /canCustomerAccessHandover\(customerUid, packId\)/);
   assert.match(lifecycleRoute, /customer_asset_ownerships history/);
   assert.match(projectRoute, /customer_asset_ownerships ownership/);
-  assert.match(customerDashboard, /Home assets/);
-  assert.match(customerUi, /Your live access ends when the transfer completes/);
+  assert.match(customerDashboard, /Home records/);
+  assert.match(customerUi, /Moving out\? Transfer this home record/);
 });
 
 test("published handover corrections retain the previous value and require administrator review", () => {
@@ -104,6 +104,7 @@ test("ownership and correction workflows preserve platform privacy and account b
   assert.doesNotMatch(transferAdminRoute, /sender\.email|recipient\.email|display_name|fromCustomerUid:|toCustomerUid:/);
   assert.match(correctionRoute, /account\.partner_type !== "installer"/);
   assert.doesNotMatch(correctionRoute, /supplier|wholesaler.*lead/i);
-  assert.match(customerUi, /Free household asset passport/);
+  assert.match(customerUi, /Free home records/);
+  assert.match(customerUi, /Trades cannot see your account or contact details/);
   assert.doesNotMatch(`${ownershipRoute}\n${ownershipServer}\n${transferAdminRoute}\n${correctionRoute}\n${correctionAdminRoute}\n${customerUi}\n${tradeUi}\n${adminUi}`, /[\u2013\u2014]/);
 });

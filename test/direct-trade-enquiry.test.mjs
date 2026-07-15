@@ -93,11 +93,12 @@ test("installer matching masks location and permits only structured platform res
 
 test("the customer dashboard supports guided, saved and separately managed projects", () => {
   assert.match(customerDashboard, /Project builder step \$\{step\} of 5/);
-  assert.match(customerDashboard, /\["Home", "Goals", "Roadmap", "Scope", "Privacy review"\]/);
+  assert.match(customerDashboard, /\["Home", "Goals", "Your plan", "Work", "Privacy"\]/);
+  assert.match(customerDashboard, /Answer one small step at a time/);
   assert.match(customerDashboard, /Build more than one project/);
   assert.match(customerDashboard, /fetch\("\/api\/customer-projects"/);
   assert.match(customerDashboard, /Duplicate as a new draft/);
-  assert.match(customerDashboard, /mark steps complete/i);
+  assert.match(customerDashboard, /tick off completed steps/i);
   assert.match(customerDashboard, /Review exactly what installers can see/);
   assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and exact postcode stay hidden/);
   assert.match(customerDashboard, /No direct messages or contact details are exchanged/);

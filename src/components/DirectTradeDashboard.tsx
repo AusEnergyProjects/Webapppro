@@ -583,7 +583,7 @@ export function DirectTradeDashboard() {
                 <a aria-current="page" href="/direct-trade/dashboard">
                   Product catalogue
                 </a>
-                <a href="#business-hub">Business Hub</a>
+                <a href="#business-hub">Business workspace</a>
                 <a href="/direct-trade/dashboard/verification">
                   Verification centre
                 </a>
@@ -615,7 +615,7 @@ export function DirectTradeDashboard() {
                 <a href="#opportunity-inbox">
                   Opportunity inbox {offeredCount ? `(${offeredCount})` : ""}
                 </a>
-                <a href="#business-hub">Business Hub</a>
+                <a href="#business-hub">Business workspace</a>
                 <a href="/direct-trade/dashboard/verification">
                   Verification centre
                 </a>

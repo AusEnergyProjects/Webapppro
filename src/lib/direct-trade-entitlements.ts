@@ -64,8 +64,8 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   },
   {
     key: "business_operations",
-    label: "Expanded Business Hub",
-    description: "Expand privacy-safe work management, convert eligible platform work, and give installers asset, warranty, compliance and reviewed customer handover tools.",
+    label: "CRM and Business Hub",
+    description: "Run customers, jobs, scheduling, tasks, issues, quote and invoice progress, reporting, asset records, compliance and reviewed customer handovers in one workspace.",
     roles: ["installer", "supplier"],
     tier: "membership",
   },

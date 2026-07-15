@@ -85,7 +85,8 @@ test("customer lifecycle reads require project ownership and approved handovers"
   assert.match(customerRoute, /p\.status = 'published'/);
   assert.match(customerRoute, /record_status = 'active'/);
   assert.match(customerRoute, /ON CONFLICT\(customer_uid, notice_id, asset_id\)/);
-  assert.match(customerUi, /Free for the life of your home/);
+  assert.match(customerUi, /Free care reminders/);
+  assert.match(customerUi, /customer-lifecycle-simple/);
   assert.match(customerUi, /Add to Google Calendar/);
   assert.match(customerUi, /No contact details were shared/);
 });
