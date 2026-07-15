@@ -162,6 +162,20 @@
       "when": 1784122470121,
       "tag": "0022_worried_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1784125090783,
+      "tag": "0023_petite_the_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1784125297100,
+      "tag": "0024_lethal_purifiers",
+      "breakpoints": true
     }
   ]
 }

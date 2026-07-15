@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
 
 export const runtime = "edge";
@@ -97,6 +98,7 @@ function errorResponse(error: unknown) {
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Crew assignment requires the Team access premium feature." }, 403);
   if (code === "FREE_LIMIT_REACHED") return adminJson({ ok: false, error: `Free accounts can manage up to ${FREE_ACTIVE_LIMIT} active work records. Complete, archive or upgrade to add more.` }, 409);
   if (code === "MEMBER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its active work-record fair-use limit." }, 409);
+  if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "SOURCE_NOT_FOUND") return adminJson({ ok: false, error: "That platform work item is no longer available to convert." }, 404);
@@ -360,9 +362,8 @@ export async function POST(request: Request) {
     if (requestedAssignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
     if (privateDataDetected(requestedAssignee)) throw new Error("PRIVATE_DATA");
     const workOrderId = crypto.randomUUID();
-    const dateCode = now.slice(2, 7).replace("-", "");
-    const randomCode = workOrderId.replaceAll("-", "").slice(0, 5).toUpperCase();
-    const workNumber = `${identity.partnerType === "supplier" ? "FUL" : "JOB"}-${dateCode}-${randomCode}`;
+    const prefix = identity.partnerType === "supplier" ? "FUL" : "JOB";
+    const workNumber = await nextTradeWorkNumber(db, identity.uid, prefix, now);
     const workType = identity.partnerType === "supplier" ? "fulfilment" : "job";
     await db.batch([
       db.prepare(`INSERT INTO trade_work_orders

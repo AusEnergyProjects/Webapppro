@@ -16,7 +16,7 @@ type Provider = {
   lastError: string;
 };
 
-type IntegrationResult = { ok?: boolean; providers?: Provider[]; propertySearchConfigured?: boolean; error?: string };
+type IntegrationResult = { ok?: boolean; providers?: Provider[]; error?: string };
 
 const providerNotes: Record<Provider["provider"], string> = {
   xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
@@ -27,7 +27,6 @@ const providerNotes: Record<Provider["provider"], string> = {
 
 export function TradeIntegrationCentre({ user }: { user: User }) {
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [propertyConfigured, setPropertyConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -38,7 +37,6 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
     const result = await response.json().catch(() => ({})) as IntegrationResult;
     if (!response.ok) throw new Error(result.error || "Integrations could not be loaded.");
     setProviders(result.providers || []);
-    setPropertyConfigured(Boolean(result.propertySearchConfigured));
   }, [user]);
 
   useEffect(() => {
@@ -94,7 +92,6 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
           <button type="button" disabled={busy === provider.provider || (!provider.configured && provider.status !== "connected")} onClick={() => provider.status === "connected" ? void disconnect(provider) : void connect(provider)}>{busy === provider.provider ? "Working..." : provider.status === "connected" ? `Disconnect ${provider.label}` : `Connect ${provider.label}`}</button>
         </article>)}
       </section>
-      <section className="crm-google-service"><div className="crm-provider-mark google">G</div><div><span>Google property tools</span><h4>Address match and satellite view</h4><p>Available only for customers your business already owns. Each search is deliberate to control cost, and AEA protected addresses are blocked on the server.</p></div><strong className={propertyConfigured ? "ready" : "pending"}>{propertyConfigured ? "Ready" : "Setup needed"}</strong></section>
     </>}
     {status && <p className="crm-inline-status" role="status">{status}</p>}
   </div>;

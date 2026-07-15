@@ -227,6 +227,7 @@ export function DirectTradeDashboard() {
   const [referrals, setReferrals] = useState<ReferralData | null>(null);
   const [referralBusy, setReferralBusy] = useState(false);
   const [referralStatus, setReferralStatus] = useState("");
+  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "account">("work");
 
   useEffect(
     () =>
@@ -575,61 +576,50 @@ export function DirectTradeDashboard() {
             </div>
           </header>
 
-          <PlanAccessPanel profile={profile} />
+          {(isSupplier ? workspace === "account" : workspace === "account") && <PlanAccessPanel profile={profile} />}
 
           {isSupplier ? (
             <>
-              <nav className="dashboard-subnav" aria-label="Wholesaler account">
-                <a aria-current="page" href="/direct-trade/dashboard">
-                  Product catalogue
-                </a>
-                <a href="#business-hub">Business workspace</a>
-                <a href="/direct-trade/dashboard/verification">
-                  Verification centre
-                </a>
-                <a href="/direct-trade/membership">Membership and referrals</a>
+              <nav className="dashboard-workspace-nav" aria-label="Wholesaler workspace">
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Catalogue and stock</small></button>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Requests and tasks</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Profile and membership</small></button>
               </nav>
-              <TradeBusinessHub
+              {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="supplier"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
-              />
-              <SupplierCatalogueWorkspace
+              />}
+              {workspace === "products" && <SupplierCatalogueWorkspace
                 user={user}
                 businessName={profile.businessName}
                 marketplaceVisible={hasSupplierVisibility}
                 canBulkImport={hasBulkImport}
                 hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
-              />
+              />}
+              {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile, verification and membership</h2><p>Keep occasional administration separate from daily work.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a><a href="/direct-trade/membership"><strong>Membership and referrals</strong><span>Plans, invoices and rewards</span></a></div></section>}
             </>
           ) : (
             <>
               <nav
-                className="dashboard-subnav"
+                className="dashboard-workspace-nav"
                 aria-label="Direct Trade account"
               >
-                <a aria-current="page" href="/direct-trade/dashboard">
-                  Overview
-                </a>
-                <a href="#opportunity-inbox">
-                  Opportunity inbox {offeredCount ? `(${offeredCount})` : ""}
-                </a>
-                <a href="#business-hub">Business workspace</a>
-                <a href="/direct-trade/dashboard/verification">
-                  Verification centre
-                </a>
-                <a href="/direct-trade/membership">Membership and referrals</a>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Today, jobs and customers</small></button>
+                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Settings and membership</small></button>
               </nav>
 
-              <TradeBusinessHub
+              {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="installer"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
-              />
+              />}
 
-              <section
+              {workspace === "account" && <section
                 className="dashboard-status-grid"
                 aria-label="Account status"
               >
@@ -685,9 +675,9 @@ export function DirectTradeDashboard() {
                   </strong>
                   <small>No per-lead purchase or bidding is required.</small>
                 </article>
-              </section>
+              </section>}
 
-              <div className="dashboard-main-grid">
+              {workspace === "leads" && <div className="dashboard-main-grid">
                 <section
                   id="opportunity-inbox"
                   className="dashboard-panel dashboard-opportunities"
@@ -911,9 +901,9 @@ export function DirectTradeDashboard() {
                     </li>
                   </ol>
                 </aside>
-              </div>
+              </div>}
 
-              <section
+              {workspace === "account" && <section
                 className="dashboard-panel dashboard-activity"
                 aria-labelledby="dashboard-activity-title"
               >
@@ -971,9 +961,9 @@ export function DirectTradeDashboard() {
                     </article>
                   )}
                 </div>
-              </section>
+              </section>}
 
-              <section
+              {workspace === "account" && <section
                 className="dashboard-panel dashboard-settings"
                 aria-labelledby="dashboard-settings-title"
               >
@@ -1134,9 +1124,9 @@ export function DirectTradeDashboard() {
                     </p>
                   )}
                 </form>
-              </section>
+              </section>}
 
-              {hasMarketplaceAccess ? (
+              {workspace === "products" && (hasMarketplaceAccess ? (
                 <InstallerProductMarketplace user={user} />
               ) : (
                 <section className="dashboard-panel dashboard-paywall-panel">
@@ -1151,11 +1141,11 @@ export function DirectTradeDashboard() {
                     <a href="#membership">Unlock product selection</a>
                   </div>
                 </section>
-              )}
+              ))}
             </>
           )}
 
-          <section
+          {workspace === "account" && <section
             className="dashboard-panel dashboard-membership"
             aria-labelledby="dashboard-membership-title"
             id="membership"
@@ -1252,9 +1242,9 @@ export function DirectTradeDashboard() {
                 Read membership and cancellation terms
               </a>
             </div>
-          </section>
+          </section>}
 
-          <section
+          {workspace === "account" && <section
             className="dashboard-panel dashboard-referral"
             aria-labelledby="dashboard-referral-title"
           >
@@ -1352,7 +1342,7 @@ export function DirectTradeDashboard() {
                 )}
               </div>
             )}
-          </section>
+          </section>}
         </>
       )}
       <SiteFooter>

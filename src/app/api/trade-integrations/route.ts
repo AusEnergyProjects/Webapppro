@@ -63,7 +63,6 @@ export async function GET(request: Request) {
         checkoutUrl: row.checkout_url, status: row.status, paidAt: row.paid_at,
         failureCode: row.failure_code, lastEventAt: row.last_event_at, createdAt: row.created_at,
       })),
-      propertySearchConfigured: Boolean(integrationEnvironment().GOOGLE_MAPS_API_KEY),
     });
   } catch (error) { return integrationError(error); }
 }

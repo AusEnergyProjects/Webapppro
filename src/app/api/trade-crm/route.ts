@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 
 export const runtime = "edge";
 
@@ -53,6 +54,7 @@ function errorResponse(error: unknown) {
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
   if (code === "JOB_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its 500 active job fair-use limit." }, 409);
   if (code === "CUSTOMER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its customer-record fair-use limit." }, 409);
+  if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
   return adminJson({ ok: false, error: "The private installer CRM request could not be completed." }, 500);
 }
 
@@ -255,7 +257,7 @@ export async function POST(request: Request) {
       const scheduledEnd = dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
       const workOrderId = crypto.randomUUID();
-      const workNumber = `JOB-${now.slice(2, 7).replace("-", "")}-${workOrderId.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
+      const workNumber = await nextTradeWorkNumber(db, identity.uid, "JOB", now);
       const assignee = cleanAdminText(body.assigneeLabel, 80);
       if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
       await db.batch([
@@ -272,7 +274,7 @@ export async function POST(request: Request) {
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, customerId ? "trade_owned" : "internal",
-            cleanAdminText(body.description, 3000), cleanAdminText(body.customerReference, 100), cleanAdminText(body.nextAction, 200),
+            cleanAdminText(body.description, 3000), "", cleanAdminText(body.nextAction, 200),
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
@@ -398,7 +400,7 @@ export async function PATCH(request: Request) {
       customerSource: platformPrivate ? "platform_private" : customerId ? "trade_owned" : "internal",
       pipelineStage,
       description: body.description === undefined ? String(current?.description || "") : cleanAdminText(body.description, 3000),
-      customerReference: platformPrivate ? "" : body.customerReference === undefined ? String(current?.customer_reference || "") : cleanAdminText(body.customerReference, 100),
+      customerReference: platformPrivate ? "" : String(current?.customer_reference || ""),
       nextAction: body.nextAction === undefined ? String(current?.next_action || "") : cleanAdminText(body.nextAction, 200),
       tags: body.tags === undefined ? String(current?.tags || "[]") : JSON.stringify(cleanList(body.tags)),
       estimated: body.estimatedValueCents === undefined ? Number(current?.estimated_value_cents || 0) : moneyValue(body.estimatedValueCents),

@@ -1,0 +1,1 @@
+DROP TABLE `trade_crm_property_views`;

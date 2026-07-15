@@ -11,6 +11,7 @@ const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
 const customerAssets = read("../src/components/CustomerAssetOwnershipCentre.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
+const numberer = read("../src/lib/trade-job-number-server.ts");
 
 test("installer CRM customers, job details, appointments and notes are durable and indexed", () => {
   assert.match(schema, /sqliteTable\("trade_crm_customers"/);
@@ -50,15 +51,27 @@ test("platform households stay separate from installer-owned contacts", () => {
   assert.match(route, /customerSource === "platform_private" \? ""/);
   assert.match(route, /platformPrivate \? ""/);
   assert.match(crm, /AEA manages the household relationship/);
-  assert.match(crm, /No name, phone, email or street address is provided/);
+  assert.match(crm, /project scope, broad service region and protected reference/);
   assert.match(crm, /Only add contacts who came directly to your business/);
   assert.match(crm, /AEA protected households never appear here/);
+});
+
+test("direct customers have full addresses while job IDs are chronological and read only", () => {
+  assert.match(crm, /name="addressLine1"/);
+  assert.match(crm, /name="addressLine2"/);
+  assert.match(crm, /Assigned automatically/);
+  assert.match(crm, /cannot be edited/);
+  assert.doesNotMatch(crm, /name="customerReference"/);
+  assert.match(route, /nextTradeWorkNumber/);
+  assert.match(numberer, /ON CONFLICT\(firebase_uid, counter_key\) DO UPDATE/);
+  assert.match(numberer, /last_value = last_value \+ 1/);
+  assert.match(numberer, /padStart\(6, "0"\)/);
 });
 
 test("paid installers receive a complete progressive CRM while free accounts keep the foundation", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
-  for (const label of ["Today", "Jobs", "Schedule", "Customers", "Reports", "Quote and invoice", "Notes and issues", "Assets and handover"]) {
+  for (const label of ["Today", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Money", "Notes", "Handover"]) {
     assert.match(crm, new RegExp(label));
   }
   assert.match(crm, /NewJobForm/);

@@ -29,7 +29,6 @@ type IntegrationEnvironment = {
   SQUARE_APPLICATION_ID?: string;
   SQUARE_APPLICATION_SECRET?: string;
   SQUARE_ENVIRONMENT?: string;
-  GOOGLE_MAPS_API_KEY?: string;
 };
 
 export function integrationEnvironment() {

@@ -63,7 +63,8 @@ test("platform conversion respects installer and wholesaler role boundaries", ()
   assert.match(route, /identity\.partnerType !== "supplier"/);
   assert.match(route, /supplier_product_enquiries/);
   assert.match(hub, /Wholesalers convert product requests, never household leads/);
-  assert.match(dashboard, /href="#business-hub"/);
+  assert.match(dashboard, /dashboard-workspace-nav/);
+  assert.match(dashboard, /setWorkspace\("work"\)/);
 });
 
 test("Business Hub user-facing copy avoids prohibited dash characters", () => {

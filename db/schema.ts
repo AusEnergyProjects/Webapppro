@@ -282,6 +282,15 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   index("trade_work_orders_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
 ]);
 
+export const tradeCrmCounters = sqliteTable("trade_crm_counters", {
+  firebaseUid: text("firebase_uid").notNull(),
+  counterKey: text("counter_key").notNull(),
+  lastValue: integer("last_value").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_counters_owner_key_idx").on(table.firebaseUid, table.counterKey),
+]);
+
 export const tradeWorkOrderTasks = sqliteTable("trade_work_order_tasks", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
@@ -690,6 +699,53 @@ export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {
   index("trade_crm_job_notes_work_order_idx").on(table.workOrderId, table.createdAt),
 ]);
 
+export const tradeCrmTimeEntries = sqliteTable("trade_crm_time_entries", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  staffLabel: text("staff_label").notNull().default(""),
+  workDate: text("work_date").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_time_entries_owner_date_idx").on(table.firebaseUid, table.workDate),
+  index("trade_crm_time_entries_work_order_idx").on(table.workOrderId, table.workDate),
+]);
+
+export const tradeCrmJobMedia = sqliteTable("trade_crm_job_media", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  category: text("category").notNull().default("progress"),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  objectKey: text("object_key").notNull(),
+  caption: text("caption").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_job_media_owner_idx").on(table.firebaseUid, table.createdAt),
+  index("trade_crm_job_media_work_order_idx").on(table.workOrderId, table.createdAt),
+]);
+
+export const tradeCrmSignoffs = sqliteTable("trade_crm_signoffs", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  signerRole: text("signer_role").notNull(),
+  signerName: text("signer_name").notNull(),
+  confirmationText: text("confirmation_text").notNull(),
+  method: text("method").notNull().default("typed"),
+  signedAt: text("signed_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_signoffs_owner_idx").on(table.firebaseUid, table.signedAt),
+  index("trade_crm_signoffs_work_order_idx").on(table.workOrderId, table.signedAt),
+]);
+
 export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -812,18 +868,6 @@ export const tradeCrmAccountingEvents = sqliteTable("trade_crm_accounting_events
 }, (table) => [
   index("trade_crm_accounting_events_document_idx").on(table.accountingDocumentId, table.occurredAt),
   index("trade_crm_accounting_events_owner_idx").on(table.firebaseUid, table.occurredAt),
-]);
-
-export const tradeCrmPropertyViews = sqliteTable("trade_crm_property_views", {
-  id: text("id").primaryKey(),
-  workOrderId: text("work_order_id").notNull(),
-  firebaseUid: text("firebase_uid").notNull(),
-  placeId: text("place_id").notNull(),
-  verifiedAt: text("verified_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_crm_property_views_work_order_idx").on(table.workOrderId),
-  index("trade_crm_property_views_owner_idx").on(table.firebaseUid, table.updatedAt),
 ]);
 
 export const customerAccounts = sqliteTable("customer_accounts", {

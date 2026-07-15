@@ -9,22 +9,23 @@ const migration = read("../drizzle/0020_lying_stick.sql");
 const integrations = read("../src/app/api/trade-integrations/route.ts");
 const callback = read("../src/app/api/trade-integrations/callback/[provider]/route.ts");
 const payments = read("../src/app/api/trade-payment-links/route.ts");
-const property = read("../src/app/api/trade-property-map/route.ts");
 const cryptoLayer = read("../src/lib/trade-integration-crypto.ts");
 const providerLayer = read("../src/lib/trade-integrations-server.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const integrationUi = read("../src/components/TradeIntegrationCentre.tsx");
 const paymentUi = read("../src/components/TradePaymentPanel.tsx");
-const propertyUi = read("../src/components/TradePropertyView.tsx");
+const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
+const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
+const fieldMigration = read("../drizzle/0023_petite_the_phantom.sql");
+const propertyRetirementMigration = read("../drizzle/0024_lethal_purifiers.sql");
 
-test("integration, OAuth state, payment link and property records are durable and indexed", () => {
-  for (const table of ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links", "trade_crm_property_views"]) {
+test("integration, OAuth state and payment link records are durable and indexed", () => {
+  for (const table of ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
   }
   assert.match(schema, /trade_crm_integrations_owner_provider_idx/);
   assert.match(schema, /trade_crm_oauth_states_hash_idx/);
   assert.match(schema, /trade_crm_payment_links_idempotency_idx/);
-  assert.match(schema, /trade_crm_property_views_work_order_idx/);
   assert.match(schema, /encryptedCredentials: text\("encrypted_credentials"\)/);
   assert.doesNotMatch(schema, /accessToken|refreshToken/);
 });
@@ -45,7 +46,6 @@ test("all business connections are installer-only, paid, same-origin and owner s
   assert.match(integrations, /sameOrigin\(request\)/);
   assert.match(integrations, /WHERE firebase_uid = \?/);
   assert.match(payments, /sameOrigin\(request\)/);
-  assert.match(property, /sameOrigin\(request\)/);
   assert.match(providerLayer, /\["xero", "myob", "stripe", "square"\]/);
 });
 
@@ -85,29 +85,38 @@ test("online payment links are direct-customer only and provider hosted", () => 
   assert.match(paymentUi, /Card data stays with Stripe or Square/);
 });
 
-test("Google property tools never reveal or search an AEA protected address", () => {
-  assert.match(property, /row\.source_type !== "internal" \|\| row\.customer_source !== "trade_owned"/);
-  assert.match(property, /DIRECT_CUSTOMER_REQUIRED/);
-  assert.match(property, /maps\.googleapis\.com\/maps\/api\/geocode\/json/);
-  assert.match(property, /maps\.googleapis\.com\/maps\/api\/staticmap/);
-  assert.match(property, /maptype", "satellite"/);
-  assert.match(property, /place_id/);
-  assert.doesNotMatch(property, /body\.address|body\.latitude|body\.longitude/);
-  assert.doesNotMatch(schema.match(/tradeCrmPropertyViews[\s\S]*?\]\);/)?.[0] || "", /latitude|longitude|formatted_address/);
-  assert.match(propertyUi, /Exact property tools are unavailable/);
-  assert.match(propertyUi, /never the customer&apos;s street address/);
+test("field records are owner scoped and protected customer sign-off stays with AEA", () => {
+  for (const table of ["trade_crm_time_entries", "trade_crm_job_media", "trade_crm_signoffs"]) {
+    assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
+    assert.match(fieldMigration, new RegExp("CREATE TABLE `" + table + "`"));
+  }
+  assert.match(fieldRoute, /requireInstallerOperations/);
+  assert.match(fieldRoute, /sameOrigin\(request\)/);
+  assert.match(fieldRoute, /firebase_uid = \?/);
+  assert.match(fieldRoute, /job\.source_type === "opportunity" && signerRole === "customer"/);
+  assert.match(fieldRoute, /PROTECTED_CUSTOMER/);
+  assert.match(fieldUi, /Customer sign-off stays with AEA/);
+  assert.match(fieldUi, /Technician time/);
+  assert.match(fieldUi, /Photos and files/);
+  assert.match(fieldUi, /Digital sign-off/);
 });
 
-test("installer CRM exposes progressive integrations, property and payment workflows", () => {
-  for (const label of ["integrations", "Property", "Quote and invoice"]) assert.match(crm, new RegExp(label));
+test("retired Google property storage is removed from the active schema", () => {
+  assert.doesNotMatch(schema, /trade_crm_property_views|place_id/);
+  assert.match(propertyRetirementMigration, /DROP TABLE `trade_crm_property_views`/);
+  assert.doesNotMatch(`${providerLayer}\n${integrations}\n${crm}\n${integrationUi}`, /GOOGLE_MAPS_API_KEY|trade-property-map|TradePropertyView/);
+});
+
+test("installer CRM exposes progressive integrations, field and payment workflows", () => {
+  for (const label of ["integrations", "Field work", "Quote and invoice"]) assert.match(crm, new RegExp(label));
   assert.match(crm, /TradeIntegrationCentre/);
-  assert.match(crm, /TradePropertyView/);
+  assert.match(crm, /TradeFieldWorkPanel/);
   assert.match(crm, /TradePaymentPanel/);
-  for (const label of ["Xero", "MYOB", "Stripe", "Square", "Google property tools"]) assert.match(integrationUi, new RegExp(label));
+  for (const label of ["Xero", "MYOB", "Stripe", "Square"]) assert.match(integrationUi, new RegExp(label));
   assert.match(integrationUi, /never asks for or stores the provider password/);
-  assert.match(propertyUi, /Each search is deliberate|Search only when it helps the job/);
+  assert.doesNotMatch(`${providerLayer}\n${integrationUi}\n${crm}`, /GOOGLE_MAPS_API_KEY|Google property tools|TradePropertyView/);
 });
 
-test("new integration and property copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${integrations}\n${callback}\n${payments}\n${property}\n${crm}\n${integrationUi}\n${paymentUi}\n${propertyUi}`, /[\u2013\u2014]/);
+test("new integration and field copy avoids prohibited dash characters", () => {
+  assert.doesNotMatch(`${integrations}\n${callback}\n${payments}\n${crm}\n${integrationUi}\n${paymentUi}\n${fieldRoute}\n${fieldUi}`, /[\u2013\u2014]/);
 });

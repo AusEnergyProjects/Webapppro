@@ -66,16 +66,6 @@ The MYOB income account is selected for each first export. This avoids guessing 
 5. Store the webhook signature key as `SQUARE_WEBHOOK_SIGNATURE_KEY`.
 6. Store the exact notification URL above as `SQUARE_WEBHOOK_NOTIFICATION_URL` so signature verification cannot drift behind a proxy.
 
-## Google property tools
-
-1. Use a dedicated Google Cloud project for the property lookup service.
-2. Enable only Geocoding API and Maps Static API.
-3. Create a server-side API key restricted to those two APIs.
-4. Set conservative service quotas and billing alerts that match the operating budget.
-5. Store the key as `GOOGLE_MAPS_API_KEY`.
-
-The application sends address lookups only for installer-owned direct customers. AEA-protected household addresses are blocked before Google is called. The database stores only the Google place ID, not coordinates or the formatted street address.
-
 ## Release checks
 
 After changing any runtime value, deploy a saved Sites version so the new environment revision is applied. Then confirm:
