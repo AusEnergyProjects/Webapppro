@@ -11,7 +11,7 @@ const sqlPath = path.resolve(args.sql || path.join(process.cwd(), "drizzle", "00
 const csvPath = path.join(outputDir, "aea-demo-account-credentials.csv");
 const checkpointPath = path.join(outputDir, ".aea-demo-account-checkpoint.json");
 const brokerUrl = args.broker || "";
-const brokerSecret = args["broker-secret-file"] ? fs.readFileSync(path.resolve(args["broker-secret-file"]), "utf8").trim() : "";
+const brokerSecret = process.env.SYNTHETIC_BROKER_SECRET || (args["broker-secret-file"] ? fs.readFileSync(path.resolve(args["broker-secret-file"]), "utf8").trim() : "");
 
 const states = [
   { code: "VIC", postcode: "3128", suburb: "Box Hill" }, { code: "NSW", postcode: "2150", suburb: "Parramatta" },
