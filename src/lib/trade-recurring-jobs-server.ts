@@ -1,6 +1,6 @@
 import { nextTradeWorkNumber } from "./trade-job-number-server";
 import { jobSyncChangeStatements } from "./trade-team-sync-server";
-import { tradeFormTemplate } from "./trade-form-library.mjs";
+import { publishedTradeFormTemplatesFor } from "./trade-form-templates-server";
 
 const serviceLabels: Record<string, string> = {
   annual_service: "Annual service",
@@ -71,7 +71,9 @@ export async function generateDueServiceJobs(db: D1Database, options: GenerateOp
       const protectedJob = row.original_source_type === "opportunity" || row.customer_source === "platform_private";
       const customerSource = protectedJob ? "platform_private" : String(row.customer_source || "internal");
       const customerId = protectedJob ? "" : String(row.crm_customer_id || "");
-      const serviceForm = tradeFormTemplate("service-visit-support", 1, String(row.service_category || "other"));
+      const serviceForm = (await publishedTradeFormTemplatesFor(String(row.service_category || "other"), db))
+        .filter((template) => template.key === "service-visit-support")
+        .sort((left, right) => right.version - left.version)[0];
       await db.batch([
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
@@ -95,8 +97,8 @@ export async function generateDueServiceJobs(db: D1Database, options: GenerateOp
           .bind(crypto.randomUUID(), workOrderId, row.firebase_uid, task, row.next_due_at, index, now, now)),
         ...(serviceForm ? [db.prepare(`INSERT INTO trade_job_forms
           (id, work_order_id, firebase_uid, template_key, template_version, template_name, jurisdiction,
-           template_snapshot, answers, status, completed_by_uid, completed_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', '', '', ?, ?)`)
+           template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', 1, '', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, row.firebase_uid, serviceForm.key, serviceForm.version,
             serviceForm.name, serviceForm.jurisdiction, JSON.stringify(serviceForm), now, now)] : []),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)

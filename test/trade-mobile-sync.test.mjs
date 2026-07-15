@@ -102,6 +102,8 @@ test("queued actions are hashed, idempotent and revision conflict aware", () => 
   assert.match(syncRoute, /set_job_stage/);
   assert.match(syncRoute, /set_task_status/);
   assert.match(syncRoute, /add_time_entry/);
+  assert.match(syncRoute, /save_job_form/);
+  assert.match(syncRoute, /FORM_INCOMPLETE/);
   assert.match(syncRoute, /deviceId/);
 });
 
@@ -157,7 +159,7 @@ test("the native field roadmap is explicit and keeps the web CRM authoritative",
   assert.match(contract, /encrypted local database/);
   assert.match(contract, /Resumable field media/);
   assert.match(contract, /Push tokens are private server records/);
-  assert.match(contract, /Version 2 transport/);
+  assert.match(contract, /Version 3 transport/);
 });
 
 test("offline sync copy avoids prohibited dash characters", () => {

@@ -13,7 +13,7 @@ The installer web CRM is the system of record. Future iOS and Android apps will 
 - Signing out must purge all locally cached business data.
 - The server remains authoritative. Device storage is a temporary working copy.
 
-## Version 2 transport
+## Version 3 transport
 
 - Registration: `POST /api/trade-team/devices` records one installation-specific device ID, platform, app version and optional push token.
 - Bootstrap: `GET /api/trade-team/sync?deviceId=<id>` returns the current accessible job snapshot and an opaque `v1` cursor.
@@ -28,6 +28,7 @@ The installer web CRM is the system of record. Future iOS and Android apps will 
 - `set_job_stage` requires the job revision that the device edited.
 - `set_task_status` requires the checklist revision that the device edited.
 - `add_time_entry` is append-only and can be replayed safely.
+- `save_job_form` carries the assigned form revision, the latest bounded answers and an optional completion request. Repeated offline saves for the same form are coalesced on the device while preserving the original revision.
 
 The server returns `applied`, `duplicate`, `conflict`, `retry` or `rejected` for each action. A conflict includes the current revision so the app can refresh the job and ask the technician to review the newer state. Reusing an action ID with different content is rejected. Processing receipts carry a five-minute lease. An interrupted request can be retried safely after the lease expires without leaving an action permanently blocked.
 
@@ -69,9 +70,9 @@ The `mobile/` workspace now implements the iOS and Android field client on Expo 
 
 - Job, action, conflict and upload metadata is held in SQLCipher.
 - Photos and documents are divided into 5 MB AES-256-GCM encrypted chunks. The file key remains in the platform secure store and only one decrypted chunk is held in memory during upload.
-- Bootstrap, delta pages, action replay, tombstones, resumable uploads, app-version enforcement and remote revocation use contract version 2.
+- Bootstrap, delta pages, action replay, tombstones, resumable uploads, app-version enforcement and remote revocation use contract version 3.
 - Sync runs when the app opens, reception returns, a private push notification is opened, the user requests it or the operating system grants a background window.
 - The technician interface is limited to assigned work, job stage, checklists, time and evidence. Device registration, sync state and actionable conflicts are visible without exposing the underlying complexity during normal work.
-- Assigned job payloads include versioned technical form names, jurisdiction and completion state. The current app presents these as read-only field records so the office and technician share one checklist of required evidence.
-- Offline form editing will use stable client action IDs and form revisions in a later contract version. The app must not invent, alter or silently upgrade a saved template snapshot.
+- Assigned job payloads include the original versioned technical form snapshot, bounded answers, readiness and completion state. The app renders the saved snapshot and never silently upgrades it.
+- Technicians can edit, save and complete forms offline. Required fields are checked on the device and again by the server, completed forms lock, and technical answers are rejected if they contain customer email or phone details.
 - Native store credentials, Firebase mobile configuration files and platform OAuth client IDs remain release prerequisites and must not enter source control.

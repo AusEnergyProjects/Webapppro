@@ -23,9 +23,19 @@ export type FieldMedia = {
 
 export type FieldForm = {
   id: string;
+  templateKey: string;
+  templateVersion: number;
   name: string;
   jurisdiction: string;
+  template: {
+    guidance: string;
+    fields: Array<{ key: string; label: string; type: 'checkbox' | 'text' | 'textarea' | 'date' | 'select'; required: boolean; maxLength?: number; options?: string[] }>;
+  };
+  answers: Record<string, string | boolean>;
   status: 'draft' | 'complete';
+  revision: number;
+  ready: boolean;
+  missing: string[];
   completedAt: string;
   updatedAt: string;
 };
@@ -83,19 +93,22 @@ export type SyncResponse = {
   devicePolicy?: DevicePolicy;
 };
 
-export type OfflineActionType = 'set_job_stage' | 'set_task_status' | 'add_time_entry';
+export type OfflineActionType = 'set_job_stage' | 'set_task_status' | 'add_time_entry' | 'save_job_form';
 
 export type OfflineAction = {
   clientActionId: string;
   type: OfflineActionType;
   workOrderId: string;
   taskId?: string;
+  formId?: string;
   baseRevision: number;
   stage?: JobStage;
   status?: TaskStatus;
   workDate?: string;
   durationMinutes?: number;
   notes?: string;
+  answers?: Record<string, string | boolean>;
+  complete?: boolean;
 };
 
 export type QueueRow = {

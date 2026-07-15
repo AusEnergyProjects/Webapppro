@@ -4,6 +4,8 @@ import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
+import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
+import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
 
 export const runtime = "edge";
 
@@ -89,7 +91,8 @@ async function accessibleJobs(access: TeamAccess) {
         AND (? <> 'technician' OR w.assignee_member_id = ?)
       ORDER BY m.created_at DESC`)
       .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
-    db.prepare(`SELECT f.id, f.work_order_id, f.template_name, f.jurisdiction, f.status, f.completed_at, f.updated_at
+    db.prepare(`SELECT f.id, f.work_order_id, f.template_key, f.template_version, f.template_name, f.jurisdiction,
+        f.template_snapshot, f.answers, f.status, f.revision, f.completed_at, f.updated_at
       FROM trade_job_forms f JOIN trade_work_orders w ON w.id = f.work_order_id
       WHERE f.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
@@ -135,10 +138,15 @@ async function accessibleJobs(access: TeamAccess) {
         contentType: media.content_type, sizeBytes: Number(media.size_bytes),
         caption: protectedJob ? "" : media.caption, createdAt: media.created_at,
       })),
-      forms: formRows.results.filter((form) => form.work_order_id === row.id).map((form) => ({
-        id: form.id, name: form.template_name, jurisdiction: form.jurisdiction, status: form.status,
-        completedAt: form.completed_at, updatedAt: form.updated_at,
-      })),
+      forms: formRows.results.filter((form) => form.work_order_id === row.id).map((form) => {
+        const template = (() => { try { return JSON.parse(String(form.template_snapshot || "{}")); } catch { return { fields: [] }; } })();
+        const answers = (() => { try { return JSON.parse(String(form.answers || "{}")); } catch { return {}; } })();
+        const completion = tradeFormCompletion(template, answers);
+        return { id: form.id, templateKey: form.template_key, templateVersion: Number(form.template_version),
+          name: form.template_name, jurisdiction: form.jurisdiction, template, answers, status: form.status,
+          revision: Number(form.revision || 1), ready: completion.ready, missing: completion.missing,
+          completedAt: form.completed_at, updatedAt: form.updated_at };
+      }),
     }];
   }));
 }
@@ -335,6 +343,75 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     ]);
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, taskId, resultRevision: jobRevision,
       taskRevision, appliedAt: now };
+  }
+
+  if (actionType === "save_job_form") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const formId = cleanAdminText(action.formId, 180);
+    const baseRevision = Number(action.baseRevision);
+    const complete = action.complete === true;
+    if (!workOrderId || !formId || !Number.isInteger(baseRevision) || baseRevision < 1) {
+      return { clientActionId, status: "rejected", code: "INVALID_FORM_UPDATE", error: "Add a valid form and base revision." };
+    }
+    const job = await assignedJob(access, workOrderId);
+    const form = await db.prepare(`SELECT id, template_key, template_snapshot, status, revision FROM trade_job_forms
+      WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`).bind(formId, workOrderId, access.ownerUid).first<Record<string, unknown>>();
+    if (!form) return { clientActionId, status: "rejected", code: "FORM_NOT_FOUND", error: "The field form is no longer available." };
+    if (form.status === "complete") return { clientActionId, status: "rejected", code: "FORM_LOCKED", error: "This completed form is locked." };
+    if (Number(form.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
+      entityId: formId, baseRevision, currentRevision: Number(form.revision) };
+    let template: Record<string, unknown>;
+    try { template = JSON.parse(String(form.template_snapshot || "{}")) as Record<string, unknown>; }
+    catch { return { clientActionId, status: "rejected", code: "INVALID_FORM", error: "The saved form template is invalid." }; }
+    const answers = normalizeTradeFormAnswers(template, action.answers);
+    if (privateDataDetected(JSON.stringify(answers))) return { clientActionId, status: "rejected", code: "PROTECTED_CUSTOMER_DATA",
+      error: "Remove customer email or phone details from the technical form." };
+    const completion = tradeFormCompletion(template, answers);
+    if (complete && !completion.ready) return { clientActionId, status: "rejected", code: "FORM_INCOMPLETE",
+      error: `Complete the required fields: ${completion.missing.join(", ")}.` };
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
+    if (reserved) return reserved;
+    const formRevision = nextJobRevision(form.revision);
+    const update = await db.prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, revision = ?, completed_by_uid = ?,
+      completed_at = ?, updated_at = ? WHERE id = ? AND work_order_id = ? AND firebase_uid = ? AND revision = ?`)
+      .bind(JSON.stringify(answers), complete ? "complete" : "draft", formRevision, complete ? access.actorUid : "",
+        complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision).run();
+    if (!update.meta.changes) {
+      await releaseConflict(access, action, Number(form.revision), now);
+      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: formId };
+    }
+    const jobRevision = nextJobRevision(job.revision);
+    const lifecycle: D1PreparedStatement[] = [];
+    if (complete && form.template_key === "service-visit-support" && job.source_type === "recurring_service" && job.source_reference) {
+      const plan = await db.prepare(`SELECT id, asset_id, handover_pack_id, work_order_id, cadence_months
+        FROM trade_asset_service_plans WHERE id = ? AND firebase_uid = ?`).bind(job.source_reference, access.ownerUid).first<Record<string, unknown>>();
+      if (plan) {
+        const servicedAt = String(answers.work_date || now.slice(0, 10)); const nextDueAt = addMonthsToIsoDate(servicedAt, Number(plan.cadence_months));
+        lifecycle.push(
+          db.prepare(`INSERT INTO trade_asset_service_events
+            (id, service_plan_id, asset_id, handover_pack_id, work_order_id, firebase_uid, event_type,
+             serviced_at, summary, provider_reference, next_due_at, created_at, updated_at)
+            SELECT ?, ?, ?, ?, ?, ?, 'service_completed', ?, 'Scheduled service form completed.', ?, ?, ?, ?
+            WHERE NOT EXISTS (SELECT 1 FROM trade_asset_service_events WHERE service_plan_id = ? AND event_type = 'service_completed' AND provider_reference = ?)`)
+            .bind(crypto.randomUUID(), plan.id, plan.asset_id, plan.handover_pack_id, plan.work_order_id, access.ownerUid,
+              servicedAt, workOrderId, nextDueAt, now, now, plan.id, workOrderId),
+          db.prepare("UPDATE trade_asset_service_plans SET next_due_at = ?, status = 'active', updated_at = ? WHERE id = ? AND firebase_uid = ?")
+            .bind(nextDueAt, now, plan.id, access.ownerUid),
+        );
+      }
+    }
+    await db.batch([
+      db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(jobRevision, now, workOrderId, access.ownerUid),
+      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, jobRevision, now),
+      db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid,
+          complete ? "offline_field_form_completed" : "offline_field_form_saved",
+          complete ? `${String(template.name || "Field form")} completed in the field app.` : `${String(template.name || "Field form")} saved in the field app.`, now),
+      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: jobRevision,
+        changedAt: now, audienceMemberId: job.assignee_member_id }), ...lifecycle,
+    ]);
+    return { clientActionId, status: "applied", actionType, entityId: workOrderId, formId,
+      resultRevision: jobRevision, formRevision, appliedAt: now };
   }
 
   if (actionType === "add_time_entry") {

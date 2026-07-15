@@ -173,15 +173,26 @@ export async function getJob(id: string) {
 export async function queueAction(action: OfflineAction) {
   const db = await getDatabase();
   const now = new Date().toISOString();
-  await db.runAsync(
-    `INSERT INTO action_queue (id, work_order_id, payload, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'queued', ?, ?)`,
-    action.clientActionId,
-    action.workOrderId,
-    JSON.stringify(action),
-    now,
-    now,
-  );
+  let queuedAction = action;
+  if (action.type === 'save_job_form' && action.formId) {
+    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+    );
+    const existing = candidates.map((row) => ({ ...row, action: JSON.parse(row.payload) as OfflineAction }))
+      .find((row) => row.action.type === 'save_job_form' && row.action.formId === action.formId);
+    if (existing) {
+      queuedAction = { ...action, clientActionId: existing.action.clientActionId, baseRevision: existing.action.baseRevision };
+      await db.runAsync("UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
+        JSON.stringify(queuedAction), now, existing.id);
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, 'queued', ?, ?)`, action.clientActionId, action.workOrderId, JSON.stringify(action), now, now);
+    }
+  } else {
+    await db.runAsync(`INSERT INTO action_queue (id, work_order_id, payload, status, created_at, updated_at)
+      VALUES (?, ?, ?, 'queued', ?, ?)`, action.clientActionId, action.workOrderId, JSON.stringify(action), now, now);
+  }
   const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM jobs WHERE id = ?', action.workOrderId);
   if (!row) return;
   const job = JSON.parse(row.payload) as FieldJob;
@@ -191,6 +202,17 @@ export async function queueAction(action: OfflineAction) {
     if (task) {
       task.status = action.status;
       task.completedAt = action.status === 'done' ? now : '';
+    }
+  }
+  if (queuedAction.type === 'save_job_form' && queuedAction.formId && queuedAction.answers) {
+    const form = job.forms.find((item) => item.id === queuedAction.formId);
+    if (form) {
+      form.answers = queuedAction.answers;
+      form.status = queuedAction.complete ? 'complete' : 'draft';
+      form.ready = form.template.fields.every((field) => !field.required || (field.type === 'checkbox' ? queuedAction.answers?.[field.key] === true : Boolean(String(queuedAction.answers?.[field.key] || '').trim())));
+      form.missing = form.template.fields.filter((field) => field.required && (field.type === 'checkbox' ? queuedAction.answers?.[field.key] !== true : !String(queuedAction.answers?.[field.key] || '').trim())).map((field) => field.label);
+      form.completedAt = queuedAction.complete ? now : '';
+      form.updatedAt = now;
     }
   }
   await saveJob(db, job, now);

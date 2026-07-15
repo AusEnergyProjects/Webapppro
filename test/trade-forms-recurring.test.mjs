@@ -103,7 +103,8 @@ test("web and native field interfaces expose forms progressively", () => {
   assert.match(syncRoute, /FROM trade_job_forms f JOIN trade_work_orders/);
   assert.match(syncRoute, /forms: formRows\.results/);
   assert.match(mobileJob, /Technical records/);
-  assert.match(mobileJob, /Offline form completion is planned for the next app release/);
+  assert.match(mobileJob, /with or without reception/);
+  assert.match(mobileJob, /save_job_form/);
 });
 
 test("new field form and recurring job copy avoids prohibited dash characters", () => {

@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../db";
 import type { TeamAccess } from "./trade-team-server";
 
-export const MOBILE_CONTRACT_VERSION = 2;
+export const MOBILE_CONTRACT_VERSION = 3;
 export const MOBILE_CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/;
 export const MOBILE_PLATFORMS = new Set(["ios", "android"]);
 

@@ -2,7 +2,8 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { normalizeTradeFormAnswers, tradeFormCompletion, tradeFormTemplate, tradeFormTemplatesFor } from "@/lib/trade-form-library.mjs";
+import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
+import { publishedTradeFormTemplate, publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
 import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
 
 export const runtime = "edge";
@@ -38,12 +39,12 @@ async function formPayload(ownerUid: string, workOrderId: string) {
     .bind(workOrderId, ownerUid).first<Record<string, unknown>>();
   if (!work) throw new Error("JOB_NOT_FOUND");
   const rows = await db.prepare(`SELECT id, template_key, template_version, template_name, jurisdiction,
-      template_snapshot, answers, status, completed_by_uid, completed_at, created_at, updated_at
+      template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at
     FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at`)
     .bind(workOrderId, ownerUid).all<Record<string, unknown>>();
   return {
     protectedJob: work.source_type === "opportunity" || work.customer_source === "platform_private",
-    templates: tradeFormTemplatesFor(String(work.service_category)).map((template) => ({
+    templates: (await publishedTradeFormTemplatesFor(String(work.service_category))).map((template) => ({
       key: template.key, version: template.version, name: template.name, jurisdiction: template.jurisdiction,
       description: template.description, guidance: template.guidance, fieldCount: template.fields.length,
     })),
@@ -54,7 +55,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
       return {
         id: row.id, templateKey: row.template_key, templateVersion: Number(row.template_version),
         templateName: row.template_name, jurisdiction: row.jurisdiction, template: snapshot, answers,
-        status: row.status, ready: completion.ready, missing: completion.missing,
+        status: row.status, revision: Number(row.revision || 1), ready: completion.ready, missing: completion.missing,
         completedAt: row.completed_at, createdAt: row.created_at, updatedAt: row.updated_at,
       };
     }),
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
     const templateVersion = Math.max(1, Math.min(1000, Math.round(Number(body.templateVersion || 1))));
     const work = await getD1().prepare("SELECT service_category FROM trade_work_orders WHERE id = ? AND firebase_uid = ?")
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
-    const template = tradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"));
+    const template = await publishedTradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"));
     if (!template) return adminJson({ ok: false, error: "Choose a form available for this work type." }, 400);
     const existing = await getD1().prepare(`SELECT id FROM trade_job_forms
       WHERE work_order_id = ? AND firebase_uid = ? AND template_key = ? AND template_version = ?`)
@@ -98,8 +99,8 @@ export async function POST(request: Request) {
     await getD1().batch([
       getD1().prepare(`INSERT INTO trade_job_forms
         (id, work_order_id, firebase_uid, template_key, template_version, template_name, jurisdiction,
-         template_snapshot, answers, status, completed_by_uid, completed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', '', '', ?, ?)
+         template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', 1, '', '', ?, ?)
         ON CONFLICT(work_order_id, template_key, template_version) DO NOTHING`)
         .bind(id, workOrderId, access.ownerUid, template.key, template.version, template.name, template.jurisdiction,
           JSON.stringify(template), now, now),
@@ -125,11 +126,15 @@ export async function PATCH(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const { access, job } = await accessAndJob(request, workOrderId);
     const formId = cleanAdminText(body.formId, 180);
-    const row = await getD1().prepare(`SELECT id, template_key, template_snapshot, status FROM trade_job_forms
+    const row = await getD1().prepare(`SELECT id, template_key, template_snapshot, status, revision FROM trade_job_forms
       WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`).bind(formId, workOrderId, access.ownerUid)
       .first<Record<string, unknown>>();
     if (!row) return adminJson({ ok: false, error: "Field form not found." }, 404);
     if (row.status === "complete") return adminJson({ ok: false, error: "This completed form is locked. Start a newer template version if the record must be replaced." }, 409);
+    const baseRevision = Number(body.baseRevision || row.revision);
+    if (!Number.isInteger(baseRevision) || baseRevision !== Number(row.revision)) {
+      return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This form changed elsewhere. Refresh it before saving." }, 409);
+    }
     const template = parseJson(row.template_snapshot, null) as Record<string, unknown> | null;
     if (!template || !Array.isArray(template.fields)) return adminJson({ ok: false, error: "The saved form template is invalid." }, 409);
     const answers = normalizeTradeFormAnswers(template, body.answers);
@@ -162,10 +167,11 @@ export async function PATCH(request: Request) {
       }
     }
     await getD1().batch([
-      getD1().prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, completed_by_uid = ?, completed_at = ?, updated_at = ?
-        WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`)
+      getD1().prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, revision = revision + 1,
+        completed_by_uid = ?, completed_at = ?, updated_at = ?
+        WHERE id = ? AND work_order_id = ? AND firebase_uid = ? AND revision = ?`)
         .bind(JSON.stringify(answers), complete ? "complete" : "draft", complete ? access.actorUid : "",
-          complete ? now : "", now, formId, workOrderId, access.ownerUid),
+          complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision),
       getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(revision, now, workOrderId, access.ownerUid),
       getD1().prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)

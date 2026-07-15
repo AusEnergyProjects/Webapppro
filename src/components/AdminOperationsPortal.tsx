@@ -25,6 +25,7 @@ import { AdminAccountDirectory } from "@/components/AdminAccountDirectory";
 import { AdminHandoverReview } from "@/components/AdminHandoverReview";
 import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
+import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -253,7 +254,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "referrals" | "access"
+    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -1116,17 +1117,23 @@ export function AdminOperationsPortal() {
             <span>10</span>Asset governance
           </button>
           <button
+            className={tab === "form-governance" ? "active" : ""}
+            onClick={() => setTab("form-governance")}
+          >
+            <span>11</span>Field forms
+          </button>
+          <button
             className={tab === "referrals" ? "active" : ""}
             onClick={() => setTab("referrals")}
           >
-            <span>11</span>Referrals
+            <span>12</span>Referrals
           </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>12</span>Access & audit
+              <span>13</span>Access & audit
             </button>
           )}
           <aside>
@@ -1173,6 +1180,7 @@ export function AdminOperationsPortal() {
           {tab === "handovers" && user && <AdminHandoverReview user={user} role={session.role} />}
           {tab === "asset-safety" && user && <AdminAssetSafety user={user} role={session.role} />}
           {tab === "asset-governance" && user && <AdminAssetGovernance user={user} role={session.role} />}
+          {tab === "form-governance" && <AdminFormTemplates api={api} role={session.role} />}
           {tab === "overview" && (
             <>
               <header className="admin-page-heading">

@@ -897,6 +897,7 @@ export const tradeJobForms = sqliteTable("trade_job_forms", {
   templateSnapshot: text("template_snapshot").notNull(),
   answers: text("answers").notNull().default("{}"),
   status: text("status").notNull().default("draft"),
+  revision: integer("revision").notNull().default(1),
   completedByUid: text("completed_by_uid").notNull().default(""),
   completedAt: text("completed_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -905,6 +906,29 @@ export const tradeJobForms = sqliteTable("trade_job_forms", {
   uniqueIndex("trade_job_forms_work_template_idx").on(table.workOrderId, table.templateKey, table.templateVersion),
   index("trade_job_forms_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
   index("trade_job_forms_work_idx").on(table.workOrderId, table.updatedAt),
+]);
+
+export const tradeFormTemplates = sqliteTable("trade_form_templates", {
+  id: text("id").primaryKey(),
+  templateKey: text("template_key").notNull(),
+  version: integer("version").notNull(),
+  name: text("name").notNull(),
+  jurisdiction: text("jurisdiction").notNull().default("AU"),
+  categories: text("categories").notNull().default("[]"),
+  description: text("description").notNull().default(""),
+  guidance: text("guidance").notNull().default(""),
+  fields: text("fields").notNull().default("[]"),
+  sourceNotes: text("source_notes").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  createdByUid: text("created_by_uid").notNull(),
+  publishedByUid: text("published_by_uid").notNull().default(""),
+  publishedAt: text("published_at").notNull().default(""),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_form_templates_key_version_idx").on(table.templateKey, table.version),
+  index("trade_form_templates_status_idx").on(table.status, table.updatedAt),
 ]);
 
 export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {

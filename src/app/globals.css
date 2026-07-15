@@ -2104,6 +2104,32 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-page-heading { margin-bottom: 22px; max-width: 800px; }
 .admin-page-heading h1 { color: var(--color-aea-ink); font-size: clamp(1.8rem, 3vw, 2.7rem); margin-top: 4px; }
 .admin-page-heading p { color: var(--color-aea-muted); font-size: .76rem; margin: 7px 0 0; }
+.admin-card { background: #fff; border: 1px solid #d8e8e2; border-radius: 16px; box-shadow: 0 10px 30px rgba(9, 48, 42, .06); margin-bottom: 18px; padding: 22px; }
+.admin-card > header { align-items: flex-start; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 18px; }
+.admin-card > header span { color: var(--color-aea-green-dark); font-size: .67rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.admin-card > header h2 { color: var(--color-aea-ink); font-size: 1.35rem; margin: 3px 0 0; }
+.admin-card > header small { color: var(--color-aea-muted); max-width: 360px; }
+.admin-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-form-grid label, .admin-template-fields label { color: var(--color-aea-ink); display: grid; font-size: .75rem; font-weight: 800; gap: 6px; }
+.admin-form-grid input, .admin-form-grid select, .admin-form-grid textarea, .admin-template-fields input, .admin-template-fields select { background: #fbfdfc; border: 1px solid #b9d5ca; border-radius: 9px; color: var(--color-aea-ink); font: inherit; min-height: 42px; padding: 9px 11px; }
+.admin-form-grid .wide, .admin-form-grid fieldset.wide { grid-column: 1 / -1; }
+.admin-form-grid fieldset { border: 1px solid #d8e8e2; border-radius: 10px; padding: 12px; }
+.admin-form-grid legend { color: var(--color-aea-ink); font-size: .75rem; font-weight: 800; padding: 0 5px; }
+.admin-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-choice-row label { align-items: center; background: #f3faf7; border-radius: 8px; display: flex; flex-direction: row; font-weight: 700; padding: 7px 10px; }
+.admin-choice-row input, .admin-inline-check input { min-height: auto; }
+.admin-template-fields { border-top: 1px solid #d8e8e2; margin-top: 18px; padding-top: 18px; }
+.admin-template-fields > header { align-items: center; display: flex; justify-content: space-between; }
+.admin-template-fields article { align-items: end; border-bottom: 1px solid #e4eee9; display: grid; gap: 10px; grid-template-columns: 1fr 2fr 1fr auto auto; padding: 12px 0; }
+.admin-inline-check { align-items: center; display: flex !important; flex-direction: row; min-height: 42px; }
+.admin-form-template-builder footer { display: flex; gap: 10px; justify-content: flex-end; padding-top: 18px; }
+.admin-form-template-builder button, .admin-template-register button, .admin-template-fields button { border: 1px solid #a9cec1; border-radius: 8px; min-height: 38px; padding: 7px 12px; }
+.admin-form-template-builder button.primary { background: var(--color-aea-green); color: white; }
+.admin-template-register > article { align-items: center; border-top: 1px solid #e4eee9; display: flex; gap: 20px; justify-content: space-between; padding: 16px 0; }
+.admin-template-register > article h3 { color: var(--color-aea-ink); margin: 3px 0; }
+.admin-template-register > article p, .admin-template-register > article small { color: var(--color-aea-muted); }
+.admin-template-register > article > div:last-child { align-items: flex-end; display: flex; flex-direction: column; gap: 7px; min-width: 160px; }
+@media (max-width: 760px) { .admin-form-grid { grid-template-columns: 1fr; } .admin-form-grid .wide, .admin-form-grid fieldset.wide { grid-column: auto; } .admin-template-fields article { grid-template-columns: 1fr; } .admin-template-register > article { align-items: stretch; flex-direction: column; } .admin-template-register > article > div:last-child { align-items: stretch; } }
 .admin-metric-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
 .admin-metric-grid article, .admin-panel { background: #fff; border: 1px solid var(--color-aea-line); border-radius: 16px; box-shadow: 0 9px 26px rgba(4, 43, 44, .07); }
 .admin-metric-grid article { min-height: 130px; padding: 19px; }
