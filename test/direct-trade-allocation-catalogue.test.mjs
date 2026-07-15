@@ -88,6 +88,8 @@ test("wholesalers cannot access leads and installers only see approved published
   );
   assert.match(marketplaceRoute, /a\.partner_type = 'supplier'/);
   assert.match(marketplaceRoute, /p\.listing_status = 'published'/);
+  assert.match(partnerRoute, /p\.listing_status = 'published'/);
+  assert.doesNotMatch(partnerRoute, /p\.listing_status = 'live'/);
   assert.match(marketplaceRoute, /p\.review_status = 'approved'/);
   assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
   assert.doesNotMatch(

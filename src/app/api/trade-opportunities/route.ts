@@ -35,7 +35,7 @@ async function productSnapshot(installerUid: string, productListId: string) {
     FROM installer_product_list_items i
     JOIN supplier_products p ON p.id = i.product_id
     JOIN trade_accounts a ON a.firebase_uid = i.supplier_uid
-    WHERE i.list_id = ? AND p.listing_status = 'live' AND p.review_status = 'approved'
+    WHERE i.list_id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
       AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
       AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
         SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
