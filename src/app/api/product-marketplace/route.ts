@@ -38,18 +38,23 @@ export async function GET(request: Request) {
     ORDER BY p.category, p.brand, p.name LIMIT 300`)
     .bind(new Date().toISOString(), category, category, search, `%${search}%`).all<Record<string, unknown>>();
   const ids = rows.results.map((row) => String(row.id));
-  const links = ids.length ? await db.prepare(`SELECT l.product_id, l.relationship, l.default_qty, l.note,
-    p.id linked_product_id, p.model_number, p.brand, p.name, p.unit_price_cents_ex_gst
-    FROM supplier_product_links l JOIN supplier_products p ON p.id = l.linked_product_id
-    WHERE l.product_id IN (${ids.map(() => "?").join(",")}) AND p.listing_status = 'published' AND p.review_status = 'approved'`)
-    .bind(...ids).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const linkedProducts: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < ids.length; offset += 80) {
+    const batch = ids.slice(offset, offset + 80);
+    const links = await db.prepare(`SELECT l.product_id, l.relationship, l.default_qty, l.note,
+      p.id linked_product_id, p.model_number, p.brand, p.name, p.unit_price_cents_ex_gst
+      FROM supplier_product_links l JOIN supplier_products p ON p.id = l.linked_product_id
+      WHERE l.product_id IN (${batch.map(() => "?").join(",")}) AND p.listing_status = 'published' AND p.review_status = 'approved'`)
+      .bind(...batch).all<Record<string, unknown>>();
+    linkedProducts.push(...links.results);
+  }
   return adminJson({ ok: true, products: rows.results.map((row) => ({
     id: row.id, modelNumber: row.model_number, brand: row.brand, name: row.name, category: row.category,
     description: row.description, unitPriceCentsExGst: Number(row.unit_price_cents_ex_gst), minOrderQty: Number(row.min_order_qty),
     orderIncrement: Number(row.order_increment), unitLabel: row.unit_label, stockStatus: row.stock_status,
     leadTimeDays: Number(row.lead_time_days), warrantyYears: Number(row.warranty_years), datasheetUrl: row.datasheet_url,
     supplierUid: row.supplier_uid, supplierName: row.supplier_name, supplierWebsite: row.supplier_website,
-    dependencies: links.results.filter((link) => link.product_id === row.id).map((link) => ({
+    dependencies: linkedProducts.filter((link) => link.product_id === row.id).map((link) => ({
       relationship: link.relationship, defaultQty: Number(link.default_qty), note: link.note,
       productId: link.linked_product_id, modelNumber: link.model_number, brand: link.brand, name: link.name,
       unitPriceCentsExGst: Number(link.unit_price_cents_ex_gst),
