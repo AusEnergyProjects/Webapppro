@@ -413,7 +413,7 @@ export async function PATCH(request: Request) {
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
-    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_label
+    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label
       FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!current) throw new Error("WORK_NOT_FOUND");
@@ -445,6 +445,7 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
     }
     const assigneeLabel = body.assigneeLabel === undefined ? String(current.assignee_label) : cleanAdminText(body.assigneeLabel, 80);
+    const assigneeMemberId = body.assigneeLabel === undefined ? String(current.assignee_member_id) : "";
     if (assigneeLabel && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
     if (privateDataDetected(assigneeLabel)) throw new Error("PRIVATE_DATA");
     const changes: string[] = [];
@@ -454,8 +455,8 @@ export async function PATCH(request: Request) {
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
     await db.batch([
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
-        assignee_label = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeLabel, now, workOrderId, identity.uid),
+        assignee_member_id = ?, assignee_label = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId, assigneeLabel, now, workOrderId, identity.uid),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
     ]);
     return adminJson({ ok: true, ...(await workOrderPayload(identity)) });

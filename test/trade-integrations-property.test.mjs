@@ -85,12 +85,13 @@ test("online payment links are direct-customer only and provider hosted", () => 
   assert.match(paymentUi, /Card data stays with Stripe or Square/);
 });
 
-test("field records are owner scoped and protected customer sign-off stays with AEA", () => {
+test("field records are owner or assigned-team scoped and protected customer sign-off stays with AEA", () => {
   for (const table of ["trade_crm_time_entries", "trade_crm_job_media", "trade_crm_signoffs"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
     assert.match(fieldMigration, new RegExp("CREATE TABLE `" + table + "`"));
   }
-  assert.match(fieldRoute, /requireInstallerOperations/);
+  assert.match(fieldRoute, /requireInstallerTeamAccess/);
+  assert.match(fieldRoute, /assignedJob/);
   assert.match(fieldRoute, /sameOrigin\(request\)/);
   assert.match(fieldRoute, /firebase_uid = \?/);
   assert.match(fieldRoute, /job\.source_type === "opportunity" && signerRole === "customer"/);

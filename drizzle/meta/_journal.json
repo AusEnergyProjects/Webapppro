@@ -176,6 +176,13 @@
       "when": 1784125297100,
       "tag": "0024_lethal_purifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1784126477727,
+      "tag": "0025_dizzy_spot",
+      "breakpoints": true
     }
   ]
 }

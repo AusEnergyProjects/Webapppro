@@ -272,6 +272,7 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   priority: text("priority").notNull().default("standard"),
   scheduledStart: text("scheduled_start").notNull().default(""),
   scheduledEnd: text("scheduled_end").notNull().default(""),
+  assigneeMemberId: text("assignee_member_id").notNull().default(""),
   assigneeLabel: text("assignee_label").notNull().default(""),
   recordStatus: text("record_status").notNull().default("active"),
   createdAt: text("created_at").notNull(),
@@ -280,6 +281,40 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   uniqueIndex("trade_work_orders_owner_number_idx").on(table.firebaseUid, table.workNumber),
   index("trade_work_orders_owner_stage_idx").on(table.firebaseUid, table.recordStatus, table.stage, table.updatedAt),
   index("trade_work_orders_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
+]);
+
+export const tradeTeamMembers = sqliteTable("trade_team_members", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  memberUid: text("member_uid").notNull().default(""),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  role: text("role").notNull().default("technician"),
+  status: text("status").notNull().default("invited"),
+  invitedAt: text("invited_at").notNull(),
+  acceptedAt: text("accepted_at").notNull().default(""),
+  lastActiveAt: text("last_active_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_team_members_owner_email_idx").on(table.ownerUid, table.email),
+  index("trade_team_members_owner_member_idx").on(table.ownerUid, table.memberUid),
+  index("trade_team_members_member_status_idx").on(table.memberUid, table.status, table.updatedAt),
+  index("trade_team_members_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),
+]);
+
+export const tradeTeamInvites = sqliteTable("trade_team_invites", {
+  id: text("id").primaryKey(),
+  teamMemberId: text("team_member_id").notNull(),
+  ownerUid: text("owner_uid").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_team_invites_token_idx").on(table.tokenHash),
+  index("trade_team_invites_member_idx").on(table.teamMemberId, table.expiresAt),
+  index("trade_team_invites_owner_idx").on(table.ownerUid, table.expiresAt),
 ]);
 
 export const tradeCrmCounters = sqliteTable("trade_crm_counters", {

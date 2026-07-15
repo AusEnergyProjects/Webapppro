@@ -3199,3 +3199,125 @@ body input[type="checkbox"]:disabled {
   .customer-asset-move-tools > summary { align-items: flex-start; flex-direction: column; gap: 4px; }
   .customer-lifecycle-simple > summary { align-items: flex-start; gap: 10px; }
 }
+
+/* Installer team operations */
+.crm-team-centre { display: grid; gap: 18px; }
+.crm-team-portal-link { align-items: center; background: #e9f8f2; border: 1px solid #9bd8c1; border-radius: 10px; color: #075f42; display: inline-flex; font-size: .68rem; font-weight: 850; min-height: 40px; padding: 0 15px; text-decoration: none; }
+.crm-team-tabs { background: #edf5f2; border: 1px solid #c5ddd4; border-radius: 12px; display: flex; gap: 5px; padding: 5px; width: fit-content; }
+.crm-team-tabs button { background: transparent; border: 0; border-radius: 8px; color: #45625a; cursor: pointer; font-size: .66rem; font-weight: 800; min-height: 36px; padding: 0 16px; }
+.crm-team-tabs button.active { background: #fff; box-shadow: 0 4px 14px rgba(3, 57, 43, .09); color: #076848; }
+.crm-dispatch-board, .crm-team-invite, .crm-team-list { background: #fff; border: 1px solid #c6ddd5; border-radius: 16px; overflow: hidden; }
+.crm-dispatch-board > header, .crm-team-list > header { align-items: center; background: #f6faf8; border-bottom: 1px solid #d7e6e1; display: flex; justify-content: space-between; padding: 15px 18px; }
+.crm-dispatch-board > header div:first-child, .crm-team-list > header { color: #123c32; }
+.crm-dispatch-board > header strong, .crm-team-list > header strong { display: block; font-size: .72rem; }
+.crm-dispatch-board > header span, .crm-team-list > header span { color: #607970; display: block; font-size: .58rem; margin-top: 3px; }
+.crm-dispatch-legend { display: flex; gap: 8px; }
+.crm-dispatch-legend span { background: #e6f5ef; border-radius: 999px; color: #176249 !important; font-weight: 750; margin: 0 !important; padding: 7px 10px; }
+.crm-dispatch-list article { align-items: center; border-bottom: 1px solid #e1ece8; display: grid; gap: 14px; grid-template-columns: 54px minmax(0, 1fr) minmax(170px, .42fr); padding: 13px 17px; }
+.crm-dispatch-list article:last-child { border-bottom: 0; }
+.crm-dispatch-list article.unassigned { box-shadow: inset 3px 0 #efaa2c; }
+.crm-dispatch-date { background: #eef6f3; border-radius: 10px; display: grid; min-height: 48px; padding: 7px; place-items: center; }
+.crm-dispatch-date strong { color: #0e4b39; font-size: .9rem; line-height: 1; }
+.crm-dispatch-date span { color: #668078; font-size: .54rem; font-weight: 800; }
+.crm-dispatch-job { display: grid; gap: 3px; min-width: 0; }
+.crm-dispatch-job > span { color: #078052; font-size: .55rem; font-weight: 850; text-transform: uppercase; }
+.crm-dispatch-job > strong { color: #102f27; font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-dispatch-job > small { color: #687c76; font-size: .57rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-dispatch-list label, .crm-team-invite label { display: grid; gap: 5px; }
+.crm-dispatch-list label > span, .crm-team-invite label > span { color: #4c6a61; font-size: .55rem; font-weight: 800; }
+.crm-dispatch-list select, .crm-team-invite input, .crm-team-invite select, .crm-team-list select, .crm-invite-link input { background: #fff; border: 1px solid #b9d4ca; border-radius: 8px; color: #183f34; font: inherit; min-height: 38px; padding: 0 10px; }
+.crm-team-layout { display: grid; gap: 16px; grid-template-columns: minmax(260px, .72fr) minmax(420px, 1.4fr); }
+.crm-team-invite { padding: 20px; }
+.crm-team-invite > span { color: #078052; font-size: .57rem; font-weight: 900; text-transform: uppercase; }
+.crm-team-invite h4 { color: #113a2f; font-size: .84rem; margin-top: 4px; }
+.crm-team-invite > p { color: #657b74; font-size: .61rem; line-height: 1.55; margin-top: 5px; }
+.crm-team-invite form { display: grid; gap: 11px; margin-top: 17px; }
+.crm-team-invite form > button, .crm-invite-link button, .crm-team-list form button, .crm-reissue-button { background: #079762; border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 38px; padding: 0 13px; }
+.crm-invite-link { background: #eef8f4; border: 1px solid #b7ddcf; border-radius: 10px; display: grid; gap: 8px; margin-top: 15px; padding: 12px; }
+.crm-invite-link strong { color: #16493a; font-size: .59rem; }
+.crm-invite-link input { font-size: .56rem; width: 100%; }
+.crm-team-list > article { align-items: center; border-bottom: 1px solid #e1ece8; display: grid; gap: 12px; grid-template-columns: minmax(170px, 1fr) minmax(290px, auto); padding: 14px 17px; }
+.crm-team-list > article:last-child { border-bottom: 0; }
+.crm-team-list > article > div { display: grid; gap: 2px; min-width: 0; }
+.crm-team-list > article > div strong { color: #12382e; font-size: .69rem; }
+.crm-team-list > article > div span, .crm-team-list > article > div small { color: #6a7f78; font-size: .55rem; overflow: hidden; text-overflow: ellipsis; }
+.crm-team-list form { display: grid; gap: 6px; grid-template-columns: 1fr 1fr auto; }
+.crm-team-list select { font-size: .58rem; min-width: 0; }
+.crm-reissue-button { background: #eef8f4; color: #08714d; grid-column: 2; justify-self: end; min-height: 32px; }
+
+.trade-team-page { background: #f3f8f6; min-height: 100vh; }
+.team-auth-shell { background: linear-gradient(135deg, #073c31, #086246); border-radius: 22px; display: grid; gap: 34px; grid-template-columns: 1.15fr .85fr; margin: 22px 0; padding: 42px; }
+.team-auth-intro { align-self: center; color: #fff; max-width: 620px; }
+.team-auth-intro > span, .team-portal-hero > div:first-child > span { color: #67e1b0; font-size: .72rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.team-auth-intro h1 { color: #fff; font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.03; margin: 11px 0 16px; }
+.team-auth-intro p { color: #d8eee6; font-size: .92rem; line-height: 1.65; }
+.team-auth-card { background: #fff; border-radius: 18px; box-shadow: 0 18px 50px rgba(0, 28, 21, .22); padding: 24px; }
+.team-auth-card form { display: grid; gap: 13px; margin-top: 16px; }
+.team-auth-card form label { display: grid; gap: 6px; }
+.team-auth-card form label > span { color: #36584f; font-size: .68rem; font-weight: 800; }
+.team-auth-card form input { border: 1px solid #b9d3ca; border-radius: 10px; font: inherit; min-height: 46px; padding: 0 12px; }
+.team-auth-card [role="status"] { color: #48665d; font-size: .68rem; line-height: 1.5; margin-top: 12px; }
+.team-portal-hero { align-items: center; background: linear-gradient(125deg, #073c31, #08714e); border-radius: 19px; color: #fff; display: flex; justify-content: space-between; margin: 20px 0 15px; padding: 25px 28px; }
+.team-portal-hero h1 { color: #fff; font-size: 1.65rem; margin-top: 4px; }
+.team-portal-hero p { color: #d6ede4; font-size: .75rem; margin-top: 7px; }
+.team-portal-hero > div:last-child { align-items: center; display: grid; grid-template-columns: auto auto; text-align: right; }
+.team-portal-hero > div:last-child strong { font-size: 1.8rem; line-height: 1; }
+.team-portal-hero > div:last-child span { color: #cfe8df; font-size: .65rem; margin-left: 7px; }
+.team-portal-hero > div:last-child button { background: rgba(255, 255, 255, .12); border: 1px solid rgba(255,255,255,.25); border-radius: 8px; color: #fff; cursor: pointer; font-size: .62rem; grid-column: 1 / -1; margin-top: 8px; min-height: 34px; }
+.team-queue-summary { display: grid; gap: 11px; grid-template-columns: repeat(4, 1fr); margin-bottom: 15px; }
+.team-queue-summary article { background: #fff; border: 1px solid #c9ddd6; border-radius: 13px; display: flex; justify-content: space-between; padding: 15px 17px; }
+.team-queue-summary span { color: #5a736b; font-size: .65rem; font-weight: 750; }
+.team-queue-summary strong { color: #086c4a; font-size: 1rem; }
+.team-queue-layout { display: grid; gap: 15px; grid-template-columns: minmax(260px, .65fr) minmax(0, 1.55fr); }
+.team-job-queue, .team-job-focus { background: #fff; border: 1px solid #c7ddd5; border-radius: 16px; overflow: hidden; }
+.team-job-queue > header { align-items: center; background: #f4f9f7; border-bottom: 1px solid #d8e6e1; display: flex; justify-content: space-between; padding: 15px 17px; }
+.team-job-queue > header strong { color: #183f34; font-size: .75rem; }
+.team-job-queue > header span { color: #687e77; font-size: .61rem; }
+.team-job-queue > button { background: #fff; border: 0; border-bottom: 1px solid #e1ebe7; cursor: pointer; display: grid; gap: 5px; padding: 15px 17px; text-align: left; width: 100%; }
+.team-job-queue > button:hover, .team-job-queue > button.active { background: #edf8f4; box-shadow: inset 4px 0 #08a36a; }
+.team-job-queue > button > span { color: #087651; display: flex; font-size: .59rem; font-weight: 850; justify-content: space-between; }
+.team-job-queue > button b { background: #e8f3ef; border-radius: 999px; font-size: .52rem; padding: 4px 7px; text-transform: uppercase; }
+.team-job-queue > button > strong { color: #173c32; font-size: .72rem; }
+.team-job-queue > button > small { color: #687d76; font-size: .58rem; }
+.team-job-focus > article > header { align-items: flex-start; border-bottom: 1px solid #dbe8e3; display: flex; gap: 24px; justify-content: space-between; padding: 21px; }
+.team-job-focus > article > header > div > span { color: #078052; font-size: .6rem; font-weight: 900; }
+.team-job-focus h2 { color: #143a30; font-size: 1.12rem; margin-top: 4px; }
+.team-job-focus > article > header p { color: #647a73; font-size: .67rem; line-height: 1.5; margin-top: 6px; }
+.team-job-focus label { display: grid; gap: 5px; }
+.team-job-focus label > span { color: #526d65; font-size: .6rem; font-weight: 800; }
+.team-job-focus select { background: #fff; border: 1px solid #b7d2c8; border-radius: 8px; color: #163e33; min-height: 39px; padding: 0 9px; }
+.team-portal-assignment { border-bottom: 1px solid #dbe8e3; padding: 16px 21px; }
+.team-mobile-checklist, .team-field-tools { border-bottom: 1px solid #dbe8e3; padding: 20px 21px; }
+.team-mobile-checklist h3, .team-field-tools h3 { color: #173f34; font-size: .8rem; margin-bottom: 12px; }
+.team-mobile-checklist > label { align-items: flex-start; border: 1px solid #d3e4de; border-radius: 9px; display: flex; gap: 10px; margin-bottom: 7px; padding: 11px 12px; }
+.team-mobile-checklist input { accent-color: #079762; height: 18px; width: 18px; }
+.team-mobile-checklist label > span { color: #274b41; display: grid; font-size: .67rem; gap: 3px; }
+.team-mobile-checklist label small { color: #73867f; font-size: .56rem; }
+.team-field-tools { border-bottom: 0; }
+
+@media (max-width: 900px) {
+  .crm-team-layout, .team-auth-shell, .team-queue-layout { grid-template-columns: 1fr; }
+  .crm-dispatch-list article { grid-template-columns: 50px minmax(0, 1fr); }
+  .crm-dispatch-list article > label { grid-column: 2; }
+  .team-auth-shell { padding: 30px; }
+}
+
+@media (max-width: 620px) {
+  .crm-dispatch-board > header, .crm-team-list > header, .team-portal-hero { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .crm-dispatch-list article { align-items: start; grid-template-columns: 44px minmax(0, 1fr); padding: 13px; }
+  .crm-dispatch-list article > label { grid-column: 1 / -1; }
+  .crm-team-list > article { grid-template-columns: 1fr; }
+  .crm-team-list form { grid-template-columns: 1fr 1fr; }
+  .crm-team-list form button { grid-column: 1 / -1; }
+  .crm-reissue-button { grid-column: 1; justify-self: stretch; }
+  .team-auth-shell { border-radius: 16px; gap: 24px; margin: 12px 0; padding: 22px 17px; }
+  .team-auth-intro h1 { font-size: 2rem; }
+  .team-auth-intro p { font-size: .8rem; }
+  .team-auth-card { padding: 18px; }
+  .team-portal-hero { margin-top: 12px; padding: 21px 18px; }
+  .team-portal-hero > div:last-child { text-align: left; }
+  .team-queue-summary { grid-template-columns: repeat(2, 1fr); }
+  .team-queue-summary article { padding: 13px; }
+  .team-job-focus > article > header { flex-direction: column; }
+  .team-job-focus > article > header label { width: 100%; }
+}

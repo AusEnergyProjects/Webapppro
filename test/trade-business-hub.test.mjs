@@ -9,10 +9,10 @@ const hub = read("../src/components/TradeBusinessHub.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const entitlements = read("../src/lib/direct-trade-entitlements.ts");
 const migration = read("../drizzle/0015_aromatic_black_knight.sql");
-const operationsSchema = schema.slice(
-  schema.indexOf("export const tradeWorkOrders"),
-  schema.indexOf("export const tradeOpportunities"),
-);
+const operationsSchema = [
+  schema.slice(schema.indexOf("export const tradeWorkOrders"), schema.indexOf("export const tradeTeamMembers")),
+  schema.slice(schema.indexOf("export const tradeWorkOrderTasks"), schema.indexOf("export const tradeHandoverPacks")),
+].join("\n");
 
 test("Business Hub records, tasks and activity are durable and indexed", () => {
   assert.match(operationsSchema, /sqliteTable\("trade_work_orders"/);
