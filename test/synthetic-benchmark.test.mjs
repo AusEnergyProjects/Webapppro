@@ -7,6 +7,7 @@ const markerMigration = read("../drizzle/0032_windy_fixer.sql");
 const population = read("../drizzle/0033_synthetic_benchmark_population.sql");
 const ecosystemRepair = read("../drizzle/0035_ecosystem_flow_repair.sql");
 const journeyReadiness = read("../drizzle/0036_synthetic_journey_readiness.sql");
+const catalogueReadiness = read("../drizzle/0037_synthetic_catalogue_readiness.sql");
 const generator = read("../scripts/seed-synthetic-population.mjs");
 const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
@@ -45,6 +46,9 @@ test("the benchmark uses the production customer-project path and six installer 
   assert.match(supplierProducts, /identity\.isSynthetic/);
   assert.match(journeyReadiness, /service_radius_km` = 5000/);
   assert.match(journeyReadiness, /lower-bills/);
+  assert.match(catalogueReadiness, /Synthetic walkthrough auto-approval/);
+  assert.match(supplierProducts, /identity\.isSynthetic \? "approved" : "pending"/);
+  assert.match(supplierProducts, /!identity\.isSynthetic && values\.listingStatus/);
 });
 
 test("seed data is notification free and maintains the protected household boundary", () => {

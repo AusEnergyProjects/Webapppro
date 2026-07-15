@@ -430,6 +430,8 @@ export async function POST(request: Request) {
         );
       }
       const now = new Date().toISOString();
+      const reviewStatus = identity.isSynthetic ? "approved" : "pending";
+      const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
       await db.batch(
         rows.map((row) => {
           const values = row!;
@@ -439,14 +441,14 @@ export async function POST(request: Request) {
               (id, firebase_uid, model_number, brand, name, category, description, unit_price_cents_ex_gst,
                min_order_qty, order_increment, unit_label, stock_status, lead_time_days, warranty_years, datasheet_url,
                listing_status, review_status, review_note, is_synthetic, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(firebase_uid, model_number) DO UPDATE SET
                 brand = excluded.brand, name = excluded.name, category = excluded.category, description = excluded.description,
                 unit_price_cents_ex_gst = excluded.unit_price_cents_ex_gst, min_order_qty = excluded.min_order_qty,
                 order_increment = excluded.order_increment, unit_label = excluded.unit_label, stock_status = excluded.stock_status,
                 lead_time_days = excluded.lead_time_days, warranty_years = excluded.warranty_years,
                 datasheet_url = excluded.datasheet_url, listing_status = excluded.listing_status,
-                review_status = 'pending', review_note = '', updated_at = excluded.updated_at`,
+                review_status = excluded.review_status, review_note = excluded.review_note, updated_at = excluded.updated_at`,
             )
             .bind(
               crypto.randomUUID(),
@@ -465,6 +467,8 @@ export async function POST(request: Request) {
               values.warrantyYears,
               values.datasheetUrl,
               values.listingStatus,
+              reviewStatus,
+              reviewNote,
               identity.isSynthetic,
               now,
               now,
@@ -499,13 +503,13 @@ export async function POST(request: Request) {
         eventType: "supplier.catalogue_imported",
         category: "catalogue",
         priority: "high",
-        title: "Wholesaler catalogue import awaiting review",
-        summary: `${identity.businessName} imported ${rows.length} products. Published items require catalogue approval before installers can select them.`,
+        title: identity.isSynthetic ? "Synthetic catalogue import completed" : "Wholesaler catalogue import awaiting review",
+        summary: identity.isSynthetic ? `${identity.businessName} imported ${rows.length} synthetic products for the protected walkthrough.` : `${identity.businessName} imported ${rows.length} products. Published items require catalogue approval before installers can select them.`,
         entityType: "trade_account",
         entityId: identity.uid,
         actorType: "supplier",
         actorUid: identity.uid,
-        requiresAction: rows.some((item) => item?.listingStatus === "published"),
+        requiresAction: !identity.isSynthetic && rows.some((item) => item?.listingStatus === "published"),
         metadata: { productCount: rows.length },
         occurredAt: now,
       });
@@ -543,6 +547,8 @@ export async function POST(request: Request) {
         400,
       );
     const now = new Date().toISOString();
+    const reviewStatus = identity.isSynthetic ? "approved" : "pending";
+    const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
     try {
       await getD1()
         .prepare(
@@ -550,7 +556,7 @@ export async function POST(request: Request) {
         (id, firebase_uid, model_number, brand, name, category, description, unit_price_cents_ex_gst,
          min_order_qty, order_increment, unit_label, stock_status, lead_time_days, warranty_years, datasheet_url,
          listing_status, review_status, review_note, is_synthetic, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -569,6 +575,8 @@ export async function POST(request: Request) {
           values.warrantyYears,
           values.datasheetUrl,
           values.listingStatus,
+          reviewStatus,
+          reviewNote,
           identity.isSynthetic,
           now,
           now,
@@ -597,13 +605,13 @@ export async function POST(request: Request) {
       eventType: "supplier.product_created",
       category: "catalogue",
       priority: values.listingStatus === "published" ? "high" : "normal",
-      title: "Wholesaler product awaiting review",
-      summary: `${identity.businessName} added ${values.brand} ${values.name} to its catalogue.`,
+      title: identity.isSynthetic ? "Synthetic catalogue product added" : "Wholesaler product awaiting review",
+      summary: identity.isSynthetic ? `${identity.businessName} added a synthetic product for the protected walkthrough.` : `${identity.businessName} added ${values.brand} ${values.name} to its catalogue.`,
       entityType: "supplier_product",
       entityId: id,
       actorType: "supplier",
       actorUid: identity.uid,
-      requiresAction: values.listingStatus === "published",
+      requiresAction: !identity.isSynthetic && values.listingStatus === "published",
       metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
       occurredAt: now,
     });
@@ -636,12 +644,14 @@ export async function PATCH(request: Request) {
         400,
       );
     const now = new Date().toISOString();
+    const reviewStatus = identity.isSynthetic ? "approved" : "pending";
+    const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
     try {
       const result = await getD1()
         .prepare(
           `UPDATE supplier_products SET model_number = ?, brand = ?, name = ?, category = ?,
         description = ?, unit_price_cents_ex_gst = ?, min_order_qty = ?, order_increment = ?, unit_label = ?, stock_status = ?,
-        lead_time_days = ?, warranty_years = ?, datasheet_url = ?, listing_status = ?, review_status = 'pending', review_note = '', updated_at = ?
+        lead_time_days = ?, warranty_years = ?, datasheet_url = ?, listing_status = ?, review_status = ?, review_note = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ?`,
         )
         .bind(
@@ -659,6 +669,8 @@ export async function PATCH(request: Request) {
           values.warrantyYears,
           values.datasheetUrl,
           values.listingStatus,
+          reviewStatus,
+          reviewNote,
           now,
           id,
           identity.uid,
@@ -691,12 +703,12 @@ export async function PATCH(request: Request) {
       category: "catalogue",
       priority: values.listingStatus === "published" ? "high" : "normal",
       title: "Wholesaler product changed",
-      summary: `${identity.businessName} updated ${values.brand} ${values.name}. The catalogue review was reset to pending.`,
+      summary: identity.isSynthetic ? `${identity.businessName} updated a synthetic walkthrough product.` : `${identity.businessName} updated ${values.brand} ${values.name}. The catalogue review was reset to pending.`,
       entityType: "supplier_product",
       entityId: id,
       actorType: "supplier",
       actorUid: identity.uid,
-      requiresAction: values.listingStatus === "published",
+      requiresAction: !identity.isSynthetic && values.listingStatus === "published",
       metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
       occurredAt: now,
     });
