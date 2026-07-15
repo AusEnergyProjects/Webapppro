@@ -23,6 +23,7 @@ import {
 } from "@/components/AdminNotificationInbox";
 import { AdminAccountDirectory } from "@/components/AdminAccountDirectory";
 import { AdminHandoverReview } from "@/components/AdminHandoverReview";
+import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -251,7 +252,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "referrals" | "access"
+    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "referrals" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -515,6 +516,10 @@ export function AdminOperationsPortal() {
     }
     if (notification.entityType === "trade_handover_pack") {
       setTab("handovers");
+      return;
+    }
+    if (notification.entityType === "asset_safety_notice") {
+      setTab("asset-safety");
       return;
     }
     if (["trade_opportunity_match", "customer_project_quote"].includes(notification.entityType)) {
@@ -1094,17 +1099,23 @@ export function AdminOperationsPortal() {
             <span>08</span>Handovers
           </button>
           <button
+            className={tab === "asset-safety" ? "active" : ""}
+            onClick={() => setTab("asset-safety")}
+          >
+            <span>09</span>Asset safety
+          </button>
+          <button
             className={tab === "referrals" ? "active" : ""}
             onClick={() => setTab("referrals")}
           >
-            <span>09</span>Referrals
+            <span>10</span>Referrals
           </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>10</span>Access & audit
+              <span>11</span>Access & audit
             </button>
           )}
           <aside>
@@ -1149,6 +1160,7 @@ export function AdminOperationsPortal() {
             />
           )}
           {tab === "handovers" && user && <AdminHandoverReview user={user} role={session.role} />}
+          {tab === "asset-safety" && user && <AdminAssetSafety user={user} role={session.role} />}
           {tab === "overview" && (
             <>
               <header className="admin-page-heading">

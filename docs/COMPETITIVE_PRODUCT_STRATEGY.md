@@ -174,12 +174,19 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 - Customer-visible handover packs without direct contact details.
 - Always-free customer asset, warranty and document access.
 
-### Next release: ownership and lifecycle automation
+### Delivered release: lifecycle schedules and safety notices
 
 - Recurring service and warranty reminders.
+- Installer-maintained service history without household contact access.
+- Customer-controlled dashboard reminders and Google Calendar actions.
+- Administrator-sourced product safety notices using category, brand or model matching.
+- Private customer acknowledgement records and audited publication or withdrawal.
+
+### Next release: private ownership and record corrections
+
 - Asset ownership transfer between private household accounts with explicit approval.
-- Product recall and warranty notice workflows using model and serial references.
 - Versioned handover corrections without removing a previously approved record.
+- Serial-range and batch-aware product notice matching after supplier identifier quality improves.
 
 ### Following release: Google-first business integrations
 
@@ -199,7 +206,7 @@ The administrator grant system should remain feature-specific, expiry-aware and 
 
 ## Recommended decision
 
-Continue with lifecycle automation and Google-first business integrations before rate cards or accounting. The installed asset and reviewed handover foundation now creates the structured information needed for reminders, service history and future quoting controls.
+Continue with explicit private asset ownership transfer, versioned handover corrections and consented Google Workspace integrations before rate cards or accounting. The installed asset, reviewed handover and lifecycle foundation now creates the structured information needed for safe transfers and future quoting controls.
 
 ## Further questions
 

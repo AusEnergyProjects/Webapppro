@@ -390,6 +390,94 @@ export const tradeHandoverDocuments = sqliteTable("trade_handover_documents", {
   index("trade_handover_documents_owner_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
 ]);
 
+export const tradeAssetServicePlans = sqliteTable("trade_asset_service_plans", {
+  id: text("id").primaryKey(),
+  assetId: text("asset_id").notNull(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  serviceType: text("service_type").notNull(),
+  cadenceMonths: integer("cadence_months").notNull(),
+  nextDueAt: text("next_due_at").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_asset_service_plans_asset_type_idx").on(table.assetId, table.serviceType),
+  index("trade_asset_service_plans_owner_due_idx").on(table.firebaseUid, table.status, table.nextDueAt),
+  index("trade_asset_service_plans_pack_idx").on(table.handoverPackId, table.status, table.nextDueAt),
+]);
+
+export const tradeAssetServiceEvents = sqliteTable("trade_asset_service_events", {
+  id: text("id").primaryKey(),
+  servicePlanId: text("service_plan_id").notNull(),
+  assetId: text("asset_id").notNull(),
+  handoverPackId: text("handover_pack_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  eventType: text("event_type").notNull().default("service_completed"),
+  servicedAt: text("serviced_at").notNull(),
+  summary: text("summary").notNull().default(""),
+  providerReference: text("provider_reference").notNull().default(""),
+  nextDueAt: text("next_due_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_asset_service_events_plan_idx").on(table.servicePlanId, table.servicedAt),
+  index("trade_asset_service_events_asset_idx").on(table.assetId, table.servicedAt),
+  index("trade_asset_service_events_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
+export const customerAssetLifecyclePreferences = sqliteTable("customer_asset_lifecycle_preferences", {
+  id: text("id").primaryKey(),
+  customerUid: text("customer_uid").notNull(),
+  assetId: text("asset_id").notNull(),
+  remindersEnabled: integer("reminders_enabled", { mode: "boolean" }).notNull().default(true),
+  reminderLeadDays: integer("reminder_lead_days").notNull().default(30),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_asset_lifecycle_preferences_owner_asset_idx").on(table.customerUid, table.assetId),
+  index("customer_asset_lifecycle_preferences_owner_idx").on(table.customerUid, table.updatedAt),
+]);
+
+export const assetSafetyNotices = sqliteTable("asset_safety_notices", {
+  id: text("id").primaryKey(),
+  createdByUid: text("created_by_uid").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  severity: text("severity").notNull().default("advisory"),
+  assetCategory: text("asset_category").notNull().default(""),
+  brand: text("brand").notNull().default(""),
+  modelNumber: text("model_number").notNull().default(""),
+  sourceUrl: text("source_url").notNull(),
+  sourceLabel: text("source_label").notNull().default("Official safety source"),
+  effectiveAt: text("effective_at").notNull().default(""),
+  expiresAt: text("expires_at").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  publishedAt: text("published_at").notNull().default(""),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("asset_safety_notices_status_idx").on(table.status, table.publishedAt),
+  index("asset_safety_notices_scope_idx").on(table.assetCategory, table.brand, table.modelNumber),
+]);
+
+export const assetSafetyAcknowledgements = sqliteTable("asset_safety_acknowledgements", {
+  id: text("id").primaryKey(),
+  noticeId: text("notice_id").notNull(),
+  assetId: text("asset_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  status: text("status").notNull().default("acknowledged"),
+  acknowledgedAt: text("acknowledged_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("asset_safety_acknowledgements_owner_notice_asset_idx").on(table.customerUid, table.noticeId, table.assetId),
+  index("asset_safety_acknowledgements_notice_idx").on(table.noticeId, table.acknowledgedAt),
+  index("asset_safety_acknowledgements_owner_idx").on(table.customerUid, table.updatedAt),
+]);
+
 export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
