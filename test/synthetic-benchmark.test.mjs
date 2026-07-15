@@ -6,6 +6,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const markerMigration = read("../drizzle/0032_windy_fixer.sql");
 const population = read("../drizzle/0033_synthetic_benchmark_population.sql");
 const ecosystemRepair = read("../drizzle/0035_ecosystem_flow_repair.sql");
+const journeyReadiness = read("../drizzle/0036_synthetic_journey_readiness.sql");
 const generator = read("../scripts/seed-synthetic-population.mjs");
 const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
@@ -42,6 +43,8 @@ test("the benchmark uses the production customer-project path and six installer 
   assert.match(customerProjects, /!user\.emailVerified && !Boolean\(current\.is_synthetic\)/);
   assert.match(supplierProducts, /review_note, is_synthetic, created_at/);
   assert.match(supplierProducts, /identity\.isSynthetic/);
+  assert.match(journeyReadiness, /service_radius_km` = 5000/);
+  assert.match(journeyReadiness, /lower-bills/);
 });
 
 test("seed data is notification free and maintains the protected household boundary", () => {

@@ -19,6 +19,7 @@ const states = [
   { code: "WA", postcode: "6000", suburb: "Perth" }, { code: "TAS", postcode: "7000", suburb: "Hobart" },
   { code: "ACT", postcode: "2600", suburb: "Canberra" }, { code: "NT", postcode: "0800", suburb: "Darwin" },
 ];
+const canonicalState = (code) => ({ VIC: "Vic", QLD: "Qld", TAS: "Tas" }[code] || code);
 const trades = [
   ["assessment", "Energy assessment"], ["solar", "Solar installation"], ["battery", "Battery installation"],
   ["heating-cooling", "Heating and cooling"], ["hot-water", "Heat pump hot water"],
@@ -38,7 +39,7 @@ const productTemplates = [
   ["plumbing", "FlowCore", "FC-HW", "Heat pump plumbing connection kit", 42000, 5],
 ];
 const projectGoals = ["Lower energy bills", "Replace ageing equipment", "Improve comfort", "Reduce gas use", "Prepare for an electric vehicle", "Build a staged whole home plan"];
-const priorities = ["cost", "comfort", "reliability", "emissions", "future_ready"];
+const priorities = ["lower-bills", "comfort", "move-from-gas", "resilience", "future-ready", "replace-failed"];
 const stages = ["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"];
 const pipelines = ["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid"];
 
@@ -159,8 +160,8 @@ function buildSql(records) {
       VALUES (${sql(record.firebaseUid)}, ${sql(record.email)}, ${sql(record.displayName)}, ${sql(`${accountIndex + 10} Benchmark Street`)},
        ${sql(record.state.suburb)}, ${sql(record.state.code)}, ${sql(record.state.postcode)}, ${sql("Demo Account Manager")},
        ${sql(`0400 ${String(100000 + accountIndex).slice(0, 3)} ${String(100000 + accountIndex).slice(3)}`)}, ${sql(partnerType)}, '',
-       ${sql(json([record.state.code]))}, ${sql(json(record.capabilities))}, ${sql(`Synthetic ${record.offering} account for product and UI benchmarking.`)},
-       'active', 'approved', ${sql(planKey)}, 'active', 'open', ${sql(record.state.postcode)}, 150, 0, 0, 1,
+       ${sql(json(partnerType === "installer" ? states.map((item) => canonicalState(item.code)) : [canonicalState(record.state.code)]))}, ${sql(json(record.capabilities))}, ${sql(`Synthetic ${record.offering} account for product and UI benchmarking.`)},
+       'active', 'approved', ${sql(planKey)}, 'active', 'open', ${sql(record.state.postcode)}, ${partnerType === "installer" ? 5000 : 150}, 0, 0, 1,
        'synthetic-benchmark-v1', ${sql(now)}, ${sql(now)}, ${sql(now)});`);
     const roleFeatures = partnerType === "supplier"
       ? ["supplier_visibility", "supplier_bulk_import", "business_operations", "advanced_analytics", "featured_placement", "team_access", "priority_support"]
@@ -259,16 +260,16 @@ function buildSql(records) {
     statements.push(`INSERT OR IGNORE INTO customer_accounts
       (firebase_uid, email, display_name, postcode, address_state, property_type, household_situation, account_updates,
        account_status, is_synthetic, consent_version, consent_at, created_at, updated_at)
-      VALUES (${sql(consumer.firebaseUid)}, ${sql(consumer.email)}, ${sql(consumer.displayName)}, ${sql(consumer.state.postcode)}, ${sql(consumer.state.code)},
+      VALUES (${sql(consumer.firebaseUid)}, ${sql(consumer.email)}, ${sql(consumer.displayName)}, ${sql(consumer.state.postcode)}, ${sql(canonicalState(consumer.state.code))},
       'house', 'owner', 0, 'active', 1, 'synthetic-benchmark-v1', ${sql(now)}, ${sql(now)}, ${sql(now)});`);
     statements.push(`INSERT OR IGNORE INTO customer_projects
       (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation, goal, pace,
        existing_features, service_categories, priorities, project_stage, timing, budget_range, private_notes, plan_snapshot,
        completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
       VALUES (${sql(projectId)}, ${sql(consumer.firebaseUid)}, ${sql(title)}, ${sql(`Demo home ${consumerIndex + 1}`)}, ${sql(consumer.state.postcode)},
-      ${sql(consumer.state.code)}, 'house', 'owner', ${sql(projectGoals[consumerIndex % projectGoals.length])}, ${sql(consumerIndex % 3 === 0 ? "guided" : "steady")},
+      ${sql(canonicalState(consumer.state.code))}, 'house', 'owner', ${sql(projectGoals[consumerIndex % projectGoals.length])}, ${sql(consumerIndex % 3 === 0 ? "whole-home" : "staged")},
       ${sql(json(consumerIndex % 2 ? ["solar"] : []))}, ${sql(json(categories))}, ${sql(json([priorities[consumerIndex % priorities.length], priorities[(consumerIndex + 2) % priorities.length]]))},
-      ${sql(consumerIndex % 4 === 0 ? "ready" : "exploring")}, ${sql(consumerIndex % 3 === 0 ? "soon" : "planning")}, ${sql(["under_10k", "10k_25k", "25k_50k", "not_set"][consumerIndex % 4])},
+      ${sql(consumerIndex % 4 === 0 ? "ready-for-pricing" : "exploring")}, ${sql(consumerIndex % 3 === 0 ? "within_30_days" : "planning")}, ${sql(["under_5k", "5_15k", "15_30k", "not_set"][consumerIndex % 4])},
       'Synthetic private planning note. This text is not shared with installers.', ${sql(json({ version: 1, synthetic: true, nextSteps: ["Compare options", "Review installer responses"] }))},
       '[]', 'matching', ${sql(opportunityId)}, ${sql(now)}, '', 1, ${sql(now)}, ${sql(now)});`);
     statements.push(`INSERT OR IGNORE INTO customer_consent_receipts
@@ -278,8 +279,8 @@ function buildSql(records) {
     statements.push(`INSERT OR IGNORE INTO trade_opportunities
       (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status, source_reference,
        contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
-      VALUES (${sql(opportunityId)}, ${sql(title)}, ${sql(category)}, ${sql(consumer.state.postcode)}, ${sql(consumer.state.code)}, ${sql(json(categories))},
-      ${sql(consumerIndex % 10 === 0 ? "high" : "standard")}, ${sql(consumerIndex % 3 === 0 ? "soon" : "planning")},
+      VALUES (${sql(opportunityId)}, ${sql(title)}, ${sql(category)}, ${sql(consumer.state.postcode)}, ${sql(canonicalState(consumer.state.code))}, ${sql(json(categories))},
+      ${sql(consumerIndex % 10 === 0 ? "priority" : "standard")}, ${sql(consumerIndex % 3 === 0 ? "within_30_days" : "planning")},
       ${sql(`Synthetic anonymised ${categories.join(" and ")} enquiry in ${consumer.state.code}.`)}, 'open', ${sql(opportunityId)}, 2, 3,
       ${sql(day(30))}, '', ${sql(consumer.firebaseUid)}, 1, ${sql(now)}, ${sql(now)});`);
     const eligible = installers.filter((installer) => installer.capabilities.includes(category));

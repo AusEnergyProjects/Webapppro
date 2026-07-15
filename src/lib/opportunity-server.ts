@@ -189,7 +189,7 @@ function candidateFromRow(
   row: Record<string, unknown>,
   opportunity: Record<string, unknown>,
 ): InstallerCandidate | null {
-  const serviceStates = parseJsonList(row.service_states);
+  const serviceStates = parseJsonList(row.service_states).map(canonicalMarketplaceState).filter(Boolean);
   const capabilities = parseJsonList(row.capabilities);
   const categories = parseJsonList(opportunity.service_categories);
   const state = canonicalMarketplaceState(opportunity.state);

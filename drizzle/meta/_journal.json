@@ -253,6 +253,13 @@
       "when": 1784199600000,
       "tag": "0035_ecosystem_flow_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1784203200000,
+      "tag": "0036_synthetic_journey_readiness",
+      "breakpoints": true
     }
   ]
 }
