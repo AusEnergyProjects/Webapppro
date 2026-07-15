@@ -690,6 +690,69 @@ export const tradeCrmJobNotes = sqliteTable("trade_crm_job_notes", {
   index("trade_crm_job_notes_work_order_idx").on(table.workOrderId, table.createdAt),
 ]);
 
+export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  provider: text("provider").notNull(),
+  status: text("status").notNull().default("connected"),
+  externalAccountId: text("external_account_id").notNull().default(""),
+  externalAccountLabel: text("external_account_label").notNull().default(""),
+  encryptedCredentials: text("encrypted_credentials").notNull(),
+  scopes: text("scopes").notNull().default("[]"),
+  tokenExpiresAt: text("token_expires_at").notNull().default(""),
+  lastSyncAt: text("last_sync_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_integrations_owner_provider_idx").on(table.firebaseUid, table.provider),
+  index("trade_crm_integrations_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
+export const tradeCrmOauthStates = sqliteTable("trade_crm_oauth_states", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  provider: text("provider").notNull(),
+  stateHash: text("state_hash").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_oauth_states_hash_idx").on(table.stateHash),
+  index("trade_crm_oauth_states_owner_expiry_idx").on(table.firebaseUid, table.expiresAt),
+]);
+
+export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  provider: text("provider").notNull(),
+  externalId: text("external_id").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  checkoutUrl: text("checkout_url").notNull(),
+  status: text("status").notNull().default("open"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_payment_links_idempotency_idx").on(table.idempotencyKey),
+  index("trade_crm_payment_links_owner_idx").on(table.firebaseUid, table.updatedAt),
+  index("trade_crm_payment_links_work_order_idx").on(table.workOrderId, table.updatedAt),
+]);
+
+export const tradeCrmPropertyViews = sqliteTable("trade_crm_property_views", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  placeId: text("place_id").notNull(),
+  verifiedAt: text("verified_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_property_views_work_order_idx").on(table.workOrderId),
+  index("trade_crm_property_views_owner_idx").on(table.firebaseUid, table.updatedAt),
+]);
+
 export const customerAccounts = sqliteTable("customer_accounts", {
   firebaseUid: text("firebase_uid").primaryKey(),
   email: text("email").notNull(),
