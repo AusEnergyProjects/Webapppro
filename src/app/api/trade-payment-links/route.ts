@@ -25,7 +25,7 @@ async function activeSquareCredentials(connection: Record<string, unknown>) {
   const setting = providerSetting("square");
   if (!credentials.refresh_token) throw new Error("INTEGRATION_REQUIRED");
   const response = await fetch(setting.tokenUrl, {
-    method: "POST", headers: { "Content-Type": "application/json", "Square-Version": "2026-07-15" },
+    method: "POST", headers: { "Content-Type": "application/json", "Square-Version": "2026-05-20" },
     body: JSON.stringify({ client_id: setting.clientId, client_secret: setting.clientSecret, grant_type: "refresh_token", refresh_token: credentials.refresh_token }),
   });
   const refreshed = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const idempotencyKey = `aea-payment-${id}`;
     let externalId = "";
+    let providerOrderId = "";
     let checkoutUrl = "";
     if (provider === "stripe") {
       const setting = providerSetting("stripe");
@@ -84,6 +85,10 @@ export async function POST(request: Request) {
         "line_items[0][price_data][unit_amount]": String(amountCents),
         "line_items[0][quantity]": "1",
         client_reference_id: String(job.id),
+        "metadata[aea_payment_link_id]": id,
+        "metadata[aea_work_order_id]": String(job.id),
+        "payment_intent_data[metadata][aea_payment_link_id]": id,
+        "payment_intent_data[metadata][aea_work_order_id]": String(job.id),
         success_url: `${origin}/direct-trade/dashboard?payment_status=returned#business-hub`,
         cancel_url: `${origin}/direct-trade/dashboard?payment_status=cancelled#business-hub`,
       });
@@ -106,27 +111,35 @@ export async function POST(request: Request) {
       const setting = providerSetting("square");
       const credentials = await activeSquareCredentials(connection);
       if (!credentials.access_token || !credentials.location_id) throw new Error("INTEGRATION_REQUIRED");
+      const origin = new URL(request.url).origin;
       const response = await fetch(setting.tokenUrl.replace("/oauth2/token", "/v2/online-checkout/payment-links"), {
         method: "POST",
-        headers: { Authorization: `Bearer ${String(credentials.access_token)}`, "Content-Type": "application/json", "Square-Version": "2026-07-15" },
+        headers: { Authorization: `Bearer ${String(credentials.access_token)}`, "Content-Type": "application/json", "Square-Version": "2026-05-20" },
         body: JSON.stringify({
           idempotency_key: idempotencyKey,
-          quick_pay: {
-            name: `${String(job.work_number)} | ${String(job.title)}`.slice(0, 180),
-            price_money: { amount: amountCents, currency: "AUD" },
+          order: {
             location_id: credentials.location_id,
+            reference_id: id.slice(0, 40),
+            metadata: { aea_payment_link_id: id, aea_work_order_id: String(job.id).slice(0, 255) },
+            line_items: [{
+              name: `${String(job.work_number)} | ${String(job.title)}`.slice(0, 180),
+              quantity: "1",
+              base_price_money: { amount: amountCents, currency: "AUD" },
+            }],
           },
+          checkout_options: { redirect_url: `${origin}/direct-trade/dashboard?payment_status=returned#business-hub` },
         }),
       });
       const result = await response.json().catch(() => ({})) as { payment_link?: Record<string, unknown> };
-      if (!response.ok || !result.payment_link?.id || !result.payment_link?.url) throw new Error("PROVIDER_PAYMENT_FAILED");
-      externalId = String(result.payment_link.id); checkoutUrl = String(result.payment_link.url);
+      if (!response.ok || !result.payment_link?.id || !result.payment_link?.order_id || !result.payment_link?.url) throw new Error("PROVIDER_PAYMENT_FAILED");
+      externalId = String(result.payment_link.id); providerOrderId = String(result.payment_link.order_id); checkoutUrl = String(result.payment_link.url);
     }
     const now = new Date().toISOString();
     await db.prepare(`INSERT INTO trade_crm_payment_links
-      (id, work_order_id, firebase_uid, provider, external_id, amount_cents, checkout_url, status, idempotency_key, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
-      .bind(id, workOrderId, identity.uid, provider, externalId, amountCents, checkoutUrl, idempotencyKey, now, now).run();
+      (id, work_order_id, firebase_uid, provider, external_id, provider_order_id, amount_cents,
+       checkout_url, status, idempotency_key, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
+      .bind(id, workOrderId, identity.uid, provider, externalId, providerOrderId, amountCents, checkoutUrl, idempotencyKey, now, now).run();
     return adminJson({ ok: true, paymentLink: { id, workOrderId, provider, externalId, amountCents, checkoutUrl, status: "open", createdAt: now } }, 201);
   } catch (error) { return paymentError(error); }
 }

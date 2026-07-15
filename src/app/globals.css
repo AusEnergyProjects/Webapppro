@@ -210,12 +210,17 @@
 .crm-map-link { color: #17674e; display: inline-block; font-size: .58rem; font-weight: 900; margin-top: 11px; }
 .crm-payment-panel { border-top: 1px solid #dfe9e5; margin-top: 18px; padding-top: 17px; }
 .crm-payment-panel header p, .crm-payment-boundary p { color: var(--color-aea-muted); font-size: .57rem; line-height: 1.45; margin-top: 4px; }
-.crm-payment-create { align-items: end; background: #f5f8f7; border-radius: 10px; display: grid; gap: 8px; grid-template-columns: minmax(150px, 1fr) auto auto; margin-top: 11px; padding: 10px; }
+.crm-payment-create { align-items: end; background: #f5f8f7; border-radius: 10px; display: grid; gap: 8px; grid-template-columns: minmax(150px, 1fr) auto auto auto; margin-top: 11px; padding: 10px; }
 .crm-payment-create label > span { color: var(--color-aea-muted); display: block; font-size: .52rem; font-weight: 850; margin-bottom: 4px; text-transform: uppercase; }
 .crm-payment-create input { background: #fff; border: 1px solid #c8d7d2; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .64rem; min-height: 38px; padding: 8px 10px; width: 100%; }
 .crm-payment-panel ol { display: grid; gap: 6px; list-style: none; margin: 12px 0 0; padding: 0; }
 .crm-payment-panel li { align-items: center; border: 1px solid #dbe7e2; border-radius: 9px; display: flex; gap: 12px; justify-content: space-between; padding: 9px 11px; }
 .crm-payment-panel li span { color: var(--color-aea-ink); display: block; font-size: .59rem; font-weight: 850; text-transform: capitalize; }
+.crm-payment-panel li strong { color: #6c5b27; display: block; font-size: .52rem; margin-top: 3px; }
+.crm-payment-panel li.payment-paid { background: #f0faf6; border-color: #9dd4c0; }
+.crm-payment-panel li.payment-paid strong { color: #176046; }
+.crm-payment-panel li.payment-failed, .crm-payment-panel li.payment-review_required { background: #fff5f3; border-color: #e6b4ab; }
+.crm-payment-panel li.payment-failed strong, .crm-payment-panel li.payment-review_required strong { color: #8c2f21; }
 .crm-payment-panel li small { color: var(--color-aea-muted); display: block; font-size: .5rem; margin-top: 2px; }
 .crm-payment-panel li a { background: #e8f5f0; border-radius: 7px; color: #185c45; font-size: .54rem; font-weight: 900; padding: 7px 9px; text-decoration: none; }
 .crm-payment-boundary { background: #edf5fa; border-left: 4px solid #4b8db5; border-radius: 9px; margin-top: 16px; padding: 11px 13px; }

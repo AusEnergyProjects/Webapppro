@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { qualifyReferralFromFirstPayment } from "@/lib/stripe-referral-server";
 import { createAdminNotification, resolveSystemAdminNotifications } from "@/lib/admin-notifications";
+import { reconcileTradePayment } from "@/lib/trade-payment-reconciliation";
 
 export const runtime = "edge";
 
@@ -205,6 +206,33 @@ async function applyCheckout(
   } satisfies BillingChange;
 }
 
+async function applyTradeCrmCheckout(session: StripeObject, event: StripeObject, eventType: string) {
+  const connectedAccountId = stringId(event.account);
+  const externalId = stringId(session.id);
+  if (!connectedAccountId || !externalId || session.mode !== "payment") return undefined;
+  const paymentStatus = String(session.payment_status || "");
+  const status = eventType === "checkout.session.async_payment_failed"
+    ? "failed"
+    : eventType === "checkout.session.async_payment_succeeded" || paymentStatus === "paid" || paymentStatus === "no_payment_required"
+      ? "paid"
+      : "processing";
+  const created = Number(event.created || 0);
+  return reconcileTradePayment({
+    provider: "stripe",
+    eventId: stringId(event.id),
+    eventType,
+    connectedAccountId,
+    externalId,
+    providerPaymentId: stringId(session.payment_intent),
+    workOrderReference: typeof session.client_reference_id === "string" ? session.client_reference_id : "",
+    status,
+    amountCents: Number(session.amount_total || 0),
+    currency: String(session.currency || ""),
+    occurredAt: Number.isInteger(created) && created > 0 ? new Date(created * 1000).toISOString() : "",
+    failureCode: paymentStatus || "provider_failed",
+  });
+}
+
 async function applySubscription(subscription: StripeObject, deleted: boolean) {
   const subscriptionId = stringId(subscription.id);
   if (!subscriptionId) return undefined;
@@ -327,10 +355,13 @@ async function recordBillingChange(change: BillingChange, eventId: string, event
 }
 
 export async function POST(request: Request) {
-  const secret = (
-    env as unknown as { STRIPE_WEBHOOK_SECRET?: string }
-  ).STRIPE_WEBHOOK_SECRET;
-  if (!secret)
+  const webhookEnvironment = env as unknown as {
+    STRIPE_WEBHOOK_SECRET?: string;
+    STRIPE_CONNECT_WEBHOOK_SECRET?: string;
+  };
+  const secrets = [webhookEnvironment.STRIPE_WEBHOOK_SECRET, webhookEnvironment.STRIPE_CONNECT_WEBHOOK_SECRET]
+    .filter((value): value is string => Boolean(value));
+  if (!secrets.length)
     return json({ ok: false, error: "Stripe billing is unavailable." }, 503);
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (declaredLength > 1024 * 1024)
@@ -339,7 +370,8 @@ export async function POST(request: Request) {
   if (rawBody.length > 1024 * 1024)
     return json({ ok: false, error: "Webhook event was too large." }, 413);
   const signature = request.headers.get("stripe-signature") || "";
-  if (!(await verifyStripeSignature(rawBody, signature, secret)))
+  const signatureChecks = await Promise.all(secrets.map((secret) => verifyStripeSignature(rawBody, signature, secret)));
+  if (!signatureChecks.some(Boolean))
     return json({ ok: false, error: "Webhook signature was not accepted." }, 400);
   let event: StripeObject;
   try {
@@ -369,8 +401,10 @@ export async function POST(request: Request) {
         "checkout.session.async_payment_succeeded",
         "checkout.session.async_payment_failed",
       ].includes(eventType)
-    )
+    ) {
+      await applyTradeCrmCheckout(stripeObject, event, eventType);
       billingChange = await applyCheckout(stripeObject, eventType);
+    }
     else if (eventType === "customer.subscription.updated")
       billingChange = await applySubscription(stripeObject, false);
     else if (eventType === "customer.subscription.deleted")

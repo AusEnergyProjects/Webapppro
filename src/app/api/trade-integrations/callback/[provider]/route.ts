@@ -22,7 +22,7 @@ async function tokenExchange(provider: string, code: string, redirectUri: string
   if (provider === "square") {
     response = await fetch(setting.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Square-Version": "2026-07-15" },
+      headers: { "Content-Type": "application/json", "Square-Version": "2026-05-20" },
       body: JSON.stringify({ client_id: setting.clientId, client_secret: setting.clientSecret, code, grant_type: "authorization_code", redirect_uri: redirectUri }),
     });
   } else if (provider === "stripe") {
@@ -68,7 +68,7 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
   }
   const setting = providerSetting(provider);
   const response = await fetch(setting.tokenUrl.replace("/oauth2/token", "/v2/locations"), {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json", "Square-Version": "2026-07-15" },
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json", "Square-Version": "2026-05-20" },
   });
   const result = await response.json().catch(() => ({})) as { locations?: Array<Record<string, unknown>> };
   const location = result.locations?.find((item) => item.status === "ACTIVE") || result.locations?.[0];

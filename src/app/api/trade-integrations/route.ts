@@ -48,7 +48,8 @@ export async function GET(request: Request) {
     const [connections, links] = await Promise.all([
       db.prepare(`SELECT provider, status, external_account_label, created_at, last_sync_at, last_error
         FROM trade_crm_integrations WHERE firebase_uid = ? ORDER BY provider`).bind(identity.uid).all<Record<string, unknown>>(),
-      db.prepare(`SELECT id, work_order_id, provider, external_id, amount_cents, checkout_url, status, created_at
+      db.prepare(`SELECT id, work_order_id, provider, external_id, amount_cents, paid_amount_cents,
+          checkout_url, status, paid_at, failure_code, last_event_at, created_at
         FROM trade_crm_payment_links WHERE firebase_uid = ? ORDER BY created_at DESC LIMIT 100`)
         .bind(identity.uid).all<Record<string, unknown>>(),
     ]);
@@ -58,7 +59,9 @@ export async function GET(request: Request) {
       providers: INTEGRATION_PROVIDERS.map((provider) => providerReadiness(provider, request, connectedByProvider[provider])),
       paymentLinks: links.results.map((row) => ({
         id: row.id, workOrderId: row.work_order_id, provider: row.provider, externalId: row.external_id,
-        amountCents: Number(row.amount_cents || 0), checkoutUrl: row.checkout_url, status: row.status, createdAt: row.created_at,
+        amountCents: Number(row.amount_cents || 0), paidAmountCents: Number(row.paid_amount_cents || 0),
+        checkoutUrl: row.checkout_url, status: row.status, paidAt: row.paid_at,
+        failureCode: row.failure_code, lastEventAt: row.last_event_at, createdAt: row.created_at,
       })),
       propertySearchConfigured: Boolean(integrationEnvironment().GOOGLE_MAPS_API_KEY),
     });
@@ -120,7 +123,7 @@ async function bestEffortRevoke(provider: IntegrationProvider, row: Record<strin
     } else if (provider === "square" && credentials.access_token) {
       await fetch(setting.tokenUrl.replace("/token", "/revoke"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Client ${setting.clientSecret}`, "Square-Version": "2026-07-15" },
+        headers: { "Content-Type": "application/json", Authorization: `Client ${setting.clientSecret}`, "Square-Version": "2026-05-20" },
         body: JSON.stringify({ client_id: setting.clientId, access_token: credentials.access_token }),
       });
     }

@@ -64,7 +64,7 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     clientSecret: values.SQUARE_APPLICATION_SECRET || "",
     authorizeUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/authorize" : "https://connect.squareup.com/oauth2/authorize",
     tokenUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/token" : "https://connect.squareup.com/oauth2/token",
-    scopes: ["MERCHANT_PROFILE_READ", "ORDERS_READ", "ORDERS_WRITE", "PAYMENTS_WRITE"],
+    scopes: ["MERCHANT_PROFILE_READ", "ORDERS_READ", "ORDERS_WRITE", "PAYMENTS_READ", "PAYMENTS_WRITE"],
   };
 }
 

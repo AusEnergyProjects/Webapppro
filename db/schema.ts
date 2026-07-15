@@ -729,9 +729,16 @@ export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
   firebaseUid: text("firebase_uid").notNull(),
   provider: text("provider").notNull(),
   externalId: text("external_id").notNull(),
+  providerOrderId: text("provider_order_id").notNull().default(""),
+  providerPaymentId: text("provider_payment_id").notNull().default(""),
   amountCents: integer("amount_cents").notNull(),
+  paidAmountCents: integer("paid_amount_cents").notNull().default(0),
   checkoutUrl: text("checkout_url").notNull(),
   status: text("status").notNull().default("open"),
+  paidAt: text("paid_at").notNull().default(""),
+  failureCode: text("failure_code").notNull().default(""),
+  lastEventId: text("last_event_id").notNull().default(""),
+  lastEventAt: text("last_event_at").notNull().default(""),
   idempotencyKey: text("idempotency_key").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -739,6 +746,26 @@ export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
   uniqueIndex("trade_crm_payment_links_idempotency_idx").on(table.idempotencyKey),
   index("trade_crm_payment_links_owner_idx").on(table.firebaseUid, table.updatedAt),
   index("trade_crm_payment_links_work_order_idx").on(table.workOrderId, table.updatedAt),
+  index("trade_crm_payment_links_provider_order_idx").on(table.provider, table.providerOrderId),
+]);
+
+export const tradeCrmPaymentEvents = sqliteTable("trade_crm_payment_events", {
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull(),
+  eventId: text("event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  paymentLinkId: text("payment_link_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  status: text("status").notNull(),
+  amountCents: integer("amount_cents").notNull().default(0),
+  providerPaymentId: text("provider_payment_id").notNull().default(""),
+  occurredAt: text("occurred_at").notNull().default(""),
+  receivedAt: text("received_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_payment_events_provider_event_idx").on(table.provider, table.eventId),
+  index("trade_crm_payment_events_link_idx").on(table.paymentLinkId, table.receivedAt),
+  index("trade_crm_payment_events_owner_idx").on(table.firebaseUid, table.receivedAt),
 ]);
 
 export const tradeCrmPropertyViews = sqliteTable("trade_crm_property_views", {
