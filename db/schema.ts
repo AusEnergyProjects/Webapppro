@@ -274,6 +274,7 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   scheduledEnd: text("scheduled_end").notNull().default(""),
   assigneeMemberId: text("assignee_member_id").notNull().default(""),
   assigneeLabel: text("assignee_label").notNull().default(""),
+  revision: integer("revision").notNull().default(1),
   recordStatus: text("record_status").notNull().default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -317,6 +318,41 @@ export const tradeTeamInvites = sqliteTable("trade_team_invites", {
   index("trade_team_invites_owner_idx").on(table.ownerUid, table.expiresAt),
 ]);
 
+export const tradeTeamSyncChanges = sqliteTable("trade_team_sync_changes", {
+  sequence: integer("sequence").primaryKey({ autoIncrement: true }),
+  ownerUid: text("owner_uid").notNull(),
+  audienceMemberId: text("audience_member_id").notNull().default(""),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  operation: text("operation").notNull().default("upsert"),
+  revision: integer("revision").notNull().default(1),
+  changedAt: text("changed_at").notNull(),
+}, (table) => [
+  index("trade_team_sync_changes_owner_sequence_idx").on(table.ownerUid, table.audienceMemberId, table.sequence),
+  index("trade_team_sync_changes_entity_idx").on(table.ownerUid, table.entityType, table.entityId, table.sequence),
+]);
+
+export const tradeOfflineActions = sqliteTable("trade_offline_actions", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  memberId: text("member_id").notNull().default(""),
+  deviceId: text("device_id").notNull().default(""),
+  clientActionId: text("client_action_id").notNull(),
+  payloadHash: text("payload_hash").notNull(),
+  actionType: text("action_type").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  baseRevision: integer("base_revision").notNull().default(0),
+  resultRevision: integer("result_revision").notNull().default(0),
+  status: text("status").notNull().default("applied"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_offline_actions_owner_client_idx").on(table.ownerUid, table.clientActionId),
+  index("trade_offline_actions_actor_idx").on(table.ownerUid, table.actorUid, table.createdAt),
+  index("trade_offline_actions_entity_idx").on(table.ownerUid, table.entityType, table.entityId, table.createdAt),
+]);
+
 export const tradeCrmCounters = sqliteTable("trade_crm_counters", {
   firebaseUid: text("firebase_uid").notNull(),
   counterKey: text("counter_key").notNull(),
@@ -334,6 +370,7 @@ export const tradeWorkOrderTasks = sqliteTable("trade_work_order_tasks", {
   dueAt: text("due_at").notNull().default(""),
   status: text("status").notNull().default("pending"),
   completedAt: text("completed_at").notNull().default(""),
+  revision: integer("revision").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

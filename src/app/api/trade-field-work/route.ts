@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 
 export const runtime = "edge";
 
@@ -86,7 +87,8 @@ export async function GET(request: Request) {
     }
     const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     const job = await assignedJob(access, workOrderId);
-    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", ...(await payload(access.ownerUid, workOrderId)) });
+    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision),
+      ...(await payload(access.ownerUid, workOrderId)) });
   } catch (error) { return fieldError(error); }
 }
 
@@ -95,7 +97,7 @@ async function upload(request: Request, access: TeamAccess) {
   try { form = await request.formData(); }
   catch { return adminJson({ ok: false, error: "The job upload could not be read." }, 400); }
   const workOrderId = cleanAdminText(form.get("workOrderId"), 180);
-  await assignedJob(access, workOrderId);
+  const job = await assignedJob(access, workOrderId);
   const file = form.get("file");
   const categoryValue = cleanAdminText(form.get("category"), 20);
   const category = MEDIA_CATEGORIES.has(categoryValue) ? categoryValue : "progress";
@@ -105,6 +107,7 @@ async function upload(request: Request, access: TeamAccess) {
   const id = crypto.randomUUID();
   const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${crypto.randomUUID()}`;
   const now = new Date().toISOString();
+  const revision = nextJobRevision(job.revision);
   const store = bucket();
   await store.put(objectKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type },
     customMetadata: { owner: access.ownerUid, actor: access.actorUid, workOrderId, mediaId: id } });
@@ -119,9 +122,13 @@ async function upload(request: Request, access: TeamAccess) {
         (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'field_file_added', 'Field photo or document added.', ?)`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now),
+      getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+        .bind(revision, now, workOrderId, access.ownerUid),
+      ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
+        audienceMemberId: job.assignee_member_id }),
     ]);
   } catch (error) { await store.delete(objectKey); throw error; }
-  return adminJson({ ok: true, ...(await payload(access.ownerUid, workOrderId)) }, 201);
+  return adminJson({ ok: true, revision, ...(await payload(access.ownerUid, workOrderId)) }, 201);
 }
 
 export async function POST(request: Request) {
@@ -136,17 +143,18 @@ export async function POST(request: Request) {
     const job = await assignedJob(access, workOrderId);
     const action = cleanAdminText(body.action, 30);
     const now = new Date().toISOString();
+    let recordStatement: D1PreparedStatement;
     if (action === "add_time") {
       const duration = Number(body.durationMinutes);
       const workDate = cleanAdminText(body.workDate, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate) || !Number.isInteger(duration) || duration < 1 || duration > 1440) {
         return adminJson({ ok: false, error: "Add a valid work date and between 1 minute and 24 hours." }, 400);
       }
-      await getD1().prepare(`INSERT INTO trade_crm_time_entries
+      recordStatement = getD1().prepare(`INSERT INTO trade_crm_time_entries
         (id, work_order_id, firebase_uid, staff_label, work_date, duration_minutes, notes, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, access.isOwner ? cleanAdminText(body.staffLabel, 80) : access.displayName, workDate,
-          duration, cleanAdminText(body.notes, 500), now, now).run();
+          duration, cleanAdminText(body.notes, 500), now, now);
     } else if (action === "add_signoff") {
       const signerRole = cleanAdminText(body.signerRole, 20);
       const signerName = cleanAdminText(body.signerName, 100);
@@ -157,12 +165,21 @@ export async function POST(request: Request) {
       const confirmation = signerRole === "customer"
         ? "I confirm the recorded work has been presented to me for review."
         : "I confirm the field record is accurate to the best of my knowledge.";
-      await getD1().prepare(`INSERT INTO trade_crm_signoffs
+      recordStatement = getD1().prepare(`INSERT INTO trade_crm_signoffs
         (id, work_order_id, firebase_uid, signer_role, signer_name, confirmation_text, method, signed_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'typed', ?, ?)`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, signerRole, signerName, confirmation, now, now).run();
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, signerRole, signerName, confirmation, now, now);
     } else return adminJson({ ok: false, error: "Unsupported field-work action." }, 400);
-    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", ...(await payload(access.ownerUid, workOrderId)) }, 201);
+    const revision = nextJobRevision(job.revision);
+    await getD1().batch([
+      recordStatement,
+      getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+        .bind(revision, now, workOrderId, access.ownerUid),
+      ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
+        audienceMemberId: job.assignee_member_id }),
+    ]);
+    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision,
+      ...(await payload(access.ownerUid, workOrderId)) }, 201);
   } catch (error) { return fieldError(error); }
 }
 
@@ -176,9 +193,16 @@ export async function DELETE(request: Request) {
       WHERE m.id = ? AND m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
       .bind(id, access.ownerUid, access.ownerUid).first<{ object_key: string; work_order_id: string }>();
     if (!record) return adminJson({ ok: false, error: "Job file not found." }, 404);
-    await assignedJob(access, record.work_order_id);
+    const job = await assignedJob(access, record.work_order_id);
     await bucket().delete(record.object_key);
-    await getD1().prepare("DELETE FROM trade_crm_job_media WHERE id = ? AND firebase_uid = ?").bind(id, access.ownerUid).run();
-    return adminJson({ ok: true, ...(await payload(access.ownerUid, record.work_order_id)) });
+    const now = new Date().toISOString(); const revision = nextJobRevision(job.revision);
+    await getD1().batch([
+      getD1().prepare("DELETE FROM trade_crm_job_media WHERE id = ? AND firebase_uid = ?").bind(id, access.ownerUid),
+      getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+        .bind(revision, now, record.work_order_id, access.ownerUid),
+      ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId: record.work_order_id,
+        revision, changedAt: now, audienceMemberId: job.assignee_member_id }),
+    ]);
+    return adminJson({ ok: true, revision, ...(await payload(access.ownerUid, record.work_order_id)) });
   } catch (error) { return fieldError(error); }
 }

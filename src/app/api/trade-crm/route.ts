@@ -3,6 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
+import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 
 export const runtime = "edge";
 
@@ -149,6 +150,7 @@ async function crmPayload(identity: CrmIdentity) {
       scheduledStart: row.scheduled_start,
       scheduledEnd: row.scheduled_end,
       assigneeLabel: row.assignee_label,
+      revision: Number(row.revision || 1),
       sourceType,
       customerSource,
       crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
@@ -167,6 +169,7 @@ async function crmPayload(identity: CrmIdentity) {
       handoverStatus: handoverRows.results.find((item) => item.work_order_id === row.id)?.status || "",
       tasks: taskRows.results.filter((item) => item.work_order_id === row.id).map((item) => ({
         id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at,
+        revision: Number(item.revision || 1),
       })),
       appointments: appointmentRows.results.filter((item) => item.work_order_id === row.id).map((item) => ({
         id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at,
@@ -184,7 +187,7 @@ async function crmPayload(identity: CrmIdentity) {
 }
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
-  const job = await db.prepare(`SELECT id, source_type FROM trade_work_orders
+  const job = await db.prepare(`SELECT id, source_type, assignee_member_id, revision FROM trade_work_orders
     WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
     .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
   if (!job) throw new Error("JOB_NOT_FOUND");
@@ -278,6 +281,7 @@ export async function POST(request: Request) {
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
+        ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
       return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
     }
@@ -332,7 +336,11 @@ export async function PATCH(request: Request) {
       if (!current) throw new Error("CUSTOMER_NOT_FOUND");
       const email = body.email === undefined ? String(current.email) : cleanAdminText(body.email, 180).toLowerCase();
       if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
-      await db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, email = ?,
+      const relatedJobs = await db.prepare(`SELECT w.id, w.revision, w.assignee_member_id FROM trade_work_orders w
+        JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+        WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
+        .bind(customerId, identity.uid).all<Record<string, unknown>>();
+      const statements = [db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, email = ?,
         phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
         tags = ?, private_notes = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
         .bind(
@@ -348,7 +356,15 @@ export async function PATCH(request: Request) {
           body.tags === undefined ? current.tags : JSON.stringify(cleanList(body.tags)),
           body.privateNotes === undefined ? current.private_notes : cleanAdminText(body.privateNotes, 2000),
           now, customerId, identity.uid,
-        ).run();
+        )];
+      for (const job of relatedJobs.results) {
+        const revision = nextJobRevision(job.revision); const workOrderId = String(job.id);
+        statements.push(db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(revision, now, workOrderId, identity.uid));
+        statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
+          audienceMemberId: String(job.assignee_member_id || "") }));
+      }
+      await db.batch(statements);
       return adminJson({ ok: true, ...(await crmPayload(identity)) });
     }
 
@@ -425,12 +441,14 @@ export async function PATCH(request: Request) {
         .bind(crypto.randomUUID(), workOrderId, identity.uid, values.customerId, values.customerSource, values.pipelineStage,
           values.description, values.customerReference, values.nextAction, values.tags, values.estimated, values.quoted,
           values.invoiced, values.paid, quoteStatus, invoiceStatus, values.paymentDue, now, now);
-    const statements = [detailStatement];
-    if (workStage || priority) statements.push(db.prepare(`UPDATE trade_work_orders SET stage = COALESCE(NULLIF(?, ''), stage),
-      priority = COALESCE(NULLIF(?, ''), priority), updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-      .bind(workStage, priority, now, workOrderId, identity.uid));
+    const revision = nextJobRevision(job.revision);
+    const statements = [detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = COALESCE(NULLIF(?, ''), stage),
+      priority = COALESCE(NULLIF(?, ''), priority), revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+      .bind(workStage, priority, revision, now, workOrderId, identity.uid)];
     statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
       VALUES (?, ?, ?, 'crm_updated', 'CRM job details updated.', ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, now));
+    statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
+      audienceMemberId: String(job.assignee_member_id || "") }));
     await db.batch(statements);
     return adminJson({ ok: true, ...(await crmPayload(identity)) });
   } catch (error) { return errorResponse(error); }

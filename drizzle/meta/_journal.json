@@ -183,6 +183,13 @@
       "when": 1784126477727,
       "tag": "0025_dizzy_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1784127765121,
+      "tag": "0026_lovely_zodiak",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { assignedJob, canDispatch, canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 
 export const runtime = "edge";
 
@@ -47,7 +48,7 @@ async function teamPayload(access: TeamAccess) {
   const jobRows = await db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage,
       w.priority, w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label,
       w.source_type, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
-      c.address_state, c.postcode, w.updated_at
+      c.address_state, c.postcode, w.revision, w.updated_at
     FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
@@ -55,7 +56,7 @@ async function teamPayload(access: TeamAccess) {
       AND (? <> 'technician' OR w.assignee_member_id = ?)
     ORDER BY w.scheduled_start = '', w.scheduled_start, w.priority = 'urgent' DESC, w.updated_at DESC LIMIT 500`)
     .bind(access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>();
-  const taskRows = await db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at
+  const taskRows = await db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at, t.revision
     FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
     WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
       AND (? <> 'technician' OR w.assignee_member_id = ?)
@@ -74,9 +75,10 @@ async function teamPayload(access: TeamAccess) {
       return { id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
         siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
         scheduledEnd: row.scheduled_end, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
-        protectedJob, serviceAddress: address, updatedAt: row.updated_at,
+        protectedJob, serviceAddress: address, revision: Number(row.revision || 1), updatedAt: row.updated_at,
         tasks: taskRows.results.filter((task) => task.work_order_id === row.id).map((task) => ({ id: task.id,
-          title: task.title, dueAt: task.due_at, status: task.status, completedAt: task.completed_at })) };
+          title: task.title, dueAt: task.due_at, status: task.status, completedAt: task.completed_at,
+          revision: Number(task.revision || 1) })) };
     }),
   };
 }
@@ -192,35 +194,51 @@ export async function PATCH(request: Request) {
     } else if (action === "assign_job") {
       if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180);
-      await assignedJob(access, workOrderId);
+      const job = await assignedJob(access, workOrderId);
       let label = "";
       if (memberId) {
         const member = await db.prepare(`SELECT display_name FROM trade_team_members
           WHERE id = ? AND owner_uid = ? AND status = 'active'`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
         if (!member) throw new Error("MEMBER_NOT_FOUND"); label = String(member.display_name);
       }
+      const revision = nextJobRevision(job.revision);
       await db.batch([
-        db.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(memberId, label, now, workOrderId, access.ownerUid),
+        db.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(memberId, label, revision, now, workOrderId, access.ownerUid),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'team_assignment', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, access.ownerUid, memberId ? `Assigned to ${label}.` : "Team assignment cleared.", now),
+        ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
+          audienceMemberId: memberId, previousAudienceMemberId: job.assignee_member_id }),
       ]);
     } else if (action === "update_job") {
-      const workOrderId = cleanAdminText(body.workOrderId, 180); await assignedJob(access, workOrderId);
+      const workOrderId = cleanAdminText(body.workOrderId, 180); const job = await assignedJob(access, workOrderId);
       const stage = cleanAdminText(body.stage, 30);
       if (!WORK_STAGES.has(stage)) return adminJson({ ok: false, error: "Choose a valid job stage." }, 400);
-      await db.prepare("UPDATE trade_work_orders SET stage = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(stage, now, workOrderId, access.ownerUid).run();
+      const revision = nextJobRevision(job.revision);
+      await db.batch([
+        db.prepare("UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(stage, revision, now, workOrderId, access.ownerUid),
+        ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
+          audienceMemberId: job.assignee_member_id }),
+      ]);
     } else if (action === "update_task") {
       const taskId = cleanAdminText(body.taskId, 180); const status = cleanAdminText(body.status, 20);
-      if (!['pending', 'done'].includes(status)) return adminJson({ ok: false, error: "Choose a valid task status." }, 400);
-      const task = await db.prepare(`SELECT t.work_order_id FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
+      if (!["pending", "done"].includes(status)) return adminJson({ ok: false, error: "Choose a valid task status." }, 400);
+      const task = await db.prepare(`SELECT t.work_order_id, t.revision, w.revision job_revision, w.assignee_member_id
+        FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, access.ownerUid, access.ownerUid).first<Record<string, unknown>>();
       if (!task) throw new Error("JOB_NOT_FOUND"); await assignedJob(access, String(task.work_order_id));
-      await db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(status, status === "done" ? now : "", now, taskId, access.ownerUid).run();
+      const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
+      await db.batch([
+        db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid),
+        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(jobRevision, now, task.work_order_id, access.ownerUid),
+        ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: String(task.work_order_id),
+          revision: jobRevision, changedAt: now, audienceMemberId: String(task.assignee_member_id || "") }),
+      ]);
     } else return adminJson({ ok: false, error: "Unsupported team update." }, 400);
     return adminJson({ ok: true, ...(await teamPayload(access)) });
   } catch (error) { return errorResponse(error); }

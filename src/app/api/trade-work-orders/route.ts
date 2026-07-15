@@ -4,6 +4,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
+import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/lib/trade-team-sync-server";
 
 export const runtime = "edge";
 
@@ -69,6 +70,20 @@ function eventStatement(
     (id, work_order_id, firebase_uid, event_type, summary, created_at)
     VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), workOrderId, firebaseUid, eventType, summary, createdAt);
+}
+
+function offlineSyncStatements(
+  db: D1Database,
+  identity: TradeIdentity,
+  workOrderId: string,
+  revision: number,
+  changedAt: string,
+  audienceMemberId = "",
+  previousAudienceMemberId = "",
+  operation: SyncOperation = "upsert",
+) {
+  return identity.partnerType === "installer" ? jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId,
+    revision, changedAt, audienceMemberId, previousAudienceMemberId, operation }) : [];
 }
 
 async function tradeIdentity(request: Request): Promise<TradeIdentity> {
@@ -158,7 +173,7 @@ async function workOrderPayload(identity: TradeIdentity) {
   const db = getD1();
   const orderRows = await db.prepare(`SELECT id, partner_type, work_type, source_type, source_reference,
     work_number, title, service_category, site_area, stage, priority, scheduled_start, scheduled_end,
-    assignee_label, record_status, created_at, updated_at
+    assignee_label, revision, record_status, created_at, updated_at
     FROM trade_work_orders WHERE firebase_uid = ? AND record_status = 'active'
     ORDER BY CASE stage
       WHEN 'in_progress' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'ready' THEN 2
@@ -171,7 +186,7 @@ async function workOrderPayload(identity: TradeIdentity) {
   let handoverPacks: Record<string, unknown>[] = [];
   if (ids.length) {
     const [taskRows, eventRows, handoverRows] = await Promise.all([
-      db.prepare(`SELECT id, work_order_id, title, due_at, status, completed_at, sort_order, created_at, updated_at
+      db.prepare(`SELECT id, work_order_id, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at
         FROM trade_work_order_tasks t
         WHERE t.firebase_uid = ? AND EXISTS (
           SELECT 1 FROM trade_work_orders w
@@ -218,6 +233,7 @@ async function workOrderPayload(identity: TradeIdentity) {
         scheduledStart: row.scheduled_start,
         scheduledEnd: row.scheduled_end,
         assigneeLabel: row.assignee_label,
+        revision: Number(row.revision || 1),
         handoverStatus: handover?.status || "",
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -227,6 +243,7 @@ async function workOrderPayload(identity: TradeIdentity) {
           dueAt: task.due_at,
           status: task.status,
           completedAt: task.completed_at,
+          revision: Number(task.revision || 1),
           sortOrder: Number(task.sort_order),
           createdAt: task.created_at,
           updatedAt: task.updated_at,
@@ -283,7 +300,7 @@ export async function POST(request: Request) {
       const dueAt = dateValue(body.dueAt);
       if (!workOrderId || !title) return adminJson({ ok: false, error: "Add a checklist item." }, 400);
       if (privateDataDetected(title)) throw new Error("PRIVATE_DATA");
-      const order = await db.prepare("SELECT id FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
+      const order = await db.prepare("SELECT id, revision, assignee_member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (!order) throw new Error("WORK_NOT_FOUND");
       const count = await db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ?")
@@ -291,14 +308,16 @@ export async function POST(request: Request) {
       const taskLimit = identity.fullAccess ? MEMBER_TASK_LIMIT : FREE_TASK_LIMIT;
       if (Number(count?.count || 0) >= taskLimit) throw new Error("TASK_LIMIT_REACHED");
       const taskId = crypto.randomUUID();
+      const revision = nextJobRevision(order.revision);
       await db.batch([
         db.prepare(`INSERT INTO trade_work_order_tasks
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)`)
           .bind(taskId, workOrderId, identity.uid, title, dueAt, Number(count?.count || 0), now, now),
-        db.prepare("UPDATE trade_work_orders SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(now, workOrderId, identity.uid),
+        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(revision, now, workOrderId, identity.uid),
         eventStatement(db, identity.uid, workOrderId, "task_added", `Checklist item added: ${title}`, now),
+        ...offlineSyncStatements(db, identity, workOrderId, revision, now, String(order.assignee_member_id || "")),
       ]);
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
@@ -375,6 +394,7 @@ export async function POST(request: Request) {
           workNumber, title, serviceCategory, siteArea, priority, scheduledStart, scheduledEnd,
           requestedAssignee, now, now),
       eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now),
+      ...offlineSyncStatements(db, identity, workOrderId, 1, now),
     ]);
     return adminJson({ ok: true, ...(await workOrderPayload(identity)) }, 201);
   } catch (error) {
@@ -397,23 +417,27 @@ export async function PATCH(request: Request) {
       const taskId = cleanAdminText(body.taskId, 180);
       const status = cleanAdminText(body.status, 20);
       if (!taskId || !["pending", "done"].includes(status)) return adminJson({ ok: false, error: "Choose a valid checklist status." }, 400);
-      const task = await db.prepare(`SELECT t.work_order_id, t.title FROM trade_work_order_tasks t
+      const task = await db.prepare(`SELECT t.work_order_id, t.title, t.revision, w.revision job_revision, w.assignee_member_id
+        FROM trade_work_order_tasks t
         JOIN trade_work_orders w ON w.id = t.work_order_id
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!task) throw new Error("WORK_NOT_FOUND");
+      const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
       await db.batch([
-        db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(status, status === "done" ? now : "", now, taskId, identity.uid),
-        db.prepare("UPDATE trade_work_orders SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(now, task.work_order_id, identity.uid),
+        db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, identity.uid),
+        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(jobRevision, now, task.work_order_id, identity.uid),
         eventStatement(db, identity.uid, String(task.work_order_id), status === "done" ? "task_completed" : "task_reopened", `${status === "done" ? "Completed" : "Reopened"}: ${String(task.title)}`, now),
+        ...offlineSyncStatements(db, identity, String(task.work_order_id), jobRevision, now,
+          String(task.assignee_member_id || "")),
       ]);
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
-    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label
+    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label, revision
       FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!current) throw new Error("WORK_NOT_FOUND");
@@ -425,10 +449,12 @@ export async function PATCH(request: Request) {
       const handover = await db.prepare("SELECT status FROM trade_handover_packs WHERE work_order_id = ? AND firebase_uid = ?")
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (handover) throw new Error("ASSET_RECORD_RETAINED");
+      const revision = nextJobRevision(current.revision);
       await db.batch([
-        db.prepare("UPDATE trade_work_orders SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(now, workOrderId, identity.uid),
+        db.prepare("UPDATE trade_work_orders SET record_status = 'archived', revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(revision, now, workOrderId, identity.uid),
         eventStatement(db, identity.uid, workOrderId, "work_archived", "Work record archived.", now),
+        ...offlineSyncStatements(db, identity, workOrderId, revision, now, String(current.assignee_member_id || ""), "", "delete"),
       ]);
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
@@ -453,11 +479,14 @@ export async function PATCH(request: Request) {
     if (requestedPriority !== current.priority) changes.push(`Priority changed to ${requestedPriority}.`);
     if (scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end) changes.push("Schedule updated.");
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
+    const revision = nextJobRevision(current.revision);
     await db.batch([
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
-        assignee_member_id = ?, assignee_label = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId, assigneeLabel, now, workOrderId, identity.uid),
+        assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId, assigneeLabel, revision, now, workOrderId, identity.uid),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
+      ...offlineSyncStatements(db, identity, workOrderId, revision, now, assigneeMemberId,
+        String(current.assignee_member_id || "")),
     ]);
     return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
   } catch (error) {

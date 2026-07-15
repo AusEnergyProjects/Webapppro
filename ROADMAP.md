@@ -104,3 +104,20 @@ Progress as at 14 July 2026:
 - Customers now have an always-free home asset passport that remains separate from project identity. A current household can create a seven-day one-time transfer code, a receiving household can consent while signed in and an administrator must approve both consents before live asset, document, lifecycle and safety access changes. Only a SHA-256 hash of the claim code is stored, neither household sees the other account identity and every ownership event remains in an immutable ledger.
 - Paid installers can now propose controlled one-field corrections to published handover assets. The previously approved value remains live while the proposal is reviewed, administrator approval publishes a numbered version and rejection preserves the existing record. Customer and administrator views show the correction history without adding customer contact or address fields.
 - A public membership page now compares all four GST-inclusive installer and wholesaler billing options, explains equal matching rules and records the planned two-sided referral credit before Stripe is connected.
+
+## Phase 5: native field platform and offline operation
+
+- Treat iOS and Android field apps as first-class clients of the same installer platform, not as separate products with separate records.
+- Keep the web CRM as the owner, office and dispatch workspace. Keep the future mobile apps focused on assigned work, checklists, time, field evidence and handover completion.
+- Design every field mutation for delayed delivery, safe replay, revision conflicts and explicit removal from a device when work is unassigned.
+- Require encrypted device storage, purge data on sign-out and tightly expire any direct-customer address cached for assigned work.
+- Never sync AEA protected customer identity, contact information or street address to a trade device.
+- Use the versioned technician sync contract documented in `docs/MOBILE_FIELD_SYNC.md` for future native client work.
+
+Progress as at 16 July 2026:
+
+- Installer jobs and checklist items now carry server revisions for optimistic conflict detection.
+- A durable sync ledger records job upserts and deletion tombstones separately for the dispatch workspace and each assigned technician.
+- Field actions accept stable client action IDs, record hashed idempotency receipts and safely recognise duplicate delivery.
+- The first versioned sync API supports bootstrap snapshots, opaque cursors, bounded change pages, job-stage changes, checklist completion and technician time entries.
+- Direct-customer addresses are limited to assigned jobs with a 24-hour offline cache policy. AEA protected jobs remain region-only with a seven-day non-contact cache policy.
