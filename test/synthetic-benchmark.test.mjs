@@ -42,6 +42,8 @@ test("the refined CRM uses progressive navigation and a focused visual board", (
   assert.match(crm, /crm-pipeline-board/);
   assert.match(crm, /crm-layout-toggle/);
   assert.match(crm, /setPipelineFocus\(""\); setJobLayout\("board"\)/);
+  assert.match(crm, /closest\("details"\)\?\.removeAttribute\("open"\)/);
+  assert.doesNotMatch(crm, /`More: \$\{/);
 });
 
 test("the temporary identity seeding endpoint has been removed", () => {
