@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -203,6 +204,17 @@ type AdminProductEnquiry = {
   itemCount: number;
   subtotalCentsExGst: number;
 };
+type EcosystemHealth = {
+  status: "healthy" | "attention";
+  checkedAt: string;
+  counts: Record<string, number>;
+  checks: Array<{
+    key: string;
+    label: string;
+    passed: boolean;
+    detail: string;
+  }>;
+};
 
 const states = ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"];
 const categories = [
@@ -273,6 +285,10 @@ export function AdminOperationsPortal() {
   const [accountNote, setAccountNote] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [opportunitySynthetic, setOpportunitySynthetic] = useState("");
+  const [opportunitySearch, setOpportunitySearch] = useState("");
+  const [opportunityStatusFilter, setOpportunityStatusFilter] = useState("");
+  const [opportunityServiceFilter, setOpportunityServiceFilter] = useState("");
+  const [opportunityStateFilter, setOpportunityStateFilter] = useState("");
   const [products, setProducts] = useState<CatalogueProduct[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [productSynthetic, setProductSynthetic] = useState("");
@@ -287,6 +303,8 @@ export function AdminOperationsPortal() {
   const [productEnquiries, setProductEnquiries] = useState<AdminProductEnquiry[]>([]);
   const [enquirySearch, setEnquirySearch] = useState("");
   const [enquiryStatus, setEnquiryStatus] = useState("");
+  const [ecosystemHealth, setEcosystemHealth] = useState<EcosystemHealth | null>(null);
+  const [ecosystemBusy, setEcosystemBusy] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -435,6 +453,52 @@ export function AdminOperationsPortal() {
       );
     } catch (error) {
       setStatus(authMessage(error));
+    }
+  }
+
+  async function resetAdminPassword() {
+    const accountEmail = email.trim().toLowerCase();
+    if (!accountEmail) {
+      setStatus("Enter your operations email address first.");
+      return;
+    }
+    setStatus("Sending secure password reset instructions...");
+    try {
+      await sendPasswordResetEmail(firebaseAuth, accountEmail);
+      setStatus(
+        "Password reset instructions have been sent. Use the same email so your existing operations identity is preserved.",
+      );
+    } catch (error) {
+      setStatus(authMessage(error));
+    }
+  }
+
+  function openNotificationInbox() {
+    setTab("inbox");
+    window.history.replaceState(null, "", "#operations-inbox");
+    window.requestAnimationFrame(() => {
+      document.getElementById("operations-inbox")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  async function runEcosystemCheck() {
+    setEcosystemBusy(true);
+    setStatus("Checking the protected demo journey...");
+    try {
+      const result = await api("/api/admin/ecosystem-health");
+      setEcosystemHealth(result as unknown as EcosystemHealth);
+      setStatus(
+        result.status === "healthy"
+          ? "The full demo ecosystem passed every readiness check."
+          : "The demo ecosystem check found steps that need attention.",
+      );
+    } catch (error) {
+      setStatus(authMessage(error));
+    } finally {
+      setEcosystemBusy(false);
     }
   }
 
@@ -886,9 +950,20 @@ export function AdminOperationsPortal() {
     [opportunities, opportunitySynthetic],
   );
   const visibleOpportunities = useMemo(
-    () => opportunities.filter((item) => opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true),
-    [opportunities, opportunitySynthetic],
+    () => {
+      const term = opportunitySearch.trim().toLowerCase();
+      return opportunities
+        .filter((item) => opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true)
+        .filter((item) => !opportunityStatusFilter || item.status === opportunityStatusFilter)
+        .filter((item) => !opportunityServiceFilter || item.serviceCategories.includes(opportunityServiceFilter))
+        .filter((item) => !opportunityStateFilter || item.state === opportunityStateFilter)
+        .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.postcode}`.toLowerCase().includes(term));
+    },
+    [opportunities, opportunitySearch, opportunityServiceFilter, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic],
   );
+  const activeOwners = admins.filter(
+    (item) => item.role === "owner" && item.status === "active",
+  ).length;
   const visibleProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
     return products
@@ -968,6 +1043,13 @@ export function AdminOperationsPortal() {
               />
             </label>
             <button type="submit">Sign in securely</button>
+            <button
+              type="button"
+              className="admin-password-reset"
+              onClick={() => void resetAdminPassword()}
+            >
+              Forgot password?
+            </button>
           </form>
           {status && (
             <p className="admin-inline-status" role="status">
@@ -1048,10 +1130,18 @@ export function AdminOperationsPortal() {
           </div>
         </div>
         <div className="admin-topbar-account">
-          <button type="button" className="admin-notification-button" onClick={() => setTab("inbox")}>
+          <a
+            href="#operations-inbox"
+            className="admin-notification-button"
+            aria-label={`Open operations inbox, ${notificationCounts.unread || 0} unread alerts`}
+            onClick={(event) => {
+              event.preventDefault();
+              openNotificationInbox();
+            }}
+          >
             Alerts
             <strong>{notificationCounts.unread || 0}</strong>
-          </button>
+          </a>
           <span className={`admin-role admin-role-${session.role}`}>
             {session.role}
           </span>
@@ -1171,7 +1261,7 @@ export function AdminOperationsPortal() {
               </button>
             </div>
           )}
-          <div hidden={tab !== "inbox"}>
+          <div id="operations-inbox" hidden={tab !== "inbox"}>
             <AdminNotificationInbox
               api={api}
               role={session.role}
@@ -1250,6 +1340,50 @@ export function AdminOperationsPortal() {
                 <article><span>Free profiles</span><strong>{freeAccounts}</strong><small>Setup and verification access only</small></article>
                 <article><span>Hidden wholesalers</span><strong>{hiddenSuppliers}</strong><small>Products excluded from installer selection</small></article>
                 <article><span>Lead-locked installers</span><strong>{leadLockedInstallers}</strong><small>Excluded from opportunity allocation</small></article>
+              </section>
+              <section className="admin-panel admin-ecosystem-check" aria-labelledby="ecosystem-check-title">
+                <div className="admin-panel-heading">
+                  <span>End-to-end assurance</span>
+                  <h2 id="ecosystem-check-title">Ecosystem walkthrough</h2>
+                  <p>
+                    Run a read-only check across demo customers, six-installer matching,
+                    wholesaler catalogue visibility, installer responses and structured quotes.
+                    This check never sends a new lead or exposes household information.
+                  </p>
+                </div>
+                <div className="admin-ecosystem-actions">
+                  <button type="button" onClick={() => void runEcosystemCheck()} disabled={ecosystemBusy}>
+                    {ecosystemBusy ? "Checking journey..." : ecosystemHealth ? "Run check again" : "Run ecosystem check"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setOpportunitySynthetic("only");
+                      setTab("opportunities");
+                    }}
+                  >
+                    Open demo enquiries
+                  </button>
+                  {ecosystemHealth && (
+                    <span className={`admin-ecosystem-state ${ecosystemHealth.status}`}>
+                      {ecosystemHealth.status === "healthy" ? "All checks passed" : "Attention required"}
+                    </span>
+                  )}
+                </div>
+                {ecosystemHealth && (
+                  <div className="admin-ecosystem-results">
+                    {ecosystemHealth.checks.map((check) => (
+                      <article key={check.key} className={check.passed ? "passed" : "attention"}>
+                        <span aria-hidden="true">{check.passed ? "OK" : "!"}</span>
+                        <div>
+                          <strong>{check.label}</strong>
+                          <small>{check.detail}</small>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
               <div className="admin-overview-grid">
                 <section className="admin-panel">
@@ -1755,7 +1889,37 @@ export function AdminOperationsPortal() {
                   assign suitable verified businesses.
                 </p>
               </header>
-              <div className="admin-context-filter">
+              <div className="admin-context-filter admin-opportunity-filters">
+                <label>
+                  Search enquiries
+                  <input
+                    aria-label="Search opportunities"
+                    placeholder="Title, scope, type or postcode"
+                    value={opportunitySearch}
+                    onChange={(event) => setOpportunitySearch(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Status
+                  <select value={opportunityStatusFilter} onChange={(event) => setOpportunityStatusFilter(event.target.value)}>
+                    <option value="">All statuses</option>
+                    {["draft", "open", "paused", "closed", "expired"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Service
+                  <select value={opportunityServiceFilter} onChange={(event) => setOpportunityServiceFilter(event.target.value)}>
+                    <option value="">All services</option>
+                    {categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  State
+                  <select value={opportunityStateFilter} onChange={(event) => setOpportunityStateFilter(event.target.value)}>
+                    <option value="">All states</option>
+                    {states.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>
                 <label>
                   Opportunity data
                   <select aria-label="Opportunity data marker" value={opportunitySynthetic} onChange={(event) => setOpportunitySynthetic(event.target.value)}>
@@ -1765,6 +1929,21 @@ export function AdminOperationsPortal() {
                   </select>
                 </label>
                 <span>{visibleOpportunities.length} enquiries shown</span>
+                {(opportunitySearch || opportunityStatusFilter || opportunityServiceFilter || opportunityStateFilter || opportunitySynthetic) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setOpportunitySearch("");
+                      setOpportunityStatusFilter("");
+                      setOpportunityServiceFilter("");
+                      setOpportunityStateFilter("");
+                      setOpportunitySynthetic("");
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
               <div className="admin-opportunity-layout">
                 <form
@@ -2464,6 +2643,17 @@ export function AdminOperationsPortal() {
                   suspend access without deleting the accountability record.
                 </p>
               </header>
+              <section className={`admin-panel admin-recovery-readiness ${activeOwners > 1 ? "ready" : "attention"}`}>
+                <div>
+                  <span>Owner recovery readiness</span>
+                  <h2>{activeOwners > 1 ? "Backup owner coverage is active" : "Add a backup owner"}</h2>
+                  <p>
+                    Password recovery on the sign-in page preserves the existing Firebase identity.
+                    A second named owner provides audited recovery if the primary owner loses access entirely.
+                  </p>
+                </div>
+                <strong>{activeOwners} active owner{activeOwners === 1 ? "" : "s"}</strong>
+              </section>
               <div className="admin-access-layout">
                 <form
                   className="admin-panel admin-invite-form"

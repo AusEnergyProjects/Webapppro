@@ -104,6 +104,16 @@ test("membership and verification routes are connected across the account journe
   assert.match(standards, /Membership and referrals/);
 });
 
+test("installer leads can be narrowed without exposing household details", () => {
+  assert.match(dashboard, /dashboard-lead-filters/);
+  assert.match(dashboard, /Search leads/);
+  assert.match(dashboard, /leadStatusFilter/);
+  assert.match(dashboard, /leadServiceFilter/);
+  assert.match(dashboard, /leadStateFilter/);
+  assert.match(dashboard, /No leads match these filters/);
+  assert.doesNotMatch(dashboard, /customerEmail|customerPhone|streetAddress/);
+});
+
 test("new dashboard, verification and membership copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(dashboard + verification + membership, /[\u2013\u2014]/);
 });

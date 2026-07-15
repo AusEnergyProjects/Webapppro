@@ -16,6 +16,9 @@ const matchesRoute = read(
 const allocationRoute = read(
   "../src/app/api/admin/opportunities/allocate/route.ts",
 );
+const ecosystemHealthRoute = read(
+  "../src/app/api/admin/ecosystem-health/route.ts",
+);
 const productRoute = read("../src/app/api/admin/products/route.ts");
 const referralsRoute = read("../src/app/api/admin/referrals/route.ts");
 const partnerOpportunities = read(
@@ -38,6 +41,7 @@ test("operations portal is unlisted and every administrator API has server-side 
     opportunitiesRoute,
     matchesRoute,
     allocationRoute,
+    ecosystemHealthRoute,
     productRoute,
     referralsRoute,
   ]) {
@@ -132,5 +136,24 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Referral rewards and eligibility/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
+  assert.match(portal, /sendPasswordResetEmail/);
+  assert.match(portal, /Forgot password\?/);
+  assert.match(portal, /href="#operations-inbox"/);
+  assert.match(portal, /aria-label=\{`Open operations inbox/);
+  assert.match(portal, /Ecosystem walkthrough/);
+  assert.match(portal, /Owner recovery readiness/);
+  assert.match(portal, /Search opportunities/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
+});
+
+test("the ecosystem walkthrough is read only, privacy safe and checks every platform role", () => {
+  assert.match(ecosystemHealthRoute, /requireAdminIdentity\(request\)/);
+  assert.match(ecosystemHealthRoute, /sameOrigin\(request\)/);
+  assert.match(ecosystemHealthRoute, /COALESCE\(is_synthetic, 0\) = 1/);
+  assert.match(ecosystemHealthRoute, /match_count >= 6/);
+  assert.match(ecosystemHealthRoute, /listing_status = 'published'/);
+  assert.match(ecosystemHealthRoute, /customer_project_quotes/);
+  assert.doesNotMatch(ecosystemHealthRoute, /export async function POST|export async function PATCH/);
+  assert.doesNotMatch(ecosystemHealthRoute, /customer_email|customer_phone|address_line_1|private_notes/);
+  assert.doesNotMatch(ecosystemHealthRoute, /[\u2013\u2014]/);
 });

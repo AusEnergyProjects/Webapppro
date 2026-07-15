@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter, SiteHeader } from "./ComparatorChrome";
@@ -230,6 +230,10 @@ export function DirectTradeDashboard() {
   );
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [leadStatusFilter, setLeadStatusFilter] = useState("");
+  const [leadServiceFilter, setLeadServiceFilter] = useState("");
+  const [leadStateFilter, setLeadStateFilter] = useState("");
   const [referrals, setReferrals] = useState<ReferralData | null>(null);
   const [referralBusy, setReferralBusy] = useState(false);
   const [referralStatus, setReferralStatus] = useState("");
@@ -378,6 +382,14 @@ export function DirectTradeDashboard() {
   const interestedCount = opportunities.filter(
     (item) => item.matchStatus === "interested",
   ).length;
+  const visibleLeadOpportunities = useMemo(() => {
+    const term = leadSearch.trim().toLowerCase();
+    return opportunities
+      .filter((item) => !leadStatusFilter || item.matchStatus === leadStatusFilter)
+      .filter((item) => !leadStateFilter || item.state === leadStateFilter)
+      .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
+      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.distanceBand}`.toLowerCase().includes(term));
+  }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
 
   async function generateReferralLink() {
     if (!user) return;
@@ -719,8 +731,53 @@ export function DirectTradeDashboard() {
                       <a href="#membership">Unlock opportunity leads</a>
                     </div>
                   ) : opportunities.length ? (
-                    <div className="dashboard-opportunity-list">
-                      {opportunities.map((opportunity) => (
+                    <>
+                      <div className="dashboard-lead-filters" aria-label="Lead filters">
+                        <label>
+                          <span>Search</span>
+                          <input
+                            aria-label="Search leads"
+                            placeholder="Scope, service or region"
+                            value={leadSearch}
+                            onChange={(event) => setLeadSearch(event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Status</span>
+                          <select value={leadStatusFilter} onChange={(event) => setLeadStatusFilter(event.target.value)}>
+                            <option value="">All statuses</option>
+                            {["offered", "viewed", "interested", "declined", "connected", "closed"].map((value) => <option key={value} value={value}>{value === "offered" ? "New" : value.replaceAll("_", " ")}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Service</span>
+                          <select value={leadServiceFilter} onChange={(event) => setLeadServiceFilter(event.target.value)}>
+                            <option value="">All services</option>
+                            {Object.entries(capabilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>State</span>
+                          <select value={leadStateFilter} onChange={(event) => setLeadStateFilter(event.target.value)}>
+                            <option value="">All states</option>
+                            {[...new Set(opportunities.map((item) => item.state))].sort().map((value) => <option key={value} value={value}>{value}</option>)}
+                          </select>
+                        </label>
+                        <div>
+                          <strong>{visibleLeadOpportunities.length}</strong>
+                          <span>matching lead{visibleLeadOpportunities.length === 1 ? "" : "s"}</span>
+                          {(leadSearch || leadStatusFilter || leadServiceFilter || leadStateFilter) && (
+                            <button type="button" onClick={() => {
+                              setLeadSearch("");
+                              setLeadStatusFilter("");
+                              setLeadServiceFilter("");
+                              setLeadStateFilter("");
+                            }}>Clear</button>
+                          )}
+                        </div>
+                      </div>
+                      {visibleLeadOpportunities.length ? <div className="dashboard-opportunity-list">
+                      {visibleLeadOpportunities.map((opportunity) => (
                         <article
                           key={opportunity.matchId}
                           className={`dashboard-opportunity-card status-${opportunity.matchStatus}`}
@@ -831,7 +888,8 @@ export function DirectTradeDashboard() {
                           {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
                         </article>
                       ))}
-                    </div>
+                    </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
+                    </>
                   ) : (
                     <div className="dashboard-empty-state">
                       <strong>No opportunities assigned</strong>
