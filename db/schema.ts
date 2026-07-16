@@ -1544,6 +1544,29 @@ export const tradeWarrantyClaims = sqliteTable("trade_warranty_claims", {
   index("trade_warranty_claims_order_idx").on(table.purchaseOrderId, table.updatedAt),
 ]);
 
+export const certificatePriceHistory = sqliteTable("certificate_price_history", {
+  id: text("id").primaryKey(),
+  certificateCode: text("certificate_code").notNull(),
+  tradedOn: text("traded_on").notNull(),
+  priceCents: integer("price_cents").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  capturedAt: text("captured_at").notNull(),
+}, (table) => [
+  uniqueIndex("certificate_price_history_code_date_idx").on(table.certificateCode, table.tradedOn),
+  index("certificate_price_history_date_idx").on(table.tradedOn),
+]);
+
+export const certificatePriceSyncRuns = sqliteTable("certificate_price_sync_runs", {
+  id: text("id").primaryKey(),
+  sourceName: text("source_name").notNull(),
+  status: text("status").notNull(),
+  recordCount: integer("record_count").notNull().default(0),
+  message: text("message").notNull().default(""),
+  fetchedAt: text("fetched_at").notNull(),
+}, (table) => [
+  index("certificate_price_sync_runs_status_date_idx").on(table.status, table.fetchedAt),
+]);
+
 export const apiPerformanceSamples = sqliteTable("api_performance_samples", {
   id: text("id").primaryKey(),
   routeKey: text("route_key").notNull(),

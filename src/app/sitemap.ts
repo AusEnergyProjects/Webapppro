@@ -7,6 +7,7 @@ const routes = [
   "/compare",
   "/gas-compare",
   "/guides",
+  "/guides/certificate-prices",
   "/guides/solar",
   "/guides/batteries",
   "/guides/heating",

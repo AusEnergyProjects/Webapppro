@@ -16,7 +16,7 @@ export function BrandBar() {
   );
 }
 
-type SiteActive = "start" | "plan" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-membership" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "guides" | "rebates" | "case-studies";
+export type SiteActive = "start" | "plan" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-membership" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
@@ -24,6 +24,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
     { key: "plan", href: "/plan", label: "My energy plan" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
+    { key: "certificates", href: "/guides/certificate-prices", label: "Certificates" },
     { key: "guides", href: "/guides", label: "Guides and rebates" },
     { key: "assessments", href: "/assessments", label: "Assessments" },
   ] as const;

@@ -21,15 +21,15 @@ Every AI-assisted milestone must follow [docs/AI_DELIVERY_GUARDRAILS.md](./docs/
 - Completed: commercial Stripe links and payment-link identifiers are validated server configuration rather than source constants.
 - Completed: inactive Netlify deployment configuration is removed. Sites and GitHub are the only active release targets.
 - Completed: one canonical release-truth document identifies what is implemented, externally dependent or not yet verified.
-- External confirmation required: verify the production Stripe account, products, webhook secrets and payment links in the Stripe dashboard before enabling public paid memberships.
+- Completed: Stripe production preflight on 17 July 2026 found no active account tasks, four active Direct Trade membership payment links at the configured prices, and one active membership webhook destination with five events and a 0% error rate. Webhook secrets remain intentionally non-displayable and must remain configured as deployment secrets.
 
 ### P1: architecture and maintainability
 
-- In progress: split `AdminOperationsPortal.tsx` into feature workspaces, typed API clients and reducer-backed domain hooks without changing the admin workflow.
+- In progress: split `AdminOperationsPortal.tsx` into feature workspaces, typed API clients and reducer-backed domain hooks without changing the admin workflow. Opportunity, catalogue, account, inbox and product-enquiry workspaces are feature-owned.
 - In progress: move feature styling out of `globals.css` beside TLink CRM, catalogue, admin, consumer and comparison features. Remove obsolete selectors only after visual regression checks.
 - In progress: one canonical uppercase Australian state code now drives new writes and filtering. Migration 0045 normalises existing stored state values.
 - Completed foundation: shared keyset pagination, list controls, searchable lookups, high-volume table behaviour and route telemetry are reusable across admin, CRM, catalogue and purchasing.
-- Next: convert the highest-state admin and CRM screens one domain at a time, beginning with opportunities and catalogue review.
+- Next: extract the referral workspace, then reassess the remaining stateful admin shell one domain at a time.
 
 ### P2: production scaling
 
@@ -37,7 +37,8 @@ Every AI-assisted milestone must follow [docs/AI_DELIVERY_GUARDRAILS.md](./docs/
 - Completed foundation: bounded server search and D1 FTS5 indexes cover products, accounts, customers, opportunities and CRM customer records.
 - Completed foundation: API and database timing telemetry records slow or failed requests without request bodies or household identity.
 - Completed foundation: the 400,000-row scale benchmark and high-volume list views protect the primary query paths.
-- Next: establish production SLO dashboards and query plans from real traffic, then add specialised indexes only where telemetry proves a need.
+- Completed foundation: the admin performance panel evaluates 7-day p95 latency, average database time, error rate and minimum sample SLOs, and exposes read-only query plans for the principal keyset lists.
+- Next: monitor real-traffic SLO results, then add specialised indexes only where telemetry proves a need.
 
 ### P3: controlled retirement and native release
 
@@ -107,6 +108,7 @@ Progress as at 14 July 2026:
 - Heating and hot water guides now cover building-load reduction, climate-zone performance, system sizing, noise, tariffs, written quote evidence and location-specific support checks. The hot water guide links certificate claims to the current Clean Energy Regulator model register.
 - Electric cooking and home EV charging guides now cover appliance fit, electrical enabling work, gas isolation, ventilation, driving needs, charging controls, solar timing, site capacity and approval requirements for renters, strata and shared buildings.
 - A location-aware rebates and assistance hub now separates federal certificates and programs from state, territory and provider support. It requires an explicit state or territory selection, shows the information date and caveats, and links each listed program to an official confirmation source without hard-coded dollar claims.
+- A certificate price tracker now explains STC, ESC, VEEC, PRC, LGC, ACCU and SMC markets in plain English, stores six months of validated reported trades, refreshes them through the scheduled worker and exposes an accessible chart with explicit indicative-price caveats.
 - A worked-examples area now explains electricity timing, solar self-use, battery dispatch and seasonal gas annualisation without inventing customer testimonials or guaranteed savings. Each example shows its evidence, method, decision lesson and limitations, plus the privacy and comparability requirements for future consented customer case studies.
 - An insulation and draught-proofing guide now covers building-fabric diagnosis, R values, thermal bridges, moisture, deliberate ventilation, electrical and combustion-appliance safety, windows, quote scope and the need to reassess heating and cooling size after reducing the load.
 - The shared visual foundation now uses a unified responsive header, contemporary typography, refined spacing, stronger hierarchy, consistent focus states, quieter page surfaces and polished cards, forms, buttons and hero treatments across the comparison and guidance journeys.

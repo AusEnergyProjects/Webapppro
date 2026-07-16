@@ -36,7 +36,11 @@ import {
   type NativeAuditChargeLine,
 } from "@/lib/electricity/native-tariff-engine";
 import { buildNativeComparisonUrl, parseNativeComparisonQuery } from "@/lib/electricity/native-sharing";
-import { annualiseUsage, usageForPeriod, type UsagePeriod } from "@/lib/electricity/usage-input";
+import {
+  AEMO_NSLP_REFERENCE_VERSION,
+  annualiseElectricityUsage,
+  type ElectricityUsageMode,
+} from "@/lib/electricity/usage-input";
 
 type PlanBundle = {
   plans: NativePlanInput[];
@@ -87,9 +91,8 @@ type ScenarioResult = {
 type ChoiceOption<T extends string> = { value: T; title: string; description: string };
 const LEAD_NOTICE_VERSION = "2026-07-13";
 
-const USAGE_PERIOD_OPTIONS: ChoiceOption<UsagePeriod>[] = [
-  { value: "quarterly", title: "Typical quarterly bill", description: "Enter the kWh from one representative 3 month bill." },
-  { value: "monthly", title: "Monthly bill", description: "Enter the kWh from one representative month." },
+const MANUAL_USAGE_OPTIONS: ChoiceOption<ElectricityUsageMode>[] = [
+  { value: "bill", title: "One recent bill", description: "Enter its exact dates and total kWh. We account for the season automatically." },
   { value: "annual", title: "Annual total", description: "Enter the kWh used across a full 12 months." },
 ];
 
@@ -185,8 +188,11 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [postcode, setPostcode] = useState("");
   const [nmi, setNmi] = useState("");
   const [customerType, setCustomerType] = useState<ElectricityCustomerType>("RESIDENTIAL");
-  const [annualKwh, setAnnualKwh] = useState("5000");
-  const [usagePeriod, setUsagePeriod] = useState<UsagePeriod>("quarterly");
+  const [manualUsageKwh, setManualUsageKwh] = useState("");
+  const [manualUsageMode, setManualUsageMode] = useState<ElectricityUsageMode>("bill");
+  const [billStart, setBillStart] = useState("");
+  const [billEnd, setBillEnd] = useState("");
+  const [manualUsageOpen, setManualUsageOpen] = useState(false);
   const [profileKind, setProfileKind] = useState("evening");
   const [meter, setMeter] = useState<Nem12Success | null>(null);
   const [registerRoles, setRegisterRoles] = useState<Record<string, RegisterRole | undefined>>({});
@@ -242,9 +248,19 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const nmiDistributor = useMemo(() => distributorFromNmi(nmi), [nmi]);
   const guidanceDistributor = nmiDistributor || meterGuideDistributor || distributor;
   const distributorInfo = guidanceDistributor ? DISTRIBUTOR_INFO[guidanceDistributor] : null;
-  const displayedUsage = usageForPeriod(annualKwh, usagePeriod);
-  const annualUsageNumber = Number(annualKwh);
   const meterAllocation = useMemo(() => meter ? allocateNem12Registers(meter.registers, registerRoles) : null, [meter, registerRoles]);
+  const usageDistributor = nmiDistributor || distributor || meterGuideDistributor;
+  const manualAnnualised = useMemo(() => annualiseElectricityUsage({
+    usageKwh: Number(manualUsageKwh), mode: manualUsageMode, billStart, billEnd, distributor: usageDistributor, postcode,
+  }), [billEnd, billStart, manualUsageKwh, manualUsageMode, postcode, usageDistributor]);
+  const meterAnnualised = useMemo(() => meter ? meter.fullYear
+    ? annualiseElectricityUsage({ usageKwh: meter.annualImport, mode: "annual" })
+    : annualiseElectricityUsage({ usageKwh: meter.importKwh, mode: "bill", billStart: meter.startDate, billEnd: meter.endDate, distributor: usageDistributor, postcode })
+    : null, [meter, postcode, usageDistributor]);
+  const automaticMeterAnnualKwh = meter ? meterAnnualised?.ok ? meterAnnualised.annualKwh : meter.annualImport : 0;
+  const annualUsageNumber = usageOverride?.value || (meter ? automaticMeterAnnualKwh : manualAnnualised.ok ? manualAnnualised.annualKwh : 0);
+  const previewMeterAllocation = meterAllocation?.ok ? scaleNem12AnnualAllocation(meterAllocation, annualUsageNumber) : null;
+  const meterAnnualScale = meter?.annualImport ? annualUsageNumber / meter.annualImport : 1;
   const demandReady = Boolean(meter && meterAllocation?.ok && meter.dateSpanDays >= 360 && meter.coverageRatio >= 0.98 && meter.actualPct >= 0.9);
 
   useEffect(() => {
@@ -254,8 +270,9 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     /* eslint-disable react-hooks/set-state-in-effect */
     if (restored.postcode) setPostcode(restored.postcode);
     if (restored.annualKwh) {
-      setAnnualKwh(String(restored.annualKwh));
-      setUsagePeriod("annual");
+      setManualUsageKwh(String(restored.annualKwh));
+      setManualUsageMode("annual");
+      setManualUsageOpen(true);
     }
     if (restored.profileKind) setProfileKind(restored.profileKind);
     if (restored.customerType) setCustomerType(restored.customerType);
@@ -358,8 +375,6 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     setRegisterRoles(initialRoles);
     setUsageOverride(null);
     setShowUsageOverride(false);
-    setAnnualKwh(String(Math.round(parsed.annualImport)));
-    setUsagePeriod("annual");
     if (parsed.nmi && !nmi) {
       setNmi(cleanNmi(parsed.nmi).slice(0, 11));
       setDistributor("");
@@ -370,7 +385,9 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     }
     setMeterStatus(parsed.registers.length > 1
       ? `Loaded ${parsed.registers.length} consumption registers across ${parsed.spanDays} observed days. Confirm each register before comparing.`
-      : `Loaded ${parsed.spanDays} observed days. The annual total and measured time pattern are active.`);
+      : parsed.fullYear
+        ? `Loaded ${parsed.spanDays} observed days. The measured annual total, seasons and time pattern are active.`
+        : `Loaded ${parsed.spanDays} observed days. The measured time pattern is active and the annual total will be seasonally adjusted for the missing dates.`);
   }
 
   function removeMeterData() {
@@ -384,7 +401,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
   function openAnnualOverride() {
     if (!meter) return;
-    setOverrideKwh(String(Math.round(usageOverride?.value || meter.annualImport)));
+    setOverrideKwh(String(Math.round(usageOverride?.value || automaticMeterAnnualKwh)));
     setOverrideReason(usageOverride?.reason || "");
     setOverrideError("");
     setShowUsageOverride(true);
@@ -398,8 +415,6 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       return;
     }
     setUsageOverride({ value, reason });
-    setAnnualKwh(String(Math.round(value)));
-    setUsagePeriod("annual");
     setShowUsageOverride(false);
     setOverrideError("");
     setMeterStatus("Annual total adjusted. The original measured interval pattern remains active.");
@@ -408,11 +423,11 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   function removeAnnualOverride() {
     if (!meter) return;
     setUsageOverride(null);
-    setAnnualKwh(String(Math.round(meter.annualImport)));
-    setUsagePeriod("annual");
     setShowUsageOverride(false);
     setOverrideError("");
-    setMeterStatus("Annual adjustment removed. The NEM12 annual figure and measured pattern are active.");
+    setMeterStatus(meter.fullYear
+      ? "Annual adjustment removed. The measured NEM12 annual figure and time pattern are active."
+      : "Annual adjustment removed. The partial NEM12 file and automatic seasonal adjustment are active.");
   }
 
   function handleMeterDrop(event: DragEvent<HTMLDivElement>) {
@@ -427,13 +442,14 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     const cleanedNmi = cleanNmi(nmi);
     if (cleanedNmi && (cleanedNmi.length < 10 || cleanedNmi.length > 11)) { setError("An NMI must contain 10 characters, plus an optional checksum character."); return; }
-    const totalKwh = Number(annualKwh);
+    const totalKwh = annualUsageNumber;
     if (meter && !meterAllocation?.ok) { setError("Confirm whether every meter register is general usage or controlled load before comparing."); return; }
+    if (!meter && !manualAnnualised.ok) { setError(manualAnnualised.error); setManualUsageOpen(true); return; }
     const scaledAllocation = meterAllocation?.ok ? scaleNem12AnnualAllocation(meterAllocation, totalKwh) : null;
     const allocationScale = scaledAllocation?.scale || 1;
     const controlled = scaledAllocation ? scaledAllocation.annualControlledKwh : hasControlledLoad ? Number(controlledKwh) : 0;
     const general = scaledAllocation ? scaledAllocation.annualGeneralKwh : totalKwh - controlled;
-    if (!(totalKwh > 0)) { setError("Enter annual electricity usage in kWh."); return; }
+    if (!(totalKwh > 0)) { setError("Add smart-meter data or enter electricity usage from a bill."); return; }
     if (hasControlledLoad && (!(controlled > 0) || controlled >= totalKwh)) { setError("Controlled-load usage must be positive and less than total annual usage."); return; }
     const hasSolar = setupMode !== "none";
     const hasBattery = setupMode === "battery";
@@ -469,10 +485,15 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         ? meter && meter.annualExport > 0 ? meter.exportProfile : genericExportProfile(annualExport)
         : emptyProfile();
       const customerEvidence = customerType === "BUSINESS" ? " Small-business offers were requested." : " Residential offers were requested.";
-      const overrideEvidence = usageOverride ? ` The annual total was adjusted from ${Math.round(meter?.annualImport || 0).toLocaleString()} to ${Math.round(usageOverride.value).toLocaleString()} kWh because: ${usageOverride.reason}. The measured interval proportions were retained and scaled.` : "";
+      const overrideEvidence = usageOverride ? ` The annual total was adjusted from ${Math.round(automaticMeterAnnualKwh).toLocaleString()} to ${Math.round(usageOverride.value).toLocaleString()} kWh because: ${usageOverride.reason}. The measured interval proportions were retained and scaled.` : "";
+      const seasonalEvidence = meter && !meter.fullYear && !usageOverride
+        ? ` The observed ${meter.startDate} to ${meter.endDate} total was seasonally annualised to ${Math.round(totalKwh).toLocaleString()} kWh using the bounded ${AEMO_NSLP_REFERENCE_VERSION} network reference. The measured time-of-day proportions were retained.`
+        : !meter && manualUsageMode === "bill"
+          ? ` The ${billStart} to ${billEnd} bill was seasonally annualised to ${Math.round(totalKwh).toLocaleString()} kWh using the bounded ${AEMO_NSLP_REFERENCE_VERSION} network reference.`
+          : "";
       const evidenceLabel = meter
-        ? `Measured NEM12 intervals: ${meter.spanDays} observed days, ${Math.round(meter.coverageRatio * 100)}% day coverage and ${Math.round(meter.actualPct * 100)}% actual intervals.${overrideEvidence}${customerEvidence}`
-        : `Manual assumption: ${profileAssumptionLabel(profileKind)}. This selection determines the TOU allocation.${customerEvidence}`;
+        ? `Measured NEM12 intervals: ${meter.spanDays} observed days, ${Math.round(meter.coverageRatio * 100)}% day coverage and ${Math.round(meter.actualPct * 100)}% actual intervals.${seasonalEvidence}${overrideEvidence}${customerEvidence}`
+        : `Manual assumption: ${profileAssumptionLabel(profileKind)}. This selection determines the TOU allocation.${seasonalEvidence}${customerEvidence}`;
       const registerEvidence: NativeAuditRegister[] = meterAllocation?.ok && meter ? meter.registers.map((register) => ({
         id: register.id,
         role: registerRoles[register.id] as "general" | "controlled",
@@ -538,7 +559,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
   function privateSafeUrl(): string {
     return buildNativeComparisonUrl(window.location.origin, {
-      postcode, annualKwh: Number(annualKwh), profileKind: profileKind as "evening" | "daytime" | "even",
+      postcode, annualKwh: annualUsageNumber, profileKind: profileKind as "evening" | "daytime" | "even",
       customerType, setupMode, solarKw: Number(solarKw) || undefined, batteryKwh: Number(batteryKwh) || undefined,
       exportKwh: Number(exportKwh) || undefined, hasEv, hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
       controlledKwh: !meter ? Number(controlledKwh) || undefined : undefined, assumeConditional, usedMeter: Boolean(meter),
@@ -557,7 +578,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     return {
       engineVersion: NATIVE_ENGINE_VERSION, tariffSchemaVersion: bundle?.tariffSchemaVersion || "",
       sourceHash: bundle?.sourceHash || "", sourceFetchedAt: bundle?.fetchedAt || "",
-      annualSource: meter ? usageOverride ? "meter-adjusted" : "meter-measured" : "manual",
+      annualSource: meter ? usageOverride ? "meter-adjusted" : meter.fullYear ? "meter-measured" : "meter-seasonally-adjusted" : manualUsageMode === "bill" ? "bill-seasonally-adjusted" : "manual-annual",
       meterConfidence: meter?.confidence || "modelled", conditionalDiscountsAssumed: assumeConditional,
     };
   }
@@ -592,7 +613,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       const reference = await postLead({
         submissionType: "comparison", clientStartedAt: pageStartedAt.current, website: leadWebsite,
         name: leadName, email: leadEmail, upgrades: false,
-        postcode, annualKwh: Math.round(Number(annualKwh)), solar: setupMode, hasEv,
+        postcode, annualKwh: Math.round(annualUsageNumber), solar: setupMode, hasEv,
         hasControlledLoad: meter ? Boolean(meterAllocation?.ok && meterAllocation.annualControlledKwh > 0) : hasControlledLoad,
         top3: topPlans(), magicLink: privateSafeUrl(), provenance: provenance(), recheckMonths: 6,
         consent: { accepted: true, purpose: "Email comparison results and six monthly comparison reminders", noticeVersion: LEAD_NOTICE_VERSION, grantedAt: new Date().toISOString() },
@@ -610,30 +631,19 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   return <>
     {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <a href="/compare">/compare</a>.</span></div>}
     <form onSubmit={compare}>
-      <StepCard number="1" title="Usage and location">
-        <p className="sub">Start with the details on a recent electricity bill. Your NMI is optional and always stays in this browser.</p>
+      <StepCard number="1" title="Location">
+        <p className="sub">Enter the property location first. Your optional NMI identifies the exact network and always stays in this browser.</p>
         <div className="grid c3 native-location-grid">
           <Field label="Postcode"><input type="text" value={postcode} inputMode="numeric" maxLength={4} onChange={(event) => { setPostcode(event.target.value); setDistributor(""); setDistributors([]); }} placeholder="e.g. 3000" /></Field>
           <Field label="NMI" optional="(optional)" hint="A 10 or 11 character number, usually near the top of your bill. It identifies your electricity connection."><input type="text" value={nmi} maxLength={11} autoComplete="off" onChange={(event) => { setNmi(cleanNmi(event.target.value).slice(0, 11)); setDistributor(""); }} placeholder="e.g. 6407123456" /></Field>
           <Field label="Customer type"><select value={customerType} onChange={(event) => setCustomerType(event.target.value as ElectricityCustomerType)}><option value="RESIDENTIAL">Residential</option><option value="BUSINESS">Small business</option></select></Field>
           {distributors.length > 1 && <Field label="Network distributor" hint={nmiDistributor ? "Confirmed from your NMI." : "Required because this postcode crosses network boundaries."}><select value={nmiDistributor || distributor} disabled={Boolean(nmiDistributor)} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field>}
         </div>
-        <p className="native-nmi-help">Not sure where to find your NMI? <a href="#meter-data-help">Follow the bill and meter-data guide below</a>.</p>
+        <p className="native-nmi-help">Have your NMI but still need the usage file? <a href="#meter-data-help">Follow the meter-data guide below</a>.</p>
         {nmi && <div className={nmiDistributor ? "native-location-evidence ok" : "native-location-evidence"} aria-live="polite">{nmiDistributor ? <><b>{nmiDistributor}</b> was identified from NMI {maskNmi(nmi)}. The full NMI stays in this browser and is not included in the plan request.</> : cleanNmi(nmi).length >= 10 ? <>This NMI prefix is not in the supported National Electricity Market allocation table. We will use postcode and ask you to confirm the distributor if needed.</> : <>Enter the complete NMI to confirm the exact distributor.</>}</div>}
-        <div className="native-usage-panel">
-          <div className="native-section-intro"><h3>Electricity usage from your bill</h3><p>You do not need to know your annual usage. Choose the period shown on your bill and enter its total kWh.</p></div>
-          <ChoiceCards name="usage-period" legend="What period does your usage cover?" value={usagePeriod} options={USAGE_PERIOD_OPTIONS} disabled={Boolean(meter)} onChange={setUsagePeriod} />
-          <div className="native-usage-entry">
-            <Field label="Grid usage" hint={meter ? "Read-only while your uploaded meter data is active." : "Enter the kWh figure, not the dollar amount. Look for kWh, total usage or consumption on your bill."}>
-              <input type="number" min="1" step="any" value={displayedUsage} readOnly={Boolean(meter)} onChange={(event) => { const value = event.target.value; setAnnualKwh(value === "" ? "" : String(annualiseUsage(value, usagePeriod))); }} placeholder={usagePeriod === "quarterly" ? "e.g. 1250" : usagePeriod === "monthly" ? "e.g. 420" : "e.g. 5000"} />
-            </Field>
-            {!meter && annualUsageNumber > 0 && <div className="native-annual-equivalent" aria-live="polite"><b>{Math.round(annualUsageNumber).toLocaleString()} kWh per year</b><span>will be used to compare plans.</span></div>}
-          </div>
-          <ChoiceCards name="usage-pattern" legend="When do you usually use the most power?" hint="This helps estimate time-of-use plans when no smart-meter file is provided." value={profileKind} options={PROFILE_OPTIONS} disabled={Boolean(meter)} onChange={setProfileKind} />
-        </div>
       </StepCard>
-      <StepCard number="2" title="Optional: use your smart-meter data">
-        <p className="sub">For the most accurate comparison, upload a NEM12 CSV with up to 12 months of interval usage. The file is read only in this browser and is never uploaded.</p>
+      <StepCard number="2" title="Add your usage">
+        <div className="native-evidence-priority"><span>Recommended</span><div><b>Use your smart-meter data</b><p>Upload up to 12 months of NEM12 data. We automatically read the NMI, annual usage, seasonal changes, solar exports and time-of-day pattern. The file stays in this browser.</p></div></div>
         <div className={`native-dropzone${dragActive ? " drag" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false); }} onDrop={handleMeterDrop}>
           <b>Drag your NEM12 meter-data CSV here</b>
           <span>or choose a file from this device</span>
@@ -660,22 +670,41 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         {meterStatus && <p className={meter && meterAllocation?.ok ? "native-meter-status ok" : "native-meter-status"}>{meterStatus}</p>}
         {meter && <>
           <div className="native-meter-actions"><button type="button" className="btn ghost" onClick={openAnnualOverride}>Adjust annual total</button><button type="button" className="btn ghost" onClick={removeMeterData}>Remove meter data</button></div>
-          {usageOverride && <p className="native-override-flag">Annual usage adjusted from {Math.round(meter.annualImport).toLocaleString()} to {Math.round(usageOverride.value).toLocaleString()} kWh. Reason: {usageOverride.reason}. The measured time pattern is unchanged.</p>}
+          {usageOverride && <p className="native-override-flag">Annual usage adjusted from {Math.round(automaticMeterAnnualKwh).toLocaleString()} to {Math.round(usageOverride.value).toLocaleString()} kWh. Reason: {usageOverride.reason}. The measured time pattern is unchanged.</p>}
           {showUsageOverride && <div className="native-override-panel">
             <div className="grid c3"><Field label="Adjusted annual grid usage"><input type="number" min="1" step="1" value={overrideKwh} onChange={(event) => setOverrideKwh(event.target.value)} /></Field><div className="native-override-reason"><Field label="Reason for adjustment" hint="Required so the change remains visible in every calculation audit."><input type="text" maxLength={160} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="e.g. recent heating upgrade" /></Field></div></div>
             <div className="native-meter-actions"><button type="button" className="btn" onClick={applyAnnualOverride}>Apply adjustment</button><button type="button" className="btn ghost" onClick={() => { setShowUsageOverride(false); setOverrideError(""); }}>Cancel</button>{usageOverride && <button type="button" className="btn ghost" onClick={removeAnnualOverride}>Use NEM12 annual figure</button>}</div>
             {overrideError && <p className="error">{overrideError}</p>}
           </div>}
           {meter.registers.length > 1 && <div className="grid c3">
-            {meter.registers.map((register) => <Field key={register.id} label={`${register.id} (${Math.round(register.annualKwh).toLocaleString()} kWh/yr)`} hint={register.suggestedRole ? `File evidence suggests ${register.suggestedRole === "general" ? "general usage" : "controlled load"}. Confirm this assignment.` : "No reliable role was found in the file. Confirm this assignment."}>
+            {meter.registers.map((register) => <Field key={register.id} label={`${register.id} (${Math.round(register.annualKwh * meterAnnualScale).toLocaleString()} kWh/yr)`} hint={register.suggestedRole ? `File evidence suggests ${register.suggestedRole === "general" ? "general usage" : "controlled load"}. Confirm this assignment.` : "No reliable role was found in the file. Confirm this assignment."}>
               <select aria-label={`Role for register ${register.id}`} value={registerRoles[register.id] || ""} onChange={(event) => setRegisterRoles((current) => ({ ...current, [register.id]: event.target.value ? event.target.value as RegisterRole : undefined }))}>
                 <option value="">Choose register role</option><option value="general">General usage</option><option value="controlled">Controlled load</option>
               </select>
             </Field>)}
           </div>}
-          {meterAllocation?.ok && <p className="native-meter-status ok">Confirmed allocation: {Math.round(meterAllocation.annualGeneralKwh).toLocaleString()} kWh general usage{meterAllocation.annualControlledKwh > 0 ? ` and ${Math.round(meterAllocation.annualControlledKwh).toLocaleString()} kWh controlled load` : ""}{usageOverride ? ", proportionally scaled to the adjusted annual total for pricing" : ""}. {demandReady ? "Measured demand pricing is available." : "Demand pricing needs at least 360 days, 98% day coverage and 90% actual intervals."}</p>}
+          {previewMeterAllocation && <p className="native-meter-status ok"><b>{meter.fullYear ? "Measured full year" : "Seasonally adjusted partial meter data"}.</b> Confirmed allocation: {Math.round(previewMeterAllocation.annualGeneralKwh).toLocaleString()} kWh general usage{previewMeterAllocation.annualControlledKwh > 0 ? ` and ${Math.round(previewMeterAllocation.annualControlledKwh).toLocaleString()} kWh controlled load` : ""}{usageOverride ? ", proportionally scaled to the adjusted annual total for pricing" : ""}. {demandReady ? "Measured demand pricing is available." : "Demand pricing needs at least 360 days, 98% day coverage and 90% actual intervals."}</p>}
           <Nem12UsageChart data={meter} />
         </>}
+        {!meter && <details className="native-manual-usage" open={manualUsageOpen} onToggle={(event) => setManualUsageOpen(event.currentTarget.open)}>
+          <summary><span>I only have an electricity bill</span><small>Use this optional fallback when a NEM12 file is not available.</small></summary>
+          <div className="native-manual-usage-body">
+            <div className="native-section-intro"><h3>Enter usage from your bill</h3><p>Exact bill dates let us correct for seasonal heating and cooling instead of multiplying one month or quarter across the year.</p></div>
+            <ChoiceCards name="manual-usage-mode" legend="What usage figure do you have?" value={manualUsageMode} options={MANUAL_USAGE_OPTIONS} onChange={setManualUsageMode} />
+            {manualUsageMode === "bill" && <div className="grid c3 native-bill-date-range">
+              <Field label="Bill period starts" hint="Use the first date covered by the bill."><input type="date" value={billStart} data-date-range-group="electricity-bill-period" data-date-range-role="start" onChange={(event) => setBillStart(event.target.value)} /></Field>
+              <Field label="Bill period ends" hint="Use the last date covered by the bill."><input type="date" value={billEnd} data-date-range-group="electricity-bill-period" data-date-range-role="end" onChange={(event) => setBillEnd(event.target.value)} /></Field>
+            </div>}
+            <div className="native-usage-entry">
+              <Field label={manualUsageMode === "annual" ? "Annual grid usage" : "Grid usage on this bill"} hint="Enter the kWh figure, not the dollar amount. Look for kWh, total usage or consumption on your bill.">
+                <input type="number" min="1" step="any" value={manualUsageKwh} onChange={(event) => setManualUsageKwh(event.target.value)} placeholder={manualUsageMode === "annual" ? "e.g. 5000" : "e.g. 1250"} />
+              </Field>
+              {manualAnnualised.ok && <div className="native-annual-equivalent" aria-live="polite"><span>{manualUsageMode === "bill" ? "Seasonally adjusted from bill" : "Annual total"}</span><b>{Math.round(manualAnnualised.annualKwh).toLocaleString()} kWh per year</b><small>{manualUsageMode === "bill" ? `Based on ${manualAnnualised.billDays} bill days and the bounded AEMO network reference.` : "The time-of-day pattern below remains an estimate."}</small></div>}
+            </div>
+            {!manualAnnualised.ok && manualUsageKwh && <p className="native-manual-error">{manualAnnualised.error}</p>}
+            <ChoiceCards name="usage-pattern" legend="When do you usually use the most power?" hint="This optional assumption estimates time-of-use charges when no smart-meter intervals are available." value={profileKind} options={PROFILE_OPTIONS} onChange={setProfileKind} />
+          </div>
+        </details>}
       </StepCard>
       <StepCard number="3" title="Pricing assumptions">
         <p className="sub">Tell us what is already installed and which plan conditions apply to your home.</p>
