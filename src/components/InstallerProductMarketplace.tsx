@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type MarketplaceProduct = {
   id: string;
@@ -93,7 +94,7 @@ function readable(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function InstallerProductMarketplace({ user }: { user: User }) {
+export function InstallerProductMarketplace({ user, navigationTarget }: { user: User; navigationTarget?: TLinkCommandTarget | null }) {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [lists, setLists] = useState<ProductList[]>([]);
   const [activeListId, setActiveListId] = useState("");
@@ -155,6 +156,23 @@ export function InstallerProductMarketplace({ user }: { user: User }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (navigationTarget?.kind !== "product" || !navigationTarget.query) return;
+    const frame = window.requestAnimationFrame(() => {
+      setSearch(navigationTarget.query);
+      setCategory("");
+      setSupplier("");
+      setBrand("");
+      setServiceState("");
+      setStock("");
+      setMinimumPrice("");
+      setMaximumPrice("");
+      setMaximumLeadTime("");
+      setMinimumWarranty("");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [navigationTarget]);
 
   const filterOptions = useMemo(() => ({
     suppliers: [...new Set(products.map((item) => item.supplierName))].sort((a, b) => a.localeCompare(b)),

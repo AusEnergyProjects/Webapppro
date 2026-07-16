@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type ProductDependency = {
   linkedProductId: string;
@@ -194,12 +195,14 @@ export function SupplierCatalogueWorkspace({
   marketplaceVisible,
   canBulkImport,
   hasAnalytics,
+  navigationTarget,
 }: {
   user: User;
   businessName: string;
   marketplaceVisible: boolean;
   canBulkImport: boolean;
   hasAnalytics: boolean;
+  navigationTarget?: TLinkCommandTarget | null;
 }) {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [enquiries, setEnquiries] = useState<SupplierEnquiry[]>([]);
@@ -249,6 +252,15 @@ export function SupplierCatalogueWorkspace({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    if (navigationTarget?.kind !== "product" || !navigationTarget.query) return;
+    const frame = window.requestAnimationFrame(() => {
+      setSearch(navigationTarget.query);
+      setCatalogueView("catalogue");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [navigationTarget]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

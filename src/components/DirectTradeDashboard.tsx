@@ -11,6 +11,7 @@ import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
+import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -239,6 +240,7 @@ export function DirectTradeDashboard() {
   const [referralBusy, setReferralBusy] = useState(false);
   const [referralStatus, setReferralStatus] = useState("");
   const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "import" | "account">("work");
+  const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
   useEffect(
     () =>
@@ -577,6 +579,19 @@ export function DirectTradeDashboard() {
             <div className="trade-portal-brand">
               <TLinkBrand context={isSupplier ? "Wholesaler control centre" : "Installer control centre"} />
             </div>
+            <TLinkCommandCentre
+              user={user}
+              partnerType={isSupplier ? "supplier" : "installer"}
+              features={{
+                businessOperations: hasBusinessOperations,
+                marketplace: hasMarketplaceAccess,
+                teamAccess: hasTeamAccess,
+              }}
+              onNavigate={(target) => {
+                setCommandTarget(target);
+                setWorkspace(target.workspace);
+              }}
+            />
             <div className="dashboard-account-actions">
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
@@ -616,6 +631,7 @@ export function DirectTradeDashboard() {
                 partnerType="supplier"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
+                navigationTarget={commandTarget}
               />}
               {workspace === "products" && <SupplierCatalogueWorkspace
                 user={user}
@@ -623,8 +639,9 @@ export function DirectTradeDashboard() {
                 marketplaceVisible={hasSupplierVisibility}
                 canBulkImport={hasBulkImport}
                 hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
+                navigationTarget={commandTarget}
               />}
-              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
               {workspace === "import" && (hasBusinessOperations && hasBulkImport ? <TradeDataImportWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Guided catalogue migration is locked</strong><p>Paid wholesaler access adds preview, duplicate review and rollback for catalogue imports.</p><a href="#membership">Compare membership</a></section>)}
               {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile, verification and membership</h2><p>Keep occasional administration separate from daily work.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a><a href="/direct-trade/membership"><strong>Membership and referrals</strong><span>Plans, invoices and rewards</span></a></div></section>}
             </>
@@ -649,6 +666,7 @@ export function DirectTradeDashboard() {
                 partnerType="installer"
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
+                navigationTarget={commandTarget}
               />}
 
               {workspace === "account" && <section
@@ -1205,7 +1223,7 @@ export function DirectTradeDashboard() {
               </section>}
 
               {workspace === "products" && (hasMarketplaceAccess ? (
-                <InstallerProductMarketplace user={user} />
+                <InstallerProductMarketplace user={user} navigationTarget={commandTarget} />
               ) : (
                 <section className="dashboard-panel dashboard-paywall-panel">
                   <div className="dashboard-paywall-state">
@@ -1220,7 +1238,7 @@ export function DirectTradeDashboard() {
                   </div>
                 </section>
               ))}
-              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="installer" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds system-numbered purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="installer" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds system-numbered purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
             </>
           )}
 

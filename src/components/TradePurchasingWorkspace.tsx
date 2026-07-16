@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type PartnerType = "installer" | "supplier";
 type OrderItem = {
@@ -30,7 +31,7 @@ const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const displayDate = (value: string) => value ? new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "Not set";
 
-export function TradePurchasingWorkspace({ user, partnerType }: { user: User; partnerType: PartnerType }) {
+export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }: { user: User; partnerType: PartnerType; navigationTarget?: TLinkCommandTarget | null }) {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [eligible, setEligible] = useState<EligibleEnquiry[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -66,6 +67,15 @@ export function TradePurchasingWorkspace({ user, partnerType }: { user: User; pa
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
   }, [request]);
+
+  useEffect(() => {
+    if (navigationTarget?.kind !== "order" || !navigationTarget.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      setFilter("all");
+      setSelectedId(navigationTarget.id);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [navigationTarget]);
 
   async function submit(body: Record<string, unknown>, key: string, success: string) {
     setBusy(key); setStatus("Saving the business purchasing record...");

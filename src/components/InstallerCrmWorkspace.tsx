@@ -10,6 +10,7 @@ import { TradeFieldWorkPanel } from "./TradeFieldWorkPanel";
 import { TradeTeamCentre } from "./TradeTeamCentre";
 import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type Customer = {
   id: string; customerNumber: string; customerType: string; displayName: string; firstName: string;
@@ -66,7 +67,7 @@ const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "curren
 const cents = (value: FormDataEntryValue | null) => Math.round(Math.max(0, Number(value || 0)) * 100);
 const isoDay = () => new Date().toISOString().slice(0, 10);
 
-export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAccess: boolean }) {
+export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { user: User; teamAccess: boolean; navigationTarget?: TLinkCommandTarget | null }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
@@ -110,6 +111,31 @@ export function InstallerCrmWorkspace({ user, teamAccess }: { user: User; teamAc
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
   }, [load]);
+
+  useEffect(() => {
+    if (!navigationTarget) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (navigationTarget.kind === "job") {
+        setCreating("");
+        setSearch("");
+        setSelectedJobId(navigationTarget.id);
+        setView("jobs");
+      } else if (navigationTarget.kind === "customer") {
+        setCreating("");
+        setSelectedCustomerId(navigationTarget.id);
+        setView("customers");
+      } else if (navigationTarget.kind === "team" && teamAccess) {
+        setView("team");
+      } else if (navigationTarget.kind === "new-job") {
+        setView("jobs");
+        setCreating("job");
+      } else if (navigationTarget.kind === "new-customer") {
+        setView("customers");
+        setCreating("customer");
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [navigationTarget, teamAccess]);
 
   async function crmRequest(method: "POST" | "PATCH", body: Record<string, unknown>, busyKey: string, success: string) {
     setBusy(busyKey); setStatus("Saving your private business record...");

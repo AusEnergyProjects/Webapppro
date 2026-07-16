@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type PartnerType = "installer" | "supplier";
 type WorkTask = {
@@ -124,9 +125,10 @@ export function TradeBusinessHub(props: {
   partnerType: PartnerType;
   fullAccess: boolean;
   teamAccess: boolean;
+  navigationTarget?: TLinkCommandTarget | null;
 }) {
   if (props.partnerType === "installer" && props.fullAccess) {
-    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} />;
+    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} navigationTarget={props.navigationTarget} />;
   }
   return <BusinessHubFoundation {...props} />;
 }
