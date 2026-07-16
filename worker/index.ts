@@ -1,5 +1,6 @@
 import handler from "vinext/server/app-router-entry";
 import { getD1 } from "../db";
+import { syncCertificatePriceHistory } from "../src/lib/certificate-prices-server";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
@@ -56,9 +57,15 @@ const worker = {
     return cacheable;
   },
   async scheduled(_controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
-    ctx.waitUntil(generateDueServiceJobs(getD1(), { limit: 200 }).catch((error) => {
-      console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
-    }));
+    const db = getD1();
+    ctx.waitUntil(Promise.all([
+      generateDueServiceJobs(db, { limit: 200 }).catch((error) => {
+        console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
+      }),
+      syncCertificatePriceHistory(db).catch((error) => {
+        console.error("Certificate price refresh failed.", error instanceof Error ? error.message : "Unknown error");
+      }),
+    ]).then(() => undefined));
   },
 };
 

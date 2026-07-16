@@ -26,6 +26,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 
 - Native electricity and gas comparison routes plus compatibility rollback for electricity.
 - Consumer, installer, wholesaler and restricted admin authentication journeys.
+- Certificate price education with seven certificate definitions, a scheduled six-month reported-trade history and a privacy-safe public read endpoint.
 - Privacy-safe opportunity matching with household identity and direct contact withheld from trade accounts.
 - Installer CRM, catalogue, purchasing, integrations, payments, teams, assets, handover and native field-sync foundations.
 - Keyset pagination, server-side search, D1 FTS5 indexes, query telemetry and high-volume list tables.

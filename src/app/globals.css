@@ -4319,3 +4319,92 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .site-date-popover { border-radius: 18px; padding: 14px; }
   .site-date-grid button { min-height: 42px; }
 }
+
+/* Certificate price education and history */
+.certificate-intro-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.certificate-intro-grid article { background: #fff; border: 1px solid #d7e5df; border-radius: var(--radius-card); box-shadow: 0 12px 28px rgba(3, 25, 45, .14); padding: 20px; }
+.certificate-intro-grid article > span { align-items: center; background: #dff8ef; border-radius: 50%; color: var(--color-aea-green-dark); display: inline-flex; font-size: .75rem; font-weight: 950; height: 30px; justify-content: center; width: 30px; }
+.certificate-intro-grid h3 { color: #062c32; font-size: .95rem; margin-top: 12px; }
+.certificate-intro-grid p { color: #4a655c; font-size: .75rem; line-height: 1.55; margin-top: 7px; }
+.certificate-spot-explainer { align-items: center; background: linear-gradient(135deg, #fff9e8, #f2fbf7); border: 1px solid #d9c98f; border-radius: var(--radius-card); display: grid; gap: 22px; grid-template-columns: minmax(260px, .75fr) minmax(0, 1fr); margin: 32px 0; padding: 24px 26px; }
+.certificate-spot-explainer span, .certificate-section-heading > span, .certificate-chart-heading > div:first-child > span { color: var(--color-aea-green-dark); display: block; font-size: .68rem; font-weight: 950; letter-spacing: .07em; text-transform: uppercase; }
+.certificate-spot-explainer h2 { color: var(--color-aea-ink); font-size: 1.12rem; margin-top: 5px; }
+.certificate-spot-explainer p { color: #455e55; font-size: .78rem; line-height: 1.6; margin: 0; }
+.certificate-price-summary, .certificate-chart-card, .certificate-glossary { background: #fff; border: 1px solid #d7e5df; border-radius: var(--radius-card); box-shadow: 0 14px 32px rgba(3, 25, 45, .16); margin: 28px 0; padding: 24px; }
+.certificate-section-heading h2 { color: var(--color-aea-ink); font-size: 1.25rem; margin-top: 5px; }
+.certificate-section-heading p { color: var(--color-aea-muted); font-size: .76rem; line-height: 1.55; margin: 6px 0 0; max-width: 820px; }
+.certificate-price-cards { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+.certificate-price-cards button { background: #f7faf9; border: 1px solid #d7e5df; border-radius: 13px; color: var(--color-aea-ink); cursor: pointer; display: grid; min-height: 112px; padding: 13px; text-align: left; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.certificate-price-cards button:hover { border-color: var(--certificate-colour); transform: translateY(-1px); }
+.certificate-price-cards button:focus-visible { outline: 3px solid color-mix(in srgb, var(--certificate-colour) 40%, transparent); outline-offset: 2px; }
+.certificate-price-cards button.selected { background: color-mix(in srgb, var(--certificate-colour) 10%, #fff); border-color: var(--certificate-colour); box-shadow: inset 0 3px var(--certificate-colour), 0 8px 20px rgba(6, 44, 50, .08); }
+.certificate-price-cards button > span { align-items: start; display: flex; font-size: .84rem; font-weight: 950; justify-content: space-between; }
+.certificate-price-cards button > span small { color: var(--color-aea-muted); font-size: .52rem; font-weight: 750; }
+.certificate-price-cards button > strong { font-size: 1.2rem; margin-top: 7px; }
+.certificate-price-cards button > small { color: var(--color-aea-muted); font-size: .57rem; line-height: 1.35; margin-top: 5px; }
+.certificate-price-cards button > small em { color: #5a766d; display: block; font-size: .52rem; font-style: normal; font-weight: 750; margin-top: 4px; }
+.certificate-chart-heading { align-items: flex-start; display: flex; gap: 22px; justify-content: space-between; }
+.certificate-chart-heading h2 { color: var(--color-aea-ink); font-size: 1.3rem; margin-top: 5px; }
+.certificate-chart-heading p { color: var(--color-aea-muted); font-size: .75rem; line-height: 1.55; margin: 6px 0 0; max-width: 730px; }
+.certificate-chart-readout { background: linear-gradient(135deg, #102a43, #123f4a); border: 1px solid rgba(37, 244, 210, .25); border-radius: 13px; box-shadow: 0 10px 24px rgba(3, 25, 45, .14); color: #fff; display: flex; flex: 0 0 190px; flex-direction: column; justify-content: center; min-height: 76px; padding: 13px 15px; }
+.certificate-chart-readout span { color: #72f7df; font-size: .65rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.certificate-chart-readout strong { font-size: 1.05rem; }
+.certificate-chart-readout small { color: #ffe36e; font-size: .58rem; margin-top: 4px; }
+.certificate-chart-toolbar { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin: 18px 0 10px; }
+.certificate-chart-toolbar > div { background: #edf5f2; border-radius: 10px; display: inline-flex; gap: 3px; padding: 4px; }
+.certificate-chart-toolbar button { background: transparent; border: 0; border-radius: 8px; color: #47625a; cursor: pointer; font-size: .66rem; font-weight: 850; min-height: 36px; padding: 7px 11px; }
+.certificate-chart-toolbar button[aria-pressed="true"] { background: #fff; box-shadow: 0 3px 9px rgba(10, 48, 39, .12); color: var(--color-aea-green-dark); }
+.certificate-chart-toolbar > span { align-items: center; color: var(--color-aea-muted); display: inline-flex; font-size: .6rem; font-weight: 750; gap: 7px; }
+.certificate-chart-toolbar > span::before { background: #22c55e; border-radius: 50%; content: ""; height: 7px; width: 7px; }
+.certificate-chart-toolbar > span.stale::before { background: #d49b10; }
+.certificate-chart-shell { background: radial-gradient(circle at 82% 5%, color-mix(in srgb, var(--certificate-colour) 18%, transparent), transparent 25rem), linear-gradient(145deg, #0b1729, #102a43 52%, #0b3540); border: 1px solid rgba(118, 240, 217, .17); border-radius: 17px; box-shadow: inset 0 1px rgba(255, 255, 255, .06), 0 14px 32px rgba(3, 25, 45, .2); padding: 13px 13px 9px; }
+.certificate-chart-shell svg { cursor: crosshair; display: block; touch-action: none; width: 100%; }
+.certificate-chart-shell svg:focus-visible { border-radius: 10px; outline: 3px solid color-mix(in srgb, var(--certificate-colour) 65%, transparent); outline-offset: 2px; }
+.certificate-chart-grid { stroke: rgba(215, 231, 255, .18); stroke-dasharray: 4 5; }
+.certificate-chart-time-grid { stroke: rgba(215, 231, 255, .09); }
+.certificate-chart-label, .certificate-chart-unit { fill: #a9bfd2; font-family: "Manrope", Arial, sans-serif; font-size: 10px; }
+.certificate-chart-unit { fill: #d9e7ef; font-size: 9px; font-weight: 850; }
+.certificate-chart-line { fill: none; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--certificate-colour) 55%, transparent)); stroke: var(--certificate-colour); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.certificate-chart-cursor { stroke: rgba(255, 255, 255, .62); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.certificate-chart-point { fill: var(--certificate-colour); stroke: #0b1729; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.certificate-chart-shell > p { color: #9fb6c9; font-size: .62rem; margin: 3px 8px 2px; text-align: center; }
+.certificate-chart-context { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
+.certificate-chart-context > div { background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 12px; padding: 13px 14px; }
+.certificate-chart-context span { color: var(--color-aea-green-dark); display: block; font-size: .62rem; font-weight: 900; text-transform: uppercase; }
+.certificate-chart-context p, .certificate-source-note { color: var(--color-aea-muted); font-size: .68rem; line-height: 1.55; margin: 5px 0 0; }
+.certificate-source-note { margin-top: 12px; }
+.certificate-source-note a { color: var(--color-aea-green-dark); font-weight: 800; }
+.certificate-tracker-state { background: #f4f8f6; border: 1px solid var(--color-aea-line); border-radius: var(--radius-card); color: var(--color-aea-ink); margin: 28px 0; padding: 28px; text-align: center; }
+.certificate-tracker-state p { color: var(--color-aea-muted); font-size: .72rem; margin: 7px 0 0; }
+.certificate-glossary > div:last-child { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 18px; }
+.certificate-glossary article { background: #f8fbfa; border: 1px solid var(--color-aea-line); border-radius: 14px; padding: 17px; }
+.certificate-glossary article header { align-items: center; display: flex; gap: 11px; }
+.certificate-glossary article header > span { align-items: center; border-radius: 9px; color: #071d27; display: inline-flex; flex: 0 0 50px; font-size: .72rem; font-weight: 950; height: 38px; justify-content: center; }
+.certificate-glossary h3 { color: var(--color-aea-ink); font-size: .85rem; }
+.certificate-glossary header small { color: var(--color-aea-muted); display: block; font-size: .55rem; margin-top: 2px; }
+.certificate-glossary article > p { color: #435d54; font-size: .68rem; line-height: 1.55; margin: 12px 0; }
+.certificate-glossary dl { display: grid; gap: 8px; }
+.certificate-glossary dl > div { border-top: 1px solid #e0eae6; padding-top: 8px; }
+.certificate-glossary dt { color: var(--color-aea-green-dark); font-size: .58rem; font-weight: 900; text-transform: uppercase; }
+.certificate-glossary dd { color: var(--color-aea-muted); font-size: .64rem; line-height: 1.5; margin: 3px 0 0; }
+.certificate-glossary article > a { color: var(--color-aea-green-dark); display: inline-block; font-size: .62rem; font-weight: 850; margin-top: 12px; }
+
+@media (max-width: 900px) {
+  .certificate-intro-grid { grid-template-columns: 1fr; }
+  .certificate-price-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .certificate-spot-explainer, .certificate-chart-context, .certificate-glossary > div:last-child { grid-template-columns: 1fr; }
+  .certificate-chart-heading { flex-direction: column; }
+  .certificate-chart-readout { flex-basis: auto; min-height: 0; width: 100%; }
+  .certificate-chart-toolbar { align-items: flex-start; flex-direction: column; }
+  .certificate-chart-shell { padding: 8px 5px 6px; }
+}
+
+@media (max-width: 480px) {
+  .certificate-price-summary, .certificate-chart-card, .certificate-glossary { padding: 17px 13px; }
+  .certificate-price-cards { grid-template-columns: 1fr; }
+  .certificate-price-cards button { min-height: 100px; }
+  .certificate-chart-toolbar > div { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+}
