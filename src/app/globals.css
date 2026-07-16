@@ -122,6 +122,9 @@
 .crm-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 16px; }
 .crm-form-grid label { display: block; }
 .crm-form-grid label.wide { grid-column: 1 / -1; }
+.crm-customer-lookup { border: 1px solid #d4e3de; border-radius: 10px; display: grid; gap: 9px; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; padding: 10px; }
+.crm-customer-lookup legend { color: #275f4e; font-size: .57rem; font-weight: 850; padding: 0 5px; text-transform: uppercase; }
+.crm-customer-lookup > small { color: var(--color-aea-muted); font-size: .52rem; grid-column: 1 / -1; line-height: 1.4; }
 .crm-form label > span, .crm-job-toolbar label > span, .crm-customer-toolbar label > span, .crm-bulk-actions label > span { color: var(--color-aea-muted); display: block; font-size: .56rem; font-weight: 850; margin-bottom: 5px; text-transform: uppercase; }
 .crm-form input, .crm-form select, .crm-form textarea, .crm-job-toolbar input, .crm-job-toolbar select, .crm-customer-toolbar select, .crm-inline-form input, .crm-inline-form select, .crm-inline-form textarea { background: #fff; border: 1px solid #c8d7d2; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .65rem; min-height: 39px; padding: 8px 10px; resize: vertical; width: 100%; }
 .crm-form label small { color: var(--color-aea-muted); display: block; font-size: .52rem; line-height: 1.4; margin-top: 4px; }
@@ -519,6 +522,8 @@
   .crm-metrics, .crm-today-grid, .crm-report-grid, .crm-finance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crm-form-grid { grid-template-columns: 1fr; }
   .crm-form-grid label.wide { grid-column: auto; }
+  .crm-customer-lookup { grid-template-columns: 1fr; }
+  .crm-customer-lookup > small { grid-column: auto; }
   .crm-job-toolbar { align-items: stretch; flex-direction: column; }
   .crm-job-toolbar label { max-width: none; }
   .crm-job-toolbar label.crm-index-sort { max-width: none; }

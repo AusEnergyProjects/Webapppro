@@ -109,6 +109,32 @@ test("bulk CRM actions are bounded, owner scoped and protect active customer wor
   assert.match(crm, /Only customers with no active jobs can be archived/);
 });
 
+test("installer dashboard, schedule and reports use compact server-owned read models", () => {
+  for (const mode of ["bootstrap", "summary", "schedule", "reports"]) {
+    assert.match(route, new RegExp(`mode === "${mode}"`));
+  }
+  assert.match(route, /async function crmBootstrap/);
+  assert.match(route, /async function crmSummary/);
+  assert.match(route, /async function crmSchedule/);
+  assert.match(route, /async function crmReports/);
+  assert.match(route, /SUM\(CASE WHEN stage NOT IN/);
+  assert.match(route, /GROUP BY COALESCE\(d\.pipeline_stage/);
+  assert.match(crm, /trade-crm\?mode=bootstrap/);
+  assert.match(crm, /trade-crm\?mode=summary/);
+  assert.match(crm, /mode: "schedule"/);
+  assert.match(crm, /trade-crm\?mode=reports/);
+  assert.match(crm, /schedulePagination/);
+});
+
+test("CRM writes no longer return the full customer and job workspace", () => {
+  assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
+  assert.match(crm, /CustomerLookupSelect/);
+  assert.match(crm, /Name, number, phone or suburb/);
+  assert.match(crm, /pageSize: "25"/);
+});
+
 test("customer home records use plain language and progressive disclosure", () => {
   assert.match(customerAssets, /Free home records/);
   assert.match(customerAssets, /Your products, warranties and documents/);

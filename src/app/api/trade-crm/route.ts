@@ -101,117 +101,6 @@ function customerDisplayName(row: Record<string, unknown>) {
   return String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim() || row.customer_number);
 }
 
-async function crmPayload(identity: CrmIdentity) {
-  const db = getD1();
-  const [customerRows, jobRows, taskRows, appointmentRows, noteRows, handoverRows, templateRows] = await Promise.all([
-    db.prepare(`SELECT * FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'
-      ORDER BY updated_at DESC LIMIT 1000`).bind(identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT w.*, d.id detail_id, d.crm_customer_id, d.customer_source, d.pipeline_stage,
-      d.description, d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents,
-      d.quoted_value_cents, d.invoiced_value_cents, d.paid_value_cents, d.quote_status,
-      d.invoice_status, d.payment_due_at
-      FROM trade_work_orders w LEFT JOIN trade_crm_job_details d
-        ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-      ORDER BY CASE w.stage WHEN 'in_progress' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'ready' THEN 2
-        WHEN 'blocked' THEN 3 WHEN 'backlog' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END,
-        w.scheduled_start = '', w.scheduled_start, w.updated_at DESC LIMIT 500`).bind(identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT t.* FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
-      WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-      ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT a.* FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id
-      WHERE a.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-      ORDER BY a.starts_at, a.created_at`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT n.* FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id
-      WHERE n.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-      ORDER BY n.created_at DESC LIMIT 1000`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT p.work_order_id, p.status FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
-      WHERE p.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT id, name, title, service_category, priority, description, task_titles, created_at, updated_at
-      FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'
-      ORDER BY name COLLATE NOCASE LIMIT 60`).bind(identity.uid).all<Record<string, unknown>>(),
-  ]);
-  const customers = customerRows.results.map((row) => ({
-    id: row.id,
-    customerNumber: row.customer_number,
-    customerType: row.customer_type,
-    displayName: customerDisplayName(row),
-    firstName: row.first_name,
-    lastName: row.last_name,
-    businessName: row.business_name,
-    email: row.email,
-    phone: row.phone,
-    addressLine1: row.address_line_1,
-    addressLine2: row.address_line_2,
-    suburb: row.suburb,
-    addressState: row.address_state,
-    postcode: row.postcode,
-    tags: storedList(row.tags),
-    privateNotes: row.private_notes,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
-  const jobs = jobRows.results.map((row) => {
-    const sourceType = String(row.source_type);
-    const customerSource = sourceType === "opportunity" ? "platform_private" : String(row.customer_source || "internal");
-    return {
-      id: row.id,
-      workNumber: row.work_number,
-      title: row.title,
-      serviceCategory: row.service_category,
-      siteArea: row.site_area,
-      stage: row.stage,
-      priority: row.priority,
-      scheduledStart: row.scheduled_start,
-      scheduledEnd: row.scheduled_end,
-      assigneeLabel: row.assignee_label,
-      revision: Number(row.revision || 1),
-      sourceType,
-      customerSource,
-      crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
-      pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"),
-      description: row.description || "",
-      customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
-      nextAction: row.next_action || "",
-      tags: storedList(row.job_tags),
-      estimatedValueCents: Number(row.estimated_value_cents || 0),
-      quotedValueCents: Number(row.quoted_value_cents || 0),
-      invoicedValueCents: Number(row.invoiced_value_cents || 0),
-      paidValueCents: Number(row.paid_value_cents || 0),
-      quoteStatus: row.quote_status || "not_started",
-      invoiceStatus: row.invoice_status || "not_started",
-      paymentDueAt: row.payment_due_at || "",
-      handoverStatus: handoverRows.results.find((item) => item.work_order_id === row.id)?.status || "",
-      tasks: taskRows.results.filter((item) => item.work_order_id === row.id).map((item) => ({
-        id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at,
-        revision: Number(item.revision || 1),
-      })),
-      appointments: appointmentRows.results.filter((item) => item.work_order_id === row.id).map((item) => ({
-        id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at,
-        endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes,
-      })),
-      notes: noteRows.results.filter((item) => item.work_order_id === row.id).map((item) => ({
-        id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status,
-        createdAt: item.created_at, updatedAt: item.updated_at,
-      })),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  });
-  const templates = templateRows.results.map((row) => ({
-    id: row.id,
-    name: row.name,
-    title: row.title,
-    serviceCategory: row.service_category,
-    priority: row.priority,
-    description: row.description,
-    taskTitles: storedList(row.task_titles),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
-  return { customers, jobs, templates, teamAccess: identity.teamAccess };
-}
-
 function pagination(url: URL) {
   const requestedPage = Number(url.searchParams.get("page"));
   const requestedPageSize = Number(url.searchParams.get("pageSize"));
@@ -365,6 +254,125 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   } };
 }
 
+function activityJob(row: Record<string, unknown>) {
+  return {
+    id: String(row.work_order_id || ""),
+    workNumber: String(row.work_number || ""),
+    title: String(row.job_title || ""),
+  };
+}
+
+async function crmBootstrap(identity: CrmIdentity) {
+  const templateRows = await getD1().prepare(`SELECT id, name, title, service_category, priority, description, task_titles, created_at, updated_at
+    FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'
+    ORDER BY name COLLATE NOCASE LIMIT 60`).bind(identity.uid).all<Record<string, unknown>>();
+  return {
+    teamAccess: identity.teamAccess,
+    templates: templateRows.results.map((row: Record<string, unknown>) => ({
+      id: row.id, name: row.name, title: row.title, serviceCategory: row.service_category,
+      priority: row.priority, description: row.description, taskTitles: storedList(row.task_titles, 24),
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    })),
+  };
+}
+
+async function crmSummary(identity: CrmIdentity) {
+  const db = getD1();
+  const today = new Date().toISOString().slice(0, 10);
+  const [jobMetrics, financialMetrics, visitCount, overdueCount, issueCount, appointments, overdueTasks, openIssues] = await Promise.all([
+    db.prepare(`SELECT
+      SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) open_jobs,
+      SUM(CASE WHEN stage = 'blocked' THEN 1 ELSE 0 END) waiting_jobs,
+      SUM(CASE WHEN stage = 'completed' THEN 1 ELSE 0 END) completed_jobs
+      FROM trade_work_orders WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
+      .bind(identity.uid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT
+      COALESCE(SUM(d.quoted_value_cents), 0) quoted_cents,
+      COALESCE(SUM(d.invoiced_value_cents), 0) invoiced_cents,
+      COALESCE(SUM(d.paid_value_cents), 0) paid_cents,
+      COALESCE(SUM(CASE WHEN d.invoiced_value_cents > d.paid_value_cents THEN d.invoiced_value_cents - d.paid_value_cents ELSE 0 END), 0) outstanding_cents
+      FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
+      WHERE d.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`).bind(identity.uid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      .bind(identity.uid, today).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
+      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?`)
+      .bind(identity.uid, today).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
+      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'`)
+      .bind(identity.uid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title
+      FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?
+      ORDER BY a.starts_at, a.created_at LIMIT 6`).bind(identity.uid, today).all<Record<string, unknown>>(),
+    db.prepare(`SELECT t.*, w.id work_order_id, w.work_number, w.title job_title
+      FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
+      WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?
+      ORDER BY t.due_at, t.created_at LIMIT 4`).bind(identity.uid, today).all<Record<string, unknown>>(),
+    db.prepare(`SELECT n.*, w.id work_order_id, w.work_number, w.title job_title
+      FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
+      WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'
+      ORDER BY n.updated_at DESC LIMIT 4`).bind(identity.uid).all<Record<string, unknown>>(),
+  ]);
+  return {
+    metrics: {
+      openJobs: Number(jobMetrics?.open_jobs || 0), nextVisits: Number(visitCount?.total || 0),
+      overdueTasks: Number(overdueCount?.total || 0), openIssues: Number(issueCount?.total || 0),
+      waitingJobs: Number(jobMetrics?.waiting_jobs || 0), completedJobs: Number(jobMetrics?.completed_jobs || 0),
+      quotedCents: Number(financialMetrics?.quoted_cents || 0), invoicedCents: Number(financialMetrics?.invoiced_cents || 0),
+      paidCents: Number(financialMetrics?.paid_cents || 0), outstandingCents: Number(financialMetrics?.outstanding_cents || 0),
+    },
+    upcomingAppointments: appointments.results.map((row: Record<string, unknown>) => ({
+      id: row.id, appointmentType: row.appointment_type, title: row.title, startsAt: row.starts_at,
+      endsAt: row.ends_at, assigneeLabel: row.assignee_label, status: row.status, notes: row.notes, job: activityJob(row),
+    })),
+    overdueTasks: overdueTasks.results.map((row: Record<string, unknown>) => ({
+      id: row.id, title: row.title, dueAt: row.due_at, status: row.status, completedAt: row.completed_at, job: activityJob(row),
+    })),
+    openIssues: openIssues.results.map((row: Record<string, unknown>) => ({
+      id: row.id, noteType: row.note_type, body: row.body, issueStatus: row.issue_status,
+      createdAt: row.created_at, updatedAt: row.updated_at, job: activityJob(row),
+    })),
+  };
+}
+
+async function crmSchedule(identity: CrmIdentity, url: URL) {
+  const db = getD1();
+  const today = new Date().toISOString().slice(0, 10);
+  const { page, pageSize } = pagination(url);
+  const [countRow, rows] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      .bind(identity.uid, today).first<Record<string, unknown>>(),
+    db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title
+      FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?
+      ORDER BY a.starts_at, a.created_at LIMIT ? OFFSET ?`).bind(identity.uid, today, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+  ]);
+  const total = Number(countRow?.total || 0);
+  return {
+    items: rows.results.map((row: Record<string, unknown>) => ({
+      id: row.id, appointmentType: row.appointment_type, title: row.title, startsAt: row.starts_at,
+      endsAt: row.ends_at, assigneeLabel: row.assignee_label, status: row.status, notes: row.notes, job: activityJob(row),
+    })),
+    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+  };
+}
+
+async function crmReports(identity: CrmIdentity) {
+  const db = getD1();
+  const [summary, pipelineRows] = await Promise.all([
+    crmSummary(identity),
+    db.prepare(`SELECT COALESCE(d.pipeline_stage, CASE WHEN w.source_type = 'opportunity' THEN 'qualifying' ELSE 'enquiry' END) stage, COUNT(*) total
+      FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      GROUP BY COALESCE(d.pipeline_stage, CASE WHEN w.source_type = 'opportunity' THEN 'qualifying' ELSE 'enquiry' END)`)
+      .bind(identity.uid).all<Record<string, unknown>>(),
+  ]);
+  return { metrics: summary.metrics, pipeline: Object.fromEntries(pipelineRows.results.map((row: Record<string, unknown>) => [String(row.stage), Number(row.total || 0)])) };
+}
+
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
   const job = await db.prepare(`SELECT id, source_type, assignee_member_id, revision FROM trade_work_orders
     WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
@@ -380,6 +388,10 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const mode = cleanAdminText(url.searchParams.get("mode"), 20);
     const resource = cleanAdminText(url.searchParams.get("resource"), 20);
+    if (mode === "bootstrap") return adminJson({ ok: true, ...(await crmBootstrap(identity)) });
+    if (mode === "summary") return adminJson({ ok: true, ...(await crmSummary(identity)) });
+    if (mode === "schedule") return adminJson({ ok: true, ...(await crmSchedule(identity, url)) });
+    if (mode === "reports") return adminJson({ ok: true, ...(await crmReports(identity)) });
     if (mode === "index" && ["jobs", "customers"].includes(resource)) {
       return adminJson({ ok: true, ...(await crmIndex(identity, url, resource)) });
     }
@@ -388,7 +400,7 @@ export async function GET(request: Request) {
       if (!id) return adminJson({ ok: false, error: "Choose a CRM record." }, 400);
       return adminJson({ ok: true, ...(await crmDetail(identity, resource, id)) });
     }
-    return adminJson({ ok: true, ...(await crmPayload(identity)) });
+    return adminJson({ ok: true, ...(await crmBootstrap(identity)) });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -418,7 +430,7 @@ export async function POST(request: Request) {
           .bind(crypto.randomUUID(), identity.uid, name, cleanAdminText(body.title, 160), serviceCategory, priority,
             cleanAdminText(body.description, 3000), JSON.stringify(cleanTemplateTasks(body.taskTitles)), now, now).run();
       } catch { return adminJson({ ok: false, error: "A template with this name already exists." }, 409); }
-      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+      return adminJson({ ok: true }, 201);
     }
 
     if (action === "create_customer") {
@@ -446,7 +458,7 @@ export async function POST(request: Request) {
           phone, cleanAdminText(body.addressLine1, 140), cleanAdminText(body.addressLine2, 140),
           cleanAdminText(body.suburb, 80), cleanAdminText(body.addressState, 20).toUpperCase(),
           cleanAdminText(body.postcode, 12), JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now).run();
-      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+      return adminJson({ ok: true, id, customerNumber }, 201);
     }
 
     if (action === "create_job") {
@@ -502,7 +514,7 @@ export async function POST(request: Request) {
           .bind(crypto.randomUUID(), workOrderId, identity.uid, taskTitle, index, now, now)),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
-      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+      return adminJson({ ok: true, id: workOrderId, workNumber }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -521,7 +533,7 @@ export async function POST(request: Request) {
         .bind(crypto.randomUUID(), workOrderId, identity.uid, appointmentType,
           cleanAdminText(body.title, 160) || "Job appointment", startsAt, endsAt, assignee,
           cleanAdminText(body.notes, 1000), now, now).run();
-      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+      return adminJson({ ok: true }, 201);
     }
     if (action === "create_note") {
       const noteType = NOTE_TYPES.has(cleanAdminText(body.noteType, 20)) ? cleanAdminText(body.noteType, 20) : "internal";
@@ -531,7 +543,7 @@ export async function POST(request: Request) {
         (id, work_order_id, firebase_uid, note_type, body, issue_status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(crypto.randomUUID(), workOrderId, identity.uid, noteType, noteBody, noteType === "issue" ? "open" : "not_applicable", now, now).run();
-      return adminJson({ ok: true, ...(await crmPayload(identity)) }, 201);
+      return adminJson({ ok: true }, 201);
     }
     return adminJson({ ok: false, error: "Unsupported CRM action." }, 400);
   } catch (error) { return errorResponse(error); }
@@ -625,7 +637,7 @@ export async function PATCH(request: Request) {
           audienceMemberId: String(job.assignee_member_id || "") }));
       }
       await db.batch(statements);
-      return adminJson({ ok: true, ...(await crmPayload(identity)) });
+      return adminJson({ ok: true });
     }
 
     if (action === "archive_template") {
@@ -633,7 +645,7 @@ export async function PATCH(request: Request) {
       const result = await db.prepare(`UPDATE trade_crm_job_templates SET record_status = 'archived', updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(now, templateId, identity.uid).run();
       if (!result.meta.changes) return adminJson({ ok: false, error: "Job template not found." }, 404);
-      return adminJson({ ok: true, ...(await crmPayload(identity)) });
+      return adminJson({ ok: true });
     }
 
     if (action === "update_appointment") {
@@ -646,7 +658,7 @@ export async function PATCH(request: Request) {
       if (!APPOINTMENT_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid appointment status." }, 400);
       await db.prepare("UPDATE trade_crm_appointments SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(status, now, appointmentId, identity.uid).run();
-      return adminJson({ ok: true, ...(await crmPayload(identity)) });
+      return adminJson({ ok: true });
     }
 
     if (action === "resolve_issue") {
@@ -656,7 +668,7 @@ export async function PATCH(request: Request) {
       const result = await db.prepare(`UPDATE trade_crm_job_notes SET issue_status = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND note_type = 'issue'`).bind(issueStatus, now, noteId, identity.uid).run();
       if (!result.meta.changes) throw new Error("NOTE_NOT_FOUND");
-      return adminJson({ ok: true, ...(await crmPayload(identity)) });
+      return adminJson({ ok: true });
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -718,6 +730,6 @@ export async function PATCH(request: Request) {
     statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now,
       audienceMemberId: String(job.assignee_member_id || "") }));
     await db.batch(statements);
-    return adminJson({ ok: true, ...(await crmPayload(identity)) });
+    return adminJson({ ok: true });
   } catch (error) { return errorResponse(error); }
 }

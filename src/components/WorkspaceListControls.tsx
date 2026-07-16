@@ -20,6 +20,7 @@ export function WorkspaceListControls({
   onPageSize,
   onSave,
   onReset,
+  showViewActions = true,
 }: {
   page: number;
   pageCount: number;
@@ -31,6 +32,7 @@ export function WorkspaceListControls({
   onPageSize: (pageSize: number) => void;
   onSave: () => void;
   onReset: () => void;
+  showViewActions?: boolean;
 }) {
   const first = total ? (page - 1) * pageSize + 1 : 0;
   const last = Math.min(total, page * pageSize);
@@ -42,9 +44,9 @@ export function WorkspaceListControls({
       <span>Page {page} of {Math.max(1, pageCount)}</span>
       <button type="button" disabled={page >= pageCount || busy} onClick={() => onPage(page + 1)}>Next</button>
     </div>
-    <div className="workspace-list-view-actions">
+    {showViewActions && <div className="workspace-list-view-actions">
       <button type="button" disabled={busy} onClick={onSave}>{saved ? "Update default view" : "Save as default"}</button>
       {saved && <button type="button" disabled={busy} onClick={onReset}>Reset view</button>}
-    </div>
+    </div>}
   </div>;
 }
