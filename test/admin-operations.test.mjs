@@ -98,6 +98,7 @@ test("owner identity recovery is explicit, recent, password based and audited", 
   assert.doesNotMatch(recoveryRoute, /export async function GET/);
   assert.match(portal, /Reconnect owner access/);
   assert.match(portal, /admin-inline-status/);
+  assert.match(portal, /Owner access is active\. Some workspace data could not be loaded/);
   assert.doesNotMatch(recoveryRoute + portal, /[\u2013\u2014]/);
 });
 

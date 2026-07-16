@@ -404,7 +404,13 @@ export function AdminOperationsPortal() {
       setAudit(result.audit || []);
       setCanBootstrap(false);
       setCanRecoverOwner(false);
-      await loadWorkspace(result.admin);
+      try {
+        await loadWorkspace(result.admin);
+      } catch (workspaceError) {
+        setStatus(
+          `Owner access is active. Some workspace data could not be loaded: ${authMessage(workspaceError)}`,
+        );
+      }
     } catch (error) {
       const result =
         typeof error === "object" && error && "result" in error
