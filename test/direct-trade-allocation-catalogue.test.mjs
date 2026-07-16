@@ -94,6 +94,14 @@ test("wholesalers cannot access leads and installers only see approved published
   assert.match(marketplaceRoute, /offset \+= 80/);
   assert.match(marketplaceRoute, /ids\.slice\(offset, offset \+ 80\)/);
   assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
+  assert.match(marketplaceRoute, /a\.service_states supplier_service_states/);
+  assert.match(marketplaceRoute, /a\.business_name\) LIKE/);
+  assert.match(installerUi, /Product name A to Z/);
+  assert.match(installerUi, /Wholesaler A to Z/);
+  assert.match(installerUi, /Available in state/);
+  assert.match(installerUi, /Maximum lead time/);
+  assert.match(installerUi, /Minimum warranty/);
+  assert.match(installerUi, /Clear all filters/);
   assert.doesNotMatch(
     marketplaceRoute,
     /supplier_email|supplier_phone|address_line_1/,

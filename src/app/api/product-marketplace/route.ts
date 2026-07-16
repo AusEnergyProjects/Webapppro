@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const rows = await db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
     p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
     p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
-    a.business_name supplier_name, a.business_website supplier_website
+    a.business_name supplier_name, a.business_website supplier_website, a.service_states supplier_service_states
     FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
     WHERE p.listing_status = 'published' AND p.review_status = 'approved'
       AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
@@ -34,8 +34,8 @@ export async function GET(request: Request) {
           AND (fg.expires_at = '' OR fg.expires_at > ?)
       ))
       AND (? = '' OR p.category = ?)
-      AND (? = '' OR LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.description) LIKE ?)
-    ORDER BY p.category, p.brand, p.name LIMIT 300`)
+      AND (? = '' OR LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.description || ' ' || a.business_name) LIKE ?)
+    ORDER BY p.name COLLATE NOCASE, p.brand COLLATE NOCASE, p.model_number COLLATE NOCASE LIMIT 300`)
     .bind(new Date().toISOString(), category, category, search, `%${search}%`).all<Record<string, unknown>>();
   const ids = rows.results.map((row) => String(row.id));
   const linkedProducts: Record<string, unknown>[] = [];
@@ -54,6 +54,7 @@ export async function GET(request: Request) {
     orderIncrement: Number(row.order_increment), unitLabel: row.unit_label, stockStatus: row.stock_status,
     leadTimeDays: Number(row.lead_time_days), warrantyYears: Number(row.warranty_years), datasheetUrl: row.datasheet_url,
     supplierUid: row.supplier_uid, supplierName: row.supplier_name, supplierWebsite: row.supplier_website,
+    serviceStates: (() => { try { const value = JSON.parse(String(row.supplier_service_states || "[]")); return Array.isArray(value) ? value.map(String) : []; } catch { return []; } })(),
     dependencies: linkedProducts.filter((link) => link.product_id === row.id).map((link) => ({
       relationship: link.relationship, defaultQty: Number(link.default_qty), note: link.note,
       productId: link.linked_product_id, modelNumber: link.model_number, brand: link.brand, name: link.name,

@@ -267,6 +267,13 @@
       "when": 1784205000000,
       "tag": "0037_synthetic_catalogue_readiness",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1784206800000,
+      "tag": "0038_complete_trade_purchasing_walkthrough",
+      "breakpoints": true
     }
   ]
 }

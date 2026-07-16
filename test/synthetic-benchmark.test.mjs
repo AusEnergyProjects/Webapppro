@@ -8,6 +8,7 @@ const population = read("../drizzle/0033_synthetic_benchmark_population.sql");
 const ecosystemRepair = read("../drizzle/0035_ecosystem_flow_repair.sql");
 const journeyReadiness = read("../drizzle/0036_synthetic_journey_readiness.sql");
 const catalogueReadiness = read("../drizzle/0037_synthetic_catalogue_readiness.sql");
+const purchasingWalkthrough = read("../drizzle/0038_complete_trade_purchasing_walkthrough.sql");
 const generator = read("../scripts/seed-synthetic-population.mjs");
 const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
@@ -59,6 +60,16 @@ test("seed data is notification free and maintains the protected household bound
   assert.match(population, /Synthetic anonymised/);
   assert.match(population, /INSERT OR IGNORE INTO customer_accounts\s+\(firebase_uid, email, display_name, postcode, address_state/);
   assert.match(population, /INSERT OR IGNORE INTO trade_opportunities\s+\(id, title, project_type, postcode, state, service_categories/);
+});
+
+test("the synthetic trade walkthrough covers enquiry, order, partial supply, completion and warranty", () => {
+  assert.match(purchasingWalkthrough, /supplier_product_enquiries/);
+  assert.match(purchasingWalkthrough, /'responded'/);
+  assert.match(purchasingWalkthrough, /'part_fulfilled'/);
+  assert.match(purchasingWalkthrough, /'fulfilled'/);
+  assert.match(purchasingWalkthrough, /trade_warranty_claims/);
+  assert.match(purchasingWalkthrough, /postcode-level planning only/i);
+  assert.doesNotMatch(purchasingWalkthrough, /customer_accounts|customer_projects|street_address|customer_email|customer_phone/);
 });
 
 test("the refined CRM uses progressive navigation and a focused visual board", () => {

@@ -21,6 +21,7 @@ type MarketplaceProduct = {
   supplierUid: string;
   supplierName: string;
   supplierWebsite: string;
+  serviceStates: string[];
   dependencies: {
     relationship: string;
     defaultQty: number;
@@ -98,6 +99,15 @@ export function InstallerProductMarketplace({ user }: { user: User }) {
   const [activeListId, setActiveListId] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [supplier, setSupplier] = useState("");
+  const [brand, setBrand] = useState("");
+  const [serviceState, setServiceState] = useState("");
+  const [stock, setStock] = useState("");
+  const [minimumPrice, setMinimumPrice] = useState("");
+  const [maximumPrice, setMaximumPrice] = useState("");
+  const [maximumLeadTime, setMaximumLeadTime] = useState("");
+  const [minimumWarranty, setMinimumWarranty] = useState("");
+  const [sort, setSort] = useState("name-asc");
   const [status, setStatus] = useState("Loading approved wholesaler products...");
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -146,14 +156,44 @@ export function InstallerProductMarketplace({ user }: { user: User }) {
     void load();
   }, [load]);
 
+  const filterOptions = useMemo(() => ({
+    suppliers: [...new Set(products.map((item) => item.supplierName))].sort((a, b) => a.localeCompare(b)),
+    brands: [...new Set(products.filter((item) => !supplier || item.supplierName === supplier).map((item) => item.brand))].sort((a, b) => a.localeCompare(b)),
+    states: [...new Set(products.flatMap((item) => item.serviceStates))].sort((a, b) => a.localeCompare(b)),
+    stocks: [...new Set(products.map((item) => item.stockStatus))].sort((a, b) => a.localeCompare(b)),
+  }), [products, supplier]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return products.filter(
-      (item) =>
-        (!category || item.category === category) &&
-        (!term || `${item.modelNumber} ${item.brand} ${item.name} ${item.description} ${item.supplierName}`.toLowerCase().includes(term)),
-    );
-  }, [products, search, category]);
+    const minCents = minimumPrice === "" ? 0 : Number(minimumPrice) * 100;
+    const maxCents = maximumPrice === "" ? Number.POSITIVE_INFINITY : Number(maximumPrice) * 100;
+    const maxDays = maximumLeadTime === "" ? Number.POSITIVE_INFINITY : Number(maximumLeadTime);
+    const minWarranty = minimumWarranty === "" ? 0 : Number(minimumWarranty);
+    return products.filter((item) =>
+      (!category || item.category === category) &&
+      (!supplier || item.supplierName === supplier) &&
+      (!brand || item.brand === brand) &&
+      (!serviceState || item.serviceStates.includes(serviceState)) &&
+      (!stock || item.stockStatus === stock) &&
+      item.unitPriceCentsExGst >= minCents && item.unitPriceCentsExGst <= maxCents &&
+      item.leadTimeDays <= maxDays && item.warrantyYears >= minWarranty &&
+      (!term || `${item.modelNumber} ${item.brand} ${item.name} ${item.description} ${item.supplierName} ${item.category}`.toLowerCase().includes(term)),
+    ).sort((left, right) => {
+      if (sort === "name-desc") return right.name.localeCompare(left.name);
+      if (sort === "brand-asc") return left.brand.localeCompare(right.brand) || left.name.localeCompare(right.name);
+      if (sort === "supplier-asc") return left.supplierName.localeCompare(right.supplierName) || left.name.localeCompare(right.name);
+      if (sort === "price-asc") return left.unitPriceCentsExGst - right.unitPriceCentsExGst;
+      if (sort === "price-desc") return right.unitPriceCentsExGst - left.unitPriceCentsExGst;
+      if (sort === "lead-asc") return left.leadTimeDays - right.leadTimeDays || left.name.localeCompare(right.name);
+      if (sort === "model-asc") return left.modelNumber.localeCompare(right.modelNumber);
+      return left.name.localeCompare(right.name) || left.brand.localeCompare(right.brand);
+    });
+  }, [products, search, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty, sort]);
+  const activeFilterCount = [category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty].filter(Boolean).length;
+  function clearFilters() {
+    setSearch(""); setCategory(""); setSupplier(""); setBrand(""); setServiceState(""); setStock("");
+    setMinimumPrice(""); setMaximumPrice(""); setMaximumLeadTime(""); setMinimumWarranty(""); setSort("name-asc");
+  }
   const activeList = lists.find((list) => list.id === activeListId) || null;
   const listSubtotal = activeList?.items.reduce(
     (total, item) => total + item.quantity * item.unitPriceCentsExGst,
@@ -253,12 +293,34 @@ export function InstallerProductMarketplace({ user }: { user: User }) {
       </div>
       <div className="marketplace-workspace-layout">
         <div className="marketplace-catalogue-column">
-          <div className="marketplace-filterbar">
-            <input type="search" placeholder="Search model, brand, product or wholesaler" value={search} onChange={(event) => setSearch(event.target.value)} />
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">All categories</option>
-              {Object.entries(categoryLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-            </select>
+          <div className="marketplace-finder" aria-label="Advanced product finder">
+            <div className="marketplace-filterbar">
+              <label className="marketplace-search"><span>Search products</span><input type="search" placeholder="Product, model code, brand or wholesaler" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+              <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}>
+                <option value="">All categories</option>
+                {Object.entries(categoryLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+              </select></label>
+              <label><span>Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)}>
+                <option value="name-asc">Product name A to Z</option><option value="name-desc">Product name Z to A</option>
+                <option value="brand-asc">Brand A to Z</option><option value="supplier-asc">Wholesaler A to Z</option>
+                <option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option>
+                <option value="lead-asc">Fastest availability</option><option value="model-asc">Model code A to Z</option>
+              </select></label>
+            </div>
+            <details className="marketplace-advanced-filters">
+              <summary>Advanced filters{activeFilterCount ? ` (${activeFilterCount} active)` : ""}</summary>
+              <div>
+                <label><span>Wholesaler</span><select value={supplier} onChange={(event) => { setSupplier(event.target.value); setBrand(""); }}><option value="">All wholesalers</option>{filterOptions.suppliers.map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label><span>Brand</span><select value={brand} onChange={(event) => setBrand(event.target.value)}><option value="">All brands</option>{filterOptions.brands.map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label><span>Available in state</span><select value={serviceState} onChange={(event) => setServiceState(event.target.value)}><option value="">All service states</option>{filterOptions.states.map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label><span>Stock availability</span><select value={stock} onChange={(event) => setStock(event.target.value)}><option value="">Any stock status</option>{filterOptions.stocks.map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></label>
+                <label><span>Minimum price, ex GST</span><input type="number" min="0" step="1" inputMode="decimal" value={minimumPrice} onChange={(event) => setMinimumPrice(event.target.value)} placeholder="$0" /></label>
+                <label><span>Maximum price, ex GST</span><input type="number" min="0" step="1" inputMode="decimal" value={maximumPrice} onChange={(event) => setMaximumPrice(event.target.value)} placeholder="No maximum" /></label>
+                <label><span>Maximum lead time</span><select value={maximumLeadTime} onChange={(event) => setMaximumLeadTime(event.target.value)}><option value="">Any lead time</option><option value="0">Available now</option><option value="3">3 days or less</option><option value="7">7 days or less</option><option value="14">14 days or less</option><option value="30">30 days or less</option></select></label>
+                <label><span>Minimum warranty</span><select value={minimumWarranty} onChange={(event) => setMinimumWarranty(event.target.value)}><option value="">Any warranty</option><option value="5">5 years or more</option><option value="10">10 years or more</option><option value="20">20 years or more</option></select></label>
+              </div>
+            </details>
+            <div className="marketplace-result-summary"><span><strong>{filtered.length}</strong> of {products.length} approved products</span>{(activeFilterCount > 0 || search) && <button type="button" onClick={clearFilters}>Clear all filters</button>}</div>
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {filtered.length ? (
@@ -281,6 +343,7 @@ export function InstallerProductMarketplace({ user }: { user: User }) {
                       <li>Minimum {product.minOrderQty} {product.unitLabel}; order in {product.orderIncrement}s</li>
                       <li>{readable(product.stockStatus)}{product.leadTimeDays ? ` · ${product.leadTimeDays} day lead time` : ""}</li>
                       <li>{product.warrantyYears ? `${product.warrantyYears} year stated product warranty` : "Warranty term not stated"}</li>
+                      <li>{product.serviceStates.length ? `Available in ${product.serviceStates.join(", ")}` : "Confirm service state with wholesaler"}</li>
                     </ul>
                     {product.dependencies.length > 0 && (
                       <details>
