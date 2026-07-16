@@ -15,7 +15,7 @@ const dashboardPage = read("../src/app/direct-trade/dashboard/page.tsx");
 test("the homepage connects installers and suppliers to a participation route", () => {
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
-  assert.match(form, /Create your free trade account/);
+  assert.match(form, /Create your free TLink account/);
   assert.match(form, /No per-lead fees/i);
   assert.doesNotMatch(form, /free lead|included lead|paid lead/i);
   assert.match(page, /DirectTradePartnerForm/);

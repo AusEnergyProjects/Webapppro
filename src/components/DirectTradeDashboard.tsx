@@ -3,13 +3,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { SiteFooter, SiteHeader } from "./ComparatorChrome";
+import { SiteFooter } from "./ComparatorChrome";
 import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
 import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
+import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import {
   directTradeCheckoutUrl,
   directTradePortalLink,
@@ -532,10 +533,10 @@ export function DirectTradeDashboard() {
 
   return (
     <main className="wrap direct-trade-dashboard-page">
-      <SiteHeader active="direct-trade-dashboard" />
+      <TLinkHeader active="dashboard" />
       {!authReady || loading ? (
         <section className="dashboard-state-card" aria-live="polite">
-          <p>Preparing your Direct Trade dashboard...</p>
+          <p>Preparing your TLink dashboard...</p>
         </section>
       ) : !user ? (
         <section className="dashboard-state-card">
@@ -574,19 +575,13 @@ export function DirectTradeDashboard() {
         <div className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}>
           <header className="dashboard-hero">
             <div className="trade-portal-brand">
-              <span className="trade-portal-mark" aria-hidden="true">AEA</span>
-              <div>
-                <strong>{profile.businessName}</strong>
-                <small>
-                  {isSupplier ? "Wholesaler control centre" : "Installer control centre"}
-                </small>
-              </div>
+              <TLinkBrand context={isSupplier ? "Wholesaler control centre" : "Installer control centre"} />
             </div>
             <div className="dashboard-account-actions">
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
-                <small>Signed in as</small>
-                <strong>{user.email}</strong>
+                <small>Business account</small>
+                <strong title={user.email || ""}>{profile.businessName}</strong>
               </div>
               <a href="/direct-trade/partners">Profile</a>
               <button type="button" onClick={() => void signOut(firebaseAuth)}>
@@ -637,7 +632,7 @@ export function DirectTradeDashboard() {
             <>
               <nav
                 className="dashboard-workspace-nav"
-                aria-label="Direct Trade account"
+                aria-label="TLink installer account"
               >
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">01</b><span>Work</span><small>Today, jobs and customers</small></button>
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">02</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>

@@ -20,7 +20,7 @@ test("Direct Trade standards are connected to every marketplace entry journey", 
 });
 
 test("standards separate membership from licensing and scheme approval", () => {
-  assert.match(standards, /Direct Trade membership does not replace it/);
+  assert.match(standards, /TLink membership does not replace it/);
   assert.match(
     standards,
     /legal, licensing, safety, scheme and\s+consumer obligation/,

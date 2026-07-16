@@ -22,6 +22,10 @@ export const metadata: Metadata = {
     images: ["/aea-home-energy-plan-og.png"],
   },
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/tlink-icon-192.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/tlink-icon-192.png", type: "image/png", sizes: "192x192" }],
+  },
 };
 
 export const viewport: Viewport = {

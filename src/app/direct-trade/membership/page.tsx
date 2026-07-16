@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { SiteFooter } from "@/components/ComparatorChrome";
+import { TLinkHeader } from "@/components/TLinkChrome";
 
 export const metadata: Metadata = {
   title:
-    "Direct Trade membership and referrals | Australian Energy Assessments",
+    "TLink membership and referrals",
   description:
     "Compare live installer and wholesaler membership pricing, cancellation terms, matching rules and the two-sided referral reward.",
 };
@@ -79,10 +80,10 @@ const accessGroups = [
 export default function DirectTradeMembershipPage() {
   return (
     <main className="wrap direct-trade-membership-page">
-      <SiteHeader active="direct-trade-membership" />
+      <TLinkHeader active="membership" />
       <header className="membership-hero">
         <div>
-          <span>Direct Trade membership</span>
+          <span>TLink membership</span>
           <h1>One subscription, no per-lead fees</h1>
           <p>
             Membership supports verification, role-specific dashboards and

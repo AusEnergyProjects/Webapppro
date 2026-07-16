@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { SiteFooter, SiteHeader } from "./ComparatorChrome";
+import { SiteFooter } from "./ComparatorChrome";
+import { TLinkHeader } from "./TLinkChrome";
 
 type VerificationProfile = {
   businessName: string;
@@ -174,10 +175,10 @@ export function DirectTradeVerificationCentre() {
   }
 
   return <main className="wrap direct-trade-verification-page">
-    <SiteHeader active="direct-trade-verification" />
+    <TLinkHeader active="verification" />
     {!authReady || loading ? <section className="dashboard-state-card" aria-live="polite"><p>Preparing the verification centre...</p></section> : !user ? <section className="dashboard-state-card"><span>Account required</span><h1>Sign in to manage verification</h1><p>Verification evidence belongs to the signed-in business account.</p><a className="btn" href="/direct-trade/partners">Sign in or create an account</a></section> : error && !profile ? <section className="dashboard-state-card"><span>Verification unavailable</span><h1>We could not load this account</h1><p>{error}</p><a className="btn" href="/direct-trade/dashboard">Return to dashboard</a></section> : !profile ? <section className="dashboard-state-card"><span>Profile required</span><h1>Complete the business profile first</h1><p>The private business address and role determine the correct verification pathway.</p><a className="btn" href="/direct-trade/partners">Complete business profile</a></section> : <>
       <header className="verification-hero"><div><span>Verification centre</span><h1>Prepare {profile.businessName} for review</h1><p>Store role-specific evidence in a private workspace for future Australian Energy Assessments review. Uploading a document does not grant approval or replace an issuing authority.</p></div><aside><span>Current status</span><strong>{statusLabel(profile.verificationStatus)}</strong><small>{documents.length} {documents.length === 1 ? "document" : "documents"} stored privately. Review submission will open in a later release.</small></aside></header>
-      <nav className="dashboard-subnav" aria-label="Direct Trade account"><a href="/direct-trade/dashboard">Overview</a><a aria-current="page" href="/direct-trade/dashboard/verification">Verification centre</a><a href="/direct-trade/membership">Membership and referrals</a></nav>
+      <nav className="dashboard-subnav" aria-label="TLink account"><a href="/direct-trade/dashboard">Overview</a><a aria-current="page" href="/direct-trade/dashboard/verification">Verification centre</a><a href="/direct-trade/membership">Membership and referrals</a></nav>
       <section className="verification-summary" aria-label="Business verification summary"><article><span>Business</span><strong>{profile.businessName}</strong><small>{profile.suburb}, {profile.addressState} {profile.postcode}</small></article><article><span>Role pathway</span><strong>{profile.partnerType === "supplier" ? "Supplier or wholesaler" : "Licensed installer"}</strong><small>Evidence categories change with role and work category.</small></article><article><span>Privacy</span><strong>Owner-only access</strong><small>No public file links. Downloads require this signed-in account.</small></article></section>
       <section className="dashboard-panel verification-checklist" aria-labelledby="verification-checklist-title"><div className="dashboard-panel-heading"><span>Evidence pathway</span><h2 id="verification-checklist-title">What the review will confirm</h2><p>Add only evidence relevant to the business role and proposed work.</p></div><div>{checks.map((check, index) => { const count = documents.filter((document) => document.category === check.category).length; return <article key={check.category}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{check.title}</h3><p>{check.text}</p></div><strong>{count ? `${count} uploaded` : "Not added"}</strong></article>; })}</div></section>
       <section className="verification-workspace" aria-labelledby="verification-upload-title">

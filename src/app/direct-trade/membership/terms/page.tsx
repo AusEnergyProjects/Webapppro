@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { SiteFooter } from "@/components/ComparatorChrome";
+import { TLinkHeader } from "@/components/TLinkChrome";
 import { directTradePortalLink } from "@/lib/direct-trade-billing";
 
 export const metadata: Metadata = {
-  title: "Direct Trade membership terms | Australian Energy Assessments",
+  title: "TLink membership terms",
   description:
     "Review Direct Trade subscription, cancellation, renewal and marketplace terms.",
 };
@@ -38,11 +39,11 @@ const sections = [
 export default function DirectTradeMembershipTermsPage() {
   return (
     <main className="wrap direct-trade-membership-page">
-      <SiteHeader active="direct-trade-membership" />
+      <TLinkHeader active="membership" />
       <header className="membership-hero">
         <div>
           <span>Effective 14 July 2026</span>
-          <h1>Direct Trade membership terms</h1>
+          <h1>TLink membership terms</h1>
           <p>
             These terms explain the billing commitment and marketplace boundary
             for installer and wholesaler memberships. Nothing here limits rights
@@ -84,7 +85,7 @@ export default function DirectTradeMembershipTermsPage() {
           <h2>Subscribe from the signed-in business dashboard</h2>
           <p>
             Checkout uses the signed-in account reference and email so Stripe
-            events can update the correct Direct Trade profile. Do not create a
+            events can update the correct TLink profile. Do not create a
             second subscription for the same business if a payment is still
             processing; use the billing portal or account support pathway first.
           </p>

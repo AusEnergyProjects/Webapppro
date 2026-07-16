@@ -22,6 +22,9 @@ const schema = read("../db/schema.ts");
 const hosting = read("../.openai/hosting.json");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const partners = read("../src/components/DirectTradePartnerForm.tsx");
+const tlinkChrome = read("../src/components/TLinkChrome.tsx");
+const manifest = read("../src/app/manifest.ts");
+const appLayout = read("../src/app/layout.tsx");
 
 test("dashboard availability and email preferences are durable and owner protected", () => {
   assert.match(schema, /availabilityStatus: text\("availability_status"\)/);
@@ -119,6 +122,7 @@ test("installer leads can be narrowed without exposing household details", () =>
 
 test("installer and wholesaler dashboards share the clean operations shell", () => {
   assert.match(dashboard, /trade-portal-shell/);
+  assert.match(dashboard, /TLinkBrand/);
   assert.match(dashboard, /Wholesaler control centre/);
   assert.match(dashboard, /Installer control centre/);
   assert.match(dashboard, /dashboard-rail-note/);
@@ -126,6 +130,23 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 780px\)/);
   assert.match(styles, /dashboard-workspace-nav button\.active/);
+});
+
+test("TLink has a consistent trade platform identity and installable app icon", () => {
+  assert.match(tlinkChrome, />TLink</);
+  assert.match(tlinkChrome, /tlink-icon-192\.png/);
+  assert.match(tlinkChrome, /TLink trade ecosystem dashboard/);
+  assert.match(manifest, /tlink-icon-192\.png/);
+  assert.match(manifest, /tlink-icon-512\.png/);
+  assert.match(appLayout, /tlink-icon-192\.png/);
+  assert.ok(fs.statSync(new URL("../public/tlink-icon-192.png", import.meta.url)).size > 10_000);
+  assert.ok(fs.statSync(new URL("../public/tlink-icon-512.png", import.meta.url)).size > 50_000);
+});
+
+test("the mobile More menu opens above the CRM view instead of being clipped", () => {
+  assert.match(styles, /\.trade-portal-shell \.crm-nav \{ overflow: visible;/);
+  assert.match(styles, /\.trade-portal-shell \.crm-more-nav\[open\] \{ z-index: 25;/);
+  assert.match(styles, /max-width: calc\(100vw - 30px\)/);
 });
 
 test("wholesaler work is progressive instead of one crowded catalogue page", () => {

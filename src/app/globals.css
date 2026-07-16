@@ -3763,16 +3763,30 @@ body input[type="checkbox"]:disabled {
   .team-job-focus > article > header label { width: 100%; }
 }
 
+/* TLink trade platform identity */
+.tlink-site-header { align-items: center; background: #001724; border-bottom: 1px solid #173b45; border-radius: 0 0 16px 16px; display: flex; gap: 22px; margin-bottom: 18px; min-height: 72px; padding: 10px 20px; }
+.tlink-home-link { color: inherit; margin-right: auto; text-decoration: none; }
+.tlink-brand { align-items: center; display: flex; gap: 11px; }
+.tlink-brand-mark { border-radius: 12px; display: block; height: 48px; object-fit: cover; width: 48px; }
+.tlink-brand > span > strong, .tlink-brand > span > small { display: block; }
+.tlink-brand > span > strong { color: #fff; font-size: .92rem; letter-spacing: -.02em; }
+.tlink-brand > span > small { color: #83aaa8; font-size: .57rem; margin-top: 2px; }
+.tlink-site-header nav { align-items: center; display: flex; gap: 4px; }
+.tlink-site-header nav a, .tlink-aea-link { border-radius: 8px; color: #b8cfce; font-size: .61rem; font-weight: 800; padding: 9px 10px; text-decoration: none; }
+.tlink-site-header nav a:hover, .tlink-site-header nav a.active { background: #0d353c; color: #fff; }
+.tlink-aea-link { border: 1px solid #2b4c55; color: #d9e7e5; }
+
 /* Admin-inspired trade CRM shell */
 .direct-trade-dashboard-page:has(.trade-portal-shell) { background: #f3f8f6; max-width: none; padding: 0; width: 100%; }
 .direct-trade-dashboard-page:has(.trade-portal-shell) > .site-header,
+.direct-trade-dashboard-page:has(.trade-portal-shell) > .tlink-site-header,
 .direct-trade-dashboard-page:has(.trade-portal-shell) > .site-content-anchor { display: none; }
 .trade-portal-shell { --trade-ink: #0c3738; --trade-dark: #001724; --trade-green: #18b889; --trade-line: #d5e4df; background: #f3f8f6; display: grid; grid-template-columns: 244px minmax(0, 1fr); grid-template-rows: 72px auto; min-height: 100vh; }
 .trade-portal-shell > .dashboard-hero { background: var(--trade-dark); border: 0; border-bottom: 1px solid #143b46; border-radius: 0; box-shadow: none; color: #fff; grid-column: 1 / -1; grid-row: 1; margin: 0; min-height: 72px; padding: 11px 28px; }
 .trade-portal-brand { align-items: center; display: flex; gap: 12px; }
-.trade-portal-mark { align-items: center; background: linear-gradient(145deg, #0cae7c, #23c9aa); border-radius: 12px; color: #fff !important; display: flex !important; font-size: .76rem !important; font-weight: 950 !important; height: 45px; justify-content: center; letter-spacing: 0 !important; width: 45px; }
-.trade-portal-brand strong { color: #fff; display: block; font-size: .83rem; }
-.trade-portal-brand small { color: #84aaa8; display: block; font-size: .62rem; margin-top: 3px; }
+.trade-portal-brand .tlink-brand-mark { height: 46px; width: 46px; }
+.trade-portal-brand .tlink-brand > span > strong { font-size: .9rem; }
+.trade-portal-brand .tlink-brand > span > small { font-size: .59rem; }
 .trade-portal-shell .dashboard-account-actions { align-items: center; display: flex; flex-direction: row; gap: 13px; text-align: left; }
 .trade-portal-shell .dashboard-account-actions > div { display: grid; gap: 2px; max-width: 270px; }
 .trade-portal-shell .dashboard-account-actions small { color: #79a19f; font-size: .52rem; letter-spacing: .04em; text-transform: uppercase; }
@@ -3919,7 +3933,9 @@ body input[type="checkbox"]:disabled {
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 14px; margin-right: 14px; }
   .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
   .trade-portal-shell .crm-hero h2 { font-size: 1.3rem; }
-  .trade-portal-shell .crm-nav { overflow-x: auto; padding-left: 10px; padding-right: 10px; }
+  .trade-portal-shell .crm-nav { overflow: visible; padding-left: 10px; padding-right: 10px; position: relative; z-index: 12; }
+  .trade-portal-shell .crm-more-nav[open] { z-index: 25; }
+  .trade-portal-shell .crm-more-nav > div { max-width: calc(100vw - 30px); min-width: 210px; right: 0; top: calc(100% + 5px); }
   .trade-portal-shell .crm-view { padding: 17px 14px 20px; }
   .trade-portal-shell .crm-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trade-portal-shell .crm-jobs-layout,
@@ -3935,8 +3951,14 @@ body input[type="checkbox"]:disabled {
 }
 
 @media (max-width: 520px) {
-  .trade-portal-brand strong { font-size: .72rem; }
-  .trade-portal-brand small { font-size: .55rem; }
+  .tlink-site-header { align-items: stretch; flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
+  .tlink-home-link { flex: 1 1 auto; }
+  .tlink-brand-mark { border-radius: 10px; height: 42px; width: 42px; }
+  .tlink-site-header nav { flex: 1 0 100%; order: 3; overflow-x: auto; }
+  .tlink-site-header nav a { flex: 0 0 auto; }
+  .tlink-aea-link { align-self: center; padding: 7px 8px; }
+  .trade-portal-brand .tlink-brand > span > strong { font-size: .72rem; }
+  .trade-portal-brand .tlink-brand > span > small { font-size: .55rem; }
   .trade-portal-shell .dashboard-account-actions strong { max-width: 185px; }
   .trade-portal-shell .dashboard-account-actions a,
   .trade-portal-shell .dashboard-account-actions button { min-height: 32px; padding: 7px 9px; }

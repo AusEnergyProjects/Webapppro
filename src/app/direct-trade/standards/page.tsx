@@ -1,9 +1,10 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from "next";
-import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
+import { SiteFooter } from "@/components/ComparatorChrome";
+import { TLinkHeader } from "@/components/TLinkChrome";
 
 export const metadata: Metadata = {
-  title: "Direct Trade Standards | Australian Energy Assessments",
+  title: "TLink marketplace standards",
   description:
     "How Direct Trade Services reviews participants, matches projects and expects household upgrade quotes to be presented.",
 };
@@ -17,7 +18,7 @@ const standards = [
   {
     number: "02",
     title: "Scheme approval is checked separately",
-    text: "Where a certificate, rebate or program requires a specific installer approval, that approval must be current and relevant to the proposed activity. Direct Trade membership does not replace it.",
+    text: "Where a certificate, rebate or program requires a specific installer approval, that approval must be current and relevant to the proposed activity. TLink membership does not replace it.",
   },
   {
     number: "03",
@@ -54,9 +55,9 @@ const standards = [
 export default function DirectTradeStandardsPage() {
   return (
     <main className="wrap direct-trade-standards-page">
-      <SiteHeader active="direct-trade-standards" />
+      <TLinkHeader active="standards" />
       <header className="guide-hero">
-        <span>Direct Trade Services</span>
+        <span>TLink marketplace standards</span>
         <h1>The rules behind a trustworthy connection</h1>
         <p>
           These standards explain what Australian Energy Assessments checks, how
