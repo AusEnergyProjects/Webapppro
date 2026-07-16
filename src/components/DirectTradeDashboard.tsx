@@ -1425,7 +1425,7 @@ export function DirectTradeDashboard() {
         </div>
       )}
       <SiteFooter>
-        Direct Trade membership does not replace trade licensing, government
+        TLink membership does not replace trade licensing, government
         accreditation, scheme approval, insurance, product compliance or
         customer obligations.
       </SiteFooter>

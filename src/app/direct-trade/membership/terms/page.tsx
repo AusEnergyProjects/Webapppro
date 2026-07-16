@@ -6,7 +6,7 @@ import { directTradePortalLink } from "@/lib/direct-trade-billing";
 export const metadata: Metadata = {
   title: "TLink membership terms",
   description:
-    "Review Direct Trade subscription, cancellation, renewal and marketplace terms.",
+    "Review TLink subscription, cancellation, renewal and marketplace terms.",
 };
 
 const sections = [

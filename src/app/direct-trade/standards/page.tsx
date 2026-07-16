@@ -6,7 +6,7 @@ import { TLinkHeader } from "@/components/TLinkChrome";
 export const metadata: Metadata = {
   title: "TLink marketplace standards",
   description:
-    "How Direct Trade Services reviews participants, matches projects and expects household upgrade quotes to be presented.",
+    "How TLink reviews participants, matches projects and expects household upgrade quotes to be presented.",
 };
 
 const standards = [
@@ -77,7 +77,7 @@ export default function DirectTradeStandardsPage() {
             The work should determine the trade, not the biggest sales margin
           </h2>
           <p>
-            Direct Trade Services is designed to shorten the path between a
+            TLink is designed to shorten the path between a
             household, qualified installers and reputable product suppliers.
             Participation is reviewed, matching is based on project fit and the
             household receives structured scope and price options inside its
