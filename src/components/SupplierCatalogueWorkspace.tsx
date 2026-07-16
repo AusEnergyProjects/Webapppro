@@ -874,6 +874,9 @@ export function SupplierCatalogueWorkspace({
             <p className="dashboard-settings-status">Loading catalogue...</p>
           ) : filtered.length ? (
             <div className="supplier-product-list">
+              <div className="supplier-product-columns" aria-hidden="true">
+                <span>Product and status</span><span>Description</span><span>Price and ordering</span><span>Availability</span><span>Linked kit</span><span>Action</span>
+              </div>
               {filtered.map((product) => (
                 <article key={product.id}>
                   <header>
@@ -896,7 +899,7 @@ export function SupplierCatalogueWorkspace({
                       </strong>
                     </div>
                   </header>
-                  <p>{product.description}</p>
+                  <p><strong>{readable(product.category)}</strong><span>{product.description}</span></p>
                   <div className="supplier-product-facts">
                     <span>
                       <strong>

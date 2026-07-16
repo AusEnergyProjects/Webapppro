@@ -343,6 +343,9 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {filtered.length ? (
             <div className="marketplace-product-grid">
+              <div className="marketplace-product-columns" aria-hidden="true">
+                <span>Product and wholesaler</span><span>Category and description</span><span>Trade price</span><span>Supply details</span><span>Linked kit</span><span>Action</span>
+              </div>
               {filtered.map((product) => {
                 const selected = activeList?.items.some((item) => item.productId === product.id);
                 return (
@@ -352,7 +355,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
                       <strong>{product.brand} · {product.modelNumber}</strong>
                       <h3>{product.name}</h3>
                     </header>
-                    <p>{product.description}</p>
+                    <p><strong>{categoryLabels[product.category] || readable(product.category)}</strong><span>{product.description}</span></p>
                     <div className="marketplace-price">
                       <strong>{money.format(product.unitPriceCentsExGst / 100)}</strong>
                       <span>ex GST · {money.format((product.unitPriceCentsExGst * 1.1) / 100)} inc GST</span>

@@ -20,7 +20,6 @@ type SearchRecord = {
   detail: string;
   meta: string;
   query: string;
-  searchText: string;
 };
 
 type CommandFeatures = {
@@ -45,16 +44,6 @@ const kindLabels: Record<SearchKind | "all", string> = {
   team: "Team",
 };
 
-const readable = (value: unknown) => String(value || "")
-  .replaceAll("_", " ")
-  .replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const money = new Intl.NumberFormat("en-AU", {
-  style: "currency",
-  currency: "AUD",
-  maximumFractionDigits: 0,
-});
-
 export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: CommandProps) {
   const { businessOperations, marketplace, teamAccess } = features;
   const [open, setOpen] = useState(false);
@@ -62,11 +51,10 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   const [category, setCategory] = useState<SearchKind | "all">("all");
   const [records, setRecords] = useState<SearchRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const loadingRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {
@@ -96,64 +84,53 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   }, [open]);
 
   useEffect(() => {
-    if (!open || loaded || loadingRef.current) return;
+    const term = query.trim();
+    requestRef.current?.abort();
+    if (!open || term.length < 2) return;
     let active = true;
-    loadingRef.current = true;
-    const frame = window.requestAnimationFrame(() => {
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const debounce = window.setTimeout(() => {
       setLoading(true);
-      setStatus("Opening your business records...");
-      void loadRecords(user, partnerType, { businessOperations, marketplace, teamAccess }, (batch) => {
-        if (!active) return;
-        setRecords((current) => {
-          const known = new Set(current.map((record) => `${record.kind}:${record.id}`));
-          return [...current, ...batch.filter((record) => !known.has(`${record.kind}:${record.id}`))];
-        });
-      })
-        .then((nextRecords) => {
-          if (!active) return;
-          setRecords(nextRecords);
-          setLoaded(true);
-          setStatus(nextRecords.length ? "" : "No searchable records are available yet.");
-        })
-        .catch((error) => {
-          if (active) {
-            setLoaded(true);
-            setStatus(error instanceof Error ? error.message : "TLink search could not be loaded.");
-          }
-        })
-        .finally(() => {
-          loadingRef.current = false;
-          if (active) setLoading(false);
-        });
-    });
+      setStatus("");
+      const timeout = window.setTimeout(() => controller.abort(), 6000);
+      void user.getIdToken().then((token) => fetch(`/api/tlink-search?q=${encodeURIComponent(term)}&kind=${category}`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
+      })).then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "TLink search could not be completed.");
+        if (active) setRecords(Array.isArray(result.records) ? result.records : []);
+      }).catch((error) => {
+        if (!active || controller.signal.aborted) return;
+        setRecords([]);
+        setStatus(error instanceof Error ? error.message : "TLink search could not be completed.");
+      }).finally(() => {
+        window.clearTimeout(timeout);
+        if (active) setLoading(false);
+      });
+    }, 220);
     return () => {
       active = false;
-      window.cancelAnimationFrame(frame);
+      window.clearTimeout(debounce);
+      controller.abort();
     };
-  }, [businessOperations, loaded, marketplace, open, partnerType, teamAccess, user]);
+  }, [category, open, query, user]);
 
-  const results = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (term.length < 2) return [];
-    return records
-      .filter((record) => category === "all" || record.kind === category)
-      .filter((record) => record.searchText.includes(term))
-      .sort((left, right) => {
-        const leftExact = left.searchText.startsWith(term) ? 0 : 1;
-        const rightExact = right.searchText.startsWith(term) ? 0 : 1;
-        return leftExact - rightExact || left.title.localeCompare(right.title);
-      })
-      .slice(0, 24);
-  }, [category, query, records]);
-
+  const results = records;
   const availableKinds = useMemo(() => (["job", "customer", "product", "order", "team"] as SearchKind[])
-    .filter((kind) => records.some((record) => record.kind === kind)), [records]);
+    .filter((kind) => {
+      if (partnerType === "supplier") return kind === "product" || (kind === "order" && businessOperations);
+      if (kind === "product") return marketplace;
+      if (kind === "team") return teamAccess;
+      return businessOperations;
+    }), [businessOperations, marketplace, partnerType, teamAccess]);
 
   function close() {
     setOpen(false);
     setQuery("");
     setCategory("all");
     setActiveIndex(0);
+    requestRef.current?.abort();
   }
 
   function navigate(record: SearchRecord) {
@@ -209,7 +186,12 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
             ref={inputRef}
             type="search"
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              setActiveIndex(0);
+              if (value.trim().length < 2) { setRecords([]); setLoading(false); setStatus(""); }
+            }}
             onKeyDown={onInputKeyDown}
             placeholder={partnerType === "supplier" ? "Search product, model, order or installer" : "Search job, customer, product, order or team member"}
             aria-label="Search TLink business records"
@@ -218,8 +200,8 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
           <kbd>Esc</kbd>
         </label>
         <nav className="tlink-command-filters" aria-label="Search record type">
-          {(["all", ...availableKinds] as Array<SearchKind | "all">).map((kind) => <button key={kind} type="button" className={category === kind ? "active" : ""} onClick={() => { setCategory(kind); setActiveIndex(0); }}>
-            {kindLabels[kind]}{kind !== "all" ? ` ${records.filter((record) => record.kind === kind).length}` : ""}
+          {(["all", ...availableKinds] as Array<SearchKind | "all">).map((kind) => <button key={kind} type="button" className={category === kind ? "active" : ""} onClick={() => { setCategory(kind); setActiveIndex(0); setRecords([]); setStatus(""); }}>
+            {kindLabels[kind]}
           </button>)}
         </nav>
         <div className="tlink-command-body" id="tlink-command-results">
@@ -237,7 +219,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
             <p>Only records this business can already access are included. AEA protected household contact details are never indexed.</p>
           </div>}
           {query.trim().length === 1 && <div className="tlink-command-empty"><strong>Keep typing</strong><span>Enter at least two characters to search.</span></div>}
-          {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Opening the latest business records...</span></div>}
+          {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Checking the latest matching records...</span></div>}
           {query.trim().length >= 2 && !loading && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>Try a job ID, customer name, model code, order number or team member.</span></div>}
           {results.length > 0 && <div className="tlink-command-results" role="listbox" aria-label="TLink search results">
             {results.map((record, index) => <button
@@ -254,82 +236,10 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
               <em>{record.meta}</em>
             </button>)}
           </div>}
-          {status && !query.trim() && <p className="tlink-command-status" role="status">{status}</p>}
+          {status && <p className="tlink-command-status" role="status">{status}</p>}
         </div>
-        <footer><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></footer>
+        <footer><span><kbd>Up</kbd><kbd>Down</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></footer>
       </section>
     </div>}
   </>;
-}
-
-async function loadRecords(user: User, partnerType: "installer" | "supplier", features: CommandFeatures, onBatch: (records: SearchRecord[]) => void) {
-  const token = await user.getIdToken();
-  const request = async (path: string) => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 6000);
-    try {
-      const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || result.ok === false) throw new Error(result.error || "A TLink record source could not be opened.");
-      return result;
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  };
-  const sources: Array<Promise<Record<string, unknown>>> = [];
-  if (partnerType === "installer") {
-    if (features.businessOperations) sources.push(request("/api/trade-crm"));
-    if (features.marketplace) sources.push(request("/api/product-marketplace"));
-    if (features.businessOperations) sources.push(request("/api/trade-purchasing"));
-    if (features.teamAccess) sources.push(request("/api/trade-team"));
-  } else {
-    sources.push(request("/api/supplier-products"));
-    if (features.businessOperations) sources.push(request("/api/trade-purchasing"));
-  }
-  const settled = await Promise.allSettled(sources.map((source) => source.then((payload) => {
-    onBatch(toSearchRecords(payload));
-    return payload;
-  })));
-  const payloads = settled.filter((item): item is PromiseFulfilledResult<Record<string, unknown>> => item.status === "fulfilled").map((item) => item.value);
-  if (!payloads.length && settled.length) {
-    throw new Error("TLink search is taking longer than expected. Close it and try again.");
-  }
-  const seen = new Set<string>();
-  return payloads.flatMap(toSearchRecords).filter((record) => {
-    const key = `${record.kind}:${record.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function toSearchRecords(payload: Record<string, unknown>): SearchRecord[] {
-  const records: SearchRecord[] = [];
-  const rows = <T,>(key: string) => Array.isArray(payload[key]) ? payload[key] as T[] : [];
-  rows<Record<string, unknown>>("jobs").forEach((job) => records.push({
-    id: String(job.id), kind: "job", label: "JB", title: String(job.title || "Untitled job"),
-    detail: String(job.workNumber || "Job"), meta: [readable(job.stage), job.siteArea, job.assigneeLabel].filter(Boolean).join(" | "),
-    query: String(job.workNumber || job.title || ""), searchText: `${job.workNumber || ""} ${job.title || ""} ${job.serviceCategory || ""} ${job.siteArea || ""} ${job.assigneeLabel || ""}`.toLowerCase(),
-  }));
-  rows<Record<string, unknown>>("customers").forEach((customer) => records.push({
-    id: String(customer.id), kind: "customer", label: "CU", title: String(customer.displayName || customer.customerNumber || "Customer"),
-    detail: String(customer.customerNumber || "Direct customer"), meta: [customer.suburb, customer.addressState, customer.phone].filter(Boolean).join(" | "),
-    query: String(customer.displayName || customer.customerNumber || ""), searchText: `${customer.customerNumber || ""} ${customer.displayName || ""} ${customer.email || ""} ${customer.phone || ""} ${customer.suburb || ""} ${customer.addressState || ""} ${customer.postcode || ""}`.toLowerCase(),
-  }));
-  rows<Record<string, unknown>>("products").forEach((product) => records.push({
-    id: String(product.id), kind: "product", label: "PR", title: String(product.name || product.modelNumber || "Product"),
-    detail: [product.brand, product.modelNumber].filter(Boolean).join(" "), meta: [product.supplierName || "Your catalogue", readable(product.stockStatus), money.format(Number(product.unitPriceCentsExGst || 0) / 100)].filter(Boolean).join(" | "),
-    query: String(product.modelNumber || product.name || ""), searchText: `${product.modelNumber || ""} ${product.brand || ""} ${product.name || ""} ${product.category || ""} ${product.supplierName || ""} ${product.stockStatus || ""}`.toLowerCase(),
-  }));
-  rows<Record<string, unknown>>("orders").forEach((order) => records.push({
-    id: String(order.id), kind: "order", label: "PO", title: String(order.listName || "Purchase order"),
-    detail: String(order.orderNumber || "Order"), meta: [order.supplierBusiness || order.installerBusiness, readable(order.status), money.format(Number(order.totalCentsIncGst || 0) / 100)].filter(Boolean).join(" | "),
-    query: String(order.orderNumber || order.listName || ""), searchText: `${order.orderNumber || ""} ${order.listName || ""} ${order.installerReference || ""} ${order.supplierReference || ""} ${order.supplierBusiness || ""} ${order.installerBusiness || ""} ${order.status || ""}`.toLowerCase(),
-  }));
-  rows<Record<string, unknown>>("members").forEach((member) => records.push({
-    id: String(member.id), kind: "team", label: "TM", title: String(member.displayName || member.email || "Team member"),
-    detail: readable(member.role), meta: [member.email, readable(member.status)].filter(Boolean).join(" | "),
-    query: String(member.displayName || member.email || ""), searchText: `${member.displayName || ""} ${member.email || ""} ${member.role || ""} ${member.status || ""}`.toLowerCase(),
-  }));
-  return records;
 }

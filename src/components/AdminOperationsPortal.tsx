@@ -2426,6 +2426,9 @@ export function AdminOperationsPortal() {
                   onChange={(event) => setProductSearch(event.target.value)}
                 />
                 <div className="admin-catalogue-list">
+                  <div className="admin-catalogue-columns" aria-hidden="true">
+                    <span>Wholesaler and product</span><span>Description</span><span>Price</span><span>Supply</span><span>Review state</span><span>Action</span>
+                  </div>
                   {visibleProducts.length ? (
                     visibleProducts.map((product) => {
                       const decision = productReview[product.id] || {
@@ -2482,7 +2485,9 @@ export function AdminOperationsPortal() {
                               {product.linkedCount === 1 ? "" : "s"}
                             </span>
                           </div>
-                          <div className="admin-product-review">
+                          <details className="admin-product-review-details">
+                            <summary>Review product</summary>
+                            <div className="admin-product-review">
                             <label>
                               Review decision
                               <select
@@ -2548,7 +2553,8 @@ export function AdminOperationsPortal() {
                             >
                               Save catalogue decision
                             </button>
-                          </div>
+                            </div>
+                          </details>
                         </article>
                       );
                     })
