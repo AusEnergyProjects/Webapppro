@@ -18,6 +18,7 @@ const CUSTOMER_STATUSES = new Set(["active", "suspended", "closed"]);
 const STATES = new Set(["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"]);
 const PROPERTY_TYPES = new Set(["house", "townhouse", "apartment", "new-build", "other"]);
 const HOUSEHOLD_SITUATIONS = new Set(["owner", "renter", "strata", "planning-building"]);
+const PAGE_SIZES = new Set([25, 50, 100]);
 
 function directoryItem(row: Record<string, unknown>, revealCustomer: boolean) {
   const accountType = String(row.account_type);
@@ -177,40 +178,62 @@ export async function GET(request: Request) {
       return adminJson({ ok: true, accountType: "admin", canEdit: false, impersonationAllowed: false, account });
     }
 
-    const [customers, trades, administrators] = await Promise.all([
-      db.prepare(`SELECT firebase_uid, email, display_name name, 'Household profile' secondary, 'customer' account_type,
-        address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, is_synthetic, created_at, updated_at
-        FROM customer_accounts ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
-      db.prepare(`SELECT firebase_uid, email, business_name name, contact_name secondary, partner_type account_type,
-        address_state, postcode, account_status, verification_status, plan_key, is_synthetic, created_at, updated_at
-        FROM trade_accounts ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
-      db.prepare(`SELECT id firebase_uid, email, COALESCE(NULLIF(display_name, ''), email) name, role secondary,
-        'admin' account_type, '' address_state, '' postcode, status account_status, '' verification_status,
-        role plan_key, 0 is_synthetic, created_at, updated_at FROM admin_users ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
-    ]);
     const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
     const type = cleanAdminText(url.searchParams.get("type"), 30);
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
+    const requestedPage = Number(url.searchParams.get("page"));
+    const requestedPageSize = Number(url.searchParams.get("pageSize"));
+    const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
     const revealCustomer = ["owner", "admin", "support"].includes(admin.role);
-    const all = [...customers.results, ...trades.results, ...administrators.results]
-      .filter((row) => !type || row.account_type === type)
-      .filter((row) => !status || row.account_status === status)
-      .filter((row) => synthetic !== "only" || Boolean(row.is_synthetic))
-      .filter((row) => synthetic !== "exclude" || !Boolean(row.is_synthetic))
-      .filter((row) => !search || row.account_type !== "customer" || revealCustomer)
-      .filter((row) => !search || `${row.name} ${row.email} ${row.secondary} ${row.postcode}`.toLowerCase().includes(search))
-      .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)));
+    const union = `(SELECT firebase_uid, email, display_name name, 'Household profile' secondary, 'customer' account_type,
+        address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, is_synthetic, created_at, updated_at
+        FROM customer_accounts
+      UNION ALL
+      SELECT firebase_uid, email, business_name name, contact_name secondary, partner_type account_type,
+        address_state, postcode, account_status, verification_status, plan_key, is_synthetic, created_at, updated_at
+        FROM trade_accounts
+      UNION ALL
+      SELECT id firebase_uid, email, COALESCE(NULLIF(display_name, ''), email) name, role secondary,
+        'admin' account_type, '' address_state, '' postcode, status account_status, '' verification_status,
+        role plan_key, 0 is_synthetic, created_at, updated_at FROM admin_users)`;
+    const conditions = ["1 = 1"];
+    const bindings: unknown[] = [];
+    if (type) { conditions.push("account_type = ?"); bindings.push(type); }
+    if (status) { conditions.push("account_status = ?"); bindings.push(status); }
+    if (synthetic !== "exclude") {
+      if (synthetic === "only") conditions.push("is_synthetic = 1");
+    } else conditions.push("is_synthetic = 0");
+    if (search) {
+      if (!revealCustomer) conditions.push("account_type <> 'customer'");
+      conditions.push("LOWER(name || ' ' || email || ' ' || secondary || ' ' || postcode) LIKE ?");
+      bindings.push(`%${search}%`);
+    }
+    const where = conditions.join(" AND ");
+    const [filteredCount, accountRows, globalCounts] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) total FROM ${union} directory WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+      db.prepare(`SELECT * FROM ${union} directory WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN account_type = 'customer' THEN 1 ELSE 0 END) customers,
+        SUM(CASE WHEN account_type = 'installer' THEN 1 ELSE 0 END) installers,
+        SUM(CASE WHEN account_type = 'supplier' THEN 1 ELSE 0 END) suppliers,
+        SUM(CASE WHEN account_type = 'admin' THEN 1 ELSE 0 END) admins
+        FROM ${union} directory`).first<Record<string, unknown>>(),
+    ]);
+    const total = Number(filteredCount?.total || 0);
     return adminJson({
       ok: true,
-      accounts: all.map((row) => directoryItem(row, revealCustomer)),
+      accounts: accountRows.results.map((row: Record<string, unknown>) => directoryItem(row, revealCustomer)),
       counts: {
-        total: all.length,
-        customers: all.filter((row) => row.account_type === "customer").length,
-        installers: all.filter((row) => row.account_type === "installer").length,
-        suppliers: all.filter((row) => row.account_type === "supplier").length,
-        admins: all.filter((row) => row.account_type === "admin").length,
+        total: Number(globalCounts?.total || 0),
+        customers: Number(globalCounts?.customers || 0),
+        installers: Number(globalCounts?.installers || 0),
+        suppliers: Number(globalCounts?.suppliers || 0),
+        admins: Number(globalCounts?.admins || 0),
       },
+      pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
     });
   } catch (error) {
     return adminError(error);

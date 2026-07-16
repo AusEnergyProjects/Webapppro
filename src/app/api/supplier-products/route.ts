@@ -27,6 +27,7 @@ const STOCK_STATUSES = new Set([
 ]);
 const LISTING_STATUSES = new Set(["draft", "published", "paused", "archived"]);
 const RELATIONSHIPS = new Set(["required", "recommended", "compatible"]);
+const PAGE_SIZES = new Set([25, 50, 100]);
 
 function json(body: object, status = 200) {
   return Response.json(body, {
@@ -147,6 +148,68 @@ async function catalogue(firebaseUid: string) {
         linkedName: link.linked_name,
       })),
   }));
+}
+
+async function cataloguePage(firebaseUid: string, url: URL) {
+  const search = text(url.searchParams.get("search"), 100).toLowerCase();
+  const filter = text(url.searchParams.get("filter"), 30) || "all";
+  const sort = text(url.searchParams.get("sort"), 30) || "updated-desc";
+  const requestedPage = Number(url.searchParams.get("page"));
+  const requestedPageSize = Number(url.searchParams.get("pageSize"));
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+  const conditions = ["firebase_uid = ?"];
+  const bindings: unknown[] = [firebaseUid];
+  if (search) {
+    conditions.push("LOWER(model_number || ' ' || brand || ' ' || name || ' ' || category) LIKE ?");
+    bindings.push(`%${search}%`);
+  }
+  if (filter === "pending") conditions.push("review_status = 'pending'");
+  else if (filter === "approved") conditions.push("review_status = 'approved'");
+  else if (filter === "rejected") conditions.push("review_status = 'rejected'");
+  else if (["draft", "archived"].includes(filter)) { conditions.push("listing_status = ?"); bindings.push(filter); }
+  const orderBy: Record<string, string> = {
+    "updated-desc": "updated_at DESC",
+    "name-asc": "name COLLATE NOCASE ASC, model_number COLLATE NOCASE ASC",
+    "name-desc": "name COLLATE NOCASE DESC, model_number COLLATE NOCASE ASC",
+    "price-asc": "unit_price_cents_ex_gst ASC, name COLLATE NOCASE ASC",
+    "price-desc": "unit_price_cents_ex_gst DESC, name COLLATE NOCASE ASC",
+  };
+  const where = conditions.join(" AND ");
+  const db = getD1();
+  const [countRow, metrics, rows, options] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) total FROM supplier_products WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total,
+      SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live,
+      SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
+      SUM(CASE WHEN stock_status IN ('in_stock', 'limited') THEN 1 ELSE 0 END) available
+      FROM supplier_products WHERE firebase_uid = ?`).bind(firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT * FROM supplier_products WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
+      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, model_number, brand, name, listing_status FROM supplier_products
+      WHERE firebase_uid = ? AND listing_status <> 'archived' ORDER BY brand COLLATE NOCASE, model_number COLLATE NOCASE LIMIT 2000`)
+      .bind(firebaseUid).all<Record<string, unknown>>(),
+  ]);
+  const ids = rows.results.map((row: Record<string, unknown>) => String(row.id));
+  const links = ids.length ? await db.prepare(`SELECT l.id, l.product_id, l.linked_product_id, l.relationship, l.default_qty, l.note,
+      p.model_number linked_model_number, p.name linked_name
+      FROM supplier_product_links l JOIN supplier_products p ON p.id = l.linked_product_id
+      WHERE l.firebase_uid = ? AND l.product_id IN (${ids.map(() => "?").join(",")}) ORDER BY p.brand, p.name`)
+    .bind(firebaseUid, ...ids).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const total = Number(countRow?.total || 0);
+  return {
+    products: rows.results.map((row: Record<string, unknown>) => ({
+      ...product(row),
+      dependencies: links.results.filter((link: Record<string, unknown>) => link.product_id === row.id).map((link: Record<string, unknown>) => ({
+        id: link.id, linkedProductId: link.linked_product_id, relationship: link.relationship,
+        defaultQty: Number(link.default_qty), note: link.note,
+        linkedModelNumber: link.linked_model_number, linkedName: link.linked_name,
+      })),
+    })),
+    counts: { total: Number(metrics?.total || 0), live: Number(metrics?.live || 0), pending: Number(metrics?.pending || 0), available: Number(metrics?.available || 0) },
+    productOptions: options.results.map((row: Record<string, unknown>) => ({ id: row.id, modelNumber: row.model_number, brand: row.brand, name: row.name, listingStatus: row.listing_status })),
+    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+  };
 }
 
 type DependencyInput = {
@@ -332,7 +395,7 @@ export async function GET(request: Request) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await supplierIdentity(request);
-    return json({ ok: true, products: await catalogue(identity.uid) });
+    return json({ ok: true, ...await cataloguePage(identity.uid, new URL(request.url)) });
   } catch (error) {
     return errorResponse(error);
   }

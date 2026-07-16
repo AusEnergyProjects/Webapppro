@@ -11,6 +11,7 @@ import { TradeTeamCentre } from "./TradeTeamCentre";
 import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
 type Customer = {
   id: string; customerNumber: string; customerType: string; displayName: string; firstName: string;
@@ -80,6 +81,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
   const [jobLayout, setJobLayout] = useState<"list" | "board">("list");
   const [pipelineFocus, setPipelineFocus] = useState("");
   const [search, setSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [jobPage, setJobPage] = useState(1);
+  const [jobPageSize, setJobPageSize] = useState(25);
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerPageSize, setCustomerPageSize] = useState(25);
+  const [jobViewSaved, setJobViewSaved] = useState(false);
+  const [customerViewSaved, setCustomerViewSaved] = useState(false);
+  const [viewBusy, setViewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -111,6 +120,30 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
   }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    void user.getIdToken().then(async (token) => {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [jobsResponse, customersResponse] = await Promise.all([
+        fetch("/api/trade-list-views?view=installer-jobs", { headers, cache: "no-store" }),
+        fetch("/api/trade-list-views?view=installer-customers", { headers, cache: "no-store" }),
+      ]);
+      const [jobsResult, customersResult] = await Promise.all([jobsResponse.json(), customersResponse.json()]);
+      if (!active) return;
+      if (jobsResult.ok) {
+        const preferences = (jobsResult.preferences || {}) as Partial<WorkspaceListPreferences>;
+        setSearch(preferences.search || ""); setJobFilter(preferences.filter || "active");
+        setJobPageSize(Number(preferences.pageSize) || 25); setJobViewSaved(Boolean(jobsResult.saved));
+      }
+      if (customersResult.ok) {
+        const preferences = (customersResult.preferences || {}) as Partial<WorkspaceListPreferences>;
+        setCustomerSearch(preferences.search || ""); setCustomerPageSize(Number(preferences.pageSize) || 25);
+        setCustomerViewSaved(Boolean(customersResult.saved));
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     if (!navigationTarget) return;
@@ -192,6 +225,37 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     if (jobFilter === "attention") return job.stage === "blocked" || job.notes.some((note) => note.noteType === "issue" && note.issueStatus === "open");
     return !["completed", "cancelled"].includes(job.stage);
   });
+  const jobPageCount = Math.max(1, Math.ceil(filteredJobs.length / jobPageSize));
+  const pagedJobs = filteredJobs.slice((jobPage - 1) * jobPageSize, jobPage * jobPageSize);
+  const filteredCustomers = customers.filter((customer) => !customerSearch || `${customer.displayName} ${customer.customerNumber} ${customer.email} ${customer.phone} ${customer.suburb} ${customer.postcode}`.toLowerCase().includes(customerSearch.toLowerCase()));
+  const customerPageCount = Math.max(1, Math.ceil(filteredCustomers.length / customerPageSize));
+  const pagedCustomers = filteredCustomers.slice((customerPage - 1) * customerPageSize, customerPage * customerPageSize);
+
+  async function updateListView(viewKey: "installer-jobs" | "installer-customers", method: "PATCH" | "DELETE") {
+    setViewBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const body = viewKey === "installer-jobs"
+        ? { search, filter: jobFilter, sort: "updated-desc", pageSize: jobPageSize }
+        : { search: customerSearch, filter: "all", sort: "name-asc", pageSize: customerPageSize };
+      const response = await fetch(`/api/trade-list-views?view=${viewKey}`, {
+        method, headers: { Authorization: `Bearer ${token}`, ...(method === "PATCH" ? { "Content-Type": "application/json" } : {}) },
+        body: method === "PATCH" ? JSON.stringify(body) : undefined,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The default list view could not be saved.");
+      const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+      if (viewKey === "installer-jobs") {
+        if (method === "DELETE") { setSearch(preferences.search || ""); setJobFilter(preferences.filter || "active"); setJobPageSize(Number(preferences.pageSize) || 25); setJobPage(1); }
+        setJobViewSaved(method === "PATCH");
+      } else {
+        if (method === "DELETE") { setCustomerSearch(preferences.search || ""); setCustomerPageSize(Number(preferences.pageSize) || 25); setCustomerPage(1); }
+        setCustomerViewSaved(method === "PATCH");
+      }
+      setStatus(method === "PATCH" ? "Default list view saved." : "Default list view reset.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The default list view could not be saved."); }
+    finally { setViewBusy(false); }
+  }
 
   async function createCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
@@ -256,10 +320,12 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
 
     {view === "jobs" && creating !== "job" && <div className="crm-view">
       <div className="crm-page-heading"><div><span>Job management</span><h3>Jobs</h3><p>Search by job ID, title, area or one of your own customers.</p></div><button type="button" className="crm-new-button" onClick={() => setCreating("job")}>New job</button></div>
-      <div className="crm-job-toolbar"><label><span>Search jobs</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job number, work or customer" /></label><div role="group" aria-label="Filter jobs">{[["active", "Active"], ["attention", "Needs attention"], ["platform", "AEA protected"], ["completed", "Completed"], ["all", "All"]].map(([value, label]) => <button key={value} type="button" className={jobFilter === value ? "active" : ""} onClick={() => { setJobFilter(value); setPipelineFocus(""); }}>{label}</button>)}</div><div className="crm-layout-toggle" role="group" aria-label="Job layout"><button type="button" className={jobLayout === "list" ? "active" : ""} onClick={() => setJobLayout("list")}>List</button><button type="button" className={jobLayout === "board" ? "active" : ""} onClick={() => { setPipelineFocus(""); setJobLayout("board"); }}>Board</button></div></div>
+      <div className="crm-job-toolbar"><label><span>Search jobs</span><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setJobPage(1); }} placeholder="Job number, work or customer" /></label><div role="group" aria-label="Filter jobs">{[["active", "Active"], ["attention", "Needs attention"], ["platform", "AEA protected"], ["completed", "Completed"], ["all", "All"]].map(([value, label]) => <button key={value} type="button" className={jobFilter === value ? "active" : ""} onClick={() => { setJobFilter(value); setPipelineFocus(""); setJobPage(1); }}>{label}</button>)}</div><div className="crm-layout-toggle" role="group" aria-label="Job layout"><button type="button" className={jobLayout === "list" ? "active" : ""} onClick={() => setJobLayout("list")}>List</button><button type="button" className={jobLayout === "board" ? "active" : ""} onClick={() => { setPipelineFocus(""); setJobLayout("board"); }}>Board</button></div></div>
       {pipelineFocus && <div className="crm-filter-notice"><span>Showing {pipelineLabels[pipelineFocus] || pipelineFocus}</span><button type="button" onClick={() => setPipelineFocus("")}>Clear stage</button></div>}
+      {jobLayout === "list" && <WorkspaceListControls page={jobPage} pageCount={jobPageCount} pageSize={jobPageSize} total={filteredJobs.length} saved={jobViewSaved} busy={viewBusy}
+        onPage={setJobPage} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} />}
       {jobLayout === "list" ? <div className="crm-jobs-layout">
-        <aside className="crm-job-list" aria-label="Job results">{filteredJobs.length ? filteredJobs.map((job) => { const customer = customerById[job.crmCustomerId]; return <button type="button" key={job.id} className={selectedJobId === job.id ? "active" : ""} onClick={() => setSelectedJobId(job.id)}><span><b>{job.workNumber}</b><em>{pipelineLabels[job.pipelineStage] || job.pipelineStage}</em></span><strong>{job.title}</strong><small>{job.customerSource === "platform_private" ? "AEA protected customer" : customer?.displayName || "No customer linked"}{job.scheduledStart ? ` | ${dateLabel(job.scheduledStart)}` : ""}</small></button>; }) : <div className="crm-empty"><strong>No matching jobs</strong><span>Try another search or filter.</span></div>}</aside>
+        <aside className="crm-job-list" aria-label="Job results">{pagedJobs.length ? pagedJobs.map((job) => { const customer = customerById[job.crmCustomerId]; return <button type="button" key={job.id} className={selectedJobId === job.id ? "active" : ""} onClick={() => setSelectedJobId(job.id)}><span><b>{job.workNumber}</b><em>{pipelineLabels[job.pipelineStage] || job.pipelineStage}</em></span><strong>{job.title}</strong><small>{job.customerSource === "platform_private" ? "AEA protected customer" : customer?.displayName || "No customer linked"}{job.scheduledStart ? ` | ${dateLabel(job.scheduledStart)}` : ""}</small></button>; }) : <div className="crm-empty"><strong>No matching jobs</strong><span>Try another search or filter.</span></div>}</aside>
         <main className="crm-job-detail">{selectedJob ? <JobDetail key={selectedJob.id} job={selectedJob} customer={customerById[selectedJob.crmCustomerId]} customers={customers} user={user} busy={busy} teamAccess={hasTeamAccess} onCrm={crmRequest} onWorkOrder={workOrderRequest} onReload={load} /> : <div className="crm-empty"><strong>Select a job</strong><span>The job card will open here.</span></div>}</main>
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = filteredJobs.filter((job) => job.pipelineStage === stage); return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{stageJobs.length}</strong></header><div>{stageJobs.slice(0, 30).map((job) => <button type="button" key={job.id} onClick={() => { setSelectedJobId(job.id); setJobLayout("list"); }}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{job.customerSource === "platform_private" ? "AEA protected" : customerById[job.crmCustomerId]?.displayName || "Internal"}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
@@ -276,7 +342,10 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
 
     {view === "customers" && creating !== "customer" && <div className="crm-view">
       <div className="crm-page-heading"><div><span>Contacts you own</span><h3>Your customers</h3><p>Use this only for people or businesses that contacted you directly. AEA protected households never appear here.</p></div><button type="button" className="crm-new-button" onClick={() => setCreating("customer")}>New customer</button></div>
-      <div className="crm-customers-layout"><aside className="crm-customer-list">{customers.length ? customers.map((customer) => <button key={customer.id} type="button" className={selectedCustomerId === customer.id ? "active" : ""} onClick={() => setSelectedCustomerId(customer.id)}><strong>{customer.displayName}</strong><span>{customer.customerNumber}</span><small>{customer.phone || customer.email || `${customer.suburb} ${customer.addressState}`.trim() || "Contact details not added"}</small></button>) : <div className="crm-empty"><strong>No direct customers yet</strong><span>Add customers your business already owns.</span></div>}</aside>{selectedCustomer ? <CustomerDetail key={selectedCustomer.id} customer={selectedCustomer} jobs={jobs.filter((job) => job.crmCustomerId === selectedCustomer.id)} busy={busy} onSave={crmRequest} onOpenJob={(id) => { setSelectedJobId(id); setView("jobs"); }} /> : <section className="crm-card"><div className="crm-empty"><strong>Select a customer</strong><span>The private contact record will open here.</span></div></section>}</div>
+      <div className="crm-customer-toolbar"><input type="search" value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); setCustomerPage(1); }} placeholder="Search name, customer number, contact or location" aria-label="Search customers" /></div>
+      <WorkspaceListControls page={customerPage} pageCount={customerPageCount} pageSize={customerPageSize} total={filteredCustomers.length} saved={customerViewSaved} busy={viewBusy}
+        onPage={setCustomerPage} onPageSize={(size) => { setCustomerPageSize(size); setCustomerPage(1); }} onSave={() => void updateListView("installer-customers", "PATCH")} onReset={() => void updateListView("installer-customers", "DELETE")} />
+      <div className="crm-customers-layout"><aside className="crm-customer-list">{pagedCustomers.length ? pagedCustomers.map((customer) => <button key={customer.id} type="button" className={selectedCustomerId === customer.id ? "active" : ""} onClick={() => setSelectedCustomerId(customer.id)}><strong>{customer.displayName}</strong><span>{customer.customerNumber}</span><small>{customer.phone || customer.email || `${customer.suburb} ${customer.addressState}`.trim() || "Contact details not added"}</small></button>) : <div className="crm-empty"><strong>No direct customers in this view</strong><span>Change the search or add a customer your business owns.</span></div>}</aside>{selectedCustomer ? <CustomerDetail key={selectedCustomer.id} customer={selectedCustomer} jobs={jobs.filter((job) => job.crmCustomerId === selectedCustomer.id)} busy={busy} onSave={crmRequest} onOpenJob={(id) => { setSelectedJobId(id); setView("jobs"); }} /> : <section className="crm-card"><div className="crm-empty"><strong>Select a customer</strong><span>The private contact record will open here.</span></div></section>}</div>
     </div>}
 
     {view === "templates" && <div className="crm-view crm-template-view">

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 
@@ -63,6 +64,7 @@ type AccountDetail = {
 };
 
 type Counts = { total: number; customers: number; installers: number; suppliers: number; admins: number };
+type Pagination = { page: number; pageSize: number; total: number; pageCount: number };
 
 type Props = {
   api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
@@ -73,6 +75,7 @@ type Props = {
 };
 
 const emptyCounts: Counts = { total: 0, customers: 0, installers: 0, suppliers: 0, admins: 0 };
+const emptyPagination: Pagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
 
 function readable(value: unknown) {
   return String(value || "Not set").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -104,6 +107,12 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   const [selected, setSelected] = useState<AccountDetail | null>(null);
   const [note, setNote] = useState("");
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<Pagination>(emptyPagination);
+  const [viewReady, setViewReady] = useState(false);
+  const [viewSaved, setViewSaved] = useState(false);
+  const [viewBusy, setViewBusy] = useState(false);
 
   const loadList = useCallback(async (announce = false) => {
     const params = new URLSearchParams();
@@ -111,16 +120,20 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
     if (type) params.set("type", type);
     if (accountStatus) params.set("status", accountStatus);
     if (synthetic) params.set("synthetic", synthetic);
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
     try {
       const result = await api(`/api/admin/directory?${params}`);
       const next = (result.accounts || []) as DirectoryAccount[];
       setAccounts(next);
       setCounts({ ...emptyCounts, ...((result.counts || {}) as Partial<Counts>) });
-      if (announce) setStatus(`${next.length} accounts shown.`);
+      const nextPagination = { ...emptyPagination, ...((result.pagination || {}) as Partial<Pagination>) };
+      setPagination(nextPagination);
+      if (announce) setStatus(`${nextPagination.total} matching accounts.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The account directory could not be loaded.");
     }
-  }, [accountStatus, api, search, synthetic, type]);
+  }, [accountStatus, api, page, pageSize, search, synthetic, type]);
 
   const openAccount = useCallback(async (accountType: string, uid: string) => {
     setStatus("Opening the audited account record...");
@@ -135,9 +148,24 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   }, [api]);
 
   useEffect(() => {
+    let active = true;
+    void api("/api/admin/list-views?view=admin-accounts").then((result) => {
+      if (!active) return;
+      const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+      setSearch(preferences.search || "");
+      setAccountStatus(preferences.filter && preferences.filter !== "all" ? preferences.filter : "");
+      setType(preferences.type || "");
+      setSynthetic(preferences.synthetic || "");
+      setPageSize([25, 50, 100].includes(Number(preferences.pageSize)) ? Number(preferences.pageSize) : 25);
+      setViewSaved(Boolean(result.saved));
+    }).catch(() => undefined).finally(() => active && setViewReady(true));
+    return () => { active = false; };
+  }, [api]);
+  useEffect(() => {
+    if (!viewReady) return;
     const timer = window.setTimeout(() => void loadList(), 0);
     return () => window.clearTimeout(timer);
-  }, [loadList]);
+  }, [loadList, viewReady]);
   useEffect(() => {
     if (!target?.uid || !target.type) return;
     const timer = window.setTimeout(() => void openAccount(target.type, target.uid), 0);
@@ -146,7 +174,30 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
 
   function submitFilters(event: FormEvent) {
     event.preventDefault();
-    void loadList(true);
+    setPage(1);
+    setStatus("Account filters applied.");
+  }
+
+  async function saveView() {
+    setViewBusy(true);
+    try {
+      await api("/api/admin/list-views?view=admin-accounts", { method: "PATCH", body: JSON.stringify({ search, filter: accountStatus || "all", sort: "updated-desc", pageSize, type, synthetic }) });
+      setViewSaved(true);
+      setStatus("Default account view saved.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The default account view could not be saved."); }
+    finally { setViewBusy(false); }
+  }
+
+  async function resetView() {
+    setViewBusy(true);
+    try {
+      const result = await api("/api/admin/list-views?view=admin-accounts", { method: "DELETE" });
+      const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+      setSearch(preferences.search || ""); setAccountStatus(""); setType(""); setSynthetic("");
+      setPageSize(Number(preferences.pageSize) || 25); setPage(1); setViewSaved(false);
+      setStatus("Default account view reset.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The account view could not be reset."); }
+    finally { setViewBusy(false); }
   }
 
   function updateCustomer(key: string, value: string) {
@@ -220,6 +271,8 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
         </select>
         <button type="submit">Apply filters</button>
       </form>
+      <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+        onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveView()} onReset={() => void resetView()} />
       <div className="admin-directory-layout">
         <section className="admin-panel admin-directory-list">
           <div className="admin-table-header"><span>Account</span><span>Type</span><span>Status</span><span>Updated</span></div>

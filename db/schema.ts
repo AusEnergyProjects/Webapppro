@@ -1386,6 +1386,18 @@ export const installerCataloguePreferences = sqliteTable("installer_catalogue_pr
   index("installer_catalogue_preferences_updated_idx").on(table.updatedAt),
 ]);
 
+export const workspaceListViews = sqliteTable("workspace_list_views", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  ownerScope: text("owner_scope").notNull(),
+  viewKey: text("view_key").notNull(),
+  preferences: text("preferences").notNull().default("{}"),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("workspace_list_views_owner_view_idx").on(table.ownerUid, table.ownerScope, table.viewKey),
+  index("workspace_list_views_owner_idx").on(table.ownerUid, table.ownerScope, table.updatedAt),
+]);
+
 export const installerProductLists = sqliteTable("installer_product_lists", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

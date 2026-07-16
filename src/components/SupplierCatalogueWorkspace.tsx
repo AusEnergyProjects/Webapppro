@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
 type ProductDependency = {
   linkedProductId: string;
@@ -33,6 +34,8 @@ type SupplierProduct = {
   dependencies: ProductDependency[];
   updatedAt: string;
 };
+type SupplierProductOption = Pick<SupplierProduct, "id" | "modelNumber" | "brand" | "name" | "listingStatus">;
+type CataloguePagination = { page: number; pageSize: number; total: number; pageCount: number };
 
 type SupplierEnquiry = {
   id: string;
@@ -205,6 +208,7 @@ export function SupplierCatalogueWorkspace({
   navigationTarget?: TLinkCommandTarget | null;
 }) {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
+  const [productOptions, setProductOptions] = useState<SupplierProductOption[]>([]);
   const [enquiries, setEnquiries] = useState<SupplierEnquiry[]>([]);
   const [enquiryNotes, setEnquiryNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -212,6 +216,15 @@ export function SupplierCatalogueWorkspace({
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [search, setSearch] = useState("");
+  const [catalogueFilter, setCatalogueFilter] = useState("all");
+  const [catalogueSort, setCatalogueSort] = useState("updated-desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<CataloguePagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const [catalogueCounts, setCatalogueCounts] = useState({ total: 0, live: 0, pending: 0, available: 0 });
+  const [viewReady, setViewReady] = useState(false);
+  const [viewSaved, setViewSaved] = useState(false);
+  const [viewBusy, setViewBusy] = useState(false);
   const [catalogueView, setCatalogueView] = useState<
     "overview" | "enquiries" | "catalogue" | "editor"
   >("overview");
@@ -219,8 +232,9 @@ export function SupplierCatalogueWorkspace({
   const loadProducts = useCallback(async () => {
     try {
       const token = await user.getIdToken();
+      const params = new URLSearchParams({ search: search.trim(), filter: catalogueFilter, sort: catalogueSort, page: String(page), pageSize: String(pageSize) });
       const [productResponse, enquiryResponse] = await Promise.all([
-        fetch("/api/supplier-products", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
+        fetch(`/api/supplier-products?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
         fetch("/api/supplier-enquiries", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
       ]);
       const [result, enquiryResult] = await Promise.all([
@@ -232,6 +246,9 @@ export function SupplierCatalogueWorkspace({
           result.error || "The product catalogue could not be loaded.",
         );
       setProducts(result.products || []);
+      setProductOptions(result.productOptions || []);
+      setPagination({ page: 1, pageSize, total: 0, pageCount: 1, ...(result.pagination || {}) });
+      setCatalogueCounts({ total: 0, live: 0, pending: 0, available: 0, ...(result.counts || {}) });
       if (enquiryResponse.ok && enquiryResult.ok) {
         setEnquiries(enquiryResult.enquiries || []);
         setEnquiryNotes(Object.fromEntries((enquiryResult.enquiries || []).map((item: SupplierEnquiry) => [item.id, item.supplierNote || ""])));
@@ -245,13 +262,26 @@ export function SupplierCatalogueWorkspace({
     } finally {
       setLoading(false);
     }
+  }, [catalogueFilter, catalogueSort, page, pageSize, search, user]);
+
+  useEffect(() => {
+    let active = true;
+    void user.getIdToken().then((token) => fetch("/api/trade-list-views?view=supplier-products", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
+      .then((response) => response.json()).then((result) => {
+        if (!active || !result.ok) return;
+        const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+        setSearch(preferences.search || ""); setCatalogueFilter(preferences.filter || "all");
+        setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
+        setViewSaved(Boolean(result.saved));
+      }).catch(() => undefined).finally(() => active && setViewReady(true));
+    return () => { active = false; };
   }, [user]);
 
   useEffect(() => {
-    // The async loader owns the remote catalogue state for this authenticated account.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadProducts();
-  }, [loadProducts]);
+    if (!viewReady) return;
+    const timer = window.setTimeout(() => void loadProducts(), 180);
+    return () => window.clearTimeout(timer);
+  }, [loadProducts, viewReady]);
 
   useEffect(() => {
     if (navigationTarget?.kind !== "product" || !navigationTarget.query) return;
@@ -262,26 +292,9 @@ export function SupplierCatalogueWorkspace({
     return () => window.cancelAnimationFrame(frame);
   }, [navigationTarget]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return term
-      ? products.filter((item) =>
-          `${item.modelNumber} ${item.brand} ${item.name} ${item.category}`
-            .toLowerCase()
-            .includes(term),
-        )
-      : products;
-  }, [products, search]);
-  const liveCount = products.filter(
-    (item) =>
-      item.listingStatus === "published" && item.reviewStatus === "approved",
-  ).length;
-  const reviewCount = products.filter(
-    (item) => item.reviewStatus === "pending",
-  ).length;
-  const availableCount = products.filter(
-    (item) => item.stockStatus === "in_stock" || item.stockStatus === "limited",
-  ).length;
+  const liveCount = catalogueCounts.live;
+  const reviewCount = catalogueCounts.pending;
+  const availableCount = catalogueCounts.available;
   const newEnquiryCount = enquiries.filter((item) => item.status === "new").length;
 
   async function updateEnquiry(
@@ -401,7 +414,7 @@ export function SupplierCatalogueWorkspace({
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok)
         throw new Error(result.error || "The product could not be saved.");
-      setProducts(result.products || []);
+      await loadProducts();
       setDraft(emptyDraft);
       setStatus(
         "Product saved. Published items become visible to installers after catalogue review.",
@@ -586,8 +599,8 @@ export function SupplierCatalogueWorkspace({
             result.error || `The import stopped after ${imported} rows.`,
           );
         imported += Number(result.imported || 0);
-        setProducts(result.products || []);
       }
+      await loadProducts();
       setStatus(
         `${imported} catalogue row${imported === 1 ? "" : "s"} imported or updated with matching model dependencies. Imported items are pending review.`,
       );
@@ -602,6 +615,36 @@ export function SupplierCatalogueWorkspace({
     }
   }
 
+  async function saveCatalogueView() {
+    setViewBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-list-views?view=supplier-products", {
+        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ search, filter: catalogueFilter, sort: catalogueSort, pageSize }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The default catalogue view could not be saved.");
+      setViewSaved(true); setStatus("Default catalogue view saved.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The default catalogue view could not be saved."); }
+    finally { setViewBusy(false); }
+  }
+
+  async function resetCatalogueView() {
+    setViewBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-list-views?view=supplier-products", { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The catalogue view could not be reset.");
+      const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+      setSearch(preferences.search || ""); setCatalogueFilter(preferences.filter || "all");
+      setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
+      setPage(1); setViewSaved(false); setStatus("Default catalogue view reset.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The catalogue view could not be reset."); }
+    finally { setViewBusy(false); }
+  }
+
   return (
     <>
       <section
@@ -611,7 +654,7 @@ export function SupplierCatalogueWorkspace({
         <article>
           <span>Catalogue</span>
           <strong>
-            {products.length} product{products.length === 1 ? "" : "s"}
+            {catalogueCounts.total} product{catalogueCounts.total === 1 ? "" : "s"}
           </strong>
           <small>Owned and editable by {businessName}</small>
         </article>
@@ -863,21 +906,28 @@ export function SupplierCatalogueWorkspace({
               <span>Demand and catalogue performance reporting is active for this account.</span>
             </div>
           )}
-          <input
-            className="supplier-search"
-            type="search"
-            placeholder="Search model, brand, name or category"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <div className="supplier-catalogue-filters">
+            <input className="supplier-search" type="search" placeholder="Search model, brand, name or category" value={search}
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+            <select aria-label="Catalogue status" value={catalogueFilter} onChange={(event) => { setCatalogueFilter(event.target.value); setPage(1); }}>
+              <option value="all">All statuses</option><option value="draft">Draft</option><option value="pending">Awaiting review</option>
+              <option value="approved">Approved</option><option value="rejected">Changes required</option><option value="archived">Archived</option>
+            </select>
+            <select aria-label="Catalogue sort" value={catalogueSort} onChange={(event) => { setCatalogueSort(event.target.value); setPage(1); }}>
+              <option value="updated-desc">Recently updated</option><option value="name-asc">Name A to Z</option><option value="name-desc">Name Z to A</option>
+              <option value="price-asc">Lowest price</option><option value="price-desc">Highest price</option>
+            </select>
+          </div>
+          <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+            onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveCatalogueView()} onReset={() => void resetCatalogueView()} />
           {loading ? (
             <p className="dashboard-settings-status">Loading catalogue...</p>
-          ) : filtered.length ? (
+          ) : products.length ? (
             <div className="supplier-product-list">
               <div className="supplier-product-columns" aria-hidden="true">
                 <span>Product and status</span><span>Description</span><span>Price and ordering</span><span>Availability</span><span>Linked kit</span><span>Action</span>
               </div>
-              {filtered.map((product) => (
+              {products.map((product) => (
                 <article key={product.id}>
                   <header>
                     <div>
@@ -1147,12 +1197,12 @@ export function SupplierCatalogueWorkspace({
               Select products from this catalogue, then state whether each item
               is required, recommended or simply compatible.
             </p>
-            {products.filter(
+            {productOptions.filter(
               (item) =>
                 item.id !== draft.id && item.listingStatus !== "archived",
             ).length ? (
               <div>
-                {products
+                {productOptions
                   .filter(
                     (item) =>
                       item.id !== draft.id && item.listingStatus !== "archived",

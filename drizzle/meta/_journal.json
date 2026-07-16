@@ -281,6 +281,13 @@
       "when": 1784173783846,
       "tag": "0039_exotic_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1784174903436,
+      "tag": "0040_dry_pyro",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ const CLAIM_TRANSITIONS: Record<string, Set<string>> = {
   supplier: new Set(["acknowledged", "assessment", "replacement", "credit", "resolved", "rejected"]),
   installer: new Set(["withdrawn"]),
 };
+const PAGE_SIZES = new Set([25, 50, 100]);
 
 async function purchasingIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
@@ -40,17 +41,50 @@ function errorResponse(error: unknown) {
   return adminJson({ ok: false, error: "The purchasing request could not be completed." }, 500);
 }
 
-async function purchasingData(uid: string, partnerType: string) {
+async function purchasingData(uid: string, partnerType: string, url?: URL) {
   const db = getD1();
   const ownerColumn = partnerType === "supplier" ? "supplier_uid" : "installer_uid";
-  const orders = await db.prepare(`SELECT po.*, ia.business_name installer_business, sa.business_name supplier_business,
-    l.name list_name, l.project_postcode
-    FROM trade_purchase_orders po
+  const search = cleanAdminText(url?.searchParams.get("search"), 100).toLowerCase();
+  const filter = cleanAdminText(url?.searchParams.get("filter"), 30) || "active";
+  const sort = cleanAdminText(url?.searchParams.get("sort"), 30) || "updated-desc";
+  const requestedPage = Number(url?.searchParams.get("page"));
+  const requestedPageSize = Number(url?.searchParams.get("pageSize"));
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+  const ownerWhere = `WHERE po.${ownerColumn} = ?`;
+  const conditions = [ownerWhere.slice(6)];
+  const bindings: unknown[] = [uid];
+  if (filter === "claims") conditions.push(`EXISTS (SELECT 1 FROM trade_warranty_claims wc WHERE wc.purchase_order_id = po.id AND wc.status NOT IN ('resolved', 'rejected', 'withdrawn'))`);
+  else if (filter === "complete") conditions.push("po.status IN ('fulfilled', 'cancelled')");
+  else if (filter === "active") conditions.push("po.status NOT IN ('fulfilled', 'cancelled')");
+  if (search) {
+    conditions.push("LOWER(po.id || ' ' || po.order_number || ' ' || po.installer_reference || ' ' || po.supplier_reference || ' ' || ia.business_name || ' ' || sa.business_name || ' ' || l.name) LIKE ?");
+    bindings.push(`%${search}%`);
+  }
+  const where = conditions.join(" AND ");
+  const orderBy: Record<string, string> = {
+    "updated-desc": "po.updated_at DESC",
+    "number-asc": "po.order_number COLLATE NOCASE ASC",
+    "number-desc": "po.order_number COLLATE NOCASE DESC",
+    "value-desc": "po.total_cents_inc_gst DESC, po.updated_at DESC",
+  };
+  const joins = `FROM trade_purchase_orders po
     JOIN trade_accounts ia ON ia.firebase_uid = po.installer_uid
     JOIN trade_accounts sa ON sa.firebase_uid = po.supplier_uid
-    JOIN installer_product_lists l ON l.id = po.list_id
-    WHERE po.${ownerColumn} = ? ORDER BY po.updated_at DESC LIMIT 150`).bind(uid).all<Record<string, unknown>>();
-  const orderIds = orders.results.map((row) => String(row.id));
+    JOIN installer_product_lists l ON l.id = po.list_id`;
+  const [orders, countRow, metrics] = await Promise.all([
+    db.prepare(`SELECT po.*, ia.business_name installer_business, sa.business_name supplier_business,
+    l.name list_name, l.project_postcode
+    ${joins} WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
+      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total,
+      SUM(CASE WHEN status IN ('submitted', 'confirmed', 'part_fulfilled') THEN 1 ELSE 0 END) active,
+      SUM(CASE WHEN status = 'fulfilled' THEN 1 ELSE 0 END) fulfilled,
+      (SELECT COUNT(*) FROM trade_warranty_claims wc WHERE wc.${ownerColumn} = ? AND wc.status NOT IN ('resolved', 'rejected', 'withdrawn')) open_claims
+      FROM trade_purchase_orders WHERE ${ownerColumn} = ?`).bind(uid, uid).first<Record<string, unknown>>(),
+  ]);
+  const orderIds = orders.results.map((row: Record<string, unknown>) => String(row.id));
   const placeholders = orderIds.map(() => "?").join(",");
   const [items, events, claims] = orderIds.length ? await Promise.all([
     db.prepare(`SELECT * FROM trade_purchase_order_items WHERE purchase_order_id IN (${placeholders}) ORDER BY brand, product_name`).bind(...orderIds).all<Record<string, unknown>>(),
@@ -65,8 +99,9 @@ async function purchasingData(uid: string, partnerType: string) {
     LEFT JOIN trade_purchase_orders po ON po.enquiry_id = e.id
     WHERE e.installer_uid = ? AND e.status = 'responded' AND po.id IS NULL
     ORDER BY e.updated_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>() : { results: [] };
+  const total = Number(countRow?.total || 0);
   return {
-    orders: orders.results.map((row) => ({
+    orders: orders.results.map((row: Record<string, unknown>) => ({
       id: row.id, orderNumber: row.order_number, enquiryId: row.enquiry_id, listId: row.list_id,
       status: row.status, installerReference: row.installer_reference, supplierReference: row.supplier_reference,
       deliveryMethod: row.delivery_method, deliveryNotes: row.delivery_notes, supplierNote: row.supplier_note,
@@ -74,28 +109,30 @@ async function purchasingData(uid: string, partnerType: string) {
       totalCentsIncGst: Number(row.total_cents_inc_gst), submittedAt: row.submitted_at, confirmedAt: row.confirmed_at,
       fulfilledAt: row.fulfilled_at, updatedAt: row.updated_at, installerBusiness: row.installer_business,
       supplierBusiness: row.supplier_business, listName: row.list_name, projectPostcode: row.project_postcode,
-      items: items.results.filter((item) => item.purchase_order_id === row.id).map((item) => ({
+      items: items.results.filter((item: Record<string, unknown>) => item.purchase_order_id === row.id).map((item: Record<string, unknown>) => ({
         id: item.id, productId: item.supplier_product_id, modelNumber: item.model_number, brand: item.brand,
         name: item.product_name, unitLabel: item.unit_label, quantity: Number(item.quantity),
         fulfilledQuantity: Number(item.fulfilled_quantity), unitPriceCentsExGst: Number(item.unit_price_cents_ex_gst),
         warrantyYears: Number(item.warranty_years),
       })),
-      events: events.results.filter((event) => event.purchase_order_id === row.id).map((event) => ({
+      events: events.results.filter((event: Record<string, unknown>) => event.purchase_order_id === row.id).map((event: Record<string, unknown>) => ({
         id: event.id, eventType: event.event_type, status: event.status, summary: event.summary,
         actorType: event.actor_type, createdAt: event.created_at,
       })),
-      claims: claims.results.filter((claim) => claim.purchase_order_id === row.id).map((claim) => ({
+      claims: claims.results.filter((claim: Record<string, unknown>) => claim.purchase_order_id === row.id).map((claim: Record<string, unknown>) => ({
         id: claim.id, claimNumber: claim.claim_number, itemId: claim.purchase_order_item_id, status: claim.status,
         issueCategory: claim.issue_category, summary: claim.summary, serialNumber: claim.serial_number,
         supplierResponse: claim.supplier_response, resolution: claim.resolution, submittedAt: claim.submitted_at,
         resolvedAt: claim.resolved_at, updatedAt: claim.updated_at,
       })),
     })),
-    eligibleEnquiries: eligible.results.map((row) => ({
+    eligibleEnquiries: eligible.results.map((row: Record<string, unknown>) => ({
       id: row.id, listId: row.list_id, supplierUid: row.supplier_uid, status: row.status,
       supplierNote: row.supplier_note, updatedAt: row.updated_at, listName: row.list_name,
       projectPostcode: row.project_postcode, supplierBusiness: row.supplier_business,
     })),
+    metrics: { total: Number(metrics?.total || 0), active: Number(metrics?.active || 0), fulfilled: Number(metrics?.fulfilled || 0), openClaims: Number(metrics?.open_claims || 0) },
+    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
   };
 }
 
@@ -103,7 +140,7 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await purchasingIdentity(request);
-    return adminJson({ ok: true, ...(await purchasingData(identity.uid, identity.partnerType)) });
+    return adminJson({ ok: true, ...(await purchasingData(identity.uid, identity.partnerType, new URL(request.url))) });
   } catch (error) { return errorResponse(error); }
 }
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
 type PartnerType = "installer" | "supplier";
 type OrderItem = {
@@ -25,7 +26,7 @@ type EligibleEnquiry = {
   id: string; listId: string; supplierUid: string; status: string; supplierNote: string; updatedAt: string;
   listName: string; projectPostcode: string; supplierBusiness: string;
 };
-type PurchasingResult = { ok?: boolean; orders?: PurchaseOrder[]; eligibleEnquiries?: EligibleEnquiry[]; error?: string };
+type PurchasingResult = { ok?: boolean; orders?: PurchaseOrder[]; eligibleEnquiries?: EligibleEnquiry[]; metrics?: { total: number; active: number; fulfilled: number; openClaims: number }; pagination?: { page: number; pageSize: number; total: number; pageCount: number }; error?: string };
 
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -36,6 +37,15 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
   const [eligible, setEligible] = useState<EligibleEnquiry[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState("active");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("updated-desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const [metrics, setMetrics] = useState({ total: 0, active: 0, fulfilled: 0, openClaims: 0 });
+  const [viewReady, setViewReady] = useState(false);
+  const [viewSaved, setViewSaved] = useState(false);
+  const [viewBusy, setViewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -44,12 +54,15 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     const next = result.orders || [];
     setOrders(next);
     setEligible(result.eligibleEnquiries || []);
+    if (result.metrics) setMetrics(result.metrics);
+    if (result.pagination) setPagination(result.pagination);
     setSelectedId((current) => current && next.some((order) => order.id === current) ? current : next[0]?.id || "");
   }, []);
 
   const request = useCallback(async (method: "GET" | "POST" | "PATCH", body?: Record<string, unknown>) => {
     const token = await user.getIdToken();
-    const response = await fetch("/api/trade-purchasing", {
+    const params = new URLSearchParams({ search: search.trim(), filter, sort, page: String(page), pageSize: String(pageSize) });
+    const response = await fetch(method === "GET" ? `/api/trade-purchasing?${params}` : "/api/trade-purchasing", {
       method, cache: "no-store",
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
@@ -57,21 +70,36 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     const result = await response.json().catch(() => ({})) as PurchasingResult;
     if (!response.ok || result.ok === false) throw new Error(result.error || "The purchasing workspace could not be updated.");
     apply(result);
-  }, [apply, user]);
+  }, [apply, filter, page, pageSize, search, sort, user]);
 
   useEffect(() => {
     let active = true;
-    const frame = window.requestAnimationFrame(() => {
+    void user.getIdToken().then((token) => fetch("/api/trade-list-views?view=purchasing-orders", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
+      .then((response) => response.json()).then((result) => {
+        if (!active || !result.ok) return;
+        const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+        setSearch(preferences.search || ""); setFilter(preferences.filter || "active"); setSort(preferences.sort || "updated-desc");
+        setPageSize(Number(preferences.pageSize) || 25); setViewSaved(Boolean(result.saved));
+      }).catch(() => undefined).finally(() => active && setViewReady(true));
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!viewReady) return;
+    let active = true;
+    const frame = window.setTimeout(() => {
       void request("GET").catch((error) => active && setStatus(error instanceof Error ? error.message : "The purchasing workspace could not be loaded."))
         .finally(() => active && setLoading(false));
-    });
-    return () => { active = false; window.cancelAnimationFrame(frame); };
-  }, [request]);
+    }, 150);
+    return () => { active = false; window.clearTimeout(frame); };
+  }, [request, viewReady]);
 
   useEffect(() => {
     if (navigationTarget?.kind !== "order" || !navigationTarget.id) return;
     const frame = window.requestAnimationFrame(() => {
       setFilter("all");
+      setSearch(navigationTarget.id);
+      setPage(1);
       setSelectedId(navigationTarget.id);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -79,20 +107,33 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
 
   async function submit(body: Record<string, unknown>, key: string, success: string) {
     setBusy(key); setStatus("Saving the business purchasing record...");
-    try { await request(key.startsWith("create") ? "POST" : "PATCH", body); setStatus(success); }
+    try { await request(key.startsWith("create") ? "POST" : "PATCH", body); await request("GET"); setStatus(success); }
     catch (error) { setStatus(error instanceof Error ? error.message : "The purchasing update could not be saved."); }
     finally { setBusy(""); }
   }
 
-  const visible = useMemo(() => orders.filter((order) => {
-    if (filter === "all") return true;
-    if (filter === "claims") return order.claims.some((claim) => !["resolved", "rejected", "withdrawn"].includes(claim.status));
-    if (filter === "complete") return ["fulfilled", "cancelled"].includes(order.status);
-    return !["fulfilled", "cancelled"].includes(order.status);
-  }), [filter, orders]);
   const selected = orders.find((order) => order.id === selectedId) || null;
-  const openClaims = orders.flatMap((order) => order.claims).filter((claim) => !["resolved", "rejected", "withdrawn"].includes(claim.status)).length;
-  const waiting = orders.filter((order) => ["submitted", "confirmed", "part_fulfilled"].includes(order.status)).length;
+  const openClaims = metrics.openClaims;
+  const waiting = metrics.active;
+
+  async function updateSavedView(method: "PATCH" | "DELETE") {
+    setViewBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-list-views?view=purchasing-orders", {
+        method, headers: { Authorization: `Bearer ${token}`, ...(method === "PATCH" ? { "Content-Type": "application/json" } : {}) },
+        body: method === "PATCH" ? JSON.stringify({ search, filter, sort, pageSize }) : undefined,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The purchasing view could not be saved.");
+      if (method === "DELETE") {
+        const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+        setSearch(preferences.search || ""); setFilter(preferences.filter || "active"); setSort(preferences.sort || "updated-desc");
+        setPageSize(Number(preferences.pageSize) || 25); setPage(1); setViewSaved(false); setStatus("Default purchasing view reset.");
+      } else { setViewSaved(true); setStatus("Default purchasing view saved."); }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The purchasing view could not be saved."); }
+    finally { setViewBusy(false); }
+  }
 
   if (loading) return <section className="dashboard-panel purchasing-loading"><strong>Opening purchasing records</strong><p>Loading private business orders and claims...</p></section>;
 
@@ -103,9 +144,9 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     </header>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
     <section className="crm-metrics purchasing-metrics" aria-label="Purchasing summary">
-      <article><span>Orders</span><strong>{orders.length}</strong><small>System numbered</small></article>
+      <article><span>Orders</span><strong>{metrics.total}</strong><small>System numbered</small></article>
       <article className={waiting ? "attention" : ""}><span>In progress</span><strong>{waiting}</strong><small>Awaiting or fulfilling</small></article>
-      <article><span>Fulfilled</span><strong>{orders.filter((order) => order.status === "fulfilled").length}</strong><small>Completed supply</small></article>
+      <article><span>Fulfilled</span><strong>{metrics.fulfilled}</strong><small>Completed supply</small></article>
       <article className={openClaims ? "attention" : ""}><span>Open claims</span><strong>{openClaims}</strong><small>Warranty follow-up</small></article>
     </section>
 
@@ -129,9 +170,13 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
       </article>)}</div> : <div className="dashboard-empty-state"><strong>No responded enquiries ready to order</strong><p>Build a product list in Products, send it to the relevant wholesalers and return here after a response.</p></div>}
     </section>}
 
-    <div className="purchasing-toolbar"><div role="group" aria-label="Filter purchase orders">{[["active", "In progress"], ["claims", "Open claims"], ["complete", "Completed"], ["all", "All"]].map(([value, label]) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div><span>{visible.length} shown</span></div>
+    <div className="purchasing-toolbar"><div role="group" aria-label="Filter purchase orders">{[["active", "In progress"], ["claims", "Open claims"], ["complete", "Completed"], ["all", "All"]].map(([value, label]) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => { setFilter(value); setPage(1); }}>{label}</button>)}</div><span>{pagination.total} matching</span></div>
+    <div className="purchasing-list-filters"><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search order, business, list or reference" aria-label="Search purchase orders" />
+      <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort purchase orders"><option value="updated-desc">Recently updated</option><option value="number-asc">Order number ascending</option><option value="number-desc">Order number descending</option><option value="value-desc">Highest value</option></select></div>
+    <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+      onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void updateSavedView("PATCH")} onReset={() => void updateSavedView("DELETE")} />
     <div className="purchasing-layout">
-      <aside className="purchasing-order-list" aria-label="Purchase orders">{visible.length ? visible.map((order) => <button type="button" key={order.id} className={selectedId === order.id ? "active" : ""} onClick={() => setSelectedId(order.id)}><span><b>{order.orderNumber}</b><em>{readable(order.status)}</em></span><strong>{partnerType === "supplier" ? order.installerBusiness : order.supplierBusiness}</strong><small>{order.listName} | {money.format(order.totalCentsIncGst / 100)} inc GST</small></button>) : <div className="dashboard-empty-state"><strong>No orders in this view</strong><p>Change the filter to review another order state.</p></div>}</aside>
+      <aside className="purchasing-order-list" aria-label="Purchase orders">{orders.length ? orders.map((order) => <button type="button" key={order.id} className={selectedId === order.id ? "active" : ""} onClick={() => setSelectedId(order.id)}><span><b>{order.orderNumber}</b><em>{readable(order.status)}</em></span><strong>{partnerType === "supplier" ? order.installerBusiness : order.supplierBusiness}</strong><small>{order.listName} | {money.format(order.totalCentsIncGst / 100)} inc GST</small></button>) : <div className="dashboard-empty-state"><strong>No orders in this view</strong><p>Change the filter to review another order state.</p></div>}</aside>
       <main className="purchasing-order-detail">{selected ? <OrderDetail key={selected.id} order={selected} partnerType={partnerType} busy={busy} submit={submit} /> : <div className="dashboard-empty-state"><strong>No purchase order selected</strong><p>New orders will appear here with quantities, fulfilment and warranty history.</p></div>}</main>
     </div>
   </section>;
