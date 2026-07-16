@@ -10,7 +10,13 @@ export const TRADE_LIST_VIEWS = new Set([
   "purchasing-orders",
 ]);
 
-export const ADMIN_LIST_VIEWS = new Set(["admin-accounts", "admin-customers"]);
+export const ADMIN_LIST_VIEWS = new Set([
+  "admin-accounts",
+  "admin-customers",
+  "admin-partners",
+  "admin-opportunities",
+  "admin-products",
+]);
 
 type ListViewDefaults = {
   search: string;
@@ -36,6 +42,10 @@ type ListViewDefaults = {
   stock?: string;
   minPrice?: string;
   maxPrice?: string;
+  supplier?: string;
+  verification?: string;
+  review?: string;
+  listing?: string;
   columns?: string[];
 };
 
@@ -52,6 +62,9 @@ const defaultsByView: Record<string, ListViewDefaults> = {
   "purchasing-orders": { search: "", filter: "active", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-accounts": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-customers": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "customer", synthetic: "" },
+  "admin-partners": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-opportunities": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-products": { search: "", filter: "all", sort: "priority-desc", pageSize: 25, type: "", synthetic: "" },
 };
 
 const filtersByView: Record<string, Set<string>> = {
@@ -61,6 +74,9 @@ const filtersByView: Record<string, Set<string>> = {
   "purchasing-orders": new Set(["active", "claims", "complete", "all"]),
   "admin-accounts": new Set(["all", "active", "suspended", "closed"]),
   "admin-customers": new Set(["all", "active", "suspended", "closed"]),
+  "admin-partners": new Set(["all", "not_started", "submitted", "under_review", "needs_information", "approved", "rejected", "expired"]),
+  "admin-opportunities": new Set(["all", "draft", "open", "paused", "closed", "expired"]),
+  "admin-products": new Set(["all", "pending", "approved", "needs_changes", "rejected"]),
 };
 
 const sortsByView: Record<string, Set<string>> = {
@@ -70,6 +86,9 @@ const sortsByView: Record<string, Set<string>> = {
   "purchasing-orders": new Set(["updated-desc", "number-asc", "number-desc", "value-desc"]),
   "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
   "admin-customers": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
+  "admin-partners": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "verification-asc", "status-asc", "status-desc"]),
+  "admin-opportunities": new Set(["updated-desc", "updated-asc", "title-asc", "title-desc", "status-asc", "state-asc", "expires-asc"]),
+  "admin-products": new Set(["priority-desc", "updated-desc", "updated-asc", "name-asc", "name-desc", "supplier-asc", "brand-asc", "model-asc", "category-asc", "price-asc", "price-desc", "stock-asc", "lead-asc", "warranty-desc", "review-asc", "listing-asc"]),
 };
 
 export function defaultListView(viewKey: string): ListViewDefaults {
@@ -106,6 +125,10 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     stock: cleanAdminText(raw.stock, 30),
     minPrice: cleanAdminText(raw.minPrice, 20),
     maxPrice: cleanAdminText(raw.maxPrice, 20),
+    supplier: cleanAdminText(raw.supplier, 100),
+    verification: cleanAdminText(raw.verification, 30),
+    review: cleanAdminText(raw.review, 30),
+    listing: cleanAdminText(raw.listing, 30),
     columns: columnsByView[viewKey]
       ? Array.isArray(raw.columns)
         ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)

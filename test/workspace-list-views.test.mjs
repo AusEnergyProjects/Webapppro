@@ -12,10 +12,14 @@ const adminRoute = read("../src/app/api/admin/list-views/route.ts");
 const supplierRoute = read("../src/app/api/supplier-products/route.ts");
 const purchasingRoute = read("../src/app/api/trade-purchasing/route.ts");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");
+const adminAccountsRoute = read("../src/app/api/admin/accounts/route.ts");
+const adminOpportunitiesRoute = read("../src/app/api/admin/opportunities/route.ts");
+const adminProductsRoute = read("../src/app/api/admin/products/route.ts");
 const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const purchasingUi = read("../src/components/TradePurchasingWorkspace.tsx");
 const crmUi = read("../src/components/InstallerCrmWorkspace.tsx");
 const directoryUi = read("../src/components/AdminAccountDirectory.tsx");
+const adminUi = read("../src/components/AdminOperationsPortal.tsx");
 const tableTools = read("../src/components/WorkspaceTableTools.tsx");
 
 test("role scoped list views are durable and unique per workspace", () => {
@@ -42,12 +46,15 @@ test("saved views enforce trade and operations account boundaries", () => {
   assert.match(tradeRoute, /TRADE_LIST_VIEWS/);
   assert.match(adminRoute, /ADMIN_LIST_VIEWS/);
   assert.match(shared, /"admin-customers"/);
+  assert.match(shared, /"admin-partners"/);
+  assert.match(shared, /"admin-opportunities"/);
+  assert.match(shared, /"admin-products"/);
   assert.match(directoryUi, /fixedType/);
   assert.match(directoryUi, /effectiveType/);
 });
 
 test("high volume catalogue, order and account indexes use server paging", () => {
-  for (const route of [supplierRoute, purchasingRoute, directoryRoute]) {
+  for (const route of [supplierRoute, purchasingRoute, directoryRoute, adminAccountsRoute, adminOpportunitiesRoute, adminProductsRoute]) {
     assert.match(route, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
     assert.match(route, /LIMIT \? OFFSET \?/);
     assert.match(route, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
@@ -55,10 +62,13 @@ test("high volume catalogue, order and account indexes use server paging", () =>
   assert.match(supplierRoute, /SELECT COUNT\(\*\) total FROM supplier_products/);
   assert.match(purchasingRoute, /SELECT COUNT\(\*\) total/);
   assert.match(directoryRoute, /UNION ALL/);
+  assert.match(adminAccountsRoute, /installerOptions/);
+  assert.match(adminOpportunitiesRoute, /openOptions/);
+  assert.match(adminProductsRoute, /review_status = 'pending'/);
 });
 
 test("all business and operations result lists expose consistent saved paging controls", () => {
-  for (const ui of [supplierUi, purchasingUi, crmUi, directoryUi]) {
+  for (const ui of [supplierUi, purchasingUi, crmUi, directoryUi, adminUi]) {
     assert.match(ui, /WorkspaceListControls/);
   }
   assert.match(crmUi, /indexedJobs/);
@@ -72,4 +82,7 @@ test("all business and operations result lists expose consistent saved paging co
   assert.match(tableTools, /Pin left/);
   assert.match(tableTools, /Export visible \{noun\} CSV/);
   assert.match(tableTools, /\/\^\[=\+\\-@\]\//);
+  assert.match(adminUi, /admin-partners/);
+  assert.match(adminUi, /admin-opportunities/);
+  assert.match(adminUi, /admin-products/);
 });

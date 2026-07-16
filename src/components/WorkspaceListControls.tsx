@@ -24,6 +24,10 @@ export type WorkspaceListPreferences = {
   stock?: string;
   minPrice?: string;
   maxPrice?: string;
+  supplier?: string;
+  verification?: string;
+  review?: string;
+  listing?: string;
   columns?: string[];
 };
 

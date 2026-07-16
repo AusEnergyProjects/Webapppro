@@ -9,6 +9,16 @@ const CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling",
 const STATUSES = new Set(["draft", "open", "paused", "closed", "expired"]);
 const PRIORITIES = new Set(["standard", "priority", "urgent"]);
 const TIMINGS = new Set(["planning", "within_3_months", "within_30_days", "urgent"]);
+const PAGE_SIZES = new Set([25, 50, 100]);
+const SORTS: Record<string, string> = {
+  "updated-desc": "o.updated_at DESC",
+  "updated-asc": "o.updated_at ASC",
+  "title-asc": "o.title COLLATE NOCASE ASC, o.updated_at DESC",
+  "title-desc": "o.title COLLATE NOCASE DESC, o.updated_at DESC",
+  "status-asc": "o.status COLLATE NOCASE ASC, o.updated_at DESC",
+  "state-asc": "o.state COLLATE NOCASE ASC, o.postcode ASC, o.updated_at DESC",
+  "expires-asc": "o.expires_at ASC, o.updated_at DESC",
+};
 
 function cleanCategories(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string" && CATEGORIES.has(item)))] : [];
@@ -30,26 +40,61 @@ export async function GET(request: Request) {
     await requireAdminIdentity(request);
     await expireStaleOpportunities();
     const db = getD1();
-    const rows = await db.prepare(`SELECT o.*,
+    const url = new URL(request.url);
+    const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
+    const status = cleanAdminText(url.searchParams.get("status"), 20);
+    const service = cleanAdminText(url.searchParams.get("service"), 40);
+    const state = cleanAdminText(url.searchParams.get("state"), 12);
+    const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
+    const sort = cleanAdminText(url.searchParams.get("sort"), 30) || "updated-desc";
+    const requestedPage = Number(url.searchParams.get("page"));
+    const requestedPageSize = Number(url.searchParams.get("pageSize"));
+    const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+    const clauses: string[] = [];
+    const bindings: unknown[] = [];
+    if (search) {
+      clauses.push("LOWER(o.title || ' ' || o.summary || ' ' || o.project_type || ' ' || o.postcode) LIKE ?");
+      bindings.push(`%${search}%`);
+    }
+    if (STATUSES.has(status)) { clauses.push("o.status = ?"); bindings.push(status); }
+    if (CATEGORIES.has(service)) { clauses.push("o.service_categories LIKE ?"); bindings.push(`%\"${service}\"%`); }
+    if (STATES.has(state)) { clauses.push("o.state = ?"); bindings.push(state); }
+    if (synthetic === "only") clauses.push("COALESCE(o.is_synthetic, 0) = 1");
+    if (synthetic === "exclude") clauses.push("COALESCE(o.is_synthetic, 0) = 0");
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const orderBy = SORTS[sort] || SORTS["updated-desc"];
+    const [countRow, rows, openOptions] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) total FROM trade_opportunities o ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+      db.prepare(`SELECT o.*,
       COUNT(m.id) match_count,
       SUM(CASE WHEN m.status = 'interested' THEN 1 ELSE 0 END) interested_count,
       SUM(CASE WHEN m.status = 'connected' THEN 1 ELSE 0 END) connected_count
       FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
-      GROUP BY o.id ORDER BY o.updated_at DESC LIMIT 500`).all<Record<string, unknown>>();
-    const allocations = rows.results.length ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
-      m.distance_metres, m.allocation_rank, m.match_source, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at,
-      a.business_name, a.address_state, a.postcode
-      FROM trade_opportunity_matches m JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
-      JOIN (SELECT id FROM trade_opportunities ORDER BY updated_at DESC LIMIT 500) visible ON visible.id = m.opportunity_id
-      WHERE a.partner_type = 'installer'
-      ORDER BY m.opportunity_id, m.allocation_rank, m.matched_at`).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-    return adminJson({ ok: true, opportunities: rows.results.map((row) => ({ ...shape(row), allocations: allocations.results.filter((item) => item.opportunity_id === row.id).map((item) => ({
+      ${where} GROUP BY o.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      db.prepare(`SELECT id, title, state, postcode FROM trade_opportunities
+        WHERE status = 'open' ORDER BY updated_at DESC LIMIT 1000`).all<Record<string, unknown>>(),
+    ]);
+    const allocationRows = rows.results.length
+      ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
+          m.distance_metres, m.allocation_rank, m.match_source, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at,
+          a.business_name, a.address_state, a.postcode
+          FROM trade_opportunity_matches m JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
+          WHERE a.partner_type = 'installer'
+            AND m.opportunity_id IN (SELECT o.id FROM trade_opportunities o ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?)
+          ORDER BY m.opportunity_id, m.allocation_rank, m.matched_at`)
+          .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>()
+      : { results: [] as Record<string, unknown>[] };
+    const total = Number(countRow?.total || 0);
+    return adminJson({ ok: true, opportunities: rows.results.map((row) => ({ ...shape(row), allocations: allocationRows.results.filter((item) => item.opportunity_id === row.id).map((item) => ({
       id: item.id, firebaseUid: item.firebase_uid, businessName: item.business_name, status: item.status,
       matchedCategories: parseJsonList(item.matched_categories), distanceKm: Number(item.distance_metres || 0) / 1000,
       allocationRank: Number(item.allocation_rank || 0), matchSource: item.match_source,
       contactAttemptCount: Number(item.contact_attempt_count || 0), lastContactAt: item.last_contact_at,
       connectedAt: item.connected_at, matchedAt: item.matched_at,
-    })) })) });
+    })) })), openOptions: openOptions.results.map((row) => ({ id: row.id, title: row.title, state: row.state, postcode: row.postcode })),
+      pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) { return adminError(error); }
 }
 

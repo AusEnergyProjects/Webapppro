@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -29,6 +29,7 @@ import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
+import { WorkspaceListControls, type WorkspaceListPreferences } from "@/components/WorkspaceListControls";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -162,7 +163,11 @@ type CatalogueProduct = {
   reviewNote: string;
   linkedCount: number;
   updatedAt: string;
+  isSynthetic: boolean;
 };
+type ListPagination = { page: number; pageSize: number; total: number; pageCount: number };
+type AccountOption = { firebaseUid: string; businessName: string; partnerType: string; addressState: string; accountStatus: string };
+type OpportunityOption = { id: string; title: string; state: string; postcode: string };
 type AdminUser = {
   id: string;
   email: string;
@@ -230,6 +235,7 @@ const categories = [
   ["other", "Other energy upgrades"],
 ] as const;
 const capabilityLabels = Object.fromEntries(categories);
+const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
 
 function authMessage(error: unknown) {
   const code =
@@ -294,6 +300,15 @@ export function AdminOperationsPortal() {
   const [accountType, setAccountType] = useState("");
   const [accountVerification, setAccountVerification] = useState("");
   const [accountSynthetic, setAccountSynthetic] = useState("");
+  const [accountSort, setAccountSort] = useState("updated-desc");
+  const [accountPage, setAccountPage] = useState(1);
+  const [accountPageSize, setAccountPageSize] = useState(25);
+  const [accountPagination, setAccountPagination] = useState<ListPagination>(emptyPagination);
+  const [accountListCounts, setAccountListCounts] = useState({ total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
+  const [installerOptions, setInstallerOptions] = useState<AccountOption[]>([]);
+  const [accountViewReady, setAccountViewReady] = useState(false);
+  const [accountViewSaved, setAccountViewSaved] = useState(false);
+  const [accountViewBusy, setAccountViewBusy] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<AccountDetail | null>(
     null,
   );
@@ -304,6 +319,14 @@ export function AdminOperationsPortal() {
   const [opportunityStatusFilter, setOpportunityStatusFilter] = useState("");
   const [opportunityServiceFilter, setOpportunityServiceFilter] = useState("");
   const [opportunityStateFilter, setOpportunityStateFilter] = useState("");
+  const [opportunitySort, setOpportunitySort] = useState("updated-desc");
+  const [opportunityPage, setOpportunityPage] = useState(1);
+  const [opportunityPageSize, setOpportunityPageSize] = useState(25);
+  const [opportunityPagination, setOpportunityPagination] = useState<ListPagination>(emptyPagination);
+  const [opportunityOptions, setOpportunityOptions] = useState<OpportunityOption[]>([]);
+  const [opportunityViewReady, setOpportunityViewReady] = useState(false);
+  const [opportunityViewSaved, setOpportunityViewSaved] = useState(false);
+  const [opportunityViewBusy, setOpportunityViewBusy] = useState(false);
   const [products, setProducts] = useState<CatalogueProduct[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [productWholesaler, setProductWholesaler] = useState("");
@@ -316,6 +339,14 @@ export function AdminOperationsPortal() {
   const [productMinimumPrice, setProductMinimumPrice] = useState("");
   const [productMaximumPrice, setProductMaximumPrice] = useState("");
   const [productSynthetic, setProductSynthetic] = useState("");
+  const [productSort, setProductSort] = useState("priority-desc");
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(25);
+  const [productPagination, setProductPagination] = useState<ListPagination>(emptyPagination);
+  const [productListCounts, setProductListCounts] = useState({ total: 0, pending: 0, approved: 0, live: 0 });
+  const [productViewReady, setProductViewReady] = useState(false);
+  const [productViewSaved, setProductViewSaved] = useState(false);
+  const [productViewBusy, setProductViewBusy] = useState(false);
   const [productReview, setProductReview] = useState<
     Record<
       string,
@@ -378,6 +409,64 @@ export function AdminOperationsPortal() {
     return result;
   }, []);
 
+  const loadAccounts = useCallback(async (announce = false) => {
+    const params = new URLSearchParams({ page: String(accountPage), pageSize: String(accountPageSize), sort: accountSort });
+    if (accountSearch.trim()) params.set("search", accountSearch.trim());
+    if (accountType) params.set("partnerType", accountType);
+    if (accountVerification) params.set("verification", accountVerification);
+    if (accountSynthetic) params.set("synthetic", accountSynthetic);
+    try {
+      const result = await api(`/api/admin/accounts?${params}`);
+      setAccounts(result.accounts || []);
+      setAccountPagination(result.pagination || emptyPagination);
+      setAccountListCounts(result.counts || { total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
+      setInstallerOptions(result.installerOptions || []);
+      if (announce) setStatus(`${result.pagination?.total || 0} business accounts match this view.`);
+    } catch (error) { setStatus(authMessage(error)); }
+  }, [accountPage, accountPageSize, accountSearch, accountSort, accountSynthetic, accountType, accountVerification, api]);
+
+  const loadOpportunities = useCallback(async (announce = false) => {
+    const params = new URLSearchParams({ page: String(opportunityPage), pageSize: String(opportunityPageSize), sort: opportunitySort });
+    if (opportunitySearch.trim()) params.set("search", opportunitySearch.trim());
+    if (opportunityStatusFilter) params.set("status", opportunityStatusFilter);
+    if (opportunityServiceFilter) params.set("service", opportunityServiceFilter);
+    if (opportunityStateFilter) params.set("state", opportunityStateFilter);
+    if (opportunitySynthetic) params.set("synthetic", opportunitySynthetic);
+    try {
+      const result = await api(`/api/admin/opportunities?${params}`);
+      setOpportunities(result.opportunities || []);
+      setOpportunityOptions(result.openOptions || []);
+      setOpportunityPagination(result.pagination || emptyPagination);
+      if (announce) setStatus(`${result.pagination?.total || 0} leads and opportunities match this view.`);
+    } catch (error) { setStatus(authMessage(error)); }
+  }, [api, opportunityPage, opportunityPageSize, opportunitySearch, opportunityServiceFilter, opportunitySort, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic]);
+
+  const loadProducts = useCallback(async (announce = false) => {
+    const params = new URLSearchParams({ page: String(productPage), pageSize: String(productPageSize), sort: productSort });
+    if (productSearch.trim()) params.set("search", productSearch.trim());
+    if (productWholesaler.trim()) params.set("supplier", productWholesaler.trim());
+    if (productBrand.trim()) params.set("brand", productBrand.trim());
+    if (productModel.trim()) params.set("model", productModel.trim());
+    if (productCategory) params.set("category", productCategory);
+    if (productStock) params.set("stock", productStock);
+    if (productReviewStatus) params.set("review", productReviewStatus);
+    if (productListingStatus) params.set("listing", productListingStatus);
+    if (productMinimumPrice) params.set("minPrice", productMinimumPrice);
+    if (productMaximumPrice) params.set("maxPrice", productMaximumPrice);
+    if (productSynthetic) params.set("synthetic", productSynthetic);
+    try {
+      const result = await api(`/api/admin/products?${params}`);
+      const nextProducts = result.products || [];
+      setProducts(nextProducts);
+      setProductPagination(result.pagination || emptyPagination);
+      setProductListCounts(result.counts || { total: 0, pending: 0, approved: 0, live: 0 });
+      setProductReview(Object.fromEntries(nextProducts.map((product: CatalogueProduct) => [product.id, {
+        reviewStatus: product.reviewStatus, reviewNote: product.reviewNote || "", listingStatus: product.listingStatus,
+      }])));
+      if (announce) setStatus(`${result.pagination?.total || 0} catalogue products match this view.`);
+    } catch (error) { setStatus(authMessage(error)); }
+  }, [api, productBrand, productCategory, productListingStatus, productMaximumPrice, productMinimumPrice, productModel, productPage, productPageSize, productReviewStatus, productSearch, productSort, productStock, productSynthetic, productWholesaler]);
+
   const loadWorkspace = useCallback(
     async (nextSession: AdminSession) => {
       const datasets = await Promise.allSettled([
@@ -389,13 +478,24 @@ export function AdminOperationsPortal() {
       ]);
       const failures: string[] = [];
       const [accountResult, opportunityResult, productResult, referralResult, enquiryResult] = datasets;
-      if (accountResult.status === "fulfilled") setAccounts(accountResult.value.accounts || []);
+      if (accountResult.status === "fulfilled") {
+        setAccounts(accountResult.value.accounts || []);
+        setAccountPagination(accountResult.value.pagination || emptyPagination);
+        setAccountListCounts(accountResult.value.counts || { total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
+        setInstallerOptions(accountResult.value.installerOptions || []);
+      }
       else failures.push("partners");
-      if (opportunityResult.status === "fulfilled") setOpportunities(opportunityResult.value.opportunities || []);
+      if (opportunityResult.status === "fulfilled") {
+        setOpportunities(opportunityResult.value.opportunities || []);
+        setOpportunityPagination(opportunityResult.value.pagination || emptyPagination);
+        setOpportunityOptions(opportunityResult.value.openOptions || []);
+      }
       else failures.push("leads and opportunities");
       if (productResult.status === "fulfilled") {
         const nextProducts = productResult.value.products || [];
         setProducts(nextProducts);
+        setProductPagination(productResult.value.pagination || emptyPagination);
+        setProductListCounts(productResult.value.counts || { total: 0, pending: 0, approved: 0, live: 0 });
         setProductReview(
           Object.fromEntries(
             nextProducts.map((product: CatalogueProduct) => [
@@ -476,6 +576,99 @@ export function AdminOperationsPortal() {
       }),
     [loadSession],
   );
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    void Promise.allSettled([
+      api("/api/admin/list-views?view=admin-partners"),
+      api("/api/admin/list-views?view=admin-opportunities"),
+      api("/api/admin/list-views?view=admin-products"),
+    ]).then(([partnerView, opportunityView, productView]) => {
+      if (cancelled) return;
+      if (partnerView.status === "fulfilled") {
+        const preferences = partnerView.value.preferences as WorkspaceListPreferences;
+        setAccountSearch(preferences.search || "");
+        setAccountType(preferences.type || "");
+        setAccountVerification(preferences.filter === "all" ? "" : preferences.filter || "");
+        setAccountSynthetic(preferences.synthetic || "");
+        setAccountSort(preferences.sort || "updated-desc");
+        setAccountPageSize(preferences.pageSize || 25);
+        setAccountViewSaved(Boolean(partnerView.value.saved));
+      }
+      if (opportunityView.status === "fulfilled") {
+        const preferences = opportunityView.value.preferences as WorkspaceListPreferences;
+        setOpportunitySearch(preferences.search || "");
+        setOpportunityStatusFilter(preferences.filter === "all" ? "" : preferences.filter || "");
+        setOpportunityServiceFilter(preferences.service || "");
+        setOpportunityStateFilter(preferences.state || "");
+        setOpportunitySynthetic(preferences.synthetic || "");
+        setOpportunitySort(preferences.sort || "updated-desc");
+        setOpportunityPageSize(preferences.pageSize || 25);
+        setOpportunityViewSaved(Boolean(opportunityView.value.saved));
+      }
+      if (productView.status === "fulfilled") {
+        const preferences = productView.value.preferences as WorkspaceListPreferences;
+        setProductSearch(preferences.search || "");
+        setProductWholesaler(preferences.supplier || "");
+        setProductBrand(preferences.brand || "");
+        setProductModel(preferences.model || "");
+        setProductCategory(preferences.category || "");
+        setProductStock(preferences.stock || "");
+        setProductReviewStatus(preferences.filter === "all" ? "" : preferences.filter || "");
+        setProductListingStatus(preferences.listing || "");
+        setProductMinimumPrice(preferences.minPrice || "");
+        setProductMaximumPrice(preferences.maxPrice || "");
+        setProductSynthetic(preferences.synthetic || "");
+        setProductSort(preferences.sort || "priority-desc");
+        setProductPageSize(preferences.pageSize || 25);
+        setProductViewSaved(Boolean(productView.value.saved));
+      }
+      setAccountViewReady(true);
+      setOpportunityViewReady(true);
+      setProductViewReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [api, session]);
+
+  useEffect(() => {
+    if (!session || !accountViewReady) return;
+    const timer = window.setTimeout(() => { void loadAccounts(); }, 180);
+    return () => window.clearTimeout(timer);
+  }, [accountViewReady, loadAccounts, session]);
+
+  useEffect(() => {
+    if (!session || !opportunityViewReady) return;
+    const timer = window.setTimeout(() => { void loadOpportunities(); }, 180);
+    return () => window.clearTimeout(timer);
+  }, [loadOpportunities, opportunityViewReady, session]);
+
+  useEffect(() => {
+    if (!session || !productViewReady) return;
+    const timer = window.setTimeout(() => { void loadProducts(); }, 180);
+    return () => window.clearTimeout(timer);
+  }, [loadProducts, productViewReady, session]);
+
+  async function saveAdminListView(view: string, preferences: WorkspaceListPreferences, setSaved: (saved: boolean) => void, setBusy: (busy: boolean) => void) {
+    setBusy(true);
+    try {
+      await api(`/api/admin/list-views?view=${view}`, { method: "PATCH", body: JSON.stringify(preferences) });
+      setSaved(true);
+      setStatus("Your default table view has been saved.");
+    } catch (error) { setStatus(authMessage(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function resetAdminListView(view: string, apply: (preferences: WorkspaceListPreferences) => void, setSaved: (saved: boolean) => void, setBusy: (busy: boolean) => void) {
+    setBusy(true);
+    try {
+      const result = await api(`/api/admin/list-views?view=${view}`, { method: "DELETE" });
+      apply(result.preferences as WorkspaceListPreferences);
+      setSaved(false);
+      setStatus("The table view has been reset to the TLink default.");
+    } catch (error) { setStatus(authMessage(error)); }
+    finally { setBusy(false); }
+  }
 
   async function signInGoogle() {
     setStatus("Opening secure Google sign-in...");
@@ -576,19 +769,56 @@ export function AdminOperationsPortal() {
 
   async function searchAccounts(event?: FormEvent) {
     event?.preventDefault();
-    setStatus("Refreshing business accounts...");
-    try {
-      const params = new URLSearchParams();
-      if (accountSearch.trim()) params.set("search", accountSearch.trim());
-      if (accountType) params.set("partnerType", accountType);
-      if (accountVerification) params.set("verification", accountVerification);
-      if (accountSynthetic) params.set("synthetic", accountSynthetic);
-      const result = await api(`/api/admin/accounts?${params}`);
-      setAccounts(result.accounts || []);
-      setStatus(`${result.accounts?.length || 0} business accounts shown.`);
-    } catch (error) {
-      setStatus(authMessage(error));
-    }
+    if (accountPage !== 1) setAccountPage(1);
+    else await loadAccounts(true);
+  }
+
+  function applyPartnerView(preferences: WorkspaceListPreferences) {
+    setAccountSearch(preferences.search || ""); setAccountType(preferences.type || "");
+    setAccountVerification(preferences.filter === "all" ? "" : preferences.filter || "");
+    setAccountSynthetic(preferences.synthetic || ""); setAccountSort(preferences.sort || "updated-desc");
+    setAccountPageSize(preferences.pageSize || 25); setAccountPage(1);
+  }
+
+  function applyOpportunityView(preferences: WorkspaceListPreferences) {
+    setOpportunitySearch(preferences.search || ""); setOpportunityStatusFilter(preferences.filter === "all" ? "" : preferences.filter || "");
+    setOpportunityServiceFilter(preferences.service || ""); setOpportunityStateFilter(preferences.state || "");
+    setOpportunitySynthetic(preferences.synthetic || ""); setOpportunitySort(preferences.sort || "updated-desc");
+    setOpportunityPageSize(preferences.pageSize || 25); setOpportunityPage(1);
+  }
+
+  function applyProductView(preferences: WorkspaceListPreferences) {
+    setProductSearch(preferences.search || ""); setProductWholesaler(preferences.supplier || "");
+    setProductBrand(preferences.brand || ""); setProductModel(preferences.model || "");
+    setProductCategory(preferences.category || ""); setProductStock(preferences.stock || "");
+    setProductReviewStatus(preferences.filter === "all" ? "" : preferences.filter || ""); setProductListingStatus(preferences.listing || "");
+    setProductMinimumPrice(preferences.minPrice || ""); setProductMaximumPrice(preferences.maxPrice || "");
+    setProductSynthetic(preferences.synthetic || ""); setProductSort(preferences.sort || "priority-desc");
+    setProductPageSize(preferences.pageSize || 25); setProductPage(1);
+  }
+
+  function savePartnerView() {
+    void saveAdminListView("admin-partners", { search: accountSearch, filter: accountVerification || "all", sort: accountSort, pageSize: accountPageSize, type: accountType, synthetic: accountSynthetic }, setAccountViewSaved, setAccountViewBusy);
+  }
+
+  function resetPartnerView() {
+    void resetAdminListView("admin-partners", applyPartnerView, setAccountViewSaved, setAccountViewBusy);
+  }
+
+  function saveOpportunityView() {
+    void saveAdminListView("admin-opportunities", { search: opportunitySearch, filter: opportunityStatusFilter || "all", sort: opportunitySort, pageSize: opportunityPageSize, service: opportunityServiceFilter, state: opportunityStateFilter, synthetic: opportunitySynthetic }, setOpportunityViewSaved, setOpportunityViewBusy);
+  }
+
+  function resetOpportunityView() {
+    void resetAdminListView("admin-opportunities", applyOpportunityView, setOpportunityViewSaved, setOpportunityViewBusy);
+  }
+
+  function saveProductView() {
+    void saveAdminListView("admin-products", { search: productSearch, filter: productReviewStatus || "all", sort: productSort, pageSize: productPageSize, supplier: productWholesaler, brand: productBrand, model: productModel, category: productCategory, stock: productStock, listing: productListingStatus, minPrice: productMinimumPrice, maxPrice: productMaximumPrice, synthetic: productSynthetic }, setProductViewSaved, setProductViewBusy);
+  }
+
+  function resetProductView() {
+    void resetAdminListView("admin-products", applyProductView, setProductViewSaved, setProductViewBusy);
   }
 
   async function searchProductEnquiries(event?: FormEvent) {
@@ -804,8 +1034,8 @@ export function AdminOperationsPortal() {
         summary: "",
         status: "draft",
       });
-      const result = await api("/api/admin/opportunities");
-      setOpportunities(result.opportunities || []);
+      setOpportunityPage(1);
+      await loadOpportunities();
       setStatus(
         "Opportunity created. Open it when the scope is ready for matching.",
       );
@@ -821,8 +1051,7 @@ export function AdminOperationsPortal() {
         method: "PATCH",
         body: JSON.stringify({ id, status: nextStatus }),
       });
-      const result = await api("/api/admin/opportunities");
-      setOpportunities(result.opportunities || []);
+      await loadOpportunities();
       setStatus(`Opportunity marked ${nextStatus}.`);
     } catch (error) {
       setStatus(authMessage(error));
@@ -838,8 +1067,7 @@ export function AdminOperationsPortal() {
         method: "POST",
         body: JSON.stringify({ opportunityId: id }),
       });
-      const refreshed = await api("/api/admin/opportunities");
-      setOpportunities(refreshed.opportunities || []);
+      await loadOpportunities();
       setStatus(
         `${result.allocated?.length || 0} installer${result.allocated?.length === 1 ? "" : "s"} allocated. ${result.eligibleCount || 0} eligible businesses were assessed against distance, radius, capability and recent allocation load.`,
       );
@@ -859,8 +1087,7 @@ export function AdminOperationsPortal() {
         method: "PATCH",
         body: JSON.stringify({ id, status: nextStatus }),
       });
-      const result = await api("/api/admin/opportunities");
-      setOpportunities(result.opportunities || []);
+      await loadOpportunities();
       setStatus(
         nextStatus === "connected"
           ? "Platform coordination opened. Customer contact details remain private."
@@ -882,8 +1109,7 @@ export function AdminOperationsPortal() {
           firebaseUid: selectedBusiness,
         }),
       });
-      const result = await api("/api/admin/opportunities");
-      setOpportunities(result.opportunities || []);
+      await loadOpportunities();
       setStatus(
         "Opportunity assigned. The business can now respond from its dashboard.",
       );
@@ -904,20 +1130,7 @@ export function AdminOperationsPortal() {
         method: "PATCH",
         body: JSON.stringify({ id: product.id, ...decision }),
       });
-      const result = await api("/api/admin/products");
-      setProducts(result.products || []);
-      setProductReview(
-        Object.fromEntries(
-          (result.products || []).map((item: CatalogueProduct) => [
-            item.id,
-            {
-              reviewStatus: item.reviewStatus,
-              reviewNote: item.reviewNote || "",
-              listingStatus: item.listingStatus,
-            },
-          ]),
-        ),
-      );
+      await loadProducts();
       setStatus("Catalogue decision saved and added to the audit history.");
     } catch (error) {
       setStatus(authMessage(error));
@@ -992,56 +1205,19 @@ export function AdminOperationsPortal() {
   const opportunityCounts = metrics.opportunities || {};
   const matchCounts = metrics.matches || {};
   const productCounts = metrics.products || {};
-  const paidAccounts = accounts.filter((account) => account.membershipActive).length;
-  const freeAccounts = accounts.filter((account) => !account.membershipActive).length;
-  const hiddenSuppliers = accounts.filter(
-    (account) => account.partnerType === "supplier" && !account.membershipActive,
-  ).length;
-  const leadLockedInstallers = accounts.filter(
-    (account) => account.partnerType === "installer" && !account.membershipActive,
-  ).length;
+  const paidAccounts = accountListCounts.paid;
+  const freeAccounts = accountListCounts.free;
+  const hiddenSuppliers = accountListCounts.hiddenSuppliers;
+  const leadLockedInstallers = accountListCounts.leadLockedInstallers;
   const openProductEnquiries = productEnquiries.filter((item) => ["new", "viewed"].includes(item.status)).length;
   const respondedProductEnquiries = productEnquiries.filter((item) => item.status === "responded").length;
   const enquiryValueCents = productEnquiries.reduce((total, item) => total + item.subtotalCentsExGst, 0);
-  const openOpportunities = useMemo(
-    () => opportunities.filter((item) => item.status === "open" && (opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true)),
-    [opportunities, opportunitySynthetic],
-  );
-  const visibleOpportunities = useMemo(
-    () => {
-      const term = opportunitySearch.trim().toLowerCase();
-      return opportunities
-        .filter((item) => opportunitySynthetic === "only" ? item.isSynthetic : opportunitySynthetic === "exclude" ? !item.isSynthetic : true)
-        .filter((item) => !opportunityStatusFilter || item.status === opportunityStatusFilter)
-        .filter((item) => !opportunityServiceFilter || item.serviceCategories.includes(opportunityServiceFilter))
-        .filter((item) => !opportunityStateFilter || item.state === opportunityStateFilter)
-        .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.postcode}`.toLowerCase().includes(term));
-    },
-    [opportunities, opportunitySearch, opportunityServiceFilter, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic],
-  );
+  const openOpportunities = opportunityOptions;
+  const visibleOpportunities = opportunities;
   const activeOwners = admins.filter(
     (item) => item.role === "owner" && item.status === "active",
   ).length;
-  const visibleProducts = useMemo(() => {
-    const term = productSearch.trim().toLowerCase();
-    const wholesaler = productWholesaler.trim().toLowerCase();
-    const brand = productBrand.trim().toLowerCase();
-    const model = productModel.trim().toLowerCase();
-    const minimumPrice = productMinimumPrice ? Math.round(Number(productMinimumPrice) * 100) : 0;
-    const maximumPrice = productMaximumPrice ? Math.round(Number(productMaximumPrice) * 100) : 0;
-    return products
-      .filter((item) => productSynthetic === "only" ? item.isSynthetic : productSynthetic === "exclude" ? !item.isSynthetic : true)
-      .filter((item) => !term || item.name.toLowerCase().includes(term))
-      .filter((item) => !wholesaler || item.supplierName.toLowerCase().includes(wholesaler))
-      .filter((item) => !brand || item.brand.toLowerCase().includes(brand))
-      .filter((item) => !model || item.modelNumber.toLowerCase().includes(model))
-      .filter((item) => !productCategory || item.category === productCategory)
-      .filter((item) => !productStock || item.stockStatus === productStock)
-      .filter((item) => !productReviewStatus || item.reviewStatus === productReviewStatus)
-      .filter((item) => !productListingStatus || item.listingStatus === productListingStatus)
-      .filter((item) => !minimumPrice || item.unitPriceCentsExGst >= minimumPrice)
-      .filter((item) => !maximumPrice || item.unitPriceCentsExGst <= maximumPrice);
-  }, [productBrand, productCategory, productListingStatus, productMaximumPrice, productMinimumPrice, productModel, productReviewStatus, productSearch, productStock, productSynthetic, productWholesaler, products]);
+  const visibleProducts = products;
 
   function exportPartners() {
     downloadWorkspaceCsv("tlink-admin-partners.csv", [
@@ -1603,18 +1779,18 @@ export function AdminOperationsPortal() {
                   aria-label="Search accounts"
                   placeholder="Business, contact, email or postcode"
                   value={accountSearch}
-                  onChange={(event) => setAccountSearch(event.target.value)}
+                  onChange={(event) => { setAccountSearch(event.target.value); setAccountPage(1); }}
                 />
                 <select
                   aria-label="Partner type"
                   value={accountType}
-                  onChange={(event) => setAccountType(event.target.value)}
+                  onChange={(event) => { setAccountType(event.target.value); setAccountPage(1); }}
                 >
                   <option value="">All partner types</option>
                   <option value="installer">Installers</option>
                   <option value="supplier">Wholesalers</option>
                 </select>
-                <select aria-label="Test account marker" value={accountSynthetic} onChange={(event) => setAccountSynthetic(event.target.value)}>
+                <select aria-label="Test account marker" value={accountSynthetic} onChange={(event) => { setAccountSynthetic(event.target.value); setAccountPage(1); }}>
                   <option value="">Live and demo accounts</option>
                   <option value="exclude">Live accounts only</option>
                   <option value="only">Demo accounts only</option>
@@ -1622,9 +1798,7 @@ export function AdminOperationsPortal() {
                 <select
                   aria-label="Verification status"
                   value={accountVerification}
-                  onChange={(event) =>
-                    setAccountVerification(event.target.value)
-                  }
+                  onChange={(event) => { setAccountVerification(event.target.value); setAccountPage(1); }}
                 >
                   <option value="">All verification states</option>
                   {[
@@ -1641,8 +1815,20 @@ export function AdminOperationsPortal() {
                     </option>
                   ))}
                 </select>
+                <select aria-label="Sort partners" value={accountSort} onChange={(event) => { setAccountSort(event.target.value); setAccountPage(1); }}>
+                  <option value="updated-desc">Recently updated</option>
+                  <option value="updated-asc">Oldest updated</option>
+                  <option value="name-asc">Business A to Z</option>
+                  <option value="name-desc">Business Z to A</option>
+                  <option value="type-asc">Partner type</option>
+                  <option value="verification-asc">Verification status</option>
+                  <option value="status-asc">Account status</option>
+                </select>
                 <button type="submit">Apply filters</button>
               </form>
+              <WorkspaceListControls page={accountPagination.page} pageCount={accountPagination.pageCount} pageSize={accountPagination.pageSize} total={accountPagination.total}
+                saved={accountViewSaved} busy={accountViewBusy} onPage={setAccountPage} onPageSize={(size) => { setAccountPageSize(size); setAccountPage(1); }}
+                onSave={savePartnerView} onReset={resetPartnerView} />
               <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!accounts.length} onClick={exportPartners}>Export visible partners CSV</button></div>
               <div className="admin-partner-layout">
                 <section className="admin-panel admin-account-list">
@@ -2034,39 +2220,51 @@ export function AdminOperationsPortal() {
                     aria-label="Search opportunities"
                     placeholder="Title, scope, type or postcode"
                     value={opportunitySearch}
-                    onChange={(event) => setOpportunitySearch(event.target.value)}
+                    onChange={(event) => { setOpportunitySearch(event.target.value); setOpportunityPage(1); }}
                   />
                 </label>
                 <label>
                   Status
-                  <select value={opportunityStatusFilter} onChange={(event) => setOpportunityStatusFilter(event.target.value)}>
+                  <select value={opportunityStatusFilter} onChange={(event) => { setOpportunityStatusFilter(event.target.value); setOpportunityPage(1); }}>
                     <option value="">All statuses</option>
                     {["draft", "open", "paused", "closed", "expired"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
                   </select>
                 </label>
                 <label>
                   Service
-                  <select value={opportunityServiceFilter} onChange={(event) => setOpportunityServiceFilter(event.target.value)}>
+                  <select value={opportunityServiceFilter} onChange={(event) => { setOpportunityServiceFilter(event.target.value); setOpportunityPage(1); }}>
                     <option value="">All services</option>
                     {categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </label>
                 <label>
                   State
-                  <select value={opportunityStateFilter} onChange={(event) => setOpportunityStateFilter(event.target.value)}>
+                  <select value={opportunityStateFilter} onChange={(event) => { setOpportunityStateFilter(event.target.value); setOpportunityPage(1); }}>
                     <option value="">All states</option>
                     {states.map((value) => <option key={value} value={value}>{value}</option>)}
                   </select>
                 </label>
                 <label>
                   Opportunity data
-                  <select aria-label="Opportunity data marker" value={opportunitySynthetic} onChange={(event) => setOpportunitySynthetic(event.target.value)}>
+                  <select aria-label="Opportunity data marker" value={opportunitySynthetic} onChange={(event) => { setOpportunitySynthetic(event.target.value); setOpportunityPage(1); }}>
                     <option value="">Live and demo enquiries</option>
                     <option value="exclude">Live enquiries only</option>
                     <option value="only">Demo enquiries only</option>
                   </select>
                 </label>
-                <span>{visibleOpportunities.length} enquiries shown</span>
+                <label>
+                  Sort by
+                  <select value={opportunitySort} onChange={(event) => { setOpportunitySort(event.target.value); setOpportunityPage(1); }}>
+                    <option value="updated-desc">Recently updated</option>
+                    <option value="updated-asc">Oldest updated</option>
+                    <option value="title-asc">Title A to Z</option>
+                    <option value="title-desc">Title Z to A</option>
+                    <option value="status-asc">Status</option>
+                    <option value="state-asc">State and postcode</option>
+                    <option value="expires-asc">Expiry date</option>
+                  </select>
+                </label>
+                <span>{opportunityPagination.total} enquiries match</span>
                 {(opportunitySearch || opportunityStatusFilter || opportunityServiceFilter || opportunityStateFilter || opportunitySynthetic) && (
                   <button
                     type="button"
@@ -2077,12 +2275,16 @@ export function AdminOperationsPortal() {
                       setOpportunityServiceFilter("");
                       setOpportunityStateFilter("");
                       setOpportunitySynthetic("");
+                      setOpportunityPage(1);
                     }}
                   >
                     Clear filters
                   </button>
                 )}
               </div>
+              <WorkspaceListControls page={opportunityPagination.page} pageCount={opportunityPagination.pageCount} pageSize={opportunityPagination.pageSize} total={opportunityPagination.total}
+                saved={opportunityViewSaved} busy={opportunityViewBusy} onPage={setOpportunityPage} onPageSize={(size) => { setOpportunityPageSize(size); setOpportunityPage(1); }}
+                onSave={saveOpportunityView} onReset={resetOpportunityView} />
               <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!visibleOpportunities.length} onClick={exportOpportunities}>Export visible leads CSV</button></div>
               <div className="admin-opportunity-layout">
                 <form
@@ -2415,13 +2617,7 @@ export function AdminOperationsPortal() {
                       required
                     >
                       <option value="">Choose a business</option>
-                      {accounts
-                        .filter(
-                          (item) =>
-                            item.accountStatus === "active" &&
-                            item.partnerType === "installer",
-                        )
-                        .map((item) => (
+                      {installerOptions.map((item) => (
                           <option
                             value={item.firebaseUid}
                             key={item.firebaseUid}
@@ -2452,52 +2648,33 @@ export function AdminOperationsPortal() {
               <div className="admin-context-filter">
                 <label>
                   Catalogue data
-                  <select aria-label="Catalogue data marker" value={productSynthetic} onChange={(event) => setProductSynthetic(event.target.value)}>
+                  <select aria-label="Catalogue data marker" value={productSynthetic} onChange={(event) => { setProductSynthetic(event.target.value); setProductPage(1); }}>
                     <option value="">Live and demo products</option>
                     <option value="exclude">Live products only</option>
                     <option value="only">Demo products only</option>
                   </select>
                 </label>
-                <span>{visibleProducts.length} products shown</span>
+                <span>{productPagination.total} products match</span>
               </div>
               <section className="admin-metric-grid">
                 <article>
                   <span>Total products</span>
-                  <strong>{products.length}</strong>
+                  <strong>{productListCounts.total}</strong>
                   <small>Across verified and pending wholesalers</small>
                 </article>
                 <article>
                   <span>Awaiting review</span>
-                  <strong>
-                    {
-                      products.filter((item) => item.reviewStatus === "pending")
-                        .length
-                    }
-                  </strong>
+                  <strong>{productListCounts.pending}</strong>
                   <small>New or materially changed listings</small>
                 </article>
                 <article>
                   <span>Approved</span>
-                  <strong>
-                    {
-                      products.filter(
-                        (item) => item.reviewStatus === "approved",
-                      ).length
-                    }
-                  </strong>
+                  <strong>{productListCounts.approved}</strong>
                   <small>Catalogue evidence accepted</small>
                 </article>
                 <article>
                   <span>Live to installers</span>
-                  <strong>
-                    {
-                      products.filter(
-                        (item) =>
-                          item.reviewStatus === "approved" &&
-                          item.listingStatus === "published",
-                      ).length
-                    }
-                  </strong>
+                  <strong>{productListCounts.live}</strong>
                   <small>Approved and published listings only</small>
                 </article>
               </section>
@@ -2512,18 +2689,22 @@ export function AdminOperationsPortal() {
                   </p>
                 </div>
                 <div className="admin-catalogue-granular crm-granular-filters"><div>
-                  <label><span>Product name</span><input type="search" placeholder="Product name" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} /></label>
-                  <label><span>Wholesaler</span><input placeholder="Wholesaler" value={productWholesaler} onChange={(event) => setProductWholesaler(event.target.value)} /></label>
-                  <label><span>Brand</span><input placeholder="Brand" value={productBrand} onChange={(event) => setProductBrand(event.target.value)} /></label>
-                  <label><span>Model code</span><input placeholder="Model code" value={productModel} onChange={(event) => setProductModel(event.target.value)} /></label>
-                  <label><span>Category</span><select value={productCategory} onChange={(event) => setProductCategory(event.target.value)}><option value="">All categories</option>{[...new Set(products.map((item) => item.category))].sort().map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></label>
-                  <label><span>Stock</span><select value={productStock} onChange={(event) => setProductStock(event.target.value)}><option value="">Any stock</option><option value="in_stock">In stock</option><option value="limited">Limited</option><option value="order_in">Order in</option><option value="unavailable">Unavailable</option></select></label>
-                  <label><span>Review status</span><select value={productReviewStatus} onChange={(event) => setProductReviewStatus(event.target.value)}><option value="">Any review status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="needs_changes">Needs changes</option><option value="rejected">Rejected</option></select></label>
-                  <label><span>Listing status</span><select value={productListingStatus} onChange={(event) => setProductListingStatus(event.target.value)}><option value="">Any listing status</option><option value="draft">Draft</option><option value="published">Published</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
-                  <label><span>Minimum price ex GST</span><input type="number" min="0" value={productMinimumPrice} onChange={(event) => setProductMinimumPrice(event.target.value)} placeholder="$0" /></label>
-                  <label><span>Maximum price ex GST</span><input type="number" min="0" value={productMaximumPrice} onChange={(event) => setProductMaximumPrice(event.target.value)} placeholder="No maximum" /></label>
-                  <button type="button" onClick={() => { setProductSearch(""); setProductWholesaler(""); setProductBrand(""); setProductModel(""); setProductCategory(""); setProductStock(""); setProductReviewStatus(""); setProductListingStatus(""); setProductMinimumPrice(""); setProductMaximumPrice(""); }}>Clear filters</button>
+                  <label><span>Product name</span><input type="search" placeholder="Product name" value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setProductPage(1); }} /></label>
+                  <label><span>Wholesaler</span><input placeholder="Wholesaler" value={productWholesaler} onChange={(event) => { setProductWholesaler(event.target.value); setProductPage(1); }} /></label>
+                  <label><span>Brand</span><input placeholder="Brand" value={productBrand} onChange={(event) => { setProductBrand(event.target.value); setProductPage(1); }} /></label>
+                  <label><span>Model code</span><input placeholder="Model code" value={productModel} onChange={(event) => { setProductModel(event.target.value); setProductPage(1); }} /></label>
+                  <label><span>Category</span><select value={productCategory} onChange={(event) => { setProductCategory(event.target.value); setProductPage(1); }}><option value="">All categories</option>{["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></label>
+                  <label><span>Stock</span><select value={productStock} onChange={(event) => { setProductStock(event.target.value); setProductPage(1); }}><option value="">Any stock</option><option value="in_stock">In stock</option><option value="limited">Limited</option><option value="order_in">Order in</option><option value="unavailable">Unavailable</option></select></label>
+                  <label><span>Review status</span><select value={productReviewStatus} onChange={(event) => { setProductReviewStatus(event.target.value); setProductPage(1); }}><option value="">Any review status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="needs_changes">Needs changes</option><option value="rejected">Rejected</option></select></label>
+                  <label><span>Listing status</span><select value={productListingStatus} onChange={(event) => { setProductListingStatus(event.target.value); setProductPage(1); }}><option value="">Any listing status</option><option value="draft">Draft</option><option value="published">Published</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
+                  <label><span>Minimum price ex GST</span><input type="number" min="0" value={productMinimumPrice} onChange={(event) => { setProductMinimumPrice(event.target.value); setProductPage(1); }} placeholder="$0" /></label>
+                  <label><span>Maximum price ex GST</span><input type="number" min="0" value={productMaximumPrice} onChange={(event) => { setProductMaximumPrice(event.target.value); setProductPage(1); }} placeholder="No maximum" /></label>
+                  <label><span>Sort by</span><select value={productSort} onChange={(event) => { setProductSort(event.target.value); setProductPage(1); }}><option value="priority-desc">Review priority</option><option value="updated-desc">Recently updated</option><option value="name-asc">Product A to Z</option><option value="supplier-asc">Wholesaler A to Z</option><option value="brand-asc">Brand A to Z</option><option value="model-asc">Model code A to Z</option><option value="category-asc">Category</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="stock-asc">Stock status</option><option value="lead-asc">Lead time</option><option value="warranty-desc">Warranty longest first</option></select></label>
+                  <button type="button" onClick={() => { setProductSearch(""); setProductWholesaler(""); setProductBrand(""); setProductModel(""); setProductCategory(""); setProductStock(""); setProductReviewStatus(""); setProductListingStatus(""); setProductMinimumPrice(""); setProductMaximumPrice(""); setProductPage(1); }}>Clear filters</button>
                 </div></div>
+                <WorkspaceListControls page={productPagination.page} pageCount={productPagination.pageCount} pageSize={productPagination.pageSize} total={productPagination.total}
+                  saved={productViewSaved} busy={productViewBusy} onPage={setProductPage} onPageSize={(size) => { setProductPageSize(size); setProductPage(1); }}
+                  onSave={saveProductView} onReset={resetProductView} />
                 <div className="admin-catalogue-list">
                   <div className="admin-catalogue-columns" aria-hidden="true">
                     <span>Wholesaler</span><span>Brand</span><span>Model code</span><span>Product</span><span>Category</span><span>Price ex GST</span><span>Minimum order</span><span>Stock</span><span>Lead time</span><span>Warranty</span><span>Review</span><span>Listing</span><span>Linked kit</span><span>Action</span>

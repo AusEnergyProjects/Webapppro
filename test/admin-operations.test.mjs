@@ -193,7 +193,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
 });
 
 test("large opportunity sets load without a parameter per opportunity", () => {
-  assert.match(opportunitiesRoute, /JOIN \(SELECT id FROM trade_opportunities ORDER BY updated_at DESC LIMIT 500\) visible/);
+  assert.match(opportunitiesRoute, /IN \(SELECT o\.id FROM trade_opportunities o \$\{where\} ORDER BY \$\{orderBy\} LIMIT \? OFFSET \?\)/);
+  assert.match(opportunitiesRoute, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
   assert.doesNotMatch(opportunitiesRoute, /ids\.map\(\(\) => "\?"\)/);
 });
 

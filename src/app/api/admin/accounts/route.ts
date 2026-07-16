@@ -15,6 +15,18 @@ const VERIFICATION_STATUSES = new Set(["not_started", "submitted", "under_review
 const AVAILABILITY_STATUSES = new Set(["open", "limited", "paused"]);
 const PLAN_KEYS = new Set(["unselected", "installer_annual", "installer_monthly", "supplier_annual", "supplier_monthly"]);
 const BILLING_STATUSES = new Set(["not_connected", "processing", "trial", "active", "active_cancels_at_period_end", "past_due", "paused", "cancelled"]);
+const PAGE_SIZES = new Set([25, 50, 100]);
+const SORTS: Record<string, string> = {
+  "updated-desc": "updated_at DESC",
+  "updated-asc": "updated_at ASC",
+  "name-asc": "business_name COLLATE NOCASE ASC, updated_at DESC",
+  "name-desc": "business_name COLLATE NOCASE DESC, updated_at DESC",
+  "type-asc": "partner_type COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
+  "type-desc": "partner_type COLLATE NOCASE DESC, business_name COLLATE NOCASE ASC",
+  "verification-asc": "verification_status COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
+  "status-asc": "account_status COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
+  "status-desc": "account_status COLLATE NOCASE DESC, business_name COLLATE NOCASE ASC",
+};
 
 function shapeAccount(row: Record<string, unknown>) {
   return {
@@ -100,8 +112,13 @@ export async function GET(request: Request) {
     const partnerType = cleanAdminText(url.searchParams.get("partnerType"), 20);
     const verification = cleanAdminText(url.searchParams.get("verification"), 30);
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
+    const sort = cleanAdminText(url.searchParams.get("sort"), 30) || "updated-desc";
+    const requestedPage = Number(url.searchParams.get("page"));
+    const requestedPageSize = Number(url.searchParams.get("pageSize"));
+    const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
     const clauses: string[] = [];
-    const bindings: string[] = [];
+    const bindings: unknown[] = [];
     if (search) {
       clauses.push("(LOWER(business_name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(contact_name) LIKE ? OR postcode LIKE ?)");
       const term = `%${search}%`;
@@ -113,12 +130,37 @@ export async function GET(request: Request) {
     if (synthetic === "only") clauses.push("COALESCE(is_synthetic, 0) = 1");
     if (synthetic === "exclude") clauses.push("COALESCE(is_synthetic, 0) = 0");
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const statement = db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
+    const [countRow, rows, counts, installerOptions] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) total FROM trade_accounts ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+      db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
       plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, is_synthetic, created_at, updated_at
-      FROM trade_accounts ${where} ORDER BY updated_at DESC LIMIT 500`);
-    const rows = bindings.length ? await statement.bind(...bindings).all<Record<string, unknown>>() : await statement.all<Record<string, unknown>>();
-    return adminJson({ ok: true, accounts: rows.results.map(shapeAccount) });
+      FROM trade_accounts ${where} ORDER BY ${SORTS[sort] || SORTS["updated-desc"]} LIMIT ? OFFSET ?`)
+        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN billing_status IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) paid,
+        SUM(CASE WHEN billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) free,
+        SUM(CASE WHEN partner_type = 'supplier' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) hidden_suppliers,
+        SUM(CASE WHEN partner_type = 'installer' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) lead_locked_installers
+        FROM trade_accounts`).first<Record<string, unknown>>(),
+      db.prepare(`SELECT firebase_uid, business_name, partner_type, address_state, account_status
+        FROM trade_accounts WHERE partner_type = 'installer' AND account_status = 'active'
+        ORDER BY business_name COLLATE NOCASE LIMIT 2000`).all<Record<string, unknown>>(),
+    ]);
+    const total = Number(countRow?.total || 0);
+    return adminJson({
+      ok: true,
+      accounts: rows.results.map(shapeAccount),
+      counts: {
+        total: Number(counts?.total || 0), paid: Number(counts?.paid || 0), free: Number(counts?.free || 0),
+        hiddenSuppliers: Number(counts?.hidden_suppliers || 0), leadLockedInstallers: Number(counts?.lead_locked_installers || 0),
+      },
+      installerOptions: installerOptions.results.map((row) => ({
+        firebaseUid: row.firebase_uid, businessName: row.business_name, partnerType: row.partner_type,
+        addressState: row.address_state, accountStatus: row.account_status,
+      })),
+      pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+    });
   } catch (error) {
     return adminError(error);
   }
