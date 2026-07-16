@@ -277,10 +277,11 @@ function BusinessHubFoundation({
       <div className="dashboard-panel-heading business-hub-heading">
         <div>
           <span>Business operations</span>
-          <h2 id="business-hub-title">Run work without turning customer details into a contact list</h2>
+          <h2 id="business-hub-title">{partnerType === "supplier" ? "Move supply work from request to completion" : "Run work without turning customer details into a contact list"}</h2>
           <p>
-            Track stages, dates, checklists and handover progress. Business Hub stores operational references only.
-            Customer names, emails, phone numbers and street addresses stay outside this workspace.
+            {partnerType === "supplier"
+              ? "Track allocations, commercial follow-up, dates and internal tasks without mixing catalogue work with household enquiries."
+              : "Track stages, dates, checklists and handover progress. Business Hub stores operational references only. Customer names, emails, phone numbers and street addresses stay outside this workspace."}
           </p>
         </div>
         <div className={`business-hub-access ${access.fullAccess ? "is-member" : "is-free"}`}>

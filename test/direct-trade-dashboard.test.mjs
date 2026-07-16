@@ -8,6 +8,8 @@ const styles = read("../src/app/globals.css");
 const supplierCatalogue = read(
   "../src/components/SupplierCatalogueWorkspace.tsx",
 );
+const purchasing = read("../src/components/TradePurchasingWorkspace.tsx");
+const businessHub = read("../src/components/TradeBusinessHub.tsx");
 const verification = read(
   "../src/components/DirectTradeVerificationCentre.tsx",
 );
@@ -126,6 +128,23 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   assert.match(styles, /dashboard-workspace-nav button\.active/);
 });
 
+test("wholesaler work is progressive instead of one crowded catalogue page", () => {
+  assert.match(supplierCatalogue, /supplier-command-nav/);
+  assert.match(supplierCatalogue, /"overview" \| "enquiries" \| "catalogue" \| "editor"/);
+  assert.match(supplierCatalogue, /Readiness and visibility/);
+  assert.match(supplierCatalogue, /Installer product requests/);
+  assert.match(supplierCatalogue, /One focused listing form/);
+  assert.match(supplierCatalogue, /supplier-product-library-focused/);
+  assert.match(styles, /supplier-overview-actions/);
+  assert.match(styles, /supplier-command-nav button\.active/);
+  assert.match(purchasing, /purchasing-flow-strip/);
+  assert.match(purchasing, /Wholesaler order desk/);
+  assert.match(businessHub, /Move supply work from request to completion/);
+});
+
 test("new dashboard, verification and membership copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(dashboard + verification + membership, /[\u2013\u2014]/);
+  assert.doesNotMatch(
+    dashboard + supplierCatalogue + purchasing + businessHub + verification + membership,
+    /[\u2013\u2014]/,
+  );
 });

@@ -3849,6 +3849,39 @@ body input[type="checkbox"]:disabled {
 .trade-portal-shell .supplier-catalogue-layout { gap: 18px; grid-template-columns: minmax(320px, .75fr) minmax(480px, 1.25fr); }
 .trade-portal-shell .supplier-product-library,
 .trade-portal-shell .supplier-product-editor { border-color: var(--trade-line); box-shadow: none; }
+.trade-portal-shell .supplier-command-nav { background: #fff; border: 1px solid var(--trade-line); border-radius: 16px; display: grid; gap: 5px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; padding: 6px; }
+.trade-portal-shell .supplier-command-nav button { background: transparent; border: 1px solid transparent; border-radius: 11px; color: #58706d; cursor: pointer; display: grid; gap: 3px; padding: 13px 15px; text-align: left; }
+.trade-portal-shell .supplier-command-nav button:hover { background: #f3f8f6; }
+.trade-portal-shell .supplier-command-nav button.active { background: #082f31; border-color: #082f31; box-shadow: 0 7px 16px rgba(5, 47, 49, .13); color: #fff; }
+.trade-portal-shell .supplier-command-nav span { font-size: .72rem; font-weight: 900; }
+.trade-portal-shell .supplier-command-nav small { color: #78908c; font-size: .54rem; line-height: 1.35; }
+.trade-portal-shell .supplier-command-nav button.active small { color: #b9d9d2; }
+.trade-portal-shell .supplier-workspace-status { margin-bottom: 16px; }
+.trade-portal-shell .supplier-overview-actions { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 18px; }
+.trade-portal-shell .supplier-overview-actions button { background: #fff; border: 1px solid var(--trade-line); border-radius: 15px; cursor: pointer; display: grid; gap: 4px; min-height: 118px; padding: 18px; text-align: left; transition: border-color .16s ease, transform .16s ease; }
+.trade-portal-shell .supplier-overview-actions button:hover { border-color: #7ebca7; transform: translateY(-1px); }
+.trade-portal-shell .supplier-overview-actions span { color: #0b9066; font-size: .56rem; font-weight: 950; letter-spacing: .08em; }
+.trade-portal-shell .supplier-overview-actions strong { color: var(--trade-ink); font-family: "Source Serif 4", Georgia, serif; font-size: .9rem; }
+.trade-portal-shell .supplier-overview-actions small { color: #6f8581; font-size: .58rem; line-height: 1.45; }
+.trade-portal-shell .supplier-product-library-focused { width: 100%; }
+.trade-portal-shell .supplier-product-library-focused .supplier-product-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; overflow: visible; }
+.trade-portal-shell .supplier-product-editor { margin: 0 auto 18px; max-width: 1080px; width: 100%; }
+.trade-portal-shell .trade-purchasing { display: grid; gap: 16px; }
+.trade-portal-shell .purchasing-hero { background: #fff; border: 1px solid var(--trade-line); box-shadow: 0 10px 28px rgba(8, 46, 47, .06); color: var(--trade-ink); }
+.trade-portal-shell .purchasing-hero h2 { color: var(--trade-ink); }
+.trade-portal-shell .purchasing-hero p { color: #647c78; }
+.trade-portal-shell .purchasing-hero > div:first-child > span { color: #07845b; }
+.trade-portal-shell .purchasing-boundary { background: #eaf7f2; border-color: #b8dbce; }
+.trade-portal-shell .purchasing-boundary strong { color: #07533c; }
+.trade-portal-shell .purchasing-boundary span { color: #52736a; }
+.trade-portal-shell .purchasing-flow-strip { background: #fff; border: 1px solid var(--trade-line); border-radius: 15px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; }
+.trade-portal-shell .purchasing-flow-strip article { border-right: 1px solid var(--trade-line); display: grid; gap: 3px; padding: 15px 17px; }
+.trade-portal-shell .purchasing-flow-strip article:last-child { border-right: 0; }
+.trade-portal-shell .purchasing-flow-strip span { color: #0a8b62; font-size: .54rem; font-weight: 950; }
+.trade-portal-shell .purchasing-flow-strip strong { color: var(--trade-ink); font-size: .69rem; }
+.trade-portal-shell .purchasing-flow-strip small { color: #738985; font-size: .53rem; }
+.trade-portal-shell .purchasing-flow-strip article.attention { background: #fff8e6; }
+.trade-portal-shell .purchasing-layout { background: #fff; border: 1px solid var(--trade-line); border-radius: 16px; padding: 8px; }
 .trade-portal-shell .dashboard-upgrade-callout { padding: 28px; }
 .trade-portal-shell .dashboard-upgrade-callout strong { color: var(--trade-ink); font-size: 1rem; }
 
@@ -3857,6 +3890,8 @@ body input[type="checkbox"]:disabled {
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 24px; margin-right: 24px; }
   .trade-portal-intro { padding-left: 24px; padding-right: 24px; }
   .trade-portal-shell .supplier-catalogue-layout { grid-template-columns: 1fr; }
+  .trade-portal-shell .supplier-status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .trade-portal-shell .supplier-product-library-focused .supplier-product-list { grid-template-columns: 1fr; }
   .trade-portal-shell .crm-today-grid,
   .trade-portal-shell .crm-report-grid { grid-template-columns: 1fr; }
 }
@@ -3883,6 +3918,11 @@ body input[type="checkbox"]:disabled {
   .trade-portal-shell .crm-job-list,
   .trade-portal-shell .crm-customer-list { max-height: 280px; }
   .trade-portal-shell .trade-business-hub { padding: 18px 15px; }
+  .trade-portal-shell .supplier-command-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trade-portal-shell .supplier-overview-actions { grid-template-columns: 1fr; }
+  .trade-portal-shell .purchasing-flow-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trade-portal-shell .purchasing-flow-strip article:nth-child(2) { border-right: 0; }
+  .trade-portal-shell .purchasing-flow-strip article:nth-child(-n+2) { border-bottom: 1px solid var(--trade-line); }
 }
 
 @media (max-width: 520px) {
@@ -3901,4 +3941,9 @@ body input[type="checkbox"]:disabled {
   .trade-portal-shell .crm-finance-summary { grid-template-columns: 1fr; }
   .trade-portal-shell .crm-form-grid label.wide,
   .trade-portal-shell .crm-field-card.wide { grid-column: 1; }
+  .trade-portal-shell .supplier-status-grid { grid-template-columns: 1fr; }
+  .trade-portal-shell .supplier-command-nav { grid-template-columns: 1fr; }
+  .trade-portal-shell .purchasing-flow-strip { grid-template-columns: 1fr; }
+  .trade-portal-shell .purchasing-flow-strip article { border-bottom: 1px solid var(--trade-line); border-right: 0; }
+  .trade-portal-shell .purchasing-flow-strip article:last-child { border-bottom: 0; }
 }

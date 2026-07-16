@@ -209,6 +209,9 @@ export function SupplierCatalogueWorkspace({
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [search, setSearch] = useState("");
+  const [catalogueView, setCatalogueView] = useState<
+    "overview" | "enquiries" | "catalogue" | "editor"
+  >("overview");
 
   const loadProducts = useCallback(async () => {
     try {
@@ -317,9 +320,7 @@ export function SupplierCatalogueWorkspace({
     setStatus(
       `Editing ${product.modelNumber}. Saving material changes sends the item back for review.`,
     );
-    document
-      .getElementById("supplier-product-editor")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setCatalogueView("editor");
   }
 
   function dependencyFor(productId: string) {
@@ -393,6 +394,7 @@ export function SupplierCatalogueWorkspace({
       setStatus(
         "Product saved. Published items become visible to installers after catalogue review.",
       );
+      setCatalogueView("catalogue");
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -627,6 +629,33 @@ export function SupplierCatalogueWorkspace({
         </article>
       </section>
 
+      <nav className="supplier-command-nav" aria-label="Catalogue workspace sections">
+        <button type="button" className={catalogueView === "overview" ? "active" : ""} onClick={() => setCatalogueView("overview")}>
+          <span>Overview</span><small>Readiness and visibility</small>
+        </button>
+        <button type="button" className={catalogueView === "enquiries" ? "active" : ""} onClick={() => setCatalogueView("enquiries")}>
+          <span>Enquiries{newEnquiryCount ? ` (${newEnquiryCount})` : ""}</span><small>Installer product requests</small>
+        </button>
+        <button type="button" className={catalogueView === "catalogue" ? "active" : ""} onClick={() => setCatalogueView("catalogue")}>
+          <span>Catalogue</span><small>Products, stock and pricing</small>
+        </button>
+        <button type="button" className={catalogueView === "editor" ? "active" : ""} onClick={() => {
+          if (catalogueView !== "editor") {
+            setDraft(emptyDraft);
+            setStatus("");
+          }
+          setCatalogueView("editor");
+        }}>
+          <span>{draft.id ? "Edit product" : "Add product"}</span><small>One focused listing form</small>
+        </button>
+      </nav>
+      {status && catalogueView !== "editor" && (
+        <p className="dashboard-settings-status supplier-workspace-status" role="status">
+          {status}
+        </p>
+      )}
+
+      {catalogueView === "overview" && <>
       <section className={`dashboard-visibility-banner ${marketplaceVisible ? "is-live" : "is-locked"}`}>
         <div>
           <span>{marketplaceVisible ? "Marketplace live" : "Free account"}</span>
@@ -644,7 +673,24 @@ export function SupplierCatalogueWorkspace({
         <a href="#membership">{marketplaceVisible ? "Manage access" : "Unlock marketplace visibility"}</a>
       </section>
 
-      <section className="dashboard-panel supplier-enquiry-workspace" aria-labelledby="supplier-enquiry-title">
+      <section className="supplier-overview-actions" aria-label="Catalogue next actions">
+        <button type="button" onClick={() => setCatalogueView("enquiries")}>
+          <span>01</span><strong>Review installer enquiries</strong><small>{newEnquiryCount ? `${newEnquiryCount} new request${newEnquiryCount === 1 ? "" : "s"} needs attention` : "No new commercial requests"}</small>
+        </button>
+        <button type="button" onClick={() => setCatalogueView("catalogue")}>
+          <span>02</span><strong>Maintain the catalogue</strong><small>{reviewCount ? `${reviewCount} listing${reviewCount === 1 ? "" : "s"} awaiting review` : "Prices and stock are ready to maintain"}</small>
+        </button>
+        <button type="button" onClick={() => {
+          setDraft(emptyDraft);
+          setStatus("");
+          setCatalogueView("editor");
+        }}>
+          <span>03</span><strong>Add a product</strong><small>Create one complete model listing at a time</small>
+        </button>
+      </section>
+      </>}
+
+      {catalogueView === "enquiries" && <section className="dashboard-panel supplier-enquiry-workspace" aria-labelledby="supplier-enquiry-title">
         <div className="dashboard-panel-heading">
           <span>Installer demand inbox</span>
           <h2 id="supplier-enquiry-title">Product selection enquiries</h2>
@@ -722,9 +768,9 @@ export function SupplierCatalogueWorkspace({
             <p>{marketplaceVisible ? "New requests will appear when an installer sends a project product list containing your items." : "Your products are not currently visible to installers, so no new enquiries can be created."}</p>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="dashboard-panel supplier-boundary">
+      {catalogueView === "overview" && <section className="dashboard-panel supplier-boundary">
         <div>
           <span>Wholesaler workspace</span>
           <h2>Products, pricing and install-ready bundles</h2>
@@ -745,10 +791,9 @@ export function SupplierCatalogueWorkspace({
             <li>Installer access requires an approved trade account</li>
           </ul>
         </aside>
-      </section>
+      </section>}
 
-      <div className="supplier-catalogue-layout">
-        <section className="dashboard-panel supplier-product-library">
+      {catalogueView === "catalogue" && <section className="dashboard-panel supplier-product-library supplier-product-library-focused">
           <div className="dashboard-panel-heading">
             <span>Product library</span>
             <h2>Manage the full catalogue</h2>
@@ -878,9 +923,9 @@ export function SupplierCatalogueWorkspace({
               <p>Add the first model or change the catalogue search.</p>
             </div>
           )}
-        </section>
+        </section>}
 
-        <form
+        {catalogueView === "editor" && <form
           id="supplier-product-editor"
           className="dashboard-panel supplier-product-editor"
           onSubmit={saveProduct}
@@ -1180,6 +1225,7 @@ export function SupplierCatalogueWorkspace({
                 onClick={() => {
                   setDraft(emptyDraft);
                   setStatus("Product editor cleared.");
+                  setCatalogueView("catalogue");
                 }}
               >
                 Cancel edit
@@ -1191,8 +1237,7 @@ export function SupplierCatalogueWorkspace({
               {status}
             </p>
           )}
-        </form>
-      </div>
+        </form>}
     </>
   );
 }

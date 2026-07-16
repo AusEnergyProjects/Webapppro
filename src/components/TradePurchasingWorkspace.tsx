@@ -88,7 +88,7 @@ export function TradePurchasingWorkspace({ user, partnerType }: { user: User; pa
 
   return <section className="trade-purchasing" aria-labelledby="trade-purchasing-title">
     <header className="purchasing-hero">
-      <div><span>Business purchasing</span><h2 id="trade-purchasing-title">Orders, fulfilment and warranties</h2><p>Move approved products from a wholesaler response into a traceable business order. Household names, contacts and street addresses are never included.</p></div>
+      <div><span>{partnerType === "supplier" ? "Wholesaler order desk" : "Business purchasing"}</span><h2 id="trade-purchasing-title">{partnerType === "supplier" ? "Orders and fulfilment" : "Orders, fulfilment and warranties"}</h2><p>{partnerType === "supplier" ? "Confirm trade orders, record supplied quantities and resolve warranty requests from one focused queue. Household information never enters this workspace." : "Move approved products from a wholesaler response into a traceable business order. Household names, contacts and street addresses are never included."}</p></div>
       <div className="purchasing-boundary"><strong>B2B only</strong><span>Installer and wholesaler business records</span><span>Postcode-level planning only</span></div>
     </header>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
@@ -97,6 +97,13 @@ export function TradePurchasingWorkspace({ user, partnerType }: { user: User; pa
       <article className={waiting ? "attention" : ""}><span>In progress</span><strong>{waiting}</strong><small>Awaiting or fulfilling</small></article>
       <article><span>Fulfilled</span><strong>{orders.filter((order) => order.status === "fulfilled").length}</strong><small>Completed supply</small></article>
       <article className={openClaims ? "attention" : ""}><span>Open claims</span><strong>{openClaims}</strong><small>Warranty follow-up</small></article>
+    </section>
+
+    <section className="purchasing-flow-strip" aria-label="Purchasing workflow">
+      <article><span>01</span><strong>Commercial request</strong><small>{partnerType === "supplier" ? "Review installer product demand" : "Send a product list to a wholesaler"}</small></article>
+      <article className={waiting ? "attention" : ""}><span>02</span><strong>Purchase order</strong><small>{waiting ? `${waiting} order${waiting === 1 ? "" : "s"} moving` : "No orders waiting"}</small></article>
+      <article><span>03</span><strong>Fulfilment</strong><small>Confirm stock, quantities and expected dates</small></article>
+      <article className={openClaims ? "attention" : ""}><span>04</span><strong>Warranty</strong><small>{openClaims ? `${openClaims} open claim${openClaims === 1 ? "" : "s"}` : "No warranty follow-up"}</small></article>
     </section>
 
     {partnerType === "installer" && <section className="dashboard-panel purchasing-start">
