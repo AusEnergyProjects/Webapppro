@@ -30,6 +30,7 @@ Build a trustworthy Australian Energy Assessments site for independent energy-pl
 - Do not deploy, submit leads, or change external services without explicit approval.
 - After validated changes, commit the approved scope, push it to GitHub, and publish it to Sites without a separate release prompt. Never deploy to Netlify unless the user explicitly requests it.
 - No em dashes or en dashes in user-facing copy.
+- All `date` and `datetime-local` inputs must use the delegated `SiteDatePicker` pop-out provided by the root layout. Date ranges must share a stable `data-date-range-group` and use `data-date-range-role="start"` and `data-date-range-role="end"` so one calendar can select and apply the range.
 - Before finishing code work, run npm run build.
 - Use Next.js App Router. Read relevant local Next documentation before unfamiliar APIs.
 - Preserve the compatibility comparator until the native electricity migration passes the same interaction audit.

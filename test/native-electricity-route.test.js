@@ -52,14 +52,19 @@ test("native input flow preserves location, privacy and reasoned override parity
   assert.match(component, /The measured interval proportions were retained and scaled/);
 });
 
-test("native manual inputs use bill-friendly periods and clear choice cards", () => {
-  assert.match(component, /Typical quarterly bill/);
-  assert.match(component, /Monthly bill/);
+test("native usage prioritises meter evidence and keeps the dated bill fallback optional", () => {
+  assert.match(component, /Use your smart-meter data/);
+  assert.match(component, /I only have an electricity bill/);
+  assert.match(component, /One recent bill/);
   assert.match(component, /Annual total/);
-  assert.match(component, /annualiseUsage\(value, usagePeriod\)/);
+  assert.match(component, /annualiseElectricityUsage/);
+  assert.match(component, /data-date-range-group="electricity-bill-period"/);
+  assert.match(component, /Seasonally adjusted from bill/);
+  assert.match(component, /AEMO_NSLP_REFERENCE_VERSION/);
   assert.match(component, /When do you usually use the most power/);
   assert.match(component, /Current solar and battery setup/);
   assert.match(component, /native-assumption-card/);
+  assert.doesNotMatch(component, /useState\("5000"\)/);
   assert.doesNotMatch(component, /<Field label="Usage pattern"><select/);
 });
 

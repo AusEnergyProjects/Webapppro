@@ -4,15 +4,15 @@ Status: **cutover gate passed**. The native comparer is the primary implementati
 at `/compare`. The compatibility implementation remains available at the noindex
 `/compare/electricity-legacy` rollback route.
 
-Audit date: 13 July 2026
+Audit date: 16 July 2026
 
 ## Calculation credibility
 
 | Area | Status | Evidence |
 | --- | --- | --- |
 | NEM12 interval use | Pass | General and controlled-load registers are retained separately. Dated half-hour intervals drive time-of-use windows, measured seasonal allocation, demand peaks, solar export and battery dispatch. |
-| Manual usage profile | Pass | When no NEM12 data is supplied, the selected household pattern is recorded as an explicit assumption and drives the synthetic half-hour profile. |
-| Annual usage field | Pass | An uploaded NEM12 file annualises the measured period and fills the annual field as a read-only summary. Pricing still uses the underlying interval pattern; the annual number is not used as a substitute for timing. |
+| Manual usage profile | Pass | NEM12 upload is the primary path. When no file is available, the optional bill fallback uses exact dates and a bounded AEMO NSLP seasonal reference before the selected household pattern drives the synthetic half-hour profile. |
+| Annual usage summary | Pass | An uploaded NEM12 file produces an automatic annual summary. Pricing still preserves the underlying interval pattern rather than substituting a synthetic timing profile. |
 | Location | Pass | Postcode and distributor constrain eligible offers, so identical consumption in different locations can produce different plans, tariffs and rankings. |
 | Tariff components | Pass | Single rate, time of use, usage blocks, daily supply, controlled load, measured demand, feed-in credits and supported discounts have typed charge-level evidence. |
 | Solar and battery scenarios | Pass | Scenarios are simulated half-hourly and then repriced, including export timing and equipment-specific eligibility. |
@@ -25,7 +25,7 @@ Audit date: 13 July 2026
 | --- | --- | --- |
 | Postcode and ambiguous distributor choice | Pass | Native flow supports location selection before retrieving offers. |
 | Annual usage and household usage pattern | Pass | Manual assumptions are used only without interval data and appear in the audit. |
-| Local NEM12 parsing, chart and annualised summary | Pass | Processing stays in the browser; annual usage becomes read-only after upload. |
+| Local NEM12 parsing, chart and annualised summary | Pass | Processing stays in the browser; the measured period and automatic annual estimate are shown after upload. |
 | Multi-register role confirmation | Pass | Every consumption register must be assigned as general usage or controlled load before pricing. |
 | Solar, battery, EV and controlled-load inputs | Pass | Inputs flow into eligibility and scenario calculations. |
 | Search, filters, show-more and source evidence | Pass | Available in the native results experience. |
@@ -44,15 +44,15 @@ Audit date: 13 July 2026
 ## Cutover decision
 
 The local cutover gate approves the native implementation for `/compare`.
-All 63 automated tests passed with the supplied Origin fixture and no skips.
-Lint, TypeScript and the production build passed. Interactive desktop and mobile
-checks covered validation failures, residential and small-business plans, manual
-load profiles, calculation-audit reconciliation and focus return, consent
-boundaries, private-safe links, enquiry dialogs and the rollback route. Browser
-logs contained no errors.
+The full 443-test suite passed 441 active tests with no failures. Two supplied
+Origin fixture compatibility checks remained skipped because their fixture was
+not present. Lint, TypeScript, database migration validation and the production
+build passed. Interactive desktop and compact-width checks covered the NEM12-first
+layout, optional manual bill flow, range calendar, seasonal annual estimate and
+gas-comparator calendar integration. Browser logs contained no errors.
 
 Recommended order:
 
-1. Publish through the configured repository and Netlify workflow.
+1. Publish through the configured repository and Sites workflow.
 2. Smoke-test `/compare`, `/api/electricity-plans` and the rollback route on production.
 3. Confirm the production lead webhook before relying on email and enquiry delivery.
