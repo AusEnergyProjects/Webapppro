@@ -22,6 +22,7 @@ test("the TLink command centre searches role scoped business records", () => {
   assert.match(command, /features\.businessOperations/);
   assert.match(command, /features\.marketplace/);
   assert.match(command, /features\.teamAccess/);
+  assert.match(command, /seen\.has\(key\)/);
   assert.match(command, /AEA protected household contact details are never indexed/);
 });
 

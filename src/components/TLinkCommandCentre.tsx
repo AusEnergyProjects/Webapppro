@@ -294,7 +294,13 @@ async function loadRecords(user: User, partnerType: "installer" | "supplier", fe
   if (!payloads.length && settled.length) {
     throw new Error("TLink search is taking longer than expected. Close it and try again.");
   }
-  return payloads.flatMap(toSearchRecords);
+  const seen = new Set<string>();
+  return payloads.flatMap(toSearchRecords).filter((record) => {
+    const key = `${record.kind}:${record.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function toSearchRecords(payload: Record<string, unknown>): SearchRecord[] {
