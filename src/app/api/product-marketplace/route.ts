@@ -77,6 +77,7 @@ export async function GET(request: Request) {
   const requestedPage = integerParam(url.searchParams.get("page"), 1, 1, 100_000);
   const requestedPageSize = integerParam(url.searchParams.get("pageSize"), 25, 1, 100);
   const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+  const includeFacets = url.searchParams.get("facets") !== "0";
   const now = new Date().toISOString();
 
   const conditions = [eligibleSupplierSql];
@@ -97,21 +98,42 @@ export async function GET(request: Request) {
   if (modelSearch) { conditions.push("LOWER(p.model_number) LIKE ?"); bindings.push(`%${modelSearch}%`); }
   const whereSql = conditions.join(" AND ");
   const db = getD1();
-  const count = await db.prepare(`SELECT COUNT(*) total FROM supplier_products p
-    JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${whereSql}`)
-    .bind(...bindings).first<{ total: number }>();
+  const requestedRowOffset = (requestedPage - 1) * pageSize;
+  const [count, initialRows, facetResults] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) total FROM supplier_products p
+      JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${whereSql}`)
+      .bind(...bindings).first<{ total: number }>(),
+    db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
+      p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
+      p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
+      a.business_name supplier_name, a.business_website supplier_website, a.service_states supplier_service_states
+      FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
+      WHERE ${whereSql} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`)
+      .bind(...bindings, pageSize, requestedRowOffset).all<Record<string, unknown>>(),
+    includeFacets ? Promise.all([
+      db.prepare(`SELECT DISTINCT a.firebase_uid supplier_uid, a.business_name supplier_name
+        FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
+        WHERE ${eligibleSupplierSql} ORDER BY a.business_name COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+      db.prepare(`SELECT DISTINCT p.brand, a.firebase_uid supplier_uid
+        FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
+        WHERE ${eligibleSupplierSql} ORDER BY p.brand COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+      db.prepare(`SELECT DISTINCT a.service_states FROM supplier_products p
+        JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}`).bind(now).all<Record<string, unknown>>(),
+      db.prepare(`SELECT DISTINCT p.stock_status FROM supplier_products p
+        JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}
+        ORDER BY p.stock_status COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+    ]) : Promise.resolve(null),
+  ]);
   const total = Number(count?.total || 0);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(requestedPage, pageCount);
-  const rowOffset = (page - 1) * pageSize;
-
-  const rows = await db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
+  const rows = page === requestedPage || total === 0 ? initialRows : await db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
     p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
     p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
     a.business_name supplier_name, a.business_website supplier_website, a.service_states supplier_service_states
     FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
     WHERE ${whereSql} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`)
-    .bind(...bindings, pageSize, rowOffset).all<Record<string, unknown>>();
+    .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>();
 
   const ids = rows.results.map((row) => String(row.id));
   const linkedProducts: Record<string, unknown>[] = [];
@@ -125,19 +147,7 @@ export async function GET(request: Request) {
     linkedProducts.push(...links.results);
   }
 
-  const [supplierRows, brandRows, stateRows, stockRows] = await Promise.all([
-    db.prepare(`SELECT DISTINCT a.firebase_uid supplier_uid, a.business_name supplier_name
-      FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-      WHERE ${eligibleSupplierSql} ORDER BY a.business_name COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
-    db.prepare(`SELECT DISTINCT p.brand, a.firebase_uid supplier_uid
-      FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-      WHERE ${eligibleSupplierSql} ORDER BY p.brand COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
-    db.prepare(`SELECT DISTINCT a.service_states FROM supplier_products p
-      JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}`).bind(now).all<Record<string, unknown>>(),
-    db.prepare(`SELECT DISTINCT p.stock_status FROM supplier_products p
-      JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}
-      ORDER BY p.stock_status COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
-  ]);
+  const [supplierRows, brandRows, stateRows, stockRows] = facetResults || [{ results: [] }, { results: [] }, { results: [] }, { results: [] }];
   const states = new Set<string>();
   stateRows.results.forEach((row) => {
     try {
@@ -162,11 +172,11 @@ export async function GET(request: Request) {
       })),
     })),
     pagination: { page, pageSize, pageCount, total },
-    facets: {
+    facets: facetResults ? {
       suppliers: supplierRows.results.map((row) => ({ uid: String(row.supplier_uid), name: String(row.supplier_name) })),
       brands: brandRows.results.map((row) => ({ name: String(row.brand), supplierUid: String(row.supplier_uid) })),
       states: [...states].sort((left, right) => left.localeCompare(right)),
       stocks: stockRows.results.map((row) => String(row.stock_status)),
-    },
+    } : undefined,
   });
 }

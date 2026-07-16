@@ -12,6 +12,7 @@ const marketplaceRoute = read("../src/app/api/product-marketplace/route.ts");
 const marketplacePreferencesRoute = read("../src/app/api/product-marketplace/preferences/route.ts");
 const marketplacePreferencesMigration = read("../drizzle/0039_exotic_mulholland_black.sql");
 const marketplaceGranularFiltersMigration = read("../drizzle/0041_foamy_shotgun.sql");
+const marketplacePerformanceMigration = read("../drizzle/0042_big_lady_mastermind.sql");
 const adminMatches = read(
   "../src/app/api/admin/opportunities/matches/route.ts",
 );
@@ -122,12 +123,35 @@ test("installer catalogue queries are paginated, server filtered and return boun
   assert.match(marketplaceRoute, /a\.service_states LIKE \?/);
   assert.match(marketplaceRoute, /SORTS\[sort\]/);
   assert.match(marketplaceRoute, /pagination: \{ page, pageSize, pageCount, total \}/);
-  assert.match(marketplaceRoute, /facets:/);
+  assert.match(marketplaceRoute, /includeFacets/);
+  assert.match(marketplaceRoute, /facetResults \?/);
+  assert.match(marketplaceRoute, /Promise\.all\(\[/);
   assert.doesNotMatch(marketplaceRoute, /LIMIT 300/);
   assert.match(installerUi, /Rows per page/);
   assert.match(installerUi, /aria-label="Catalogue pages"/);
-  assert.match(installerUi, /}, 250\)/);
+  assert.match(installerUi, /requestDelay/);
+  assert.match(installerUi, /catalogueLoading/);
+  assert.match(installerUi, /facetsReadyRef/);
   assert.match(installerUi, /AbortController/);
+});
+
+test("marketplace sort and filter indexes apply cleanly", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE supplier_products (
+    listing_status TEXT NOT NULL, review_status TEXT NOT NULL, name TEXT NOT NULL,
+    brand TEXT NOT NULL, unit_price_cents_ex_gst INTEGER NOT NULL, lead_time_days INTEGER NOT NULL,
+    category TEXT NOT NULL, stock_status TEXT NOT NULL
+  )`);
+  for (const statement of marketplacePerformanceMigration.split("--> statement-breakpoint")) {
+    if (statement.trim()) database.exec(statement);
+  }
+  const indexes = database.prepare("PRAGMA index_list(supplier_products)").all().map((index) => index.name);
+  assert.ok(indexes.includes("supplier_products_marketplace_name_idx"));
+  assert.ok(indexes.includes("supplier_products_marketplace_brand_idx"));
+  assert.ok(indexes.includes("supplier_products_marketplace_price_idx"));
+  assert.ok(indexes.includes("supplier_products_marketplace_lead_idx"));
+  assert.ok(indexes.includes("supplier_products_marketplace_filter_idx"));
+  database.close();
 });
 
 test("installer catalogue filters and columns persist to the authenticated account", () => {

@@ -4152,8 +4152,8 @@ body input[type="checkbox"]:disabled {
 .crm-jobs-layout, .crm-customers-layout { grid-template-columns: 1fr; }
 .crm-record-table, .trade-portal-shell .crm-record-table { background: #fff; display: block; max-height: none; overflow-x: auto; padding: 0; }
 .crm-record-columns { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .49rem; font-weight: 950; letter-spacing: .04em; min-width: 1380px; padding: 9px 10px; text-transform: uppercase; }
-.crm-job-columns, .crm-job-list.crm-record-table > article { grid-template-columns: 30px 105px 150px 140px minmax(190px, 1fr) 125px 125px 115px 105px 95px; min-width: 1380px; }
-.crm-customer-columns, .crm-customer-list.crm-record-table > article { grid-template-columns: 30px 105px 165px minmax(180px, 1fr) 120px 75px 110px 65px 175px 105px 125px; min-width: 1500px; }
+.crm-job-columns, .crm-job-list.crm-record-table > article { gap: 10px; grid-template-columns: 30px 105px 150px 140px minmax(190px, 1fr) 125px 125px 115px 105px 95px; min-width: 1380px; }
+.crm-customer-columns, .crm-customer-list.crm-record-table > article { gap: 10px; grid-template-columns: 30px 105px 165px minmax(180px, 1fr) 120px 75px 110px 65px 175px 105px 125px; min-width: 1500px; }
 .crm-job-list.crm-record-table > article, .crm-customer-list.crm-record-table > article { align-items: center; border: 0; border-bottom: 1px solid #e4ece9; border-radius: 0; display: grid; padding: 0 10px; }
 .crm-job-list.crm-record-table > article:last-child, .crm-customer-list.crm-record-table > article:last-child { border-bottom: 0; }
 .crm-record-table > article.active { background: #f3fbf7; box-shadow: inset 3px 0 #14ae7d; }
@@ -4190,12 +4190,18 @@ body input[type="checkbox"]:disabled {
 
 .marketplace-product-columns,
 .supplier-product-columns,
-.admin-catalogue-columns { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .51rem; font-weight: 950; letter-spacing: .045em; min-width: 940px; padding: 9px 12px; text-transform: uppercase; }
+.admin-catalogue-columns { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .51rem; font-weight: 950; gap: 10px; letter-spacing: .045em; min-width: 940px; padding: 9px 12px; text-transform: uppercase; }
 .marketplace-product-columns { grid-template-columns: var(--marketplace-grid); min-width: max(100%, 1720px); }
 .supplier-product-columns { grid-template-columns: 110px 125px minmax(180px, 1fr) 135px 115px 145px 105px 90px 90px 95px 95px 80px 70px; min-width: 1500px; }
 .admin-catalogue-columns { grid-template-columns: 175px 105px 125px minmax(180px, 1fr) 130px 115px 105px 100px 90px 90px 95px 95px 80px 95px; min-width: 1650px; }
 
 .marketplace-product-grid > article { align-items: center; border: 0; border-bottom: 1px solid var(--color-aea-line); border-radius: 0; display: grid; gap: 10px; grid-template-columns: var(--marketplace-grid); min-width: max(100%, 1720px); padding: 10px 12px; }
+.marketplace-product-grid { position: relative; }
+.marketplace-product-grid > article { transition: opacity 120ms ease; }
+.marketplace-product-grid.is-loading > article { opacity: .68; }
+.marketplace-product-grid.is-loading::before { animation: marketplace-page-progress 900ms ease-in-out infinite; background: #13af7d; content: ""; display: block; height: 3px; left: 0; position: absolute; top: 0; width: 28%; z-index: 3; }
+@keyframes marketplace-page-progress { from { transform: translateX(-110%); } to { transform: translateX(360%); } }
+@media (prefers-reduced-motion: reduce) { .marketplace-product-grid.is-loading::before { animation: none; width: 100%; } }
 .marketplace-product-grid > article:last-child { border-bottom: 0; }
 .marketplace-table-cell { color: var(--color-aea-muted); display: block; font-size: .58rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .marketplace-supplier, .marketplace-product-name { color: var(--color-aea-ink); }

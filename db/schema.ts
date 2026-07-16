@@ -1348,6 +1348,11 @@ export const supplierProducts = sqliteTable("supplier_products", {
   index("supplier_products_owner_idx").on(table.firebaseUid, table.updatedAt),
   index("supplier_products_listing_idx").on(table.listingStatus, table.reviewStatus),
   index("supplier_products_category_idx").on(table.category),
+  index("supplier_products_marketplace_name_idx").on(table.listingStatus, table.reviewStatus, table.name),
+  index("supplier_products_marketplace_brand_idx").on(table.listingStatus, table.reviewStatus, table.brand, table.name),
+  index("supplier_products_marketplace_price_idx").on(table.listingStatus, table.reviewStatus, table.unitPriceCentsExGst, table.name),
+  index("supplier_products_marketplace_lead_idx").on(table.listingStatus, table.reviewStatus, table.leadTimeDays, table.name),
+  index("supplier_products_marketplace_filter_idx").on(table.listingStatus, table.reviewStatus, table.category, table.stockStatus),
 ]);
 
 export const supplierProductLinks = sqliteTable("supplier_product_links", {

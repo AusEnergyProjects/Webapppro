@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
@@ -179,11 +179,14 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const [sort, setSort] = useState("name-asc");
   const [status, setStatus] = useState("Loading approved wholesaler products...");
   const [busy, setBusy] = useState(false);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [listName, setListName] = useState("");
   const [projectPostcode, setProjectPostcode] = useState("");
   const [listNotes, setListNotes] = useState("");
   const [enquiryMessage, setEnquiryMessage] = useState("");
+  const facetsReadyRef = useRef(false);
+  const catalogueFilterKeyRef = useRef("");
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const token = await user.getIdToken();
@@ -247,6 +250,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   useEffect(() => {
     if (!preferencesReady) return;
     const controller = new AbortController();
+    const filterKey = JSON.stringify([search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty, sort, pageSize]);
+    const previousFilterKey = catalogueFilterKeyRef.current;
+    catalogueFilterKeyRef.current = filterKey;
+    const requestDelay = previousFilterKey && previousFilterKey !== filterKey ? 140 : 0;
     const timer = window.setTimeout(async () => {
       const query = new URLSearchParams({
         search,
@@ -263,12 +270,17 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
         sort,
         page: String(page),
         pageSize: String(pageSize),
+        facets: facetsReadyRef.current ? "0" : "1",
       });
       try {
-        setStatus("Loading matching products...");
+        setCatalogueLoading(true);
+        setStatus(`Loading catalogue page ${page}...`);
         const result = await request(`/api/product-marketplace?${query.toString()}`, { signal: controller.signal });
         setProducts(result.products || []);
-        setFacets(result.facets || { suppliers: [], brands: [], states: [], stocks: [] });
+        if (result.facets) {
+          setFacets(result.facets);
+          facetsReadyRef.current = true;
+        }
         setPage(result.pagination?.page || 1);
         setPageCount(result.pagination?.pageCount || 1);
         setTotalProducts(result.pagination?.total || 0);
@@ -276,8 +288,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       } catch (error) {
         if (controller.signal.aborted) return;
         setStatus(error instanceof Error ? error.message : "The trade catalogue could not be loaded.");
+      } finally {
+        if (!controller.signal.aborted) setCatalogueLoading(false);
       }
-    }, 250);
+    }, requestDelay);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
@@ -317,6 +331,19 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   }
   function changeFilter(setter: (value: string) => void, value: string) {
     setter(value);
+    setPage(1);
+  }
+  function changePage(nextPage: number) {
+    if (catalogueLoading || nextPage === page || nextPage < 1 || nextPage > pageCount) return;
+    setCatalogueLoading(true);
+    setStatus(`Loading catalogue page ${nextPage}...`);
+    setPage(nextPage);
+  }
+  function changePageSize(nextPageSize: number) {
+    if (catalogueLoading || nextPageSize === pageSize) return;
+    setCatalogueLoading(true);
+    setStatus("Loading the updated catalogue view...");
+    setPageSize(nextPageSize);
     setPage(1);
   }
   function toggleColumn(column: CatalogueColumn) {
@@ -552,7 +579,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
             <div className="marketplace-result-summary">
               <span>Showing <strong>{resultStart} to {resultEnd}</strong> of {totalProducts} approved products</span>
               <div>
-                <label>Rows per page<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
+                <label>Rows per page<select value={pageSize} disabled={catalogueLoading} onChange={(event) => changePageSize(Number(event.target.value))}><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
                 {(activeFilterCount > 0 || search) && <button type="button" onClick={clearFilters}>Clear all filters</button>}
               </div>
             </div>
@@ -567,7 +594,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {products.length ? (
-            <div className="marketplace-product-grid">
+            <div className={`marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading}>
               <div className="marketplace-product-columns" role="row" style={productGridStyle}>
                 {orderedColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={columnSortState(column.key)}>{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>
@@ -612,10 +639,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           ) : !status && (
             <div className="dashboard-empty-state"><strong>No approved products match this view</strong><p>Change the search or check again after paying wholesalers publish reviewed catalogue items.</p></div>
           )}
-          {totalProducts > 0 && <nav className="marketplace-pagination" aria-label="Catalogue pages">
-            <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-            <span>Page <strong>{page}</strong> of {pageCount}</span>
-            <button type="button" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button>
+          {totalProducts > 0 && <nav className="marketplace-pagination" aria-label="Catalogue pages" aria-busy={catalogueLoading}>
+            <button type="button" disabled={catalogueLoading || page <= 1} onClick={() => changePage(page - 1)}>Previous</button>
+            <span>{catalogueLoading ? "Loading" : "Page"} <strong>{page}</strong> of {pageCount}</span>
+            <button type="button" disabled={catalogueLoading || page >= pageCount} onClick={() => changePage(page + 1)}>{catalogueLoading ? "Loading..." : "Next"}</button>
           </nav>}
         </div>
 
