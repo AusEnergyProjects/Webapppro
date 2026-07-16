@@ -40,7 +40,7 @@ function cacheableHtmlResponse(response: Response) {
 const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
     if (!isCacheablePageRequest(request)) {
-      return secureResponse(await handler.fetch(request, env, ctx), request);
+      return secureResponse(await handler.fetch(request, env as never, ctx as never), request);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
@@ -49,7 +49,7 @@ const worker = {
       if (cached) return secureResponse(cached, request);
     }
 
-    const response = secureResponse(await handler.fetch(request, env, ctx), request);
+    const response = secureResponse(await handler.fetch(request, env as never, ctx as never), request);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));

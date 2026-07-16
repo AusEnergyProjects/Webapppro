@@ -156,7 +156,7 @@ export async function GET(request: Request) {
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowClauses.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rowWhere = rowClauses.length ? `WHERE ${rowClauses.join(" AND ")}` : "";
-    const [countRow, rows, counts] = await Promise.all([
+    const [countRow, rows, counts] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_accounts ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
@@ -169,7 +169,7 @@ export async function GET(request: Request) {
         SUM(CASE WHEN partner_type = 'supplier' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) hidden_suppliers,
         SUM(CASE WHEN partner_type = 'installer' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) lead_locked_installers
         FROM trade_accounts`).first<Record<string, unknown>>(),
-    ].map((work) => timer.database(work)));
+    ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
     const hasNext = rows.results.length > pageSize;
     const pageRows = rows.results.slice(0, pageSize);

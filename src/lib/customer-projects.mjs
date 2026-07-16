@@ -1,4 +1,5 @@
 import { createHomeEnergyPlan } from "./home-energy-plan.mjs";
+import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "./australian-postcodes.mjs";
 
 export const CUSTOMER_NOTICE_VERSION = "2026-07-15";
 export const CUSTOMER_PLAN_VERSION = "2026-07-15";
@@ -6,7 +7,7 @@ export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
 
 export const customerProjectOptions = {
-  states: ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"],
+  states: AUSTRALIAN_STATE_CODES,
   propertyTypes: [
     ["house", "Detached house"],
     ["townhouse", "Townhouse or terrace"],
@@ -119,7 +120,7 @@ export function parseStoredJson(value, fallback) {
 export function validateCustomerProfile(raw = {}) {
   const displayName = text(raw.displayName, 80);
   const postcode = text(raw.postcode, 4);
-  const addressState = text(raw.addressState, 12);
+  const addressState = canonicalAustralianState(raw.addressState) || "";
   const propertyType = propertyTypes.has(raw.propertyType) ? raw.propertyType : "house";
   const householdSituation = ["owner", "renter", "strata", "planning-building"].includes(raw.householdSituation)
     ? raw.householdSituation
@@ -153,7 +154,7 @@ export function normalizeCustomerProject(raw = {}) {
     title: text(raw.title, 120),
     homeNickname: text(raw.homeNickname, 80) || "My home",
     postcode: text(raw.postcode, 4),
-    addressState: text(raw.addressState, 12),
+    addressState: canonicalAustralianState(raw.addressState) || "",
     propertyType: propertyTypes.has(raw.propertyType) ? raw.propertyType : "house",
     householdSituation: plan.situation,
     goal: plan.goal,

@@ -38,9 +38,8 @@ function json(body, status = 200, extraHeaders = {}) {
 
 function clientKey(request) {
   const cloudflareIp = request.headers.get("cf-connecting-ip")?.trim();
-  const netlifyIp = request.headers.get("x-nf-client-connection-ip")?.trim();
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return cloudflareIp || netlifyIp || forwarded || request.headers.get("x-real-ip") || "local";
+  return cloudflareIp || forwarded || request.headers.get("x-real-ip") || "local";
 }
 
 function safeMagicLink(value, requestUrl) {

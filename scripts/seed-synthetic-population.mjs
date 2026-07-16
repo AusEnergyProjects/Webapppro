@@ -7,7 +7,7 @@ const BATCH = "aea-demo-20260716";
 const LOGIN_BASE = "https://aea-energy-comparison.info294029.chatgpt.site";
 const args = Object.fromEntries(process.argv.slice(2).map((entry, index, all) => entry.startsWith("--") ? [entry.slice(2), all[index + 1]] : null).filter(Boolean));
 const outputDir = path.resolve(args.out || path.join(process.cwd(), "synthetic-test-output"));
-const sqlPath = path.resolve(args.sql || path.join(process.cwd(), "drizzle", "0033_synthetic_benchmark_population.sql"));
+const sqlPath = path.resolve(args.sql || path.join(process.cwd(), "fixtures", "synthetic", "migrations", "0033_synthetic_benchmark_population.sql"));
 const csvPath = path.join(outputDir, "aea-demo-account-credentials.csv");
 const checkpointPath = path.join(outputDir, ".aea-demo-account-checkpoint.json");
 const brokerUrl = args.broker || "";
@@ -19,7 +19,7 @@ const states = [
   { code: "WA", postcode: "6000", suburb: "Perth" }, { code: "TAS", postcode: "7000", suburb: "Hobart" },
   { code: "ACT", postcode: "2600", suburb: "Canberra" }, { code: "NT", postcode: "0800", suburb: "Darwin" },
 ];
-const canonicalState = (code) => ({ VIC: "Vic", QLD: "Qld", TAS: "Tas" }[code] || code);
+const canonicalState = (code) => code;
 const trades = [
   ["assessment", "Energy assessment"], ["solar", "Solar installation"], ["battery", "Battery installation"],
   ["heating-cooling", "Heating and cooling"], ["hot-water", "Heat pump hot water"],

@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../../db";
-import { postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
+import { AUSTRALIAN_STATE_CODES, canonicalAustralianState, postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
 import {
   adminError,
@@ -18,7 +18,7 @@ export const runtime = "edge";
 
 const ACCOUNT_TYPES = new Set(["customer", "installer", "supplier", "admin"]);
 const CUSTOMER_STATUSES = new Set(["active", "suspended", "closed"]);
-const STATES = new Set(["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"]);
+const STATES = new Set(AUSTRALIAN_STATE_CODES);
 const PROPERTY_TYPES = new Set(["house", "townhouse", "apartment", "new-build", "other"]);
 const HOUSEHOLD_SITUATIONS = new Set(["owner", "renter", "strata", "planning-building"]);
 const PAGE_SIZES = new Set([25, 50, 100]);
@@ -250,7 +250,7 @@ export async function GET(request: Request) {
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = conditions.join(" AND ");
     const rowWhere = rowConditions.join(" AND ");
-    const [filteredCount, accountRows, globalCounts] = await Promise.all([
+    const [filteredCount, accountRows, globalCounts] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM ${union} directory WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT * FROM ${union} directory WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
@@ -260,7 +260,7 @@ export async function GET(request: Request) {
         SUM(CASE WHEN account_type = 'supplier' THEN 1 ELSE 0 END) suppliers,
         SUM(CASE WHEN account_type = 'admin' THEN 1 ELSE 0 END) admins
         FROM ${union} directory`).first<Record<string, unknown>>(),
-    ].map((work) => timer.database(work)));
+    ]);
     const total = filteredCount ? Number(filteredCount.total || 0) : undefined;
     const hasNext = accountRows.results.length > pageSize;
     const pageRows = accountRows.results.slice(0, pageSize);
@@ -295,7 +295,7 @@ export async function PATCH(request: Request) {
     const uid = cleanAdminText(body.firebaseUid, 180);
     const displayName = cleanAdminText(body.displayName, 120);
     const postcode = cleanAdminText(body.postcode, 4);
-    const addressState = cleanAdminText(body.addressState, 12);
+    const addressState = canonicalAustralianState(body.addressState) || "";
     const propertyType = cleanAdminText(body.propertyType, 30);
     const householdSituation = cleanAdminText(body.householdSituation, 30);
     const accountStatus = cleanAdminText(body.accountStatus, 30);

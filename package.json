@@ -9,7 +9,13 @@
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "start": "vinext start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit --pretty false",
     "test": "node --experimental-strip-types --test",
+    "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test",
+    "test:integration": "node --experimental-strip-types --test test/australian-postcodes.test.mjs test/direct-trade-matching.test.mjs test/gas-tariff-engine.test.mjs test/home-energy-plan.test.mjs test/release-integrity.test.mjs test/trade-payment-reconciliation.test.mjs",
+    "db:check": "node scripts/check-migrations.mjs",
+    "synthetic:validate": "node scripts/validate-synthetic-population.mjs",
+    "validate": "npm run typecheck && npm run lint && npm run test:integration && npm test && npm run db:check && npm run build",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -23,6 +29,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

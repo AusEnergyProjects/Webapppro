@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 
 export function getD1(): D1Database {
-  if (!env.DB) {
+  const database = env.DB as D1Database | undefined;
+  if (!database) {
     throw new Error("Trade account storage is unavailable.");
   }
-  return env.DB;
+  return database;
 }

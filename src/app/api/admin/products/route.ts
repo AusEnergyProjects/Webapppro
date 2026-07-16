@@ -86,7 +86,7 @@ export async function GET(request: Request) {
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowClauses.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rowWhere = rowClauses.length ? `WHERE ${rowClauses.join(" AND ")}` : "";
-    const [countRow, rows, counts] = await Promise.all([
+    const [countRow, rows, counts] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid ${where}`)
         .bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT p.*, a.business_name supplier_name, a.email supplier_email,
@@ -100,7 +100,7 @@ export async function GET(request: Request) {
         SUM(CASE WHEN review_status = 'approved' THEN 1 ELSE 0 END) approved,
         SUM(CASE WHEN review_status = 'approved' AND listing_status = 'published' THEN 1 ELSE 0 END) live
         FROM supplier_products`).first<Record<string, unknown>>(),
-    ].map((work) => timer.database(work)));
+    ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
     const hasNext = rows.results.length > pageSize;
     const pageRows = rows.results.slice(0, pageSize);

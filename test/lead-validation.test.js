@@ -138,7 +138,7 @@ test('direct trade project briefs retain only allowlisted project fields', async
   const result = validateLeadPayload(payload);
   assert.equal(result.ok, true);
   assert.deepEqual(result.value.projectCategories, ['solar', 'battery']);
-  assert.equal(result.value.state, 'Vic');
+  assert.equal(result.value.state, 'VIC');
   assert.equal(result.value.propertyType, 'house');
   assert.equal(result.value.propertyRelationship, 'owner-occupier');
   assert.deepEqual(result.value.projectPriorities, ['lower-running-costs', 'improve-comfort']);
@@ -207,7 +207,7 @@ test('direct trade partner enquiries retain allowlisted participation fields', a
   assert.equal(result.ok, true);
   assert.equal(result.value.partnerType, 'supplier');
   assert.equal(result.value.businessName, 'Example Energy Supply');
-  assert.deepEqual(result.value.serviceStates, ['Vic', 'NSW']);
+  assert.deepEqual(result.value.serviceStates, ['VIC', 'NSW']);
   assert.deepEqual(result.value.projectCategories, ['battery', 'hot-water']);
 });
 

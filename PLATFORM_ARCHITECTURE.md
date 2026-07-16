@@ -1,8 +1,9 @@
-# AEA Energy and Direct to Trades architecture review
+# Historical architecture baseline
 
-Status: proposed design for review
+Status: retained design history, not current implementation truth
 Date: 13 July 2026
-Scope: architecture and roadmap only. This document does not authorise a production deployment, marketplace launch, finance integration, or collection of additional personal information.
+
+This review predates the TLink marketplace, CRM, admin, D1, R2, Sites and field-sync implementation. Use [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md) for current architecture and release status and [ROADMAP.md](./ROADMAP.md) for approved follow-on work. The principles below remain useful where they do not conflict with those current documents.
 
 ## 1. Executive recommendation
 
@@ -35,7 +36,7 @@ This milestone improves credibility and privacy without starting the commercial 
 | Leads and enquiries | Browser posts directly to a hard-coded Google Apps Script webhook using `no-cors` | Not an adequate long-term customer-data boundary. There is no authenticated server acknowledgement, durable consent record, central rate limit, or application audit event. |
 | Persistence | Browser `localStorage` for public tariff caches and browser-side rate counters | No customer, assessment, participant, quote, rate-card, subscription, or audit database exists. |
 | Identity and permissions | None | Direct to Trades cannot safely begin until authentication, organisation tenancy, roles, and server-side authorisation are designed. |
-| Hosting | Next.js configured for Netlify | Suitable for the current app. Platform services must be selected with Australian data location, backup, encryption, logging, and exit requirements documented. |
+| Hosting | Historical target was Netlify; the active target is now Sites with Cloudflare bindings | Treat [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md) as authoritative. Australian data location, backup, encryption, logging, and exit requirements still require documented review. |
 | Automated verification | Node tests for NEM12 parsing, TOU fractions, solar, battery, and the supplied fixture | Useful baseline. There are no tariff-contract fixtures, end-to-end comparison tests, access-control tests, or security tests yet. |
 
 ### Current comparison data flow

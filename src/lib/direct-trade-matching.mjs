@@ -1,4 +1,5 @@
 import { assessParticipantRecord } from "./direct-trade-participants.mjs";
+import { canonicalAustralianState } from "./australian-postcodes.mjs";
 
 const CATEGORY_REQUIREMENTS = {
   assessment: ["assessment"],
@@ -94,8 +95,7 @@ function uniqueStrings(value) {
 }
 
 function canonicalState(value) {
-  const aliases = { Vic: "VIC", Qld: "QLD", Tas: "TAS" };
-  return aliases[value] || value || "";
+  return canonicalAustralianState(value) || "";
 }
 
 function projectCapabilities(project) {

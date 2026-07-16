@@ -8,11 +8,12 @@ import {
   type FeatureGrant,
   type PartnerType,
 } from "@/lib/direct-trade-entitlements";
+import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 
 export const runtime = "edge";
 
 const NOTICE_VERSION = "2026-07-14";
-const STATES = new Set(["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"]);
+const STATES = new Set(AUSTRALIAN_STATE_CODES);
 const CAPABILITIES = new Set([
   "assessment",
   "solar",
@@ -213,13 +214,15 @@ export async function POST(request: Request) {
   const businessName = cleanText(raw.businessName, 160);
   const addressLine1 = cleanText(raw.addressLine1, 180);
   const suburb = cleanText(raw.suburb, 100);
-  const addressState = cleanText(raw.addressState, 12);
+  const addressState = canonicalAustralianState(raw.addressState) || "";
   const postcode = cleanText(raw.postcode, 4);
   const contactName = cleanText(raw.contactName, 120);
   const phone = cleanText(raw.phone, 40);
   const partnerType = raw.partnerType === "supplier" ? "supplier" : "installer";
   const businessWebsite = cleanText(raw.businessWebsite, 300);
-  const serviceStates = cleanList(raw.serviceStates, STATES);
+  const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
+    ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
+    : [])];
   const capabilities = cleanList(raw.capabilities, CAPABILITIES);
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;

@@ -1,7 +1,7 @@
 import postcodeCentroids from "@/data/postcode-centroids.json";
 
 type Coordinate = readonly [latitude: number, longitude: number];
-const centroids = postcodeCentroids as Record<string, Coordinate>;
+const centroids = postcodeCentroids as unknown as Record<string, Coordinate>;
 
 export function postcodeCoordinate(postcode: string): Coordinate | null {
   const coordinate = centroids[String(postcode || "").padStart(4, "0")];
@@ -22,4 +22,3 @@ export function postcodeDistanceKm(originPostcode: string, destinationPostcode: 
     + Math.cos(originLatitude) * Math.cos(destinationLatitude) * Math.sin(longitudeDelta / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
-

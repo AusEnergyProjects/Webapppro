@@ -3,6 +3,7 @@
 import { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
+import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 
@@ -365,7 +366,7 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
               <form className="admin-customer-account-form" onSubmit={saveCustomer}>
                 <label>Display name<input value={String(selected.account.displayName || "")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("displayName", event.target.value)} /></label>
                 <label>Postcode<input value={String(selected.account.postcode || "")} inputMode="numeric" maxLength={4} disabled={!selected.canEdit} onChange={(event) => updateCustomer("postcode", event.target.value)} /></label>
-                <label>State or territory<select value={String(selected.account.addressState || "")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("addressState", event.target.value)}>{['ACT','NSW','NT','Qld','SA','Tas','Vic','WA'].map((value) => <option key={value}>{value}</option>)}</select></label>
+                <label>State or territory<select value={String(selected.account.addressState || "").toUpperCase()} disabled={!selected.canEdit} onChange={(event) => updateCustomer("addressState", event.target.value)}>{AUSTRALIAN_STATE_CODES.map((value) => <option key={value}>{value}</option>)}</select></label>
                 <label>Property type<select value={String(selected.account.propertyType || "house")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("propertyType", event.target.value)}>{['house','townhouse','apartment','new-build','other'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
                 <label>Household situation<select value={String(selected.account.householdSituation || "owner")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("householdSituation", event.target.value)}>{['owner','renter','strata','planning-building'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
                 <label>Account status<select value={String(selected.account.accountStatus || "active")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("accountStatus", event.target.value)}>{['active','suspended','closed'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>

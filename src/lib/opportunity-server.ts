@@ -1,6 +1,7 @@
 import { getD1 } from "../../db";
 import { parseJsonList } from "@/lib/admin-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
+import { canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 
 export const MAX_VISIBLE_INSTALLERS = 6;
 export const DEFAULT_CONNECTED_INSTALLERS = 3;
@@ -13,19 +14,6 @@ const ACTIVE_MATCH_STATUSES = new Set([
   "interested",
   "connected",
 ]);
-const STATE_LABELS: Record<string, string> = {
-  ACT: "ACT",
-  NSW: "NSW",
-  NT: "NT",
-  QLD: "Qld",
-  Qld: "Qld",
-  SA: "SA",
-  TAS: "Tas",
-  Tas: "Tas",
-  VIC: "Vic",
-  Vic: "Vic",
-  WA: "WA",
-};
 const CATEGORY_LABELS: Record<string, string> = {
   assessment: "energy assessment",
   solar: "rooftop solar",
@@ -38,7 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function canonicalMarketplaceState(value: unknown) {
-  return STATE_LABELS[String(value || "")] || "";
+  return canonicalAustralianState(value) || "";
 }
 
 export function opportunityExpiry(createdAt = new Date()) {

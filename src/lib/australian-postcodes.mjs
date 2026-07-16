@@ -20,6 +20,19 @@ const STATE_LABELS = {
   WA: "Western Australia",
 };
 
+export const AUSTRALIAN_STATE_CODES = Object.freeze(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
+
+export const AUSTRALIAN_STATE_OPTIONS = Object.freeze([
+  ["ACT", "Australian Capital Territory"],
+  ["NSW", "New South Wales"],
+  ["NT", "Northern Territory"],
+  ["QLD", "Queensland"],
+  ["SA", "South Australia"],
+  ["TAS", "Tasmania"],
+  ["VIC", "Victoria"],
+  ["WA", "Western Australia"],
+]);
+
 export function canonicalAustralianState(value) {
   return STATE_ALIASES.get(String(value || "").trim().toUpperCase()) || null;
 }

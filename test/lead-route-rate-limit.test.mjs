@@ -12,7 +12,7 @@ test("lead route uses the D1 limiter and trusted proxy client addresses", () => 
   assert.match(route, /await leadRateLimiter\.check/);
   assert.match(route, /getDatabase: getD1/);
   assert.match(route, /cf-connecting-ip/);
-  assert.match(route, /x-nf-client-connection-ip/);
+  assert.doesNotMatch(route, /x-nf-client-connection-ip/);
   assert.match(route, /"Retry-After"/);
   assert.match(route, /createOperationalRecorder\(\{ event: "api\.leads" \}\)/);
   assert.match(route, /"X-Request-Id": operations\.requestId/);

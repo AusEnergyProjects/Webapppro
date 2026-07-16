@@ -2,9 +2,13 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 const db = new DatabaseSync(":memory:");
-for (const file of fs.readdirSync("drizzle").filter((name) => /^\d+.*\.sql$/.test(name)).sort()) {
+for (const file of fs.readdirSync("drizzle").filter((name) => /^\d+.*\.sql$/.test(name) && name !== "0044_flimsy_omega_flight.sql").sort()) {
   const migration = fs.readFileSync(`drizzle/${file}`, "utf8");
   for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
+}
+for (const file of fs.readdirSync("fixtures/synthetic/migrations").filter((name) => /^\d+.*\.sql$/.test(name)).sort()) {
+  const fixture = fs.readFileSync(`fixtures/synthetic/migrations/${file}`, "utf8");
+  for (const statement of fixture.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) db.exec(statement);
 }
 const count = (table, where = "") => Number(db.prepare(`SELECT COUNT(*) count FROM ${table} ${where}`).get().count);
 const summary = {

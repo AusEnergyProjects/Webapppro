@@ -7,6 +7,42 @@
 - /gas-compare is the native Next gas page with a server-side gas-plan endpoint. `/compare/gas` remains a compatibility entry point.
 - The Electricity compare and Gas compare tabs now link the two tools.
 
+The exact release status, validation evidence and external dependencies are maintained in [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md). The external audit response is tracked in [docs/EXTERNAL_AUDIT_REMEDIATION.md](./docs/EXTERNAL_AUDIT_REMEDIATION.md).
+
+## Release-quality remediation programme
+
+### P0: safety and release truth
+
+- Completed: synthetic benchmark population is outside the production migration path. Historical migration identifiers remain as no-op compatibility records, while test fixtures require an explicit workflow.
+- Completed: generated synthetic credentials and benchmark output are ignored.
+- Completed: active web and worker typecheck, runtime integration tests, coverage, fresh D1 migration validation and one aggregate `npm run validate` command are available.
+- Completed: commercial Stripe links and payment-link identifiers are validated server configuration rather than source constants.
+- Completed: inactive Netlify deployment configuration is removed. Sites and GitHub are the only active release targets.
+- Completed: one canonical release-truth document identifies what is implemented, externally dependent or not yet verified.
+- External confirmation required: verify the production Stripe account, products, webhook secrets and payment links in the Stripe dashboard before enabling public paid memberships.
+
+### P1: architecture and maintainability
+
+- In progress: split `AdminOperationsPortal.tsx` into feature workspaces, typed API clients and reducer-backed domain hooks without changing the admin workflow.
+- In progress: move feature styling out of `globals.css` beside TLink CRM, catalogue, admin, consumer and comparison features. Remove obsolete selectors only after visual regression checks.
+- In progress: one canonical uppercase Australian state code now drives new writes and filtering. Migration 0045 normalises existing stored state values.
+- Completed foundation: shared keyset pagination, list controls, searchable lookups, high-volume table behaviour and route telemetry are reusable across admin, CRM, catalogue and purchasing.
+- Next: convert the highest-state admin and CRM screens one domain at a time, beginning with opportunities and catalogue review.
+
+### P2: production scaling
+
+- Completed foundation: cursor pagination covers the major admin, CRM, catalogue and purchasing endpoints.
+- Completed foundation: bounded server search and D1 FTS5 indexes cover products, accounts, customers, opportunities and CRM customer records.
+- Completed foundation: API and database timing telemetry records slow or failed requests without request bodies or household identity.
+- Completed foundation: the 400,000-row scale benchmark and high-volume list views protect the primary query paths.
+- Next: establish production SLO dashboards and query plans from real traffic, then add specialised indexes only where telemetry proves a need.
+
+### P3: controlled retirement and native release
+
+- Keep the compatibility electricity comparator until the native route completes its stability period and parity gate.
+- Complete physical iOS and Android device acceptance, store credentials and release signing before field-app distribution.
+- Retire historical design and status documents only after their durable decisions are merged into release truth and this roadmap.
+
 ## Phase 1: protect the working comparator
 
 - Keep NMI to distributor lookup, NEM12 upload and drag/drop, usage chart, plan retrieval, tariff estimates, solar, battery, filters and lead flow working.

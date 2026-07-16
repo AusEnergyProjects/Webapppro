@@ -4,11 +4,11 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const markerMigration = read("../drizzle/0032_windy_fixer.sql");
-const population = read("../drizzle/0033_synthetic_benchmark_population.sql");
-const ecosystemRepair = read("../drizzle/0035_ecosystem_flow_repair.sql");
-const journeyReadiness = read("../drizzle/0036_synthetic_journey_readiness.sql");
-const catalogueReadiness = read("../drizzle/0037_synthetic_catalogue_readiness.sql");
-const purchasingWalkthrough = read("../drizzle/0038_complete_trade_purchasing_walkthrough.sql");
+const population = read("../fixtures/synthetic/migrations/0033_synthetic_benchmark_population.sql");
+const ecosystemRepair = read("../fixtures/synthetic/migrations/0035_ecosystem_flow_repair.sql");
+const journeyReadiness = read("../fixtures/synthetic/migrations/0036_synthetic_journey_readiness.sql");
+const catalogueReadiness = read("../fixtures/synthetic/migrations/0037_synthetic_catalogue_readiness.sql");
+const purchasingWalkthrough = read("../fixtures/synthetic/migrations/0038_complete_trade_purchasing_walkthrough.sql");
 const generator = read("../scripts/seed-synthetic-population.mjs");
 const validator = read("../scripts/validate-synthetic-population.mjs");
 const directoryRoute = read("../src/app/api/admin/directory/route.ts");

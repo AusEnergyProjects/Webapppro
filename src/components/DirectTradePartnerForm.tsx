@@ -19,8 +19,9 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
+import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
 
-const states = ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"];
+const states = AUSTRALIAN_STATE_CODES;
 const categories = [
   ["assessment", "Energy assessment"],
   ["solar", "Rooftop solar"],

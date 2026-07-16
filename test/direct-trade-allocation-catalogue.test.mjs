@@ -23,7 +23,8 @@ const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const customerBrief = read("../src/components/DirectTradeProjectBrief.tsx");
-const billing = read("../src/lib/direct-trade-billing.ts");
+const billingRoute = read("../src/app/api/direct-trade-billing/route.ts");
+const commercialConfig = read("../src/lib/commercial-config.ts");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
 const membership = read("../src/app/direct-trade/membership/page.tsx");
 
@@ -278,11 +279,11 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
 });
 
 test("Stripe memberships are account matched, signed and term aware", () => {
-  assert.match(billing, /client_reference_id/);
-  assert.match(billing, /prefilled_email/);
-  assert.match(billing, /billing\.stripe\.com\/p\/login/);
+  assert.match(billingRoute, /client_reference_id/);
+  assert.match(billingRoute, /prefilled_email/);
+  assert.match(commercialConfig, /STRIPE_BILLING_PORTAL_URL/);
   assert.match(stripeWebhook, /verifyStripeSignature/);
-  assert.match(stripeWebhook, /PLAN_BY_PAYMENT_LINK/);
+  assert.match(stripeWebhook, /stripeMembershipPlanByPaymentLink/);
   assert.match(stripeWebhook, /checkout\.session\.completed/);
   assert.match(stripeWebhook, /customer\.subscription\.updated/);
   assert.match(stripeWebhook, /active_cancels_at_period_end/);

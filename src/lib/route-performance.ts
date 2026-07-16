@@ -20,6 +20,14 @@ export function routeTimer() {
       try { return await work; }
       finally { dbDurationMs += performance.now() - databaseStartedAt; }
     },
+    async databases<const T extends readonly Promise<unknown>[]>(work: T) {
+      const databaseStartedAt = performance.now();
+      try {
+        return await Promise.all(work) as { [K in keyof T]: Awaited<T[K]> };
+      } finally {
+        dbDurationMs += performance.now() - databaseStartedAt;
+      }
+    },
   };
 }
 

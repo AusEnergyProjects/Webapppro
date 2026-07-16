@@ -120,7 +120,7 @@ test("project postcodes are checked before installer allocation", () => {
   assert.match(customerProjectsRoute, /postcodeCoordinate\(project\.postcode\)/);
   assert.match(customerProjectsRoute, /Enter a recognised Australian project postcode/);
   assert.match(customerProjectRules, /Enter a four digit project postcode/);
-  assert.match(customerProjectRules, /states: \["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"\]/);
+  assert.match(customerProjectRules, /states: AUSTRALIAN_STATE_CODES/);
 });
 
 test("private customer project copy avoids prohibited dash characters", () => {

@@ -1,8 +1,7 @@
-import { australianStateLabel, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
+import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const DIRECT_TRADE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
-const DIRECT_TRADE_STATES = new Set(["ACT", "NSW", "NT", "QLD", "Qld", "SA", "TAS", "Tas", "VIC", "Vic", "WA"]);
 const PROPERTY_TYPES = new Set(["house", "townhouse-unit", "apartment", "small-business", "other"]);
 const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quotes", "replacement-urgent"]);
 const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
@@ -92,7 +91,7 @@ export function validateLeadPayload(raw) {
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
   const enquiry = cleanText(raw.enquiry, 80);
   const projectCategories = cleanStringArray(raw.projectCategories, DIRECT_TRADE_CATEGORIES);
-  const state = cleanEnum(raw.state, DIRECT_TRADE_STATES);
+  const state = canonicalAustralianState(raw.state) || "";
   const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);
   const projectStage = cleanEnum(raw.projectStage, PROJECT_STAGES);
   const timeframe = cleanEnum(raw.timeframe, PROJECT_TIMEFRAMES);
@@ -101,7 +100,9 @@ export function validateLeadPayload(raw) {
   const projectSource = cleanEnum(raw.projectSource, PROJECT_SOURCES);
   const preferredContact = cleanEnum(raw.preferredContact, CONTACT_METHODS);
   const partnerType = cleanEnum(raw.partnerType, PARTNER_TYPES);
-  const serviceStates = cleanStringArray(raw.serviceStates, DIRECT_TRADE_STATES);
+  const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
+    ? raw.serviceStates.map(canonicalAustralianState).filter(Boolean)
+    : [])].slice(0, 8);
   if (enquiry === "direct-trade-project") {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
     if (!postcode || !state) return { ok: false, error: "Please enter a postcode and choose a state or territory." };

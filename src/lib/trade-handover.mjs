@@ -91,6 +91,9 @@ export function complianceTemplateFor(serviceCategory) {
   ];
 }
 
+/**
+ * @param {{assets?: Array<Record<string, unknown>>, complianceItems?: Array<Record<string, unknown>>, documents?: Array<Record<string, unknown>>, workStage?: string, customerProjectId?: unknown}} input
+ */
 export function handoverReadiness({
   assets = [],
   complianceItems = [],

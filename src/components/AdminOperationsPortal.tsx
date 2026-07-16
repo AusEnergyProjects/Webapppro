@@ -32,6 +32,7 @@ import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { WorkspaceListControls, type WorkspaceListPreferences } from "@/components/WorkspaceListControls";
 import { SearchableLookup, type SearchableLookupOption } from "@/components/SearchableLookup";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
+import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -142,7 +143,6 @@ type Opportunity = {
   isSynthetic: boolean;
   expiresAt: string;
   updatedAt: string;
-  isSynthetic: boolean;
   allocations: OpportunityAllocation[];
 };
 type CatalogueProduct = {
@@ -223,7 +223,7 @@ type EcosystemHealth = {
   }>;
 };
 
-const states = ["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"];
+const states = AUSTRALIAN_STATE_CODES;
 const categories = [
   ["assessment", "Energy assessment"],
   ["solar", "Rooftop solar"],

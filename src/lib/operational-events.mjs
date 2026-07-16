@@ -10,6 +10,9 @@ function cleanMetrics(metrics) {
   );
 }
 
+/**
+ * @param {{event?: string, logger?: Console, now?: () => number, createId?: () => string}} options
+ */
 export function createOperationalRecorder({
   event,
   logger = console,

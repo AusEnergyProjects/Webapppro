@@ -370,8 +370,10 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
   } catch (error) {
     const message = error instanceof Error ? error.message : "PROVIDER_REQUEST_FAILED";
     const failedAt = new Date().toISOString();
-    await db.prepare(`UPDATE trade_crm_accounting_documents SET status = 'error', last_error = ?, updated_at = ? WHERE id = ?`)
-      .bind(message, failedAt, document.id).run();
+    if (document) {
+      await db.prepare(`UPDATE trade_crm_accounting_documents SET status = 'error', last_error = ?, updated_at = ? WHERE id = ?`)
+        .bind(message, failedAt, document.id).run();
+    }
     await db.prepare(`UPDATE trade_crm_integrations SET last_error = ?, updated_at = ? WHERE id = ?`)
       .bind(message, failedAt, connection.id).run();
     const failed = await documentRow(firebaseUid, String(job.id));

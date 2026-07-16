@@ -1,4 +1,8 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AEA Energy and TLink
+
+This repository contains four connected products: household energy planning, the TLink protected marketplace, the TLink trade operating platform, and the native field application. The comparison tools and consumer account remain under Australian Energy Assessments. Installer, wholesaler, admin and field operations use the TLink platform identity.
+
+The canonical current implementation and release status is [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md). The implementation sequence is [ROADMAP.md](./ROADMAP.md). Historical architecture documents are retained for design context only.
 
 ## Getting Started
 
@@ -101,21 +105,8 @@ Actionable, high and urgent notifications are queued, retried and recorded in th
 
 See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert behavior, privacy boundaries and incident response steps.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Release validation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run `npm run validate` before publishing. It performs the active web and worker typecheck, lint, runtime integration suite, full test suite, fresh Cloudflare D1 migration check and production build. `npm run test:coverage` is available for coverage analysis. Synthetic benchmark data is opt-in through `fixtures/synthetic` and is never part of the normal production migration path.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The active deployment target is OpenAI Sites with Cloudflare D1 and R2 bindings. GitHub is the source record. Netlify and Vercel are not deployment targets for this repository.

@@ -3,30 +3,9 @@ import { getD1 } from "../../../../../db";
 import { qualifyReferralFromFirstPayment } from "@/lib/stripe-referral-server";
 import { createAdminNotification, resolveSystemAdminNotifications } from "@/lib/admin-notifications";
 import { reconcileTradePayment } from "@/lib/trade-payment-reconciliation";
+import { stripeMembershipPlanByPaymentLink } from "@/lib/commercial-config";
 
 export const runtime = "edge";
-
-const PLAN_BY_PAYMENT_LINK: Record<
-  string,
-  { planKey: string; partnerType: "installer" | "supplier" }
-> = {
-  plink_1Tt2EPAZFM6O8tnYCbCwBETb: {
-    planKey: "installer_monthly",
-    partnerType: "installer",
-  },
-  plink_1Tt2IzAZFM6O8tnYwF0SQ7Q8: {
-    planKey: "installer_annual",
-    partnerType: "installer",
-  },
-  plink_1Tt2RrAZFM6O8tnYn3YsYgRh: {
-    planKey: "supplier_monthly",
-    partnerType: "supplier",
-  },
-  plink_1Tt2UdAZFM6O8tnYmruCRBr6: {
-    planKey: "supplier_annual",
-    partnerType: "supplier",
-  },
-};
 
 type StripeObject = Record<string, unknown>;
 type BillingChange = {
@@ -135,7 +114,7 @@ async function applyCheckout(
       ? session.client_reference_id.slice(0, 180)
       : "";
   const paymentLinkId = stringId(session.payment_link);
-  const plan = PLAN_BY_PAYMENT_LINK[paymentLinkId];
+  const plan = stripeMembershipPlanByPaymentLink()[paymentLinkId];
   if (!firebaseUid || !plan) return undefined;
   const subscriptionId = stringId(session.subscription);
   if (!subscriptionId) throw new Error("SUBSCRIPTION_REFERENCE_MISSING");

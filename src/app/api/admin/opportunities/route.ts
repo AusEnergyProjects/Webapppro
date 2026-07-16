@@ -4,10 +4,11 @@ import { DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, expireStaleOpportu
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
+import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 
 export const runtime = "edge";
 
-const STATES = new Set(["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"]);
+const STATES = new Set(AUSTRALIAN_STATE_CODES);
 const CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
 const STATUSES = new Set(["draft", "open", "paused", "closed", "expired"]);
 const PRIORITIES = new Set(["standard", "priority", "urgent"]);
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
     const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
     const status = cleanAdminText(url.searchParams.get("status"), 20);
     const service = cleanAdminText(url.searchParams.get("service"), 40);
-    const state = cleanAdminText(url.searchParams.get("state"), 12);
+    const state = canonicalAustralianState(url.searchParams.get("state")) || "";
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
     const sortValue = cleanAdminText(url.searchParams.get("sort"), 30);
     const sort = SORTS[sortValue] ? sortValue : "updated-desc";
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowClauses.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rowWhere = rowClauses.length ? `WHERE ${rowClauses.join(" AND ")}` : "";
-    const [countRow, rows] = await Promise.all([
+    const [countRow, rows] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_opportunities o ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT o.*,
       COUNT(m.id) match_count,
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
       FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
       ${rowWhere} GROUP BY o.id ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
-    ].map((work) => timer.database(work)));
+    ]);
     const hasNext = rows.results.length > pageSize;
     const pageRows = rows.results.slice(0, pageSize);
     const allocationRows = pageRows.length
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
     const title = cleanAdminText(body.title, 160);
     const projectType = cleanAdminText(body.projectType, 100);
     const postcode = cleanAdminText(body.postcode, 4);
-    const state = cleanAdminText(body.state, 12);
+    const state = canonicalAustralianState(body.state) || "";
     const summary = cleanAdminText(body.summary, 1600);
     const priority = cleanAdminText(body.priority, 30) || "standard";
     const timing = cleanAdminText(body.timing, 30) || "planning";

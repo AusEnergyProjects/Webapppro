@@ -187,17 +187,6 @@ test("failed alert delivery remains pending for the next scheduled run", async (
   assert.equal(store.read().status, "unhealthy");
 });
 
-test("scheduled function is hourly and uses the dedicated operations store", () => {
-  const scheduled = fs.readFileSync(
-    path.join(process.cwd(), "netlify/functions/api-health-monitor.mts"),
-    "utf8",
-  );
-  assert.match(scheduled, /schedule: "@hourly"/);
-  assert.match(scheduled, /name: "aea-operations", consistency: "strong"/);
-  assert.match(scheduled, /AEA_OPS_ALERT_WEBHOOK_URL/);
-  assert.match(scheduled, /AEA_LEAD_WEBHOOK_TEST_TOKEN/);
-});
-
 test("Google Apps monitoring checks the Sites runtime, both plan services and privacy-safe lead delivery", () => {
   const script = fs.readFileSync(
     path.join(process.cwd(), "integrations/google-apps-script/lead-email-relay.gs"),

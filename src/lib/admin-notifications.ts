@@ -10,6 +10,7 @@ export const ADMIN_NOTIFICATION_CATEGORIES = [
   "billing",
   "security",
   "platform",
+  "account",
 ] as const;
 
 export const ADMIN_NOTIFICATION_PRIORITIES = ["low", "normal", "high", "urgent"] as const;

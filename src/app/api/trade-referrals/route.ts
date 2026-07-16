@@ -91,7 +91,7 @@ async function referralPayload(request: Request, firebaseUid: string) {
     stats: {
       joined: shapedReferrals.length,
       awaitingPayment: shapedReferrals.filter((item) =>
-        ["registered", "review_required"].includes(item.status),
+        ["registered", "review_required"].includes(String(item.status)),
       ).length,
       rewarded: rewardedReferrals,
       earnedMonths,
