@@ -69,9 +69,10 @@ type ProductList = {
   }>;
 };
 
-type CatalogueColumn = "category" | "price" | "supply" | "kit" | "actions";
+type CatalogueColumn = "supplier" | "brand" | "model" | "name" | "category" | "price" | "ordering" | "stock" | "lead" | "warranty" | "states" | "kit" | "actions";
 type CataloguePreferences = {
   search: string;
+  modelSearch: string;
   category: string;
   supplierUid: string;
   brand: string;
@@ -95,6 +96,7 @@ type CatalogueFacets = {
 
 const defaultPreferences: CataloguePreferences = {
   search: "",
+  modelSearch: "",
   category: "",
   supplierUid: "",
   brand: "",
@@ -106,15 +108,23 @@ const defaultPreferences: CataloguePreferences = {
   minimumWarrantyYears: 0,
   sortKey: "name-asc",
   pageSize: 25,
-  visibleColumns: ["category", "price", "supply", "kit", "actions"],
+  visibleColumns: ["supplier", "brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "states", "kit", "actions"],
 };
 
 const columnOptions: Array<{ key: CatalogueColumn; label: string; width: string }> = [
-  { key: "category", label: "Category and description", width: "minmax(180px, 1fr)" },
-  { key: "price", label: "Trade price", width: "minmax(105px, .65fr)" },
-  { key: "supply", label: "Supply details", width: "minmax(175px, .95fr)" },
-  { key: "kit", label: "Linked kit", width: "minmax(130px, .75fr)" },
-  { key: "actions", label: "Action", width: "minmax(145px, .8fr)" },
+  { key: "supplier", label: "Wholesaler", width: "minmax(180px, 1.2fr)" },
+  { key: "brand", label: "Brand", width: "minmax(110px, .7fr)" },
+  { key: "model", label: "Model code", width: "minmax(125px, .8fr)" },
+  { key: "name", label: "Product", width: "minmax(190px, 1.25fr)" },
+  { key: "category", label: "Category", width: "minmax(135px, .85fr)" },
+  { key: "price", label: "Trade price ex GST", width: "minmax(130px, .85fr)" },
+  { key: "ordering", label: "Minimum order", width: "minmax(135px, .85fr)" },
+  { key: "stock", label: "Stock", width: "minmax(105px, .65fr)" },
+  { key: "lead", label: "Lead time", width: "minmax(95px, .6fr)" },
+  { key: "warranty", label: "Warranty", width: "minmax(95px, .6fr)" },
+  { key: "states", label: "Available states", width: "minmax(145px, .9fr)" },
+  { key: "kit", label: "Linked kit", width: "minmax(120px, .75fr)" },
+  { key: "actions", label: "Action", width: "minmax(150px, .9fr)" },
 ];
 
 const money = new Intl.NumberFormat("en-AU", {
@@ -155,6 +165,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const [lists, setLists] = useState<ProductList[]>([]);
   const [activeListId, setActiveListId] = useState("");
   const [search, setSearch] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
   const [category, setCategory] = useState("");
   const [supplier, setSupplier] = useState("");
   const [brand, setBrand] = useState("");
@@ -195,6 +206,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
 
   const applyPreferences = useCallback((preferences: CataloguePreferences) => {
     setSearch(preferences.search || "");
+    setModelSearch(preferences.modelSearch || "");
     setCategory(preferences.category || "");
     setSupplier(preferences.supplierUid || "");
     setBrand(preferences.brand || "");
@@ -206,7 +218,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     setMinimumWarranty(preferences.minimumWarrantyYears ? String(preferences.minimumWarrantyYears) : "");
     setSort(preferences.sortKey || "name-asc");
     setPageSize([25, 50, 100].includes(preferences.pageSize) ? preferences.pageSize : 25);
-    setVisibleColumns(Array.isArray(preferences.visibleColumns) ? preferences.visibleColumns : defaultPreferences.visibleColumns);
+    setVisibleColumns(Array.isArray(preferences.visibleColumns) && preferences.visibleColumns.length ? preferences.visibleColumns : defaultPreferences.visibleColumns);
     setPage(1);
   }, []);
 
@@ -237,6 +249,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     const timer = window.setTimeout(async () => {
       const query = new URLSearchParams({
         search,
+        model: modelSearch,
         category,
         supplier,
         brand,
@@ -268,12 +281,13 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [brand, category, maximumLeadTime, maximumPrice, minimumPrice, minimumWarranty, page, pageSize, preferencesReady, request, search, serviceState, sort, stock, supplier]);
+  }, [brand, category, maximumLeadTime, maximumPrice, minimumPrice, minimumWarranty, modelSearch, page, pageSize, preferencesReady, request, search, serviceState, sort, stock, supplier]);
 
   useEffect(() => {
     if (navigationTarget?.kind !== "product" || !navigationTarget.query) return;
     const frame = window.requestAnimationFrame(() => {
       setSearch(navigationTarget.query);
+      setModelSearch("");
       setCategory("");
       setSupplier("");
       setBrand("");
@@ -294,9 +308,9 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     states: facets.states,
     stocks: facets.stocks,
   }), [facets, supplier]);
-  const activeFilterCount = [category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty].filter(Boolean).length;
+  const activeFilterCount = [search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty].filter(Boolean).length;
   function clearFilters() {
-    setSearch(""); setCategory(""); setSupplier(""); setBrand(""); setServiceState(""); setStock("");
+    setSearch(""); setModelSearch(""); setCategory(""); setSupplier(""); setBrand(""); setServiceState(""); setStock("");
     setMinimumPrice(""); setMaximumPrice(""); setMaximumLeadTime(""); setMinimumWarranty(""); setSort("name-asc");
     setPage(1);
   }
@@ -305,12 +319,13 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     setPage(1);
   }
   function toggleColumn(column: CatalogueColumn) {
-    setVisibleColumns((current) => current.includes(column) ? current.filter((item) => item !== column) : [...current, column]);
+    setVisibleColumns((current) => current.includes(column)
+      ? current.length === 1 ? current : current.filter((item) => item !== column)
+      : [...current, column]);
   }
-  const gridTemplate = useMemo(() => [
-    "minmax(200px, 1.25fr)",
-    ...columnOptions.filter((column) => visibleColumns.includes(column.key)).map((column) => column.width),
-  ].join(" "), [visibleColumns]);
+  const gridTemplate = useMemo(() => columnOptions
+    .filter((column) => visibleColumns.includes(column.key))
+    .map((column) => column.width).join(" "), [visibleColumns]);
   const productGridStyle = { "--marketplace-grid": gridTemplate } as CSSProperties;
   const resultStart = totalProducts ? (page - 1) * pageSize + 1 : 0;
   const resultEnd = Math.min(page * pageSize, totalProducts);
@@ -322,7 +337,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       await request("/api/product-marketplace/preferences", {
         method: "PATCH",
         body: JSON.stringify({
-          search, category, supplierUid: supplier, brand, serviceState, stockStatus: stock,
+          search, modelSearch, category, supplierUid: supplier, brand, serviceState, stockStatus: stock,
           minimumPriceCents: minimumPrice ? Math.round(Number(minimumPrice) * 100) : 0,
           maximumPriceCents: maximumPrice ? Math.round(Number(maximumPrice) * 100) : 0,
           maximumLeadDays: maximumLeadTime === "" ? -1 : Number(maximumLeadTime),
@@ -454,7 +469,8 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
         <div className="marketplace-catalogue-column">
           <div className="marketplace-finder" aria-label="Advanced product finder">
             <div className="marketplace-filterbar">
-              <label className="marketplace-search"><span>Search products</span><input type="search" placeholder="Product, model code, brand or wholesaler" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} /></label>
+              <label className="marketplace-search"><span>Product name</span><input type="search" placeholder="e.g. 10 kWh home battery" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} /></label>
+              <label><span>Model code</span><input type="search" placeholder="e.g. VS-10-01-2" value={modelSearch} onChange={(event) => changeFilter(setModelSearch, event.target.value)} /></label>
               <label><span>Category</span><select value={category} onChange={(event) => changeFilter(setCategory, event.target.value)}>
                 <option value="">All categories</option>
                 {Object.entries(categoryLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
@@ -484,7 +500,6 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
               <div>
                 <fieldset>
                   <legend>Visible columns</legend>
-                  <label><input type="checkbox" checked disabled />Product and wholesaler</label>
                   {columnOptions.map((column) => <label key={column.key}><input type="checkbox" checked={visibleColumns.includes(column.key)} onChange={() => toggleColumn(column.key)} />{column.label}</label>)}
                 </fieldset>
                 <div className="marketplace-view-actions">
@@ -506,29 +521,23 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           {products.length ? (
             <div className="marketplace-product-grid">
               <div className="marketplace-product-columns" aria-hidden="true" style={productGridStyle}>
-                <span>Product and wholesaler</span>
                 {columnOptions.filter((column) => visibleColumns.includes(column.key)).map((column) => <span key={column.key}>{column.label}</span>)}
               </div>
               {products.map((product) => {
                 const selected = activeList?.items.some((item) => item.productId === product.id);
                 return (
                   <article key={product.id} style={productGridStyle}>
-                    <header>
-                      <span>{product.supplierName}</span>
-                      <strong>{product.brand} · {product.modelNumber}</strong>
-                      <h3>{product.name}</h3>
-                    </header>
-                    {visibleColumns.includes("category") && <p><strong>{categoryLabels[product.category] || readable(product.category)}</strong><span>{product.description}</span></p>}
-                    {visibleColumns.includes("price") && <div className="marketplace-price">
-                      <strong>{money.format(product.unitPriceCentsExGst / 100)}</strong>
-                      <span>ex GST · {money.format((product.unitPriceCentsExGst * 1.1) / 100)} inc GST</span>
-                    </div>}
-                    {visibleColumns.includes("supply") && <ul>
-                      <li>Minimum {product.minOrderQty} {product.unitLabel}; order in {product.orderIncrement}s</li>
-                      <li>{readable(product.stockStatus)}{product.leadTimeDays ? ` · ${product.leadTimeDays} day lead time` : ""}</li>
-                      <li>{product.warrantyYears ? `${product.warrantyYears} year stated product warranty` : "Warranty term not stated"}</li>
-                      <li>{product.serviceStates.length ? `Available in ${product.serviceStates.join(", ")}` : "Confirm service state with wholesaler"}</li>
-                    </ul>}
+                    {visibleColumns.includes("supplier") && <strong className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>}
+                    {visibleColumns.includes("brand") && <span className="marketplace-table-cell" title={product.brand}>{product.brand}</span>}
+                    {visibleColumns.includes("model") && <span className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>}
+                    {visibleColumns.includes("name") && <strong className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>}
+                    {visibleColumns.includes("category") && <span className="marketplace-table-cell" title={categoryLabels[product.category] || readable(product.category)}>{categoryLabels[product.category] || readable(product.category)}</span>}
+                    {visibleColumns.includes("price") && <strong className="marketplace-table-cell marketplace-price-value">{money.format(product.unitPriceCentsExGst / 100)}</strong>}
+                    {visibleColumns.includes("ordering") && <span className="marketplace-table-cell" title={`Minimum ${product.minOrderQty} ${product.unitLabel}; order in multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>}
+                    {visibleColumns.includes("stock") && <span className={`marketplace-table-cell marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>}
+                    {visibleColumns.includes("lead") && <span className="marketplace-table-cell">{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>}
+                    {visibleColumns.includes("warranty") && <span className="marketplace-table-cell">{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>}
+                    {visibleColumns.includes("states") && <span className="marketplace-table-cell" title={product.serviceStates.join(", ")}>{product.serviceStates.length ? product.serviceStates.join(", ") : "Confirm"}</span>}
                     {visibleColumns.includes("kit") && (product.dependencies.length > 0 ? (
                       <details className="marketplace-kit-cell">
                         <summary>{product.dependencies.length} linked kit item{product.dependencies.length === 1 ? "" : "s"}</summary>
@@ -540,7 +549,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
                           </div>
                         ))}
                       </details>
-                    ) : <span className="marketplace-kit-empty">No linked kit</span>)}
+                    ) : <span className="marketplace-kit-empty marketplace-table-cell">None</span>)}
                     {visibleColumns.includes("actions") && <div className="marketplace-product-actions">
                       <button type="button" disabled={busy || selected || activeList?.status !== "draft"} onClick={() => void addProduct(product)}>
                         {selected ? "Added to list" : "Add to project list"}

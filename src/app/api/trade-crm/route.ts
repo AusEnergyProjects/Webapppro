@@ -138,6 +138,8 @@ function indexedCustomer(row: Record<string, unknown>) {
     addressLine2: row.address_line_2, suburb: row.suburb, addressState: row.address_state,
     postcode: row.postcode, tags: storedList(row.tags), privateNotes: row.private_notes,
     jobCount: Number(row.job_count || 0), activeJobCount: Number(row.active_job_count || 0),
+    activities: String(row.activities || "").split(",").filter(Boolean),
+    latestJobNumber: String(row.latest_job_number || ""), latestPipelineStage: String(row.latest_pipeline_stage || ""),
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -156,8 +158,22 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
       bindings.push(`%${search}%`);
     }
+    const customer = cleanAdminText(url.searchParams.get("customer"), 100).toLowerCase();
+    if (customer) {
+      conditions.push(`LOWER(CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
+      bindings.push(`%${customer}%`);
+    }
+    const service = cleanAdminText(url.searchParams.get("service"), 40);
+    if (SERVICE_CATEGORIES.has(service)) { conditions.push("w.service_category = ?"); bindings.push(service); }
     const pipeline = cleanAdminText(url.searchParams.get("pipeline"), 30);
     if (pipeline && PIPELINE_STAGES.has(pipeline)) { conditions.push("d.pipeline_stage = ?"); bindings.push(pipeline); }
+    const stage = cleanAdminText(url.searchParams.get("stage"), 30);
+    if (WORK_STAGES.has(stage)) { conditions.push("w.stage = ?"); bindings.push(stage); }
+    const location = cleanAdminText(url.searchParams.get("location"), 100).toLowerCase();
+    if (location) {
+      conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(c.address_line_1, '') || ' ' || COALESCE(c.address_line_2, '') || ' ' || COALESCE(c.suburb, '') || ' ' || COALESCE(c.address_state, '') || ' ' || COALESCE(c.postcode, '')) LIKE ?`);
+      bindings.push(`%${location}%`);
+    }
     if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
     else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
     else if (filter === "attention") conditions.push(`(w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
@@ -185,8 +201,36 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   }
   const conditions = ["c.firebase_uid = ?", "c.record_status = 'active'"];
   if (search) {
-    conditions.push("LOWER(c.customer_number || ' ' || c.first_name || ' ' || c.last_name || ' ' || c.business_name || ' ' || c.email || ' ' || c.phone || ' ' || c.suburb || ' ' || c.postcode) LIKE ?");
+    conditions.push("LOWER(c.customer_number || ' ' || c.first_name || ' ' || c.last_name || ' ' || c.business_name || ' ' || c.email) LIKE ?");
     bindings.push(`%${search}%`);
+  }
+  const street = cleanAdminText(url.searchParams.get("street"), 120).toLowerCase();
+  if (street) { conditions.push("LOWER(c.address_line_1 || ' ' || c.address_line_2) LIKE ?"); bindings.push(`%${street}%`); }
+  const phone = cleanAdminText(url.searchParams.get("phone"), 50).toLowerCase();
+  if (phone) { conditions.push("LOWER(c.phone) LIKE ?"); bindings.push(`%${phone}%`); }
+  const postcode = cleanAdminText(url.searchParams.get("postcode"), 12).toLowerCase();
+  if (postcode) { conditions.push("LOWER(c.postcode) LIKE ?"); bindings.push(`%${postcode}%`); }
+  const suburb = cleanAdminText(url.searchParams.get("suburb"), 100).toLowerCase();
+  if (suburb) { conditions.push("LOWER(c.suburb) LIKE ?"); bindings.push(`%${suburb}%`); }
+  const state = cleanAdminText(url.searchParams.get("state"), 12).toUpperCase();
+  if (state) { conditions.push("UPPER(c.address_state) = ?"); bindings.push(state); }
+  const service = cleanAdminText(url.searchParams.get("service"), 40);
+  if (SERVICE_CATEGORIES.has(service)) {
+    conditions.push(`EXISTS (SELECT 1 FROM trade_crm_job_details fd JOIN trade_work_orders fw ON fw.id = fd.work_order_id AND fw.firebase_uid = fd.firebase_uid
+      WHERE fd.crm_customer_id = c.id AND fd.firebase_uid = c.firebase_uid AND fw.record_status = 'active' AND fw.service_category = ?)`);
+    bindings.push(service);
+  }
+  const jobId = cleanAdminText(url.searchParams.get("jobId"), 80).toLowerCase();
+  if (jobId) {
+    conditions.push(`EXISTS (SELECT 1 FROM trade_crm_job_details fd JOIN trade_work_orders fw ON fw.id = fd.work_order_id AND fw.firebase_uid = fd.firebase_uid
+      WHERE fd.crm_customer_id = c.id AND fd.firebase_uid = c.firebase_uid AND fw.record_status = 'active' AND LOWER(fw.work_number) LIKE ?)`);
+    bindings.push(`%${jobId}%`);
+  }
+  const pipeline = cleanAdminText(url.searchParams.get("pipeline"), 30);
+  if (PIPELINE_STAGES.has(pipeline)) {
+    conditions.push(`EXISTS (SELECT 1 FROM trade_crm_job_details fd JOIN trade_work_orders fw ON fw.id = fd.work_order_id AND fw.firebase_uid = fd.firebase_uid
+      WHERE fd.crm_customer_id = c.id AND fd.firebase_uid = c.firebase_uid AND fw.record_status = 'active' AND fd.pipeline_stage = ?)`);
+    bindings.push(pipeline);
   }
   const where = conditions.join(" AND ");
   const sorts: Record<string, string> = {
@@ -201,6 +245,12 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') job_count,
       (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' AND w.stage NOT IN ('completed', 'cancelled')) active_job_count
+      , (SELECT GROUP_CONCAT(DISTINCT w.service_category) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') activities
+      , (SELECT w.work_number FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_job_number
+      , (SELECT d.pipeline_stage FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_pipeline_stage
       FROM trade_crm_customers c WHERE ${where} ORDER BY ${sorts[sort] || sorts["name-asc"]} LIMIT ? OFFSET ?`)
       .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
   ]);

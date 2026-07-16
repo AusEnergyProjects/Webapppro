@@ -96,6 +96,22 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(crm, /Name A to Z/);
 });
 
+test("job and customer directories expose granular server filters and single-line data columns", () => {
+  for (const field of ["customer", "service", "pipeline", "stage", "location", "street", "phone", "postcode", "suburb", "state", "jobId"]) {
+    assert.match(route, new RegExp(`searchParams\\.get\\("${field}"\\)`));
+  }
+  assert.match(route, /GROUP_CONCAT\(DISTINCT w\.service_category\)/);
+  assert.match(route, /latest_job_number/);
+  assert.match(route, /latest_pipeline_stage/);
+  assert.match(crm, /Detailed job filters/);
+  assert.match(crm, /Detailed customer filters/);
+  assert.match(crm, /Street address/);
+  assert.match(crm, /Contact number/);
+  assert.match(crm, /Completion status/);
+  assert.match(crm, /crm-job-columns/);
+  assert.match(crm, /crm-customer-columns/);
+});
+
 test("bulk CRM actions are bounded, owner scoped and protect active customer work", () => {
   assert.match(route, /function cleanIds/);
   assert.match(route, /slice\(0, 100\)/);

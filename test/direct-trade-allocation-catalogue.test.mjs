@@ -11,6 +11,7 @@ const supplierRoute = read("../src/app/api/supplier-products/route.ts");
 const marketplaceRoute = read("../src/app/api/product-marketplace/route.ts");
 const marketplacePreferencesRoute = read("../src/app/api/product-marketplace/preferences/route.ts");
 const marketplacePreferencesMigration = read("../drizzle/0039_exotic_mulholland_black.sql");
+const marketplaceGranularFiltersMigration = read("../drizzle/0041_foamy_shotgun.sql");
 const adminMatches = read(
   "../src/app/api/admin/opportunities/matches/route.ts",
 );
@@ -98,7 +99,8 @@ test("wholesalers cannot access leads and installers only see approved published
   assert.match(marketplaceRoute, /ids\.slice\(offset, offset \+ 80\)/);
   assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
   assert.match(marketplaceRoute, /a\.service_states supplier_service_states/);
-  assert.match(marketplaceRoute, /a\.business_name \|\| ' ' \|\| p\.category\) LIKE/);
+  assert.match(marketplaceRoute, /LOWER\(p\.name\) LIKE/);
+  assert.match(marketplaceRoute, /LOWER\(p\.model_number\) LIKE/);
   assert.match(installerUi, /Product name A to Z/);
   assert.match(installerUi, /Wholesaler A to Z/);
   assert.match(installerUi, /Available in state/);
@@ -149,11 +151,14 @@ test("installer catalogue preference migration applies cleanly", () => {
   for (const statement of marketplacePreferencesMigration.split("--> statement-breakpoint")) {
     if (statement.trim()) database.exec(statement);
   }
+  for (const statement of marketplaceGranularFiltersMigration.split("--> statement-breakpoint")) {
+    if (statement.trim()) database.exec(statement);
+  }
   const columns = database.prepare("PRAGMA table_info(installer_catalogue_preferences)").all().map((column) => column.name);
   assert.deepEqual(columns, [
     "firebase_uid", "search", "category", "supplier_uid", "brand", "service_state",
     "stock_status", "minimum_price_cents", "maximum_price_cents", "maximum_lead_days",
-    "minimum_warranty_years", "sort_key", "page_size", "visible_columns", "updated_at",
+    "minimum_warranty_years", "sort_key", "page_size", "visible_columns", "updated_at", "model_search",
   ]);
   database.close();
 });
@@ -173,6 +178,11 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(supplierRoute, /Import between 1 and 100 catalogue rows/);
   assert.match(supplierUi, /Bulk catalogue import/);
   assert.match(supplierUi, /Download completed CSV demo/);
+  assert.match(supplierUi, /Detailed catalogue filters/);
+  assert.match(supplierUi, /Model code/);
+  assert.match(supplierUi, /Minimum order/);
+  assert.match(supplierRoute, /LOWER\(model_number\) LIKE/);
+  assert.match(supplierRoute, /unit_price_cents_ex_gst >=/);
   assert.match(supplierUi, /dependency_model_numbers/);
   assert.match(supplierUi, /EASYFIT-250\|PLINTH-250/);
   assert.match(supplierUi, /Linked products and kit dependencies/);

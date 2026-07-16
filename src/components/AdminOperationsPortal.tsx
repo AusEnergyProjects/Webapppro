@@ -292,6 +292,15 @@ export function AdminOperationsPortal() {
   const [opportunityStateFilter, setOpportunityStateFilter] = useState("");
   const [products, setProducts] = useState<CatalogueProduct[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [productWholesaler, setProductWholesaler] = useState("");
+  const [productBrand, setProductBrand] = useState("");
+  const [productModel, setProductModel] = useState("");
+  const [productCategory, setProductCategory] = useState("");
+  const [productStock, setProductStock] = useState("");
+  const [productReviewStatus, setProductReviewStatus] = useState("");
+  const [productListingStatus, setProductListingStatus] = useState("");
+  const [productMinimumPrice, setProductMinimumPrice] = useState("");
+  const [productMaximumPrice, setProductMaximumPrice] = useState("");
   const [productSynthetic, setProductSynthetic] = useState("");
   const [productReview, setProductReview] = useState<
     Record<
@@ -987,13 +996,24 @@ export function AdminOperationsPortal() {
   ).length;
   const visibleProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
+    const wholesaler = productWholesaler.trim().toLowerCase();
+    const brand = productBrand.trim().toLowerCase();
+    const model = productModel.trim().toLowerCase();
+    const minimumPrice = productMinimumPrice ? Math.round(Number(productMinimumPrice) * 100) : 0;
+    const maximumPrice = productMaximumPrice ? Math.round(Number(productMaximumPrice) * 100) : 0;
     return products
       .filter((item) => productSynthetic === "only" ? item.isSynthetic : productSynthetic === "exclude" ? !item.isSynthetic : true)
-      .filter((item) => !term ||
-          `${item.supplierName} ${item.modelNumber} ${item.brand} ${item.name} ${item.category}`
-            .toLowerCase()
-            .includes(term));
-  }, [productSearch, productSynthetic, products]);
+      .filter((item) => !term || item.name.toLowerCase().includes(term))
+      .filter((item) => !wholesaler || item.supplierName.toLowerCase().includes(wholesaler))
+      .filter((item) => !brand || item.brand.toLowerCase().includes(brand))
+      .filter((item) => !model || item.modelNumber.toLowerCase().includes(model))
+      .filter((item) => !productCategory || item.category === productCategory)
+      .filter((item) => !productStock || item.stockStatus === productStock)
+      .filter((item) => !productReviewStatus || item.reviewStatus === productReviewStatus)
+      .filter((item) => !productListingStatus || item.listingStatus === productListingStatus)
+      .filter((item) => !minimumPrice || item.unitPriceCentsExGst >= minimumPrice)
+      .filter((item) => !maximumPrice || item.unitPriceCentsExGst <= maximumPrice);
+  }, [productBrand, productCategory, productListingStatus, productMaximumPrice, productMinimumPrice, productModel, productReviewStatus, productSearch, productStock, productSynthetic, productWholesaler, products]);
 
   if (!authReady || loading)
     return (
@@ -2418,16 +2438,22 @@ export function AdminOperationsPortal() {
                     minimum order, availability, warranty and dependency count.
                   </p>
                 </div>
-                <input
-                  className="admin-catalogue-search"
-                  type="search"
-                  placeholder="Search wholesaler, model, brand, product or category"
-                  value={productSearch}
-                  onChange={(event) => setProductSearch(event.target.value)}
-                />
+                <div className="admin-catalogue-granular crm-granular-filters"><div>
+                  <label><span>Product name</span><input type="search" placeholder="Product name" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} /></label>
+                  <label><span>Wholesaler</span><input placeholder="Wholesaler" value={productWholesaler} onChange={(event) => setProductWholesaler(event.target.value)} /></label>
+                  <label><span>Brand</span><input placeholder="Brand" value={productBrand} onChange={(event) => setProductBrand(event.target.value)} /></label>
+                  <label><span>Model code</span><input placeholder="Model code" value={productModel} onChange={(event) => setProductModel(event.target.value)} /></label>
+                  <label><span>Category</span><select value={productCategory} onChange={(event) => setProductCategory(event.target.value)}><option value="">All categories</option>{[...new Set(products.map((item) => item.category))].sort().map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></label>
+                  <label><span>Stock</span><select value={productStock} onChange={(event) => setProductStock(event.target.value)}><option value="">Any stock</option><option value="in_stock">In stock</option><option value="limited">Limited</option><option value="order_in">Order in</option><option value="unavailable">Unavailable</option></select></label>
+                  <label><span>Review status</span><select value={productReviewStatus} onChange={(event) => setProductReviewStatus(event.target.value)}><option value="">Any review status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="needs_changes">Needs changes</option><option value="rejected">Rejected</option></select></label>
+                  <label><span>Listing status</span><select value={productListingStatus} onChange={(event) => setProductListingStatus(event.target.value)}><option value="">Any listing status</option><option value="draft">Draft</option><option value="published">Published</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
+                  <label><span>Minimum price ex GST</span><input type="number" min="0" value={productMinimumPrice} onChange={(event) => setProductMinimumPrice(event.target.value)} placeholder="$0" /></label>
+                  <label><span>Maximum price ex GST</span><input type="number" min="0" value={productMaximumPrice} onChange={(event) => setProductMaximumPrice(event.target.value)} placeholder="No maximum" /></label>
+                  <button type="button" onClick={() => { setProductSearch(""); setProductWholesaler(""); setProductBrand(""); setProductModel(""); setProductCategory(""); setProductStock(""); setProductReviewStatus(""); setProductListingStatus(""); setProductMinimumPrice(""); setProductMaximumPrice(""); }}>Clear filters</button>
+                </div></div>
                 <div className="admin-catalogue-list">
                   <div className="admin-catalogue-columns" aria-hidden="true">
-                    <span>Wholesaler and product</span><span>Description</span><span>Price</span><span>Supply</span><span>Review state</span><span>Action</span>
+                    <span>Wholesaler</span><span>Brand</span><span>Model code</span><span>Product</span><span>Category</span><span>Price ex GST</span><span>Minimum order</span><span>Stock</span><span>Lead time</span><span>Warranty</span><span>Review</span><span>Listing</span><span>Linked kit</span><span>Action</span>
                   </div>
                   {visibleProducts.length ? (
                     visibleProducts.map((product) => {
@@ -2438,53 +2464,12 @@ export function AdminOperationsPortal() {
                       };
                       return (
                         <article key={product.id}>
-                          <header>
-                            <div>
-                              <span>
-                                {product.supplierName} · {product.supplierEmail}
-                              </span>
-                              <h3>
-                                {product.brand} {product.modelNumber}{product.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}
-                              </h3>
-                              <strong>{product.name}</strong>
-                            </div>
-                            <div>
-                              <span
-                                className={`admin-pill admin-pill-${product.reviewStatus}`}
-                              >
-                                {readable(product.reviewStatus)}
-                              </span>
-                              <span
-                                className={`admin-pill admin-pill-${product.listingStatus}`}
-                              >
-                                {readable(product.listingStatus)}
-                              </span>
-                            </div>
-                          </header>
-                          <p>{product.description}</p>
-                          <div className="admin-product-facts">
-                            <span>
-                              $
-                              {(
-                                product.unitPriceCentsExGst / 100
-                              ).toLocaleString("en-AU", {
-                                minimumFractionDigits: 2,
-                              })}{" "}
-                              ex GST
-                            </span>
-                            <span>MOQ {product.minOrderQty}</span>
-                            <span>{readable(product.stockStatus)}</span>
-                            <span>{product.leadTimeDays} day lead time</span>
-                            <span>
-                              {product.warrantyYears
-                                ? `${product.warrantyYears} year warranty`
-                                : "Warranty not stated"}
-                            </span>
-                            <span>
-                              {product.linkedCount} linked item
-                              {product.linkedCount === 1 ? "" : "s"}
-                            </span>
-                          </div>
+                          <strong title={`${product.supplierName} | ${product.supplierEmail}`}>{product.supplierName}</strong><span>{product.brand}</span><b>{product.modelNumber}</b>
+                          <strong title={product.name}>{product.name}{product.isSynthetic && <i className="admin-synthetic-marker">Demo</i>}</strong><span>{readable(product.category)}</span>
+                          <strong>${(product.unitPriceCentsExGst / 100).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</strong><span>{product.minOrderQty}</span>
+                          <span className={`marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span><span>{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
+                          <span>{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span><span className={`admin-pill admin-pill-${product.reviewStatus}`}>{readable(product.reviewStatus)}</span>
+                          <span className={`admin-pill admin-pill-${product.listingStatus}`}>{readable(product.listingStatus)}</span><span>{product.linkedCount || "None"}</span>
                           <details className="admin-product-review-details">
                             <summary>Review product</summary>
                             <div className="admin-product-review">

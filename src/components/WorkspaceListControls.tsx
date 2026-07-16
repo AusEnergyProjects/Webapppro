@@ -7,6 +7,23 @@ export type WorkspaceListPreferences = {
   pageSize: number;
   type?: string;
   synthetic?: string;
+  customer?: string;
+  service?: string;
+  pipeline?: string;
+  stage?: string;
+  location?: string;
+  street?: string;
+  phone?: string;
+  postcode?: string;
+  suburb?: string;
+  state?: string;
+  jobId?: string;
+  model?: string;
+  brand?: string;
+  category?: string;
+  stock?: string;
+  minPrice?: string;
+  maxPrice?: string;
 };
 
 export function WorkspaceListControls({

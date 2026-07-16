@@ -160,6 +160,14 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Create an opportunity/);
   assert.match(portal, /Allocate nearest eligible installers/);
   assert.match(portal, /Catalogue review and availability/);
+  assert.match(portal, /Product name/);
+  assert.match(portal, /Wholesaler/);
+  assert.match(portal, /Model code/);
+  assert.match(portal, /Minimum price ex GST/);
+  assert.match(portal, /Maximum price ex GST/);
+  assert.match(portal, /Minimum order/);
+  assert.match(portal, /Lead time/);
+  assert.match(portal, /Warranty/);
   assert.match(portal, /Referral rewards and eligibility/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);

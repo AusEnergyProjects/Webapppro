@@ -59,6 +59,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
+  const modelSearch = cleanAdminText(url.searchParams.get("model"), 100).toLowerCase();
   const categoryValue = cleanAdminText(url.searchParams.get("category"), 40);
   const category = CATEGORIES.has(categoryValue) ? categoryValue : "";
   const supplierUid = cleanAdminText(url.searchParams.get("supplier"), 160);
@@ -90,9 +91,10 @@ export async function GET(request: Request) {
   if (maximumLeadDays >= 0) { conditions.push("p.lead_time_days <= ?"); bindings.push(maximumLeadDays); }
   if (minimumWarrantyYears) { conditions.push("p.warranty_years >= ?"); bindings.push(minimumWarrantyYears); }
   if (search) {
-    conditions.push("LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.description || ' ' || a.business_name || ' ' || p.category) LIKE ?");
+    conditions.push("LOWER(p.name) LIKE ?");
     bindings.push(`%${search}%`);
   }
+  if (modelSearch) { conditions.push("LOWER(p.model_number) LIKE ?"); bindings.push(`%${modelSearch}%`); }
   const whereSql = conditions.join(" AND ");
   const db = getD1();
   const count = await db.prepare(`SELECT COUNT(*) total FROM supplier_products p

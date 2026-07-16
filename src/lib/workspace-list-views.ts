@@ -19,6 +19,23 @@ type ListViewDefaults = {
   pageSize: number;
   type: string;
   synthetic: string;
+  customer?: string;
+  service?: string;
+  pipeline?: string;
+  stage?: string;
+  location?: string;
+  street?: string;
+  phone?: string;
+  postcode?: string;
+  suburb?: string;
+  state?: string;
+  jobId?: string;
+  model?: string;
+  brand?: string;
+  category?: string;
+  stock?: string;
+  minPrice?: string;
+  maxPrice?: string;
 };
 
 const defaultsByView: Record<string, ListViewDefaults> = {
@@ -61,6 +78,23 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
+    customer: cleanAdminText(raw.customer, 100),
+    service: cleanAdminText(raw.service, 40),
+    pipeline: cleanAdminText(raw.pipeline, 40),
+    stage: cleanAdminText(raw.stage, 40),
+    location: cleanAdminText(raw.location, 100),
+    street: cleanAdminText(raw.street, 120),
+    phone: cleanAdminText(raw.phone, 50),
+    postcode: cleanAdminText(raw.postcode, 12),
+    suburb: cleanAdminText(raw.suburb, 100),
+    state: cleanAdminText(raw.state, 12),
+    jobId: cleanAdminText(raw.jobId, 80),
+    model: cleanAdminText(raw.model, 100),
+    brand: cleanAdminText(raw.brand, 100),
+    category: cleanAdminText(raw.category, 40),
+    stock: cleanAdminText(raw.stock, 30),
+    minPrice: cleanAdminText(raw.minPrice, 20),
+    maxPrice: cleanAdminText(raw.maxPrice, 20),
   };
 }
 

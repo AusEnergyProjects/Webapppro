@@ -152,6 +152,12 @@ async function catalogue(firebaseUid: string) {
 
 async function cataloguePage(firebaseUid: string, url: URL) {
   const search = text(url.searchParams.get("search"), 100).toLowerCase();
+  const model = text(url.searchParams.get("model"), 100).toLowerCase();
+  const brand = text(url.searchParams.get("brand"), 100).toLowerCase();
+  const category = text(url.searchParams.get("category"), 40);
+  const stock = text(url.searchParams.get("stock"), 30);
+  const minimumPrice = integer(url.searchParams.get("minPrice"), 0, 100_000_000) || 0;
+  const maximumPrice = integer(url.searchParams.get("maxPrice"), 0, 100_000_000) || 0;
   const filter = text(url.searchParams.get("filter"), 30) || "all";
   const sort = text(url.searchParams.get("sort"), 30) || "updated-desc";
   const requestedPage = Number(url.searchParams.get("page"));
@@ -161,9 +167,15 @@ async function cataloguePage(firebaseUid: string, url: URL) {
   const conditions = ["firebase_uid = ?"];
   const bindings: unknown[] = [firebaseUid];
   if (search) {
-    conditions.push("LOWER(model_number || ' ' || brand || ' ' || name || ' ' || category) LIKE ?");
+    conditions.push("LOWER(name) LIKE ?");
     bindings.push(`%${search}%`);
   }
+  if (model) { conditions.push("LOWER(model_number) LIKE ?"); bindings.push(`%${model}%`); }
+  if (brand) { conditions.push("LOWER(brand) LIKE ?"); bindings.push(`%${brand}%`); }
+  if (CATEGORIES.has(category)) { conditions.push("category = ?"); bindings.push(category); }
+  if (STOCK_STATUSES.has(stock)) { conditions.push("stock_status = ?"); bindings.push(stock); }
+  if (minimumPrice) { conditions.push("unit_price_cents_ex_gst >= ?"); bindings.push(minimumPrice); }
+  if (maximumPrice) { conditions.push("unit_price_cents_ex_gst <= ?"); bindings.push(maximumPrice); }
   if (filter === "pending") conditions.push("review_status = 'pending'");
   else if (filter === "approved") conditions.push("review_status = 'approved'");
   else if (filter === "rejected") conditions.push("review_status = 'rejected'");

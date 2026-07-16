@@ -216,6 +216,12 @@ export function SupplierCatalogueWorkspace({
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [search, setSearch] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [stockFilter, setStockFilter] = useState("");
+  const [minimumPrice, setMinimumPrice] = useState("");
+  const [maximumPrice, setMaximumPrice] = useState("");
   const [catalogueFilter, setCatalogueFilter] = useState("all");
   const [catalogueSort, setCatalogueSort] = useState("updated-desc");
   const [page, setPage] = useState(1);
@@ -232,7 +238,10 @@ export function SupplierCatalogueWorkspace({
   const loadProducts = useCallback(async () => {
     try {
       const token = await user.getIdToken();
-      const params = new URLSearchParams({ search: search.trim(), filter: catalogueFilter, sort: catalogueSort, page: String(page), pageSize: String(pageSize) });
+      const params = new URLSearchParams({ search: search.trim(), model: modelSearch.trim(), brand: brandFilter.trim(),
+        category: categoryFilter, stock: stockFilter, minPrice: minimumPrice ? String(Math.round(Number(minimumPrice) * 100)) : "0",
+        maxPrice: maximumPrice ? String(Math.round(Number(maximumPrice) * 100)) : "0", filter: catalogueFilter,
+        sort: catalogueSort, page: String(page), pageSize: String(pageSize) });
       const [productResponse, enquiryResponse] = await Promise.all([
         fetch(`/api/supplier-products?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
         fetch("/api/supplier-enquiries", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
@@ -262,7 +271,7 @@ export function SupplierCatalogueWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [catalogueFilter, catalogueSort, page, pageSize, search, user]);
+  }, [brandFilter, catalogueFilter, catalogueSort, categoryFilter, maximumPrice, minimumPrice, modelSearch, page, pageSize, search, stockFilter, user]);
 
   useEffect(() => {
     let active = true;
@@ -270,7 +279,9 @@ export function SupplierCatalogueWorkspace({
       .then((response) => response.json()).then((result) => {
         if (!active || !result.ok) return;
         const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
-        setSearch(preferences.search || ""); setCatalogueFilter(preferences.filter || "all");
+        setSearch(preferences.search || ""); setModelSearch(preferences.model || ""); setBrandFilter(preferences.brand || "");
+        setCategoryFilter(preferences.category || ""); setStockFilter(preferences.stock || "");
+        setMinimumPrice(preferences.minPrice || ""); setMaximumPrice(preferences.maxPrice || ""); setCatalogueFilter(preferences.filter || "all");
         setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
         setViewSaved(Boolean(result.saved));
       }).catch(() => undefined).finally(() => active && setViewReady(true));
@@ -621,7 +632,8 @@ export function SupplierCatalogueWorkspace({
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-list-views?view=supplier-products", {
         method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ search, filter: catalogueFilter, sort: catalogueSort, pageSize }),
+        body: JSON.stringify({ search, model: modelSearch, brand: brandFilter, category: categoryFilter, stock: stockFilter,
+          minPrice: minimumPrice, maxPrice: maximumPrice, filter: catalogueFilter, sort: catalogueSort, pageSize }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "The default catalogue view could not be saved.");
@@ -638,7 +650,9 @@ export function SupplierCatalogueWorkspace({
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "The catalogue view could not be reset.");
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
-      setSearch(preferences.search || ""); setCatalogueFilter(preferences.filter || "all");
+      setSearch(preferences.search || ""); setModelSearch(preferences.model || ""); setBrandFilter(preferences.brand || "");
+      setCategoryFilter(preferences.category || ""); setStockFilter(preferences.stock || "");
+      setMinimumPrice(preferences.minPrice || ""); setMaximumPrice(preferences.maxPrice || ""); setCatalogueFilter(preferences.filter || "all");
       setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
       setPage(1); setViewSaved(false); setStatus("Default catalogue view reset.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The catalogue view could not be reset."); }
@@ -907,7 +921,7 @@ export function SupplierCatalogueWorkspace({
             </div>
           )}
           <div className="supplier-catalogue-filters">
-            <input className="supplier-search" type="search" placeholder="Search model, brand, name or category" value={search}
+            <input className="supplier-search" type="search" placeholder="Search product name" value={search}
               onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
             <select aria-label="Catalogue status" value={catalogueFilter} onChange={(event) => { setCatalogueFilter(event.target.value); setPage(1); }}>
               <option value="all">All statuses</option><option value="draft">Draft</option><option value="pending">Awaiting review</option>
@@ -918,6 +932,15 @@ export function SupplierCatalogueWorkspace({
               <option value="price-asc">Lowest price</option><option value="price-desc">Highest price</option>
             </select>
           </div>
+          <details className="crm-granular-filters supplier-granular-filters"><summary>Detailed catalogue filters</summary><div>
+            <label><span>Model code</span><input value={modelSearch} onChange={(event) => { setModelSearch(event.target.value); setPage(1); }} placeholder="Model code" /></label>
+            <label><span>Brand</span><input value={brandFilter} onChange={(event) => { setBrandFilter(event.target.value); setPage(1); }} placeholder="Brand" /></label>
+            <label><span>Category</span><select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label><span>Stock</span><select value={stockFilter} onChange={(event) => { setStockFilter(event.target.value); setPage(1); }}><option value="">Any stock status</option><option value="in_stock">In stock</option><option value="limited">Limited</option><option value="order_in">Order in</option><option value="unavailable">Unavailable</option></select></label>
+            <label><span>Minimum price ex GST</span><input type="number" min="0" value={minimumPrice} onChange={(event) => { setMinimumPrice(event.target.value); setPage(1); }} placeholder="$0" /></label>
+            <label><span>Maximum price ex GST</span><input type="number" min="0" value={maximumPrice} onChange={(event) => { setMaximumPrice(event.target.value); setPage(1); }} placeholder="No maximum" /></label>
+            <button type="button" onClick={() => { setSearch(""); setModelSearch(""); setBrandFilter(""); setCategoryFilter(""); setStockFilter(""); setMinimumPrice(""); setMaximumPrice(""); setPage(1); }}>Clear detailed filters</button>
+          </div></details>
           <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
             onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveCatalogueView()} onReset={() => void resetCatalogueView()} />
           {loading ? (
@@ -925,60 +948,17 @@ export function SupplierCatalogueWorkspace({
           ) : products.length ? (
             <div className="supplier-product-list">
               <div className="supplier-product-columns" aria-hidden="true">
-                <span>Product and status</span><span>Description</span><span>Price and ordering</span><span>Availability</span><span>Linked kit</span><span>Action</span>
+                <span>Brand</span><span>Model code</span><span>Product</span><span>Category</span><span>Price ex GST</span><span>Minimum order</span><span>Stock</span><span>Lead time</span><span>Warranty</span><span>Listing</span><span>Review</span><span>Linked kit</span><span>Action</span>
               </div>
               {products.map((product) => (
                 <article key={product.id}>
-                  <header>
-                    <div>
-                      <span>
-                        {product.brand} · {product.modelNumber}
-                      </span>
-                      <h3>{product.name}</h3>
-                    </div>
-                    <div>
-                      <strong
-                        className={`admin-pill admin-pill-${product.listingStatus}`}
-                      >
-                        {readable(product.listingStatus)}
-                      </strong>
-                      <strong
-                        className={`admin-pill admin-pill-${product.reviewStatus}`}
-                      >
-                        {readable(product.reviewStatus)}
-                      </strong>
-                    </div>
-                  </header>
-                  <p><strong>{readable(product.category)}</strong><span>{product.description}</span></p>
-                  <div className="supplier-product-facts">
-                    <span>
-                      <strong>
-                        {money.format(product.unitPriceCentsExGst / 100)}
-                      </strong>{" "}
-                      ex GST
-                    </span>
-                    <span>
-                      MOQ {product.minOrderQty} {product.unitLabel}
-                    </span>
-                    <span>{readable(product.stockStatus)}</span>
-                    <span>
-                      {product.leadTimeDays
-                        ? `${product.leadTimeDays} day lead time`
-                        : "No stated lead time"}
-                    </span>
-                    <span>
-                      {product.dependencies.length} linked item
-                      {product.dependencies.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  {product.reviewNote && (
-                    <small className="supplier-review-note">
-                      Review note: {product.reviewNote}
-                    </small>
-                  )}
-                  <button type="button" onClick={() => editProduct(product)}>
-                    Edit product and dependencies
-                  </button>
+                  <span title={product.brand}>{product.brand}</span><b title={product.modelNumber}>{product.modelNumber}</b><strong title={product.name}>{product.name}</strong>
+                  <span title={readable(product.category)}>{readable(product.category)}</span><strong>{money.format(product.unitPriceCentsExGst / 100)}</strong>
+                  <span title={`Minimum ${product.minOrderQty} ${product.unitLabel}; multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>
+                  <span className={`marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span><span>{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
+                  <span>{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span><span className={`admin-pill admin-pill-${product.listingStatus}`}>{readable(product.listingStatus)}</span>
+                  <span className={`admin-pill admin-pill-${product.reviewStatus}`} title={product.reviewNote || readable(product.reviewStatus)}>{readable(product.reviewStatus)}</span><span>{product.dependencies.length || "None"}</span>
+                  <button type="button" onClick={() => editProduct(product)}>Edit</button>
                 </article>
               ))}
             </div>
