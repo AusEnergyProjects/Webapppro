@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter } from "../src/lib/keyset-pagination.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -13,6 +14,8 @@ const marketplacePreferencesRoute = read("../src/app/api/product-marketplace/pre
 const marketplacePreferencesMigration = read("../drizzle/0039_exotic_mulholland_black.sql");
 const marketplaceGranularFiltersMigration = read("../drizzle/0041_foamy_shotgun.sql");
 const marketplacePerformanceMigration = read("../drizzle/0042_big_lady_mastermind.sql");
+const marketplaceScaleMigration = read("../drizzle/0043_serious_layla_miller.sql");
+const scaleBenchmark = read("../scripts/benchmark-scale-100k.mjs");
 const adminMatches = read(
   "../src/app/api/admin/opportunities/matches/route.ts",
 );
@@ -114,15 +117,19 @@ test("wholesalers cannot access leads and installers only see approved published
   );
 });
 
-test("installer catalogue queries are paginated, server filtered and return bounded facets", () => {
+test("installer catalogue queries use seek cursors, bounded totals and server filters", () => {
   assert.match(marketplaceRoute, /SELECT COUNT\(\*\) total/);
-  assert.match(marketplaceRoute, /LIMIT \? OFFSET \?/);
+  assert.doesNotMatch(marketplaceRoute, /LIMIT \? OFFSET \?/);
   assert.match(marketplaceRoute, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
   assert.match(marketplaceRoute, /p\.unit_price_cents_ex_gst >= \?/);
   assert.match(marketplaceRoute, /p\.lead_time_days <= \?/);
   assert.match(marketplaceRoute, /a\.service_states LIKE \?/);
-  assert.match(marketplaceRoute, /SORTS\[sort\]/);
-  assert.match(marketplaceRoute, /pagination: \{ page, pageSize, pageCount, total \}/);
+  assert.match(marketplaceRoute, /selectedSort = SORTS\[sort\]/);
+  assert.match(marketplaceRoute, /decodeKeysetCursor/);
+  assert.match(marketplaceRoute, /keysetAfter/);
+  assert.match(marketplaceRoute, /pageSize \+ 1/);
+  assert.match(marketplaceRoute, /includeTotal/);
+  assert.match(marketplaceRoute, /hasNext, nextCursor/);
   assert.match(marketplaceRoute, /includeFacets/);
   assert.match(marketplaceRoute, /facetResults \?/);
   assert.match(marketplaceRoute, /Promise\.all\(\[/);
@@ -132,26 +139,77 @@ test("installer catalogue queries are paginated, server filtered and return boun
   assert.match(installerUi, /requestDelay/);
   assert.match(installerUi, /catalogueLoading/);
   assert.match(installerUi, /facetsReadyRef/);
+  assert.match(installerUi, /pageCursorsRef/);
+  assert.match(installerUi, /catalogueCountReadyRef/);
   assert.match(installerUi, /AbortController/);
 });
 
-test("marketplace sort and filter indexes apply cleanly", () => {
+test("keyset cursors preserve unicode values and mixed sort directions", () => {
+  const cursor = encodeKeysetCursor("name-desc", ["Ångström", "Brand", "MODEL-1", "product-1"]);
+  assert.deepEqual(decodeKeysetCursor(cursor, "name-desc", 4), ["Ångström", "Brand", "MODEL-1", "product-1"]);
+  const predicate = keysetAfter([
+    { expression: "p.name COLLATE NOCASE", direction: "desc" },
+    { expression: "p.id", direction: "asc" },
+  ], ["Product", "product-1"]);
+  assert.match(predicate.sql, /p\.name COLLATE NOCASE < \?/);
+  assert.match(predicate.sql, /p\.name COLLATE NOCASE = \? AND p\.id > \?/);
+  assert.deepEqual(predicate.bindings, ["Product", "Product", "product-1"]);
+  const ascendingPredicate = keysetAfter([
+    { expression: "p.name COLLATE NOCASE", direction: "asc" },
+    { expression: "p.id", direction: "asc" },
+  ], ["Product", "product-1"]);
+  assert.equal(ascendingPredicate.sql, "p.name COLLATE NOCASE >= ? AND (p.name COLLATE NOCASE, p.id) > (?, ?)");
+  assert.deepEqual(ascendingPredicate.bindings, ["Product", "Product", "product-1"]);
+  assert.throws(() => decodeKeysetCursor(cursor, "price-asc", 4), /INVALID_CURSOR/);
+});
+
+test("marketplace and admin scale indexes apply cleanly", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE supplier_products (
-    listing_status TEXT NOT NULL, review_status TEXT NOT NULL, name TEXT NOT NULL,
-    brand TEXT NOT NULL, unit_price_cents_ex_gst INTEGER NOT NULL, lead_time_days INTEGER NOT NULL,
+    id TEXT PRIMARY KEY, listing_status TEXT NOT NULL, review_status TEXT NOT NULL, name TEXT NOT NULL,
+    brand TEXT NOT NULL, model_number TEXT NOT NULL, unit_price_cents_ex_gst INTEGER NOT NULL, lead_time_days INTEGER NOT NULL,
     category TEXT NOT NULL, stock_status TEXT NOT NULL
-  )`);
+  );
+  CREATE TABLE trade_opportunities (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, state TEXT NOT NULL,
+    updated_at TEXT NOT NULL, expires_at TEXT NOT NULL
+  );
+  CREATE INDEX trade_opportunities_status_idx ON trade_opportunities (status, updated_at);
+  CREATE INDEX trade_opportunities_state_idx ON trade_opportunities (state);
+  CREATE TABLE trade_accounts (
+    firebase_uid TEXT PRIMARY KEY, business_name TEXT NOT NULL, partner_type TEXT NOT NULL,
+    account_status TEXT NOT NULL, verification_status TEXT NOT NULL, billing_status TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );`);
   for (const statement of marketplacePerformanceMigration.split("--> statement-breakpoint")) {
+    if (statement.trim()) database.exec(statement);
+  }
+  for (const statement of marketplaceScaleMigration.split("--> statement-breakpoint")) {
     if (statement.trim()) database.exec(statement);
   }
   const indexes = database.prepare("PRAGMA index_list(supplier_products)").all().map((index) => index.name);
   assert.ok(indexes.includes("supplier_products_marketplace_name_idx"));
   assert.ok(indexes.includes("supplier_products_marketplace_brand_idx"));
+  assert.ok(indexes.includes("supplier_products_marketplace_model_idx"));
   assert.ok(indexes.includes("supplier_products_marketplace_price_idx"));
   assert.ok(indexes.includes("supplier_products_marketplace_lead_idx"));
   assert.ok(indexes.includes("supplier_products_marketplace_filter_idx"));
+  const accountIndexes = database.prepare("PRAGMA index_list(trade_accounts)").all().map((index) => index.name);
+  assert.ok(accountIndexes.includes("trade_accounts_eligibility_idx"));
+  assert.ok(accountIndexes.includes("trade_accounts_business_nocase_idx"));
+  const opportunityIndexes = database.prepare("PRAGMA index_list(trade_opportunities)").all().map((index) => index.name);
+  assert.ok(opportunityIndexes.includes("trade_opportunities_expiry_idx"));
   database.close();
+});
+
+test("the repeatable scale benchmark covers 100000 rows per critical dataset", () => {
+  assert.match(scaleBenchmark, /RECORDS_PER_DATASET = 100_000/);
+  assert.match(scaleBenchmark, /catalogueDeepCursor/);
+  assert.match(scaleBenchmark, /catalogueDeepOffsetBaseline/);
+  assert.match(scaleBenchmark, /adminAccounts/);
+  assert.match(scaleBenchmark, /adminOpportunities/);
+  assert.match(scaleBenchmark, /installerCustomers/);
+  assert.match(scaleBenchmark, /guardrailP95Ms/);
 });
 
 test("installer catalogue filters and columns persist to the authenticated account", () => {

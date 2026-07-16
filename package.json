@@ -6,6 +6,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "audit:links": "node scripts/audit-links.mjs",
+    "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "start": "vinext start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test",

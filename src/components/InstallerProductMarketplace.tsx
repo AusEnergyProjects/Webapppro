@@ -160,6 +160,8 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const [pageSize, setPageSize] = useState(defaultPreferences.pageSize);
   const [pageCount, setPageCount] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [nextCursor, setNextCursor] = useState("");
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [savedView, setSavedView] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<CatalogueColumn[]>(defaultPreferences.visibleColumns);
@@ -186,7 +188,9 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const [listNotes, setListNotes] = useState("");
   const [enquiryMessage, setEnquiryMessage] = useState("");
   const facetsReadyRef = useRef(false);
+  const catalogueCountReadyRef = useRef(false);
   const catalogueFilterKeyRef = useRef("");
+  const pageCursorsRef = useRef<string[]>([""]);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const token = await user.getIdToken();
@@ -224,6 +228,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     setPageSize([25, 50, 100].includes(preferences.pageSize) ? preferences.pageSize : 25);
     setVisibleColumns(Array.isArray(preferences.visibleColumns) && preferences.visibleColumns.length ? preferences.visibleColumns : defaultPreferences.visibleColumns);
     setPage(1);
+    setHasNextPage(false);
+    setNextCursor("");
+    catalogueCountReadyRef.current = false;
+    pageCursorsRef.current = [""];
   }, []);
 
   const initialise = useCallback(async () => {
@@ -253,6 +261,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     const filterKey = JSON.stringify([search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty, sort, pageSize]);
     const previousFilterKey = catalogueFilterKeyRef.current;
     catalogueFilterKeyRef.current = filterKey;
+    if (previousFilterKey && previousFilterKey !== filterKey) {
+      catalogueCountReadyRef.current = false;
+      pageCursorsRef.current = [""];
+    }
     const requestDelay = previousFilterKey && previousFilterKey !== filterKey ? 140 : 0;
     const timer = window.setTimeout(async () => {
       const query = new URLSearchParams({
@@ -271,6 +283,8 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
         page: String(page),
         pageSize: String(pageSize),
         facets: facetsReadyRef.current ? "0" : "1",
+        total: catalogueCountReadyRef.current ? "0" : "1",
+        cursor: pageCursorsRef.current[page - 1] || "",
       });
       try {
         setCatalogueLoading(true);
@@ -282,8 +296,13 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           facetsReadyRef.current = true;
         }
         setPage(result.pagination?.page || 1);
-        setPageCount(result.pagination?.pageCount || 1);
-        setTotalProducts(result.pagination?.total || 0);
+        if (Number.isFinite(result.pagination?.total)) {
+          setPageCount(result.pagination?.pageCount || 1);
+          setTotalProducts(result.pagination.total);
+          catalogueCountReadyRef.current = true;
+        }
+        setHasNextPage(Boolean(result.pagination?.hasNext));
+        setNextCursor(result.pagination?.nextCursor || "");
         setStatus("");
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -313,6 +332,10 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       setMaximumLeadTime("");
       setMinimumWarranty("");
       setPage(1);
+      setHasNextPage(false);
+      setNextCursor("");
+      catalogueCountReadyRef.current = false;
+      pageCursorsRef.current = [""];
     });
     return () => window.cancelAnimationFrame(frame);
   }, [navigationTarget]);
@@ -327,14 +350,25 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   function clearFilters() {
     setSearch(""); setModelSearch(""); setCategory(""); setSupplier(""); setBrand(""); setServiceState(""); setStock("");
     setMinimumPrice(""); setMaximumPrice(""); setMaximumLeadTime(""); setMinimumWarranty(""); setSort("name-asc");
-    setPage(1);
+    resetCataloguePaging();
   }
   function changeFilter(setter: (value: string) => void, value: string) {
     setter(value);
+    resetCataloguePaging();
+  }
+  function resetCataloguePaging() {
     setPage(1);
+    setHasNextPage(false);
+    setNextCursor("");
+    catalogueCountReadyRef.current = false;
+    pageCursorsRef.current = [""];
   }
   function changePage(nextPage: number) {
     if (catalogueLoading || nextPage === page || nextPage < 1 || nextPage > pageCount) return;
+    if (nextPage > page) {
+      if (!hasNextPage || !nextCursor) return;
+      pageCursorsRef.current[nextPage - 1] = nextCursor;
+    } else if (nextPage > 1 && !pageCursorsRef.current[nextPage - 1]) return;
     setCatalogueLoading(true);
     setStatus(`Loading catalogue page ${nextPage}...`);
     setPage(nextPage);
@@ -344,7 +378,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     setCatalogueLoading(true);
     setStatus("Loading the updated catalogue view...");
     setPageSize(nextPageSize);
-    setPage(1);
+    resetCataloguePaging();
   }
   function toggleColumn(column: CatalogueColumn) {
     setVisibleColumns((current) => current.includes(column)
@@ -369,7 +403,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     const options = sortByColumn[column];
     if (!options) return;
     setSort((current) => current === options[0] ? options[1] : options[0]);
-    setPage(1);
+    resetCataloguePaging();
   }
 
   function columnSortState(column: CatalogueColumn): "ascending" | "descending" | "none" {
@@ -594,27 +628,27 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {products.length ? (
-            <div className={`marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading}>
+            <div className={`marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading} role="table" aria-label="Approved wholesale products" aria-rowcount={totalProducts + 1}>
               <div className="marketplace-product-columns" role="row" style={productGridStyle}>
                 {orderedColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={columnSortState(column.key)}>{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>
               {products.map((product) => {
                 const selected = activeList?.items.some((item) => item.productId === product.id);
                 return (
-                  <article key={product.id} style={productGridStyle}>
-                    {orderedColumns.map((column) => column.key === "supplier" ? <strong key={column.key} className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>
-                      : column.key === "brand" ? <span key={column.key} className="marketplace-table-cell" title={product.brand}>{product.brand}</span>
-                      : column.key === "model" ? <span key={column.key} className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>
-                      : column.key === "name" ? <strong key={column.key} className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>
-                      : column.key === "category" ? <span key={column.key} className="marketplace-table-cell" title={categoryLabels[product.category] || readable(product.category)}>{categoryLabels[product.category] || readable(product.category)}</span>
-                      : column.key === "price" ? <strong key={column.key} className="marketplace-table-cell marketplace-price-value">{money.format(product.unitPriceCentsExGst / 100)}</strong>
-                      : column.key === "ordering" ? <span key={column.key} className="marketplace-table-cell" title={`Minimum ${product.minOrderQty} ${product.unitLabel}; order in multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>
-                      : column.key === "stock" ? <span key={column.key} className={`marketplace-table-cell marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>
-                      : column.key === "lead" ? <span key={column.key} className="marketplace-table-cell">{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
-                      : column.key === "warranty" ? <span key={column.key} className="marketplace-table-cell">{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>
-                      : column.key === "states" ? <span key={column.key} className="marketplace-table-cell" title={product.serviceStates.join(", ")}>{product.serviceStates.length ? product.serviceStates.join(", ") : "Confirm"}</span>
+                  <article key={product.id} style={productGridStyle} role="row">
+                    {orderedColumns.map((column) => column.key === "supplier" ? <strong key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>
+                      : column.key === "brand" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell" title={product.brand}>{product.brand}</span>
+                      : column.key === "model" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>
+                      : column.key === "name" ? <strong key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>
+                      : column.key === "category" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell" title={categoryLabels[product.category] || readable(product.category)}>{categoryLabels[product.category] || readable(product.category)}</span>
+                      : column.key === "price" ? <strong key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-price-value">{money.format(product.unitPriceCentsExGst / 100)}</strong>
+                      : column.key === "ordering" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell" title={`Minimum ${product.minOrderQty} ${product.unitLabel}; order in multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>
+                      : column.key === "stock" ? <span key={column.key} role="cell" data-label={column.label} className={`marketplace-table-cell marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>
+                      : column.key === "lead" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell">{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
+                      : column.key === "warranty" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell">{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>
+                      : column.key === "states" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell" title={product.serviceStates.join(", ")}>{product.serviceStates.length ? product.serviceStates.join(", ") : "Confirm"}</span>
                       : column.key === "kit" ? product.dependencies.length > 0 ? (
-                      <details key={column.key} className="marketplace-kit-cell">
+                      <details key={column.key} role="cell" data-label={column.label} className="marketplace-kit-cell">
                         <summary>{product.dependencies.length} linked kit item{product.dependencies.length === 1 ? "" : "s"}</summary>
                         {product.dependencies.map((item) => (
                           <div key={`${item.productId}-${item.relationship}`}>
@@ -624,8 +658,8 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
                           </div>
                         ))}
                       </details>
-                    ) : <span key={column.key} className="marketplace-kit-empty marketplace-table-cell">None</span>
-                      : column.key === "actions" ? <div key={column.key} className="marketplace-product-actions">
+                    ) : <span key={column.key} role="cell" data-label={column.label} className="marketplace-kit-empty marketplace-table-cell">None</span>
+                      : column.key === "actions" ? <div key={column.key} role="cell" data-label={column.label} className="marketplace-product-actions">
                       <button type="button" disabled={busy || selected || activeList?.status !== "draft"} onClick={() => void addProduct(product)}>
                         {selected ? "Added to list" : "Add to project list"}
                       </button>
@@ -642,7 +676,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           {totalProducts > 0 && <nav className="marketplace-pagination" aria-label="Catalogue pages" aria-busy={catalogueLoading}>
             <button type="button" disabled={catalogueLoading || page <= 1} onClick={() => changePage(page - 1)}>Previous</button>
             <span>{catalogueLoading ? "Loading" : "Page"} <strong>{page}</strong> of {pageCount}</span>
-            <button type="button" disabled={catalogueLoading || page >= pageCount} onClick={() => changePage(page + 1)}>{catalogueLoading ? "Loading..." : "Next"}</button>
+            <button type="button" disabled={catalogueLoading || !hasNextPage || page >= pageCount} onClick={() => changePage(page + 1)}>{catalogueLoading ? "Loading..." : "Next"}</button>
           </nav>}
         </div>
 

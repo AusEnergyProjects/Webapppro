@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const tradeAccounts = sqliteTable("trade_accounts", {
@@ -30,7 +31,13 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   consentAt: text("consent_at").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+}, (table) => [
+  index("trade_accounts_eligibility_idx").on(table.partnerType, table.accountStatus, table.verificationStatus, table.billingStatus, table.firebaseUid),
+  index("trade_accounts_admin_type_updated_idx").on(table.partnerType, table.updatedAt, table.firebaseUid),
+  index("trade_accounts_admin_status_updated_idx").on(table.accountStatus, table.updatedAt, table.firebaseUid),
+  index("trade_accounts_admin_verification_updated_idx").on(table.verificationStatus, table.updatedAt, table.firebaseUid),
+  index("trade_accounts_business_nocase_idx").on(sql`${table.businessName} COLLATE NOCASE`, table.firebaseUid),
+]);
 
 export const stripeMemberships = sqliteTable("stripe_memberships", {
   id: text("id").primaryKey(),
@@ -835,8 +842,10 @@ export const tradeOpportunities = sqliteTable("trade_opportunities", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
-  index("trade_opportunities_status_idx").on(table.status, table.updatedAt),
-  index("trade_opportunities_state_idx").on(table.state),
+  index("trade_opportunities_status_idx").on(table.status, table.updatedAt, table.id),
+  index("trade_opportunities_state_idx").on(table.state, table.status, table.updatedAt, table.id),
+  index("trade_opportunities_title_nocase_idx").on(sql`${table.title} COLLATE NOCASE`, table.updatedAt, table.id),
+  index("trade_opportunities_expiry_idx").on(table.status, table.expiresAt, table.id),
 ]);
 
 export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", {
@@ -1348,11 +1357,12 @@ export const supplierProducts = sqliteTable("supplier_products", {
   index("supplier_products_owner_idx").on(table.firebaseUid, table.updatedAt),
   index("supplier_products_listing_idx").on(table.listingStatus, table.reviewStatus),
   index("supplier_products_category_idx").on(table.category),
-  index("supplier_products_marketplace_name_idx").on(table.listingStatus, table.reviewStatus, table.name),
-  index("supplier_products_marketplace_brand_idx").on(table.listingStatus, table.reviewStatus, table.brand, table.name),
-  index("supplier_products_marketplace_price_idx").on(table.listingStatus, table.reviewStatus, table.unitPriceCentsExGst, table.name),
-  index("supplier_products_marketplace_lead_idx").on(table.listingStatus, table.reviewStatus, table.leadTimeDays, table.name),
-  index("supplier_products_marketplace_filter_idx").on(table.listingStatus, table.reviewStatus, table.category, table.stockStatus),
+  index("supplier_products_marketplace_name_idx").on(table.listingStatus, table.reviewStatus, sql`${table.name} COLLATE NOCASE`, sql`${table.brand} COLLATE NOCASE`, sql`${table.modelNumber} COLLATE NOCASE`, table.id),
+  index("supplier_products_marketplace_brand_idx").on(table.listingStatus, table.reviewStatus, sql`${table.brand} COLLATE NOCASE`, sql`${table.name} COLLATE NOCASE`, sql`${table.modelNumber} COLLATE NOCASE`, table.id),
+  index("supplier_products_marketplace_model_idx").on(table.listingStatus, table.reviewStatus, sql`${table.modelNumber} COLLATE NOCASE`, sql`${table.name} COLLATE NOCASE`, table.id),
+  index("supplier_products_marketplace_price_idx").on(table.listingStatus, table.reviewStatus, table.unitPriceCentsExGst, sql`${table.name} COLLATE NOCASE`, table.id),
+  index("supplier_products_marketplace_lead_idx").on(table.listingStatus, table.reviewStatus, table.leadTimeDays, sql`${table.name} COLLATE NOCASE`, table.id),
+  index("supplier_products_marketplace_filter_idx").on(table.listingStatus, table.reviewStatus, table.category, table.stockStatus, table.unitPriceCentsExGst, table.id),
 ]);
 
 export const supplierProductLinks = sqliteTable("supplier_product_links", {

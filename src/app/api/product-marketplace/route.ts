@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 
 export const runtime = "edge";
 
@@ -13,16 +14,92 @@ const CATEGORIES = new Set([
 ]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 const STOCK_STATES = new Set(["in_stock", "limited", "order_in", "unavailable"]);
-const SORTS: Record<string, string> = {
-  "name-asc": "p.name COLLATE NOCASE ASC, p.brand COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC",
-  "name-desc": "p.name COLLATE NOCASE DESC, p.brand COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC",
-  "brand-asc": "p.brand COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC",
-  "supplier-asc": "a.business_name COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC",
-  "price-asc": "p.unit_price_cents_ex_gst ASC, p.name COLLATE NOCASE ASC",
-  "price-desc": "p.unit_price_cents_ex_gst DESC, p.name COLLATE NOCASE ASC",
-  "lead-asc": "p.lead_time_days ASC, p.name COLLATE NOCASE ASC",
-  "model-asc": "p.model_number COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC",
+type MarketplaceSortTerm = {
+  expression: string;
+  direction: KeysetDirection;
+  rowKey: string;
+  numeric?: boolean;
 };
+
+type MarketplaceSort = {
+  orderBy: string;
+  terms: MarketplaceSortTerm[];
+};
+
+const SORTS: Record<string, MarketplaceSort> = {
+  "name-asc": {
+    orderBy: "p.name COLLATE NOCASE ASC, p.brand COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.brand COLLATE NOCASE", direction: "asc", rowKey: "brand" },
+      { expression: "p.model_number COLLATE NOCASE", direction: "asc", rowKey: "model_number" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "name-desc": {
+    orderBy: "p.name COLLATE NOCASE DESC, p.brand COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.name COLLATE NOCASE", direction: "desc", rowKey: "name" },
+      { expression: "p.brand COLLATE NOCASE", direction: "asc", rowKey: "brand" },
+      { expression: "p.model_number COLLATE NOCASE", direction: "asc", rowKey: "model_number" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "brand-asc": {
+    orderBy: "p.brand COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.brand COLLATE NOCASE", direction: "asc", rowKey: "brand" },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.model_number COLLATE NOCASE", direction: "asc", rowKey: "model_number" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "supplier-asc": {
+    orderBy: "a.business_name COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, p.model_number COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "a.business_name COLLATE NOCASE", direction: "asc", rowKey: "supplier_name" },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.model_number COLLATE NOCASE", direction: "asc", rowKey: "model_number" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "price-asc": {
+    orderBy: "p.unit_price_cents_ex_gst ASC, p.name COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.unit_price_cents_ex_gst", direction: "asc", rowKey: "unit_price_cents_ex_gst", numeric: true },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "price-desc": {
+    orderBy: "p.unit_price_cents_ex_gst DESC, p.name COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.unit_price_cents_ex_gst", direction: "desc", rowKey: "unit_price_cents_ex_gst", numeric: true },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "lead-asc": {
+    orderBy: "p.lead_time_days ASC, p.name COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.lead_time_days", direction: "asc", rowKey: "lead_time_days", numeric: true },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+  "model-asc": {
+    orderBy: "p.model_number COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, p.id ASC",
+    terms: [
+      { expression: "p.model_number COLLATE NOCASE", direction: "asc", rowKey: "model_number" },
+      { expression: "p.name COLLATE NOCASE", direction: "asc", rowKey: "name" },
+      { expression: "p.id", direction: "asc", rowKey: "id" },
+    ],
+  },
+};
+
+function cursorValues(sort: MarketplaceSort, row: Record<string, unknown>) {
+  return sort.terms.map((term) => term.numeric ? Number(row[term.rowKey]) : String(row[term.rowKey] || ""));
+}
 
 const eligibleSupplierSql = `p.listing_status = 'published' AND p.review_status = 'approved'
   AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
@@ -78,6 +155,8 @@ export async function GET(request: Request) {
   const requestedPageSize = integerParam(url.searchParams.get("pageSize"), 25, 1, 100);
   const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
   const includeFacets = url.searchParams.get("facets") !== "0";
+  const includeTotal = url.searchParams.get("total") !== "0";
+  const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2_000);
   const now = new Date().toISOString();
 
   const conditions = [eligibleSupplierSql];
@@ -97,19 +176,33 @@ export async function GET(request: Request) {
   }
   if (modelSearch) { conditions.push("LOWER(p.model_number) LIKE ?"); bindings.push(`%${modelSearch}%`); }
   const whereSql = conditions.join(" AND ");
+  const selectedSort = SORTS[sort];
+  let cursor;
+  try { cursor = decodeKeysetCursor(cursorInput, sort, selectedSort.terms.length); }
+  catch { return adminJson({ ok: false, error: "This catalogue page link has expired. Start again from the first page." }, 400); }
+  if (requestedPage > 1 && !cursor) {
+    return adminJson({ ok: false, error: "This catalogue page link has expired. Start again from the first page." }, 400);
+  }
+  const rowConditions = [...conditions];
+  const rowBindings = [...bindings];
+  if (cursor) {
+    const keyset = keysetAfter(selectedSort.terms, cursor);
+    rowConditions.push(`(${keyset.sql})`);
+    rowBindings.push(...keyset.bindings);
+  }
+  const rowWhereSql = rowConditions.join(" AND ");
   const db = getD1();
-  const requestedRowOffset = (requestedPage - 1) * pageSize;
   const [count, initialRows, facetResults] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) total FROM supplier_products p
+    includeTotal ? db.prepare(`SELECT COUNT(*) total FROM supplier_products p
       JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${whereSql}`)
-      .bind(...bindings).first<{ total: number }>(),
+      .bind(...bindings).first<{ total: number }>() : Promise.resolve(null),
     db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
       p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
       p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
       a.business_name supplier_name, a.business_website supplier_website, a.service_states supplier_service_states
       FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-      WHERE ${whereSql} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`)
-      .bind(...bindings, pageSize, requestedRowOffset).all<Record<string, unknown>>(),
+      WHERE ${rowWhereSql} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+      .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     includeFacets ? Promise.all([
       db.prepare(`SELECT DISTINCT a.firebase_uid supplier_uid, a.business_name supplier_name
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
@@ -124,18 +217,13 @@ export async function GET(request: Request) {
         ORDER BY p.stock_status COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
     ]) : Promise.resolve(null),
   ]);
-  const total = Number(count?.total || 0);
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(requestedPage, pageCount);
-  const rows = page === requestedPage || total === 0 ? initialRows : await db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.description,
-    p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment, p.unit_label, p.stock_status,
-    p.lead_time_days, p.warranty_years, p.datasheet_url, a.firebase_uid supplier_uid,
-    a.business_name supplier_name, a.business_website supplier_website, a.service_states supplier_service_states
-    FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-    WHERE ${whereSql} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`)
-    .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>();
+  const total = count ? Number(count.total || 0) : undefined;
+  const pageCount = total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize));
+  const hasNext = initialRows.results.length > pageSize;
+  const rows = initialRows.results.slice(0, pageSize);
+  const nextCursor = hasNext && rows.length ? encodeKeysetCursor(sort, cursorValues(selectedSort, rows.at(-1)!)) : "";
 
-  const ids = rows.results.map((row) => String(row.id));
+  const ids = rows.map((row) => String(row.id));
   const linkedProducts: Record<string, unknown>[] = [];
   for (let offset = 0; offset < ids.length; offset += 80) {
     const batch = ids.slice(offset, offset + 80);
@@ -158,7 +246,7 @@ export async function GET(request: Request) {
 
   return adminJson({
     ok: true,
-    products: rows.results.map((row) => ({
+    products: rows.map((row) => ({
       id: row.id, modelNumber: row.model_number, brand: row.brand, name: row.name, category: row.category,
       description: row.description, unitPriceCentsExGst: Number(row.unit_price_cents_ex_gst), minOrderQty: Number(row.min_order_qty),
       orderIncrement: Number(row.order_increment), unitLabel: row.unit_label, stockStatus: row.stock_status,
@@ -171,7 +259,7 @@ export async function GET(request: Request) {
         unitPriceCentsExGst: Number(link.unit_price_cents_ex_gst),
       })),
     })),
-    pagination: { page, pageSize, pageCount, total },
+    pagination: { page: requestedPage, pageSize, pageCount, total, hasNext, nextCursor },
     facets: facetResults ? {
       suppliers: supplierRows.results.map((row) => ({ uid: String(row.supplier_uid), name: String(row.supplier_name) })),
       brands: brandRows.results.map((row) => ({ name: String(row.brand), supplierUid: String(row.supplier_uid) })),

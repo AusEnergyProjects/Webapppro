@@ -72,4 +72,8 @@ test("catalogue result sets default to responsive rows and columns", () => {
   assert.match(styles, /\.admin-catalogue-columns \{[^}]*gap: 10px/);
   assert.match(styles, /\.crm-job-columns, \.crm-job-list\.crm-record-table > article \{[^}]*gap: 10px/);
   assert.match(products, /aria-busy=\{catalogueLoading\}/);
+  assert.match(products, /role="table" aria-label="Approved wholesale products"/);
+  assert.match(products, /data-label=\{column\.label\}/);
+  assert.match(styles, /\.marketplace-product-grid \[data-label\]::before/);
+  assert.match(styles, /\.marketplace-product-grid > article \{ gap: 14px; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); min-width: 0/);
 });
