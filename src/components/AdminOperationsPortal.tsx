@@ -1144,6 +1144,11 @@ export function AdminOperationsPortal() {
               </p>
             </>
           )}
+          {status && (canRecoverOwner || (!canBootstrap && user.email)) && (
+            <p className="admin-inline-status" role="status">
+              {status}
+            </p>
+          )}
           <button
             className="admin-text-button"
             type="button"

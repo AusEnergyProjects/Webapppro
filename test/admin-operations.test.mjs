@@ -95,6 +95,7 @@ test("owner identity recovery is explicit, recent, password based and audited", 
   assert.match(recoveryRoute, /recentPasswordAuthentication: true/);
   assert.doesNotMatch(recoveryRoute, /export async function GET/);
   assert.match(portal, /Reconnect owner access/);
+  assert.match(portal, /admin-inline-status/);
   assert.doesNotMatch(recoveryRoute + portal, /[\u2013\u2014]/);
 });
 
