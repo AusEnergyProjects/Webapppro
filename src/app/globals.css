@@ -2891,6 +2891,18 @@ body input[type="checkbox"]:disabled {
   opacity: .72;
 }
 
+/* Keep numeric entry visually consistent while retaining keyboard arrow stepping. */
+body input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+body input[type="number"]::-webkit-inner-spin-button,
+body input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body input[type="radio"],
   body input[type="checkbox"],

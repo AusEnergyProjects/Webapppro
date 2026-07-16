@@ -129,6 +129,11 @@ test("radios and checkboxes use one accessible site wide control language", () =
   assert.match(styles, /@media \(forced-colors: active\)/);
 });
 
+test("number fields avoid browser-specific black stepper controls", () => {
+  assert.match(styles, /body input\[type="number"\] \{[\s\S]*appearance: textfield/);
+  assert.match(styles, /body input\[type="number"\]::\-webkit-inner-spin-button,[\s\S]*\-webkit-appearance: none/);
+});
+
 test("homepage uses the original AEA energy platform artwork", () => {
   assert.match(guide, /className="start-hero-visual"/);
   assert.match(styles, /url\("\/aea-energy-platform-hero\.jpg"\)/);
