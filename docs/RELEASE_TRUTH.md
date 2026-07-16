@@ -4,6 +4,8 @@ Last verified: 16 July 2026
 
 This is the canonical implementation-status document. README, roadmap, runbooks and historical architecture notes must link here instead of defining competing release states.
 
+Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRAILS.md). The executable next milestone is maintained in the single rolling [handover](./HANDOVER_NEXT_TASK.md).
+
 ## Product identity
 
 1. Australian Energy Assessments household platform: electricity and gas comparison, NEM12 processing, home energy plans, scenarios, guides, rebates, assessments and always-free consumer accounts.

@@ -9,6 +9,8 @@
 
 The exact release status, validation evidence and external dependencies are maintained in [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md). The external audit response is tracked in [docs/EXTERNAL_AUDIT_REMEDIATION.md](./docs/EXTERNAL_AUDIT_REMEDIATION.md).
 
+Every AI-assisted milestone must follow [docs/AI_DELIVERY_GUARDRAILS.md](./docs/AI_DELIVERY_GUARDRAILS.md) and begin from the single rolling [next-task handover](./docs/HANDOVER_NEXT_TASK.md).
+
 ## Release-quality remediation programme
 
 ### P0: safety and release truth
