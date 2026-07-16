@@ -27,6 +27,7 @@ const partnerOpportunities = read(
   "../src/app/api/trade-opportunities/route.ts",
 );
 const portal = read("../src/components/AdminOperationsPortal.tsx");
+const opportunityWorkspace = read("../src/components/AdminOpportunityWorkspace.tsx");
 const portalPage = read("../src/app/operations/control-centre/page.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 
@@ -163,8 +164,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   );
   assert.match(portal, /Partner and wholesaler accounts/);
   assert.match(portal, /Protected download/);
-  assert.match(portal, /Create an opportunity/);
-  assert.match(portal, /Allocate nearest eligible installers/);
+  assert.match(opportunityWorkspace, /Create an opportunity/);
+  assert.match(opportunityWorkspace, /Allocate nearest eligible installers/);
   assert.match(portal, /Product catalogue and availability/);
   assert.match(portal, /Leads and opportunities/);
   assert.match(portal, /Product name/);
@@ -184,12 +185,26 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /aria-label=\{`Open operations inbox/);
   assert.match(portal, /Ecosystem walkthrough/);
   assert.match(portal, /Owner recovery readiness/);
-  assert.match(portal, /Search opportunities/);
+  assert.match(opportunityWorkspace, /Search opportunities/);
   assert.match(portal, /Export visible partners CSV/);
-  assert.match(portal, /Export visible leads CSV/);
+  assert.match(opportunityWorkspace, /Export visible leads CSV/);
   assert.match(portal, /Export visible products CSV/);
   assert.match(portal, /downloadWorkspaceCsv/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
+});
+
+test("the extracted opportunity workspace preserves filters, cursors, actions and privacy-safe rendering", () => {
+  assert.match(portal, /<AdminOpportunityWorkspace api=\{api\} demoOnlyRequest=\{opportunityDemoRequest\} role=\{session\.role\} setStatus=\{setStatus\}/);
+  for (const parameter of ["search", "status", "service", "state", "synthetic", "cursor", "total"]) {
+    assert.match(opportunityWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
+  }
+  assert.match(opportunityWorkspace, /opportunityCursors\.current\[opportunityPage\] = next\.nextCursor/);
+  assert.match(opportunityWorkspace, /view=admin-opportunities/);
+  assert.match(opportunityWorkspace, /method: "POST"[\s\S]*serviceCategories: opportunityDraft\.categories/);
+  assert.match(opportunityWorkspace, /api\("\/api\/admin\/opportunities\/allocate"/);
+  assert.match(opportunityWorkspace, /api\("\/api\/admin\/opportunities\/matches"/);
+  assert.match(opportunityWorkspace, /Privacy-safe summary/);
+  assert.doesNotMatch(opportunityWorkspace, /household_name|customer_email|customer_phone|street_address/);
 });
 
 test("large opportunity sets use cursor pages with bounded allocation lookups", () => {

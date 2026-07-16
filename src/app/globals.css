@@ -2387,7 +2387,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
 /* Restricted operations control centre */
 .admin-shell { background: radial-gradient(circle at 12% 0%, rgba(18, 166, 106, .18), transparent 34rem), linear-gradient(145deg, #020713, #03192d 60%, #062d3d); color: #e9f5f3; min-height: 100vh; padding: clamp(18px, 3vw, 42px); }
 .admin-auth-card { background: rgba(255, 255, 255, .97); border: 1px solid rgba(110, 231, 183, .35); border-radius: 24px; box-shadow: 0 35px 90px rgba(0, 3, 12, .55); color: var(--color-aea-text); margin: clamp(40px, 9vh, 110px) auto; max-width: 560px; padding: clamp(28px, 5vw, 52px); }
-.admin-auth-card > span, .admin-page-heading > span, .admin-panel-heading > span, .admin-assignment-form > div > span { color: var(--color-aea-green-dark); display: block; font-size: .67rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.admin-auth-card > span, .admin-page-heading > span, .admin-panel-heading > span { color: var(--color-aea-green-dark); display: block; font-size: .67rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
 .admin-auth-card h1 { color: var(--color-aea-ink); font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.04; margin-top: 8px; }
 .admin-auth-card > p { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.65; margin: 13px 0 22px; }
 .admin-brand { align-items: center; display: flex; gap: 11px; margin-bottom: 28px; }
@@ -2397,7 +2397,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-brand div { display: grid; }
 .admin-brand strong { color: inherit; font-size: .78rem; }
 .admin-brand small { color: #77938e; font-size: .62rem; }
-.admin-google-button, .admin-auth-form button, .admin-moderation-form button, .admin-opportunity-form > button, .admin-assignment-form > button, .admin-invite-form > button { align-items: center; background: var(--action-primary); border: 0; border-radius: 11px; color: #fff; cursor: pointer; display: flex; font-size: .74rem; font-weight: 900; justify-content: center; min-height: 46px; padding: 11px 15px; width: 100%; }
+.admin-google-button, .admin-auth-form button, .admin-moderation-form button, .admin-invite-form > button { align-items: center; background: var(--action-primary); border: 0; border-radius: 11px; color: #fff; cursor: pointer; display: flex; font-size: .74rem; font-weight: 900; justify-content: center; min-height: 46px; padding: 11px 15px; width: 100%; }
 .admin-google-button { background: #fff; border: 1px solid #9ebdb5; color: var(--color-aea-ink); gap: 9px; }
 .admin-google-button img { height: 18px; width: 18px; }
 .admin-auth-divider { align-items: center; color: #80928c; display: flex; font-size: .63rem; gap: 10px; margin: 18px 0; text-transform: uppercase; }
@@ -2405,8 +2405,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-auth-form { display: grid; gap: 13px; }
 .admin-auth-form .admin-password-reset { background: transparent; border: 0; color: var(--color-aea-green-dark); justify-self: start; min-height: auto; padding: 1px 0; text-decoration: underline; text-underline-offset: 3px; width: auto; }
 .admin-recovery-button { background: var(--action-primary); border: 0; border-radius: 11px; color: #fff; cursor: pointer; font-size: .74rem; font-weight: 900; margin: 2px 0 14px; min-height: 46px; padding: 11px 15px; width: 100%; }
-.admin-auth-form label, .admin-moderation-form label, .admin-opportunity-form > label, .admin-opportunity-form .admin-form-row label, .admin-assignment-form label, .admin-invite-form > label { color: var(--color-aea-ink); display: grid; font-size: .68rem; font-weight: 850; gap: 6px; }
-.admin-auth-form input, .admin-moderation-form select, .admin-moderation-form textarea, .admin-opportunity-form input, .admin-opportunity-form select, .admin-opportunity-form textarea, .admin-assignment-form select, .admin-invite-form input, .admin-invite-form select, .admin-filterbar input, .admin-filterbar select { background: #fff; border: 1px solid #a9c9bd; border-radius: 10px; color: var(--color-aea-text); min-height: 43px; padding: 9px 11px; width: 100%; }
+.admin-auth-form label, .admin-moderation-form label, .admin-invite-form > label { color: var(--color-aea-ink); display: grid; font-size: .68rem; font-weight: 850; gap: 6px; }
+.admin-auth-form input, .admin-moderation-form select, .admin-moderation-form textarea, .admin-invite-form input, .admin-invite-form select, .admin-filterbar input, .admin-filterbar select { background: #fff; border: 1px solid #a9c9bd; border-radius: 10px; color: var(--color-aea-text); min-height: 43px; padding: 9px 11px; width: 100%; }
 .admin-auth-card .admin-inline-status { background: #eef8f4; border-left: 3px solid var(--color-aea-green); color: #27483d; font-size: .68rem; margin: 16px 0 0; padding: 10px 12px; }
 .admin-security-note { color: #6a7e77; display: block; font-size: .62rem; line-height: 1.5; margin-top: 18px; text-align: center; }
 .admin-text-button { background: transparent; border: 0; color: var(--color-aea-green-dark); cursor: pointer; font-size: .7rem; font-weight: 850; margin-top: 18px; padding: 0; text-decoration: underline; }
@@ -2477,8 +2477,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-panel { padding: 22px; }
 .admin-overview-grid { display: grid; gap: 16px; grid-template-columns: .8fr 1.2fr; }
 .admin-panel-heading { border-bottom: 1px solid var(--color-aea-line); margin-bottom: 16px; padding-bottom: 13px; }
-.admin-panel-heading h2, .admin-assignment-form h2 { color: var(--color-aea-ink); font-size: 1.15rem; margin-top: 4px; }
-.admin-panel-heading p, .admin-assignment-form p { color: var(--color-aea-muted); font-size: .65rem; line-height: 1.5; margin: 5px 0 0; }
+.admin-panel-heading h2 { color: var(--color-aea-ink); font-size: 1.15rem; margin-top: 4px; }
+.admin-panel-heading p { color: var(--color-aea-muted); font-size: .65rem; line-height: 1.5; margin: 5px 0 0; }
 .admin-queue-list { display: grid; gap: 9px; }
 .admin-queue-list button { align-items: center; background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 10px; color: var(--color-aea-text); cursor: pointer; display: flex; gap: 12px; padding: 12px; text-align: left; }
 .admin-queue-list button strong { color: var(--color-aea-green-dark); font-size: 1.2rem; }
@@ -2488,7 +2488,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-audit-list strong { color: var(--color-aea-ink); display: block; font-size: .66rem; }
 .admin-audit-list span { color: var(--color-aea-muted); display: block; font-size: .57rem; margin-top: 3px; }
 .admin-filterbar { display: grid; gap: 9px; grid-template-columns: minmax(220px, 1fr) 150px 190px 170px auto; margin-bottom: 14px; }
-.admin-filterbar button, .admin-opportunity-actions button, .admin-evidence-section button, .admin-admin-list button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .66rem; font-weight: 850; padding: 9px 12px; }
+.admin-filterbar button, .admin-evidence-section button, .admin-admin-list button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .66rem; font-weight: 850; padding: 9px 12px; }
 .admin-partner-layout { display: grid; gap: 14px; grid-template-columns: minmax(480px, 1.1fr) minmax(340px, .9fr); }
 .admin-account-list { align-self: start; max-height: 760px; overflow: auto; padding: 0; }
 .admin-table-header, .admin-account-list > button { align-items: center; display: grid; gap: 9px; grid-template-columns: minmax(170px, 1.4fr) .55fr .8fr .65fr; padding: 11px 14px; }
@@ -2508,7 +2508,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-business-facts strong { color: var(--color-aea-text); display: block; font-size: .61rem; line-height: 1.45; margin-top: 4px; overflow-wrap: anywhere; }
 .admin-moderation-form { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 15px; }
 .admin-moderation-form .full, .admin-moderation-form button { grid-column: 1 / -1; }
-.admin-moderation-form textarea, .admin-opportunity-form textarea { min-height: 100px; resize: vertical; }
+.admin-moderation-form textarea { min-height: 100px; resize: vertical; }
 .admin-feature-controls { background: #f5faf8; border: 1px solid var(--color-aea-line); border-radius: 12px; margin: 7px 0; padding: 15px; }
 .admin-feature-controls > div:first-child > span { color: var(--color-aea-green-dark); display: block; font-size: .56rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .admin-feature-controls h3 { color: var(--color-aea-ink); font-size: .92rem; margin-top: 3px; }
@@ -2545,36 +2545,6 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-empty { padding: 18px; text-align: center; }
 .admin-empty-detail { padding: 80px 20px; }
 .admin-empty-detail strong { color: var(--color-aea-ink); }
-.admin-opportunity-layout { display: grid; gap: 14px; grid-template-columns: minmax(360px, .8fr) minmax(440px, 1.2fr); }
-.admin-opportunity-form { display: grid; gap: 12px; }
-.admin-form-row { display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.admin-opportunity-form fieldset { border: 0; margin: 0; padding: 0; }
-.admin-opportunity-form legend { color: var(--color-aea-ink); font-size: .68rem; font-weight: 850; margin-bottom: 6px; }
-.admin-category-grid { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.admin-category-grid label { align-items: center; background: #f7fbf9; border: 1px solid var(--color-aea-line); border-radius: 8px; color: var(--color-aea-text); display: flex; font-size: .59rem; font-weight: 750; gap: 6px; padding: 7px; }
-.admin-category-grid label.selected { background: #e8f9f1; border-color: #65bd9a; }
-.admin-category-grid input { accent-color: var(--color-aea-green); }
-.admin-opportunity-list { max-height: 790px; overflow: auto; }
-.admin-opportunity-list > article { border: 1px solid var(--color-aea-line); border-radius: 11px; padding: 14px; }
-.admin-opportunity-list > article + article { margin-top: 9px; }
-.admin-opportunity-list header { align-items: flex-start; display: flex; justify-content: space-between; }
-.admin-opportunity-list header div > span { color: var(--color-aea-green-dark); font-size: .55rem; font-weight: 900; text-transform: uppercase; }
-.admin-opportunity-list h3 { color: var(--color-aea-ink); font-size: .9rem; margin-top: 2px; }
-.admin-opportunity-list article > p { color: var(--color-aea-muted); font-size: .63rem; line-height: 1.5; }
-.admin-opportunity-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.admin-opportunity-meta span { background: #eef5f2; border-radius: 999px; color: #365d50; font-size: .54rem; font-weight: 800; padding: 3px 7px; }
-.admin-opportunity-actions { display: flex; gap: 6px; margin-top: 10px; }
-.admin-opportunity-actions button { background: #0b7251; }
-.admin-allocation-list { background: #f7fbf9; border: 1px solid var(--color-aea-line); border-radius: 10px; margin-top: 10px; padding: 4px 10px; }
-.admin-allocation-list > article { align-items: center; border: 0; border-bottom: 1px solid #e0ece7; border-radius: 0; display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
-.admin-allocation-list > article:last-child { border-bottom: 0; }
-.admin-allocation-list strong, .admin-allocation-list span, .admin-allocation-list small { display: block; }
-.admin-allocation-list strong { color: var(--color-aea-ink); font-size: .62rem; }
-.admin-allocation-list span, .admin-allocation-list small { color: var(--color-aea-muted); font-size: .54rem; margin-top: 2px; }
-.admin-allocation-list > article > div:last-child { align-items: flex-end; display: flex; flex-direction: column; }
-.admin-allocation-list button { background: #0b7251; border: 0; border-radius: 7px; color: #fff; cursor: pointer; font-size: .55rem; font-weight: 850; margin-top: 5px; padding: 6px 8px; }
-.admin-assignment-form { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(260px, 1fr) minmax(200px, .75fr) minmax(200px, .75fr) auto; margin-top: 14px; }
-.admin-assignment-form > button { min-width: 150px; }
 .admin-access-layout { display: grid; gap: 14px; grid-template-columns: minmax(320px, .65fr) minmax(480px, 1.35fr); }
 .admin-invite-form { display: grid; gap: 12px; }
 .admin-invite-form > p { color: var(--color-aea-muted); font-size: .6rem; line-height: 1.5; margin: 0; }
@@ -2685,10 +2655,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-notification-meta .admin-delivery-state.state-delivered { background: #e2f4ed; color: #146146; }
 .admin-notification-meta .admin-delivery-state.state-failed { background: #ffe3e0; color: #9b2d26; }
 .admin-notification-meta .admin-delivery-state.state-pending, .admin-notification-meta .admin-delivery-state.state-waiting_for_channel { background: #fff0cf; color: #795506; }
-.admin-opportunity-filters { display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(135px, .7fr)) auto auto; }
-.admin-opportunity-filters input { background: #fff; border: 1px solid #9fc8b9; border-radius: 9px; color: var(--color-aea-text); min-height: 40px; padding: 8px 10px; width: 100%; }
-.admin-opportunity-filters button, .admin-ecosystem-actions button { background: var(--action-primary); border: 1px solid transparent; border-radius: 9px; color: #fff; cursor: pointer; font-size: .61rem; font-weight: 850; min-height: 40px; padding: 8px 11px; }
-.admin-opportunity-filters button.secondary, .admin-ecosystem-actions button.secondary { background: #fff; border-color: #9fc8b9; color: #225847; }
+.admin-ecosystem-actions button { background: var(--action-primary); border: 1px solid transparent; border-radius: 9px; color: #fff; cursor: pointer; font-size: .61rem; font-weight: 850; min-height: 40px; padding: 8px 11px; }
+.admin-ecosystem-actions button.secondary { background: #fff; border-color: #9fc8b9; color: #225847; }
 .admin-ecosystem-check { margin-top: 14px; }
 .admin-ecosystem-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
 .admin-ecosystem-actions button:disabled { cursor: wait; opacity: .65; }
@@ -2780,19 +2748,17 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-customer-quotes small { color: var(--color-aea-muted); font-size: .51rem; grid-column: 1 / -1; }
 
 @media (max-width: 1100px) {
-  .dashboard-lead-filters, .admin-opportunity-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-lead-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-ecosystem-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-notification-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .admin-notification-filter { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .admin-case-workflow { grid-template-columns: 1fr 1fr; }
   .admin-access-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-partner-layout, .admin-opportunity-layout, .admin-directory-layout { grid-template-columns: 1fr; }
+  .admin-partner-layout, .admin-directory-layout { grid-template-columns: 1fr; }
   .admin-referral-list > article { grid-template-columns: 1fr 1fr; }
   .admin-referral-actions { grid-column: 1 / -1; grid-template-columns: repeat(2, max-content); }
   .admin-account-list { max-height: 520px; }
-  .admin-assignment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-assignment-form > div, .admin-assignment-form > button { grid-column: 1 / -1; }
   .supplier-catalogue-layout, .marketplace-workspace-layout { grid-template-columns: 1fr; }
   .marketplace-selection-builder { position: static; }
   .supplier-product-list { max-height: 620px; }
@@ -2818,7 +2784,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-sidebar { grid-template-columns: repeat(9, max-content); }
   .admin-sidebar > button span { display: none; }
   .admin-content { padding: 20px 12px; }
-  .admin-metric-grid, .admin-access-metrics, .admin-filterbar, .admin-business-facts, .admin-moderation-form, .admin-form-row, .admin-category-grid, .admin-assignment-form, .admin-product-review, .admin-feature-grid article > div, .admin-customer-account-form, .admin-customer-projects dl { grid-template-columns: 1fr; }
+  .admin-metric-grid, .admin-access-metrics, .admin-filterbar, .admin-business-facts, .admin-moderation-form, .admin-product-review, .admin-feature-grid article > div, .admin-customer-account-form, .admin-customer-projects dl { grid-template-columns: 1fr; }
   .admin-notification-card { grid-template-columns: 4px minmax(0, 1fr); }
   .admin-notification-actions { display: flex; flex-wrap: wrap; grid-column: 2; }
   .admin-notification-metrics, .admin-case-facts { grid-template-columns: 1fr; }
@@ -2834,7 +2800,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-account-list > button > span:first-child { grid-column: 1 / -1; }
   .admin-admin-list article { grid-template-columns: 1fr 1fr; }
   .admin-admin-list article > div { grid-column: 1 / -1; }
-  .dashboard-lead-filters, .admin-opportunity-filters, .admin-ecosystem-results { grid-template-columns: 1fr; }
+  .dashboard-lead-filters, .admin-ecosystem-results { grid-template-columns: 1fr; }
   .dashboard-lead-filters > div { justify-items: start; }
   .admin-recovery-readiness { align-items: flex-start; flex-direction: column; }
   .admin-audit-table article { grid-template-columns: 1fr; }
