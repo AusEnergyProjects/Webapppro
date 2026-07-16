@@ -10,6 +10,7 @@ const adminEnquiries = read("../src/app/api/admin/product-enquiries/route.ts");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const adminUi = read("../src/components/AdminOperationsPortal.tsx");
+const adminEnquiryWorkspace = read("../src/components/AdminProductEnquiryWorkspace.tsx");
 
 test("project product lists and wholesaler enquiries are durable", () => {
   assert.match(schema, /sqliteTable\("installer_product_lists"/);
@@ -48,11 +49,22 @@ test("operations can monitor product demand without receiving household data", (
   assert.match(adminEnquiries, /requireAdminIdentity\(request\)/);
   assert.match(adminEnquiries, /subtotal_cents_ex_gst/);
   assert.doesNotMatch(adminEnquiries, /address_line_1|customer_email|customer_phone/);
-  assert.match(adminUi, /Installer product enquiries/);
+  assert.match(adminUi, /AdminProductEnquiryWorkspace/);
+  assert.match(adminEnquiryWorkspace, /Installer product enquiries/);
   assert.match(adminUi, /Product enquiries awaiting wholesaler response/);
-  assert.match(adminUi, /Household contact details\s+and street addresses are outside this workflow/);
+  assert.match(adminEnquiryWorkspace, /Household contact details\s+and street addresses are outside this workflow/);
+});
+
+test("the extracted enquiry workspace preserves search, status filtering, summaries and privacy boundaries", () => {
+  assert.match(adminEnquiryWorkspace, /params\.set\("search"/);
+  assert.match(adminEnquiryWorkspace, /params\.set\("status"/);
+  assert.match(adminEnquiryWorkspace, /summariseProductEnquiries/);
+  assert.match(adminEnquiryWorkspace, /Awaiting response/);
+  assert.match(adminEnquiryWorkspace, /Installer/);
+  assert.match(adminEnquiryWorkspace, /Wholesaler/);
+  assert.doesNotMatch(adminEnquiryWorkspace, /household_name|customer_email|customer_phone|street_address/);
 });
 
 test("new product workflow copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(installerUi + supplierUi + adminUi, /[\u2013\u2014]/);
+  assert.doesNotMatch(installerUi + supplierUi + adminUi + adminEnquiryWorkspace, /[\u2013\u2014]/);
 });

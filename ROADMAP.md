@@ -25,11 +25,11 @@ Every AI-assisted milestone must follow [docs/AI_DELIVERY_GUARDRAILS.md](./docs/
 
 ### P1: architecture and maintainability
 
-- In progress: split `AdminOperationsPortal.tsx` into feature workspaces, typed API clients and reducer-backed domain hooks without changing the admin workflow. Opportunity, catalogue, account and inbox workspaces are feature-owned.
+- In progress: split `AdminOperationsPortal.tsx` into feature workspaces, typed API clients and reducer-backed domain hooks without changing the admin workflow. Opportunity, catalogue, account, inbox and product-enquiry workspaces are feature-owned.
 - In progress: move feature styling out of `globals.css` beside TLink CRM, catalogue, admin, consumer and comparison features. Remove obsolete selectors only after visual regression checks.
 - In progress: one canonical uppercase Australian state code now drives new writes and filtering. Migration 0045 normalises existing stored state values.
 - Completed foundation: shared keyset pagination, list controls, searchable lookups, high-volume table behaviour and route telemetry are reusable across admin, CRM, catalogue and purchasing.
-- Next: extract the product-enquiry workspace, then reassess the remaining stateful admin shell one domain at a time.
+- Next: extract the referral workspace, then reassess the remaining stateful admin shell one domain at a time.
 
 ### P2: production scaling
 

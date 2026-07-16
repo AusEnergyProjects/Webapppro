@@ -28,6 +28,7 @@ import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
 import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspace";
 import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
 import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
+import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -83,23 +84,6 @@ type ReferralRecord = {
   appliedCredits: number;
   failedCredits: number;
   updatedAt: string;
-};
-type AdminProductEnquiry = {
-  id: string;
-  status: string;
-  message: string;
-  supplierNote: string;
-  createdAt: string;
-  updatedAt: string;
-  listId: string;
-  listName: string;
-  projectPostcode: string;
-  installerBusiness: string;
-  installerEmail: string;
-  supplierBusiness: string;
-  supplierEmail: string;
-  itemCount: number;
-  subtotalCentsExGst: number;
 };
 type EcosystemHealth = {
   status: "healthy" | "attention";
@@ -175,9 +159,7 @@ export function AdminOperationsPortal() {
   const [accountListCounts, setAccountListCounts] = useState({ total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
-  const [productEnquiries, setProductEnquiries] = useState<AdminProductEnquiry[]>([]);
-  const [enquirySearch, setEnquirySearch] = useState("");
-  const [enquiryStatus, setEnquiryStatus] = useState("");
+  const [productEnquirySummary, setProductEnquirySummary] = useState<ProductEnquirySummary>({ total: 0, open: 0, responded: 0, valueCents: 0 });
   const [ecosystemHealth, setEcosystemHealth] = useState<EcosystemHealth | null>(null);
   const [ecosystemBusy, setEcosystemBusy] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -232,7 +214,7 @@ export function AdminOperationsPortal() {
       else failures.push("partners");
       if (referralResult.status === "fulfilled") setReferrals(referralResult.value.referrals || []);
       else failures.push("referrals");
-      if (enquiryResult.status === "fulfilled") setProductEnquiries(enquiryResult.value.enquiries || []);
+      if (enquiryResult.status === "fulfilled") setProductEnquirySummary(summariseProductEnquiries(enquiryResult.value.enquiries || []));
       else failures.push("product enquiries");
       if (nextSession.role === "owner") {
         try {
@@ -395,21 +377,6 @@ export function AdminOperationsPortal() {
     }
   }
 
-  async function searchProductEnquiries(event?: FormEvent) {
-    event?.preventDefault();
-    setStatus("Refreshing product enquiries...");
-    try {
-      const params = new URLSearchParams();
-      if (enquirySearch.trim()) params.set("search", enquirySearch.trim());
-      if (enquiryStatus) params.set("status", enquiryStatus);
-      const result = await api(`/api/admin/product-enquiries?${params}`);
-      setProductEnquiries(result.enquiries || []);
-      setStatus(`${result.enquiries?.length || 0} product enquiries shown.`);
-    } catch (error) {
-      setStatus(authMessage(error));
-    }
-  }
-
   function openNotificationRecord(notification: AdminNotification) {
     if (notification.actorType === "customer" || ["customer_account", "customer_project"].includes(notification.entityType)) {
       if (!notification.actorUid) {
@@ -530,9 +497,7 @@ export function AdminOperationsPortal() {
   const freeAccounts = accountListCounts.free;
   const hiddenSuppliers = accountListCounts.hiddenSuppliers;
   const leadLockedInstallers = accountListCounts.leadLockedInstallers;
-  const openProductEnquiries = productEnquiries.filter((item) => ["new", "viewed"].includes(item.status)).length;
-  const respondedProductEnquiries = productEnquiries.filter((item) => item.status === "responded").length;
-  const enquiryValueCents = productEnquiries.reduce((total, item) => total + item.subtotalCentsExGst, 0);
+  const openProductEnquiries = productEnquirySummary.open;
   const activeOwners = admins.filter(
     (item) => item.role === "owner" && item.status === "active",
   ).length;
@@ -1065,72 +1030,7 @@ export function AdminOperationsPortal() {
           )}
 
 
-          {tab === "enquiries" && (
-            <>
-              <header className="admin-page-heading">
-                <span>Trade supply workflow</span>
-                <h1>Installer product enquiries</h1>
-                <p>
-                  Monitor which paid installers are selecting approved products,
-                  whether wholesalers are responding and the indicative ex-GST
-                  value moving through the trade supply network.
-                </p>
-              </header>
-              <section className="admin-metric-grid">
-                <article><span>Total enquiries</span><strong>{productEnquiries.length}</strong><small>One enquiry per project list and wholesaler</small></article>
-                <article><span>Awaiting response</span><strong>{openProductEnquiries}</strong><small>New or reviewed by the wholesaler</small></article>
-                <article><span>Responded</span><strong>{respondedProductEnquiries}</strong><small>Wholesaler follow-up recorded</small></article>
-                <article><span>Indicative value</span><strong>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(enquiryValueCents / 100)}</strong><small>Selected product snapshots before GST</small></article>
-              </section>
-              <form className="admin-filterbar admin-enquiry-filterbar" onSubmit={searchProductEnquiries}>
-                <input aria-label="Search product enquiries" placeholder="Installer, wholesaler, project list or postcode" value={enquirySearch} onChange={(event) => setEnquirySearch(event.target.value)} />
-                <select aria-label="Product enquiry status" value={enquiryStatus} onChange={(event) => setEnquiryStatus(event.target.value)}>
-                  <option value="">All enquiry states</option>
-                  <option value="new">New</option>
-                  <option value="viewed">Viewed</option>
-                  <option value="responded">Responded</option>
-                  <option value="closed">Closed</option>
-                </select>
-                <button type="submit">Apply filters</button>
-              </form>
-              <section className="admin-panel admin-product-enquiry-workspace">
-                <div className="admin-panel-heading">
-                  <span>Commercial handoff</span>
-                  <h2>Selection and response history</h2>
-                  <p>
-                    Product enquiries contain installer business details and
-                    commercial project context only. Household contact details
-                    and street addresses are outside this workflow.
-                  </p>
-                </div>
-                <div className="admin-product-enquiry-list tlink-data-table">
-                  {productEnquiries.length ? productEnquiries.map((item) => (
-                    <article key={item.id}>
-                      <header>
-                        <div>
-                          <span>{item.projectPostcode || "No postcode"} Ãƒâ€šÃ‚Â· {dateTime(item.createdAt)}</span>
-                          <h3>{item.listName}</h3>
-                        </div>
-                        <span className={`admin-pill admin-pill-${item.status}`}>{readable(item.status)}</span>
-                      </header>
-                      <div className="admin-enquiry-parties">
-                        <div><span>Installer</span><strong>{item.installerBusiness}</strong><small>{item.installerEmail}</small></div>
-                        <b aria-hidden="true">to</b>
-                        <div><span>Wholesaler</span><strong>{item.supplierBusiness}</strong><small>{item.supplierEmail}</small></div>
-                      </div>
-                      <div className="admin-enquiry-facts">
-                        <span>{item.itemCount} selected item{item.itemCount === 1 ? "" : "s"}</span>
-                        <span>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(item.subtotalCentsExGst / 100)} ex GST indicative</span>
-                        <span>Updated {dateTime(item.updatedAt)}</span>
-                      </div>
-                      {item.message && <p>{item.message}</p>}
-                      {item.supplierNote && <small className="admin-enquiry-note">Wholesaler note: {item.supplierNote}</small>}
-                    </article>
-                  )) : <p className="admin-empty">No product enquiries match this view.</p>}
-                </div>
-              </section>
-            </>
-          )}
+          {tab === "enquiries" && <AdminProductEnquiryWorkspace api={api} setStatus={setStatus} onSummary={setProductEnquirySummary} />}
 
           {tab === "referrals" && (
             <>

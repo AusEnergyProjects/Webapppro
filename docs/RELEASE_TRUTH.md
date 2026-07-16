@@ -33,7 +33,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - Synthetic scale fixtures separated from production migrations.
 - Uppercase canonical Australian state codes for new writes, filters and normalisation.
 - Server-configured membership checkout, billing portal and webhook payment-link mapping.
-- Feature-owned admin account, opportunity, catalogue and inbox workspaces, with shared saved-list request helpers.
+- Feature-owned admin account, opportunity, catalogue, inbox and product-enquiry workspaces, with shared saved-list request helpers.
 - Admin performance SLO dashboard with 7-day p95 latency, average database time, error-rate and sample-size assessment plus read-only keyset query-plan checks.
 - Stripe production preflight on 17 July 2026: no active account tasks; four active Direct Trade membership payment links at the configured monthly and annual prices; one active membership webhook destination subscribing to five events with a 0% error rate.
 
@@ -53,6 +53,8 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 ## External or unverified state
 
 - Stripe production account status, membership payment links and webhook destination were inspected on 17 July 2026. Webhook signing secrets are intentionally non-displayable and must remain configured as deployment secrets; a future credential rotation or paid-membership release requires a fresh dashboard verification.
+- Production Sites version 121 was audited on 17 July 2026 and is sourced from `9a497c3` on `codex/sites-custom-domain-migration`. Do not publish an older feature branch directly over that version; first integrate the custom-domain changes and rerun the release audit.
+- The canonical custom-domain response currently exposes HTTPS, HSTS and `X-Content-Type-Options`, but the intended permissions, referrer and frame headers were not observed and no CSP was present. Resolve this before the next public release.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.
 - Historical shared D1 databases may already contain explicit synthetic demo records from migrations 0033 to 0038. They remain marked as synthetic and filterable. Fresh databases no longer receive them automatically.
 

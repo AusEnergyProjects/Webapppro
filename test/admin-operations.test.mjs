@@ -30,6 +30,7 @@ const portal = read("../src/components/AdminOperationsPortal.tsx");
 const opportunityWorkspace = read("../src/components/AdminOpportunityWorkspace.tsx");
 const catalogueWorkspace = read("../src/components/AdminCatalogueWorkspace.tsx");
 const accountWorkspace = read("../src/components/AdminAccountWorkspace.tsx");
+const enquiryWorkspace = read("../src/components/AdminProductEnquiryWorkspace.tsx");
 const sharedWorkspace = read("../src/components/admin-workspace.ts");
 const portalPage = read("../src/app/operations/control-centre/page.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
@@ -170,6 +171,7 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(opportunityWorkspace, /Create an opportunity/);
   assert.match(opportunityWorkspace, /Allocate nearest eligible installers/);
   assert.match(catalogueWorkspace, /Product catalogue and availability/);
+  assert.match(enquiryWorkspace, /Installer product enquiries/);
   assert.match(portal, /Leads and opportunities/);
   assert.match(catalogueWorkspace, /Product name/);
   assert.match(catalogueWorkspace, /Wholesaler/);
@@ -207,6 +209,14 @@ test("the extracted account workspace preserves saved filters, cursors, moderati
   assert.match(accountWorkspace, /Export visible partners CSV/);
   assert.match(accountWorkspace, /Protected document download started/);
   assert.doesNotMatch(accountWorkspace, /household_name|customer_email|customer_phone|street_address/);
+});
+
+test("the extracted enquiry workspace owns filtering, summaries and privacy-safe rendering", () => {
+  assert.match(portal, /<AdminProductEnquiryWorkspace api=\{api\} setStatus=\{setStatus\} onSummary=\{setProductEnquirySummary\}/);
+  for (const parameter of ["search", "status"]) assert.match(enquiryWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
+  assert.match(enquiryWorkspace, /summariseProductEnquiries/);
+  assert.match(enquiryWorkspace, /Wholesaler note/);
+  assert.doesNotMatch(enquiryWorkspace, /household_name|customer_email|customer_phone|street_address/);
 });
 
 test("admin list workspaces share only proven formatting and saved-view helpers", () => {

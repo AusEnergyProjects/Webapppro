@@ -2537,23 +2537,6 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-referral-actions { display: grid; gap: 6px; }
 .admin-referral-actions button { background: var(--action-primary); border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .57rem; font-weight: 850; padding: 8px 10px; }
 .admin-referral-actions button.danger { background: #fff0ee; border: 1px solid #ecc0bb; color: #a22e27; }
-.admin-enquiry-filterbar { grid-template-columns: minmax(260px, 1fr) 190px auto; }
-.admin-product-enquiry-list { display: grid; gap: 10px; }
-.admin-product-enquiry-list > article { border: 1px solid var(--color-aea-line); border-left: 4px solid #8fc6b3; border-radius: 12px; padding: 14px; }
-.admin-product-enquiry-list > article > header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
-.admin-product-enquiry-list header > div > span { color: var(--color-aea-green-dark); display: block; font-size: .53rem; font-weight: 900; text-transform: uppercase; }
-.admin-product-enquiry-list h3 { color: var(--color-aea-ink); font-size: .82rem; margin-top: 3px; }
-.admin-enquiry-parties { align-items: center; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); margin-top: 10px; }
-.admin-enquiry-parties > div { background: #f5faf8; border-radius: 9px; padding: 9px; }
-.admin-enquiry-parties span, .admin-enquiry-parties strong, .admin-enquiry-parties small { display: block; }
-.admin-enquiry-parties span { color: var(--color-aea-green-dark); font-size: .51rem; font-weight: 900; text-transform: uppercase; }
-.admin-enquiry-parties strong { color: var(--color-aea-ink); font-size: .62rem; margin-top: 2px; }
-.admin-enquiry-parties small { color: var(--color-aea-muted); font-size: .52rem; margin-top: 1px; overflow-wrap: anywhere; }
-.admin-enquiry-parties b { color: #6b8c81; font-size: .55rem; }
-.admin-enquiry-facts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
-.admin-enquiry-facts span { background: #edf4f1; border-radius: 999px; color: #42685c; font-size: .52rem; padding: 4px 7px; }
-.admin-product-enquiry-list article > p { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.45; margin-top: 8px; }
-.admin-enquiry-note { background: #fff7e4; color: #705c25; display: block; font-size: .54rem; line-height: 1.4; margin-top: 7px; padding: 7px 9px; }
 .admin-topbar-account .admin-notification-button { align-items: center; background: rgba(110, 231, 183, .1); border-color: rgba(110, 231, 183, .35); display: inline-flex; font-weight: 850; gap: 7px; }
 .admin-topbar-account a.admin-notification-button { border: 1px solid rgba(110, 231, 183, .35); border-radius: 8px; color: #dcebea; cursor: pointer; font-size: .62rem; padding: 6px 9px; text-decoration: none; }
 .admin-topbar-account a.admin-notification-button:hover, .admin-topbar-account a.admin-notification-button:focus-visible { background: rgba(110, 231, 183, .2); outline: 2px solid #6ee7b7; outline-offset: 2px; }
@@ -2755,8 +2738,7 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .admin-audit-table article { grid-template-columns: 1fr; }
   .admin-referral-list > article, .admin-referral-parties { grid-template-columns: 1fr; }
   .admin-referral-parties b { display: none; }
-  .dashboard-serviceability-fields, .supplier-form-grid, .marketplace-filterbar, .marketplace-advanced-filters > div, .marketplace-product-grid, .supplier-enquiry-items, .supplier-enquiry-contact, .admin-enquiry-parties { grid-template-columns: 1fr; }
-  .admin-enquiry-parties b { display: none; }
+  .dashboard-serviceability-fields, .supplier-form-grid, .marketplace-filterbar, .marketplace-advanced-filters > div, .marketplace-product-grid, .supplier-enquiry-items, .supplier-enquiry-contact { grid-template-columns: 1fr; }
   .supplier-form-grid label.full { grid-column: auto; }
   .supplier-dependencies article > div { grid-template-columns: 1fr; }
   .dashboard-contact-allowance, .supplier-editor-actions { align-items: flex-start; flex-direction: column; }
