@@ -56,6 +56,7 @@ const money = new Intl.NumberFormat("en-AU", {
 });
 
 export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: CommandProps) {
+  const { businessOperations, marketplace, teamAccess } = features;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<SearchKind | "all">("all");
@@ -99,7 +100,13 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
     const frame = window.requestAnimationFrame(() => {
       setLoading(true);
       setStatus("Opening your business records...");
-      void loadRecords(user, partnerType, features)
+      void loadRecords(user, partnerType, { businessOperations, marketplace, teamAccess }, (batch) => {
+        if (!active) return;
+        setRecords((current) => {
+          const known = new Set(current.map((record) => `${record.kind}:${record.id}`));
+          return [...current, ...batch.filter((record) => !known.has(`${record.kind}:${record.id}`))];
+        });
+      })
         .then((nextRecords) => {
           if (!active) return;
           setRecords(nextRecords);
@@ -107,7 +114,10 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
           setStatus(nextRecords.length ? "" : "No searchable records are available yet.");
         })
         .catch((error) => {
-          if (active) setStatus(error instanceof Error ? error.message : "TLink search could not be loaded.");
+          if (active) {
+            setLoaded(true);
+            setStatus(error instanceof Error ? error.message : "TLink search could not be loaded.");
+          }
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -117,7 +127,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
       active = false;
       window.cancelAnimationFrame(frame);
     };
-  }, [features, loaded, loading, open, partnerType, user]);
+  }, [businessOperations, loaded, loading, marketplace, open, partnerType, teamAccess, user]);
 
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -213,18 +223,18 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
           {!query.trim() && <div className="tlink-command-start">
             <div><span>Quick actions</span><strong>Go straight to the work</strong></div>
             <div className="tlink-command-actions">
-              {partnerType === "installer" && features.businessOperations && <>
+              {partnerType === "installer" && businessOperations && <>
                 <button type="button" onClick={() => navigateAction("new-job", "work")}><b>+</b><span><strong>New job</strong><small>Start a system numbered job</small></span></button>
                 <button type="button" onClick={() => navigateAction("new-customer", "work")}><b>+</b><span><strong>New customer</strong><small>Add a direct business contact</small></span></button>
               </>}
-              {(partnerType === "supplier" || features.marketplace) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Search approved equipment"}</small></span></button>}
-              {features.businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
-              {partnerType === "installer" && features.teamAccess && <button type="button" onClick={() => navigateAction("team", "work")}><b>T</b><span><strong>Team</strong><small>Open people and dispatch</small></span></button>}
+              {(partnerType === "supplier" || marketplace) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Search approved equipment"}</small></span></button>}
+              {businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
+              {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "work")}><b>T</b><span><strong>Team</strong><small>Open people and dispatch</small></span></button>}
             </div>
             <p>Only records this business can already access are included. AEA protected household contact details are never indexed.</p>
           </div>}
           {query.trim().length === 1 && <div className="tlink-command-empty"><strong>Keep typing</strong><span>Enter at least two characters to search.</span></div>}
-          {query.trim().length >= 2 && loading && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Opening the latest business records...</span></div>}
+          {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Opening the latest business records...</span></div>}
           {query.trim().length >= 2 && !loading && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>Try a job ID, customer name, model code, order number or team member.</span></div>}
           {results.length > 0 && <div className="tlink-command-results" role="listbox" aria-label="TLink search results">
             {results.map((record, index) => <button
@@ -249,13 +259,19 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   </>;
 }
 
-async function loadRecords(user: User, partnerType: "installer" | "supplier", features: CommandFeatures) {
+async function loadRecords(user: User, partnerType: "installer" | "supplier", features: CommandFeatures, onBatch: (records: SearchRecord[]) => void) {
   const token = await user.getIdToken();
   const request = async (path: string) => {
-    const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) throw new Error(result.error || "A TLink record source could not be opened.");
-    return result;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.ok === false) throw new Error(result.error || "A TLink record source could not be opened.");
+      return result;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   };
   const sources: Array<Promise<Record<string, unknown>>> = [];
   if (partnerType === "installer") {
@@ -267,11 +283,13 @@ async function loadRecords(user: User, partnerType: "installer" | "supplier", fe
     sources.push(request("/api/supplier-products"));
     if (features.businessOperations) sources.push(request("/api/trade-purchasing"));
   }
-  const settled = await Promise.allSettled(sources);
+  const settled = await Promise.allSettled(sources.map((source) => source.then((payload) => {
+    onBatch(toSearchRecords(payload));
+    return payload;
+  })));
   const payloads = settled.filter((item): item is PromiseFulfilledResult<Record<string, unknown>> => item.status === "fulfilled").map((item) => item.value);
   if (!payloads.length && settled.length) {
-    const reason = settled.find((item): item is PromiseRejectedResult => item.status === "rejected")?.reason;
-    throw reason instanceof Error ? reason : new Error("TLink search could not be loaded.");
+    throw new Error("TLink search is taking longer than expected. Close it and try again.");
   }
   return payloads.flatMap(toSearchRecords);
 }
