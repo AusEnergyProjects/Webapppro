@@ -55,8 +55,10 @@ test("all business and operations result lists expose consistent saved paging co
   for (const ui of [supplierUi, purchasingUi, crmUi, directoryUi]) {
     assert.match(ui, /WorkspaceListControls/);
   }
-  assert.match(crmUi, /pagedJobs/);
-  assert.match(crmUi, /pagedCustomers/);
+  assert.match(crmUi, /indexedJobs/);
+  assert.match(crmUi, /indexedCustomers/);
+  assert.match(crmUi, /jobPagination/);
+  assert.match(crmUi, /customerPagination/);
   assert.match(supplierUi, /supplier-catalogue-filters/);
   assert.match(purchasingUi, /purchasing-list-filters/);
 });

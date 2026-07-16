@@ -80,6 +80,35 @@ test("paid installers receive a complete progressive CRM while free accounts kee
   assert.match(crm, /outstandingCents/);
 });
 
+test("large installer job and customer directories use server paging, sorting and lazy detail", () => {
+  assert.match(route, /mode === "index"/);
+  assert.match(route, /mode === "detail"/);
+  assert.match(route, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
+  assert.match(route, /LIMIT \? OFFSET \?/);
+  assert.match(route, /SELECT COUNT\(\*\) total/);
+  assert.match(route, /"number-asc"/);
+  assert.match(route, /"name-desc"/);
+  assert.match(crm, /mode: "index", resource: "jobs"/);
+  assert.match(crm, /mode: "index", resource: "customers"/);
+  assert.match(crm, /mode=detail&resource=job/);
+  assert.match(crm, /mode=detail&resource=customer/);
+  assert.match(crm, /Recently updated/);
+  assert.match(crm, /Name A to Z/);
+});
+
+test("bulk CRM actions are bounded, owner scoped and protect active customer work", () => {
+  assert.match(route, /function cleanIds/);
+  assert.match(route, /slice\(0, 100\)/);
+  assert.match(route, /action === "bulk_set_job_priority"/);
+  assert.match(route, /action === "bulk_archive_customers"/);
+  assert.match(route, /firebase_uid = \? AND partner_type = 'installer'/);
+  assert.match(route, /Customers with active jobs cannot be archived/);
+  assert.match(route, /jobSyncChangeStatements/);
+  assert.match(crm, /ids: selectedJobIds/);
+  assert.match(crm, /ids: selectedCustomerIds/);
+  assert.match(crm, /Only customers with no active jobs can be archived/);
+});
+
 test("customer home records use plain language and progressive disclosure", () => {
   assert.match(customerAssets, /Free home records/);
   assert.match(customerAssets, /Your products, warranties and documents/);

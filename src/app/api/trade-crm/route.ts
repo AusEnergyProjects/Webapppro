@@ -22,6 +22,7 @@ const ISSUE_STATUSES = new Set(["not_applicable", "open", "resolved"]);
 const QUOTE_STATUSES = new Set(["not_started", "draft", "sent", "accepted", "declined"]);
 const INVOICE_STATUSES = new Set(["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PAGE_SIZES = new Set([25, 50, 100]);
 
 type CrmIdentity = { uid: string; businessName: string; teamAccess: boolean };
 
@@ -63,6 +64,11 @@ function errorResponse(error: unknown) {
 function cleanList(value: unknown, limit = 12) {
   const input = Array.isArray(value) ? value : String(value || "").split(",");
   return [...new Set(input.map((item) => cleanAdminText(item, 40).toLowerCase()).filter(Boolean))].slice(0, limit);
+}
+
+function cleanIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => cleanAdminText(item, 180)).filter(Boolean))].slice(0, 100);
 }
 
 function storedList(value: unknown, limit = 12) {
@@ -206,6 +212,159 @@ async function crmPayload(identity: CrmIdentity) {
   return { customers, jobs, templates, teamAccess: identity.teamAccess };
 }
 
+function pagination(url: URL) {
+  const requestedPage = Number(url.searchParams.get("page"));
+  const requestedPageSize = Number(url.searchParams.get("pageSize"));
+  return {
+    page: Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    pageSize: PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25,
+  };
+}
+
+function indexedJob(row: Record<string, unknown>) {
+  const sourceType = String(row.source_type);
+  const customerSource = sourceType === "opportunity" ? "platform_private" : String(row.customer_source || "internal");
+  return {
+    id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
+    siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
+    scheduledEnd: row.scheduled_end, assigneeLabel: row.assignee_label, sourceType, customerSource,
+    crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
+    customerDisplayName: customerSource === "platform_private" ? "AEA protected customer" : String(row.customer_name || ""),
+    pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"),
+    description: row.description || "", customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
+    nextAction: row.next_action || "", tags: storedList(row.job_tags), estimatedValueCents: Number(row.estimated_value_cents || 0),
+    quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
+    paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
+    invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
+    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [],
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+function indexedCustomer(row: Record<string, unknown>) {
+  return {
+    id: row.id, customerNumber: row.customer_number, customerType: row.customer_type,
+    displayName: customerDisplayName(row), firstName: row.first_name, lastName: row.last_name,
+    businessName: row.business_name, email: row.email, phone: row.phone, addressLine1: row.address_line_1,
+    addressLine2: row.address_line_2, suburb: row.suburb, addressState: row.address_state,
+    postcode: row.postcode, tags: storedList(row.tags), privateNotes: row.private_notes,
+    jobCount: Number(row.job_count || 0), activeJobCount: Number(row.active_job_count || 0),
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
+  const db = getD1();
+  const { page, pageSize } = pagination(url);
+  const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
+  const filter = cleanAdminText(url.searchParams.get("filter"), 30);
+  const sort = cleanAdminText(url.searchParams.get("sort"), 30);
+  const bindings: unknown[] = [identity.uid];
+  if (resource === "jobs") {
+    const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
+    if (search) {
+      conditions.push(`LOWER(w.work_number || ' ' || w.title || ' ' || w.site_area || ' ' ||
+        CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
+      bindings.push(`%${search}%`);
+    }
+    const pipeline = cleanAdminText(url.searchParams.get("pipeline"), 30);
+    if (pipeline && PIPELINE_STAGES.has(pipeline)) { conditions.push("d.pipeline_stage = ?"); bindings.push(pipeline); }
+    if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
+    else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
+    else if (filter === "attention") conditions.push(`(w.stage = 'blocked' OR EXISTS (SELECT 1 FROM trade_crm_job_notes n
+      WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open'))`);
+    else if (filter !== "all") conditions.push("w.stage NOT IN ('completed', 'cancelled')");
+    const where = conditions.join(" AND ");
+    const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid`;
+    const sorts: Record<string, string> = {
+      "number-asc": "w.work_number COLLATE NOCASE ASC", "number-desc": "w.work_number COLLATE NOCASE DESC",
+      "date-asc": "w.scheduled_start = '', w.scheduled_start ASC, w.updated_at DESC", "updated-desc": "w.updated_at DESC",
+    };
+    const [countRow, rows] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+      db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description, d.customer_reference,
+        d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
+        d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
+        CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+        (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
+        ${joins} WHERE ${where} ORDER BY ${sorts[sort] || sorts["updated-desc"]} LIMIT ? OFFSET ?`)
+        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+    ]);
+    const total = Number(countRow?.total || 0);
+    return { items: rows.results.map((row: Record<string, unknown>) => indexedJob(row)), pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) } };
+  }
+  const conditions = ["c.firebase_uid = ?", "c.record_status = 'active'"];
+  if (search) {
+    conditions.push("LOWER(c.customer_number || ' ' || c.first_name || ' ' || c.last_name || ' ' || c.business_name || ' ' || c.email || ' ' || c.phone || ' ' || c.suburb || ' ' || c.postcode) LIKE ?");
+    bindings.push(`%${search}%`);
+  }
+  const where = conditions.join(" AND ");
+  const sorts: Record<string, string> = {
+    "name-asc": "CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE ASC",
+    "name-desc": "CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE DESC",
+    "updated-desc": "c.updated_at DESC",
+  };
+  const [countRow, rows] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    db.prepare(`SELECT c.*,
+      (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') job_count,
+      (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' AND w.stage NOT IN ('completed', 'cancelled')) active_job_count
+      FROM trade_crm_customers c WHERE ${where} ORDER BY ${sorts[sort] || sorts["name-asc"]} LIMIT ? OFFSET ?`)
+      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+  ]);
+  const total = Number(countRow?.total || 0);
+  return { items: rows.results.map((row: Record<string, unknown>) => indexedCustomer(row)), pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) } };
+}
+
+async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
+  const db = getD1();
+  if (resource === "customer") {
+    const row = await db.prepare(`SELECT c.*,
+      (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') job_count
+      FROM trade_crm_customers c WHERE c.id = ? AND c.firebase_uid = ? AND c.record_status = 'active'`)
+      .bind(id, identity.uid).first<Record<string, unknown>>();
+    if (!row) throw new Error("CUSTOMER_NOT_FOUND");
+    const jobs = await db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage,
+      d.next_action, d.quoted_value_cents, d.invoiced_value_cents, d.paid_value_cents,
+      CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name
+      FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
+      WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 200`)
+      .bind(id, identity.uid).all<Record<string, unknown>>();
+    return { customer: indexedCustomer(row), jobs: jobs.results.map((job: Record<string, unknown>) => indexedJob(job)) };
+  }
+  const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description,
+    d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents,
+    d.invoiced_value_cents, d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
+    CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+    (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
+    FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+    LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
+    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
+    .bind(id, identity.uid).first<Record<string, unknown>>();
+  if (!row) throw new Error("JOB_NOT_FOUND");
+  const customerId = String(row.crm_customer_id || "");
+  const [tasks, appointments, notes, customer] = await Promise.all([
+    db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
+    db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
+    db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
+    customerId
+      ? db.prepare("SELECT * FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
+        .bind(customerId, identity.uid).first<Record<string, unknown>>()
+      : Promise.resolve(null),
+  ]);
+  const job = indexedJob(row);
+  return { customer: customer ? indexedCustomer(customer) : null, job: { ...job,
+    tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
+    appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at, endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes })),
+    notes: notes.results.map((item: Record<string, unknown>) => ({ id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status, createdAt: item.created_at, updatedAt: item.updated_at })),
+  } };
+}
+
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
   const job = await db.prepare(`SELECT id, source_type, assignee_member_id, revision FROM trade_work_orders
     WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
@@ -218,6 +377,17 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await crmIdentity(request);
+    const url = new URL(request.url);
+    const mode = cleanAdminText(url.searchParams.get("mode"), 20);
+    const resource = cleanAdminText(url.searchParams.get("resource"), 20);
+    if (mode === "index" && ["jobs", "customers"].includes(resource)) {
+      return adminJson({ ok: true, ...(await crmIndex(identity, url, resource)) });
+    }
+    if (mode === "detail" && ["job", "customer"].includes(resource)) {
+      const id = cleanAdminText(url.searchParams.get("id"), 180);
+      if (!id) return adminJson({ ok: false, error: "Choose a CRM record." }, 400);
+      return adminJson({ ok: true, ...(await crmDetail(identity, resource, id)) });
+    }
     return adminJson({ ok: true, ...(await crmPayload(identity)) });
   } catch (error) { return errorResponse(error); }
 }
@@ -377,6 +547,47 @@ export async function PATCH(request: Request) {
     const db = getD1();
     const action = cleanAdminText(body.action, 40);
     const now = new Date().toISOString();
+
+    if (action === "bulk_set_job_priority") {
+      const ids = cleanIds(body.ids);
+      const priority = cleanAdminText(body.priority, 20);
+      if (!ids.length || !PRIORITIES.has(priority)) return adminJson({ ok: false, error: "Select jobs and choose a valid priority." }, 400);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = await db.prepare(`SELECT id, revision, assignee_member_id FROM trade_work_orders
+        WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND id IN (${placeholders})`)
+        .bind(identity.uid, ...ids).all<Record<string, unknown>>();
+      if (rows.results.length !== ids.length) return adminJson({ ok: false, error: "One or more selected jobs are no longer available." }, 409);
+      const statements = [];
+      for (const row of rows.results) {
+        const workOrderId = String(row.id); const revision = nextJobRevision(row.revision);
+        statements.push(db.prepare("UPDATE trade_work_orders SET priority = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(priority, revision, now, workOrderId, identity.uid));
+        statements.push(db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+          VALUES (?, ?, ?, 'bulk_priority_updated', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `Priority changed to ${priority}.`, now));
+        statements.push(...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision, changedAt: now, audienceMemberId: String(row.assignee_member_id || "") }));
+      }
+      await db.batch(statements);
+      return adminJson({ ok: true, updated: rows.results.length });
+    }
+
+    if (action === "bulk_archive_customers") {
+      const ids = cleanIds(body.ids);
+      if (!ids.length) return adminJson({ ok: false, error: "Select customers to archive." }, 400);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = await db.prepare(`SELECT c.id,
+        (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
+          WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active'
+            AND w.stage NOT IN ('completed', 'cancelled')) active_jobs
+        FROM trade_crm_customers c WHERE c.firebase_uid = ? AND c.record_status = 'active' AND c.id IN (${placeholders})`)
+        .bind(identity.uid, ...ids).all<Record<string, unknown>>();
+      if (rows.results.length !== ids.length) return adminJson({ ok: false, error: "One or more selected customers are no longer available." }, 409);
+      if (rows.results.some((row: Record<string, unknown>) => Number(row.active_jobs || 0) > 0)) {
+        return adminJson({ ok: false, error: "Customers with active jobs cannot be archived. Complete or unlink those jobs first." }, 409);
+      }
+      await db.prepare(`UPDATE trade_crm_customers SET record_status = 'archived', updated_at = ?
+        WHERE firebase_uid = ? AND record_status = 'active' AND id IN (${placeholders})`).bind(now, identity.uid, ...ids).run();
+      return adminJson({ ok: true, archived: ids.length });
+    }
 
     if (action === "update_customer") {
       const customerId = cleanAdminText(body.customerId, 180);
