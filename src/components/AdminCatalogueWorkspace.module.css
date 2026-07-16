@@ -1,0 +1,28 @@
+.workspace :global(.admin-catalogue-list) { background: #fff; border: 1px solid var(--color-aea-line); border-radius: 13px; display: block; overflow-x: auto; }
+.workspace :global(.admin-catalogue-columns) { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .58rem; font-weight: 950; gap: 10px; grid-template-columns: 175px 105px 125px minmax(180px, 1fr) 130px 115px 105px 100px 90px 90px 95px 95px 80px 95px; letter-spacing: .045em; min-width: 1650px; padding: 10px 12px; text-transform: uppercase; }
+.workspace :global(.admin-catalogue-list > article) { align-items: center; border: 0; border-bottom: 1px solid var(--color-aea-line); border-radius: 0; display: grid; gap: 10px; grid-template-columns: 175px 105px 125px minmax(180px, 1fr) 130px 115px 105px 100px 90px 90px 95px 95px 80px 95px; min-width: 1650px; padding: 10px 12px; }
+.workspace :global(.admin-catalogue-list > article:last-child) { border-bottom: 0; }
+.workspace :global(.admin-catalogue-list > article > span), .workspace :global(.admin-catalogue-list > article > b), .workspace :global(.admin-catalogue-list > article > strong) { color: var(--color-aea-muted); display: block; font-size: .63rem; font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace :global(.admin-catalogue-list > article > b) { color: var(--color-aea-green-dark); }
+.workspace :global(.admin-catalogue-list > article > strong) { color: var(--color-aea-ink); }
+.workspace :global(.admin-catalogue-list .admin-synthetic-marker) { margin-left: 5px; }
+.workspace :global(.admin-product-review-details) { grid-column: 14; }
+.workspace :global(.admin-product-review-details > summary) { color: var(--color-aea-green-dark); cursor: pointer; font-size: .6rem; font-weight: 900; }
+.workspace :global(.admin-product-review-details[open]) { background: #f7fbf9; border-radius: 10px; grid-column: 1 / -1; padding: 11px; }
+.workspace :global(.admin-product-review) { background: #f7fbf9; border-radius: 10px; display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; padding: 12px; }
+.workspace :global(.admin-product-review label) { color: var(--color-aea-ink); display: grid; font-size: .6rem; font-weight: 850; gap: 5px; }
+.workspace :global(.admin-product-review label.full), .workspace :global(.admin-product-review button) { grid-column: 1 / -1; }
+.workspace :global(.admin-product-review select), .workspace :global(.admin-product-review textarea) { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: var(--color-aea-text); min-height: 38px; padding: 7px 9px; width: 100%; }
+.workspace :global(.admin-product-review textarea) { min-height: 70px; resize: vertical; }
+.workspace :global(.admin-product-review button) { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .64rem; font-weight: 850; justify-self: start; padding: 9px 12px; }
+.workspace :global(.admin-product-review-details .admin-product-review) { margin-top: 10px; }
+
+@media (max-width: 780px) {
+  .workspace :global(.admin-catalogue-columns) { display: none; }
+  .workspace :global(.admin-catalogue-list > article) { gap: 10px 14px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-width: 0; padding: 14px; }
+  .workspace :global(.admin-product-review-details) { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .workspace :global(.admin-catalogue-list > article), .workspace :global(.admin-product-review) { grid-template-columns: 1fr; }
+}

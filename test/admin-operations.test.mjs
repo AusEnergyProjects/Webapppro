@@ -28,6 +28,7 @@ const partnerOpportunities = read(
 );
 const portal = read("../src/components/AdminOperationsPortal.tsx");
 const opportunityWorkspace = read("../src/components/AdminOpportunityWorkspace.tsx");
+const catalogueWorkspace = read("../src/components/AdminCatalogueWorkspace.tsx");
 const portalPage = read("../src/app/operations/control-centre/page.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 
@@ -166,16 +167,16 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Protected download/);
   assert.match(opportunityWorkspace, /Create an opportunity/);
   assert.match(opportunityWorkspace, /Allocate nearest eligible installers/);
-  assert.match(portal, /Product catalogue and availability/);
+  assert.match(catalogueWorkspace, /Product catalogue and availability/);
   assert.match(portal, /Leads and opportunities/);
-  assert.match(portal, /Product name/);
-  assert.match(portal, /Wholesaler/);
-  assert.match(portal, /Model code/);
-  assert.match(portal, /Minimum price ex GST/);
-  assert.match(portal, /Maximum price ex GST/);
-  assert.match(portal, /Minimum order/);
-  assert.match(portal, /Lead time/);
-  assert.match(portal, /Warranty/);
+  assert.match(catalogueWorkspace, /Product name/);
+  assert.match(catalogueWorkspace, /Wholesaler/);
+  assert.match(catalogueWorkspace, /Model code/);
+  assert.match(catalogueWorkspace, /Minimum price ex GST/);
+  assert.match(catalogueWorkspace, /Maximum price ex GST/);
+  assert.match(catalogueWorkspace, /Minimum order/);
+  assert.match(catalogueWorkspace, /Lead time/);
+  assert.match(catalogueWorkspace, /Warranty/);
   assert.match(portal, /Referral rewards and eligibility/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
@@ -188,7 +189,7 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(opportunityWorkspace, /Search opportunities/);
   assert.match(portal, /Export visible partners CSV/);
   assert.match(opportunityWorkspace, /Export visible leads CSV/);
-  assert.match(portal, /Export visible products CSV/);
+  assert.match(catalogueWorkspace, /Export visible products CSV/);
   assert.match(portal, /downloadWorkspaceCsv/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
 });
@@ -205,6 +206,19 @@ test("the extracted opportunity workspace preserves filters, cursors, actions an
   assert.match(opportunityWorkspace, /api\("\/api\/admin\/opportunities\/matches"/);
   assert.match(opportunityWorkspace, /Privacy-safe summary/);
   assert.doesNotMatch(opportunityWorkspace, /household_name|customer_email|customer_phone|street_address/);
+});
+
+test("the extracted catalogue workspace preserves filters, cursors, reviews and protected boundaries", () => {
+  assert.match(portal, /<AdminCatalogueWorkspace api=\{api\} role=\{session\.role\} setStatus=\{setStatus\}/);
+  for (const parameter of ["search", "supplier", "brand", "model", "category", "stock", "review", "listing", "minPrice", "maxPrice", "synthetic", "cursor", "total"]) {
+    assert.match(catalogueWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
+  }
+  assert.match(catalogueWorkspace, /productCursors\.current\[productPage\] = next\.nextCursor/);
+  assert.match(catalogueWorkspace, /view=admin-products/);
+  assert.match(catalogueWorkspace, /method: "PATCH"[\s\S]*id: product\.id/);
+  assert.match(catalogueWorkspace, /Export visible products CSV/);
+  assert.match(catalogueWorkspace, /no household lead data/i);
+  assert.doesNotMatch(catalogueWorkspace, /customer_email|customer_phone|street_address|household_name/);
 });
 
 test("large opportunity sets use cursor pages with bounded allocation lookups", () => {

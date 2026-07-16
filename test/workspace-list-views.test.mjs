@@ -21,6 +21,7 @@ const crmUi = read("../src/components/InstallerCrmWorkspace.tsx");
 const directoryUi = read("../src/components/AdminAccountDirectory.tsx");
 const adminUi = read("../src/components/AdminOperationsPortal.tsx");
 const adminOpportunityUi = read("../src/components/AdminOpportunityWorkspace.tsx");
+const adminCatalogueUi = read("../src/components/AdminCatalogueWorkspace.tsx");
 const tableTools = read("../src/components/WorkspaceTableTools.tsx");
 
 test("role scoped list views are durable and unique per workspace", () => {
@@ -71,7 +72,7 @@ test("high volume catalogue, order and account indexes use server paging", () =>
 });
 
 test("all business and operations result lists expose consistent saved paging controls", () => {
-  for (const ui of [supplierUi, purchasingUi, crmUi, directoryUi, adminUi, adminOpportunityUi]) {
+  for (const ui of [supplierUi, purchasingUi, crmUi, directoryUi, adminUi, adminOpportunityUi, adminCatalogueUi]) {
     assert.match(ui, /WorkspaceListControls/);
   }
   assert.match(crmUi, /indexedJobs/);
@@ -87,5 +88,5 @@ test("all business and operations result lists expose consistent saved paging co
   assert.match(tableTools, /\/\^\[=\+\\-@\]\//);
   assert.match(adminUi, /admin-partners/);
   assert.match(adminOpportunityUi, /admin-opportunities/);
-  assert.match(adminUi, /admin-products/);
+  assert.match(adminCatalogueUi, /admin-products/);
 });

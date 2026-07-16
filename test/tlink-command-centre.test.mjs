@@ -11,6 +11,7 @@ const products = read("../src/components/InstallerProductMarketplace.tsx");
 const supplierProducts = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const purchasing = read("../src/components/TradePurchasingWorkspace.tsx");
 const styles = read("../src/app/globals.css");
+const adminCatalogueStyles = read("../src/components/AdminCatalogueWorkspace.module.css");
 
 test("the TLink command centre uses a bounded role scoped server search", () => {
   assert.match(dashboard, /TLinkCommandCentre/);
@@ -67,9 +68,9 @@ test("catalogue result sets default to responsive rows and columns", () => {
   assert.match(supplierProducts, /supplier-product-columns/);
   assert.match(styles, /\.marketplace-product-columns/);
   assert.match(styles, /\.supplier-product-columns/);
-  assert.match(styles, /\.admin-catalogue-columns/);
+  assert.match(adminCatalogueStyles, /\.workspace :global\(\.admin-catalogue-columns\)/);
   assert.match(styles, /grid-template-columns: var\(--marketplace-grid/);
-  assert.match(styles, /\.admin-catalogue-columns \{[^}]*gap: 10px/);
+  assert.match(adminCatalogueStyles, /\.workspace :global\(\.admin-catalogue-columns\) \{[^}]*gap: 10px/);
   assert.match(styles, /\.crm-job-columns, \.crm-job-list\.crm-record-table > article \{[^}]*gap: 10px/);
   assert.match(products, /aria-busy=\{catalogueLoading\}/);
   assert.match(products, /role="table" aria-label="Approved wholesale products"/);
