@@ -605,8 +605,6 @@ export function DirectTradeDashboard() {
               </p>
             </div>
 
-          {(isSupplier ? workspace === "account" : workspace === "account") && <PlanAccessPanel profile={profile} />}
-
           {isSupplier ? (
             <>
               <nav className="dashboard-workspace-nav" aria-label="Wholesaler workspace">
@@ -617,6 +615,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and membership</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
+              {workspace === "account" && <PlanAccessPanel profile={profile} />}
               {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="supplier"
@@ -647,6 +646,8 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Settings and membership</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
+
+              {workspace === "account" && <PlanAccessPanel profile={profile} />}
 
               {workspace === "work" && <TradeBusinessHub
                 user={user}
