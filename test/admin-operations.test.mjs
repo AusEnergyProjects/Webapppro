@@ -88,7 +88,7 @@ test("owner identity recovery is explicit, recent, password based and audited", 
   assert.match(recoveryRoute, /identity\.emailVerified/);
   assert.match(recoveryRoute, /lower\(trim\(email\)\) = \?/);
   assert.match(recoveryRoute, /identity\.signInProvider !== "password"/);
-  assert.match(recoveryRoute, /RECENT_AUTH_SECONDS = 15 \* 60/);
+  assert.match(recoveryRoute, /RECENT_AUTH_SECONDS = 60 \* 60/);
   assert.match(recoveryRoute, /firebase_uid = \?/);
   assert.match(recoveryRoute, /admin\.owner_recovery/);
   assert.match(recoveryRoute, /security\.owner_identity_recovered/);

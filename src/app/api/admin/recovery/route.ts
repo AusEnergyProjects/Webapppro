@@ -10,7 +10,7 @@ import { createAdminNotification } from "@/lib/admin-notifications";
 
 export const runtime = "edge";
 
-const RECENT_AUTH_SECONDS = 15 * 60;
+const RECENT_AUTH_SECONDS = 60 * 60;
 
 export async function POST(request: Request) {
   if (!sameOrigin(request))
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (!identity.authTime || nowSeconds - identity.authTime > RECENT_AUTH_SECONDS)
       return adminJson({
         ok: false,
-        error: "Sign out, sign in again with the recovered password, then retry within 15 minutes.",
+        error: "Sign out, sign in again with the recovered password, then retry within 60 minutes.",
       }, 403);
 
     const db = getD1();
