@@ -28,10 +28,12 @@ import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
+import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
 type Metrics = {
+  customers?: { total?: number; active?: number; projects?: number; submitted?: number };
   accounts?: {
     total?: number;
     active?: number;
@@ -259,6 +261,18 @@ function dateTime(value: unknown) {
     : date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
 }
 
+function AdminTLinkBrand({ context }: { context: string }) {
+  return (
+    <div className="admin-brand admin-tlink-brand">
+      <img src="/tlink-icon-192.png" width="42" height="42" alt="" aria-hidden="true" />
+      <div>
+        <strong>TLink</strong>
+        <small>{context}</small>
+      </div>
+    </div>
+  );
+}
+
 export function AdminOperationsPortal() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -271,7 +285,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "access"
+    "inbox" | "overview" | "directory" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -366,35 +380,48 @@ export function AdminOperationsPortal() {
 
   const loadWorkspace = useCallback(
     async (nextSession: AdminSession) => {
-      const [accountResult, opportunityResult, productResult, referralResult, enquiryResult] =
-        await Promise.all([
-          api("/api/admin/accounts"),
-          api("/api/admin/opportunities"),
-          api("/api/admin/products"),
-          api("/api/admin/referrals"),
-          api("/api/admin/product-enquiries"),
-        ]);
-      setAccounts(accountResult.accounts || []);
-      setOpportunities(opportunityResult.opportunities || []);
-      setProducts(productResult.products || []);
-      setReferrals(referralResult.referrals || []);
-      setProductEnquiries(enquiryResult.enquiries || []);
-      setProductReview(
-        Object.fromEntries(
-          (productResult.products || []).map((product: CatalogueProduct) => [
-            product.id,
-            {
-              reviewStatus: product.reviewStatus,
-              reviewNote: product.reviewNote || "",
-              listingStatus: product.listingStatus,
-            },
-          ]),
-        ),
-      );
+      const datasets = await Promise.allSettled([
+        api("/api/admin/accounts"),
+        api("/api/admin/opportunities"),
+        api("/api/admin/products"),
+        api("/api/admin/referrals"),
+        api("/api/admin/product-enquiries"),
+      ]);
+      const failures: string[] = [];
+      const [accountResult, opportunityResult, productResult, referralResult, enquiryResult] = datasets;
+      if (accountResult.status === "fulfilled") setAccounts(accountResult.value.accounts || []);
+      else failures.push("partners");
+      if (opportunityResult.status === "fulfilled") setOpportunities(opportunityResult.value.opportunities || []);
+      else failures.push("leads and opportunities");
+      if (productResult.status === "fulfilled") {
+        const nextProducts = productResult.value.products || [];
+        setProducts(nextProducts);
+        setProductReview(
+          Object.fromEntries(
+            nextProducts.map((product: CatalogueProduct) => [
+              product.id,
+              {
+                reviewStatus: product.reviewStatus,
+                reviewNote: product.reviewNote || "",
+                listingStatus: product.listingStatus,
+              },
+            ]),
+          ),
+        );
+      } else failures.push("products");
+      if (referralResult.status === "fulfilled") setReferrals(referralResult.value.referrals || []);
+      else failures.push("referrals");
+      if (enquiryResult.status === "fulfilled") setProductEnquiries(enquiryResult.value.enquiries || []);
+      else failures.push("product enquiries");
       if (nextSession.role === "owner") {
-        const adminResult = await api("/api/admin/admins");
-        setAdmins(adminResult.admins || []);
+        try {
+          const adminResult = await api("/api/admin/admins");
+          setAdmins(adminResult.admins || []);
+        } catch {
+          failures.push("operations users");
+        }
       }
+      if (failures.length) throw new Error(`${failures.join(", ")} could not be loaded.`);
     },
     [api],
   );
@@ -603,7 +630,7 @@ export function AdminOperationsPortal() {
         return;
       }
       setDirectoryTarget({ type: "customer", uid: notification.actorUid, nonce: Date.now() });
-      setTab("directory");
+      setTab("customers");
       return;
     }
     if (notification.entityType === "supplier_product") {
@@ -960,6 +987,7 @@ export function AdminOperationsPortal() {
   }
 
   const accountCounts = metrics.accounts || {};
+  const customerCounts = metrics.customers || {};
   const verificationCounts = metrics.verification || {};
   const opportunityCounts = metrics.opportunities || {};
   const matchCounts = metrics.matches || {};
@@ -1015,11 +1043,43 @@ export function AdminOperationsPortal() {
       .filter((item) => !maximumPrice || item.unitPriceCentsExGst <= maximumPrice);
   }, [productBrand, productCategory, productListingStatus, productMaximumPrice, productMinimumPrice, productModel, productReviewStatus, productSearch, productStock, productSynthetic, productWholesaler, products]);
 
+  function exportPartners() {
+    downloadWorkspaceCsv("tlink-admin-partners.csv", [
+      { key: "business", label: "Business" }, { key: "type", label: "Type" }, { key: "email", label: "Email" },
+      { key: "state", label: "State" }, { key: "postcode", label: "Postcode" }, { key: "verification", label: "Verification" },
+      { key: "account", label: "Account" }, { key: "membership", label: "Membership" }, { key: "updated", label: "Updated" },
+    ], accounts.map((account) => ({ business: account.businessName, type: account.partnerType === "supplier" ? "Wholesaler" : "Installer", email: account.email,
+      state: account.addressState, postcode: account.postcode, verification: readable(account.verificationStatus), account: readable(account.accountStatus),
+      membership: account.membershipActive ? "Paid" : "Free", updated: dateTime(account.updatedAt) })));
+  }
+
+  function exportOpportunities() {
+    downloadWorkspaceCsv("tlink-admin-leads-and-opportunities.csv", [
+      { key: "id", label: "Opportunity ID" }, { key: "title", label: "Title" }, { key: "projectType", label: "Project type" },
+      { key: "services", label: "Services" }, { key: "state", label: "State" }, { key: "postcode", label: "Postcode" },
+      { key: "status", label: "Status" }, { key: "priority", label: "Priority" }, { key: "timing", label: "Timing" },
+      { key: "assigned", label: "Assigned" }, { key: "interested", label: "Interested" }, { key: "connected", label: "Connected" }, { key: "updated", label: "Updated" },
+    ], visibleOpportunities.map((item) => ({ id: item.id, title: item.title, projectType: item.projectType, services: item.serviceCategories.map((service) => capabilityLabels[service] || readable(service)).join(", "),
+      state: item.state, postcode: item.postcode, status: readable(item.status), priority: readable(item.priority), timing: readable(item.timing), assigned: item.matchCount,
+      interested: item.interestedCount, connected: item.connectedCount, updated: dateTime(item.updatedAt) })));
+  }
+
+  function exportProducts() {
+    downloadWorkspaceCsv("tlink-admin-products.csv", [
+      { key: "wholesaler", label: "Wholesaler" }, { key: "brand", label: "Brand" }, { key: "model", label: "Model code" },
+      { key: "product", label: "Product" }, { key: "category", label: "Category" }, { key: "price", label: "Price ex GST" },
+      { key: "minimum", label: "Minimum order" }, { key: "stock", label: "Stock" }, { key: "lead", label: "Lead time days" },
+      { key: "warranty", label: "Warranty years" }, { key: "review", label: "Review" }, { key: "listing", label: "Listing" }, { key: "linked", label: "Linked kit" },
+    ], visibleProducts.map((item) => ({ wholesaler: item.supplierName, brand: item.brand, model: item.modelNumber, product: item.name, category: readable(item.category),
+      price: (item.unitPriceCentsExGst / 100).toFixed(2), minimum: item.minOrderQty, stock: readable(item.stockStatus), lead: item.leadTimeDays,
+      warranty: item.warrantyYears, review: readable(item.reviewStatus), listing: readable(item.listingStatus), linked: item.linkedCount })));
+  }
+
   if (!authReady || loading)
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <span>AEA operations</span>
+          <AdminTLinkBrand context="Operations control centre" />
           <h1>Preparing the control centre</h1>
           <p>
             Validating the signed-in account and loading the protected
@@ -1034,13 +1094,7 @@ export function AdminOperationsPortal() {
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <div className="admin-brand">
-            <span>AEA</span>
-            <div>
-              <strong>Australian Energy Assessments</strong>
-              <small>Restricted operations portal</small>
-            </div>
-          </div>
+          <AdminTLinkBrand context="Restricted operations portal" />
           <span>Authorised team access</span>
           <h1>Sign in to the operations control centre</h1>
           <p>
@@ -1109,13 +1163,7 @@ export function AdminOperationsPortal() {
     return (
       <main className="admin-shell">
         <section className="admin-auth-card">
-          <div className="admin-brand">
-            <span>AEA</span>
-            <div>
-              <strong>Operations access</strong>
-              <small>{user.email}</small>
-            </div>
-          </div>
+          <AdminTLinkBrand context={`Operations access | ${user.email || "verified account"}`} />
           {canRecoverOwner || (!canBootstrap && user.email) ? (
             <>
               <span>Verified owner recovery</span>
@@ -1189,13 +1237,7 @@ export function AdminOperationsPortal() {
   return (
     <main className="admin-shell admin-workspace">
       <header className="admin-topbar">
-        <div className="admin-brand">
-          <span>AEA</span>
-          <div>
-            <strong>Operations control centre</strong>
-            <small>Restricted workspace</small>
-          </div>
-        </div>
+        <AdminTLinkBrand context="Operations control centre" />
         <div className="admin-topbar-account">
           <a
             href="#operations-inbox"
@@ -1243,71 +1285,77 @@ export function AdminOperationsPortal() {
             <span>03</span>All accounts
           </button>
           <button
+            className={tab === "customers" ? "active" : ""}
+            onClick={() => setTab("customers")}
+          >
+            <span>04</span>Customers ({customerCounts.total || 0})
+          </button>
+          <button
             className={tab === "partners" ? "active" : ""}
             onClick={() => setTab("partners")}
           >
-            <span>04</span>Partners
+            <span>05</span>Partners ({accountCounts.total || 0})
           </button>
           <button
             className={tab === "opportunities" ? "active" : ""}
             onClick={() => setTab("opportunities")}
           >
-            <span>05</span>Opportunities
+            <span>06</span>Leads ({opportunityCounts.total || 0})
           </button>
           <button
             className={tab === "catalogue" ? "active" : ""}
             onClick={() => setTab("catalogue")}
           >
-            <span>06</span>Catalogue
+            <span>07</span>Products ({productCounts.total || 0})
           </button>
           <button
             className={tab === "enquiries" ? "active" : ""}
             onClick={() => setTab("enquiries")}
           >
-            <span>07</span>Product enquiries
+            <span>08</span>Product enquiries
           </button>
           <button
             className={tab === "handovers" ? "active" : ""}
             onClick={() => setTab("handovers")}
           >
-            <span>08</span>Handovers
+            <span>09</span>Handovers
           </button>
           <button
             className={tab === "asset-safety" ? "active" : ""}
             onClick={() => setTab("asset-safety")}
           >
-            <span>09</span>Asset safety
+            <span>10</span>Asset safety
           </button>
           <button
             className={tab === "asset-governance" ? "active" : ""}
             onClick={() => setTab("asset-governance")}
           >
-            <span>10</span>Asset governance
+            <span>11</span>Asset governance
           </button>
           <button
             className={tab === "form-governance" ? "active" : ""}
             onClick={() => setTab("form-governance")}
           >
-            <span>11</span>Field forms
+            <span>12</span>Field forms
           </button>
           <button
             className={tab === "referrals" ? "active" : ""}
             onClick={() => setTab("referrals")}
           >
-            <span>12</span>Referrals
+            <span>13</span>Referrals
           </button>
           <button
             className={tab === "field-pilot" ? "active" : ""}
             onClick={() => setTab("field-pilot")}
           >
-            <span>13</span>Field pilot
+            <span>14</span>Field pilot
           </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>14</span>Access & audit
+              <span>15</span>Access & audit
             </button>
           )}
           <aside>
@@ -1351,6 +1399,22 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
+          {tab === "customers" && (
+            <AdminAccountDirectory
+              api={api}
+              role={session.role}
+              fixedType="customer"
+              target={directoryTarget?.type === "customer" ? directoryTarget : null}
+              onManageTrade={(uid) => {
+                setTab("partners");
+                void openAccount(uid);
+              }}
+              onManageAdmin={() => {
+                if (session.role === "owner") setTab("access");
+                else setStatus("Only an owner can change operations access.");
+              }}
+            />
+          )}
           {tab === "handovers" && user && <AdminHandoverReview user={user} role={session.role} />}
           {tab === "asset-safety" && user && <AdminAssetSafety user={user} role={session.role} />}
           {tab === "asset-governance" && user && <AdminAssetGovernance user={user} role={session.role} />}
@@ -1373,11 +1437,31 @@ export function AdminOperationsPortal() {
                   <small>{notificationCounts.overdue || 0} overdue | {notificationCounts.unassigned || 0} unassigned</small>
                 </article>
                 <article>
-                  <span>Business network</span>
+                  <span>Customers</span>
+                  <strong>{customerCounts.total || 0}</strong>
+                  <small>
+                    {customerCounts.projects || 0} projects | {customerCounts.submitted || 0} active enquiries
+                  </small>
+                </article>
+                <article>
+                  <span>Partners</span>
                   <strong>{accountCounts.total || 0}</strong>
                   <small>
-                    {accountCounts.installers || 0} installers ·{" "}
-                    {accountCounts.suppliers || 0} wholesalers
+                    {accountCounts.installers || 0} installers | {accountCounts.suppliers || 0} wholesalers
+                  </small>
+                </article>
+                <article>
+                  <span>Leads and opportunities</span>
+                  <strong>{opportunityCounts.open || 0}</strong>
+                  <small>
+                    {matchCounts.interested || 0} installers interested
+                  </small>
+                </article>
+                <article>
+                  <span>Products</span>
+                  <strong>{productCounts.total || 0}</strong>
+                  <small>
+                    {productCounts.live || 0} live | {productCounts.pending || 0} awaiting review
                   </small>
                 </article>
                 <article>
@@ -1385,20 +1469,6 @@ export function AdminOperationsPortal() {
                   <strong>{verificationCounts.awaiting || 0}</strong>
                   <small>
                     {verificationCounts.approved || 0} accounts approved
-                  </small>
-                </article>
-                <article>
-                  <span>Open opportunities</span>
-                  <strong>{opportunityCounts.open || 0}</strong>
-                  <small>
-                    {matchCounts.interested || 0} installers interested
-                  </small>
-                </article>
-                <article>
-                  <span>Catalogue review</span>
-                  <strong>{productCounts.pending || 0}</strong>
-                  <small>
-                    {productCounts.live || 0} approved products live
                   </small>
                 </article>
               </section>
@@ -1573,6 +1643,7 @@ export function AdminOperationsPortal() {
                 </select>
                 <button type="submit">Apply filters</button>
               </form>
+              <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!accounts.length} onClick={exportPartners}>Export visible partners CSV</button></div>
               <div className="admin-partner-layout">
                 <section className="admin-panel admin-account-list">
                   <div className="admin-table-header">
@@ -1949,11 +2020,11 @@ export function AdminOperationsPortal() {
           {tab === "opportunities" && (
             <>
               <header className="admin-page-heading">
-                <span>Project coordination</span>
-                <h1>Opportunity workspace</h1>
+                <span>Customer demand and matching</span>
+                <h1>Leads and opportunities</h1>
                 <p>
-                  Create privacy-safe project scopes, open them for matching and
-                  assign suitable verified businesses.
+                  Review every submitted customer enquiry and privacy-safe lead,
+                  then coordinate matching with suitable verified installers.
                 </p>
               </header>
               <div className="admin-context-filter admin-opportunity-filters">
@@ -2012,6 +2083,7 @@ export function AdminOperationsPortal() {
                   </button>
                 )}
               </div>
+              <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!visibleOpportunities.length} onClick={exportOpportunities}>Export visible leads CSV</button></div>
               <div className="admin-opportunity-layout">
                 <form
                   className="admin-panel admin-opportunity-form"
@@ -2179,7 +2251,7 @@ export function AdminOperationsPortal() {
                 <section className="admin-panel admin-opportunity-list">
                   <div className="admin-panel-heading">
                     <span>Pipeline</span>
-                    <h2>Current opportunities</h2>
+                    <h2>Current leads and opportunities</h2>
                   </div>
                   {visibleOpportunities.length ? (
                     visibleOpportunities.map((opportunity) => (
@@ -2370,7 +2442,7 @@ export function AdminOperationsPortal() {
             <>
               <header className="admin-page-heading">
                 <span>Wholesaler supply network</span>
-                <h1>Catalogue review and availability</h1>
+                <h1>Product catalogue and availability</h1>
                 <p>
                   Moderate model-level products, ex-GST prices, ordering rules
                   and linked kit items. This workspace has no household lead
@@ -2429,6 +2501,7 @@ export function AdminOperationsPortal() {
                   <small>Approved and published listings only</small>
                 </article>
               </section>
+              <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!visibleProducts.length} onClick={exportProducts}>Export visible products CSV</button></div>
               <section className="admin-panel admin-catalogue-workspace">
                 <div className="admin-panel-heading">
                   <span>Catalogue controls</span>

@@ -10,7 +10,7 @@ export const TRADE_LIST_VIEWS = new Set([
   "purchasing-orders",
 ]);
 
-export const ADMIN_LIST_VIEWS = new Set(["admin-accounts"]);
+export const ADMIN_LIST_VIEWS = new Set(["admin-accounts", "admin-customers"]);
 
 type ListViewDefaults = {
   search: string;
@@ -36,6 +36,13 @@ type ListViewDefaults = {
   stock?: string;
   minPrice?: string;
   maxPrice?: string;
+  columns?: string[];
+};
+
+const columnsByView: Record<string, string[]> = {
+  "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
+  "admin-accounts": ["account", "type", "status", "updated"],
+  "admin-customers": ["account", "type", "status", "updated"],
 };
 
 const defaultsByView: Record<string, ListViewDefaults> = {
@@ -44,6 +51,7 @@ const defaultsByView: Record<string, ListViewDefaults> = {
   "installer-customers": { search: "", filter: "all", sort: "name-asc", pageSize: 25, type: "", synthetic: "" },
   "purchasing-orders": { search: "", filter: "active", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-accounts": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "admin-customers": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "customer", synthetic: "" },
 };
 
 const filtersByView: Record<string, Set<string>> = {
@@ -52,18 +60,21 @@ const filtersByView: Record<string, Set<string>> = {
   "installer-customers": new Set(["all"]),
   "purchasing-orders": new Set(["active", "claims", "complete", "all"]),
   "admin-accounts": new Set(["all", "active", "suspended", "closed"]),
+  "admin-customers": new Set(["all", "active", "suspended", "closed"]),
 };
 
 const sortsByView: Record<string, Set<string>> = {
-  "supplier-products": new Set(["updated-desc", "name-asc", "name-desc", "price-asc", "price-desc"]),
+  "supplier-products": new Set(["updated-desc", "name-asc", "name-desc", "price-asc", "price-desc", "brand-asc", "brand-desc", "model-asc", "model-desc", "category-asc", "category-desc", "stock-asc", "stock-desc", "lead-asc", "lead-desc", "warranty-asc", "warranty-desc", "listing-asc", "listing-desc", "review-asc", "review-desc"]),
   "installer-jobs": new Set(["updated-desc", "number-asc", "number-desc", "date-asc"]),
   "installer-customers": new Set(["name-asc", "name-desc", "updated-desc"]),
   "purchasing-orders": new Set(["updated-desc", "number-asc", "number-desc", "value-desc"]),
-  "admin-accounts": new Set(["updated-desc", "name-asc", "name-desc"]),
+  "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
+  "admin-customers": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
 };
 
 export function defaultListView(viewKey: string): ListViewDefaults {
-  return { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
+  const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
+  return columnsByView[viewKey] ? { ...defaults, columns: [...columnsByView[viewKey]] } : defaults;
 }
 
 export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
@@ -95,6 +106,11 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     stock: cleanAdminText(raw.stock, 30),
     minPrice: cleanAdminText(raw.minPrice, 20),
     maxPrice: cleanAdminText(raw.maxPrice, 20),
+    columns: columnsByView[viewKey]
+      ? Array.isArray(raw.columns)
+        ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)
+        : [...columnsByView[viewKey]]
+      : undefined,
   };
 }
 

@@ -25,7 +25,9 @@ export function adminError(error: unknown) {
   if (code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Verify the account email before using operations access." }, 403);
   if (code === "ADMIN_SUSPENDED") return adminJson({ ok: false, error: "This operations account is suspended." }, 403);
   if (code === "ROLE_REQUIRED") return adminJson({ ok: false, error: "Your operations role does not permit this action." }, 403);
-  return adminJson({ ok: false, error: "This account does not have operations access." }, 403);
+  if (code === "ADMIN_REQUIRED") return adminJson({ ok: false, error: "This account does not have operations access." }, 403);
+  console.error("Operations API failure", error);
+  return adminJson({ ok: false, error: "Operations data could not be loaded. Try again or check the service health." }, 500);
 }
 
 export async function requireAdminIdentity(request: Request, allowedRoles: readonly AdminRole[] = ADMIN_ROLES): Promise<AdminIdentity> {

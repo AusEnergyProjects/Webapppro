@@ -16,6 +16,7 @@ const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const purchasingUi = read("../src/components/TradePurchasingWorkspace.tsx");
 const crmUi = read("../src/components/InstallerCrmWorkspace.tsx");
 const directoryUi = read("../src/components/AdminAccountDirectory.tsx");
+const tableTools = read("../src/components/WorkspaceTableTools.tsx");
 
 test("role scoped list views are durable and unique per workspace", () => {
   assert.match(schema, /sqliteTable\("workspace_list_views"/);
@@ -23,6 +24,8 @@ test("role scoped list views are durable and unique per workspace", () => {
   assert.match(shared, /ON CONFLICT\(owner_uid, owner_scope, view_key\) DO UPDATE/);
   assert.match(shared, /WHERE owner_uid = \? AND owner_scope = \? AND view_key = \?/);
   assert.doesNotMatch(shared, /localStorage|sessionStorage/);
+  assert.match(shared, /columnsByView/);
+  assert.match(shared, /raw\.columns/);
   const database = new DatabaseSync(":memory:");
   for (const statement of migration.split("--> statement-breakpoint")) if (statement.trim()) database.exec(statement);
   const columns = database.prepare("PRAGMA table_info(workspace_list_views)").all().map((column) => column.name);
@@ -38,6 +41,9 @@ test("saved views enforce trade and operations account boundaries", () => {
   assert.match(adminRoute, /sameOrigin/);
   assert.match(tradeRoute, /TRADE_LIST_VIEWS/);
   assert.match(adminRoute, /ADMIN_LIST_VIEWS/);
+  assert.match(shared, /"admin-customers"/);
+  assert.match(directoryUi, /fixedType/);
+  assert.match(directoryUi, /effectiveType/);
 });
 
 test("high volume catalogue, order and account indexes use server paging", () => {
@@ -61,4 +67,9 @@ test("all business and operations result lists expose consistent saved paging co
   assert.match(crmUi, /customerPagination/);
   assert.match(supplierUi, /supplier-catalogue-filters/);
   assert.match(purchasingUi, /purchasing-list-filters/);
+  assert.match(supplierUi, /WorkspaceTableTools/);
+  assert.match(directoryUi, /WorkspaceTableTools/);
+  assert.match(tableTools, /Pin left/);
+  assert.match(tableTools, /Export visible \{noun\} CSV/);
+  assert.match(tableTools, /\/\^\[=\+\\-@\]\//);
 });

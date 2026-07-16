@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
+import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 
@@ -65,17 +66,26 @@ type AccountDetail = {
 
 type Counts = { total: number; customers: number; installers: number; suppliers: number; admins: number };
 type Pagination = { page: number; pageSize: number; total: number; pageCount: number };
+type DirectoryColumn = "account" | "type" | "status" | "updated";
 
 type Props = {
   api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
   role: AdminRole;
   target?: { type: string; uid: string; nonce: number } | null;
+  fixedType?: DirectoryAccount["accountType"];
   onManageTrade: (uid: string) => void;
   onManageAdmin: () => void;
 };
 
 const emptyCounts: Counts = { total: 0, customers: 0, installers: 0, suppliers: 0, admins: 0 };
 const emptyPagination: Pagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
+const directoryColumns: Array<{ key: DirectoryColumn; label: string; width: string }> = [
+  { key: "account", label: "Account", width: "minmax(240px, 1.3fr)" },
+  { key: "type", label: "Type", width: "minmax(100px, .55fr)" },
+  { key: "status", label: "Status", width: "minmax(110px, .6fr)" },
+  { key: "updated", label: "Updated", width: "minmax(140px, .75fr)" },
+];
+const defaultDirectoryColumns = directoryColumns.map((column) => column.key);
 
 function readable(value: unknown) {
   return String(value || "Not set").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -97,13 +107,15 @@ function accountLabel(type: string) {
   return readable(type);
 }
 
-export function AdminAccountDirectory({ api, role, target, onManageTrade, onManageAdmin }: Props) {
+export function AdminAccountDirectory({ api, role, target, fixedType, onManageTrade, onManageAdmin }: Props) {
   const [accounts, setAccounts] = useState<DirectoryAccount[]>([]);
   const [counts, setCounts] = useState<Counts>(emptyCounts);
   const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
+  const [type, setType] = useState(fixedType || "");
   const [accountStatus, setAccountStatus] = useState("");
   const [synthetic, setSynthetic] = useState("");
+  const [sort, setSort] = useState("updated-desc");
+  const [visibleColumns, setVisibleColumns] = useState<DirectoryColumn[]>(defaultDirectoryColumns);
   const [selected, setSelected] = useState<AccountDetail | null>(null);
   const [note, setNote] = useState("");
   const [status, setStatus] = useState("");
@@ -113,13 +125,16 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   const [viewReady, setViewReady] = useState(false);
   const [viewSaved, setViewSaved] = useState(false);
   const [viewBusy, setViewBusy] = useState(false);
+  const viewKey = fixedType === "customer" ? "admin-customers" : "admin-accounts";
+  const effectiveType = fixedType || type;
 
   const loadList = useCallback(async (announce = false) => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
-    if (type) params.set("type", type);
+    if (effectiveType) params.set("type", effectiveType);
     if (accountStatus) params.set("status", accountStatus);
     if (synthetic) params.set("synthetic", synthetic);
+    params.set("sort", sort);
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
     try {
@@ -133,7 +148,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The account directory could not be loaded.");
     }
-  }, [accountStatus, api, page, pageSize, search, synthetic, type]);
+  }, [accountStatus, api, effectiveType, page, pageSize, search, sort, synthetic]);
 
   const openAccount = useCallback(async (accountType: string, uid: string) => {
     setStatus("Opening the audited account record...");
@@ -149,18 +164,20 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
 
   useEffect(() => {
     let active = true;
-    void api("/api/admin/list-views?view=admin-accounts").then((result) => {
+    void api(`/api/admin/list-views?view=${viewKey}`).then((result) => {
       if (!active) return;
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
       setSearch(preferences.search || "");
       setAccountStatus(preferences.filter && preferences.filter !== "all" ? preferences.filter : "");
-      setType(preferences.type || "");
+      setType(fixedType || preferences.type || "");
       setSynthetic(preferences.synthetic || "");
+      setSort(preferences.sort || "updated-desc");
+      setVisibleColumns(Array.isArray(preferences.columns) && preferences.columns.length ? preferences.columns.filter((key): key is DirectoryColumn => defaultDirectoryColumns.includes(key as DirectoryColumn)) : defaultDirectoryColumns);
       setPageSize([25, 50, 100].includes(Number(preferences.pageSize)) ? Number(preferences.pageSize) : 25);
       setViewSaved(Boolean(result.saved));
     }).catch(() => undefined).finally(() => active && setViewReady(true));
     return () => { active = false; };
-  }, [api]);
+  }, [api, fixedType, viewKey]);
   useEffect(() => {
     if (!viewReady) return;
     const timer = window.setTimeout(() => void loadList(), 0);
@@ -181,7 +198,7 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   async function saveView() {
     setViewBusy(true);
     try {
-      await api("/api/admin/list-views?view=admin-accounts", { method: "PATCH", body: JSON.stringify({ search, filter: accountStatus || "all", sort: "updated-desc", pageSize, type, synthetic }) });
+      await api(`/api/admin/list-views?view=${viewKey}`, { method: "PATCH", body: JSON.stringify({ search, filter: accountStatus || "all", sort, pageSize, type: effectiveType, synthetic, columns: visibleColumns }) });
       setViewSaved(true);
       setStatus("Default account view saved.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The default account view could not be saved."); }
@@ -191,9 +208,10 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
   async function resetView() {
     setViewBusy(true);
     try {
-      const result = await api("/api/admin/list-views?view=admin-accounts", { method: "DELETE" });
+      const result = await api(`/api/admin/list-views?view=${viewKey}`, { method: "DELETE" });
       const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
-      setSearch(preferences.search || ""); setAccountStatus(""); setType(""); setSynthetic("");
+      setSearch(preferences.search || ""); setAccountStatus(""); setType(fixedType || ""); setSynthetic(""); setSort(preferences.sort || "updated-desc");
+      setVisibleColumns(Array.isArray(preferences.columns) && preferences.columns.length ? preferences.columns.filter((key): key is DirectoryColumn => defaultDirectoryColumns.includes(key as DirectoryColumn)) : defaultDirectoryColumns);
       setPageSize(Number(preferences.pageSize) || 25); setPage(1); setViewSaved(false);
       setStatus("Default account view reset.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The account view could not be reset."); }
@@ -231,12 +249,47 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
     }
   }
 
+  const orderedDirectoryColumns = visibleColumns
+    .map((key) => directoryColumns.find((column) => column.key === key))
+    .filter((column): column is (typeof directoryColumns)[number] => Boolean(column));
+  const directoryGridStyle = { gridTemplateColumns: orderedDirectoryColumns.map((column) => column.width).join(" "), minWidth: `${Math.max(620, orderedDirectoryColumns.length * 145)}px` } as CSSProperties;
+
+  function changeDirectorySort(column: DirectoryColumn) {
+    const sorts: Partial<Record<DirectoryColumn, [string, string]>> = {
+      account: ["name-asc", "name-desc"], type: ["type-asc", "type-desc"], status: ["status-asc", "status-desc"], updated: ["updated-desc", "updated-asc"],
+    };
+    const options = sorts[column];
+    if (!options) return;
+    setSort((current) => current === options[0] ? options[1] : options[0]);
+    setPage(1);
+  }
+
+  function directorySortState(column: DirectoryColumn): "ascending" | "descending" | "none" {
+    const prefix = column === "account" ? "name" : column;
+    if (!sort.startsWith(prefix)) return "none";
+    return sort.endsWith("desc") ? "descending" : "ascending";
+  }
+
+  function exportDirectory() {
+    downloadWorkspaceCsv(`tlink-admin-${fixedType === "customer" ? "customers" : "accounts"}-page-${page}.csv`, orderedDirectoryColumns, accounts.map((account) => ({
+      account: [account.name, account.email, account.addressState, account.postcode].filter(Boolean).join(" | "),
+      type: accountLabel(account.accountType), status: readable(account.accountStatus), updated: dateTime(account.updatedAt),
+    })));
+  }
+
+  function directoryCell(account: DirectoryAccount, column: DirectoryColumn, restricted: boolean) {
+    if (column === "account") return <span key={column}><strong>{account.name}{account.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</strong><small>{account.email || (restricted ? "Private record restricted" : account.secondary)}{account.postcode ? <> | {account.addressState} {account.postcode}</> : null}</small></span>;
+    if (column === "type") return <span key={column}>{accountLabel(account.accountType)}</span>;
+    if (column === "status") return <span key={column} className={`admin-pill admin-pill-${account.accountStatus}`}>{readable(account.accountStatus)}</span>;
+    return <span key={column}>{dateTime(account.updatedAt)}</span>;
+  }
+
   return (
     <>
       <header className="admin-page-heading">
-        <span>Whole platform directory</span>
-        <h1>All accounts</h1>
-        <p>Find customer, installer, wholesaler and operations accounts in one place, then open the appropriate audited support or moderation record.</p>
+        <span>{fixedType === "customer" ? "Customer directory" : "Whole platform directory"}</span>
+        <h1>{fixedType === "customer" ? "Customer accounts and projects" : "All accounts"}</h1>
+        <p>{fixedType === "customer" ? "Find every household account, open its protected support record and review its saved projects, enquiry status and quote history." : "Find customer, installer, wholesaler and operations accounts in one place, then open the appropriate audited support or moderation record."}</p>
       </header>
       <div className="admin-account-security-note">
         <strong>Safe account access</strong>
@@ -251,13 +304,13 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
       </section>
       <form className="admin-filterbar" onSubmit={submitFilters}>
         <input aria-label="Search all accounts" placeholder="Name, email, contact or postcode" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <select aria-label="Account type" value={type} onChange={(event) => setType(event.target.value)}>
+        {!fixedType && <select aria-label="Account type" value={type} onChange={(event) => setType(event.target.value)}>
           <option value="">All account types</option>
           <option value="customer">Customers</option>
           <option value="installer">Installers</option>
           <option value="supplier">Wholesalers</option>
           <option value="admin">Operations users</option>
-        </select>
+        </select>}
         <select aria-label="Account status" value={accountStatus} onChange={(event) => setAccountStatus(event.target.value)}>
           <option value="">All account states</option>
           <option value="active">Active</option>
@@ -273,18 +326,16 @@ export function AdminAccountDirectory({ api, role, target, onManageTrade, onMana
       </form>
       <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
         onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveView()} onReset={() => void resetView()} />
+      <WorkspaceTableTools columns={directoryColumns} visibleKeys={visibleColumns} onVisibleKeys={(keys) => setVisibleColumns(keys as DirectoryColumn[])} onExport={exportDirectory} exportDisabled={!accounts.length} noun="accounts" />
       <div className="admin-directory-layout">
         <section className="admin-panel admin-directory-list">
-          <div className="admin-table-header"><span>Account</span><span>Type</span><span>Status</span><span>Updated</span></div>
+          <div className="admin-table-header" style={directoryGridStyle}>{orderedDirectoryColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={directorySortState(column.key)}><button type="button" className="workspace-sort-header" onClick={() => changeDirectorySort(column.key)}>{column.label}</button></span>)}</div>
           {accounts.length ? accounts.map((account) => {
             const restricted = account.accountType === "customer" && role === "reviewer";
             return (
-              <button key={account.accountKey} type="button" disabled={restricted} className={selected?.account.firebaseUid === account.firebaseUid ? "selected" : ""}
+              <button key={account.accountKey} type="button" disabled={restricted} style={directoryGridStyle} className={selected?.account.firebaseUid === account.firebaseUid ? "selected" : ""}
                 onClick={() => void openAccount(account.accountType, account.firebaseUid)}>
-                <span><strong>{account.name}{account.isSynthetic && <b className="admin-synthetic-marker">Demo</b>}</strong><small>{account.email || (restricted ? "Private record restricted" : account.secondary)}{account.postcode ? <><br />{account.addressState} {account.postcode}</> : null}</small></span>
-                <span>{accountLabel(account.accountType)}</span>
-                <span className={`admin-pill admin-pill-${account.accountStatus}`}>{readable(account.accountStatus)}</span>
-                <span>{dateTime(account.updatedAt)}</span>
+                {visibleColumns.map((column) => directoryCell(account, column, restricted))}
               </button>
             );
           }) : <div className="admin-empty"><strong>No matching accounts</strong><p>Change the filters to broaden the directory.</p></div>}

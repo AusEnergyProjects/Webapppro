@@ -182,6 +182,7 @@ export async function GET(request: Request) {
     const type = cleanAdminText(url.searchParams.get("type"), 30);
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
+    const sort = cleanAdminText(url.searchParams.get("sort"), 30) || "updated-desc";
     const requestedPage = Number(url.searchParams.get("page"));
     const requestedPageSize = Number(url.searchParams.get("pageSize"));
     const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
@@ -211,9 +212,15 @@ export async function GET(request: Request) {
       bindings.push(`%${search}%`);
     }
     const where = conditions.join(" AND ");
+    const orderBy: Record<string, string> = {
+      "updated-desc": "updated_at DESC", "updated-asc": "updated_at ASC",
+      "name-asc": "name COLLATE NOCASE ASC, updated_at DESC", "name-desc": "name COLLATE NOCASE DESC, updated_at DESC",
+      "type-asc": "account_type COLLATE NOCASE ASC, name COLLATE NOCASE ASC", "type-desc": "account_type COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+      "status-asc": "account_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC", "status-desc": "account_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+    };
     const [filteredCount, accountRows, globalCounts] = await Promise.all([
       db.prepare(`SELECT COUNT(*) total FROM ${union} directory WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
-      db.prepare(`SELECT * FROM ${union} directory WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+      db.prepare(`SELECT * FROM ${union} directory WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
         .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_type = 'customer' THEN 1 ELSE 0 END) customers,

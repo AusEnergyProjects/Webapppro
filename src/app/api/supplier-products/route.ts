@@ -186,6 +186,22 @@ async function cataloguePage(firebaseUid: string, url: URL) {
     "name-desc": "name COLLATE NOCASE DESC, model_number COLLATE NOCASE ASC",
     "price-asc": "unit_price_cents_ex_gst ASC, name COLLATE NOCASE ASC",
     "price-desc": "unit_price_cents_ex_gst DESC, name COLLATE NOCASE ASC",
+    "brand-asc": "brand COLLATE NOCASE ASC, model_number COLLATE NOCASE ASC",
+    "brand-desc": "brand COLLATE NOCASE DESC, model_number COLLATE NOCASE ASC",
+    "model-asc": "model_number COLLATE NOCASE ASC",
+    "model-desc": "model_number COLLATE NOCASE DESC",
+    "category-asc": "category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+    "category-desc": "category COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+    "stock-asc": "stock_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+    "stock-desc": "stock_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+    "lead-asc": "lead_time_days ASC, name COLLATE NOCASE ASC",
+    "lead-desc": "lead_time_days DESC, name COLLATE NOCASE ASC",
+    "warranty-asc": "warranty_years ASC, name COLLATE NOCASE ASC",
+    "warranty-desc": "warranty_years DESC, name COLLATE NOCASE ASC",
+    "listing-asc": "listing_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+    "listing-desc": "listing_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+    "review-asc": "review_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+    "review-desc": "review_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
   };
   const where = conditions.join(" AND ");
   const db = getD1();

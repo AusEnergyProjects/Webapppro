@@ -3,6 +3,7 @@
 import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
+import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
 
 type MarketplaceProduct = {
   id: string;
@@ -323,12 +324,51 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       ? current.length === 1 ? current : current.filter((item) => item !== column)
       : [...current, column]);
   }
-  const gridTemplate = useMemo(() => columnOptions
-    .filter((column) => visibleColumns.includes(column.key))
-    .map((column) => column.width).join(" "), [visibleColumns]);
+  const orderedColumns = useMemo(() => visibleColumns
+    .map((key) => columnOptions.find((column) => column.key === key))
+    .filter((column): column is (typeof columnOptions)[number] => Boolean(column)), [visibleColumns]);
+  const gridTemplate = useMemo(() => orderedColumns
+    .map((column) => column.width).join(" "), [orderedColumns]);
   const productGridStyle = { "--marketplace-grid": gridTemplate } as CSSProperties;
   const resultStart = totalProducts ? (page - 1) * pageSize + 1 : 0;
   const resultEnd = Math.min(page * pageSize, totalProducts);
+
+  function changeColumnSort(column: CatalogueColumn) {
+    const sortByColumn: Partial<Record<CatalogueColumn, [string, string]>> = {
+      supplier: ["supplier-asc", "supplier-asc"], brand: ["brand-asc", "brand-asc"],
+      model: ["model-asc", "model-asc"], name: ["name-asc", "name-desc"],
+      price: ["price-asc", "price-desc"], lead: ["lead-asc", "lead-asc"],
+    };
+    const options = sortByColumn[column];
+    if (!options) return;
+    setSort((current) => current === options[0] ? options[1] : options[0]);
+    setPage(1);
+  }
+
+  function columnSortState(column: CatalogueColumn): "ascending" | "descending" | "none" {
+    const prefixByColumn: Partial<Record<CatalogueColumn, string>> = { supplier: "supplier", brand: "brand", model: "model", name: "name", price: "price", lead: "lead" };
+    const prefix = prefixByColumn[column];
+    if (!prefix || !sort.startsWith(prefix)) return "none";
+    return sort.endsWith("desc") ? "descending" : "ascending";
+  }
+
+  function exportProducts() {
+    const exportColumns = orderedColumns.filter((column) => column.key !== "actions");
+    downloadWorkspaceCsv(`tlink-installer-products-page-${page}.csv`, exportColumns, products.map((product) => ({
+      supplier: product.supplierName,
+      brand: product.brand,
+      model: product.modelNumber,
+      name: product.name,
+      category: categoryLabels[product.category] || readable(product.category),
+      price: (product.unitPriceCentsExGst / 100).toFixed(2),
+      ordering: `Minimum ${product.minOrderQty} ${product.unitLabel}; multiples of ${product.orderIncrement}`,
+      stock: readable(product.stockStatus),
+      lead: product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now",
+      warranty: product.warrantyYears ? `${product.warrantyYears} years` : "Not stated",
+      states: product.serviceStates.join(", "),
+      kit: product.dependencies.map((item) => `${item.relationship}: ${item.brand} ${item.modelNumber}`).join(" | "),
+    })));
+  }
 
   async function saveView() {
     setBusy(true);
@@ -516,30 +556,38 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
                 {(activeFilterCount > 0 || search) && <button type="button" onClick={clearFilters}>Clear all filters</button>}
               </div>
             </div>
+            <WorkspaceTableTools
+              columns={columnOptions}
+              visibleKeys={visibleColumns}
+              onVisibleKeys={(keys) => setVisibleColumns(keys as CatalogueColumn[])}
+              onExport={exportProducts}
+              exportDisabled={!products.length}
+              noun="products"
+            />
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {products.length ? (
             <div className="marketplace-product-grid">
-              <div className="marketplace-product-columns" aria-hidden="true" style={productGridStyle}>
-                {columnOptions.filter((column) => visibleColumns.includes(column.key)).map((column) => <span key={column.key}>{column.label}</span>)}
+              <div className="marketplace-product-columns" role="row" style={productGridStyle}>
+                {orderedColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={columnSortState(column.key)}>{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>
               {products.map((product) => {
                 const selected = activeList?.items.some((item) => item.productId === product.id);
                 return (
                   <article key={product.id} style={productGridStyle}>
-                    {visibleColumns.includes("supplier") && <strong className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>}
-                    {visibleColumns.includes("brand") && <span className="marketplace-table-cell" title={product.brand}>{product.brand}</span>}
-                    {visibleColumns.includes("model") && <span className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>}
-                    {visibleColumns.includes("name") && <strong className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>}
-                    {visibleColumns.includes("category") && <span className="marketplace-table-cell" title={categoryLabels[product.category] || readable(product.category)}>{categoryLabels[product.category] || readable(product.category)}</span>}
-                    {visibleColumns.includes("price") && <strong className="marketplace-table-cell marketplace-price-value">{money.format(product.unitPriceCentsExGst / 100)}</strong>}
-                    {visibleColumns.includes("ordering") && <span className="marketplace-table-cell" title={`Minimum ${product.minOrderQty} ${product.unitLabel}; order in multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>}
-                    {visibleColumns.includes("stock") && <span className={`marketplace-table-cell marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>}
-                    {visibleColumns.includes("lead") && <span className="marketplace-table-cell">{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>}
-                    {visibleColumns.includes("warranty") && <span className="marketplace-table-cell">{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>}
-                    {visibleColumns.includes("states") && <span className="marketplace-table-cell" title={product.serviceStates.join(", ")}>{product.serviceStates.length ? product.serviceStates.join(", ") : "Confirm"}</span>}
-                    {visibleColumns.includes("kit") && (product.dependencies.length > 0 ? (
-                      <details className="marketplace-kit-cell">
+                    {orderedColumns.map((column) => column.key === "supplier" ? <strong key={column.key} className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>
+                      : column.key === "brand" ? <span key={column.key} className="marketplace-table-cell" title={product.brand}>{product.brand}</span>
+                      : column.key === "model" ? <span key={column.key} className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>
+                      : column.key === "name" ? <strong key={column.key} className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>
+                      : column.key === "category" ? <span key={column.key} className="marketplace-table-cell" title={categoryLabels[product.category] || readable(product.category)}>{categoryLabels[product.category] || readable(product.category)}</span>
+                      : column.key === "price" ? <strong key={column.key} className="marketplace-table-cell marketplace-price-value">{money.format(product.unitPriceCentsExGst / 100)}</strong>
+                      : column.key === "ordering" ? <span key={column.key} className="marketplace-table-cell" title={`Minimum ${product.minOrderQty} ${product.unitLabel}; order in multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>
+                      : column.key === "stock" ? <span key={column.key} className={`marketplace-table-cell marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>
+                      : column.key === "lead" ? <span key={column.key} className="marketplace-table-cell">{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
+                      : column.key === "warranty" ? <span key={column.key} className="marketplace-table-cell">{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>
+                      : column.key === "states" ? <span key={column.key} className="marketplace-table-cell" title={product.serviceStates.join(", ")}>{product.serviceStates.length ? product.serviceStates.join(", ") : "Confirm"}</span>
+                      : column.key === "kit" ? product.dependencies.length > 0 ? (
+                      <details key={column.key} className="marketplace-kit-cell">
                         <summary>{product.dependencies.length} linked kit item{product.dependencies.length === 1 ? "" : "s"}</summary>
                         {product.dependencies.map((item) => (
                           <div key={`${item.productId}-${item.relationship}`}>
@@ -549,14 +597,14 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
                           </div>
                         ))}
                       </details>
-                    ) : <span className="marketplace-kit-empty marketplace-table-cell">None</span>)}
-                    {visibleColumns.includes("actions") && <div className="marketplace-product-actions">
+                    ) : <span key={column.key} className="marketplace-kit-empty marketplace-table-cell">None</span>
+                      : column.key === "actions" ? <div key={column.key} className="marketplace-product-actions">
                       <button type="button" disabled={busy || selected || activeList?.status !== "draft"} onClick={() => void addProduct(product)}>
                         {selected ? "Added to list" : "Add to project list"}
                       </button>
                       {product.datasheetUrl && <a href={product.datasheetUrl} target="_blank" rel="noreferrer">Product details</a>}
                       {product.supplierWebsite && <a href={product.supplierWebsite} target="_blank" rel="noreferrer">Wholesaler website</a>}
-                    </div>}
+                    </div> : null)}
                   </article>
                 );
               })}

@@ -62,7 +62,7 @@ function parseColumns(value: unknown) {
     try { values = JSON.parse(value); } catch { values = []; }
   }
   if (!Array.isArray(values) || values.includes("supply")) return [...COLUMN_KEYS];
-  const selected = COLUMN_KEYS.filter((column) => values.includes(column) && COLUMN_SET.has(column));
+  const selected = values.filter((column): column is string => typeof column === "string" && COLUMN_SET.has(column));
   return selected.length ? selected : [...COLUMN_KEYS];
 }
 

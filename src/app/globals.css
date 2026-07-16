@@ -272,6 +272,32 @@
 .workspace-list-pages, .workspace-list-view-actions { align-items: center; display: flex; gap: 6px; }
 .workspace-list-controls button { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: #17664e; cursor: pointer; font-size: .58rem; font-weight: 800; min-height: 34px; padding: 6px 9px; }
 .workspace-list-controls button:disabled { cursor: not-allowed; opacity: .45; }
+.workspace-table-actionbar { align-items: flex-start; display: flex; gap: 9px; justify-content: flex-end; margin: 8px 0 12px; position: relative; }
+.workspace-column-manager { position: relative; }
+.workspace-column-manager > summary, .workspace-csv-export { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: #17664e; cursor: pointer; font-size: .6rem; font-weight: 850; min-height: 34px; padding: 8px 11px; }
+.workspace-column-manager > summary { list-style: none; }
+.workspace-column-manager > summary::-webkit-details-marker { display: none; }
+.workspace-column-manager[open] > summary { background: #eaf8f2; }
+.workspace-column-manager > div { background: #fff; border: 1px solid #b9d4ca; border-radius: 12px; box-shadow: 0 18px 44px rgba(3, 42, 48, .16); max-height: min(540px, 70vh); min-width: 390px; overflow: auto; padding: 12px; position: absolute; right: 0; top: 40px; z-index: 30; }
+.workspace-column-manager p { color: #627a72; font-size: .58rem; line-height: 1.45; margin: 0 0 8px; }
+.workspace-column-list { display: grid; gap: 5px; }
+.workspace-column-list > div { align-items: center; border-bottom: 1px solid #e4efeb; display: flex; gap: 10px; justify-content: space-between; padding: 6px 0; }
+.workspace-column-list label { align-items: center; color: #123f34; display: flex; font-size: .61rem; font-weight: 800; gap: 7px; }
+.workspace-column-list input { accent-color: #0b9367; }
+.workspace-column-list span { display: flex; gap: 4px; }
+.workspace-column-list button { background: #f3f8f6; border: 1px solid #cfe2da; border-radius: 6px; color: #17664e; cursor: pointer; font-size: .52rem; font-weight: 800; padding: 5px 6px; }
+.workspace-column-list button:disabled, .workspace-csv-export:disabled { cursor: not-allowed; opacity: .42; }
+.workspace-sort-header { align-items: center; background: transparent; border: 0; color: inherit; cursor: pointer; display: inline-flex; font: inherit; font-weight: inherit; gap: 4px; padding: 0; text-align: left; text-transform: inherit; }
+.workspace-sort-header::after { content: "↕"; font-size: .54rem; opacity: .55; }
+.workspace-sort-column[aria-sort="ascending"] .workspace-sort-header::after { content: "↑"; opacity: 1; }
+.workspace-sort-column[aria-sort="descending"] .workspace-sort-header::after { content: "↓"; opacity: 1; }
+
+@media (max-width: 640px) {
+  .workspace-table-actionbar { justify-content: stretch; }
+  .workspace-column-manager, .workspace-column-manager > summary, .workspace-csv-export { flex: 1; text-align: center; }
+  .workspace-column-manager > div { left: 0; min-width: min(88vw, 390px); right: auto; }
+  .workspace-column-list > div { align-items: flex-start; flex-direction: column; }
+}
 .workspace-list-view-actions button:first-child { background: #e2f6ed; border-color: #83bda9; }
 .purchasing-list-filters, .supplier-catalogue-filters { display: grid; gap: 8px; grid-template-columns: minmax(240px, 1fr) 190px; margin-top: 10px; }
 .purchasing-list-filters input, .purchasing-list-filters select, .supplier-catalogue-filters select, .crm-customer-toolbar input { background: #fff; border: 1px solid #a9c9bd; border-radius: 10px; color: var(--color-aea-text); min-height: 42px; padding: 8px 10px; width: 100%; }
@@ -2366,6 +2392,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
 .admin-auth-card > p { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.65; margin: 13px 0 22px; }
 .admin-brand { align-items: center; display: flex; gap: 11px; margin-bottom: 28px; }
 .admin-brand > span { align-items: center; background: linear-gradient(135deg, #0e9f68, #20cbb8); border-radius: 12px; color: #fff; display: inline-flex; font-size: .72rem; font-weight: 900; height: 42px; justify-content: center; letter-spacing: .05em; width: 42px; }
+.admin-brand > img { border-radius: 11px; display: block; height: 42px; object-fit: cover; width: 42px; }
+.admin-tlink-brand > div > strong { font-size: .84rem; letter-spacing: -.02em; }
 .admin-brand div { display: grid; }
 .admin-brand strong { color: inherit; font-size: .78rem; }
 .admin-brand small { color: #77938e; font-size: .62rem; }

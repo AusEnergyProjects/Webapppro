@@ -24,6 +24,7 @@ export type WorkspaceListPreferences = {
   stock?: string;
   minPrice?: string;
   maxPrice?: string;
+  columns?: string[];
 };
 
 export function WorkspaceListControls({

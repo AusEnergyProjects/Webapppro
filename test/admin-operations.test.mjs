@@ -54,6 +54,8 @@ test("operations portal is unlisted and every administrator API has server-side 
   assert.match(adminServer, /emailVerified/);
   assert.match(adminServer, /ADMIN_SUSPENDED/);
   assert.match(adminServer, /ROLE_REQUIRED/);
+  assert.match(adminServer, /Operations data could not be loaded/);
+  assert.match(adminServer, /code === "ADMIN_REQUIRED"/);
 });
 
 test("first owner setup is one-time, secret-backed and verified", () => {
@@ -151,6 +153,10 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
 
 test("operations UI covers accounts, evidence, projects, access and audit", () => {
   assert.match(portal, /Network overview/);
+  assert.match(portal, /tlink-icon-192\.png/);
+  assert.match(portal, /AdminTLinkBrand/);
+  assert.match(portal, /fixedType="customer"/);
+  assert.match(portal, /Promise\.allSettled/);
   assert.match(
     portal,
     /www\.gstatic\.com\/firebasejs\/ui\/2\.0\.0\/images\/auth\/google\.svg/,
@@ -159,7 +165,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Protected download/);
   assert.match(portal, /Create an opportunity/);
   assert.match(portal, /Allocate nearest eligible installers/);
-  assert.match(portal, /Catalogue review and availability/);
+  assert.match(portal, /Product catalogue and availability/);
+  assert.match(portal, /Leads and opportunities/);
   assert.match(portal, /Product name/);
   assert.match(portal, /Wholesaler/);
   assert.match(portal, /Model code/);
@@ -178,7 +185,16 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Ecosystem walkthrough/);
   assert.match(portal, /Owner recovery readiness/);
   assert.match(portal, /Search opportunities/);
+  assert.match(portal, /Export visible partners CSV/);
+  assert.match(portal, /Export visible leads CSV/);
+  assert.match(portal, /Export visible products CSV/);
+  assert.match(portal, /downloadWorkspaceCsv/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
+});
+
+test("large opportunity sets load without a parameter per opportunity", () => {
+  assert.match(opportunitiesRoute, /JOIN \(SELECT id FROM trade_opportunities ORDER BY updated_at DESC LIMIT 500\) visible/);
+  assert.doesNotMatch(opportunitiesRoute, /ids\.map\(\(\) => "\?"\)/);
 });
 
 test("the ecosystem walkthrough is read only, privacy safe and checks every platform role", () => {

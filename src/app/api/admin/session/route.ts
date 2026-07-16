@@ -22,7 +22,12 @@ export async function GET(request: Request) {
     const admin = await requireAdminIdentity(request);
     const db = getD1();
     await expireStaleOpportunities();
-    const [accounts, opportunities, matches, verification, products, notifications, audit] = await Promise.all([
+    const [customers, accounts, opportunities, matches, verification, products, notifications, audit] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
+        (SELECT COUNT(*) FROM customer_projects) projects,
+        (SELECT COUNT(*) FROM customer_projects WHERE status IN ('matching', 'quote_review')) submitted
+        FROM customer_accounts`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
         SUM(CASE WHEN account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
@@ -59,7 +64,7 @@ export async function GET(request: Request) {
     return adminJson({
       ok: true,
       admin: { email: admin.email, displayName: admin.displayName, role: admin.role },
-      metrics: { accounts, opportunities, matches, verification, products, notifications },
+      metrics: { customers, accounts, opportunities, matches, verification, products, notifications },
       audit: audit.results,
     });
   } catch (error) {

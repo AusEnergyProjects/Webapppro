@@ -143,6 +143,9 @@ test("installer catalogue filters and columns persist to the authenticated accou
   assert.match(installerUi, /Save this view/);
   assert.match(installerUi, /Restore default/);
   assert.match(installerUi, /visibleColumns/);
+  assert.match(installerUi, /WorkspaceTableTools/);
+  assert.match(installerUi, /downloadWorkspaceCsv/);
+  assert.match(marketplacePreferencesRoute, /values\.filter\(\(column\)/);
   assert.doesNotMatch(marketplacePreferencesRoute, /localStorage|sessionStorage/);
 });
 
@@ -181,6 +184,9 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(supplierUi, /Detailed catalogue filters/);
   assert.match(supplierUi, /Model code/);
   assert.match(supplierUi, /Minimum order/);
+  assert.match(supplierUi, /WorkspaceTableTools/);
+  assert.match(supplierUi, /changeCatalogueSort/);
+  assert.match(supplierRoute, /"model-asc": "model_number COLLATE NOCASE ASC"/);
   assert.match(supplierRoute, /LOWER\(model_number\) LIKE/);
   assert.match(supplierRoute, /unit_price_cents_ex_gst >=/);
   assert.match(supplierUi, /dependency_model_numbers/);

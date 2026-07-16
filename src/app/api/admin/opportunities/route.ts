@@ -36,13 +36,13 @@ export async function GET(request: Request) {
       SUM(CASE WHEN m.status = 'connected' THEN 1 ELSE 0 END) connected_count
       FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
       GROUP BY o.id ORDER BY o.updated_at DESC LIMIT 500`).all<Record<string, unknown>>();
-    const ids = rows.results.map((row) => String(row.id));
-    const allocations = ids.length ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
+    const allocations = rows.results.length ? await db.prepare(`SELECT m.id, m.opportunity_id, m.firebase_uid, m.status, m.matched_categories,
       m.distance_metres, m.allocation_rank, m.match_source, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at,
       a.business_name, a.address_state, a.postcode
       FROM trade_opportunity_matches m JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
-      WHERE m.opportunity_id IN (${ids.map(() => "?").join(",")}) AND a.partner_type = 'installer'
-      ORDER BY m.opportunity_id, m.allocation_rank, m.matched_at`).bind(...ids).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+      JOIN (SELECT id FROM trade_opportunities ORDER BY updated_at DESC LIMIT 500) visible ON visible.id = m.opportunity_id
+      WHERE a.partner_type = 'installer'
+      ORDER BY m.opportunity_id, m.allocation_rank, m.matched_at`).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
     return adminJson({ ok: true, opportunities: rows.results.map((row) => ({ ...shape(row), allocations: allocations.results.filter((item) => item.opportunity_id === row.id).map((item) => ({
       id: item.id, firebaseUid: item.firebase_uid, businessName: item.business_name, status: item.status,
       matchedCategories: parseJsonList(item.matched_categories), distanceKm: Number(item.distance_metres || 0) / 1000,

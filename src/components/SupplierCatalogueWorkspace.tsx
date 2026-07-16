@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
+import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
 
 type ProductDependency = {
   linkedProductId: string;
@@ -36,6 +37,7 @@ type SupplierProduct = {
 };
 type SupplierProductOption = Pick<SupplierProduct, "id" | "modelNumber" | "brand" | "name" | "listingStatus">;
 type CataloguePagination = { page: number; pageSize: number; total: number; pageCount: number };
+type SupplierCatalogueColumn = "brand" | "model" | "name" | "category" | "price" | "ordering" | "stock" | "lead" | "warranty" | "listing" | "review" | "kit" | "action";
 
 type SupplierEnquiry = {
   id: string;
@@ -140,6 +142,22 @@ const csvHeaders = [
   "dependency_default_quantities",
   "dependency_notes",
 ];
+const supplierCatalogueColumns: Array<{ key: SupplierCatalogueColumn; label: string; width: string }> = [
+  { key: "brand", label: "Brand", width: "110px" },
+  { key: "model", label: "Model code", width: "125px" },
+  { key: "name", label: "Product", width: "minmax(180px, 1fr)" },
+  { key: "category", label: "Category", width: "135px" },
+  { key: "price", label: "Price ex GST", width: "115px" },
+  { key: "ordering", label: "Minimum order", width: "145px" },
+  { key: "stock", label: "Stock", width: "105px" },
+  { key: "lead", label: "Lead time", width: "90px" },
+  { key: "warranty", label: "Warranty", width: "90px" },
+  { key: "listing", label: "Listing", width: "95px" },
+  { key: "review", label: "Review", width: "95px" },
+  { key: "kit", label: "Linked kit", width: "80px" },
+  { key: "action", label: "Action", width: "70px" },
+];
+const defaultSupplierColumns = supplierCatalogueColumns.map((column) => column.key);
 
 function csvLine(values: string[]) {
   return values
@@ -231,6 +249,7 @@ export function SupplierCatalogueWorkspace({
   const [viewReady, setViewReady] = useState(false);
   const [viewSaved, setViewSaved] = useState(false);
   const [viewBusy, setViewBusy] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<SupplierCatalogueColumn[]>(defaultSupplierColumns);
   const [catalogueView, setCatalogueView] = useState<
     "overview" | "enquiries" | "catalogue" | "editor"
   >("overview");
@@ -283,6 +302,7 @@ export function SupplierCatalogueWorkspace({
         setCategoryFilter(preferences.category || ""); setStockFilter(preferences.stock || "");
         setMinimumPrice(preferences.minPrice || ""); setMaximumPrice(preferences.maxPrice || ""); setCatalogueFilter(preferences.filter || "all");
         setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
+        setVisibleColumns(Array.isArray(preferences.columns) && preferences.columns.length ? preferences.columns.filter((key): key is SupplierCatalogueColumn => defaultSupplierColumns.includes(key as SupplierCatalogueColumn)) : defaultSupplierColumns);
         setViewSaved(Boolean(result.saved));
       }).catch(() => undefined).finally(() => active && setViewReady(true));
     return () => { active = false; };
@@ -633,7 +653,7 @@ export function SupplierCatalogueWorkspace({
       const response = await fetch("/api/trade-list-views?view=supplier-products", {
         method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ search, model: modelSearch, brand: brandFilter, category: categoryFilter, stock: stockFilter,
-          minPrice: minimumPrice, maxPrice: maximumPrice, filter: catalogueFilter, sort: catalogueSort, pageSize }),
+          minPrice: minimumPrice, maxPrice: maximumPrice, filter: catalogueFilter, sort: catalogueSort, pageSize, columns: visibleColumns }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "The default catalogue view could not be saved.");
@@ -654,9 +674,59 @@ export function SupplierCatalogueWorkspace({
       setCategoryFilter(preferences.category || ""); setStockFilter(preferences.stock || "");
       setMinimumPrice(preferences.minPrice || ""); setMaximumPrice(preferences.maxPrice || ""); setCatalogueFilter(preferences.filter || "all");
       setCatalogueSort(preferences.sort || "updated-desc"); setPageSize(Number(preferences.pageSize) || 25);
+      setVisibleColumns(Array.isArray(preferences.columns) && preferences.columns.length ? preferences.columns.filter((key): key is SupplierCatalogueColumn => defaultSupplierColumns.includes(key as SupplierCatalogueColumn)) : defaultSupplierColumns);
       setPage(1); setViewSaved(false); setStatus("Default catalogue view reset.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The catalogue view could not be reset."); }
     finally { setViewBusy(false); }
+  }
+
+  const orderedCatalogueColumns = visibleColumns
+    .map((key) => supplierCatalogueColumns.find((column) => column.key === key))
+    .filter((column): column is (typeof supplierCatalogueColumns)[number] => Boolean(column));
+  const supplierGridStyle = { gridTemplateColumns: orderedCatalogueColumns.map((column) => column.width).join(" "), minWidth: `${Math.max(720, orderedCatalogueColumns.length * 105)}px` } as CSSProperties;
+
+  function changeCatalogueSort(column: SupplierCatalogueColumn) {
+    const sorts: Partial<Record<SupplierCatalogueColumn, [string, string]>> = {
+      brand: ["brand-asc", "brand-desc"], model: ["model-asc", "model-desc"], name: ["name-asc", "name-desc"],
+      category: ["category-asc", "category-desc"], price: ["price-asc", "price-desc"], stock: ["stock-asc", "stock-desc"],
+      lead: ["lead-asc", "lead-desc"], warranty: ["warranty-desc", "warranty-asc"], listing: ["listing-asc", "listing-desc"], review: ["review-asc", "review-desc"],
+    };
+    const options = sorts[column];
+    if (!options) return;
+    setCatalogueSort((current) => current === options[0] ? options[1] : options[0]);
+    setPage(1);
+  }
+
+  function catalogueSortState(column: SupplierCatalogueColumn): "ascending" | "descending" | "none" {
+    if (!catalogueSort.startsWith(column === "listing" ? "listing" : column === "review" ? "review" : column)) return "none";
+    return catalogueSort.endsWith("desc") ? "descending" : "ascending";
+  }
+
+  function exportCatalogue() {
+    const columns = orderedCatalogueColumns.filter((column) => column.key !== "action");
+    downloadWorkspaceCsv(`tlink-wholesaler-products-page-${page}.csv`, columns, products.map((product) => ({
+      brand: product.brand, model: product.modelNumber, name: product.name, category: readable(product.category),
+      price: (product.unitPriceCentsExGst / 100).toFixed(2), ordering: `Minimum ${product.minOrderQty} ${product.unitLabel}; multiples of ${product.orderIncrement}`,
+      stock: readable(product.stockStatus), lead: product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now",
+      warranty: product.warrantyYears ? `${product.warrantyYears} years` : "Not stated", listing: readable(product.listingStatus),
+      review: readable(product.reviewStatus), kit: product.dependencies.length,
+    })));
+  }
+
+  function supplierProductCell(product: SupplierProduct, column: SupplierCatalogueColumn) {
+    if (column === "brand") return <span key={column} title={product.brand}>{product.brand}</span>;
+    if (column === "model") return <b key={column} title={product.modelNumber}>{product.modelNumber}</b>;
+    if (column === "name") return <strong key={column} title={product.name}>{product.name}</strong>;
+    if (column === "category") return <span key={column} title={readable(product.category)}>{readable(product.category)}</span>;
+    if (column === "price") return <strong key={column}>{money.format(product.unitPriceCentsExGst / 100)}</strong>;
+    if (column === "ordering") return <span key={column} title={`Minimum ${product.minOrderQty} ${product.unitLabel}; multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>;
+    if (column === "stock") return <span key={column} className={`marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span>;
+    if (column === "lead") return <span key={column}>{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>;
+    if (column === "warranty") return <span key={column}>{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span>;
+    if (column === "listing") return <span key={column} className={`admin-pill admin-pill-${product.listingStatus}`}>{readable(product.listingStatus)}</span>;
+    if (column === "review") return <span key={column} className={`admin-pill admin-pill-${product.reviewStatus}`} title={product.reviewNote || readable(product.reviewStatus)}>{readable(product.reviewStatus)}</span>;
+    if (column === "kit") return <span key={column}>{product.dependencies.length || "None"}</span>;
+    return <button key={column} type="button" onClick={() => editProduct(product)}>Edit</button>;
   }
 
   return (
@@ -943,23 +1013,16 @@ export function SupplierCatalogueWorkspace({
           </div></details>
           <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
             onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveCatalogueView()} onReset={() => void resetCatalogueView()} />
+          <WorkspaceTableTools columns={supplierCatalogueColumns} visibleKeys={visibleColumns} onVisibleKeys={(keys) => setVisibleColumns(keys as SupplierCatalogueColumn[])} onExport={exportCatalogue} exportDisabled={!products.length} noun="products" />
           {loading ? (
             <p className="dashboard-settings-status">Loading catalogue...</p>
           ) : products.length ? (
             <div className="supplier-product-list">
-              <div className="supplier-product-columns" aria-hidden="true">
-                <span>Brand</span><span>Model code</span><span>Product</span><span>Category</span><span>Price ex GST</span><span>Minimum order</span><span>Stock</span><span>Lead time</span><span>Warranty</span><span>Listing</span><span>Review</span><span>Linked kit</span><span>Action</span>
+              <div className="supplier-product-columns" role="row" style={supplierGridStyle}>
+                {orderedCatalogueColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={catalogueSortState(column.key)}>{["brand", "model", "name", "category", "price", "stock", "lead", "warranty", "listing", "review"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeCatalogueSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>
               {products.map((product) => (
-                <article key={product.id}>
-                  <span title={product.brand}>{product.brand}</span><b title={product.modelNumber}>{product.modelNumber}</b><strong title={product.name}>{product.name}</strong>
-                  <span title={readable(product.category)}>{readable(product.category)}</span><strong>{money.format(product.unitPriceCentsExGst / 100)}</strong>
-                  <span title={`Minimum ${product.minOrderQty} ${product.unitLabel}; multiples of ${product.orderIncrement}`}>{product.minOrderQty} {product.unitLabel} | multiples of {product.orderIncrement}</span>
-                  <span className={`marketplace-stock status-${product.stockStatus}`}>{readable(product.stockStatus)}</span><span>{product.leadTimeDays ? `${product.leadTimeDays} days` : "Available now"}</span>
-                  <span>{product.warrantyYears ? `${product.warrantyYears} years` : "Not stated"}</span><span className={`admin-pill admin-pill-${product.listingStatus}`}>{readable(product.listingStatus)}</span>
-                  <span className={`admin-pill admin-pill-${product.reviewStatus}`} title={product.reviewNote || readable(product.reviewStatus)}>{readable(product.reviewStatus)}</span><span>{product.dependencies.length || "None"}</span>
-                  <button type="button" onClick={() => editProduct(product)}>Edit</button>
-                </article>
+                <article key={product.id} style={supplierGridStyle}>{visibleColumns.map((column) => supplierProductCell(product, column))}</article>
               ))}
             </div>
           ) : (
