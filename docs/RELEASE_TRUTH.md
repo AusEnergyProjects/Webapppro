@@ -1,6 +1,6 @@
 # TLink and AEA release truth
 
-Last verified: 16 July 2026
+Last verified: 17 July 2026
 
 This is the canonical implementation-status document. README, roadmap, runbooks and historical architecture notes must link here instead of defining competing release states.
 
@@ -33,6 +33,9 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - Synthetic scale fixtures separated from production migrations.
 - Uppercase canonical Australian state codes for new writes, filters and normalisation.
 - Server-configured membership checkout, billing portal and webhook payment-link mapping.
+- Feature-owned admin account, opportunity, catalogue and inbox workspaces, with shared saved-list request helpers.
+- Admin performance SLO dashboard with 7-day p95 latency, average database time, error-rate and sample-size assessment plus read-only keyset query-plan checks.
+- Stripe production preflight on 17 July 2026: no active account tasks; four active Direct Trade membership payment links at the configured monthly and annual prices; one active membership webhook destination subscribing to five events with a 0% error rate.
 
 ## Validation contract
 
@@ -49,7 +52,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 
 ## External or unverified state
 
-- Stripe production activation is not proven by source code. Before public paid membership launch, an owner must verify account activation, product prices, payment links, webhook destinations and secrets in Stripe.
+- Stripe production account status, membership payment links and webhook destination were inspected on 17 July 2026. Webhook signing secrets are intentionally non-displayable and must remain configured as deployment secrets; a future credential rotation or paid-membership release requires a fresh dashboard verification.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.
 - Historical shared D1 databases may already contain explicit synthetic demo records from migrations 0033 to 0038. They remain marked as synthetic and filterable. Fresh databases no longer receive them automatically.
 

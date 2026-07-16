@@ -5,6 +5,7 @@ import { WorkspaceListControls, type WorkspaceListPreferences } from "@/componen
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { SearchableLookup, type SearchableLookupOption } from "@/components/SearchableLookup";
 import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
+import { dateTime, readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError as errorMessage } from "@/components/admin-workspace";
 import styles from "./AdminOpportunityWorkspace.module.css";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
@@ -67,22 +68,6 @@ const categories = [
 ] as const;
 const capabilityLabels = Object.fromEntries(categories);
 const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
-
-function readable(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function dateTime(value: unknown) {
-  if (!value) return "Not yet";
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : date.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "The secure account action could not be completed.";
-}
 
 export type AdminOpportunityWorkspaceProps = {
   api: (path: string, init?: RequestInit) => Promise<AdminApiResult>;
@@ -195,7 +180,7 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
   async function saveOpportunityView() {
     setOpportunityViewBusy(true);
     try {
-      await api("/api/admin/list-views?view=admin-opportunities", { method: "PATCH", body: JSON.stringify({ search: opportunitySearch, filter: opportunityStatusFilter || "all", sort: opportunitySort, pageSize: opportunityPageSize, service: opportunityServiceFilter, state: opportunityStateFilter, synthetic: opportunitySynthetic }) });
+      await saveWorkspaceListView(api, "admin-opportunities", { search: opportunitySearch, filter: opportunityStatusFilter || "all", sort: opportunitySort, pageSize: opportunityPageSize, service: opportunityServiceFilter, state: opportunityStateFilter, synthetic: opportunitySynthetic });
       setOpportunityViewSaved(true);
       setStatus("Your default table view has been saved.");
     } catch (error) { setStatus(errorMessage(error)); }
@@ -205,8 +190,7 @@ export function AdminOpportunityWorkspace({ api, demoOnlyRequest, role, setStatu
   async function resetOpportunityView() {
     setOpportunityViewBusy(true);
     try {
-      const result = await api("/api/admin/list-views?view=admin-opportunities", { method: "DELETE" });
-      applyOpportunityView(result.preferences as WorkspaceListPreferences);
+      applyOpportunityView(await resetWorkspaceListView(api, "admin-opportunities"));
       setOpportunityViewSaved(false);
       setStatus("The table view has been reset to the TLink default.");
     } catch (error) { setStatus(errorMessage(error)); }

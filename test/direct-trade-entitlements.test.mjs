@@ -14,6 +14,7 @@ const marketplaceRoute = read("../src/app/api/product-marketplace/route.ts");
 const supplierRoute = read("../src/app/api/supplier-products/route.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const adminPortal = read("../src/components/AdminOperationsPortal.tsx");
+const adminAccounts = read("../src/components/AdminAccountWorkspace.tsx");
 
 test("free, paid and administrator-granted access resolve independently", () => {
   const freeInstaller = resolveEntitlements("installer", "not_connected");
@@ -52,8 +53,9 @@ test("premium grants are durable, role protected and audited", () => {
   assert.match(accountRoute, /Only owners and administrators can change premium feature access/);
   assert.match(accountRoute, /ON CONFLICT\(firebase_uid, feature_key\) DO UPDATE/);
   assert.match(accountRoute, /writeAdminAudit/);
-  assert.match(adminPortal, /Premium feature grants/);
-  assert.match(adminPortal, /Grant expiry/);
+  assert.match(adminPortal, /AdminAccountWorkspace/);
+  assert.match(adminAccounts, /Premium feature grants/);
+  assert.match(adminAccounts, /Grant expiry/);
 });
 
 test("free accounts are excluded at every commercial server boundary", () => {

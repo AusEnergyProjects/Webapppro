@@ -30,6 +30,9 @@ test("performance telemetry is privacy safe and available to operations roles", 
   assert.match(performanceRoute, /requireAdminIdentity/);
   assert.match(performanceRoute, /p50Ms/);
   assert.match(performanceRoute, /p95Ms/);
+  assert.match(performanceRoute, /QUERY_PLAN_CHECKS/);
+  assert.match(performanceRoute, /EXPLAIN QUERY PLAN/);
+  assert.match(performanceRoute, /errorRatePercent/);
 });
 
 test("all large business datasets use keyset pagination with guarded navigation", () => {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkspaceListControls, type WorkspaceListPreferences } from "@/components/WorkspaceListControls";
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
+import { readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError as errorMessage } from "@/components/admin-workspace";
 import styles from "./AdminCatalogueWorkspace.module.css";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
@@ -36,14 +37,6 @@ type AdminApiResult = {
 
 const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
 const categories = ["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"];
-
-function readable(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "The secure catalogue action could not be completed.";
-}
 
 export type AdminCatalogueWorkspaceProps = {
   api: (path: string, init?: RequestInit) => Promise<AdminApiResult>;
@@ -159,7 +152,7 @@ export function AdminCatalogueWorkspace({ api, role, setStatus }: AdminCatalogue
   async function saveProductView() {
     setProductViewBusy(true);
     try {
-      await api("/api/admin/list-views?view=admin-products", { method: "PATCH", body: JSON.stringify({ search: productSearch, filter: productReviewStatus || "all", sort: productSort, pageSize: productPageSize, supplier: productWholesaler, brand: productBrand, model: productModel, category: productCategory, stock: productStock, listing: productListingStatus, minPrice: productMinimumPrice, maxPrice: productMaximumPrice, synthetic: productSynthetic }) });
+      await saveWorkspaceListView(api, "admin-products", { search: productSearch, filter: productReviewStatus || "all", sort: productSort, pageSize: productPageSize, supplier: productWholesaler, brand: productBrand, model: productModel, category: productCategory, stock: productStock, listing: productListingStatus, minPrice: productMinimumPrice, maxPrice: productMaximumPrice, synthetic: productSynthetic });
       setProductViewSaved(true);
       setStatus("Your default table view has been saved.");
     } catch (error) { setStatus(errorMessage(error)); }
@@ -169,8 +162,7 @@ export function AdminCatalogueWorkspace({ api, role, setStatus }: AdminCatalogue
   async function resetProductView() {
     setProductViewBusy(true);
     try {
-      const result = await api("/api/admin/list-views?view=admin-products", { method: "DELETE" });
-      applyProductView(result.preferences as WorkspaceListPreferences);
+      applyProductView(await resetWorkspaceListView(api, "admin-products"));
       setProductViewSaved(false);
       setStatus("The table view has been reset to the TLink default.");
     } catch (error) { setStatus(errorMessage(error)); }

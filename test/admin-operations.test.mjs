@@ -29,6 +29,8 @@ const partnerOpportunities = read(
 const portal = read("../src/components/AdminOperationsPortal.tsx");
 const opportunityWorkspace = read("../src/components/AdminOpportunityWorkspace.tsx");
 const catalogueWorkspace = read("../src/components/AdminCatalogueWorkspace.tsx");
+const accountWorkspace = read("../src/components/AdminAccountWorkspace.tsx");
+const sharedWorkspace = read("../src/components/admin-workspace.ts");
 const portalPage = read("../src/app/operations/control-centre/page.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 
@@ -163,8 +165,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
     portal,
     /www\.gstatic\.com\/firebasejs\/ui\/2\.0\.0\/images\/auth\/google\.svg/,
   );
-  assert.match(portal, /Partner and wholesaler accounts/);
-  assert.match(portal, /Protected download/);
+  assert.match(accountWorkspace, /Partner and wholesaler accounts/);
+  assert.match(accountWorkspace, /Protected download/);
   assert.match(opportunityWorkspace, /Create an opportunity/);
   assert.match(opportunityWorkspace, /Allocate nearest eligible installers/);
   assert.match(catalogueWorkspace, /Product catalogue and availability/);
@@ -187,11 +189,35 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Ecosystem walkthrough/);
   assert.match(portal, /Owner recovery readiness/);
   assert.match(opportunityWorkspace, /Search opportunities/);
-  assert.match(portal, /Export visible partners CSV/);
+  assert.match(accountWorkspace, /Export visible partners CSV/);
   assert.match(opportunityWorkspace, /Export visible leads CSV/);
   assert.match(catalogueWorkspace, /Export visible products CSV/);
-  assert.match(portal, /downloadWorkspaceCsv/);
+  assert.match(accountWorkspace, /downloadWorkspaceCsv/);
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
+});
+
+test("the extracted account workspace preserves saved filters, cursors, moderation and privacy boundaries", () => {
+  assert.match(portal, /<AdminAccountWorkspace api=\{api\} role=\{session\.role\} setStatus=\{setStatus\} onCounts=\{setAccountListCounts\}/);
+  for (const parameter of ["search", "partnerType", "verification", "synthetic", "cursor", "total"]) {
+    assert.match(accountWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
+  }
+  assert.match(accountWorkspace, /cursors\.current\[accountPage\] = next\.nextCursor/);
+  assert.match(accountWorkspace, /view=admin-partners/);
+  assert.match(accountWorkspace, /api\("\/api\/admin\/accounts", \{ method: "PATCH"/);
+  assert.match(accountWorkspace, /Export visible partners CSV/);
+  assert.match(accountWorkspace, /Protected document download started/);
+  assert.doesNotMatch(accountWorkspace, /household_name|customer_email|customer_phone|street_address/);
+});
+
+test("admin list workspaces share only proven formatting and saved-view helpers", () => {
+  assert.match(sharedWorkspace, /saveWorkspaceListView/);
+  assert.match(sharedWorkspace, /resetWorkspaceListView/);
+  assert.match(sharedWorkspace, /workspaceError/);
+  for (const workspace of [accountWorkspace, opportunityWorkspace, catalogueWorkspace]) {
+    assert.match(workspace, /@\/components\/admin-workspace/);
+    assert.match(workspace, /saveWorkspaceListView/);
+    assert.match(workspace, /resetWorkspaceListView/);
+  }
 });
 
 test("the extracted opportunity workspace preserves filters, cursors, actions and privacy-safe rendering", () => {
