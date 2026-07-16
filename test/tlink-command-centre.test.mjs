@@ -76,4 +76,6 @@ test("catalogue result sets default to responsive rows and columns", () => {
   assert.match(products, /data-label=\{column\.label\}/);
   assert.match(styles, /\.marketplace-product-grid \[data-label\]::before/);
   assert.match(styles, /\.marketplace-product-grid > article \{ gap: 14px; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); min-width: 0/);
+  assert.match(styles, /\.marketplace-filterbar,[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.trade-portal-shell > \.dashboard-workspace-nav \{[^}]*max-width: 100vw;[^}]*overflow-x: auto;[^}]*width: 100%/);
 });
