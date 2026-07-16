@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
 
@@ -65,7 +65,7 @@ type AccountDetail = {
 };
 
 type Counts = { total: number; customers: number; installers: number; suppliers: number; admins: number };
-type Pagination = { page: number; pageSize: number; total: number; pageCount: number };
+type Pagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type DirectoryColumn = "account" | "type" | "status" | "updated";
 
 type Props = {
@@ -122,6 +122,8 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [pagination, setPagination] = useState<Pagination>(emptyPagination);
+  const pageCursors = useRef<string[]>([""]);
+  const totalReady = useRef(false);
   const [viewReady, setViewReady] = useState(false);
   const [viewSaved, setViewSaved] = useState(false);
   const [viewBusy, setViewBusy] = useState(false);
@@ -137,14 +139,22 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
     params.set("sort", sort);
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
+    const cursor = pageCursors.current[page - 1] || "";
+    if (cursor) params.set("cursor", cursor);
+    if (totalReady.current) params.set("total", "0");
     try {
       const result = await api(`/api/admin/directory?${params}`);
       const next = (result.accounts || []) as DirectoryAccount[];
       setAccounts(next);
       setCounts({ ...emptyCounts, ...((result.counts || {}) as Partial<Counts>) });
-      const nextPagination = { ...emptyPagination, ...((result.pagination || {}) as Partial<Pagination>) };
-      setPagination(nextPagination);
-      if (announce) setStatus(`${nextPagination.total} matching accounts.`);
+      setPagination((current) => {
+        const nextPagination = { ...current, ...((result.pagination || {}) as Partial<Pagination>), page, pageSize };
+        if (typeof (result.pagination as Partial<Pagination> | undefined)?.total === "number") totalReady.current = true;
+        if (nextPagination.hasNext && nextPagination.nextCursor) pageCursors.current[page] = nextPagination.nextCursor;
+        pageCursors.current.length = Math.max(page, nextPagination.hasNext ? page + 1 : page);
+        if (announce) setStatus(`${nextPagination.total} matching accounts.`);
+        return nextPagination;
+      });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The account directory could not be loaded.");
     }
@@ -162,6 +172,9 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
     }
   }, [api]);
 
+  useEffect(() => {
+    pageCursors.current = [""]; totalReady.current = false;
+  }, [accountStatus, effectiveType, pageSize, search, sort, synthetic]);
   useEffect(() => {
     let active = true;
     void api(`/api/admin/list-views?view=${viewKey}`).then((result) => {
@@ -324,11 +337,11 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
         </select>
         <button type="submit">Apply filters</button>
       </form>
-      <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+      <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} hasNext={pagination.hasNext} saved={viewSaved} busy={viewBusy}
         onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveView()} onReset={() => void resetView()} />
       <WorkspaceTableTools columns={directoryColumns} visibleKeys={visibleColumns} onVisibleKeys={(keys) => setVisibleColumns(keys as DirectoryColumn[])} onExport={exportDirectory} exportDisabled={!accounts.length} noun="accounts" />
       <div className="admin-directory-layout">
-        <section className="admin-panel admin-directory-list">
+        <section className="admin-panel admin-directory-list tlink-data-table" role="table" aria-label="Platform accounts">
           <div className="admin-table-header" style={directoryGridStyle}>{orderedDirectoryColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={directorySortState(column.key)}><button type="button" className="workspace-sort-header" onClick={() => changeDirectorySort(column.key)}>{column.label}</button></span>)}</div>
           {accounts.length ? accounts.map((account) => {
             const restricted = account.accountType === "customer" && role === "reviewer";

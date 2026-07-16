@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
@@ -36,7 +36,7 @@ type SupplierProduct = {
   updatedAt: string;
 };
 type SupplierProductOption = Pick<SupplierProduct, "id" | "modelNumber" | "brand" | "name" | "listingStatus">;
-type CataloguePagination = { page: number; pageSize: number; total: number; pageCount: number };
+type CataloguePagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type SupplierCatalogueColumn = "brand" | "model" | "name" | "category" | "price" | "ordering" | "stock" | "lead" | "warranty" | "listing" | "review" | "kit" | "action";
 
 type SupplierEnquiry = {
@@ -227,6 +227,8 @@ export function SupplierCatalogueWorkspace({
 }) {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [productOptions, setProductOptions] = useState<SupplierProductOption[]>([]);
+  const [dependencySearch, setDependencySearch] = useState("");
+  const [dependencySearchBusy, setDependencySearchBusy] = useState(false);
   const [enquiries, setEnquiries] = useState<SupplierEnquiry[]>([]);
   const [enquiryNotes, setEnquiryNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -245,6 +247,8 @@ export function SupplierCatalogueWorkspace({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [pagination, setPagination] = useState<CataloguePagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const pageCursors = useRef<string[]>([""]);
+  const totalReady = useRef(false);
   const [catalogueCounts, setCatalogueCounts] = useState({ total: 0, live: 0, pending: 0, available: 0 });
   const [viewReady, setViewReady] = useState(false);
   const [viewSaved, setViewSaved] = useState(false);
@@ -261,6 +265,9 @@ export function SupplierCatalogueWorkspace({
         category: categoryFilter, stock: stockFilter, minPrice: minimumPrice ? String(Math.round(Number(minimumPrice) * 100)) : "0",
         maxPrice: maximumPrice ? String(Math.round(Number(maximumPrice) * 100)) : "0", filter: catalogueFilter,
         sort: catalogueSort, page: String(page), pageSize: String(pageSize) });
+      const cursor = pageCursors.current[page - 1] || "";
+      if (cursor) params.set("cursor", cursor);
+      if (totalReady.current) params.set("total", "0");
       const [productResponse, enquiryResponse] = await Promise.all([
         fetch(`/api/supplier-products?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
         fetch("/api/supplier-enquiries", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }),
@@ -274,8 +281,13 @@ export function SupplierCatalogueWorkspace({
           result.error || "The product catalogue could not be loaded.",
         );
       setProducts(result.products || []);
-      setProductOptions(result.productOptions || []);
-      setPagination({ page: 1, pageSize, total: 0, pageCount: 1, ...(result.pagination || {}) });
+      setPagination((current) => {
+        const next = { ...current, ...(result.pagination || {}), page, pageSize };
+        if (typeof result.pagination?.total === "number") totalReady.current = true;
+        if (next.hasNext && next.nextCursor) pageCursors.current[page] = next.nextCursor;
+        pageCursors.current.length = Math.max(page, next.hasNext ? page + 1 : page);
+        return next;
+      });
       setCatalogueCounts({ total: 0, live: 0, pending: 0, available: 0, ...(result.counts || {}) });
       if (enquiryResponse.ok && enquiryResult.ok) {
         setEnquiries(enquiryResult.enquiries || []);
@@ -292,6 +304,9 @@ export function SupplierCatalogueWorkspace({
     }
   }, [brandFilter, catalogueFilter, catalogueSort, categoryFilter, maximumPrice, minimumPrice, modelSearch, page, pageSize, search, stockFilter, user]);
 
+  useEffect(() => {
+    pageCursors.current = [""]; totalReady.current = false;
+  }, [brandFilter, catalogueFilter, catalogueSort, categoryFilter, maximumPrice, minimumPrice, modelSearch, pageSize, search, stockFilter]);
   useEffect(() => {
     let active = true;
     void user.getIdToken().then((token) => fetch("/api/trade-list-views?view=supplier-products", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
@@ -323,10 +338,37 @@ export function SupplierCatalogueWorkspace({
     return () => window.cancelAnimationFrame(frame);
   }, [navigationTarget]);
 
+  useEffect(() => {
+    if (catalogueView !== "editor" || dependencySearch.trim().length < 2) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setDependencySearchBusy(true);
+      void user.getIdToken().then((token) => fetch(`/api/supplier-products?mode=lookup&q=${encodeURIComponent(dependencySearch.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      })).then((response) => response.json().then((body) => ({ response, body }))).then(({ response, body }) => {
+        if (!active) return;
+        if (!response.ok || !body.ok) throw new Error(body.error || "Products could not be searched.");
+        setProductOptions(body.options || []);
+      }).catch((error) => active && setStatus(error instanceof Error ? error.message : "Products could not be searched."))
+        .finally(() => active && setDependencySearchBusy(false));
+    }, 180);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [catalogueView, dependencySearch, user]);
+
   const liveCount = catalogueCounts.live;
   const reviewCount = catalogueCounts.pending;
   const availableCount = catalogueCounts.available;
   const newEnquiryCount = enquiries.filter((item) => item.status === "new").length;
+  const dependencyOptions = [...productOptions];
+  draft.dependencies.forEach((dependency) => {
+    if (!dependencyOptions.some((option) => option.id === dependency.linkedProductId)) dependencyOptions.push({
+      id: dependency.linkedProductId,
+      modelNumber: dependency.linkedModelNumber || "Selected product",
+      brand: "",
+      name: dependency.linkedName || "Previously selected product",
+      listingStatus: "published",
+    });
+  });
 
   async function updateEnquiry(
     enquiry: SupplierEnquiry,
@@ -1011,13 +1053,13 @@ export function SupplierCatalogueWorkspace({
             <label><span>Maximum price ex GST</span><input type="number" min="0" value={maximumPrice} onChange={(event) => { setMaximumPrice(event.target.value); setPage(1); }} placeholder="No maximum" /></label>
             <button type="button" onClick={() => { setSearch(""); setModelSearch(""); setBrandFilter(""); setCategoryFilter(""); setStockFilter(""); setMinimumPrice(""); setMaximumPrice(""); setPage(1); }}>Clear detailed filters</button>
           </div></details>
-          <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+          <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} hasNext={pagination.hasNext} saved={viewSaved} busy={viewBusy}
             onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void saveCatalogueView()} onReset={() => void resetCatalogueView()} />
           <WorkspaceTableTools columns={supplierCatalogueColumns} visibleKeys={visibleColumns} onVisibleKeys={(keys) => setVisibleColumns(keys as SupplierCatalogueColumn[])} onExport={exportCatalogue} exportDisabled={!products.length} noun="products" />
           {loading ? (
             <p className="dashboard-settings-status">Loading catalogue...</p>
           ) : products.length ? (
-            <div className="supplier-product-list">
+            <div className="supplier-product-list tlink-data-table" role="table" aria-label="Wholesaler products">
               <div className="supplier-product-columns" role="row" style={supplierGridStyle}>
                 {orderedCatalogueColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={catalogueSortState(column.key)}>{["brand", "model", "name", "category", "price", "stock", "lead", "warranty", "listing", "review"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeCatalogueSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>
@@ -1240,12 +1282,18 @@ export function SupplierCatalogueWorkspace({
               Select products from this catalogue, then state whether each item
               is required, recommended or simply compatible.
             </p>
-            {productOptions.filter(
+            <label className="supplier-dependency-search">
+              Search this wholesaler catalogue
+              <input value={dependencySearch} onChange={(event) => setDependencySearch(event.target.value)}
+                placeholder="Type a product, brand or model code" autoComplete="off" />
+              <small>{dependencySearchBusy ? "Searching..." : "Enter at least two characters. Results are loaded as needed."}</small>
+            </label>
+            {dependencyOptions.filter(
               (item) =>
                 item.id !== draft.id && item.listingStatus !== "archived",
             ).length ? (
               <div>
-                {productOptions
+                {dependencyOptions
                   .filter(
                     (item) =>
                       item.id !== draft.id && item.listingStatus !== "archived",

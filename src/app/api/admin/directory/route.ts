@@ -10,6 +10,9 @@ import {
   sameOrigin,
   writeAdminAudit,
 } from "@/lib/admin-server";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { performanceJson, routeTimer } from "@/lib/route-performance";
+import { ftsPrefixQuery } from "@/lib/fts-search";
 
 export const runtime = "edge";
 
@@ -19,6 +22,24 @@ const STATES = new Set(["ACT", "NSW", "NT", "Qld", "SA", "Tas", "Vic", "WA"]);
 const PROPERTY_TYPES = new Set(["house", "townhouse", "apartment", "new-build", "other"]);
 const HOUSEHOLD_SITUATIONS = new Set(["owner", "renter", "strata", "planning-building"]);
 const PAGE_SIZES = new Set([25, 50, 100]);
+type DirectorySortTerm = { expression: string; direction: KeysetDirection; rowKey: string };
+type DirectorySort = { orderBy: string; terms: DirectorySortTerm[] };
+const directoryTerm = (expression: string, direction: KeysetDirection, rowKey: string): DirectorySortTerm => ({ expression, direction, rowKey });
+const directorySort = (terms: DirectorySortTerm[]): DirectorySort => {
+  const direction = terms.at(-1)?.direction || "asc";
+  const stable = [...terms, directoryTerm("account_type COLLATE NOCASE", direction, "account_type"), directoryTerm("firebase_uid", direction, "firebase_uid")];
+  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
+};
+const DIRECTORY_SORTS: Record<string, DirectorySort> = {
+  "updated-desc": directorySort([directoryTerm("updated_at", "desc", "updated_at")]),
+  "updated-asc": directorySort([directoryTerm("updated_at", "asc", "updated_at")]),
+  "name-asc": directorySort([directoryTerm("name COLLATE NOCASE", "asc", "name"), directoryTerm("updated_at", "desc", "updated_at")]),
+  "name-desc": directorySort([directoryTerm("name COLLATE NOCASE", "desc", "name"), directoryTerm("updated_at", "desc", "updated_at")]),
+  "type-asc": directorySort([directoryTerm("account_type COLLATE NOCASE", "asc", "account_type"), directoryTerm("name COLLATE NOCASE", "asc", "name")]),
+  "type-desc": directorySort([directoryTerm("account_type COLLATE NOCASE", "desc", "account_type"), directoryTerm("name COLLATE NOCASE", "asc", "name")]),
+  "status-asc": directorySort([directoryTerm("account_status COLLATE NOCASE", "asc", "account_status"), directoryTerm("name COLLATE NOCASE", "asc", "name")]),
+  "status-desc": directorySort([directoryTerm("account_status COLLATE NOCASE", "desc", "account_status"), directoryTerm("name COLLATE NOCASE", "asc", "name")]),
+};
 
 function directoryItem(row: Record<string, unknown>, revealCustomer: boolean) {
   const accountType = String(row.account_type);
@@ -49,6 +70,7 @@ export async function GET(request: Request) {
     const uid = cleanAdminText(url.searchParams.get("uid"), 180);
     const requestedType = cleanAdminText(url.searchParams.get("type"), 30);
     const db = getD1();
+    const timer = routeTimer();
 
     if (uid && requestedType) {
       if (!ACCOUNT_TYPES.has(requestedType)) return adminJson({ ok: false, error: "Choose a valid account type." }, 400);
@@ -182,11 +204,14 @@ export async function GET(request: Request) {
     const type = cleanAdminText(url.searchParams.get("type"), 30);
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
-    const sort = cleanAdminText(url.searchParams.get("sort"), 30) || "updated-desc";
+    const sortValue = cleanAdminText(url.searchParams.get("sort"), 30);
+    const sort = DIRECTORY_SORTS[sortValue] ? sortValue : "updated-desc";
     const requestedPage = Number(url.searchParams.get("page"));
     const requestedPageSize = Number(url.searchParams.get("pageSize"));
     const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+    const includeTotal = url.searchParams.get("total") !== "0";
+    const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
     const revealCustomer = ["owner", "admin", "support"].includes(admin.role);
     const union = `(SELECT firebase_uid, email, display_name name, 'Household profile' secondary, 'customer' account_type,
         address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, is_synthetic, created_at, updated_at
@@ -208,31 +233,41 @@ export async function GET(request: Request) {
     } else conditions.push("is_synthetic = 0");
     if (search) {
       if (!revealCustomer) conditions.push("account_type <> 'customer'");
-      conditions.push("LOWER(name || ' ' || email || ' ' || secondary || ' ' || postcode) LIKE ?");
-      bindings.push(`%${search}%`);
+      conditions.push(`((account_type IN ('installer', 'supplier') AND firebase_uid IN
+        (SELECT entity_id FROM tlink_account_search WHERE tlink_account_search MATCH ?)) OR
+        (account_type = 'customer' AND firebase_uid IN
+        (SELECT entity_id FROM tlink_customer_search WHERE tlink_customer_search MATCH ?)) OR
+        (account_type = 'admin' AND LOWER(name || ' ' || email || ' ' || secondary) LIKE ?))`);
+      const fts = ftsPrefixQuery(search);
+      bindings.push(fts, fts, `%${search}%`);
     }
+    const selectedSort = DIRECTORY_SORTS[sort];
+    let cursor;
+    try { cursor = decodeKeysetCursor(cursorInput, sort, selectedSort.terms.length); }
+    catch { return adminJson({ ok: false, error: "This directory page link has expired. Start again from the first page." }, 400); }
+    if (page > 1 && !cursor) return adminJson({ ok: false, error: "This directory page link has expired. Start again from the first page." }, 400);
+    const rowConditions = [...conditions]; const rowBindings = [...bindings];
+    if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = conditions.join(" AND ");
-    const orderBy: Record<string, string> = {
-      "updated-desc": "updated_at DESC", "updated-asc": "updated_at ASC",
-      "name-asc": "name COLLATE NOCASE ASC, updated_at DESC", "name-desc": "name COLLATE NOCASE DESC, updated_at DESC",
-      "type-asc": "account_type COLLATE NOCASE ASC, name COLLATE NOCASE ASC", "type-desc": "account_type COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-      "status-asc": "account_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC", "status-desc": "account_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-    };
+    const rowWhere = rowConditions.join(" AND ");
     const [filteredCount, accountRows, globalCounts] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) total FROM ${union} directory WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
-      db.prepare(`SELECT * FROM ${union} directory WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
-        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      includeTotal ? db.prepare(`SELECT COUNT(*) total FROM ${union} directory WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
+      db.prepare(`SELECT * FROM ${union} directory WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+        .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN account_type = 'customer' THEN 1 ELSE 0 END) customers,
         SUM(CASE WHEN account_type = 'installer' THEN 1 ELSE 0 END) installers,
         SUM(CASE WHEN account_type = 'supplier' THEN 1 ELSE 0 END) suppliers,
         SUM(CASE WHEN account_type = 'admin' THEN 1 ELSE 0 END) admins
         FROM ${union} directory`).first<Record<string, unknown>>(),
-    ]);
-    const total = Number(filteredCount?.total || 0);
-    return adminJson({
+    ].map((work) => timer.database(work)));
+    const total = filteredCount ? Number(filteredCount.total || 0) : undefined;
+    const hasNext = accountRows.results.length > pageSize;
+    const pageRows = accountRows.results.slice(0, pageSize);
+    const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(sort, selectedSort.terms.map((item) => String(pageRows.at(-1)![item.rowKey] || ""))) : "";
+    return performanceJson({
       ok: true,
-      accounts: accountRows.results.map((row: Record<string, unknown>) => directoryItem(row, revealCustomer)),
+      accounts: pageRows.map((row: Record<string, unknown>) => directoryItem(row, revealCustomer)),
       counts: {
         total: Number(globalCounts?.total || 0),
         customers: Number(globalCounts?.customers || 0),
@@ -240,8 +275,8 @@ export async function GET(request: Request) {
         suppliers: Number(globalCounts?.suppliers || 0),
         admins: Number(globalCounts?.admins || 0),
       },
-      pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
-    });
+      pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor },
+    }, { db, routeKey: "admin.directory", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: pageRows.length, cursorUsed: Boolean(cursor) });
   } catch (error) {
     return adminError(error);
   }

@@ -63,7 +63,7 @@ Primary sources:
 
 - OAuth providers require production app credentials and release-account approval before live connections can complete.
 - The native field app needs real-device testing, internal distribution and measured offline conflict testing.
-- Large businesses will need pagination and server-side search beyond the current bounded administrator and CRM views.
+- Large businesses now have cursor pagination and indexed server-side search. The next risk is governing named, shared and locked team views without adding navigation clutter.
 - Moving an established trade business into AEA still requires guided imports, duplicate review and rollback.
 - Rate cards remain intentionally parked until trade categories, labour structures and compliance requirements are sufficiently researched.
 

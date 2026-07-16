@@ -56,14 +56,16 @@ test("saved views enforce trade and operations account boundaries", () => {
 test("high volume catalogue, order and account indexes use server paging", () => {
   for (const route of [supplierRoute, purchasingRoute, directoryRoute, adminAccountsRoute, adminOpportunitiesRoute, adminProductsRoute]) {
     assert.match(route, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
-    assert.match(route, /LIMIT \? OFFSET \?/);
-    assert.match(route, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
+    assert.match(route, /decodeKeysetCursor/);
+    assert.match(route, /keysetAfter/);
+    assert.doesNotMatch(route, /LIMIT \? OFFSET \?/);
   }
   assert.match(supplierRoute, /SELECT COUNT\(\*\) total FROM supplier_products/);
   assert.match(purchasingRoute, /SELECT COUNT\(\*\) total/);
   assert.match(directoryRoute, /UNION ALL/);
-  assert.match(adminAccountsRoute, /installerOptions/);
-  assert.match(adminOpportunitiesRoute, /openOptions/);
+  assert.doesNotMatch(adminAccountsRoute, /LIMIT 2000/);
+  assert.doesNotMatch(adminOpportunitiesRoute, /LIMIT 1000/);
+  assert.match(supplierRoute, /mode"\) === "lookup"/);
   assert.match(adminProductsRoute, /review_status = 'pending'/);
 });
 

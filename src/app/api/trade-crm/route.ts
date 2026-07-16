@@ -4,6 +4,9 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { performanceJson, routeTimer } from "@/lib/route-performance";
+import { ftsPrefixQuery } from "@/lib/fts-search";
 
 export const runtime = "edge";
 
@@ -23,6 +26,25 @@ const QUOTE_STATUSES = new Set(["not_started", "draft", "sent", "accepted", "dec
 const INVOICE_STATUSES = new Set(["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAGE_SIZES = new Set([25, 50, 100]);
+type CrmSortTerm = { expression: string; direction: KeysetDirection; rowKey: string; numeric?: boolean };
+type CrmSort = { orderBy: string; terms: CrmSortTerm[] };
+const crmTerm = (expression: string, direction: KeysetDirection, rowKey: string, numeric = false): CrmSortTerm => ({ expression, direction, rowKey, numeric });
+const crmSort = (terms: CrmSortTerm[], idExpression: string): CrmSort => {
+  const stable = [...terms, crmTerm(idExpression, terms.at(-1)?.direction || "asc", "id")];
+  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
+};
+const JOB_SORTS: Record<string, CrmSort> = {
+  "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
+  "number-desc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "desc", "work_number")], "w.id"),
+  "date-asc": crmSort([crmTerm("w.scheduled_start = ''", "asc", "schedule_empty", true), crmTerm("w.scheduled_start", "asc", "scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+  "updated-desc": crmSort([crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
+};
+const CUSTOMER_SORTS: Record<string, CrmSort> = {
+  "name-asc": crmSort([crmTerm("CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE", "asc", "sort_name")], "c.id"),
+  "name-desc": crmSort([crmTerm("CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE", "desc", "sort_name")], "c.id"),
+  "updated-desc": crmSort([crmTerm("c.updated_at", "desc", "updated_at")], "c.id"),
+};
+const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
 
 type CrmIdentity = { uid: string; businessName: string; teamAccess: boolean };
 
@@ -58,6 +80,7 @@ function errorResponse(error: unknown) {
   if (code === "JOB_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its 500 active job fair-use limit." }, 409);
   if (code === "CUSTOMER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its customer-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
+  if (code === "INVALID_CURSOR") return adminJson({ ok: false, error: "This CRM page link has expired. Start again from the first page." }, 400);
   return adminJson({ ok: false, error: "The private installer CRM request could not be completed." }, 500);
 }
 
@@ -149,7 +172,9 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   const { page, pageSize } = pagination(url);
   const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();
   const filter = cleanAdminText(url.searchParams.get("filter"), 30);
-  const sort = cleanAdminText(url.searchParams.get("sort"), 30);
+  const sortValue = cleanAdminText(url.searchParams.get("sort"), 30);
+  const includeTotal = url.searchParams.get("total") !== "0";
+  const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
   const bindings: unknown[] = [identity.uid];
   if (resource === "jobs") {
     const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
@@ -182,27 +207,34 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const where = conditions.join(" AND ");
     const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid`;
-    const sorts: Record<string, string> = {
-      "number-asc": "w.work_number COLLATE NOCASE ASC", "number-desc": "w.work_number COLLATE NOCASE DESC",
-      "date-asc": "w.scheduled_start = '', w.scheduled_start ASC, w.updated_at DESC", "updated-desc": "w.updated_at DESC",
-    };
+    const sort = JOB_SORTS[sortValue] ? sortValue : "updated-desc";
+    const selectedSort = JOB_SORTS[sort];
+    let cursor;
+    try { cursor = decodeKeysetCursor(cursorInput, `jobs:${sort}`, selectedSort.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
+    if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
+    const rowConditions = [...conditions]; const rowBindings = [...bindings];
+    if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
+    const rowWhere = rowConditions.join(" AND ");
     const [countRow, rows] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+      includeTotal ? db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
-        (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
-        ${joins} WHERE ${where} ORDER BY ${sorts[sort] || sorts["updated-desc"]} LIMIT ? OFFSET ?`)
-        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+        (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
+        w.scheduled_start = '' schedule_empty,
+        ${joins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+        .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
-    const total = Number(countRow?.total || 0);
-    return { items: rows.results.map((row: Record<string, unknown>) => indexedJob(row)), pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) } };
+    const total = countRow ? Number(countRow.total || 0) : undefined;
+    const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);
+    const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(`jobs:${sort}`, selectedSort.terms.map((item) => item.numeric ? Number(pageRows.at(-1)![item.rowKey]) : String(pageRows.at(-1)![item.rowKey] || ""))) : "";
+    return { items: pageRows.map((row: Record<string, unknown>) => indexedJob(row)), pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor } };
   }
   const conditions = ["c.firebase_uid = ?", "c.record_status = 'active'"];
   if (search) {
-    conditions.push("LOWER(c.customer_number || ' ' || c.first_name || ' ' || c.last_name || ' ' || c.business_name || ' ' || c.email) LIKE ?");
-    bindings.push(`%${search}%`);
+    conditions.push("c.id IN (SELECT entity_id FROM tlink_crm_customer_search WHERE owner_uid = ? AND tlink_crm_customer_search MATCH ?)");
+    bindings.push(identity.uid, ftsPrefixQuery(search));
   }
   const street = cleanAdminText(url.searchParams.get("street"), 120).toLowerCase();
   if (street) { conditions.push("LOWER(c.address_line_1 || ' ' || c.address_line_2) LIKE ?"); bindings.push(`%${street}%`); }
@@ -233,14 +265,18 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     bindings.push(pipeline);
   }
   const where = conditions.join(" AND ");
-  const sorts: Record<string, string> = {
-    "name-asc": "CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE ASC",
-    "name-desc": "CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE DESC",
-    "updated-desc": "c.updated_at DESC",
-  };
+  const sort = CUSTOMER_SORTS[sortValue] ? sortValue : "name-asc";
+  const selectedSort = CUSTOMER_SORTS[sort];
+  let cursor;
+  try { cursor = decodeKeysetCursor(cursorInput, `customers:${sort}`, selectedSort.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
+  if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
+  const rowConditions = [...conditions]; const rowBindings = [...bindings];
+  if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
+  const rowWhere = rowConditions.join(" AND ");
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT c.*,
+      CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END sort_name,
       (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') job_count,
       (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
@@ -251,11 +287,13 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_job_number
       , (SELECT d.pipeline_stage FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
         WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_pipeline_stage
-      FROM trade_crm_customers c WHERE ${where} ORDER BY ${sorts[sort] || sorts["name-asc"]} LIMIT ? OFFSET ?`)
-      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      FROM trade_crm_customers c WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+      .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
   ]);
-  const total = Number(countRow?.total || 0);
-  return { items: rows.results.map((row: Record<string, unknown>) => indexedCustomer(row)), pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) } };
+  const total = countRow ? Number(countRow.total || 0) : undefined;
+  const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);
+  const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(`customers:${sort}`, selectedSort.terms.map((item) => String(pageRows.at(-1)![item.rowKey] || ""))) : "";
+  return { items: pageRows.map((row: Record<string, unknown>) => indexedCustomer(row)), pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor } };
 }
 
 async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
@@ -391,22 +429,31 @@ async function crmSchedule(identity: CrmIdentity, url: URL) {
   const db = getD1();
   const today = new Date().toISOString().slice(0, 10);
   const { page, pageSize } = pagination(url);
+  const includeTotal = url.searchParams.get("total") !== "0";
+  const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
+  let cursor;
+  try { cursor = decodeKeysetCursor(cursorInput, "schedule:starts-asc", SCHEDULE_SORT.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
+  if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
+  const cursorWhere = cursor ? keysetAfter(SCHEDULE_SORT.terms, cursor) : null;
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+    includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?`)
-      .bind(identity.uid, today).first<Record<string, unknown>>(),
+      .bind(identity.uid, today).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?
-      ORDER BY a.starts_at, a.created_at LIMIT ? OFFSET ?`).bind(identity.uid, today, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      ${cursorWhere ? `AND (${cursorWhere.sql})` : ""}
+      ORDER BY ${SCHEDULE_SORT.orderBy} LIMIT ?`).bind(identity.uid, today, ...(cursorWhere?.bindings || []), pageSize + 1).all<Record<string, unknown>>(),
   ]);
-  const total = Number(countRow?.total || 0);
+  const total = countRow ? Number(countRow.total || 0) : undefined;
+  const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);
+  const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor("schedule:starts-asc", SCHEDULE_SORT.terms.map((item) => String(pageRows.at(-1)![item.rowKey] || ""))) : "";
   return {
-    items: rows.results.map((row: Record<string, unknown>) => ({
+    items: pageRows.map((row: Record<string, unknown>) => ({
       id: row.id, appointmentType: row.appointment_type, title: row.title, startsAt: row.starts_at,
       endsAt: row.ends_at, assigneeLabel: row.assignee_label, status: row.status, notes: row.notes, job: activityJob(row),
     })),
-    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+    pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor },
   };
 }
 
@@ -440,10 +487,16 @@ export async function GET(request: Request) {
     const resource = cleanAdminText(url.searchParams.get("resource"), 20);
     if (mode === "bootstrap") return adminJson({ ok: true, ...(await crmBootstrap(identity)) });
     if (mode === "summary") return adminJson({ ok: true, ...(await crmSummary(identity)) });
-    if (mode === "schedule") return adminJson({ ok: true, ...(await crmSchedule(identity, url)) });
+    if (mode === "schedule") {
+      const db = getD1(); const timer = routeTimer(); const result = await timer.database(crmSchedule(identity, url));
+      return performanceJson({ ok: true, ...result }, { db, routeKey: "trade.crm.schedule", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
+        resultCount: result.items.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
+    }
     if (mode === "reports") return adminJson({ ok: true, ...(await crmReports(identity)) });
     if (mode === "index" && ["jobs", "customers"].includes(resource)) {
-      return adminJson({ ok: true, ...(await crmIndex(identity, url, resource)) });
+      const db = getD1(); const timer = routeTimer(); const result = await timer.database(crmIndex(identity, url, resource));
+      return performanceJson({ ok: true, ...result }, { db, routeKey: `trade.crm.${resource}`, startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
+        resultCount: result.items.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
     }
     if (mode === "detail" && ["job", "customer"].includes(resource)) {
       const id = cleanAdminText(url.searchParams.get("id"), 180);

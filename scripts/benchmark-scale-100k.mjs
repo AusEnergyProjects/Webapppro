@@ -167,6 +167,24 @@ database.exec(`
   ANALYZE;
 `);
 const seedMs = performance.now() - seededAt;
+const searchIndexStartedAt = performance.now();
+let ftsAvailable = true;
+try { database.exec(`
+  CREATE VIRTUAL TABLE tlink_product_search USING fts5(entity_id UNINDEXED, name, brand, model_number, supplier_name, category);
+  INSERT INTO tlink_product_search SELECT p.id, p.name, p.brand, p.model_number, a.business_name, p.category
+    FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid;
+  CREATE VIRTUAL TABLE tlink_account_search USING fts5(entity_id UNINDEXED, business_name);
+  INSERT INTO tlink_account_search SELECT firebase_uid, business_name FROM trade_accounts;
+  CREATE VIRTUAL TABLE tlink_opportunity_search USING fts5(entity_id UNINDEXED, title, postcode, state);
+  INSERT INTO tlink_opportunity_search SELECT id, title, '', state FROM trade_opportunities;
+  CREATE VIRTUAL TABLE tlink_crm_customer_search USING fts5(entity_id UNINDEXED, owner_uid UNINDEXED, last_name, postcode);
+  INSERT INTO tlink_crm_customer_search SELECT id, firebase_uid, last_name, postcode FROM trade_crm_customers;
+  ANALYZE;
+`); } catch (error) {
+  ftsAvailable = false;
+  if (!String(error?.message || error).includes("no such module: fts5")) throw error;
+}
+const searchIndexMs = performance.now() - searchIndexStartedAt;
 
 const eligible = "p.listing_status = 'published' AND p.review_status = 'approved' AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved' AND a.billing_status IN ('trial', 'active')";
 const catalogueSelect = `SELECT p.id, p.name, p.brand, p.model_number
@@ -193,18 +211,42 @@ const queries = {
     sql: "SELECT firebase_uid, business_name FROM trade_accounts WHERE partner_type = ? AND account_status = ? ORDER BY updated_at DESC, firebase_uid DESC LIMIT ?",
     bindings: ["installer", "active", PAGE_SIZE],
   },
+  adminAccountsDeepCursor: {
+    sql: "SELECT firebase_uid, business_name FROM trade_accounts WHERE (updated_at, firebase_uid) < (?, ?) ORDER BY updated_at DESC, firebase_uid DESC LIMIT ?",
+    bindings: ["2026-07-14T12:00:00.000Z", "account-099999", PAGE_SIZE],
+  },
   adminOpportunities: {
     sql: "SELECT id, title FROM trade_opportunities WHERE state = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT ?",
     bindings: ["VIC", "open", PAGE_SIZE],
+  },
+  adminOpportunitiesDeepCursor: {
+    sql: "SELECT id, title FROM trade_opportunities WHERE (updated_at, id) < (?, ?) ORDER BY updated_at DESC, id DESC LIMIT ?",
+    bindings: ["2026-07-14T12:00:00.000Z", "opportunity-099999", PAGE_SIZE],
   },
   installerCustomers: {
     sql: "SELECT id, last_name FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = ? ORDER BY last_name, business_name, id LIMIT ?",
     bindings: ["installer-benchmark", "active", PAGE_SIZE],
   },
-  catalogueContainsSearch: {
-    sql: `${catalogueSelect} AND LOWER(p.name) LIKE ? ORDER BY p.name COLLATE NOCASE, p.id LIMIT ?`,
-    bindings: ["%999%", PAGE_SIZE],
+  installerCustomersDeepCursor: {
+    sql: "SELECT id, last_name FROM trade_crm_customers WHERE firebase_uid = ? AND (last_name, business_name, id) > (?, ?, ?) ORDER BY last_name, business_name, id LIMIT ?",
+    bindings: ["installer-benchmark", "Surname 099974", "", "", PAGE_SIZE],
   },
+  ...(ftsAvailable ? { catalogueFullTextSearch: {
+    sql: `${catalogueSelect} AND p.id IN (SELECT entity_id FROM tlink_product_search WHERE tlink_product_search MATCH ?) ORDER BY p.name COLLATE NOCASE, p.id LIMIT ?`,
+    bindings: ['"999"*', PAGE_SIZE],
+  },
+  accountFullTextSearch: {
+    sql: "SELECT firebase_uid FROM trade_accounts WHERE firebase_uid IN (SELECT entity_id FROM tlink_account_search WHERE tlink_account_search MATCH ?) LIMIT ?",
+    bindings: ['"999"*', PAGE_SIZE],
+  },
+  opportunityFullTextSearch: {
+    sql: "SELECT id FROM trade_opportunities WHERE id IN (SELECT entity_id FROM tlink_opportunity_search WHERE tlink_opportunity_search MATCH ?) LIMIT ?",
+    bindings: ['"999"*', PAGE_SIZE],
+  },
+  customerFullTextSearch: {
+    sql: "SELECT id FROM trade_crm_customers WHERE firebase_uid = ? AND id IN (SELECT entity_id FROM tlink_crm_customer_search WHERE owner_uid = ? AND tlink_crm_customer_search MATCH ?) LIMIT ?",
+    bindings: ["installer-benchmark", "installer-benchmark", '"999"*', PAGE_SIZE],
+  } } : {}),
 };
 
 const results = {};
@@ -226,7 +268,7 @@ const counts = Object.fromEntries([
 for (const [name, count] of Object.entries(counts)) {
   if (count !== RECORDS_PER_DATASET) throw new Error(`${name} benchmark seed expected ${RECORDS_PER_DATASET} records and received ${count}.`);
 }
-for (const name of ["catalogueFirstPage", "catalogueDeepCursor", "catalogueFilteredPrice", "adminAccounts", "adminOpportunities", "installerCustomers"]) {
+for (const name of ["catalogueFirstPage", "catalogueDeepCursor", "catalogueFilteredPrice", "adminAccounts", "adminAccountsDeepCursor", "adminOpportunities", "adminOpportunitiesDeepCursor", "installerCustomers", "installerCustomersDeepCursor", ...(ftsAvailable ? ["catalogueFullTextSearch", "accountFullTextSearch", "opportunityFullTextSearch", "customerFullTextSearch"] : [])]) {
   if (results[name].p95Ms > 75) throw new Error(`${name} exceeded the 75ms local p95 guardrail at ${results[name].p95Ms}ms.`);
 }
 
@@ -236,6 +278,8 @@ const summary = {
   recordsPerDataset: RECORDS_PER_DATASET,
   totalSyntheticRows: Object.values(counts).reduce((total, count) => total + count, 0),
   seedMs: Number(seedMs.toFixed(1)),
+  searchIndexMs: Number(searchIndexMs.toFixed(1)),
+  ftsAvailable,
   counts,
   cursorSpeedupAtDeepPage: Number((offsetP95 / cursorP95).toFixed(1)),
   guardrailP95Ms: 75,

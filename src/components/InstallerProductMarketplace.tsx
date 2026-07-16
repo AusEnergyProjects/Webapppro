@@ -628,7 +628,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {products.length ? (
-            <div className={`marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading} role="table" aria-label="Approved wholesale products" aria-rowcount={totalProducts + 1}>
+            <div className={`tlink-data-table marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading} role="table" aria-label="Approved wholesale products" aria-rowcount={totalProducts + 1}>
               <div className="marketplace-product-columns" role="row" style={productGridStyle}>
                 {orderedColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={columnSortState(column.key)}>{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}</span>)}
               </div>

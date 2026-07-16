@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -30,6 +30,8 @@ import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { WorkspaceListControls, type WorkspaceListPreferences } from "@/components/WorkspaceListControls";
+import { SearchableLookup, type SearchableLookupOption } from "@/components/SearchableLookup";
+import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -165,9 +167,7 @@ type CatalogueProduct = {
   updatedAt: string;
   isSynthetic: boolean;
 };
-type ListPagination = { page: number; pageSize: number; total: number; pageCount: number };
-type AccountOption = { firebaseUid: string; businessName: string; partnerType: string; addressState: string; accountStatus: string };
-type OpportunityOption = { id: string; title: string; state: string; postcode: string };
+type ListPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type AdminUser = {
   id: string;
   email: string;
@@ -304,8 +304,9 @@ export function AdminOperationsPortal() {
   const [accountPage, setAccountPage] = useState(1);
   const [accountPageSize, setAccountPageSize] = useState(25);
   const [accountPagination, setAccountPagination] = useState<ListPagination>(emptyPagination);
+  const accountCursors = useRef<string[]>([""]);
+  const accountTotalReady = useRef(false);
   const [accountListCounts, setAccountListCounts] = useState({ total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
-  const [installerOptions, setInstallerOptions] = useState<AccountOption[]>([]);
   const [accountViewReady, setAccountViewReady] = useState(false);
   const [accountViewSaved, setAccountViewSaved] = useState(false);
   const [accountViewBusy, setAccountViewBusy] = useState(false);
@@ -323,7 +324,8 @@ export function AdminOperationsPortal() {
   const [opportunityPage, setOpportunityPage] = useState(1);
   const [opportunityPageSize, setOpportunityPageSize] = useState(25);
   const [opportunityPagination, setOpportunityPagination] = useState<ListPagination>(emptyPagination);
-  const [opportunityOptions, setOpportunityOptions] = useState<OpportunityOption[]>([]);
+  const opportunityCursors = useRef<string[]>([""]);
+  const opportunityTotalReady = useRef(false);
   const [opportunityViewReady, setOpportunityViewReady] = useState(false);
   const [opportunityViewSaved, setOpportunityViewSaved] = useState(false);
   const [opportunityViewBusy, setOpportunityViewBusy] = useState(false);
@@ -343,6 +345,8 @@ export function AdminOperationsPortal() {
   const [productPage, setProductPage] = useState(1);
   const [productPageSize, setProductPageSize] = useState(25);
   const [productPagination, setProductPagination] = useState<ListPagination>(emptyPagination);
+  const productCursors = useRef<string[]>([""]);
+  const productTotalReady = useRef(false);
   const [productListCounts, setProductListCounts] = useState({ total: 0, pending: 0, approved: 0, live: 0 });
   const [productViewReady, setProductViewReady] = useState(false);
   const [productViewSaved, setProductViewSaved] = useState(false);
@@ -409,8 +413,25 @@ export function AdminOperationsPortal() {
     return result;
   }, []);
 
+  const loadInstallerOptions = useCallback(async (query: string, selected: string): Promise<SearchableLookupOption[]> => {
+    const params = new URLSearchParams({ type: "installer", q: query });
+    if (selected) params.set("selected", selected);
+    const result = await api(`/api/admin/lookups?${params}`);
+    return (result.options || []) as SearchableLookupOption[];
+  }, [api]);
+
+  const loadOpportunityOptions = useCallback(async (query: string, selected: string): Promise<SearchableLookupOption[]> => {
+    const params = new URLSearchParams({ type: "opportunity", q: query });
+    if (selected) params.set("selected", selected);
+    const result = await api(`/api/admin/lookups?${params}`);
+    return (result.options || []) as SearchableLookupOption[];
+  }, [api]);
+
   const loadAccounts = useCallback(async (announce = false) => {
     const params = new URLSearchParams({ page: String(accountPage), pageSize: String(accountPageSize), sort: accountSort });
+    const cursor = accountCursors.current[accountPage - 1] || "";
+    if (cursor) params.set("cursor", cursor);
+    if (accountTotalReady.current) params.set("total", "0");
     if (accountSearch.trim()) params.set("search", accountSearch.trim());
     if (accountType) params.set("partnerType", accountType);
     if (accountVerification) params.set("verification", accountVerification);
@@ -418,15 +439,23 @@ export function AdminOperationsPortal() {
     try {
       const result = await api(`/api/admin/accounts?${params}`);
       setAccounts(result.accounts || []);
-      setAccountPagination(result.pagination || emptyPagination);
+      setAccountPagination((current) => {
+        const next = { ...current, ...(result.pagination || {}), page: accountPage, pageSize: accountPageSize };
+        if (typeof result.pagination?.total === "number") accountTotalReady.current = true;
+        if (next.hasNext && next.nextCursor) accountCursors.current[accountPage] = next.nextCursor;
+        accountCursors.current.length = Math.max(accountPage, next.hasNext ? accountPage + 1 : accountPage);
+        return next;
+      });
       setAccountListCounts(result.counts || { total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
-      setInstallerOptions(result.installerOptions || []);
       if (announce) setStatus(`${result.pagination?.total || 0} business accounts match this view.`);
     } catch (error) { setStatus(authMessage(error)); }
   }, [accountPage, accountPageSize, accountSearch, accountSort, accountSynthetic, accountType, accountVerification, api]);
 
   const loadOpportunities = useCallback(async (announce = false) => {
     const params = new URLSearchParams({ page: String(opportunityPage), pageSize: String(opportunityPageSize), sort: opportunitySort });
+    const cursor = opportunityCursors.current[opportunityPage - 1] || "";
+    if (cursor) params.set("cursor", cursor);
+    if (opportunityTotalReady.current) params.set("total", "0");
     if (opportunitySearch.trim()) params.set("search", opportunitySearch.trim());
     if (opportunityStatusFilter) params.set("status", opportunityStatusFilter);
     if (opportunityServiceFilter) params.set("service", opportunityServiceFilter);
@@ -435,14 +464,22 @@ export function AdminOperationsPortal() {
     try {
       const result = await api(`/api/admin/opportunities?${params}`);
       setOpportunities(result.opportunities || []);
-      setOpportunityOptions(result.openOptions || []);
-      setOpportunityPagination(result.pagination || emptyPagination);
+      setOpportunityPagination((current) => {
+        const next = { ...current, ...(result.pagination || {}), page: opportunityPage, pageSize: opportunityPageSize };
+        if (typeof result.pagination?.total === "number") opportunityTotalReady.current = true;
+        if (next.hasNext && next.nextCursor) opportunityCursors.current[opportunityPage] = next.nextCursor;
+        opportunityCursors.current.length = Math.max(opportunityPage, next.hasNext ? opportunityPage + 1 : opportunityPage);
+        return next;
+      });
       if (announce) setStatus(`${result.pagination?.total || 0} leads and opportunities match this view.`);
     } catch (error) { setStatus(authMessage(error)); }
   }, [api, opportunityPage, opportunityPageSize, opportunitySearch, opportunityServiceFilter, opportunitySort, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic]);
 
   const loadProducts = useCallback(async (announce = false) => {
     const params = new URLSearchParams({ page: String(productPage), pageSize: String(productPageSize), sort: productSort });
+    const cursor = productCursors.current[productPage - 1] || "";
+    if (cursor) params.set("cursor", cursor);
+    if (productTotalReady.current) params.set("total", "0");
     if (productSearch.trim()) params.set("search", productSearch.trim());
     if (productWholesaler.trim()) params.set("supplier", productWholesaler.trim());
     if (productBrand.trim()) params.set("brand", productBrand.trim());
@@ -458,7 +495,13 @@ export function AdminOperationsPortal() {
       const result = await api(`/api/admin/products?${params}`);
       const nextProducts = result.products || [];
       setProducts(nextProducts);
-      setProductPagination(result.pagination || emptyPagination);
+      setProductPagination((current) => {
+        const next = { ...current, ...(result.pagination || {}), page: productPage, pageSize: productPageSize };
+        if (typeof result.pagination?.total === "number") productTotalReady.current = true;
+        if (next.hasNext && next.nextCursor) productCursors.current[productPage] = next.nextCursor;
+        productCursors.current.length = Math.max(productPage, next.hasNext ? productPage + 1 : productPage);
+        return next;
+      });
       setProductListCounts(result.counts || { total: 0, pending: 0, approved: 0, live: 0 });
       setProductReview(Object.fromEntries(nextProducts.map((product: CatalogueProduct) => [product.id, {
         reviewStatus: product.reviewStatus, reviewNote: product.reviewNote || "", listingStatus: product.listingStatus,
@@ -481,20 +524,24 @@ export function AdminOperationsPortal() {
       if (accountResult.status === "fulfilled") {
         setAccounts(accountResult.value.accounts || []);
         setAccountPagination(accountResult.value.pagination || emptyPagination);
+        accountTotalReady.current = typeof accountResult.value.pagination?.total === "number";
+        accountCursors.current = ["", accountResult.value.pagination?.nextCursor || ""].filter((value, index) => index === 0 || Boolean(value));
         setAccountListCounts(accountResult.value.counts || { total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
-        setInstallerOptions(accountResult.value.installerOptions || []);
       }
       else failures.push("partners");
       if (opportunityResult.status === "fulfilled") {
         setOpportunities(opportunityResult.value.opportunities || []);
         setOpportunityPagination(opportunityResult.value.pagination || emptyPagination);
-        setOpportunityOptions(opportunityResult.value.openOptions || []);
+        opportunityTotalReady.current = typeof opportunityResult.value.pagination?.total === "number";
+        opportunityCursors.current = ["", opportunityResult.value.pagination?.nextCursor || ""].filter((value, index) => index === 0 || Boolean(value));
       }
       else failures.push("leads and opportunities");
       if (productResult.status === "fulfilled") {
         const nextProducts = productResult.value.products || [];
         setProducts(nextProducts);
         setProductPagination(productResult.value.pagination || emptyPagination);
+        productTotalReady.current = typeof productResult.value.pagination?.total === "number";
+        productCursors.current = ["", productResult.value.pagination?.nextCursor || ""].filter((value, index) => index === 0 || Boolean(value));
         setProductListCounts(productResult.value.counts || { total: 0, pending: 0, approved: 0, live: 0 });
         setProductReview(
           Object.fromEntries(
@@ -630,6 +677,16 @@ export function AdminOperationsPortal() {
     });
     return () => { cancelled = true; };
   }, [api, session]);
+
+  useEffect(() => {
+    accountCursors.current = [""]; accountTotalReady.current = false;
+  }, [accountPageSize, accountSearch, accountSort, accountSynthetic, accountType, accountVerification]);
+  useEffect(() => {
+    opportunityCursors.current = [""]; opportunityTotalReady.current = false;
+  }, [opportunityPageSize, opportunitySearch, opportunityServiceFilter, opportunitySort, opportunityStateFilter, opportunityStatusFilter, opportunitySynthetic]);
+  useEffect(() => {
+    productCursors.current = [""]; productTotalReady.current = false;
+  }, [productBrand, productCategory, productListingStatus, productMaximumPrice, productMinimumPrice, productModel, productPageSize, productReviewStatus, productSearch, productSort, productStock, productSynthetic, productWholesaler]);
 
   useEffect(() => {
     if (!session || !accountViewReady) return;
@@ -1212,7 +1269,6 @@ export function AdminOperationsPortal() {
   const openProductEnquiries = productEnquiries.filter((item) => ["new", "viewed"].includes(item.status)).length;
   const respondedProductEnquiries = productEnquiries.filter((item) => item.status === "responded").length;
   const enquiryValueCents = productEnquiries.reduce((total, item) => total + item.subtotalCentsExGst, 0);
-  const openOpportunities = opportunityOptions;
   const visibleOpportunities = opportunities;
   const activeOwners = admins.filter(
     (item) => item.role === "owner" && item.status === "active",
@@ -1698,6 +1754,7 @@ export function AdminOperationsPortal() {
                   </div>
                 )}
               </section>
+              {["owner", "admin"].includes(session.role) && <AdminPerformancePanel api={api} />}
               <div className="admin-overview-grid">
                 <section className="admin-panel">
                   <div className="admin-panel-heading">
@@ -1826,12 +1883,12 @@ export function AdminOperationsPortal() {
                 </select>
                 <button type="submit">Apply filters</button>
               </form>
-              <WorkspaceListControls page={accountPagination.page} pageCount={accountPagination.pageCount} pageSize={accountPagination.pageSize} total={accountPagination.total}
+              <WorkspaceListControls page={accountPagination.page} pageCount={accountPagination.pageCount} pageSize={accountPagination.pageSize} total={accountPagination.total} hasNext={accountPagination.hasNext}
                 saved={accountViewSaved} busy={accountViewBusy} onPage={setAccountPage} onPageSize={(size) => { setAccountPageSize(size); setAccountPage(1); }}
                 onSave={savePartnerView} onReset={resetPartnerView} />
               <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!accounts.length} onClick={exportPartners}>Export visible partners CSV</button></div>
               <div className="admin-partner-layout">
-                <section className="admin-panel admin-account-list">
+                <section className="admin-panel admin-account-list tlink-data-table">
                   <div className="admin-table-header">
                     <span>Business</span>
                     <span>Type</span>
@@ -2282,7 +2339,7 @@ export function AdminOperationsPortal() {
                   </button>
                 )}
               </div>
-              <WorkspaceListControls page={opportunityPagination.page} pageCount={opportunityPagination.pageCount} pageSize={opportunityPagination.pageSize} total={opportunityPagination.total}
+              <WorkspaceListControls page={opportunityPagination.page} pageCount={opportunityPagination.pageCount} pageSize={opportunityPagination.pageSize} total={opportunityPagination.total} hasNext={opportunityPagination.hasNext}
                 saved={opportunityViewSaved} busy={opportunityViewBusy} onPage={setOpportunityPage} onPageSize={(size) => { setOpportunityPageSize(size); setOpportunityPage(1); }}
                 onSave={saveOpportunityView} onReset={resetOpportunityView} />
               <div className="workspace-table-actionbar"><button className="workspace-csv-export" type="button" disabled={!visibleOpportunities.length} onClick={exportOpportunities}>Export visible leads CSV</button></div>
@@ -2450,7 +2507,7 @@ export function AdminOperationsPortal() {
                   </label>
                   <button type="submit">Create opportunity</button>
                 </form>
-                <section className="admin-panel admin-opportunity-list">
+                <section className="admin-panel admin-opportunity-list tlink-data-table">
                   <div className="admin-panel-heading">
                     <span>Pipeline</span>
                     <h2>Current leads and opportunities</h2>
@@ -2590,44 +2647,12 @@ export function AdminOperationsPortal() {
                       and capability checks still apply.
                     </p>
                   </div>
-                  <label>
-                    Open opportunity
-                    <select
-                      value={selectedOpportunity}
-                      onChange={(event) =>
-                        setSelectedOpportunity(event.target.value)
-                      }
-                      required
-                    >
-                      <option value="">Choose an opportunity</option>
-                      {openOpportunities.map((item) => (
-                        <option value={item.id} key={item.id}>
-                          {item.title} · {item.state} {item.postcode}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Active business
-                    <select
-                      value={selectedBusiness}
-                      onChange={(event) =>
-                        setSelectedBusiness(event.target.value)
-                      }
-                      required
-                    >
-                      <option value="">Choose a business</option>
-                      {installerOptions.map((item) => (
-                          <option
-                            value={item.firebaseUid}
-                            key={item.firebaseUid}
-                          >
-                            {item.businessName} · {item.partnerType} ·{" "}
-                            {item.addressState}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
+                  <SearchableLookup label="Open opportunity" value={selectedOpportunity} required
+                    placeholder="Search title or postcode" load={loadOpportunityOptions}
+                    onChange={(value) => setSelectedOpportunity(value)} />
+                  <SearchableLookup label="Active installer" value={selectedBusiness} required
+                    placeholder="Search business or postcode" load={loadInstallerOptions}
+                    onChange={(value) => setSelectedBusiness(value)} />
                   <button type="submit">Add eligible installer</button>
                 </form>
               )}
@@ -2702,10 +2727,10 @@ export function AdminOperationsPortal() {
                   <label><span>Sort by</span><select value={productSort} onChange={(event) => { setProductSort(event.target.value); setProductPage(1); }}><option value="priority-desc">Review priority</option><option value="updated-desc">Recently updated</option><option value="name-asc">Product A to Z</option><option value="supplier-asc">Wholesaler A to Z</option><option value="brand-asc">Brand A to Z</option><option value="model-asc">Model code A to Z</option><option value="category-asc">Category</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option><option value="stock-asc">Stock status</option><option value="lead-asc">Lead time</option><option value="warranty-desc">Warranty longest first</option></select></label>
                   <button type="button" onClick={() => { setProductSearch(""); setProductWholesaler(""); setProductBrand(""); setProductModel(""); setProductCategory(""); setProductStock(""); setProductReviewStatus(""); setProductListingStatus(""); setProductMinimumPrice(""); setProductMaximumPrice(""); setProductPage(1); }}>Clear filters</button>
                 </div></div>
-                <WorkspaceListControls page={productPagination.page} pageCount={productPagination.pageCount} pageSize={productPagination.pageSize} total={productPagination.total}
+                <WorkspaceListControls page={productPagination.page} pageCount={productPagination.pageCount} pageSize={productPagination.pageSize} total={productPagination.total} hasNext={productPagination.hasNext}
                   saved={productViewSaved} busy={productViewBusy} onPage={setProductPage} onPageSize={(size) => { setProductPageSize(size); setProductPage(1); }}
                   onSave={saveProductView} onReset={resetProductView} />
-                <div className="admin-catalogue-list">
+                <div className="admin-catalogue-list tlink-data-table" role="table" aria-label="Catalogue review products">
                   <div className="admin-catalogue-columns" aria-hidden="true">
                     <span>Wholesaler</span><span>Brand</span><span>Model code</span><span>Product</span><span>Category</span><span>Price ex GST</span><span>Minimum order</span><span>Stock</span><span>Lead time</span><span>Warranty</span><span>Review</span><span>Listing</span><span>Linked kit</span><span>Action</span>
                   </div>
@@ -2845,7 +2870,7 @@ export function AdminOperationsPortal() {
                     and street addresses are outside this workflow.
                   </p>
                 </div>
-                <div className="admin-product-enquiry-list">
+                <div className="admin-product-enquiry-list tlink-data-table">
                   {productEnquiries.length ? productEnquiries.map((item) => (
                     <article key={item.id}>
                       <header>
@@ -2897,7 +2922,7 @@ export function AdminOperationsPortal() {
                   <h2>Referral history</h2>
                   <p>Monthly members receive their second month free; annual members receive month 13 free.</p>
                 </div>
-                <div className="admin-referral-list">
+                <div className="admin-referral-list tlink-data-table">
                   {referrals.length ? referrals.map((item) => (
                     <article key={item.id}>
                       <div className="admin-referral-parties">
@@ -2995,7 +3020,7 @@ export function AdminOperationsPortal() {
                     user signs in with a verified Firebase account.
                   </p>
                 </form>
-                <section className="admin-panel admin-admin-list">
+                <section className="admin-panel admin-admin-list tlink-data-table">
                   <div className="admin-panel-heading">
                     <span>Least privilege</span>
                     <h2>Operations team</h2>

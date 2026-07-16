@@ -7,6 +7,9 @@ import {
   type FeatureKey,
   type PartnerType,
 } from "@/lib/direct-trade-entitlements";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { performanceJson, routeTimer } from "@/lib/route-performance";
+import { ftsPrefixQuery } from "@/lib/fts-search";
 
 export const runtime = "edge";
 
@@ -16,17 +19,28 @@ const AVAILABILITY_STATUSES = new Set(["open", "limited", "paused"]);
 const PLAN_KEYS = new Set(["unselected", "installer_annual", "installer_monthly", "supplier_annual", "supplier_monthly"]);
 const BILLING_STATUSES = new Set(["not_connected", "processing", "trial", "active", "active_cancels_at_period_end", "past_due", "paused", "cancelled"]);
 const PAGE_SIZES = new Set([25, 50, 100]);
-const SORTS: Record<string, string> = {
-  "updated-desc": "updated_at DESC",
-  "updated-asc": "updated_at ASC",
-  "name-asc": "business_name COLLATE NOCASE ASC, updated_at DESC",
-  "name-desc": "business_name COLLATE NOCASE DESC, updated_at DESC",
-  "type-asc": "partner_type COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
-  "type-desc": "partner_type COLLATE NOCASE DESC, business_name COLLATE NOCASE ASC",
-  "verification-asc": "verification_status COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
-  "status-asc": "account_status COLLATE NOCASE ASC, business_name COLLATE NOCASE ASC",
-  "status-desc": "account_status COLLATE NOCASE DESC, business_name COLLATE NOCASE ASC",
+type AccountSortTerm = { expression: string; direction: KeysetDirection; rowKey: string };
+type AccountSort = { orderBy: string; terms: AccountSortTerm[] };
+const term = (expression: string, direction: KeysetDirection, rowKey: string): AccountSortTerm => ({ expression, direction, rowKey });
+const makeSort = (terms: AccountSortTerm[]): AccountSort => {
+  const stable = [...terms, term("firebase_uid", terms.at(-1)?.direction || "asc", "firebase_uid")];
+  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
 };
+const SORTS: Record<string, AccountSort> = {
+  "updated-desc": makeSort([term("updated_at", "desc", "updated_at")]),
+  "updated-asc": makeSort([term("updated_at", "asc", "updated_at")]),
+  "name-asc": makeSort([term("business_name COLLATE NOCASE", "asc", "business_name"), term("updated_at", "desc", "updated_at")]),
+  "name-desc": makeSort([term("business_name COLLATE NOCASE", "desc", "business_name"), term("updated_at", "desc", "updated_at")]),
+  "type-asc": makeSort([term("partner_type COLLATE NOCASE", "asc", "partner_type"), term("business_name COLLATE NOCASE", "asc", "business_name")]),
+  "type-desc": makeSort([term("partner_type COLLATE NOCASE", "desc", "partner_type"), term("business_name COLLATE NOCASE", "asc", "business_name")]),
+  "verification-asc": makeSort([term("verification_status COLLATE NOCASE", "asc", "verification_status"), term("business_name COLLATE NOCASE", "asc", "business_name")]),
+  "status-asc": makeSort([term("account_status COLLATE NOCASE", "asc", "account_status"), term("business_name COLLATE NOCASE", "asc", "business_name")]),
+  "status-desc": makeSort([term("account_status COLLATE NOCASE", "desc", "account_status"), term("business_name COLLATE NOCASE", "asc", "business_name")]),
+};
+
+function cursorValues(sort: AccountSort, row: Record<string, unknown>) {
+  return sort.terms.map((item) => String(row[item.rowKey] || ""));
+}
 
 function shapeAccount(row: Record<string, unknown>) {
   return {
@@ -112,55 +126,63 @@ export async function GET(request: Request) {
     const partnerType = cleanAdminText(url.searchParams.get("partnerType"), 20);
     const verification = cleanAdminText(url.searchParams.get("verification"), 30);
     const synthetic = cleanAdminText(url.searchParams.get("synthetic"), 20);
-    const sort = cleanAdminText(url.searchParams.get("sort"), 30) || "updated-desc";
+    const timer = routeTimer();
+    const sortValue = cleanAdminText(url.searchParams.get("sort"), 30);
+    const sort = SORTS[sortValue] ? sortValue : "updated-desc";
     const requestedPage = Number(url.searchParams.get("page"));
     const requestedPageSize = Number(url.searchParams.get("pageSize"));
     const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+    const includeTotal = url.searchParams.get("total") !== "0";
+    const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
     const clauses: string[] = [];
     const bindings: unknown[] = [];
     if (search) {
-      clauses.push("(LOWER(business_name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(contact_name) LIKE ? OR postcode LIKE ?)");
-      const term = `%${search}%`;
-      bindings.push(term, term, term, term);
+      clauses.push("firebase_uid IN (SELECT entity_id FROM tlink_account_search WHERE tlink_account_search MATCH ?)");
+      bindings.push(ftsPrefixQuery(search));
     }
     if (ACCOUNT_STATUSES.has(status)) { clauses.push("account_status = ?"); bindings.push(status); }
     if (["installer", "supplier"].includes(partnerType)) { clauses.push("partner_type = ?"); bindings.push(partnerType); }
     if (VERIFICATION_STATUSES.has(verification)) { clauses.push("verification_status = ?"); bindings.push(verification); }
     if (synthetic === "only") clauses.push("COALESCE(is_synthetic, 0) = 1");
     if (synthetic === "exclude") clauses.push("COALESCE(is_synthetic, 0) = 0");
+    const selectedSort = SORTS[sort];
+    let cursor;
+    try { cursor = decodeKeysetCursor(cursorInput, sort, selectedSort.terms.length); }
+    catch { return adminJson({ ok: false, error: "This account page link has expired. Start again from the first page." }, 400); }
+    if (page > 1 && !cursor) return adminJson({ ok: false, error: "This account page link has expired. Start again from the first page." }, 400);
+    const rowClauses = [...clauses];
+    const rowBindings = [...bindings];
+    if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowClauses.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const [countRow, rows, counts, installerOptions] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) total FROM trade_accounts ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    const rowWhere = rowClauses.length ? `WHERE ${rowClauses.join(" AND ")}` : "";
+    const [countRow, rows, counts] = await Promise.all([
+      includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_accounts ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
       plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, is_synthetic, created_at, updated_at
-      FROM trade_accounts ${where} ORDER BY ${SORTS[sort] || SORTS["updated-desc"]} LIMIT ? OFFSET ?`)
-        .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
+      FROM trade_accounts ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+        .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN billing_status IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) paid,
         SUM(CASE WHEN billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) free,
         SUM(CASE WHEN partner_type = 'supplier' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) hidden_suppliers,
         SUM(CASE WHEN partner_type = 'installer' AND billing_status NOT IN ('trial', 'active', 'active_cancels_at_period_end') THEN 1 ELSE 0 END) lead_locked_installers
         FROM trade_accounts`).first<Record<string, unknown>>(),
-      db.prepare(`SELECT firebase_uid, business_name, partner_type, address_state, account_status
-        FROM trade_accounts WHERE partner_type = 'installer' AND account_status = 'active'
-        ORDER BY business_name COLLATE NOCASE LIMIT 2000`).all<Record<string, unknown>>(),
-    ]);
-    const total = Number(countRow?.total || 0);
-    return adminJson({
+    ].map((work) => timer.database(work)));
+    const total = countRow ? Number(countRow.total || 0) : undefined;
+    const hasNext = rows.results.length > pageSize;
+    const pageRows = rows.results.slice(0, pageSize);
+    const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(sort, cursorValues(selectedSort, pageRows.at(-1)!)) : "";
+    return performanceJson({
       ok: true,
-      accounts: rows.results.map(shapeAccount),
+      accounts: pageRows.map(shapeAccount),
       counts: {
         total: Number(counts?.total || 0), paid: Number(counts?.paid || 0), free: Number(counts?.free || 0),
         hiddenSuppliers: Number(counts?.hidden_suppliers || 0), leadLockedInstallers: Number(counts?.lead_locked_installers || 0),
       },
-      installerOptions: installerOptions.results.map((row) => ({
-        firebaseUid: row.firebase_uid, businessName: row.business_name, partnerType: row.partner_type,
-        addressState: row.address_state, accountStatus: row.account_status,
-      })),
-      pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
-    });
+      pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor },
+    }, { db, routeKey: "admin.accounts", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: pageRows.length, cursorUsed: Boolean(cursor) });
   } catch (error) {
     return adminError(error);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
@@ -26,7 +26,8 @@ type EligibleEnquiry = {
   id: string; listId: string; supplierUid: string; status: string; supplierNote: string; updatedAt: string;
   listName: string; projectPostcode: string; supplierBusiness: string;
 };
-type PurchasingResult = { ok?: boolean; orders?: PurchaseOrder[]; eligibleEnquiries?: EligibleEnquiry[]; metrics?: { total: number; active: number; fulfilled: number; openClaims: number }; pagination?: { page: number; pageSize: number; total: number; pageCount: number }; error?: string };
+type PurchasingPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
+type PurchasingResult = { ok?: boolean; orders?: PurchaseOrder[]; eligibleEnquiries?: EligibleEnquiry[]; metrics?: { total: number; active: number; fulfilled: number; openClaims: number }; pagination?: Partial<PurchasingPagination>; error?: string };
 
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -41,7 +42,9 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
   const [sort, setSort] = useState("updated-desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const [pagination, setPagination] = useState<PurchasingPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const pageCursors = useRef<string[]>([""]);
+  const totalReady = useRef(false);
   const [metrics, setMetrics] = useState({ total: 0, active: 0, fulfilled: 0, openClaims: 0 });
   const [viewReady, setViewReady] = useState(false);
   const [viewSaved, setViewSaved] = useState(false);
@@ -55,13 +58,22 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     setOrders(next);
     setEligible(result.eligibleEnquiries || []);
     if (result.metrics) setMetrics(result.metrics);
-    if (result.pagination) setPagination(result.pagination);
+    if (result.pagination) setPagination((current) => {
+      const nextPagination = { ...current, ...result.pagination, page, pageSize };
+      if (typeof result.pagination?.total === "number") totalReady.current = true;
+      if (nextPagination.hasNext && nextPagination.nextCursor) pageCursors.current[page] = nextPagination.nextCursor;
+      pageCursors.current.length = Math.max(page, nextPagination.hasNext ? page + 1 : page);
+      return nextPagination;
+    });
     setSelectedId((current) => current && next.some((order) => order.id === current) ? current : next[0]?.id || "");
-  }, []);
+  }, [page, pageSize]);
 
   const request = useCallback(async (method: "GET" | "POST" | "PATCH", body?: Record<string, unknown>) => {
     const token = await user.getIdToken();
     const params = new URLSearchParams({ search: search.trim(), filter, sort, page: String(page), pageSize: String(pageSize) });
+    const cursor = pageCursors.current[page - 1] || "";
+    if (cursor) params.set("cursor", cursor);
+    if (totalReady.current) params.set("total", "0");
     const response = await fetch(method === "GET" ? `/api/trade-purchasing?${params}` : "/api/trade-purchasing", {
       method, cache: "no-store",
       headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
@@ -72,6 +84,9 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     apply(result);
   }, [apply, filter, page, pageSize, search, sort, user]);
 
+  useEffect(() => {
+    pageCursors.current = [""]; totalReady.current = false;
+  }, [filter, pageSize, search, sort]);
   useEffect(() => {
     let active = true;
     void user.getIdToken().then((token) => fetch("/api/trade-list-views?view=purchasing-orders", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }))
@@ -173,7 +188,7 @@ export function TradePurchasingWorkspace({ user, partnerType, navigationTarget }
     <div className="purchasing-toolbar"><div role="group" aria-label="Filter purchase orders">{[["active", "In progress"], ["claims", "Open claims"], ["complete", "Completed"], ["all", "All"]].map(([value, label]) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => { setFilter(value); setPage(1); }}>{label}</button>)}</div><span>{pagination.total} matching</span></div>
     <div className="purchasing-list-filters"><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search order, business, list or reference" aria-label="Search purchase orders" />
       <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort purchase orders"><option value="updated-desc">Recently updated</option><option value="number-asc">Order number ascending</option><option value="number-desc">Order number descending</option><option value="value-desc">Highest value</option></select></div>
-    <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} saved={viewSaved} busy={viewBusy}
+    <WorkspaceListControls page={pagination.page} pageCount={pagination.pageCount} pageSize={pageSize} total={pagination.total} hasNext={pagination.hasNext} saved={viewSaved} busy={viewBusy}
       onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} onSave={() => void updateSavedView("PATCH")} onReset={() => void updateSavedView("DELETE")} />
     <div className="purchasing-layout">
       <aside className="purchasing-order-list" aria-label="Purchase orders">{orders.length ? orders.map((order) => <button type="button" key={order.id} className={selectedId === order.id ? "active" : ""} onClick={() => setSelectedId(order.id)}><span><b>{order.orderNumber}</b><em>{readable(order.status)}</em></span><strong>{partnerType === "supplier" ? order.installerBusiness : order.supplierBusiness}</strong><small>{order.listName} | {money.format(order.totalCentsIncGst / 100)} inc GST</small></button>) : <div className="dashboard-empty-state"><strong>No orders in this view</strong><p>Change the filter to review another order state.</p></div>}</aside>

@@ -3,6 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { ftsPrefixQuery } from "@/lib/fts-search";
 
 export const runtime = "edge";
 
@@ -171,8 +172,8 @@ export async function GET(request: Request) {
   if (maximumLeadDays >= 0) { conditions.push("p.lead_time_days <= ?"); bindings.push(maximumLeadDays); }
   if (minimumWarrantyYears) { conditions.push("p.warranty_years >= ?"); bindings.push(minimumWarrantyYears); }
   if (search) {
-    conditions.push("LOWER(p.name) LIKE ?");
-    bindings.push(`%${search}%`);
+    conditions.push("p.id IN (SELECT entity_id FROM tlink_product_search WHERE tlink_product_search MATCH ?)");
+    bindings.push(ftsPrefixQuery(search));
   }
   if (modelSearch) { conditions.push("LOWER(p.model_number) LIKE ?"); bindings.push(`%${modelSearch}%`); }
   const whereSql = conditions.join(" AND ");

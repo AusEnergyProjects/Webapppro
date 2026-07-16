@@ -192,10 +192,12 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.doesNotMatch(portal, /[\u2013\u2014]/);
 });
 
-test("large opportunity sets load without a parameter per opportunity", () => {
-  assert.match(opportunitiesRoute, /IN \(SELECT o\.id FROM trade_opportunities o \$\{where\} ORDER BY \$\{orderBy\} LIMIT \? OFFSET \?\)/);
-  assert.match(opportunitiesRoute, /pageCount: Math\.max\(1, Math\.ceil\(total \/ pageSize\)\)/);
-  assert.doesNotMatch(opportunitiesRoute, /ids\.map\(\(\) => "\?"\)/);
+test("large opportunity sets use cursor pages with bounded allocation lookups", () => {
+  assert.match(opportunitiesRoute, /decodeKeysetCursor/);
+  assert.match(opportunitiesRoute, /keysetAfter/);
+  assert.match(opportunitiesRoute, /LIMIT \?`\)/);
+  assert.match(opportunitiesRoute, /pageRows\.map\(\(\) => "\?"\)/);
+  assert.doesNotMatch(opportunitiesRoute, /LIMIT \? OFFSET \?/);
 });
 
 test("the ecosystem walkthrough is read only, privacy safe and checks every platform role", () => {

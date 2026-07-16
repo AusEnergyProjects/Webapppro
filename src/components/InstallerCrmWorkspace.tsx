@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeAccountingPanel } from "./TradeAccountingPanel";
 import { TradeHandoverCentre } from "./TradeHandoverCentre";
@@ -37,7 +37,7 @@ type Job = {
   appointments: Appointment[]; notes: Note[]; customerDisplayName?: string; createdAt: string; updatedAt: string;
 };
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamAccess?: boolean; error?: string };
-type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number };
+type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; jobs?: Job[]; error?: string };
 type ActivityJob = { id: string; workNumber: string; title: string };
@@ -117,11 +117,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
   const [indexedCustomers, setIndexedCustomers] = useState<Customer[]>([]);
   const [jobPagination, setJobPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
   const [customerPagination, setCustomerPagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const jobCursors = useRef<string[]>([""]); const jobTotalReady = useRef(false);
+  const customerCursors = useRef<string[]>([""]); const customerTotalReady = useRef(false);
   const [summary, setSummary] = useState<CrmSummaryResult>({});
   const [scheduleItems, setScheduleItems] = useState<ActivityAppointment[]>([]);
   const [schedulePage, setSchedulePage] = useState(1);
   const [schedulePageSize, setSchedulePageSize] = useState(25);
   const [schedulePagination, setSchedulePagination] = useState<IndexPagination>({ page: 1, pageSize: 25, total: 0, pageCount: 1 });
+  const scheduleCursors = useRef<string[]>([""]); const scheduleTotalReady = useRef(false);
   const [report, setReport] = useState<CrmReportResult>({});
   const [boardJobs, setBoardJobs] = useState<Record<string, Job[]>>({});
   const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
@@ -193,12 +196,19 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     const params = new URLSearchParams({ mode: "index", resource: "jobs", search, customer: jobCustomer, service: jobService,
       pipeline: pipelineFocus || jobPipeline, stage: jobStage, location: jobLocation, filter: jobFilter, sort: jobSort,
       page: String(jobPage), pageSize: String(jobPageSize) });
+    const cursor = jobCursors.current[jobPage - 1] || ""; if (cursor) params.set("cursor", cursor);
+    if (jobTotalReady.current) params.set("total", "0");
     const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The job list could not be loaded.");
     const items = (result.items || []) as Job[];
     setIndexedJobs(items);
-    setJobPagination(result.pagination || { page: jobPage, pageSize: jobPageSize, total: items.length, pageCount: 1 });
+    setJobPagination((current) => {
+      const next = { ...current, ...(result.pagination || {}), page: jobPage, pageSize: jobPageSize };
+      if (typeof result.pagination?.total === "number") jobTotalReady.current = true;
+      if (next.hasNext && next.nextCursor) jobCursors.current[jobPage] = next.nextCursor;
+      jobCursors.current.length = Math.max(jobPage, next.hasNext ? jobPage + 1 : jobPage); return next;
+    });
     setSelectedJobId((current) => current && items.some((item) => item.id === current) ? current : items[0]?.id || "");
   }, [jobCustomer, jobFilter, jobLocation, jobPage, jobPageSize, jobPipeline, jobService, jobSort, jobStage, pipelineFocus, search, user]);
 
@@ -207,14 +217,31 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     const params = new URLSearchParams({ mode: "index", resource: "customers", search: customerSearch, street: customerStreet,
       phone: customerPhone, postcode: customerPostcode, suburb: customerSuburb, state: customerState, service: customerService,
       jobId: customerJobId, pipeline: customerPipeline, sort: customerSort, page: String(customerPage), pageSize: String(customerPageSize) });
+    const cursor = customerCursors.current[customerPage - 1] || ""; if (cursor) params.set("cursor", cursor);
+    if (customerTotalReady.current) params.set("total", "0");
     const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The customer list could not be loaded.");
     const items = (result.items || []) as Customer[];
     setIndexedCustomers(items);
-    setCustomerPagination(result.pagination || { page: customerPage, pageSize: customerPageSize, total: items.length, pageCount: 1 });
+    setCustomerPagination((current) => {
+      const next = { ...current, ...(result.pagination || {}), page: customerPage, pageSize: customerPageSize };
+      if (typeof result.pagination?.total === "number") customerTotalReady.current = true;
+      if (next.hasNext && next.nextCursor) customerCursors.current[customerPage] = next.nextCursor;
+      customerCursors.current.length = Math.max(customerPage, next.hasNext ? customerPage + 1 : customerPage); return next;
+    });
     setSelectedCustomerId((current) => current && items.some((item) => item.id === current) ? current : items[0]?.id || "");
   }, [customerJobId, customerPage, customerPageSize, customerPhone, customerPipeline, customerPostcode, customerSearch, customerService, customerSort, customerState, customerStreet, customerSuburb, user]);
+
+  useEffect(() => {
+    jobCursors.current = [""]; jobTotalReady.current = false;
+  }, [jobCustomer, jobFilter, jobLocation, jobPageSize, jobPipeline, jobService, jobSort, jobStage, pipelineFocus, search]);
+  useEffect(() => {
+    customerCursors.current = [""]; customerTotalReady.current = false;
+  }, [customerJobId, customerPageSize, customerPhone, customerPipeline, customerPostcode, customerSearch, customerService, customerSort, customerState, customerStreet, customerSuburb]);
+  useEffect(() => {
+    scheduleCursors.current = [""]; scheduleTotalReady.current = false;
+  }, [schedulePageSize]);
 
   useEffect(() => {
     if (view !== "jobs" || creating === "job" || jobLayout !== "list") return;
@@ -281,12 +308,22 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     if (view !== "schedule") return;
     let active = true;
     const params = new URLSearchParams({ mode: "schedule", page: String(schedulePage), pageSize: String(schedulePageSize) });
+    const cursor = scheduleCursors.current[schedulePage - 1] || ""; if (cursor) params.set("cursor", cursor);
+    if (scheduleTotalReady.current) params.set("total", "0");
     void user.getIdToken().then((token) => fetch(`/api/trade-crm?${params}`, {
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmScheduleResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "The schedule could not be loaded.");
-      if (active) { setScheduleItems(result.items || []); setSchedulePagination(result.pagination || { page: schedulePage, pageSize: schedulePageSize, total: 0, pageCount: 1 }); }
+      if (active) {
+        setScheduleItems(result.items || []);
+        setSchedulePagination((current) => {
+          const next = { ...current, ...(result.pagination || {}), page: schedulePage, pageSize: schedulePageSize };
+          if (typeof result.pagination?.total === "number") scheduleTotalReady.current = true;
+          if (next.hasNext && next.nextCursor) scheduleCursors.current[schedulePage] = next.nextCursor;
+          scheduleCursors.current.length = Math.max(schedulePage, next.hasNext ? schedulePage + 1 : schedulePage); return next;
+        });
+      }
     }).catch((error) => active && setStatus(error instanceof Error ? error.message : "The schedule could not be loaded."));
     return () => { active = false; };
   }, [refreshNonce, schedulePage, schedulePageSize, user, view]);
@@ -505,7 +542,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
         <button type="button" onClick={() => { setSearch(""); setJobCustomer(""); setJobService(""); setJobPipeline(""); setJobStage(""); setJobLocation(""); setPipelineFocus(""); setJobPage(1); }}>Clear detailed filters</button>
       </div></details>}
       {pipelineFocus && <div className="crm-filter-notice"><span>Showing {pipelineLabels[pipelineFocus] || pipelineFocus}</span><button type="button" onClick={() => setPipelineFocus("")}>Clear stage</button></div>}
-      {jobLayout === "list" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} saved={jobViewSaved} busy={viewBusy || indexLoading}
+      {jobLayout === "list" && <WorkspaceListControls page={jobPagination.page} pageCount={jobPagination.pageCount} pageSize={jobPagination.pageSize} total={jobPagination.total} hasNext={jobPagination.hasNext} saved={jobViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => { setJobPage(page); setSelectedJobIds([]); }} onPageSize={(size) => { setJobPageSize(size); setJobPage(1); setSelectedJobIds([]); }} onSave={() => void updateListView("installer-jobs", "PATCH")} onReset={() => void updateListView("installer-jobs", "DELETE")} />}
       {jobLayout === "list" && selectedJobIds.length > 0 && <div className="crm-bulk-actions" role="region" aria-label="Selected job actions"><strong>{selectedJobIds.length} job{selectedJobIds.length === 1 ? "" : "s"} selected</strong><label><span>Set priority</span><select value={bulkPriority} onChange={(event) => setBulkPriority(event.target.value)}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><button type="button" disabled={busy === "bulk-job-priority"} onClick={() => void bulkRequest({ action: "bulk_set_job_priority", ids: selectedJobIds, priority: bulkPriority }, "bulk-job-priority", "Selected job priorities updated.")}>{busy === "bulk-job-priority" ? "Updating..." : "Apply priority"}</button><button type="button" className="secondary" onClick={() => setSelectedJobIds([])}>Clear</button></div>}
       {jobLayout === "list" ? <div className="crm-jobs-layout">
@@ -516,7 +553,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
 
     {view === "schedule" && <div className="crm-view">
       <div className="crm-page-heading"><div><span>Appointments and field work</span><h3>Schedule</h3><p>See every booked call, visit, install and service in time order.</p></div></div>
-      <WorkspaceListControls page={schedulePagination.page} pageCount={schedulePagination.pageCount} pageSize={schedulePagination.pageSize} total={schedulePagination.total} saved={false} busy={Boolean(busy)} onPage={setSchedulePage} onPageSize={(size) => { setSchedulePageSize(size); setSchedulePage(1); }} onSave={() => undefined} onReset={() => undefined} showViewActions={false} />
+      <WorkspaceListControls page={schedulePagination.page} pageCount={schedulePagination.pageCount} pageSize={schedulePagination.pageSize} total={schedulePagination.total} hasNext={schedulePagination.hasNext} saved={false} busy={Boolean(busy)} onPage={setSchedulePage} onPageSize={(size) => { setSchedulePageSize(size); setSchedulePage(1); }} onSave={() => undefined} onReset={() => undefined} showViewActions={false} />
       <section className="crm-schedule-board"><header><strong>Upcoming</strong><span>{schedulePagination.total} scheduled</span></header>{scheduleItems.length ? <ol>{scheduleItems.map((item) => <li key={item.id}><time><strong>{new Date(item.startsAt).toLocaleDateString("en-AU", { day: "2-digit" })}</strong><span>{new Date(item.startsAt).toLocaleDateString("en-AU", { month: "short" })}</span></time><div><span>{appointmentLabels[item.appointmentType] || item.appointmentType}</span><h4>{item.title}</h4><small>{dateLabel(item.startsAt, true)}{item.endsAt ? ` to ${new Date(item.endsAt).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}` : ""}</small></div><button type="button" onClick={() => { setSearch(item.job.workNumber); setJobPage(1); setSelectedJobId(item.job.id); setView("jobs"); }}>{item.job.workNumber}<small>{item.job.title}</small></button><button type="button" disabled={busy === `appointment:${item.id}`} onClick={() => void crmRequest("PATCH", { action: "update_appointment", appointmentId: item.id, status: "completed" }, `appointment:${item.id}`, "Appointment marked complete.")}>Complete</button></li>)}</ol> : <div className="crm-empty"><strong>No scheduled appointments</strong><span>Open a job and add its next visit.</span></div>}</section>
     </div>}
 
@@ -539,7 +576,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
         <label><span>Completion status</span><select value={customerPipeline} onChange={(event) => { setCustomerPipeline(event.target.value); setCustomerPage(1); }}><option value="">All statuses</option>{Object.entries(pipelineLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <button type="button" onClick={() => { setCustomerSearch(""); setCustomerStreet(""); setCustomerPhone(""); setCustomerPostcode(""); setCustomerSuburb(""); setCustomerState(""); setCustomerService(""); setCustomerJobId(""); setCustomerPipeline(""); setCustomerPage(1); }}>Clear detailed filters</button>
       </div></details>
-      <WorkspaceListControls page={customerPagination.page} pageCount={customerPagination.pageCount} pageSize={customerPagination.pageSize} total={customerPagination.total} saved={customerViewSaved} busy={viewBusy || indexLoading}
+      <WorkspaceListControls page={customerPagination.page} pageCount={customerPagination.pageCount} pageSize={customerPagination.pageSize} total={customerPagination.total} hasNext={customerPagination.hasNext} saved={customerViewSaved} busy={viewBusy || indexLoading}
         onPage={(page) => { setCustomerPage(page); setSelectedCustomerIds([]); }} onPageSize={(size) => { setCustomerPageSize(size); setCustomerPage(1); setSelectedCustomerIds([]); }} onSave={() => void updateListView("installer-customers", "PATCH")} onReset={() => void updateListView("installer-customers", "DELETE")} />
       {selectedCustomerIds.length > 0 && <div className="crm-bulk-actions" role="region" aria-label="Selected customer actions"><strong>{selectedCustomerIds.length} customer{selectedCustomerIds.length === 1 ? "" : "s"} selected</strong><span>Only customers with no active jobs can be archived.</span><button type="button" disabled={busy === "bulk-customer-archive"} onClick={() => void bulkRequest({ action: "bulk_archive_customers", ids: selectedCustomerIds }, "bulk-customer-archive", "Selected customers archived.")}>{busy === "bulk-customer-archive" ? "Checking..." : "Archive selected"}</button><button type="button" className="secondary" onClick={() => setSelectedCustomerIds([])}>Clear</button></div>}
       <div className="crm-customers-layout"><aside className="crm-customer-list crm-record-table"><div className="crm-record-columns crm-customer-columns" aria-hidden="true"><span></span><span>Customer ID</span><span>Name</span><span>Street address</span><span>Contact number</span><span>Postcode</span><span>Suburb</span><span>State</span><span>Activity</span><span>Latest job</span><span>Status</span></div>{indexedCustomers.length ? indexedCustomers.map((customer) => { const activities = customer.activities || []; const activityLabel = activities.length > 1 ? `Multiple: ${activities.map((item) => serviceLabels[item] || item).join(", ")}` : activities.length ? serviceLabels[activities[0]] || activities[0] : "No activity"; return <article key={customer.id} className={selectedCustomerId === customer.id ? "active" : ""}><label className="crm-row-select"><input type="checkbox" checked={selectedCustomerIds.includes(customer.id)} onChange={(event) => setSelectedCustomerIds((current) => event.target.checked ? [...current, customer.id] : current.filter((id) => id !== customer.id))} /><span className="sr-only">Select {customer.displayName}</span></label><button className="crm-row-open crm-customer-row" type="button" onClick={() => setSelectedCustomerId(customer.id)}><b>{customer.customerNumber}</b><strong title={customer.displayName}>{customer.displayName}</strong><span title={[customer.addressLine1, customer.addressLine2].filter(Boolean).join(", ")}>{[customer.addressLine1, customer.addressLine2].filter(Boolean).join(", ") || "Not added"}</span><span>{customer.phone || "Not added"}</span><span>{customer.postcode || "Not added"}</span><span title={customer.suburb}>{customer.suburb || "Not added"}</span><span>{customer.addressState || "Not added"}</span><span title={activityLabel}>{activityLabel}</span><span>{customer.latestJobNumber || "No jobs"}</span><em>{customer.latestPipelineStage ? pipelineLabels[customer.latestPipelineStage] || customer.latestPipelineStage : "No status"}</em></button></article>; }) : <div className="crm-empty"><strong>{indexLoading ? "Loading customers..." : "No direct customers in this view"}</strong><span>{indexLoading ? "Fetching this page securely." : "Change the search or add a customer your business owns."}</span></div>}</aside>{selectedCustomerDetail?.id === selectedCustomerId ? <CustomerDetail key={`${selectedCustomerDetail.id}:${refreshNonce}`} customer={selectedCustomerDetail} jobs={selectedCustomerJobs} busy={busy} onSave={crmRequest} onOpenJob={(id) => { setSearch(selectedCustomerJobs.find((job) => job.id === id)?.workNumber || ""); setJobPage(1); setSelectedJobId(id); setView("jobs"); }} /> : <section className="crm-card"><div className="crm-empty"><strong>{selectedCustomerId ? "Loading customer..." : "Select a customer"}</strong><span>The private contact record will open here.</span></div></section>}</div>

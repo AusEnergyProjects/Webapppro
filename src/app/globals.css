@@ -4186,6 +4186,32 @@ body input[type="checkbox"]:disabled {
 }
 
 /* List-first record views keep high-volume work scannable without turning summaries into tables. */
+:is(.tlink-data-table, .crm-record-table, .purchasing-order-list) { --tlink-table-head: #edf6f2; --tlink-table-line: #dce9e4; --tlink-table-hover: #f3fbf7; scrollbar-color: #8cb9aa #eef5f2; scrollbar-width: thin; }
+:is(.tlink-data-table, .crm-record-table, .purchasing-order-list) :is([role="columnheader"], .marketplace-product-columns, .supplier-product-columns, .admin-catalogue-columns, .crm-record-columns) { background: var(--tlink-table-head); position: sticky; top: 0; z-index: 2; }
+:is(.tlink-data-table, .crm-record-table, .purchasing-order-list) [role="row"]:hover, :is(.tlink-data-table, .crm-record-table, .purchasing-order-list) article:hover, :is(.tlink-data-table, .crm-record-table, .purchasing-order-list) > button:hover { background-color: var(--tlink-table-hover); }
+:is(.tlink-data-table, .crm-record-table, .purchasing-order-list) article, :is(.tlink-data-table, .crm-record-table, .purchasing-order-list) > button { border-bottom-color: var(--tlink-table-line); }
+
+.searchable-lookup { display: grid; gap: 6px; position: relative; }
+.searchable-lookup > span { color: var(--color-aea-ink); font-size: .6rem; font-weight: 850; }
+.searchable-lookup > input { background: #fff; border: 1px solid #9fc5b7; border-radius: 9px; color: var(--color-aea-ink); min-height: 42px; padding: 9px 11px; width: 100%; }
+.searchable-lookup > div[role="listbox"] { background: #fff; border: 1px solid #abd0c1; border-radius: 10px; box-shadow: 0 12px 26px rgba(10,48,39,.16); display: grid; left: 0; max-height: 260px; overflow: auto; padding: 4px; position: absolute; right: 0; top: 100%; z-index: 30; }
+.searchable-lookup > div[role="listbox"] button { background: transparent; border: 0; border-radius: 7px; color: var(--color-aea-ink); cursor: pointer; display: grid; gap: 2px; padding: 9px; text-align: left; }
+.searchable-lookup > div[role="listbox"] button:hover, .searchable-lookup > div[role="listbox"] button[aria-selected="true"] { background: #edf8f3; }
+.searchable-lookup > div[role="listbox"] small, .searchable-lookup-status { color: var(--color-aea-muted); font-size: .55rem; }
+.supplier-dependency-search { background: #f4faf7; border: 1px solid var(--color-aea-line); border-radius: 9px; display: grid; gap: 5px; margin: 10px 0; padding: 10px; }
+.supplier-dependency-search input { background: #fff; border: 1px solid #a8cbbd; border-radius: 8px; min-height: 40px; padding: 8px 10px; }
+.admin-performance-panel { margin-bottom: 18px; }
+.admin-performance-summary { align-items: baseline; background: #f1f8f5; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0 18px 14px; padding: 12px; }
+.admin-performance-summary strong { color: var(--color-aea-ink); font-size: 1.1rem; }
+.admin-performance-summary span { color: var(--color-aea-green-dark); font-size: .65rem; font-weight: 850; }
+.admin-performance-summary small { color: var(--color-aea-muted); flex-basis: 100%; font-size: .55rem; }
+.admin-performance-table { margin: 0 18px 18px; overflow-x: auto; }
+.admin-performance-table > div { align-items: center; border-bottom: 1px solid var(--color-aea-line); display: grid; gap: 9px; grid-template-columns: minmax(190px, 1.4fr) repeat(6, minmax(80px, .55fr)); min-width: 790px; padding: 9px 11px; }
+.admin-performance-table > div:first-child { color: #467065; font-size: .54rem; font-weight: 900; text-transform: uppercase; }
+.admin-performance-table > div:not(:first-child) { color: var(--color-aea-muted); font-size: .6rem; }
+.admin-performance-table strong { color: var(--color-aea-ink); font-size: .62rem; }
+.admin-performance-table strong small { color: var(--color-aea-muted); display: block; font-size: .5rem; font-weight: 500; }
+.admin-performance-table .attention { color: #a04d2a; font-weight: 900; }
 .marketplace-product-grid,
 .supplier-product-list,
 .admin-catalogue-list { background: #fff; border: 1px solid var(--color-aea-line); border-radius: 13px; display: block; overflow-x: auto; }

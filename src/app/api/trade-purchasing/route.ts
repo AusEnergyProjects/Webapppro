@@ -4,6 +4,8 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { performanceJson, routeTimer } from "@/lib/route-performance";
 
 export const runtime = "edge";
 
@@ -16,6 +18,19 @@ const CLAIM_TRANSITIONS: Record<string, Set<string>> = {
   installer: new Set(["withdrawn"]),
 };
 const PAGE_SIZES = new Set([25, 50, 100]);
+type PurchasingSortTerm = { expression: string; direction: KeysetDirection; rowKey: string; numeric?: boolean };
+type PurchasingSort = { orderBy: string; terms: PurchasingSortTerm[] };
+const purchasingTerm = (expression: string, direction: KeysetDirection, rowKey: string, numeric = false): PurchasingSortTerm => ({ expression, direction, rowKey, numeric });
+const purchasingSort = (terms: PurchasingSortTerm[]): PurchasingSort => {
+  const stable = [...terms, purchasingTerm("po.id", terms.at(-1)?.direction || "asc", "id")];
+  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
+};
+const PURCHASING_SORTS: Record<string, PurchasingSort> = {
+  "updated-desc": purchasingSort([purchasingTerm("po.updated_at", "desc", "updated_at")]),
+  "number-asc": purchasingSort([purchasingTerm("po.order_number COLLATE NOCASE", "asc", "order_number")]),
+  "number-desc": purchasingSort([purchasingTerm("po.order_number COLLATE NOCASE", "desc", "order_number")]),
+  "value-desc": purchasingSort([purchasingTerm("po.total_cents_inc_gst", "desc", "total_cents_inc_gst", true), purchasingTerm("po.updated_at", "desc", "updated_at")]),
+};
 
 async function purchasingIdentity(request: Request) {
   const identity = await requireFirebaseIdentity(request);
@@ -38,6 +53,7 @@ function errorResponse(error: unknown) {
   if (code === "TRADE_REQUIRED") return adminJson({ ok: false, error: "Trade purchasing is reserved for installer and wholesaler accounts." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This business account is not active." }, 403);
   if (code === "OPERATIONS_REQUIRED") return adminJson({ ok: false, error: "Purchase orders and warranty workflows require Business Hub access." }, 403);
+  if (code === "INVALID_CURSOR") return adminJson({ ok: false, error: "This order page link has expired. Start again from the first page." }, 400);
   return adminJson({ ok: false, error: "The purchasing request could not be completed." }, 500);
 }
 
@@ -46,11 +62,14 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
   const ownerColumn = partnerType === "supplier" ? "supplier_uid" : "installer_uid";
   const search = cleanAdminText(url?.searchParams.get("search"), 100).toLowerCase();
   const filter = cleanAdminText(url?.searchParams.get("filter"), 30) || "active";
-  const sort = cleanAdminText(url?.searchParams.get("sort"), 30) || "updated-desc";
+  const sortValue = cleanAdminText(url?.searchParams.get("sort"), 30);
+  const sort = PURCHASING_SORTS[sortValue] ? sortValue : "updated-desc";
   const requestedPage = Number(url?.searchParams.get("page"));
   const requestedPageSize = Number(url?.searchParams.get("pageSize"));
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+  const includeTotal = url?.searchParams.get("total") !== "0";
+  const cursorInput = cleanAdminText(url?.searchParams.get("cursor"), 2000);
   const ownerWhere = `WHERE po.${ownerColumn} = ?`;
   const conditions = [ownerWhere.slice(6)];
   const bindings: unknown[] = [uid];
@@ -61,13 +80,15 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
     conditions.push("LOWER(po.id || ' ' || po.order_number || ' ' || po.installer_reference || ' ' || po.supplier_reference || ' ' || ia.business_name || ' ' || sa.business_name || ' ' || l.name) LIKE ?");
     bindings.push(`%${search}%`);
   }
+  const selectedSort = PURCHASING_SORTS[sort];
+  let cursor;
+  try { cursor = decodeKeysetCursor(cursorInput, sort, selectedSort.terms.length); }
+  catch { throw new Error("INVALID_CURSOR"); }
+  if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
+  const rowConditions = [...conditions]; const rowBindings = [...bindings];
+  if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
   const where = conditions.join(" AND ");
-  const orderBy: Record<string, string> = {
-    "updated-desc": "po.updated_at DESC",
-    "number-asc": "po.order_number COLLATE NOCASE ASC",
-    "number-desc": "po.order_number COLLATE NOCASE DESC",
-    "value-desc": "po.total_cents_inc_gst DESC, po.updated_at DESC",
-  };
+  const rowWhere = rowConditions.join(" AND ");
   const joins = `FROM trade_purchase_orders po
     JOIN trade_accounts ia ON ia.firebase_uid = po.installer_uid
     JOIN trade_accounts sa ON sa.firebase_uid = po.supplier_uid
@@ -75,16 +96,18 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
   const [orders, countRow, metrics] = await Promise.all([
     db.prepare(`SELECT po.*, ia.business_name installer_business, sa.business_name supplier_business,
     l.name list_name, l.project_postcode
-    ${joins} WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
-      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
-    db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+    ${joins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+      .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
+    includeTotal ? db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT COUNT(*) total,
       SUM(CASE WHEN status IN ('submitted', 'confirmed', 'part_fulfilled') THEN 1 ELSE 0 END) active,
       SUM(CASE WHEN status = 'fulfilled' THEN 1 ELSE 0 END) fulfilled,
       (SELECT COUNT(*) FROM trade_warranty_claims wc WHERE wc.${ownerColumn} = ? AND wc.status NOT IN ('resolved', 'rejected', 'withdrawn')) open_claims
       FROM trade_purchase_orders WHERE ${ownerColumn} = ?`).bind(uid, uid).first<Record<string, unknown>>(),
   ]);
-  const orderIds = orders.results.map((row: Record<string, unknown>) => String(row.id));
+  const hasNext = orders.results.length > pageSize;
+  const pageOrders = orders.results.slice(0, pageSize);
+  const orderIds = pageOrders.map((row: Record<string, unknown>) => String(row.id));
   const placeholders = orderIds.map(() => "?").join(",");
   const [items, events, claims] = orderIds.length ? await Promise.all([
     db.prepare(`SELECT * FROM trade_purchase_order_items WHERE purchase_order_id IN (${placeholders}) ORDER BY brand, product_name`).bind(...orderIds).all<Record<string, unknown>>(),
@@ -99,9 +122,18 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
     LEFT JOIN trade_purchase_orders po ON po.enquiry_id = e.id
     WHERE e.installer_uid = ? AND e.status = 'responded' AND po.id IS NULL
     ORDER BY e.updated_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>() : { results: [] };
-  const total = Number(countRow?.total || 0);
+  const total = countRow ? Number(countRow.total || 0) : undefined;
+  const byOrder = (rows: Record<string, unknown>[]) => {
+    const map = new Map<string, Record<string, unknown>[]>();
+    rows.forEach((row) => { const key = String(row.purchase_order_id); map.set(key, [...(map.get(key) || []), row]); });
+    return map;
+  };
+  const itemMap = byOrder(items.results as Record<string, unknown>[]);
+  const eventMap = byOrder(events.results as Record<string, unknown>[]);
+  const claimMap = byOrder(claims.results as Record<string, unknown>[]);
+  const nextCursor = hasNext && pageOrders.length ? encodeKeysetCursor(sort, selectedSort.terms.map((item) => item.numeric ? Number(pageOrders.at(-1)![item.rowKey]) : String(pageOrders.at(-1)![item.rowKey] || ""))) : "";
   return {
-    orders: orders.results.map((row: Record<string, unknown>) => ({
+    orders: pageOrders.map((row: Record<string, unknown>) => ({
       id: row.id, orderNumber: row.order_number, enquiryId: row.enquiry_id, listId: row.list_id,
       status: row.status, installerReference: row.installer_reference, supplierReference: row.supplier_reference,
       deliveryMethod: row.delivery_method, deliveryNotes: row.delivery_notes, supplierNote: row.supplier_note,
@@ -109,17 +141,17 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
       totalCentsIncGst: Number(row.total_cents_inc_gst), submittedAt: row.submitted_at, confirmedAt: row.confirmed_at,
       fulfilledAt: row.fulfilled_at, updatedAt: row.updated_at, installerBusiness: row.installer_business,
       supplierBusiness: row.supplier_business, listName: row.list_name, projectPostcode: row.project_postcode,
-      items: items.results.filter((item: Record<string, unknown>) => item.purchase_order_id === row.id).map((item: Record<string, unknown>) => ({
+      items: (itemMap.get(String(row.id)) || []).map((item: Record<string, unknown>) => ({
         id: item.id, productId: item.supplier_product_id, modelNumber: item.model_number, brand: item.brand,
         name: item.product_name, unitLabel: item.unit_label, quantity: Number(item.quantity),
         fulfilledQuantity: Number(item.fulfilled_quantity), unitPriceCentsExGst: Number(item.unit_price_cents_ex_gst),
         warrantyYears: Number(item.warranty_years),
       })),
-      events: events.results.filter((event: Record<string, unknown>) => event.purchase_order_id === row.id).map((event: Record<string, unknown>) => ({
+      events: (eventMap.get(String(row.id)) || []).map((event: Record<string, unknown>) => ({
         id: event.id, eventType: event.event_type, status: event.status, summary: event.summary,
         actorType: event.actor_type, createdAt: event.created_at,
       })),
-      claims: claims.results.filter((claim: Record<string, unknown>) => claim.purchase_order_id === row.id).map((claim: Record<string, unknown>) => ({
+      claims: (claimMap.get(String(row.id)) || []).map((claim: Record<string, unknown>) => ({
         id: claim.id, claimNumber: claim.claim_number, itemId: claim.purchase_order_item_id, status: claim.status,
         issueCategory: claim.issue_category, summary: claim.summary, serialNumber: claim.serial_number,
         supplierResponse: claim.supplier_response, resolution: claim.resolution, submittedAt: claim.submitted_at,
@@ -132,7 +164,7 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
       projectPostcode: row.project_postcode, supplierBusiness: row.supplier_business,
     })),
     metrics: { total: Number(metrics?.total || 0), active: Number(metrics?.active || 0), fulfilled: Number(metrics?.fulfilled || 0), openClaims: Number(metrics?.open_claims || 0) },
-    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+    pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor },
   };
 }
 
@@ -140,7 +172,10 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await purchasingIdentity(request);
-    return adminJson({ ok: true, ...(await purchasingData(identity.uid, identity.partnerType, new URL(request.url))) });
+    const db = getD1(); const timer = routeTimer(); const url = new URL(request.url);
+    const result = await timer.database(purchasingData(identity.uid, identity.partnerType, url));
+    return performanceJson({ ok: true, ...result }, { db, routeKey: "trade.purchasing", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
+      resultCount: result.orders.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
   } catch (error) { return errorResponse(error); }
 }
 

@@ -1543,3 +1543,20 @@ export const tradeWarrantyClaims = sqliteTable("trade_warranty_claims", {
   index("trade_warranty_claims_supplier_idx").on(table.supplierUid, table.status, table.updatedAt),
   index("trade_warranty_claims_order_idx").on(table.purchaseOrderId, table.updatedAt),
 ]);
+
+export const apiPerformanceSamples = sqliteTable("api_performance_samples", {
+  id: text("id").primaryKey(),
+  routeKey: text("route_key").notNull(),
+  method: text("method").notNull(),
+  statusCode: integer("status_code").notNull(),
+  outcome: text("outcome").notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  dbDurationMs: integer("db_duration_ms").notNull().default(0),
+  resultCount: integer("result_count").notNull().default(0),
+  cursorUsed: integer("cursor_used", { mode: "boolean" }).notNull().default(false),
+  sampledAt: text("sampled_at").notNull(),
+}, (table) => [
+  index("api_performance_samples_route_time_idx").on(table.routeKey, table.sampledAt),
+  index("api_performance_samples_time_idx").on(table.sampledAt),
+  index("api_performance_samples_duration_idx").on(table.durationMs, table.sampledAt),
+]);

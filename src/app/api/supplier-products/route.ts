@@ -2,6 +2,9 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
+import { performanceJson, routeTimer } from "@/lib/route-performance";
+import { ftsPrefixQuery } from "@/lib/fts-search";
 
 export const runtime = "edge";
 
@@ -28,6 +31,36 @@ const STOCK_STATUSES = new Set([
 const LISTING_STATUSES = new Set(["draft", "published", "paused", "archived"]);
 const RELATIONSHIPS = new Set(["required", "recommended", "compatible"]);
 const PAGE_SIZES = new Set([25, 50, 100]);
+type SupplierSortTerm = { expression: string; direction: KeysetDirection; rowKey: string; numeric?: boolean };
+type SupplierSort = { orderBy: string; terms: SupplierSortTerm[] };
+const supplierTerm = (expression: string, direction: KeysetDirection, rowKey: string, numeric = false): SupplierSortTerm => ({ expression, direction, rowKey, numeric });
+const supplierSort = (terms: SupplierSortTerm[]): SupplierSort => {
+  const stable = [...terms, supplierTerm("id", terms.at(-1)?.direction || "asc", "id")];
+  return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
+};
+const SUPPLIER_SORTS: Record<string, SupplierSort> = {
+  "updated-desc": supplierSort([supplierTerm("updated_at", "desc", "updated_at")]),
+  "name-asc": supplierSort([supplierTerm("name COLLATE NOCASE", "asc", "name"), supplierTerm("model_number COLLATE NOCASE", "asc", "model_number")]),
+  "name-desc": supplierSort([supplierTerm("name COLLATE NOCASE", "desc", "name"), supplierTerm("model_number COLLATE NOCASE", "asc", "model_number")]),
+  "price-asc": supplierSort([supplierTerm("unit_price_cents_ex_gst", "asc", "unit_price_cents_ex_gst", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "price-desc": supplierSort([supplierTerm("unit_price_cents_ex_gst", "desc", "unit_price_cents_ex_gst", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "brand-asc": supplierSort([supplierTerm("brand COLLATE NOCASE", "asc", "brand"), supplierTerm("model_number COLLATE NOCASE", "asc", "model_number")]),
+  "brand-desc": supplierSort([supplierTerm("brand COLLATE NOCASE", "desc", "brand"), supplierTerm("model_number COLLATE NOCASE", "asc", "model_number")]),
+  "model-asc": supplierSort([supplierTerm("model_number COLLATE NOCASE", "asc", "model_number")]),
+  "model-desc": supplierSort([supplierTerm("model_number COLLATE NOCASE", "desc", "model_number")]),
+  "category-asc": supplierSort([supplierTerm("category COLLATE NOCASE", "asc", "category"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "category-desc": supplierSort([supplierTerm("category COLLATE NOCASE", "desc", "category"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "stock-asc": supplierSort([supplierTerm("stock_status COLLATE NOCASE", "asc", "stock_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "stock-desc": supplierSort([supplierTerm("stock_status COLLATE NOCASE", "desc", "stock_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "lead-asc": supplierSort([supplierTerm("lead_time_days", "asc", "lead_time_days", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "lead-desc": supplierSort([supplierTerm("lead_time_days", "desc", "lead_time_days", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "warranty-asc": supplierSort([supplierTerm("warranty_years", "asc", "warranty_years", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "warranty-desc": supplierSort([supplierTerm("warranty_years", "desc", "warranty_years", true), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "listing-asc": supplierSort([supplierTerm("listing_status COLLATE NOCASE", "asc", "listing_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "listing-desc": supplierSort([supplierTerm("listing_status COLLATE NOCASE", "desc", "listing_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "review-asc": supplierSort([supplierTerm("review_status COLLATE NOCASE", "asc", "review_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+  "review-desc": supplierSort([supplierTerm("review_status COLLATE NOCASE", "desc", "review_status"), supplierTerm("name COLLATE NOCASE", "asc", "name")]),
+};
 
 function json(body: object, status = 200) {
   return Response.json(body, {
@@ -85,6 +118,8 @@ function errorResponse(error: unknown) {
       { ok: false, error: "This business account is not active." },
       403,
     );
+  if (code === "INVALID_CURSOR")
+    return json({ ok: false, error: "This catalogue page link has expired. Start again from the first page." }, 400);
   return json(
     { ok: false, error: "The catalogue request could not be completed." },
     500,
@@ -159,16 +194,19 @@ async function cataloguePage(firebaseUid: string, url: URL) {
   const minimumPrice = integer(url.searchParams.get("minPrice"), 0, 100_000_000) || 0;
   const maximumPrice = integer(url.searchParams.get("maxPrice"), 0, 100_000_000) || 0;
   const filter = text(url.searchParams.get("filter"), 30) || "all";
-  const sort = text(url.searchParams.get("sort"), 30) || "updated-desc";
+  const sortValue = text(url.searchParams.get("sort"), 30);
+  const sort = SUPPLIER_SORTS[sortValue] ? sortValue : "updated-desc";
   const requestedPage = Number(url.searchParams.get("page"));
   const requestedPageSize = Number(url.searchParams.get("pageSize"));
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const pageSize = PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 25;
+  const includeTotal = url.searchParams.get("total") !== "0";
+  const cursorInput = text(url.searchParams.get("cursor"), 2000);
   const conditions = ["firebase_uid = ?"];
   const bindings: unknown[] = [firebaseUid];
   if (search) {
-    conditions.push("LOWER(name) LIKE ?");
-    bindings.push(`%${search}%`);
+    conditions.push("id IN (SELECT entity_id FROM tlink_product_search WHERE tlink_product_search MATCH ?)");
+    bindings.push(ftsPrefixQuery(search));
   }
   if (model) { conditions.push("LOWER(model_number) LIKE ?"); bindings.push(`%${model}%`); }
   if (brand) { conditions.push("LOWER(brand) LIKE ?"); bindings.push(`%${brand}%`); }
@@ -180,63 +218,49 @@ async function cataloguePage(firebaseUid: string, url: URL) {
   else if (filter === "approved") conditions.push("review_status = 'approved'");
   else if (filter === "rejected") conditions.push("review_status = 'rejected'");
   else if (["draft", "archived"].includes(filter)) { conditions.push("listing_status = ?"); bindings.push(filter); }
-  const orderBy: Record<string, string> = {
-    "updated-desc": "updated_at DESC",
-    "name-asc": "name COLLATE NOCASE ASC, model_number COLLATE NOCASE ASC",
-    "name-desc": "name COLLATE NOCASE DESC, model_number COLLATE NOCASE ASC",
-    "price-asc": "unit_price_cents_ex_gst ASC, name COLLATE NOCASE ASC",
-    "price-desc": "unit_price_cents_ex_gst DESC, name COLLATE NOCASE ASC",
-    "brand-asc": "brand COLLATE NOCASE ASC, model_number COLLATE NOCASE ASC",
-    "brand-desc": "brand COLLATE NOCASE DESC, model_number COLLATE NOCASE ASC",
-    "model-asc": "model_number COLLATE NOCASE ASC",
-    "model-desc": "model_number COLLATE NOCASE DESC",
-    "category-asc": "category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
-    "category-desc": "category COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-    "stock-asc": "stock_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
-    "stock-desc": "stock_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-    "lead-asc": "lead_time_days ASC, name COLLATE NOCASE ASC",
-    "lead-desc": "lead_time_days DESC, name COLLATE NOCASE ASC",
-    "warranty-asc": "warranty_years ASC, name COLLATE NOCASE ASC",
-    "warranty-desc": "warranty_years DESC, name COLLATE NOCASE ASC",
-    "listing-asc": "listing_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
-    "listing-desc": "listing_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-    "review-asc": "review_status COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
-    "review-desc": "review_status COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
-  };
+  const selectedSort = SUPPLIER_SORTS[sort];
+  let cursor;
+  try { cursor = decodeKeysetCursor(cursorInput, sort, selectedSort.terms.length); }
+  catch { throw new Error("INVALID_CURSOR"); }
+  if (page > 1 && !cursor) throw new Error("INVALID_CURSOR");
+  const rowConditions = [...conditions]; const rowBindings = [...bindings];
+  if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
   const where = conditions.join(" AND ");
+  const rowWhere = rowConditions.join(" AND ");
   const db = getD1();
-  const [countRow, metrics, rows, options] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) total FROM supplier_products WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>(),
+  const [countRow, metrics, rows] = await Promise.all([
+    includeTotal ? db.prepare(`SELECT COUNT(*) total FROM supplier_products WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT COUNT(*) total,
       SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live,
       SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
       SUM(CASE WHEN stock_status IN ('in_stock', 'limited') THEN 1 ELSE 0 END) available
       FROM supplier_products WHERE firebase_uid = ?`).bind(firebaseUid).first<Record<string, unknown>>(),
-    db.prepare(`SELECT * FROM supplier_products WHERE ${where} ORDER BY ${orderBy[sort] || orderBy["updated-desc"]} LIMIT ? OFFSET ?`)
-      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>(),
-    db.prepare(`SELECT id, model_number, brand, name, listing_status FROM supplier_products
-      WHERE firebase_uid = ? AND listing_status <> 'archived' ORDER BY brand COLLATE NOCASE, model_number COLLATE NOCASE LIMIT 2000`)
-      .bind(firebaseUid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT * FROM supplier_products WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+      .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
   ]);
-  const ids = rows.results.map((row: Record<string, unknown>) => String(row.id));
+  const hasNext = rows.results.length > pageSize;
+  const pageRows = rows.results.slice(0, pageSize);
+  const ids = pageRows.map((row: Record<string, unknown>) => String(row.id));
   const links = ids.length ? await db.prepare(`SELECT l.id, l.product_id, l.linked_product_id, l.relationship, l.default_qty, l.note,
       p.model_number linked_model_number, p.name linked_name
       FROM supplier_product_links l JOIN supplier_products p ON p.id = l.linked_product_id
       WHERE l.firebase_uid = ? AND l.product_id IN (${ids.map(() => "?").join(",")}) ORDER BY p.brand, p.name`)
     .bind(firebaseUid, ...ids).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const total = Number(countRow?.total || 0);
+  const total = countRow ? Number(countRow.total || 0) : undefined;
+  const linkMap = new Map<string, Record<string, unknown>[]>();
+  links.results.forEach((link) => { const key = String(link.product_id); linkMap.set(key, [...(linkMap.get(key) || []), link]); });
+  const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(sort, selectedSort.terms.map((item) => item.numeric ? Number(pageRows.at(-1)![item.rowKey]) : String(pageRows.at(-1)![item.rowKey] || ""))) : "";
   return {
-    products: rows.results.map((row: Record<string, unknown>) => ({
+    products: pageRows.map((row: Record<string, unknown>) => ({
       ...product(row),
-      dependencies: links.results.filter((link: Record<string, unknown>) => link.product_id === row.id).map((link: Record<string, unknown>) => ({
+      dependencies: (linkMap.get(String(row.id)) || []).map((link: Record<string, unknown>) => ({
         id: link.id, linkedProductId: link.linked_product_id, relationship: link.relationship,
         defaultQty: Number(link.default_qty), note: link.note,
         linkedModelNumber: link.linked_model_number, linkedName: link.linked_name,
       })),
     })),
     counts: { total: Number(metrics?.total || 0), live: Number(metrics?.live || 0), pending: Number(metrics?.pending || 0), available: Number(metrics?.available || 0) },
-    productOptions: options.results.map((row: Record<string, unknown>) => ({ id: row.id, modelNumber: row.model_number, brand: row.brand, name: row.name, listingStatus: row.listing_status })),
-    pagination: { page, pageSize, total, pageCount: Math.max(1, Math.ceil(total / pageSize)) },
+    pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor },
   };
 }
 
@@ -423,7 +447,26 @@ export async function GET(request: Request) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await supplierIdentity(request);
-    return json({ ok: true, ...await cataloguePage(identity.uid, new URL(request.url)) });
+    const db = getD1();
+    const timer = routeTimer();
+    const url = new URL(request.url);
+    if (url.searchParams.get("mode") === "lookup") {
+      const query = text(url.searchParams.get("q"), 80).toLowerCase();
+      const selected = text(url.searchParams.get("selected"), 180);
+      if (query.length < 2 && !selected) return json({ ok: true, options: [] });
+      const term = `%${query.replaceAll("%", "").replaceAll("_", "")}%`;
+      const rows = await timer.database(db.prepare(`SELECT id, model_number, brand, name, listing_status
+        FROM supplier_products WHERE firebase_uid = ? AND listing_status <> 'archived'
+          AND (? = id OR LOWER(name) LIKE ? OR LOWER(brand) LIKE ? OR LOWER(model_number) LIKE ?)
+        ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, brand COLLATE NOCASE, model_number COLLATE NOCASE, id LIMIT 25`)
+        .bind(identity.uid, selected, term, term, term, selected).all<Record<string, unknown>>());
+      return performanceJson({ ok: true, options: rows.results.map((row) => ({ id: row.id, label: `${row.brand} ${row.model_number}`, secondary: row.name,
+        modelNumber: row.model_number, brand: row.brand, name: row.name, listingStatus: row.listing_status })) },
+        { db, routeKey: "supplier.products.lookup", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs, resultCount: rows.results.length });
+    }
+    const result = await timer.database(cataloguePage(identity.uid, url));
+    return performanceJson({ ok: true, ...result }, { db, routeKey: "supplier.products", startedAt: timer.startedAt, dbDurationMs: timer.dbDurationMs,
+      resultCount: result.products.length, cursorUsed: Boolean(url.searchParams.get("cursor")) });
   } catch (error) {
     return errorResponse(error);
   }

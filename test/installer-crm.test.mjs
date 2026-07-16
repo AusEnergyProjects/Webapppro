@@ -84,7 +84,9 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(route, /mode === "index"/);
   assert.match(route, /mode === "detail"/);
   assert.match(route, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
-  assert.match(route, /LIMIT \? OFFSET \?/);
+  assert.match(route, /decodeKeysetCursor/);
+  assert.match(route, /keysetAfter/);
+  assert.doesNotMatch(route, /LIMIT \? OFFSET \?/);
   assert.match(route, /SELECT COUNT\(\*\) total/);
   assert.match(route, /"number-asc"/);
   assert.match(route, /"name-desc"/);

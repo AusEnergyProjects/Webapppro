@@ -103,7 +103,7 @@ test("wholesalers cannot access leads and installers only see approved published
   assert.match(marketplaceRoute, /ids\.slice\(offset, offset \+ 80\)/);
   assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
   assert.match(marketplaceRoute, /a\.service_states supplier_service_states/);
-  assert.match(marketplaceRoute, /LOWER\(p\.name\) LIKE/);
+  assert.match(marketplaceRoute, /tlink_product_search MATCH/);
   assert.match(marketplaceRoute, /LOWER\(p\.model_number\) LIKE/);
   assert.match(installerUi, /Product name A to Z/);
   assert.match(installerUi, /Wholesaler A to Z/);
@@ -268,7 +268,7 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(supplierUi, /Minimum order/);
   assert.match(supplierUi, /WorkspaceTableTools/);
   assert.match(supplierUi, /changeCatalogueSort/);
-  assert.match(supplierRoute, /"model-asc": "model_number COLLATE NOCASE ASC"/);
+  assert.match(supplierRoute, /"model-asc": supplierSort/);
   assert.match(supplierRoute, /LOWER\(model_number\) LIKE/);
   assert.match(supplierRoute, /unit_price_cents_ex_gst >=/);
   assert.match(supplierUi, /dependency_model_numbers/);
