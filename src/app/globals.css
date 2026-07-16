@@ -3753,3 +3753,152 @@ body input[type="checkbox"]:disabled {
   .team-job-focus > article > header { flex-direction: column; }
   .team-job-focus > article > header label { width: 100%; }
 }
+
+/* Admin-inspired trade CRM shell */
+.direct-trade-dashboard-page:has(.trade-portal-shell) { background: #f3f8f6; max-width: none; padding: 0; width: 100%; }
+.direct-trade-dashboard-page:has(.trade-portal-shell) > .site-header,
+.direct-trade-dashboard-page:has(.trade-portal-shell) > .site-content-anchor { display: none; }
+.trade-portal-shell { --trade-ink: #0c3738; --trade-dark: #001724; --trade-green: #18b889; --trade-line: #d5e4df; background: #f3f8f6; display: grid; grid-template-columns: 244px minmax(0, 1fr); grid-template-rows: 72px auto; min-height: 100vh; }
+.trade-portal-shell > .dashboard-hero { background: var(--trade-dark); border: 0; border-bottom: 1px solid #143b46; border-radius: 0; box-shadow: none; color: #fff; grid-column: 1 / -1; grid-row: 1; margin: 0; min-height: 72px; padding: 11px 28px; }
+.trade-portal-brand { align-items: center; display: flex; gap: 12px; }
+.trade-portal-mark { align-items: center; background: linear-gradient(145deg, #0cae7c, #23c9aa); border-radius: 12px; color: #fff !important; display: flex !important; font-size: .76rem !important; font-weight: 950 !important; height: 45px; justify-content: center; letter-spacing: 0 !important; width: 45px; }
+.trade-portal-brand strong { color: #fff; display: block; font-size: .83rem; }
+.trade-portal-brand small { color: #84aaa8; display: block; font-size: .62rem; margin-top: 3px; }
+.trade-portal-shell .dashboard-account-actions { align-items: center; display: flex; flex-direction: row; gap: 13px; text-align: left; }
+.trade-portal-shell .dashboard-account-actions > div { display: grid; gap: 2px; max-width: 270px; }
+.trade-portal-shell .dashboard-account-actions small { color: #79a19f; font-size: .52rem; letter-spacing: .04em; text-transform: uppercase; }
+.trade-portal-shell .dashboard-account-actions strong { color: #fff; font-size: .65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trade-portal-shell .dashboard-account-actions a,
+.trade-portal-shell .dashboard-account-actions button { background: transparent; border: 1px solid #274b55; border-radius: 9px; color: #d7e9e6; font-size: .61rem; font-weight: 800; margin: 0; min-height: 35px; padding: 8px 11px; text-decoration: none; }
+.trade-portal-role { background: #0d3a3b; border: 1px solid #16635c; border-radius: 999px; color: #59d6ad; font-size: .52rem; font-weight: 900; padding: 5px 8px; text-transform: uppercase; }
+.trade-portal-intro { grid-column: 2; padding: 42px 38px 22px; }
+.trade-portal-intro > span { color: #087b55; display: block; font-size: .64rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.trade-portal-intro h1 { color: var(--trade-ink); font-size: clamp(2rem, 3.7vw, 3.15rem); font-weight: 500; letter-spacing: -.045em; line-height: 1.02; margin-top: 8px; }
+.trade-portal-intro p { color: #667c76; font-size: .77rem; line-height: 1.55; margin-top: 12px; max-width: 820px; }
+.trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { grid-column: 2; margin-left: 38px; margin-right: 38px; }
+.trade-portal-shell > .dashboard-workspace-nav { align-self: start; background: var(--trade-dark); border: 0; border-radius: 0; display: flex; flex-direction: column; gap: 6px; grid-column: 1; grid-row: 2 / span 80; margin: 0; min-height: calc(100vh - 72px); padding: 28px 12px 18px; position: sticky; top: 0; }
+.trade-portal-shell .dashboard-workspace-nav button { align-items: center; border: 1px solid transparent; border-radius: 10px; color: #b8d0cf; display: grid; gap: 1px 8px; grid-template-columns: 26px minmax(0, 1fr); padding: 12px 11px; }
+.trade-portal-shell .dashboard-workspace-nav button:hover { background: #0a2b36; }
+.trade-portal-shell .dashboard-workspace-nav button.active { background: #0d3339; border-color: #185a56; color: #fff; }
+.trade-portal-shell .dashboard-workspace-nav button b { color: #32d1a5; font-size: .52rem; grid-row: 1 / span 2; }
+.trade-portal-shell .dashboard-workspace-nav button span { font-size: .7rem; }
+.trade-portal-shell .dashboard-workspace-nav button small { color: #789c9b; font-size: .55rem; line-height: 1.25; }
+.dashboard-rail-note { background: #0a2332; border: 1px solid #1a3b49; border-radius: 12px; margin-top: auto; padding: 13px; }
+.dashboard-rail-note strong { color: #54d8b0; display: block; font-size: .59rem; }
+.dashboard-rail-note p { color: #7fa29f; font-size: .54rem; line-height: 1.5; margin-top: 6px; }
+
+.trade-portal-shell .dashboard-panel,
+.trade-portal-shell .dashboard-plan-access,
+.trade-portal-shell .installer-crm { background: #fff; border: 1px solid var(--trade-line); border-radius: 16px; box-shadow: 0 10px 28px rgba(12, 55, 56, .055); margin-bottom: 18px; }
+.trade-portal-shell .dashboard-panel-heading > span,
+.trade-portal-shell .dashboard-plan-summary span { color: #087b55; font-size: .6rem; letter-spacing: .06em; }
+.trade-portal-shell .dashboard-panel-heading h2,
+.trade-portal-shell .dashboard-plan-summary h2 { color: var(--trade-ink); font-size: 1.22rem; margin-top: 5px; }
+.trade-portal-shell .dashboard-panel-heading p,
+.trade-portal-shell .dashboard-plan-summary p { color: #687d77; font-size: .7rem; line-height: 1.55; }
+.trade-portal-shell .dashboard-status-grid { gap: 13px; }
+.trade-portal-shell .dashboard-status-grid article,
+.trade-portal-shell .supplier-status-grid article { border-color: var(--trade-line); border-radius: 15px; box-shadow: 0 6px 18px rgba(12, 55, 56, .04); padding: 18px; }
+.trade-portal-shell .dashboard-status-grid article > span,
+.trade-portal-shell .supplier-status-grid article > span { color: #087b55; font-size: .57rem; }
+.trade-portal-shell .dashboard-status-grid article strong,
+.trade-portal-shell .supplier-status-grid article strong { color: var(--trade-ink); font-size: .78rem; }
+
+.trade-portal-shell .installer-crm { overflow: visible; }
+.trade-portal-shell .crm-hero { align-items: flex-start; background: #fff; border-bottom: 1px solid var(--trade-line); border-radius: 16px 16px 0 0; color: var(--trade-ink); padding: 24px 26px 20px; }
+.trade-portal-shell .crm-hero > div:first-child { max-width: 850px; }
+.trade-portal-shell .crm-hero span { color: #087b55; font-size: .59rem; }
+.trade-portal-shell .crm-hero h2 { color: var(--trade-ink); font-size: 1.55rem; font-weight: 600; letter-spacing: -.025em; }
+.trade-portal-shell .crm-hero p { color: #667b75; font-size: .7rem; }
+.trade-portal-shell .crm-quick-create > summary { background: #12a978; color: #fff; font-size: .65rem; padding: 10px 14px; }
+.trade-portal-shell .crm-nav { background: #fff; border-bottom-color: var(--trade-line); gap: 2px; padding: 5px 20px 0; }
+.trade-portal-shell .crm-nav button,
+.trade-portal-shell .crm-more-nav > summary { font-size: .65rem; padding: 11px 13px 10px; }
+.trade-portal-shell .crm-privacy-line { background: #edf8f4; border-bottom-color: #cde5dc; font-size: .58rem; padding: 10px 25px; }
+.trade-portal-shell .crm-view { padding: 22px 25px 26px; }
+.trade-portal-shell .crm-metrics { gap: 12px; }
+.trade-portal-shell .crm-metrics article { background: #fff; border-color: var(--trade-line); border-radius: 14px; box-shadow: 0 5px 16px rgba(12, 55, 56, .035); min-height: 106px; padding: 17px; }
+.trade-portal-shell .crm-metrics span { color: #087b55; font-size: .57rem; }
+.trade-portal-shell .crm-metrics strong { color: var(--trade-ink); font-size: 1.42rem; }
+.trade-portal-shell .crm-metrics small { font-size: .58rem; }
+.trade-portal-shell .crm-card,
+.trade-portal-shell .crm-customer-detail,
+.trade-portal-shell .crm-job-card,
+.trade-portal-shell .crm-schedule-board { border-color: var(--trade-line); border-radius: 14px; box-shadow: 0 5px 16px rgba(12, 55, 56, .035); }
+.trade-portal-shell .crm-card > header,
+.trade-portal-shell .crm-job-card-header,
+.trade-portal-shell .crm-customer-detail > header { background: #f8fbfa; padding: 17px 18px; }
+.trade-portal-shell .crm-card header h3,
+.trade-portal-shell .crm-page-heading h3,
+.trade-portal-shell .crm-section-heading h4 { font-size: .86rem; }
+.trade-portal-shell .crm-form input,
+.trade-portal-shell .crm-form select,
+.trade-portal-shell .crm-form textarea,
+.trade-portal-shell .crm-job-toolbar input,
+.trade-portal-shell .crm-inline-form input,
+.trade-portal-shell .crm-inline-form select,
+.trade-portal-shell .crm-inline-form textarea { border-color: #b9d1c9; border-radius: 9px; font-size: .68rem; min-height: 42px; }
+.trade-portal-shell .crm-job-list,
+.trade-portal-shell .crm-customer-list { background: #f5f9f7; border-color: var(--trade-line); }
+.trade-portal-shell .crm-job-list > button.active,
+.trade-portal-shell .crm-customer-list > button.active { border-color: #83cdb6; box-shadow: inset 3px 0 #14ae7d, 0 4px 13px rgba(12, 55, 56, .05); }
+.trade-portal-shell .trade-business-hub { padding: 24px 25px; }
+.trade-portal-shell .business-hub-heading { align-items: flex-start; }
+.trade-portal-shell .business-hub-boundary { background: #edf8f4; border-color: #cce6dd; border-radius: 11px; }
+.trade-portal-shell .business-hub-metrics article { background: #fff; border: 1px solid var(--trade-line); border-radius: 14px; box-shadow: 0 5px 16px rgba(12, 55, 56, .035); }
+.trade-portal-shell .supplier-catalogue-layout { gap: 18px; grid-template-columns: minmax(320px, .75fr) minmax(480px, 1.25fr); }
+.trade-portal-shell .supplier-product-library,
+.trade-portal-shell .supplier-product-editor { border-color: var(--trade-line); box-shadow: none; }
+.trade-portal-shell .dashboard-upgrade-callout { padding: 28px; }
+.trade-portal-shell .dashboard-upgrade-callout strong { color: var(--trade-ink); font-size: 1rem; }
+
+@media (max-width: 1100px) {
+  .trade-portal-shell { grid-template-columns: 210px minmax(0, 1fr); }
+  .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 24px; margin-right: 24px; }
+  .trade-portal-intro { padding-left: 24px; padding-right: 24px; }
+  .trade-portal-shell .supplier-catalogue-layout { grid-template-columns: 1fr; }
+  .trade-portal-shell .crm-today-grid,
+  .trade-portal-shell .crm-report-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .trade-portal-shell { display: block; min-height: 100vh; }
+  .trade-portal-shell > .dashboard-hero { align-items: flex-start; flex-direction: column; gap: 11px; min-height: auto; padding: 14px 16px; }
+  .trade-portal-shell .dashboard-account-actions { flex-wrap: wrap; width: 100%; }
+  .trade-portal-shell .dashboard-account-actions > div { margin-right: auto; max-width: 210px; }
+  .trade-portal-role { display: none; }
+  .trade-portal-intro { padding: 28px 18px 16px; }
+  .trade-portal-intro h1 { font-size: 2rem; }
+  .trade-portal-shell > .dashboard-workspace-nav { display: flex; flex-direction: row; min-height: auto; overflow-x: auto; padding: 8px 12px; position: sticky; top: 0; z-index: 30; }
+  .trade-portal-shell .dashboard-workspace-nav button { flex: 0 0 150px; padding: 10px; }
+  .dashboard-rail-note { display: none; }
+  .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 14px; margin-right: 14px; }
+  .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
+  .trade-portal-shell .crm-hero h2 { font-size: 1.3rem; }
+  .trade-portal-shell .crm-nav { overflow-x: auto; padding-left: 10px; padding-right: 10px; }
+  .trade-portal-shell .crm-view { padding: 17px 14px 20px; }
+  .trade-portal-shell .crm-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trade-portal-shell .crm-jobs-layout,
+  .trade-portal-shell .crm-customers-layout { grid-template-columns: 1fr; }
+  .trade-portal-shell .crm-job-list,
+  .trade-portal-shell .crm-customer-list { max-height: 280px; }
+  .trade-portal-shell .trade-business-hub { padding: 18px 15px; }
+}
+
+@media (max-width: 520px) {
+  .trade-portal-brand strong { font-size: .72rem; }
+  .trade-portal-brand small { font-size: .55rem; }
+  .trade-portal-shell .dashboard-account-actions strong { max-width: 185px; }
+  .trade-portal-shell .dashboard-account-actions a,
+  .trade-portal-shell .dashboard-account-actions button { min-height: 32px; padding: 7px 9px; }
+  .trade-portal-intro h1 { font-size: 1.68rem; }
+  .trade-portal-shell .crm-metrics { grid-template-columns: 1fr 1fr; }
+  .trade-portal-shell .crm-metrics article { min-height: 94px; padding: 14px; }
+  .trade-portal-shell .crm-privacy-line { align-items: flex-start; flex-direction: column; gap: 5px; padding: 10px 15px; }
+  .trade-portal-shell .crm-privacy-line span + span { border-left: 0; padding-left: 0; }
+  .trade-portal-shell .crm-form-grid,
+  .trade-portal-shell .crm-field-grid,
+  .trade-portal-shell .crm-finance-summary { grid-template-columns: 1fr; }
+  .trade-portal-shell .crm-form-grid label.wide,
+  .trade-portal-shell .crm-field-card.wide { grid-column: 1; }
+}

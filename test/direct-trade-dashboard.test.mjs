@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const styles = read("../src/app/globals.css");
 const supplierCatalogue = read(
   "../src/components/SupplierCatalogueWorkspace.tsx",
 );
@@ -112,6 +113,17 @@ test("installer leads can be narrowed without exposing household details", () =>
   assert.match(dashboard, /leadStateFilter/);
   assert.match(dashboard, /No leads match these filters/);
   assert.doesNotMatch(dashboard, /customerEmail|customerPhone|streetAddress/);
+});
+
+test("installer and wholesaler dashboards share the clean operations shell", () => {
+  assert.match(dashboard, /trade-portal-shell/);
+  assert.match(dashboard, /Wholesaler control centre/);
+  assert.match(dashboard, /Installer control centre/);
+  assert.match(dashboard, /dashboard-rail-note/);
+  assert.match(styles, /Admin-inspired trade CRM shell/);
+  assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);
+  assert.match(styles, /@media \(max-width: 780px\)/);
+  assert.match(styles, /dashboard-workspace-nav button\.active/);
 });
 
 test("new dashboard, verification and membership copy avoids prohibited dash characters", () => {

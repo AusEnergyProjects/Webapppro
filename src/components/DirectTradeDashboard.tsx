@@ -571,39 +571,51 @@ export function DirectTradeDashboard() {
           </a>
         </section>
       ) : (
-        <>
+        <div className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}>
           <header className="dashboard-hero">
-            <div>
-              <span>Direct Trade dashboard</span>
-              <h1>{profile.businessName}</h1>
-              <p>
-                {isSupplier
-                  ? "Wholesaler workspace"
-                  : "Trade partner workspace"}{" "}
-                for profile readiness, verification, membership and suitable
-                opportunities.
-              </p>
+            <div className="trade-portal-brand">
+              <span className="trade-portal-mark" aria-hidden="true">AEA</span>
+              <div>
+                <strong>{profile.businessName}</strong>
+                <small>
+                  {isSupplier ? "Wholesaler control centre" : "Installer control centre"}
+                </small>
+              </div>
             </div>
             <div className="dashboard-account-actions">
-              <small>Signed in as</small>
-              <strong>{user.email}</strong>
-              <a href="/direct-trade/partners">Edit profile</a>
+              <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
+              <div>
+                <small>Signed in as</small>
+                <strong>{user.email}</strong>
+              </div>
+              <a href="/direct-trade/partners">Profile</a>
               <button type="button" onClick={() => void signOut(firebaseAuth)}>
                 Sign out
               </button>
             </div>
           </header>
 
+          <div className="trade-portal-intro">
+            <span>{isSupplier ? "Wholesale operations" : "Business operations"}</span>
+            <h1>{isSupplier ? "Products, orders and supply in one place" : "Your workday, without the clutter"}</h1>
+            <p>
+              {isSupplier
+                ? "Manage the catalogue, trade requests, fulfilment and business settings from one clear workspace."
+                : "Manage jobs, customers, schedules, products and protected opportunities from one clear workspace."}
+              </p>
+            </div>
+
           {(isSupplier ? workspace === "account" : workspace === "account") && <PlanAccessPanel profile={profile} />}
 
           {isSupplier ? (
             <>
               <nav className="dashboard-workspace-nav" aria-label="Wholesaler workspace">
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Catalogue and stock</small></button>
-                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Requests and tasks</small></button>
-                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><span>Orders</span><small>Supply and warranties</small></button>
-                <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><span>Import</span><small>Guided data migration</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Profile and membership</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">01</b><span>Products</span><small>Catalogue and stock</small></button>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">02</b><span>Work</span><small>Requests and tasks</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">03</b><span>Orders</span><small>Supply and warranties</small></button>
+                <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><b aria-hidden="true">04</b><span>Import</span><small>Guided data migration</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and membership</small></button>
+                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
               {workspace === "work" && <TradeBusinessHub
                 user={user}
@@ -628,11 +640,12 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="Direct Trade account"
               >
-                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><span>Work</span><small>Today, jobs and customers</small></button>
-                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><span>Orders</span><small>Supply and warranties</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><span>Business</span><small>Settings and membership</small></button>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">01</b><span>Work</span><small>Today, jobs and customers</small></button>
+                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">02</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">03</b><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">04</b><span>Orders</span><small>Supply and warranties</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Settings and membership</small></button>
+                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
               {workspace === "work" && <TradeBusinessHub
@@ -1413,7 +1426,7 @@ export function DirectTradeDashboard() {
               </div>
             )}
           </section>}
-        </>
+        </div>
       )}
       <SiteFooter>
         Direct Trade membership does not replace trade licensing, government
