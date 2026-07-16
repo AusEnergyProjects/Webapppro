@@ -39,6 +39,7 @@ test("command search supports keyboard and responsive field use", () => {
   assert.match(command, /event\.key\.toLowerCase\(\) === "k"/);
   assert.match(command, /event\.key === "ArrowDown"/);
   assert.match(command, /event\.key === "Enter"/);
+  assert.match(command, /loadingRef\.current/);
   assert.match(command, /role="dialog"/);
   assert.match(styles, /\.tlink-command-backdrop/);
   assert.match(styles, /\.tlink-command-dialog/);

@@ -66,6 +66,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   const [status, setStatus] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     function onShortcut(event: KeyboardEvent) {
@@ -95,8 +96,9 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   }, [open]);
 
   useEffect(() => {
-    if (!open || loaded || loading) return;
+    if (!open || loaded || loadingRef.current) return;
     let active = true;
+    loadingRef.current = true;
     const frame = window.requestAnimationFrame(() => {
       setLoading(true);
       setStatus("Opening your business records...");
@@ -120,6 +122,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
           }
         })
         .finally(() => {
+          loadingRef.current = false;
           if (active) setLoading(false);
         });
     });
@@ -127,7 +130,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
       active = false;
       window.cancelAnimationFrame(frame);
     };
-  }, [businessOperations, loaded, loading, marketplace, open, partnerType, teamAccess, user]);
+  }, [businessOperations, loaded, marketplace, open, partnerType, teamAccess, user]);
 
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
