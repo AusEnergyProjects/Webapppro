@@ -1366,6 +1366,26 @@ export const supplierProductLinks = sqliteTable("supplier_product_links", {
   index("supplier_product_links_product_idx").on(table.productId),
 ]);
 
+export const installerCataloguePreferences = sqliteTable("installer_catalogue_preferences", {
+  firebaseUid: text("firebase_uid").primaryKey(),
+  search: text("search").notNull().default(""),
+  category: text("category").notNull().default(""),
+  supplierUid: text("supplier_uid").notNull().default(""),
+  brand: text("brand").notNull().default(""),
+  serviceState: text("service_state").notNull().default(""),
+  stockStatus: text("stock_status").notNull().default(""),
+  minimumPriceCents: integer("minimum_price_cents").notNull().default(0),
+  maximumPriceCents: integer("maximum_price_cents").notNull().default(0),
+  maximumLeadDays: integer("maximum_lead_days").notNull().default(-1),
+  minimumWarrantyYears: integer("minimum_warranty_years").notNull().default(0),
+  sortKey: text("sort_key").notNull().default("name-asc"),
+  pageSize: integer("page_size").notNull().default(25),
+  visibleColumns: text("visible_columns").notNull().default('["category","price","supply","kit","actions"]'),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("installer_catalogue_preferences_updated_idx").on(table.updatedAt),
+]);
+
 export const installerProductLists = sqliteTable("installer_product_lists", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

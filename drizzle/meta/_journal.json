@@ -274,6 +274,13 @@
       "when": 1784206800000,
       "tag": "0038_complete_trade_purchasing_walkthrough",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1784173783846,
+      "tag": "0039_exotic_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

@@ -68,5 +68,5 @@ test("catalogue result sets default to responsive rows and columns", () => {
   assert.match(styles, /\.marketplace-product-columns/);
   assert.match(styles, /\.supplier-product-columns/);
   assert.match(styles, /\.admin-catalogue-columns/);
-  assert.match(styles, /grid-template-columns: minmax\(200px/);
+  assert.match(styles, /grid-template-columns: var\(--marketplace-grid/);
 });

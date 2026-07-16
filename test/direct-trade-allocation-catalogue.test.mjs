@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -8,6 +9,8 @@ const opportunityServer = read("../src/lib/opportunity-server.ts");
 const partnerRoute = read("../src/app/api/trade-opportunities/route.ts");
 const supplierRoute = read("../src/app/api/supplier-products/route.ts");
 const marketplaceRoute = read("../src/app/api/product-marketplace/route.ts");
+const marketplacePreferencesRoute = read("../src/app/api/product-marketplace/preferences/route.ts");
+const marketplacePreferencesMigration = read("../drizzle/0039_exotic_mulholland_black.sql");
 const adminMatches = read(
   "../src/app/api/admin/opportunities/matches/route.ts",
 );
@@ -95,7 +98,7 @@ test("wholesalers cannot access leads and installers only see approved published
   assert.match(marketplaceRoute, /ids\.slice\(offset, offset \+ 80\)/);
   assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
   assert.match(marketplaceRoute, /a\.service_states supplier_service_states/);
-  assert.match(marketplaceRoute, /a\.business_name\) LIKE/);
+  assert.match(marketplaceRoute, /a\.business_name \|\| ' ' \|\| p\.category\) LIKE/);
   assert.match(installerUi, /Product name A to Z/);
   assert.match(installerUi, /Wholesaler A to Z/);
   assert.match(installerUi, /Available in state/);
@@ -106,6 +109,53 @@ test("wholesalers cannot access leads and installers only see approved published
     marketplaceRoute,
     /supplier_email|supplier_phone|address_line_1/,
   );
+});
+
+test("installer catalogue queries are paginated, server filtered and return bounded facets", () => {
+  assert.match(marketplaceRoute, /SELECT COUNT\(\*\) total/);
+  assert.match(marketplaceRoute, /LIMIT \? OFFSET \?/);
+  assert.match(marketplaceRoute, /PAGE_SIZES = new Set\(\[25, 50, 100\]\)/);
+  assert.match(marketplaceRoute, /p\.unit_price_cents_ex_gst >= \?/);
+  assert.match(marketplaceRoute, /p\.lead_time_days <= \?/);
+  assert.match(marketplaceRoute, /a\.service_states LIKE \?/);
+  assert.match(marketplaceRoute, /SORTS\[sort\]/);
+  assert.match(marketplaceRoute, /pagination: \{ page, pageSize, pageCount, total \}/);
+  assert.match(marketplaceRoute, /facets:/);
+  assert.doesNotMatch(marketplaceRoute, /LIMIT 300/);
+  assert.match(installerUi, /Rows per page/);
+  assert.match(installerUi, /aria-label="Catalogue pages"/);
+  assert.match(installerUi, /}, 250\)/);
+  assert.match(installerUi, /AbortController/);
+});
+
+test("installer catalogue filters and columns persist to the authenticated account", () => {
+  assert.match(schema, /sqliteTable\("installer_catalogue_preferences"/);
+  assert.match(schema, /installer_catalogue_preferences_updated_idx/);
+  assert.match(marketplacePreferencesMigration, /CREATE TABLE `installer_catalogue_preferences`/);
+  assert.match(marketplacePreferencesRoute, /requireFirebaseIdentity/);
+  assert.match(marketplacePreferencesRoute, /sameOrigin/);
+  assert.match(marketplacePreferencesRoute, /accountHasFeature/);
+  assert.match(marketplacePreferencesRoute, /ON CONFLICT\(firebase_uid\) DO UPDATE/);
+  assert.match(marketplacePreferencesRoute, /WHERE firebase_uid = \?/);
+  assert.match(marketplacePreferencesRoute, /export async function DELETE/);
+  assert.match(installerUi, /Save this view/);
+  assert.match(installerUi, /Restore default/);
+  assert.match(installerUi, /visibleColumns/);
+  assert.doesNotMatch(marketplacePreferencesRoute, /localStorage|sessionStorage/);
+});
+
+test("installer catalogue preference migration applies cleanly", () => {
+  const database = new DatabaseSync(":memory:");
+  for (const statement of marketplacePreferencesMigration.split("--> statement-breakpoint")) {
+    if (statement.trim()) database.exec(statement);
+  }
+  const columns = database.prepare("PRAGMA table_info(installer_catalogue_preferences)").all().map((column) => column.name);
+  assert.deepEqual(columns, [
+    "firebase_uid", "search", "category", "supplier_uid", "brand", "service_state",
+    "stock_status", "minimum_price_cents", "maximum_price_cents", "maximum_lead_days",
+    "minimum_warranty_years", "sort_key", "page_size", "visible_columns", "updated_at",
+  ]);
+  database.close();
 });
 
 test("supplier catalogues are owner scoped and support pricing, order rules, CSV and dependencies", () => {
