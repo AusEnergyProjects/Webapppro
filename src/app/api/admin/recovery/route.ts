@@ -1,7 +1,6 @@
 import { getD1 } from "../../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import {
-  adminError,
   adminJson,
   sameOrigin,
   writeAdminAudit,
@@ -16,6 +15,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request))
     return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
 
+  let recoveryStage = "identity";
   try {
     const identity = await requireFirebaseIdentity(request);
     if (!identity.emailVerified)
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
         error: "Sign out, sign in again with the recovered password, then retry within 60 minutes.",
       }, 403);
 
+    recoveryStage = "owner lookup";
     const db = getD1();
     const record = await db.prepare(`SELECT id, firebase_uid, email, role, status
       FROM admin_users WHERE lower(trim(email)) = ? LIMIT 1`).bind(identity.email)
@@ -41,11 +42,13 @@ export async function POST(request: Request) {
     if (record.firebase_uid === identity.uid)
       return adminJson({ ok: true, recovered: false, message: "Owner access is already connected." });
 
+    recoveryStage = "identity collision check";
     const collision = await db.prepare("SELECT id FROM admin_users WHERE firebase_uid = ? LIMIT 1")
       .bind(identity.uid).first<Record<string, unknown>>();
     if (collision)
       return adminJson({ ok: false, error: "This secure identity is already assigned to another operations account." }, 409);
 
+    recoveryStage = "owner record update";
     const now = new Date().toISOString();
     const result = await db.prepare(`UPDATE admin_users
       SET firebase_uid = ?, last_login_at = ?, updated_at = ?
@@ -54,6 +57,7 @@ export async function POST(request: Request) {
     if (!result.meta.changes)
       return adminJson({ ok: false, error: "Owner recovery changed while it was being completed. Sign in again and retry." }, 409);
 
+    recoveryStage = "security audit";
     await writeAdminAudit(
       identity,
       "admin.owner_recovery",
@@ -62,6 +66,7 @@ export async function POST(request: Request) {
       `Reconnected the verified owner identity for ${identity.email}.`,
       { recentPasswordAuthentication: true, previousIdentityReplaced: true },
     );
+    recoveryStage = "security notification";
     await createAdminNotification({
       eventKey: `admin-owner-recovery:${record.id}:${identity.uid}`,
       eventType: "security.owner_identity_recovered",
@@ -78,6 +83,12 @@ export async function POST(request: Request) {
     });
     return adminJson({ ok: true, recovered: true });
   } catch (error) {
-    return adminError(error);
+    const code = error instanceof Error
+      ? error.message.replace(/[^a-zA-Z0-9 _:.()-]/g, "").slice(0, 140)
+      : "UNKNOWN";
+    return adminJson({
+      ok: false,
+      error: `Owner recovery stopped during ${recoveryStage} (${code || "UNKNOWN"}).`,
+    }, 500);
   }
 }

@@ -93,6 +93,7 @@ test("owner identity recovery is explicit, recent, password based and audited", 
   assert.doesNotMatch(recoveryRoute, /record\.firebase_uid, identity\.email/);
   assert.match(recoveryRoute, /admin\.owner_recovery/);
   assert.match(recoveryRoute, /security\.owner_identity_recovered/);
+  assert.match(recoveryRoute, /recoveryStage = "owner record update"/);
   assert.match(recoveryRoute, /recentPasswordAuthentication: true/);
   assert.doesNotMatch(recoveryRoute, /export async function GET/);
   assert.match(portal, /Reconnect owner access/);
