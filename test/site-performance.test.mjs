@@ -28,6 +28,13 @@ test("every worker response receives baseline browser security headers", () => {
   assert.match(worker, /secureResponse\(await handler\.fetch/);
 });
 
+test("the generated Sites hostname permanently redirects to the custom domain", () => {
+  assert.match(worker, /LEGACY_SITE_HOST = "aea-energy-comparison\.info294029\.chatgpt\.site"/);
+  assert.match(worker, /CANONICAL_SITE_HOST = "compare\.ausenergyassessments\.com"/);
+  assert.match(worker, /Response\.redirect\(url\.toString\(\), 308\)/);
+  assert.match(worker, /url\.hostname !== LEGACY_SITE_HOST/);
+});
+
 test("gas comparison bounds slow upstream calls and reuses successful results", () => {
   assert.match(gasRoute, /UPSTREAM_TIMEOUT_MS = 10_000/);
   assert.match(gasRoute, /AbortSignal\.timeout\(UPSTREAM_TIMEOUT_MS\)/);

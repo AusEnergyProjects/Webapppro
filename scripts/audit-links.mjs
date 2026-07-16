@@ -3,7 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const sourceRoot = path.join(root, "src");
-const liveOrigin = process.env.SITE_URL || "https://aea-energy-comparison.info294029.chatgpt.site";
+const liveOrigin = process.env.SITE_URL || "https://compare.ausenergyassessments.com";
 const timeoutMs = 12_000;
 const resourceHintOrigins = new Set([
   "https://fonts.googleapis.com",

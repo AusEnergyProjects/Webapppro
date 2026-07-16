@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 export const APP_VERSION = '1.0.0';
 export const SYNC_CONTRACT_VERSION = 2;
-export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://aea-energy-comparison.info294029.chatgpt.site').replace(/\/$/, '');
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://compare.ausenergyassessments.com').replace(/\/$/, '');
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBL9P793q5z7o6Baqg-o2yuIteYU6IHrug',

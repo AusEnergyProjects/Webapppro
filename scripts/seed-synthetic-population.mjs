@@ -4,7 +4,7 @@ import path from "node:path";
 
 const FIREBASE_WEB_API_KEY = "AIzaSyBL9P793q5z7o6Baqg-o2yuIteYU6IHrug";
 const BATCH = "aea-demo-20260716";
-const LOGIN_BASE = "https://aea-energy-comparison.info294029.chatgpt.site";
+const LOGIN_BASE = "https://compare.ausenergyassessments.com";
 const args = Object.fromEntries(process.argv.slice(2).map((entry, index, all) => entry.startsWith("--") ? [entry.slice(2), all[index + 1]] : null).filter(Boolean));
 const outputDir = path.resolve(args.out || path.join(process.cwd(), "synthetic-test-output"));
 const sqlPath = path.resolve(args.sql || path.join(process.cwd(), "fixtures", "synthetic", "migrations", "0033_synthetic_benchmark_population.sql"));

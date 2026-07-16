@@ -5,7 +5,7 @@ import { SiteDatePicker } from "@/components/SiteDatePicker";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://aea-energy-comparison.info294029.chatgpt.site"),
+  metadataBase: new URL("https://compare.ausenergyassessments.com"),
   applicationName: "Australian Energy Assessments",
   title: "Home Energy Planning | Australian Energy Assessments",
   description: "Build a private home energy roadmap, compare electricity and gas plans, understand upgrades, check support and prepare a clear scope for licensed trades.",

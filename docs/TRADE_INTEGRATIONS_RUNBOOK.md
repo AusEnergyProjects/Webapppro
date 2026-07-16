@@ -10,13 +10,13 @@ Use the SaaS platform model where each installer is the merchant and collects pa
 2. Enable OAuth for Stripe Dashboard accounts.
 3. Register this redirect URI:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/stripe`
+   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/stripe`
 
 4. Add the live client ID as `STRIPE_CONNECT_CLIENT_ID`.
 5. Keep the live platform secret in `STRIPE_SECRET_KEY` or the existing `STRIPE_REFERRAL_SECRET_KEY`.
 6. Create a production Connect event destination for events on connected accounts at:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/stripe/webhook`
+   `https://compare.ausenergyassessments.com/api/stripe/webhook`
 
 7. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`.
 8. Store that destination signing secret as `STRIPE_CONNECT_WEBHOOK_SECRET`.
@@ -27,7 +27,7 @@ The existing account webhook remains responsible for AEA membership billing. Its
 
 1. Register the production Xero OAuth application and allow:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/xero`
+   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/xero`
 
 2. Store the client ID as `XERO_CLIENT_ID` and client secret as `XERO_CLIENT_SECRET`.
 3. Confirm the app is approved for `offline_access`, `accounting.transactions` and `accounting.contacts`.
@@ -41,7 +41,7 @@ Xero exports remain drafts so the installer can check account coding and tax tre
 
 1. Register the production MYOB OAuth application and allow:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/myob`
+   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/myob`
 
 2. Store the API key as `MYOB_CLIENT_ID` and API secret as `MYOB_CLIENT_SECRET`.
 3. Confirm the app requests `sme-company-settings`, `sme-sales`, `sme-contacts-customer` and `sme-general-ledger`.
@@ -55,13 +55,13 @@ The MYOB income account is selected for each first export. This avoids guessing 
 
 1. Create the production OAuth application and register:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/trade-integrations/callback/square`
+   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/square`
 
 2. Store the application ID as `SQUARE_APPLICATION_ID` and the application secret as `SQUARE_APPLICATION_SECRET`.
 3. Keep `SQUARE_ENVIRONMENT` unset for production. Use `sandbox` only in an isolated non-production deployment.
 4. Create a webhook subscription for `payment.created` and `payment.updated` at:
 
-   `https://aea-energy-comparison.info294029.chatgpt.site/api/square/webhook`
+   `https://compare.ausenergyassessments.com/api/square/webhook`
 
 5. Store the webhook signature key as `SQUARE_WEBHOOK_SIGNATURE_KEY`.
 6. Store the exact notification URL above as `SQUARE_WEBHOOK_NOTIFICATION_URL` so signature verification cannot drift behind a proxy.

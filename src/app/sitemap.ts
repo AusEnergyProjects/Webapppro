@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_ORIGIN = "https://aea-energy-comparison.info294029.chatgpt.site";
+const SITE_ORIGIN = "https://compare.ausenergyassessments.com";
 const routes = [
   "",
   "/plan",
