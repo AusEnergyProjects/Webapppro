@@ -4293,6 +4293,8 @@ body input[type="checkbox"]:disabled {
 }
 
 @media (max-width: 520px) {
+  .marketplace-filterbar,
+  .marketplace-advanced-filters > div { grid-template-columns: 1fr; }
   .marketplace-product-grid > article,
   .supplier-product-list > article,
   .admin-catalogue-list > article { grid-template-columns: 1fr; }
