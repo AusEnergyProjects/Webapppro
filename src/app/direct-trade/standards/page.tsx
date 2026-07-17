@@ -37,16 +37,26 @@ const standards = [
   },
   {
     number: "06",
+    title: "Evidence follows its stated boundary",
+    text: "Customer-approved property photos are shared with every verified installer allocated to the enquiry so they can quote. Supporting documents remain restricted to the exact connected installer accepted by the household. Every download is recorded.",
+  },
+  {
+    number: "07",
+    title: "Installers provide arrival windows",
+    text: "After household acceptance, the installer proposes one or more practical arrival windows for the customer to review. Choosing a window records the preference but does not create an appointment or authorise installation work.",
+  },
+  {
+    number: "08",
     title: "Opportunities have a defined lifetime",
     text: "An active opportunity leaves installer dashboards after 30 days. It can close earlier when the household withdraws or the work is resolved, while the minimum operational audit record can be retained.",
   },
   {
-    number: "07",
+    number: "09",
     title: "Quotes make the scope visible",
     text: "Equipment, labour, electrical or building work, certificates, rebates, optional extras, exclusions, timing, payment terms and warranties should be distinguishable before acceptance.",
   },
   {
-    number: "08",
+    number: "10",
     title: "Households stay in control",
     text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract. Shortlisting alone does not release contact details.",
   },
@@ -98,7 +108,7 @@ export default function DirectTradeStandardsPage() {
         <div className="guide-section-heading">
           <span>Marketplace standard</span>
           <h2 id="standards-list-title">
-            Eight checks from participation to decision
+            Ten checks from participation to decision
           </h2>
         </div>
         <div className="standards-grid">

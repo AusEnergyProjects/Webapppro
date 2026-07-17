@@ -129,6 +129,13 @@ async function sourceOptions(identity: TradeIdentity) {
       FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       WHERE m.firebase_uid = ? AND m.status IN ('interested', 'connected')
+        AND (o.source_reference NOT LIKE 'customer-project:%' OR EXISTS (
+          SELECT 1 FROM customer_project_quotes q
+          JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+            AND r.installer_uid = q.installer_uid AND r.status = 'active'
+          WHERE q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
+            AND q.status = 'submitted' AND q.customer_decision = 'accepted' AND m.status = 'connected'
+        ))
         AND NOT EXISTS (
           SELECT 1 FROM trade_work_orders w
           WHERE w.firebase_uid = m.firebase_uid AND w.source_type = 'opportunity'
@@ -338,7 +345,14 @@ export async function POST(request: Request) {
       if (identity.partnerType !== "installer" || !sourceReference) throw new Error("SOURCE_NOT_FOUND");
       const source = await db.prepare(`SELECT o.title, o.state, o.service_categories
         FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
-        WHERE m.id = ? AND m.firebase_uid = ? AND m.status IN ('interested', 'connected')`)
+        WHERE m.id = ? AND m.firebase_uid = ? AND m.status IN ('interested', 'connected')
+          AND (o.source_reference NOT LIKE 'customer-project:%' OR EXISTS (
+            SELECT 1 FROM customer_project_quotes q
+            JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+              AND r.installer_uid = q.installer_uid AND r.status = 'active'
+            WHERE q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
+              AND q.status = 'submitted' AND q.customer_decision = 'accepted' AND m.status = 'connected'
+          ))`)
         .bind(sourceReference, identity.uid).first<Record<string, unknown>>();
       if (!source) throw new Error("SOURCE_NOT_FOUND");
       let categories: string[] = [];

@@ -1,7 +1,7 @@
 import { createHomeEnergyPlan } from "./home-energy-plan.mjs";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "./australian-postcodes.mjs";
 
-export const CUSTOMER_NOTICE_VERSION = "2026-07-15";
+export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
 export const CUSTOMER_PLAN_VERSION = "2026-07-15";
@@ -55,6 +55,52 @@ export const customerProjectOptions = {
     ["30_60k", "$30,000 to $60,000"],
     ["60k_plus", "$60,000 or more"],
   ],
+  storeys: [
+    ["single", "Single storey"],
+    ["two", "Two storeys"],
+    ["three_plus", "Three or more storeys"],
+    ["not_sure", "Not sure"],
+  ],
+  ageBands: [
+    ["pre_1960", "Built before 1960"],
+    ["1960_1999", "Built from 1960 to 1999"],
+    ["2000_2014", "Built from 2000 to 2014"],
+    ["2015_plus", "Built from 2015 onwards"],
+    ["not_sure", "Not sure"],
+  ],
+  floorAreas: [
+    ["under_100", "Under 100 m2"],
+    ["100_199", "100 to 199 m2"],
+    ["200_299", "200 to 299 m2"],
+    ["300_plus", "300 m2 or more"],
+    ["not_sure", "Not sure"],
+  ],
+  roofTypes: [
+    ["metal", "Metal roof"],
+    ["tile", "Tiled roof"],
+    ["flat", "Flat or membrane roof"],
+    ["mixed", "Mixed roof types"],
+    ["not_sure", "Not sure"],
+  ],
+  switchboards: [
+    ["modern_breakers", "Modern circuit breakers"],
+    ["older_fuses", "Older fuse board"],
+    ["recent_upgrade", "Recently upgraded"],
+    ["not_sure", "Not sure"],
+  ],
+  occupancies: [
+    ["occupied", "Usually occupied during the day"],
+    ["away_weekdays", "Usually empty on weekdays"],
+    ["vacant", "Currently vacant"],
+    ["flexible", "Access can be arranged"],
+  ],
+  accessConstraints: [
+    ["limited_parking", "Limited parking or loading access"],
+    ["stairs", "Stairs or difficult equipment access"],
+    ["strata_common_property", "Strata or common property approvals"],
+    ["restricted_roof", "Restricted roof access"],
+    ["pets", "Pets need to be secured for a visit"],
+  ],
 };
 
 export const platformQuoteOptions = {
@@ -89,6 +135,13 @@ const priorities = new Set(customerProjectOptions.priorities.map(([value]) => va
 const stages = new Set(customerProjectOptions.stages.map(([value]) => value));
 const timings = new Set(customerProjectOptions.timings.map(([value]) => value));
 const budgets = new Set(customerProjectOptions.budgets.map(([value]) => value));
+const storeys = new Set(customerProjectOptions.storeys.map(([value]) => value));
+const ageBands = new Set(customerProjectOptions.ageBands.map(([value]) => value));
+const floorAreas = new Set(customerProjectOptions.floorAreas.map(([value]) => value));
+const roofTypes = new Set(customerProjectOptions.roofTypes.map(([value]) => value));
+const switchboards = new Set(customerProjectOptions.switchboards.map(([value]) => value));
+const occupancies = new Set(customerProjectOptions.occupancies.map(([value]) => value));
+const accessConstraints = new Set(customerProjectOptions.accessConstraints.map(([value]) => value));
 const quoteTypes = new Set(platformQuoteOptions.quoteTypes.map(([value]) => value));
 const quoteInclusions = new Set(platformQuoteOptions.inclusions.map(([value]) => value));
 const quoteStartWindows = new Set(platformQuoteOptions.startWindows.map(([value]) => value));
@@ -180,6 +233,7 @@ export function normalizeCustomerProject(raw = {}) {
     ? raw.householdSituation
     : "owner";
   const existingFeatures = Array.isArray(raw.existingFeatures) ? raw.existingFeatures : [];
+  const suppliedContext = raw.propertyContext && typeof raw.propertyContext === "object" ? raw.propertyContext : {};
   const plan = createHomeEnergyPlan({ goal, pace, situation: householdSituation, features: existingFeatures });
   const normalized = {
     title: text(raw.title, 120),
@@ -196,6 +250,15 @@ export function normalizeCustomerProject(raw = {}) {
     projectStage: stages.has(raw.projectStage) ? raw.projectStage : "exploring",
     timing: timings.has(raw.timing) ? raw.timing : "planning",
     budgetRange: budgets.has(raw.budgetRange) ? raw.budgetRange : "not_set",
+    propertyContext: {
+      storeys: storeys.has(suppliedContext.storeys) ? suppliedContext.storeys : "",
+      ageBand: ageBands.has(suppliedContext.ageBand) ? suppliedContext.ageBand : "",
+      floorArea: floorAreas.has(suppliedContext.floorArea) ? suppliedContext.floorArea : "",
+      roofType: roofTypes.has(suppliedContext.roofType) ? suppliedContext.roofType : "",
+      switchboard: switchboards.has(suppliedContext.switchboard) ? suppliedContext.switchboard : "",
+      occupancy: occupancies.has(suppliedContext.occupancy) ? suppliedContext.occupancy : "",
+      accessConstraints: list(suppliedContext.accessConstraints, accessConstraints, 5),
+    },
     privateNotes: typeof raw.privateNotes === "string" ? raw.privateNotes.trim().slice(0, 2000) : "",
     planSnapshot: { version: CUSTOMER_PLAN_VERSION, ...plan },
   };
@@ -208,6 +271,10 @@ export function normalizeCustomerProject(raw = {}) {
 export function submissionReadiness(project) {
   if (!project.serviceCategories?.length) return { ok: false, error: "Choose at least one type of work before requesting installer responses." };
   if (!project.priorities?.length) return { ok: false, error: "Choose at least one project priority." };
+  const context = project.propertyContext || {};
+  if (![context.storeys, context.ageBand, context.floorArea, context.roofType, context.switchboard, context.occupancy].every(Boolean)) {
+    return { ok: false, error: "Complete the property details before requesting installer responses. Choose Not sure where needed." };
+  }
   return { ok: true };
 }
 
@@ -218,6 +285,18 @@ export function buildAnonymizedOpportunity(project, projectId) {
   const propertyLabel = label(customerProjectOptions.propertyTypes, project.propertyType, "Home");
   const stageLabel = label(customerProjectOptions.stages, project.projectStage, "Planning");
   const paceLabel = project.pace === "whole-home" ? "coordinated whole-home" : project.pace === "one-step" ? "single next-step" : "staged";
+  const context = project.propertyContext || {};
+  const propertyFacts = [
+    label(customerProjectOptions.storeys, context.storeys, "Storeys not confirmed"),
+    label(customerProjectOptions.ageBands, context.ageBand, "Age not confirmed"),
+    label(customerProjectOptions.floorAreas, context.floorArea, "Floor area not confirmed"),
+    label(customerProjectOptions.roofTypes, context.roofType, "Roof not confirmed"),
+    label(customerProjectOptions.switchboards, context.switchboard, "Switchboard not confirmed"),
+    label(customerProjectOptions.occupancies, context.occupancy, "Access timing not confirmed"),
+  ];
+  const constraints = Array.isArray(context.accessConstraints)
+    ? context.accessConstraints.map((item) => label(customerProjectOptions.accessConstraints, item)).join(", ")
+    : "";
   const title = categoryLabels.length === 1 ? `${categoryLabels[0]} project` : "Multi-upgrade home project";
   return {
     title,
@@ -227,7 +306,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     serviceCategories: categories,
     priority: project.timing === "urgent" ? "urgent" : "standard",
     timing: project.timing,
-    summary: `${propertyLabel} household seeking ${categoryLabels.join(", ").toLowerCase()}. Priorities: ${priorityLabels.join(", ").toLowerCase()}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Respond only through the structured platform workflow.`,
+    summary: `${propertyLabel} household seeking ${categoryLabels.join(", ").toLowerCase()}. Property context: ${propertyFacts.join(", ").toLowerCase()}${constraints ? `. Access considerations: ${constraints.toLowerCase()}` : ""}. Priorities: ${priorityLabels.join(", ").toLowerCase()}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Quoting photos are available separately to allocated verified installers. Supporting documents stay withheld until the household accepts one connected verified installer. Respond only through the structured platform workflow.`,
     sourceReference: `customer-project:${projectId}`,
   };
 }

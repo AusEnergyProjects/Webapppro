@@ -7,6 +7,7 @@ import { SiteFooter } from "./ComparatorChrome";
 import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
 import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
 import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
+import { InstallerArrivalWindows } from "./InstallerArrivalWindows";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
@@ -71,6 +72,7 @@ type DashboardOpportunity = {
   priority: string;
   timing: string;
   summary: string;
+  propertyContext: Record<string, string | string[]>;
   opportunityStatus: string;
   platformOnly: boolean;
   customerContact: null | {
@@ -83,6 +85,17 @@ type DashboardOpportunity = {
     addressState: string;
     postcode: string;
     grantedAt: string;
+  };
+  evidence: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; sharingScope: "quoting" | "accepted-installer" }>;
+  arrivalProposal: null | {
+    id: string;
+    status: "proposed" | "selected" | "withdrawn";
+    windows: Array<{ id: string; startsAt: string; endsAt: string }>;
+    installerNote: string;
+    selectedWindow: null | { id: string; startsAt: string; endsAt: string };
+    revision: number;
+    proposedAt: string;
+    selectedAt: string;
   };
   quote: null | {
     productListId: string;
@@ -194,7 +207,6 @@ export function DirectTradeDashboard() {
   const [leadStatusFilter, setLeadStatusFilter] = useState("");
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
-  const [siteVisitDates, setSiteVisitDates] = useState<Record<string, string>>({});
   const [workspace, setWorkspace] = useState<"work" | "schedule" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account">("work");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
@@ -409,18 +421,10 @@ export function DirectTradeDashboard() {
     }
   }
 
-  async function convertOpportunity(
-    matchId: string,
-    action: "create_job" | "book_site_visit",
-  ) {
+  async function convertOpportunity(matchId: string) {
     if (!user) return;
-    const visitDate = siteVisitDates[matchId] || "";
-    if (action === "book_site_visit" && !visitDate) {
-      setOpportunityStatus("Choose a site visit date first.");
-      return;
-    }
     setOpportunityBusy(matchId);
-    setOpportunityStatus(action === "book_site_visit" ? "Creating the job and site visit..." : "Creating the CRM job...");
+    setOpportunityStatus("Creating the CRM job...");
     try {
       const token = await user.getIdToken();
       const workResponse = await fetch("/api/trade-work-orders", {
@@ -430,37 +434,14 @@ export function DirectTradeDashboard() {
           action: "create_work_order",
           sourceType: "opportunity",
           sourceReference: matchId,
-          scheduledStart: visitDate,
         }),
       });
       const workResult = await workResponse.json().catch(() => ({}));
       if (!workResponse.ok || !workResult.ok) {
         throw new Error(workResult.error || "The marketplace opportunity could not be converted.");
       }
-      if (action === "book_site_visit") {
-        const appointmentResponse = await fetch("/api/trade-crm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            action: "create_appointment",
-            workOrderId: workResult.createdWorkOrderId,
-            appointmentType: "site_visit",
-            title: "Marketplace site visit",
-            startsAt: `${visitDate}T09:00`,
-            endsAt: `${visitDate}T10:00`,
-          }),
-        });
-        const appointmentResult = await appointmentResponse.json().catch(() => ({}));
-        if (!appointmentResponse.ok || !appointmentResult.ok) {
-          throw new Error(`${workResult.workNumber} was created, but the site visit could not be added. Open the job to schedule it.`);
-        }
-      }
       setWorkspace("work");
-      setOpportunityStatus(
-        action === "book_site_visit"
-          ? `${workResult.workNumber} and its site visit are ready in Work.`
-          : `${workResult.workNumber} is ready in Work.`,
-      );
+      setOpportunityStatus(`${workResult.workNumber} is ready in Work. Use the customer-reviewed arrival window when creating its appointment.`);
     } catch (conversionError) {
       setOpportunityStatus(
         conversionError instanceof Error
@@ -470,6 +451,22 @@ export function DirectTradeDashboard() {
     } finally {
       setOpportunityBusy("");
     }
+  }
+
+  async function downloadOpportunityEvidence(item: DashboardOpportunity["evidence"][number]) {
+    if (!user) return;
+    setOpportunityBusy(item.id); setOpportunityStatus("Preparing protected customer evidence...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      });
+      if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "The project file could not be downloaded."); }
+      const url = URL.createObjectURL(await response.blob()); const anchor = window.document.createElement("a");
+      anchor.href = url; anchor.download = item.fileName; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setOpportunityStatus("Protected project file download started and access was audited.");
+    } catch (error) { setOpportunityStatus(error instanceof Error ? error.message : "The project file could not be downloaded."); }
+    finally { setOpportunityBusy(""); }
   }
 
   return (
@@ -767,6 +764,7 @@ export function DirectTradeDashboard() {
                             </strong>
                           </header>
                           <p>{opportunity.summary}</p>
+                          {opportunity.platformOnly && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Access timing</dt><dd>{String(opportunity.propertyContext.occupancy || "not confirmed").replaceAll("_", " ")}</dd></div></dl>}
                           <div className="dashboard-opportunity-tags">
                             <span>
                               Allocation {opportunity.allocationRank} of 6
@@ -871,20 +869,21 @@ export function DirectTradeDashboard() {
                             </div>
                           )}
                           {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
-                          {["interested", "connected"].includes(opportunity.matchStatus) && (
+                          {!opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && (
                             <section className="dashboard-opportunity-conversion" aria-label="Opportunity workflow actions">
                               <div>
                                 <strong>Move this scope into your trade workflow</strong>
                                 <span>The CRM keeps the opportunity reference, service region and protected privacy boundary.</span>
                               </div>
-                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId, "create_job")}>Create job</button>
-                              <label>
-                                <span>Site visit date</span>
-                                <input type="date" value={siteVisitDates[opportunity.matchId] || ""} onChange={(event) => setSiteVisitDates((current) => ({ ...current, [opportunity.matchId]: event.target.value }))} />
-                              </label>
-                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId, "book_site_visit")}>Book site visit</button>
+                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button>
                             </section>
                           )}
+                          {opportunity.platformOnly && opportunity.evidence.length > 0 && <section className="dashboard-customer-evidence" aria-label="Customer project evidence"><header><div><strong>Customer property evidence</strong><span>Quoting photos are shared with every verified installer allocated to this enquiry. Supporting documents appear only after customer acceptance.</span></div><b>{opportunity.evidence.length}</b></header><div>{opportunity.evidence.map((item) => <article key={item.id}><div><span>{item.sharingScope === "quoting" ? "Quoting photo" : "Accepted installer file"}</span><strong>{item.sharingScope === "quoting" ? item.category.replaceAll("-", " ") : item.fileName}</strong><small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small></div><button type="button" disabled={opportunityBusy === item.id} onClick={() => void downloadOpportunityEvidence(item)}>Protected download</button></article>)}</div><small>Every download is authorised against this exact allocated match and recorded. Do not redistribute household evidence outside the enquiry.</small></section>}
+                          {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
+                            <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
+                            <section className="dashboard-opportunity-conversion" aria-label="Accepted opportunity workflow action"><div><strong>Create the CRM job after customer acceptance</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
+                          </>}
+                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for customer acceptance</strong><span>Contact release does not authorise a job, evidence access or an arrival window proposal. The customer must accept this installer for the next step.</span></div></div>}
                         </article>
                       ))}
                     </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}

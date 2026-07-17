@@ -58,12 +58,15 @@ test("verified trade access and team access are enforced server side", () => {
 
 test("marketplace opportunity actions preserve the match through quote and CRM conversion", () => {
   assert.match(dashboard, />Create job</);
-  assert.match(dashboard, />Book site visit</);
+  assert.doesNotMatch(dashboard, />Book site visit</);
+  assert.match(dashboard, /Create the CRM job after customer acceptance/);
+  assert.match(dashboard, /<InstallerArrivalWindows matchId=\{opportunity\.matchId\}/);
   assert.match(dashboard, /<InstallerPlatformQuote matchId=\{opportunity\.matchId\}/);
   assert.match(dashboard, /sourceReference: matchId/);
   assert.match(route, /source_reference = m\.id/);
   assert.match(route, /createdWorkOrderId: workOrderId/);
   assert.match(route, /m\.status IN \('interested', 'connected'\)/);
+  assert.match(route, /q\.customer_decision = 'accepted'/);
 });
 
 test("platform conversion respects installer and wholesaler role boundaries", () => {

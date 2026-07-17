@@ -103,7 +103,8 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /tick off completed steps/i);
   assert.match(customerDashboard, /Review exactly what installers can see/);
   assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and exact postcode stay hidden/);
-  assert.match(customerDashboard, /I can later choose whether to release my real contact details to one shortlisted installer/);
+  assert.match(customerDashboard, /every verified installer allocated to this enquiry can view attached quoting photos/);
+  assert.match(customerDashboard, /Supporting documents remain restricted until I accept one connected installer/);
   assert.match(customerDashboard, /confirmContactRelease: true/);
   assert.match(customerDashboard, /Other installers remain anonymised/);
   assert.match(customerDashboard, /No paid tier, lead fee or feature paywall/);

@@ -393,6 +393,13 @@
       "when": 1784299424950,
       "tag": "0056_customer_contact_release",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1784302532334,
+      "tag": "0057_customer_property_arrivals",
+      "breakpoints": true
     }
   ]
 }

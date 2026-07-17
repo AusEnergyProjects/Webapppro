@@ -2,60 +2,65 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `46a70048c2d07091a538e1a622319603ab25dadb` on `codex/sites-custom-domain-migration`.
+Implementation baseline: `93bc34c1d24e093610a3018a212fe89bd58b99e3` on `codex/sites-custom-domain-migration`.
 
 ## Current delivery summary
 
-P6-2J adds a customer-controlled handover from an anonymised AEA marketplace lead to one real, contactable installer relationship. Planning accounts remain usable without a phone or street address. A customer must complete a private phone number and full service address matching the project postcode and state before requesting trades.
+P6-2K makes customer trade requests useful for quoting before personal contact is released. The guided request now requires structured property context covering storeys, approximate age and floor area, roof, switchboard and normal access timing. Customers can add property photos, take a new photo through a supported phone or tablet camera, or attach PDF supporting documents.
 
-The marketplace opportunity remains anonymised during allocation, interest and quote review. A customer can release their account name, verified account email, phone and service address only after shortlisting a structured quote and separately confirming the named verified installer. The exact released values are snapshotted for that installer match. Every other matched installer remains anonymised.
+The privacy boundary is explicit and enforced server side. Every active verified installer allocated to the exact enquiry can view its customer-approved quoting photos while identity, contact details, exact location, private notes and usage data remain withheld. Supporting documents remain restricted until the household accepts one connected verified installer. Every installer evidence download is authorised against the current match and recorded. Browser MIME claims are checked against the uploaded file signature, and shared quoting-photo downloads use a neutral filename.
 
-The installer opportunity API joins contact data only through the same owner-scoped match and only while its release is active. A customer can remove future portal visibility, with clear notice that information already viewed or saved cannot be erased. Withdrawing or completing the project also removes active portal visibility.
+Customers must acknowledge the photo-sharing notice before submission. The consent receipt records notice version `2026-07-18-quoting-photos`. Customers can remove future evidence access, with clear notice that this cannot erase information an installer already viewed or saved.
 
-Migration `0056_customer_contact_release.sql` adds optional private customer contact defaults, one release snapshot per opportunity match and immutable release event history. Consent notice version, disclosed fields, customer actor, installer recipient and timestamps are retained. Real contact data never enters `trade_opportunities` or its anonymised summary.
+After a shortlisted installer receives a deliberate contact release, the customer can accept that installer for site assessment and scheduling preparation. Acceptance closes other matches and releases, unlocks restricted supporting documents and permits only that installer to create a CRM job from the platform lead.
 
-The upgraded AEA Twilio account and supporting delivery services remain configured, but the `TLink` Australian sender registration is still a draft pending genuine brand-ownership and identity evidence. SMS remains disabled until Twilio approves and provisions the sender.
+Arrival windows are installer owned. Only the accepted installer can propose one to three non-overlapping future windows, each between 30 minutes and four hours and within 180 days. Future-time validation uses the property state's Australian timezone. The customer can select one current revision. A proposal or selection does not create or change a CRM appointment.
+
+Migration `0057_customer_property_arrivals.sql` adds structured property context, R2-backed evidence metadata and immutable evidence events, plus revisioned installer arrival proposals and immutable proposal and selection events.
+
+The upgraded AEA Twilio account remains configured, but the `TLink` Australian sender registration still needs the genuine brand evidence that becomes available on Monday. SMS remains disabled until Twilio approves and provisions the sender.
 
 ## Recommended next milestone
 
-### P6-2K: customer-visible appointment preparation and reviewed arrival windows
+### P6-2L: reviewed appointment creation and customer preparation
 
-Outcome: show the verified appointment customer exactly how to prepare for a reviewed future visit without exposing internal job notes, staff capacity or other protected records.
+Outcome: turn the customer-selected installer arrival window into a reviewed CRM appointment, then give the verified appointment customer a bounded preparation checklist without exposing internal job or staff records.
 
 ### In scope
 
-- Let authorised dispatch staff publish a bounded preparation checklist for a future appointment.
-- Source the customer-visible arrival window from the reviewed CRM appointment and its current revision.
-- Let the verified appointment customer view the checklist and record readiness acknowledgements.
-- Preserve published checklist revisions and immutable customer acknowledgement history.
-- Create owner-scoped CRM follow-up tasks when required preparation remains incomplete near the visit.
+- Let the accepted installer create a CRM appointment from the current customer-selected arrival window.
+- Reuse the existing owner-scoped scheduling and conflict checks before any appointment is saved.
+- Preserve the source proposal and selected-window revision on the job and appointment audit trail.
+- Let authorised staff publish a bounded customer preparation checklist for that appointment.
+- Let only the verified appointment customer view and acknowledge published preparation items.
 - Invalidate or explicitly reconfirm preparation state after an accepted appointment change.
-- Use the delegated date picker contract and add customer, dispatch, revision, privacy and responsive tests.
+- Add customer, installer, dispatch, conflict, revision, privacy and responsive contract tests.
 
 ### Explicitly out of scope
 
 - Live staff location, GPS tracking, route optimisation or automatic arrival estimates.
 - Customer access to internal CRM notes, hazards, staff rosters, capacity or other customer records.
 - Compliance sign-off, job-form completion, cancellation fees or third-party calendar writes.
-- Automatic email or SMS delivery while production channels remain disabled.
-- Expanding the new marketplace contact release into general trade access to the customer account, asset library or private project notes.
+- Automatic email or SMS delivery while the required sender remains disabled.
+- The future useful-photo checklist, photo scoring or automated image analysis.
 
 ### Acceptance criteria
 
-- Only the verified CRM appointment customer can view or acknowledge a published checklist.
+- A platform appointment can be created only by the accepted installer from the current selected arrival-window revision.
+- Existing team availability and overlap rules are rerun before appointment creation.
+- Proposal selection alone still does not create or modify an appointment.
+- Only the verified appointment customer can view or acknowledge a published preparation checklist.
 - Draft and superseded checklist content is never customer visible.
-- Arrival windows cannot fall outside the current reviewed appointment.
-- Staff publication and customer acknowledgements are owner scoped, revision protected and audited.
 - Appointment changes invalidate or explicitly reconfirm customer-visible preparation state.
 - No checklist payload contains internal notes, hazards, staff availability or another customer record.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
+- Appointment ownership cannot be tied to the same accepted marketplace match, job and verified-customer boundary.
 - A checklist item requires exposing an internal note, private hazard record or another customer record.
-- The appointment cannot be tied to the same authoritative verified-customer ownership boundary used by P6-2I.
 - The slice expands into live tracking, automated outbound delivery, regulated compliance certification or dispatch optimisation.
 
-## Recommendation after P6-2K
+## Recommendation after P6-2L
 
-Build P6-2L as customer appointment reminders and reviewed status notifications using the existing consent, provider and opt-out delivery boundary after the required channels are deliberately enabled. Complete the `TLink` Australian sender registration when the genuine evidence becomes available, then keep SMS disabled until Twilio approval is confirmed.
+Build P6-2M as consent-aware appointment reminders and reviewed status notifications through the existing provider, opt-out and callback boundary. Complete the `TLink` Australian sender registration when the genuine evidence becomes available, then keep SMS disabled until Twilio approval is confirmed.

@@ -17,6 +17,7 @@ import {
   customerContactReadiness,
   submissionReadiness,
 } from "@/lib/customer-projects.mjs";
+import { parseArrivalWindows, selectedArrivalWindow } from "@/lib/customer-project-arrivals.mjs";
 
 export const runtime = "edge";
 
@@ -46,6 +47,7 @@ function projectShape(
   progress: Record<string, unknown> | undefined,
   quotes: Record<string, unknown>[],
   handovers: Record<string, unknown>[],
+  evidence: Record<string, unknown>[],
   hasRetainedAssetHistory: boolean,
   contactReady: boolean,
 ) {
@@ -73,6 +75,7 @@ function projectShape(
     projectStage: row.project_stage,
     timing: row.timing,
     budgetRange: row.budget_range,
+    propertyContext: parseStoredJson(row.property_context, {}),
     privateNotes: row.private_notes,
     planSnapshot: parseStoredJson(row.plan_snapshot, {}),
     completedPlanItems: parseStoredJson(row.completed_plan_items, []),
@@ -113,8 +116,26 @@ function projectShape(
         grantedAt: quote.contact_granted_at,
         withdrawnAt: quote.contact_withdrawn_at,
       } : null,
+      arrivalProposal: quote.arrival_proposal_id ? {
+        id: quote.arrival_proposal_id,
+        status: quote.arrival_status,
+        windows: parseArrivalWindows(quote.arrival_windows),
+        installerNote: quote.arrival_installer_note,
+        selectedWindow: parseStoredJson(quote.arrival_selected_window, null),
+        revision: Number(quote.arrival_revision || 1),
+        proposedAt: quote.arrival_proposed_at,
+        selectedAt: quote.arrival_selected_at,
+      } : null,
       submittedAt: quote.submitted_at,
       updatedAt: quote.updated_at,
+    })),
+    evidence: evidence.map((item) => ({
+      id: item.id,
+      category: item.category,
+      fileName: item.file_name,
+      contentType: item.content_type,
+      sizeBytes: Number(item.size_bytes || 0),
+      createdAt: item.created_at,
     })),
     handoverPacks: handovers.map((handover) => ({
       id: handover.id,
@@ -155,10 +176,14 @@ async function projectsForOwner(firebaseUid: string) {
     product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst, total_cents_ex_gst,
     quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, q.submitted_at, q.updated_at,
     a.business_name installer_business_name, a.verification_status installer_verification_status,
-    r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at
+    r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at,
+    ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
+    ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
+    ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
     FROM customer_project_quotes q
     JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
     LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+    LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = q.opportunity_match_id
     WHERE q.project_id IN (${projectIds.map(() => "?").join(",")}) AND q.status = 'submitted'
     ORDER BY q.submitted_at, q.id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const retainedHandoverRows = projectIds.length ? await db.prepare(`SELECT DISTINCT customer_project_id
@@ -172,6 +197,10 @@ async function projectsForOwner(firebaseUid: string) {
         OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
           WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
     ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, file_name, content_type, size_bytes, created_at
+    FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
+      AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
+    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const handoverIds = handoverRows.results.map((row: Record<string, unknown>) => String(row.id));
   const assetRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
     model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
@@ -235,6 +264,7 @@ async function projectsForOwner(firebaseUid: string) {
     progressRows.results.find((progress: Record<string, unknown>) => progress.opportunity_id === row.opportunity_id),
     quoteRows.results.filter((quote: Record<string, unknown>) => quote.project_id === row.id),
     shapedHandovers.filter((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
+    evidenceRows.results.filter((item: Record<string, unknown>) => item.project_id === row.id),
     retainedHandoverRows.results.some((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
     Boolean(account && customerContactReadiness(account, row).ok),
   ));
@@ -281,12 +311,12 @@ export async function POST(request: Request) {
   await db.prepare(`INSERT INTO customer_projects
     (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
      goal, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-     private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
+     property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
     .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
       project.propertyType, project.householdSituation, project.goal, project.pace,
       JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
-      project.projectStage, project.timing, project.budgetRange, project.privateNotes,
+      project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
       JSON.stringify(project.planSnapshot), Number(account.is_synthetic || 0), now, now).run();
   return json({ ok: true, id, projects: await projectsForOwner(user.uid) }, 201);
 }
@@ -319,13 +349,16 @@ export async function PATCH(request: Request) {
     }
     await db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
       property_type = ?, household_situation = ?, goal = ?, pace = ?, existing_features = ?, service_categories = ?,
-      priorities = ?, project_stage = ?, timing = ?, budget_range = ?, private_notes = ?, plan_snapshot = ?, updated_at = ?
+      priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
       .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
         project.householdSituation, project.goal, project.pace, JSON.stringify(project.existingFeatures),
         JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-        project.timing, project.budgetRange, project.privateNotes, JSON.stringify(project.planSnapshot), now, id, user.uid).run();
+        project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes, JSON.stringify(project.planSnapshot), now, id, user.uid).run();
   } else if (action === "submit") {
+    if (raw.confirmInstallerPhotoSharing !== true) {
+      return json({ ok: false, error: "Confirm that attached quoting photos can be shared with the verified installers allocated to this enquiry." }, 400);
+    }
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
     const stored = {
@@ -333,6 +366,7 @@ export async function PATCH(request: Request) {
       existingFeatures: parseStoredJson(current.existing_features, []),
       serviceCategories: parseStoredJson(current.service_categories, []),
       priorities: parseStoredJson(current.priorities, []),
+      propertyContext: parseStoredJson(current.property_context, {}),
       projectStage: current.project_stage,
       budgetRange: current.budget_range,
       householdSituation: current.household_situation,
@@ -530,10 +564,10 @@ export async function PATCH(request: Request) {
     await db.prepare(`INSERT INTO customer_projects
       (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
        goal, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-       private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+       property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
       SELECT ?, firebase_uid, substr(title || ' copy', 1, 120), home_nickname, postcode, address_state, property_type,
        household_situation, goal, pace, existing_features, service_categories, priorities, project_stage, timing,
-       budget_range, private_notes, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
+       budget_range, property_context, private_notes, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
       FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
       .bind(duplicateId, now, now, id, user.uid).run();
     return json({ ok: true, id: duplicateId, projects: await projectsForOwner(user.uid) }, 201);
@@ -553,6 +587,8 @@ export async function PATCH(request: Request) {
         .bind(now, current.opportunity_id),
       db.prepare("UPDATE customer_project_quotes SET status = 'closed', updated_at = ? WHERE project_id = ?")
         .bind(now, id),
+      db.prepare(`UPDATE customer_project_arrival_proposals SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
+        WHERE project_id = ? AND customer_uid = ? AND status IN ('proposed', 'selected')`).bind(now, now, id, user.uid),
       db.prepare("UPDATE customer_consent_receipts SET withdrawn_at = ? WHERE project_id = ? AND purpose = 'anonymized_installer_matching' AND withdrawn_at = ''")
         .bind(now, id),
     ];
@@ -594,29 +630,127 @@ export async function PATCH(request: Request) {
     if (publishedHandover) return json({ ok: false, error: "Projects with an approved asset and handover history stay available in your completed project library." }, 409);
     await db.prepare("UPDATE customer_projects SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
       .bind(now, now, id, user.uid).run();
+  } else if (action === "select_arrival_window") {
+    const proposalId = cleanId(raw.proposalId);
+    const windowId = cleanId(raw.windowId);
+    const expectedRevision = Number(raw.expectedRevision);
+    const proposal = await db.prepare(`SELECT ap.*, q.customer_decision, q.status quote_status,
+      r.status contact_release_status
+      FROM customer_project_arrival_proposals ap
+      JOIN customer_project_quotes q ON q.id = ap.quote_id AND q.project_id = ap.project_id
+      JOIN customer_project_contact_releases r ON r.opportunity_match_id = ap.opportunity_match_id
+        AND r.customer_uid = ap.customer_uid AND r.installer_uid = ap.installer_uid
+      WHERE ap.id = ? AND ap.project_id = ? AND ap.customer_uid = ?`)
+      .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
+    if (!proposal) return json({ ok: false, error: "Arrival window proposal not found." }, 404);
+    if (proposal.customer_decision !== "accepted" || proposal.quote_status !== "submitted"
+      || proposal.contact_release_status !== "active" || proposal.status !== "proposed") {
+      return json({ ok: false, error: "This arrival window proposal is no longer available." }, 409);
+    }
+    if (!Number.isInteger(expectedRevision) || expectedRevision !== Number(proposal.revision)) {
+      return json({ ok: false, error: "The installer updated these arrival windows. Refresh before choosing one." }, 409);
+    }
+    const selected = selectedArrivalWindow(proposal.windows, windowId);
+    if (!selected) return json({ ok: false, error: "Choose one of the current installer arrival windows." }, 400);
+    const nextRevision = Number(proposal.revision) + 1;
+    const selectedJson = JSON.stringify(selected);
+    await db.batch([
+      db.prepare(`UPDATE customer_project_arrival_proposals SET status = 'selected', selected_window = ?,
+        selected_at = ?, revision = ?, updated_at = ? WHERE id = ? AND customer_uid = ? AND revision = ? AND status = 'proposed'`)
+        .bind(selectedJson, now, nextRevision, now, proposalId, user.uid, proposal.revision),
+      db.prepare(`INSERT INTO customer_project_arrival_events
+        (id, proposal_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+         actor_uid, event_type, proposal_revision, windows, selected_window, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'selected', ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), proposalId, id, proposal.opportunity_match_id, user.uid, proposal.installer_uid,
+          user.uid, nextRevision, proposal.windows, selectedJson, now),
+      adminNotificationStatement(db, {
+        eventKey: `customer-arrival-selected:${proposalId}:${nextRevision}`,
+        eventType: "customer.arrival_window_selected",
+        category: "customer",
+        priority: "high",
+        title: "Customer selected an installer arrival window",
+        summary: `${String(current.title).slice(0, 120)} has a customer-selected arrival window ready for installer scheduling.`,
+        entityType: "customer_project_arrival_proposal",
+        entityId: proposalId,
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: { projectId: id, opportunityMatchId: proposal.opportunity_match_id, selected },
+        occurredAt: now,
+      }),
+    ]);
+    await dispatchAdminNotificationDeliveries();
   } else if (action === "quote_decision") {
     const quoteId = cleanId(raw.quoteId);
     const decision = typeof raw.decision === "string" ? raw.decision : "";
-    if (!quoteId || !["reviewing", "shortlisted", "declined"].includes(decision)) return json({ ok: false, error: "Choose a valid quote option and decision." }, 400);
-    const quote = await db.prepare("SELECT id FROM customer_project_quotes WHERE id = ? AND project_id = ? AND status = 'submitted'")
-      .bind(quoteId, id).first();
+    if (!quoteId || !["reviewing", "shortlisted", "declined", "accepted"].includes(decision)) return json({ ok: false, error: "Choose a valid quote option and decision." }, 400);
+    const quote = await db.prepare(`SELECT q.id, q.installer_uid, q.opportunity_match_id, q.customer_decision,
+      m.status match_status, o.status opportunity_status, a.verification_status, a.account_status,
+      r.id contact_release_id, r.status contact_release_status
+      FROM customer_project_quotes q
+      JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
+      JOIN trade_opportunities o ON o.id = q.opportunity_id
+      JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+      LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+        AND r.customer_uid = ? AND r.installer_uid = q.installer_uid
+      WHERE q.id = ? AND q.project_id = ? AND q.status = 'submitted'`)
+      .bind(user.uid, quoteId, id).first<Record<string, unknown>>();
     if (!quote) return json({ ok: false, error: "Quote option not found." }, 404);
     const statements = [];
     if (decision === "shortlisted") statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = 'reviewing', updated_at = ? WHERE project_id = ? AND status = 'submitted'").bind(now, id));
+    if (decision === "accepted") {
+      if (raw.confirmInstallerAcceptance !== true) return json({ ok: false, error: "Confirm the named installer selection before continuing." }, 400);
+      if (quote.customer_decision !== "shortlisted" || quote.contact_release_status !== "active"
+        || quote.match_status !== "connected" || !["open", "paused"].includes(String(quote.opportunity_status))) {
+        return json({ ok: false, error: "Shortlist and connect with this installer before accepting them for the next step." }, 409);
+      }
+      if (quote.verification_status !== "approved" || quote.account_status !== "active") {
+        return json({ ok: false, error: "Only an active verified installer can be accepted." }, 409);
+      }
+      const otherReleases = await db.prepare(`SELECT id, opportunity_match_id, installer_uid, notice_version, disclosed_fields
+        FROM customer_project_contact_releases WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+          AND opportunity_match_id != ?`).bind(id, user.uid, quote.opportunity_match_id).all<Record<string, unknown>>();
+      statements.push(
+        db.prepare(`UPDATE customer_project_quotes SET customer_decision = 'declined', updated_at = ?
+          WHERE project_id = ? AND status = 'submitted' AND id != ?`).bind(now, id, quoteId),
+        db.prepare("UPDATE trade_opportunities SET status = 'paused', updated_at = ? WHERE id = ? AND status = 'open'")
+          .bind(now, current.opportunity_id),
+        db.prepare(`UPDATE trade_opportunity_matches SET status = 'closed', updated_at = ?
+          WHERE opportunity_id = ? AND id != ? AND status IN ('offered', 'viewed', 'interested', 'connected')`)
+          .bind(now, current.opportunity_id, quote.opportunity_match_id),
+      );
+      for (const release of otherReleases.results) {
+        statements.push(
+          db.prepare(`UPDATE customer_project_contact_releases SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
+            WHERE id = ? AND customer_uid = ? AND status = 'active'`).bind(now, now, release.id, user.uid),
+          db.prepare(`INSERT INTO customer_project_contact_release_events
+            (id, release_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+             actor_uid, event_type, notice_version, disclosed_fields, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'installer_not_selected', ?, ?, ?)`)
+            .bind(crypto.randomUUID(), release.id, id, release.opportunity_match_id, user.uid, release.installer_uid,
+              user.uid, release.notice_version, release.disclosed_fields, now),
+          db.prepare(`UPDATE customer_consent_receipts SET withdrawn_at = ?
+            WHERE firebase_uid = ? AND project_id = ? AND purpose = ? AND withdrawn_at = ''`)
+            .bind(now, user.uid, id, `matched_installer_contact_release:${release.opportunity_match_id}`),
+        );
+      }
+    }
     statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = ?, updated_at = ? WHERE id = ? AND project_id = ?").bind(decision, now, quoteId, id));
+    statements.push(db.prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, user.uid));
     await db.batch(statements);
     await createAdminNotification({
       eventKey: `customer-quote-decision:${quoteId}:${decision}:${now}`,
       eventType: `customer.quote_${decision}`,
       category: "customer",
-      priority: decision === "shortlisted" ? "high" : "normal",
-      title: decision === "shortlisted" ? "Customer shortlisted a quote" : "Customer updated a quote decision",
+      priority: ["shortlisted", "accepted"].includes(decision) ? "high" : "normal",
+      title: decision === "accepted" ? "Customer accepted an installer for the next step" : decision === "shortlisted" ? "Customer shortlisted a quote" : "Customer updated a quote decision",
       summary: `${String(current.title).slice(0, 120)} has a quote marked ${decision}.`,
       entityType: "customer_project_quote",
       entityId: quoteId,
       actorType: "customer",
       actorUid: user.uid,
-      requiresAction: decision === "shortlisted",
+      requiresAction: ["shortlisted", "accepted"].includes(decision),
       metadata: { projectId: id, decision },
       occurredAt: now,
     });

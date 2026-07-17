@@ -1741,6 +1741,7 @@ export const customerProjects = sqliteTable("customer_projects", {
   projectStage: text("project_stage").notNull().default("exploring"),
   timing: text("timing").notNull().default("planning"),
   budgetRange: text("budget_range").notNull().default("not_set"),
+  propertyContext: text("property_context").notNull().default("{}"),
   privateNotes: text("private_notes").notNull().default(""),
   planSnapshot: text("plan_snapshot").notNull().default("{}"),
   completedPlanItems: text("completed_plan_items").notNull().default("[]"),
@@ -1842,6 +1843,81 @@ export const customerProjectContactReleaseEvents = sqliteTable("customer_project
 }, (table) => [
   index("customer_project_contact_release_events_release_idx").on(table.releaseId, table.createdAt),
   index("customer_project_contact_release_events_project_idx").on(table.customerUid, table.projectId, table.createdAt),
+]);
+
+export const customerProjectEvidence = sqliteTable("customer_project_evidence", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  clientUploadId: text("client_upload_id").notNull(),
+  category: text("category").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  objectKey: text("object_key").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_evidence_client_idx").on(table.customerUid, table.projectId, table.clientUploadId),
+  index("customer_project_evidence_project_idx").on(table.customerUid, table.projectId, table.status, table.createdAt),
+]);
+
+export const customerProjectEvidenceEvents = sqliteTable("customer_project_evidence_events", {
+  id: text("id").primaryKey(),
+  evidenceId: text("evidence_id").notNull(),
+  projectId: text("project_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  installerUid: text("installer_uid").notNull().default(""),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("customer_project_evidence_events_item_idx").on(table.evidenceId, table.createdAt),
+  index("customer_project_evidence_events_project_idx").on(table.customerUid, table.projectId, table.createdAt),
+]);
+
+export const customerProjectArrivalProposals = sqliteTable("customer_project_arrival_proposals", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  quoteId: text("quote_id").notNull(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  status: text("status").notNull().default("proposed"),
+  windows: text("windows").notNull().default("[]"),
+  installerNote: text("installer_note").notNull().default(""),
+  selectedWindow: text("selected_window").notNull().default("{}"),
+  revision: integer("revision").notNull().default(1),
+  proposedAt: text("proposed_at").notNull(),
+  selectedAt: text("selected_at").notNull().default(""),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_arrival_proposals_match_idx").on(table.opportunityMatchId),
+  index("customer_project_arrival_proposals_customer_idx").on(table.customerUid, table.projectId, table.updatedAt),
+  index("customer_project_arrival_proposals_installer_idx").on(table.installerUid, table.status, table.updatedAt),
+]);
+
+export const customerProjectArrivalEvents = sqliteTable("customer_project_arrival_events", {
+  id: text("id").primaryKey(),
+  proposalId: text("proposal_id").notNull(),
+  projectId: text("project_id").notNull(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  proposalRevision: integer("proposal_revision").notNull(),
+  windows: text("windows").notNull().default("[]"),
+  selectedWindow: text("selected_window").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("customer_project_arrival_events_proposal_idx").on(table.proposalId, table.createdAt),
+  index("customer_project_arrival_events_project_idx").on(table.customerUid, table.projectId, table.createdAt),
 ]);
 
 export const supplierProducts = sqliteTable("supplier_products", {
