@@ -185,7 +185,7 @@ function indexedCustomer(row: Record<string, unknown>) {
   return {
     id: row.id, customerNumber: row.customer_number, customerType: row.customer_type,
     displayName: customerDisplayName(row), firstName: row.first_name, lastName: row.last_name,
-    businessName: row.business_name, email: row.email, phone: row.phone, addressLine1: row.address_line_1,
+    businessName: row.business_name, businessNumber: row.business_number, email: row.email, phone: row.phone, addressLine1: row.address_line_1,
     addressLine2: row.address_line_2, suburb: row.suburb, addressState: row.address_state,
     postcode: row.postcode, tags: storedList(row.tags), privateNotes: row.private_notes,
     jobCount: Number(row.job_count || 0), activeJobCount: Number(row.active_job_count || 0),
@@ -626,6 +626,7 @@ export async function POST(request: Request) {
       const firstName = cleanAdminText(body.firstName, 80);
       const lastName = cleanAdminText(body.lastName, 80);
       const businessName = cleanAdminText(body.businessName, 140);
+      const businessNumber = cleanAdminText(body.businessNumber, 30);
       const email = cleanAdminText(body.email, 180).toLowerCase();
       const phone = cleanAdminText(body.phone, 40);
       if (customerType === "business" ? !businessName : !firstName && !lastName) {
@@ -642,11 +643,11 @@ export async function POST(request: Request) {
       const addressState = cleanAdminText(body.addressState, 20).toUpperCase();
       const postcode = cleanAdminText(body.postcode, 12);
       await db.batch([db.prepare(`INSERT INTO trade_crm_customers
-        (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, email,
+        (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email,
          phone, address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes,
          record_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .bind(id, identity.uid, customerNumber, customerType, firstName, lastName, businessName, email,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+        .bind(id, identity.uid, customerNumber, customerType, firstName, lastName, businessName, businessNumber, email,
           phone, addressLine1, addressLine2, suburb, addressState, postcode,
           JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now),
         db.prepare(`INSERT INTO trade_crm_customer_contacts
@@ -955,12 +956,13 @@ export async function PATCH(request: Request) {
       const suburb = body.suburb === undefined ? String(current.suburb) : cleanAdminText(body.suburb, 80);
       const addressState = body.addressState === undefined ? String(current.address_state) : cleanAdminText(body.addressState, 20).toUpperCase();
       const postcode = body.postcode === undefined ? String(current.postcode) : cleanAdminText(body.postcode, 12);
-      const statements = [db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, email = ?,
+      const statements = [db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, business_number = ?, email = ?,
         phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
         tags = ?, private_notes = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
         .bind(
           firstName, lastName,
-          body.businessName === undefined ? current.business_name : cleanAdminText(body.businessName, 140), email,
+          body.businessName === undefined ? current.business_name : cleanAdminText(body.businessName, 140),
+          body.businessNumber === undefined ? current.business_number : cleanAdminText(body.businessNumber, 30), email,
           phone, addressLine1, addressLine2, suburb, addressState, postcode,
           body.tags === undefined ? current.tags : JSON.stringify(cleanList(body.tags)),
           body.privateNotes === undefined ? current.private_notes : cleanAdminText(body.privateNotes, 2000),

@@ -1,13 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { importTemplateCsv, parseImportCsv, validateImportCsv } from "../src/lib/trade-data-imports.mjs";
+import { importTemplateCsv, mappedImportCsv, parseImportCsv, validateImportCsv } from "../src/lib/trade-data-imports.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0034_pretty_masque.sql");
+const enquiryMigration = read("../drizzle/0048_unified_enquiry_inbox.sql");
 const route = read("../src/app/api/trade-imports/route.ts");
+const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
 const importer = read("../src/components/TradeDataImportWorkspace.tsx");
+const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
+const workbookReader = read("../src/lib/xlsx-import.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const pilotRoute = read("../src/app/api/admin/usability-pilot/route.ts");
@@ -42,6 +46,43 @@ test("product previews block duplicate model numbers from automatic import", () 
   assert.equal(result.rows[0].status, "duplicate");
   assert.equal(result.rows[0].resolution, "skip");
   assert.equal(result.rows[1].status, "ready");
+});
+
+test("enquiry previews preserve source IDs and require valid customer and service data", () => {
+  const result = validateImportCsv({ importType: "enquiries", source: importTemplateCsv("enquiries"), existingKeys: new Set(["external:website:web-1042"]), customerEmails: new Set() });
+  assert.equal(result.summary.total, 2);
+  assert.equal(result.rows[0].status, "duplicate");
+  assert.equal(result.rows[0].values.externalRecordId, "WEB-1042");
+  assert.equal(result.rows[1].status, "ready");
+});
+
+test("column mapping creates canonical previews without mutating records", () => {
+  const source = "Name,Email address,Scope\nTaylor,trade@example.com,Heat pump enquiry\n";
+  const mapped = mappedImportCsv(source, "enquiries", { first_name: "Name", email: "Email address", description: "Scope" });
+  const result = validateImportCsv({ importType: "enquiries", source: mapped, existingKeys: new Set(), customerEmails: new Set() });
+  assert.equal(result.rows[0].values.firstName, "Taylor");
+  assert.equal(result.rows[0].values.email, "trade@example.com");
+});
+
+test("unified inbox keeps protected marketplace records reference-only and requires explicit duplicate conversion", () => {
+  assert.match(enquiryMigration, /protected_source.*duplicate_decision/s);
+  assert.match(enquiryMigration, /JOIN `trade_opportunities`/);
+  assert.doesNotMatch(enquiryMigration, /o\.postcode/);
+  assert.match(enquiryRoute, /PROTECTED_CUSTOMER_BOUNDARY/);
+  assert.match(enquiryRoute, /new Set\(\["create_new", "use_existing"\]\)/);
+  assert.match(enquiryRoute, /trade_crm_customer_contacts/);
+  assert.match(enquiryRoute, /trade_crm_service_sites/);
+  assert.match(enquiryInbox, /Duplicate review/);
+  assert.match(enquiryInbox, /Privacy boundary active/);
+});
+
+test("CSV and Excel imports share mapping, preview, issue export and rollback", () => {
+  assert.match(importer, /workbookToCsv/);
+  assert.match(importer, /mappedImportCsv/);
+  assert.match(importer, /Export issues/);
+  assert.match(workbookReader, /unzipSync/);
+  assert.match(route, /target_entity_type = 'crm_enquiry'/);
+  assert.match(route, /type === "crm_enquiry"/);
 });
 
 test("guided imports store durable previews, row decisions, results and rollback metadata", () => {
@@ -83,5 +124,5 @@ test("low pilot scores create proactive admin follow-up", () => {
 });
 
 test("new migration and UI copy avoid prohibited dash characters", () => {
-  assert.doesNotMatch(migration + route + importer + pilotRoute + pilotUi, /[\u2013\u2014]/);
+  assert.doesNotMatch(migration + enquiryMigration + route + enquiryRoute + importer + enquiryInbox + pilotRoute + pilotUi, /[\u2013\u2014]/);
 });

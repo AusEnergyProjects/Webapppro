@@ -8,6 +8,24 @@ export const DEFAULT_CONNECTED_INSTALLERS = 3;
 export const DEFAULT_CONTACT_LIMIT = 2;
 export const OPPORTUNITY_LIFETIME_DAYS = 30;
 
+export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: string, firebaseUid = "") {
+  await db.prepare(`INSERT INTO trade_crm_enquiries
+    (id, firebase_uid, source_type, source_reference, external_record_id, opportunity_match_id, status,
+     service_category, description, urgency, service_region, protected_source, duplicate_decision,
+     record_status, created_at, updated_at)
+    SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
+      CASE WHEN m.status IN ('interested', 'connected') THEN 'contacted'
+           WHEN m.status IN ('declined', 'closed') THEN 'lost' ELSE 'new' END,
+      COALESCE(NULLIF(o.project_type, ''), 'other'), o.summary, o.priority, o.state, 1, 'protected',
+      'active', m.matched_at, m.updated_at
+    FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
+    WHERE m.opportunity_id = ? AND (? = '' OR m.firebase_uid = ?)
+    ON CONFLICT(firebase_uid, source_type, source_reference) DO UPDATE SET
+      status = excluded.status, service_category = excluded.service_category, description = excluded.description,
+      urgency = excluded.urgency, service_region = excluded.service_region, updated_at = excluded.updated_at`)
+    .bind(opportunityId, firebaseUid, firebaseUid).run();
+}
+
 const ACTIVE_MATCH_STATUSES = new Set([
   "offered",
   "viewed",
@@ -308,6 +326,7 @@ export async function allocateNearestInstallers(
           ),
       ),
     );
+  if (selected.length) await syncMarketplaceEnquiries(db, opportunityId);
   return {
     allocated: selected,
     activeCount: activeCount + selected.length,

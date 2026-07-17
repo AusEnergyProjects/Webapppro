@@ -880,6 +880,7 @@ export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
   businessName: text("business_name").notNull().default(""),
+  businessNumber: text("business_number").notNull().default(""),
   email: text("email").notNull().default(""),
   phone: text("phone").notNull().default(""),
   addressLine1: text("address_line_1").notNull().default(""),
@@ -896,6 +897,88 @@ export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
   uniqueIndex("trade_crm_customers_owner_number_idx").on(table.firebaseUid, table.customerNumber),
   index("trade_crm_customers_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
   index("trade_crm_customers_owner_name_idx").on(table.firebaseUid, table.lastName, table.businessName),
+]);
+
+export const tradeCrmEnquiries = sqliteTable("trade_crm_enquiries", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  sourceType: text("source_type").notNull().default("direct"),
+  sourceReference: text("source_reference").notNull().default(""),
+  externalRecordId: text("external_record_id").notNull().default(""),
+  opportunityMatchId: text("opportunity_match_id").notNull().default(""),
+  status: text("status").notNull().default("new"),
+  customerId: text("customer_id").notNull().default(""),
+  customerContactId: text("customer_contact_id").notNull().default(""),
+  serviceSiteId: text("service_site_id").notNull().default(""),
+  customerType: text("customer_type").notNull().default("residential"),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  businessName: text("business_name").notNull().default(""),
+  businessNumber: text("business_number").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  addressLine1: text("address_line_1").notNull().default(""),
+  addressLine2: text("address_line_2").notNull().default(""),
+  suburb: text("suburb").notNull().default(""),
+  addressState: text("address_state").notNull().default(""),
+  postcode: text("postcode").notNull().default(""),
+  serviceCategory: text("service_category").notNull().default("other"),
+  description: text("description").notNull().default(""),
+  urgency: text("urgency").notNull().default("standard"),
+  preferredDate: text("preferred_date").notNull().default(""),
+  serviceRegion: text("service_region").notNull().default(""),
+  assignedLabel: text("assigned_label").notNull().default(""),
+  nextFollowUpAt: text("next_follow_up_at").notNull().default(""),
+  lostReason: text("lost_reason").notNull().default(""),
+  protectedSource: integer("protected_source", { mode: "boolean" }).notNull().default(false),
+  duplicateDecision: text("duplicate_decision").notNull().default("unchecked"),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_enquiries_owner_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
+  index("trade_crm_enquiries_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.status, table.updatedAt),
+  index("trade_crm_enquiries_owner_external_idx").on(table.firebaseUid, table.externalRecordId),
+  index("trade_crm_enquiries_customer_idx").on(table.firebaseUid, table.customerId, table.updatedAt),
+]);
+
+export const tradeCrmEnquiryMessages = sqliteTable("trade_crm_enquiry_messages", {
+  id: text("id").primaryKey(),
+  enquiryId: text("enquiry_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  channel: text("channel").notNull().default("note"),
+  direction: text("direction").notNull().default("internal"),
+  subject: text("subject").notNull().default(""),
+  body: text("body").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_enquiry_messages_owner_idx").on(table.firebaseUid, table.enquiryId, table.occurredAt),
+]);
+
+export const tradeCrmEnquiryAttachments = sqliteTable("trade_crm_enquiry_attachments", {
+  id: text("id").primaryKey(),
+  enquiryId: text("enquiry_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull().default("application/octet-stream"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  objectKey: text("object_key").notNull().default(""),
+  status: text("status").notNull().default("metadata_only"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_enquiry_attachments_owner_idx").on(table.firebaseUid, table.enquiryId, table.createdAt),
+]);
+
+export const tradeCrmEnquiryEvents = sqliteTable("trade_crm_enquiry_events", {
+  id: text("id").primaryKey(),
+  enquiryId: text("enquiry_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_enquiry_events_owner_idx").on(table.firebaseUid, table.enquiryId, table.createdAt),
 ]);
 
 export const tradeCrmCustomerContacts = sqliteTable("trade_crm_customer_contacts", {

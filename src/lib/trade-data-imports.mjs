@@ -5,12 +5,25 @@ export const IMPORT_DEFINITIONS = {
     label: "Customers",
     roles: ["installer"],
     headers: [
-      "customer_type", "first_name", "last_name", "business_name", "email", "phone",
+      "customer_type", "first_name", "last_name", "business_name", "business_number", "email", "phone",
       "address_line_1", "address_line_2", "suburb", "state", "postcode", "tags", "private_notes",
     ],
     examples: [
-      ["residential", "Alex", "Taylor", "", "alex.taylor@example.com", "0400 000 001", "12 Sample Street", "", "Box Hill", "VIC", "3128", "repeat customer|heat pump", "Imported example only"],
-      ["business", "", "", "Example Property Group", "projects@example.com", "03 9000 0000", "40 Example Road", "Level 2", "Parramatta", "NSW", "2150", "builder|commercial", "Imported example only"],
+      ["residential", "Alex", "Taylor", "", "", "alex.taylor@example.com", "0400 000 001", "12 Sample Street", "", "Box Hill", "VIC", "3128", "repeat customer|heat pump", "Imported example only"],
+      ["business", "", "", "Example Property Group", "51824753556", "projects@example.com", "03 9000 0000", "40 Example Road", "Level 2", "Parramatta", "NSW", "2150", "builder|commercial", "Imported example only"],
+    ],
+  },
+  enquiries: {
+    label: "Enquiries",
+    roles: ["installer"],
+    headers: [
+      "source", "external_record_id", "customer_type", "first_name", "last_name", "business_name", "business_number",
+      "email", "phone", "address_line_1", "address_line_2", "suburb", "state", "postcode", "service_category",
+      "description", "urgency", "preferred_date",
+    ],
+    examples: [
+      ["website", "WEB-1042", "residential", "Sam", "Nguyen", "", "", "sam@example.com", "0400 000 002", "8 Example Avenue", "", "Geelong", "VIC", "3220", "solar", "Solar and battery enquiry", "standard", "2026-08-12"],
+      ["referral", "REF-88", "business", "", "", "Example Bakery", "51824753556", "owner@example.com", "03 9000 0010", "19 Sample Road", "Shop 2", "Newcastle", "NSW", "2300", "electrical", "Switchboard and efficiency assessment", "high", ""],
     ],
   },
   jobs: {
@@ -83,6 +96,13 @@ function customerKey(values) {
   return `name:${[values.firstName, values.lastName, values.businessName, values.postcode].join(":").toLowerCase()}`;
 }
 
+function enquiryKey(values) {
+  if (values.externalRecordId) return `external:${values.source}:${values.externalRecordId.toLowerCase()}`;
+  if (values.email) return `email:${values.email}`;
+  const phone = values.phone.replace(/\D/g, "");
+  return phone ? `phone:${phone}` : `enquiry:${[values.firstName, values.lastName, values.businessName, values.postcode, values.description].join(":").toLowerCase()}`;
+}
+
 function jobKey(values) {
   return `job:${values.title.toLowerCase()}:${values.customerEmail}:${values.scheduledStart}`;
 }
@@ -102,7 +122,7 @@ function customerRow(record) {
   const values = {
     customerType: text(record.customer_type, 20).toLowerCase() || "residential",
     firstName: text(record.first_name, 80), lastName: text(record.last_name, 80), businessName: text(record.business_name, 140),
-    email: text(record.email, 180).toLowerCase(), phone: text(record.phone, 40),
+    businessNumber: text(record.business_number, 30), email: text(record.email, 180).toLowerCase(), phone: text(record.phone, 40),
     addressLine1: text(record.address_line_1, 140), addressLine2: text(record.address_line_2, 140), suburb: text(record.suburb, 80),
     addressState: text(record.state, 20).toUpperCase(), postcode: text(record.postcode, 12),
     tags: list(record.tags), privateNotes: text(record.private_notes, 2000),
@@ -116,6 +136,31 @@ function customerRow(record) {
   if (!values.email && !values.phone) issues.push({ level: "warning", message: "No email or phone was supplied." });
   if (!values.addressLine1 || !values.suburb || !values.addressState || !values.postcode) issues.push({ level: "warning", message: "The address is incomplete and can be finished after import." });
   return { values, key: customerKey(values), issues };
+}
+
+function enquiryRow(record) {
+  const values = {
+    source: text(record.source, 40).toLowerCase() || "import", externalRecordId: text(record.external_record_id, 120),
+    customerType: text(record.customer_type, 20).toLowerCase() || "residential", firstName: text(record.first_name, 80),
+    lastName: text(record.last_name, 80), businessName: text(record.business_name, 140), businessNumber: text(record.business_number, 30),
+    email: text(record.email, 180).toLowerCase(), phone: text(record.phone, 40), addressLine1: text(record.address_line_1, 140),
+    addressLine2: text(record.address_line_2, 140), suburb: text(record.suburb, 80), addressState: text(record.state, 10).toUpperCase(),
+    postcode: text(record.postcode, 12), serviceCategory: text(record.service_category, 60).toLowerCase() || "other",
+    description: text(record.description, 3000), urgency: text(record.urgency, 20).toLowerCase() || "standard",
+    preferredDate: text(record.preferred_date, 10),
+  };
+  const issues = [];
+  if (!CUSTOMER_TYPES.has(values.customerType)) issues.push({ level: "error", message: "Customer type must be residential or business." });
+  if (!values.businessName && !values.firstName && !values.lastName) issues.push({ level: "error", message: "Add a person or business name." });
+  if (!values.description) issues.push({ level: "error", message: "Add the enquiry description." });
+  if (values.email && !EMAIL_PATTERN.test(values.email)) issues.push({ level: "error", message: "Check the email address." });
+  if (values.addressState && !STATES.has(values.addressState)) issues.push({ level: "error", message: "Use a valid Australian state or territory code." });
+  if (values.postcode && !/^\d{4}$/.test(values.postcode)) issues.push({ level: "error", message: "Postcode must contain four digits." });
+  if (!SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
+  if (!PRIORITIES.has(values.urgency)) issues.push({ level: "error", message: "Urgency must be low, standard, high or urgent." });
+  if (!validDate(values.preferredDate)) issues.push({ level: "error", message: "Preferred date must use YYYY-MM-DD." });
+  if (!values.email && !values.phone) issues.push({ level: "warning", message: "No email or phone was supplied." });
+  return { values, key: enquiryKey(values), issues };
 }
 
 function jobRow(record, customerEmails) {
@@ -201,7 +246,7 @@ export function validateImportCsv({ importType, source, existingKeys = new Set()
   const seen = new Set();
   const rows = dataRows.map((columns, index) => {
     const record = Object.fromEntries(headers.map((header, column) => [header, columns[column] || ""]));
-    const normalized = importType === "customers" ? customerRow(record) : importType === "jobs" ? jobRow(record, customerEmails) : productRow(record);
+    const normalized = importType === "customers" ? customerRow(record) : importType === "enquiries" ? enquiryRow(record) : importType === "jobs" ? jobRow(record, customerEmails) : productRow(record);
     const duplicate = existingKeys.has(normalized.key) || seen.has(normalized.key);
     seen.add(normalized.key);
     const status = rowStatus(normalized.issues, duplicate);
@@ -225,4 +270,14 @@ export function importTemplateCsv(importType) {
   const definition = IMPORT_DEFINITIONS[importType];
   if (!definition) throw new Error("IMPORT_TYPE_INVALID");
   return `${definition.headers.join(",")}\n${definition.examples.map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
+}
+
+export function mappedImportCsv(source, importType, mapping) {
+  const definition = IMPORT_DEFINITIONS[importType];
+  if (!definition) throw new Error("IMPORT_TYPE_INVALID");
+  const rows = parseImportCsv(source);
+  if (rows.length < 2) throw new Error("IMPORT_EMPTY");
+  const sourceHeaders = rows[0].map((value) => text(value, 80));
+  const indexes = definition.headers.map((target) => sourceHeaders.findIndex((header) => header === mapping[target]));
+  return `${definition.headers.join(",")}\n${rows.slice(1).filter((row) => row.some(Boolean)).map((row) => indexes.map((index) => csvCell(index >= 0 ? row[index] || "" : "")).join(",")).join("\n")}\n`;
 }

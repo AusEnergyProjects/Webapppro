@@ -4,6 +4,7 @@ import { parseJsonList } from "@/lib/admin-server";
 import {
   allocateNearestInstallers,
   expireStaleOpportunities,
+  syncMarketplaceEnquiries,
 } from "@/lib/opportunity-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { normalizePlatformQuote, parseStoredJson } from "@/lib/customer-projects.mjs";
@@ -340,6 +341,7 @@ export async function PATCH(request: Request) {
       { ok: false, error: "The opportunity could not be updated." },
       404,
     );
+  await syncMarketplaceEnquiries(db, current.opportunity_id, user.uid);
   if (status === "declined") {
     if (current.opportunity_id)
       await allocateNearestInstallers(

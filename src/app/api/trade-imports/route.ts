@@ -8,7 +8,7 @@ import { IMPORT_DEFINITIONS, IMPORT_MAX_ROWS, validateImportCsv } from "@/lib/tr
 
 export const runtime = "edge";
 
-type ImportType = "customers" | "jobs" | "products";
+type ImportType = "customers" | "enquiries" | "jobs" | "products";
 type ImportIdentity = {
   uid: string;
   businessName: string;
@@ -17,7 +17,7 @@ type ImportIdentity = {
   canBulkProducts: boolean;
 };
 
-const IMPORT_TYPES = new Set<ImportType>(["customers", "jobs", "products"]);
+const IMPORT_TYPES = new Set<ImportType>(["customers", "enquiries", "jobs", "products"]);
 const ROLLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function importIdentity(request: Request): Promise<ImportIdentity> {
@@ -45,7 +45,7 @@ function errorResponse(error: unknown) {
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This business account is not active." }, 403);
   if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using guided data migration." }, 403);
   if (code === "IMPORT_TYPE_ROLE") return adminJson({ ok: false, error: "Choose a data type available to this business account." }, 403);
-  if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose customers, historical jobs or wholesaler products." }, 400);
+  if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose enquiries, customers, historical jobs or wholesaler products." }, 400);
   if (code === "IMPORT_EMPTY") return adminJson({ ok: false, error: "The CSV needs a header row and at least one data row." }, 400);
   if (code === "IMPORT_TOO_LARGE") return adminJson({ ok: false, error: `Import up to ${IMPORT_MAX_ROWS} rows in one batch.` }, 400);
   if (code === "CSV_QUOTE_UNCLOSED") return adminJson({ ok: false, error: "A quoted CSV field is not closed. Check the file and try again." }, 400);
@@ -97,17 +97,38 @@ async function duplicateContext(identity: ImportIdentity, importType: ImportType
   const db = getD1();
   const existingKeys = new Set<string>();
   const customerEmails = new Set<string>();
-  if (importType === "customers" || importType === "jobs") {
-    const customers = await db.prepare(`SELECT first_name, last_name, business_name, email, phone, postcode
-      FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'`).bind(identity.uid).all<Record<string, unknown>>();
+  if (importType === "customers" || importType === "jobs" || importType === "enquiries") {
+    const customers = await db.prepare(`SELECT c.first_name, c.last_name, c.business_name, c.business_number, c.email, c.phone, c.postcode,
+      COALESCE(GROUP_CONCAT(DISTINCT cc.email), '') contact_emails, COALESCE(GROUP_CONCAT(DISTINCT cc.phone), '') contact_phones
+      FROM trade_crm_customers c
+      LEFT JOIN trade_crm_customer_contacts cc ON cc.customer_id = c.id AND cc.firebase_uid = c.firebase_uid AND cc.record_status = 'active'
+      WHERE c.firebase_uid = ? AND c.record_status = 'active' GROUP BY c.id`).bind(identity.uid).all<Record<string, unknown>>();
     for (const customer of customers.results) {
       const email = String(customer.email || "").trim().toLowerCase();
       const phone = String(customer.phone || "").replace(/\D/g, "");
       if (email) customerEmails.add(email);
+      for (const contactEmail of String(customer.contact_emails || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean)) customerEmails.add(contactEmail);
       if (importType === "customers") {
         const key = email ? `email:${email}` : phone ? `phone:${phone}` : `name:${[customer.first_name, customer.last_name, customer.business_name, customer.postcode].join(":").toLowerCase()}`;
         existingKeys.add(key);
       }
+      if (importType === "enquiries") {
+        if (email) existingKeys.add(`email:${email}`);
+        if (phone) existingKeys.add(`phone:${phone}`);
+        for (const contactEmail of String(customer.contact_emails || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean)) existingKeys.add(`email:${contactEmail}`);
+        for (const contactPhone of String(customer.contact_phones || "").split(",").map((item) => item.replace(/\D/g, "")).filter(Boolean)) existingKeys.add(`phone:${contactPhone}`);
+      }
+    }
+  }
+  if (importType === "enquiries") {
+    const enquiries = await db.prepare(`SELECT source_type, external_record_id, email, phone FROM trade_crm_enquiries
+      WHERE firebase_uid = ? AND record_status = 'active' AND protected_source = 0`).bind(identity.uid).all<Record<string, unknown>>();
+    for (const enquiry of enquiries.results) {
+      const external = String(enquiry.external_record_id || "").trim().toLowerCase();
+      const source = String(enquiry.source_type || "").trim().toLowerCase();
+      const email = String(enquiry.email || "").trim().toLowerCase();
+      const phone = String(enquiry.phone || "").replace(/\D/g, "");
+      existingKeys.add(external ? `external:${source}:${external}` : email ? `email:${email}` : `phone:${phone}`);
     }
   }
   if (importType === "jobs") {
@@ -212,27 +233,63 @@ export async function POST(request: Request) {
           const values = JSON.parse(String(row.normalized_data)) as Record<string, unknown>;
           const id = crypto.randomUUID();
           const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${id.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
+          const contactId = crypto.randomUUID();
+          const siteId = crypto.randomUUID();
           statements.push(db.prepare(`INSERT INTO trade_crm_customers
-            (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, email, phone,
+            (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email, phone,
              address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes, record_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
             .bind(id, identity.uid, customerNumber, values.customerType, values.firstName, values.lastName, values.businessName,
-              values.email, values.phone, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode,
+              values.businessNumber, values.email, values.phone, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode,
               JSON.stringify(values.tags || []), values.privateNotes, now, now));
+          statements.push(db.prepare(`INSERT INTO trade_crm_customer_contacts
+            (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'Primary contact', ?, ?, 1, 'active', ?, ?)`)
+            .bind(contactId, identity.uid, id, values.firstName, values.lastName, values.email, values.phone, now, now));
+          statements.push(db.prepare(`INSERT INTO trade_crm_service_sites
+            (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+             access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+            .bind(siteId, identity.uid, id, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, now, now));
+          statements.push(db.prepare(`INSERT INTO trade_crm_site_contacts
+            (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
+            .bind(crypto.randomUUID(), identity.uid, siteId, contactId, now, now));
           statements.push(db.prepare(`UPDATE trade_data_import_rows SET result_status = 'imported', target_entity_type = 'crm_customer',
+            target_entity_id = ?, updated_at = ? WHERE id = ? AND batch_id = ?`).bind(id, now, row.id, batchId));
+        }
+      } else if (importType === "enquiries") {
+        for (const row of selected) {
+          const values = JSON.parse(String(row.normalized_data)) as Record<string, unknown>;
+          const id = crypto.randomUUID();
+          statements.push(db.prepare(`INSERT INTO trade_crm_enquiries
+            (id, firebase_uid, source_type, source_reference, external_record_id, status, customer_type, first_name, last_name,
+             business_name, business_number, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,
+             service_category, description, urgency, preferred_date, protected_source, duplicate_decision, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'unchecked', 'active', ?, ?)`)
+            .bind(id, identity.uid, values.source, `${batchId}:${row.row_number}`, values.externalRecordId, values.customerType,
+              values.firstName, values.lastName, values.businessName, values.businessNumber, values.email, values.phone,
+              values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, values.serviceCategory,
+              values.description, values.urgency, values.preferredDate, now, now));
+          statements.push(db.prepare(`INSERT INTO trade_crm_enquiry_events
+            (id, enquiry_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'data_imported', ?, ?)`)
+            .bind(crypto.randomUUID(), id, identity.uid, `Imported from ${String(batch.file_name)} with source attribution preserved.`, now));
+          statements.push(db.prepare(`UPDATE trade_data_import_rows SET result_status = 'imported', target_entity_type = 'crm_enquiry',
             target_entity_id = ?, updated_at = ? WHERE id = ? AND batch_id = ?`).bind(id, now, row.id, batchId));
         }
       } else if (importType === "jobs") {
         const numbers = await reserveTradeWorkNumbers(db, identity.uid, "JOB", selected.length, now);
-        const customers = await db.prepare(`SELECT id, LOWER(email) email FROM trade_crm_customers
-          WHERE firebase_uid = ? AND record_status = 'active' AND email != ''`).bind(identity.uid).all<{ id: string; email: string }>();
-        const customerByEmail = new Map(customers.results.map((customer) => [customer.email, customer.id]));
+        const customers = await db.prepare(`SELECT c.id, LOWER(c.email) email,
+          COALESCE((SELECT s.id FROM trade_crm_service_sites s WHERE s.customer_id = c.id AND s.firebase_uid = c.firebase_uid AND s.record_status = 'active' ORDER BY s.is_primary DESC, s.created_at LIMIT 1), '') service_site_id
+          FROM trade_crm_customers c WHERE c.firebase_uid = ? AND c.record_status = 'active' AND c.email != ''`).bind(identity.uid).all<{ id: string; email: string; service_site_id: string }>();
+        const customerByEmail = new Map(customers.results.map((customer) => [customer.email, customer]));
         for (let index = 0; index < selected.length; index += 1) {
           const row = selected[index];
           const values = JSON.parse(String(row.normalized_data)) as Record<string, unknown>;
           const id = crypto.randomUUID();
           const detailId = crypto.randomUUID();
-          const customerId = customerByEmail.get(String(values.customerEmail || "")) || "";
+          const customer = customerByEmail.get(String(values.customerEmail || ""));
+          const customerId = customer?.id || "";
           statements.push(db.prepare(`INSERT INTO trade_work_orders
             (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title, service_category,
              site_area, stage, priority, scheduled_start, scheduled_end, assignee_label, revision, record_status, created_at, updated_at)
@@ -240,11 +297,11 @@ export async function POST(request: Request) {
             .bind(id, identity.uid, batchId, numbers[index], values.title, values.serviceCategory, values.workStage, values.priority,
               values.scheduledStart, values.scheduledEnd, now, now));
           statements.push(db.prepare(`INSERT INTO trade_crm_job_details
-            (id, work_order_id, firebase_uid, crm_customer_id, customer_source, pipeline_stage, description, customer_reference,
+            (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description, customer_reference,
              next_action, tags, estimated_value_cents, quoted_value_cents, invoiced_value_cents, paid_value_cents, quote_status,
              invoice_status, payment_due_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
-            .bind(detailId, id, identity.uid, customerId, customerId ? "trade_owned" : "internal", values.pipelineStage,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
+            .bind(detailId, id, identity.uid, customerId, customer?.service_site_id || "", customerId ? "trade_owned" : "internal", values.pipelineStage,
               values.description, values.nextAction, JSON.stringify(values.tags || []), values.estimatedValueCents, now, now));
           statements.push(db.prepare(`INSERT INTO trade_work_order_events
             (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'data_imported', ?, ?)`)
@@ -329,7 +386,7 @@ export async function PATCH(request: Request) {
     for (const row of importedRows) {
       const type = String(row.target_entity_type || "");
       const id = String(row.target_entity_id || "");
-      const table = type === "crm_customer" ? "trade_crm_customers" : type === "work_order" ? "trade_work_orders" : type === "supplier_product" ? "supplier_products" : "";
+      const table = type === "crm_customer" ? "trade_crm_customers" : type === "crm_enquiry" ? "trade_crm_enquiries" : type === "work_order" ? "trade_work_orders" : type === "supplier_product" ? "supplier_products" : "";
       if (!table || !id) continue;
       const target = await db.prepare(`SELECT updated_at FROM ${table} WHERE id = ? AND firebase_uid = ?`).bind(id, identity.uid).first<{ updated_at: string }>();
       if (!target) {
@@ -343,7 +400,13 @@ export async function PATCH(request: Request) {
         blocked += 1;
         continue;
       }
-      if (type === "crm_customer") await db.prepare("UPDATE trade_crm_customers SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, identity.uid).run();
+      if (type === "crm_customer") await db.batch([
+        db.prepare("UPDATE trade_crm_customers SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, identity.uid),
+        db.prepare("UPDATE trade_crm_customer_contacts SET record_status = 'archived', updated_at = ? WHERE customer_id = ? AND firebase_uid = ?").bind(now, id, identity.uid),
+        db.prepare("UPDATE trade_crm_service_sites SET record_status = 'archived', updated_at = ? WHERE customer_id = ? AND firebase_uid = ?").bind(now, id, identity.uid),
+        db.prepare("UPDATE trade_crm_site_contacts SET record_status = 'archived', updated_at = ? WHERE firebase_uid = ? AND service_site_id IN (SELECT id FROM trade_crm_service_sites WHERE customer_id = ? AND firebase_uid = ?)").bind(now, identity.uid, id, identity.uid),
+      ]);
+      if (type === "crm_enquiry") await db.prepare("UPDATE trade_crm_enquiries SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, identity.uid).run();
       if (type === "work_order") await db.prepare("UPDATE trade_work_orders SET record_status = 'archived', updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, identity.uid).run();
       if (type === "supplier_product") await db.prepare("UPDATE supplier_products SET listing_status = 'archived', review_status = 'pending', review_note = 'Rolled back by the wholesaler.', updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, identity.uid).run();
       await db.prepare("UPDATE trade_data_import_rows SET result_status = 'rolled_back', error = '', updated_at = ? WHERE id = ?").bind(now, row.id).run();

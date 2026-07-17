@@ -10,6 +10,7 @@ import { TradeFieldWorkPanel } from "./TradeFieldWorkPanel";
 import { TradeTeamCentre } from "./TradeTeamCentre";
 import { TradeJobFormsPanel } from "./TradeJobFormsPanel";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
+import { TradeEnquiryInbox } from "./TradeEnquiryInbox";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
@@ -62,7 +63,7 @@ type CrmMetrics = {
 type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type CrmScheduleResult = { ok?: boolean; items?: ActivityAppointment[]; pagination?: IndexPagination; error?: string };
 type CrmReportResult = { ok?: boolean; metrics?: CrmMetrics; pipeline?: Record<string, number>; error?: string };
-type View = "today" | "jobs" | "schedule" | "customers" | "templates" | "reports" | "import" | "integrations" | "team";
+type View = "today" | "enquiries" | "jobs" | "schedule" | "customers" | "templates" | "reports" | "import" | "integrations" | "team";
 
 const serviceLabels: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
@@ -530,7 +531,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       <div className="crm-primary-actions"><details className="crm-quick-create"><summary>New</summary><div><button type="button" onClick={() => { setView("jobs"); setCreating("job"); }}>Job</button><button type="button" onClick={() => { setView("customers"); setCreating("customer"); }}>Customer</button></div></details></div>
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
-      {(["today", "jobs", "schedule", "customers"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item[0].toUpperCase() + item.slice(1)}</button>)}
+      {(["today", "enquiries", "jobs", "schedule", "customers"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item[0].toUpperCase() + item.slice(1)}</button>)}
       <details className="crm-more-nav"><summary className={["templates", "reports", "import", "integrations", "team"].includes(view) ? "active" : ""}>{["templates", "reports", "import", "integrations", "team"].includes(view) ? view[0].toUpperCase() + view.slice(1) : "More"}</summary><div>{(["templates", "reports", "import", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={(event) => { setView(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}</div></details>
     </nav>
     <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>AEA protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>
@@ -543,6 +544,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       </div>
       <div className="crm-today-action"><button type="button" onClick={() => { setView("jobs"); setCreating("job"); }}>Create a job</button><span>The job number is assigned automatically.</span></div>
     </div>}
+    {view === "enquiries" && <div className="crm-view"><TradeEnquiryInbox user={user} onConverted={async () => { setRefreshNonce((value) => value + 1); }} /></div>}
 
     {view === "jobs" && creating === "job" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><span>New job</span><h3>Create a clear work record</h3><p>Only the essentials are needed now. The system assigns the next chronological job ID after saving.</p></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>Back to jobs</button></div>

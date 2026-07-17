@@ -11,6 +11,7 @@ import { parseJsonList } from "@/lib/admin-server";
 import {
   canonicalMarketplaceState,
   MAX_VISIBLE_INSTALLERS,
+  syncMarketplaceEnquiries,
 } from "@/lib/opportunity-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
@@ -183,6 +184,7 @@ export async function POST(request: Request) {
         now,
       )
       .run();
+    await syncMarketplaceEnquiries(db, opportunityId, firebaseUid);
     await writeAdminAudit(
       admin,
       "opportunity.assign",
@@ -222,7 +224,7 @@ export async function PATCH(request: Request) {
     const db = getD1();
     const current = await db
       .prepare(
-        `SELECT m.status, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers
+        `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers
       FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id WHERE m.id = ?`,
       )
       .bind(id)
@@ -270,6 +272,7 @@ export async function PATCH(request: Request) {
       .run();
     if (!result.meta.changes)
       return adminJson({ ok: false, error: "Assignment not found." }, 404);
+    await syncMarketplaceEnquiries(db, String(current.opportunity_id), String(current.firebase_uid));
     await writeAdminAudit(
       admin,
       "opportunity.assignment_status",

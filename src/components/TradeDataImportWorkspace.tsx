@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
-import { IMPORT_DEFINITIONS, importTemplateCsv } from "@/lib/trade-data-imports.mjs";
+import { IMPORT_DEFINITIONS, importTemplateCsv, mappedImportCsv, parseImportCsv } from "@/lib/trade-data-imports.mjs";
+import { workbookToCsv } from "@/lib/xlsx-import";
 
-type ImportType = "customers" | "jobs" | "products";
+type ImportType = "customers" | "enquiries" | "jobs" | "products";
 type ImportBatch = {
   id: string; importType: ImportType; fileName: string; rowCount: number; readyCount: number; warningCount: number;
   duplicateCount: number; errorCount: number; importedCount: number; skippedCount: number; failedCount: number;
@@ -19,6 +20,7 @@ type ImportResult = { ok?: boolean; partnerType?: "installer" | "supplier"; batc
 
 const labels: Record<ImportType, { eyebrow: string; title: string; description: string }> = {
   customers: { eyebrow: "Private installer contacts", title: "Customers", description: "Move customers who contacted your business directly. Never import AEA protected household details." },
+  enquiries: { eyebrow: "Unified inbox", title: "Enquiries", description: "Bring direct enquiries into the same review and conversion workflow while preserving source IDs." },
   jobs: { eyebrow: "Historical business records", title: "Jobs", description: "Bring across previous and active jobs. Job IDs are assigned by AEA and cannot be imported or edited." },
   products: { eyebrow: "Wholesaler catalogue", title: "Products", description: "Move catalogue items into draft review. Imported products remain invisible to installers until approved." },
 };
@@ -34,13 +36,13 @@ function dateLabel(value: string) {
 }
 
 function rowTitle(row: ImportRow, type: ImportType) {
-  if (type === "customers") return String(row.values.businessName || [row.values.firstName, row.values.lastName].filter(Boolean).join(" ") || "Unnamed customer");
+  if (type === "customers" || type === "enquiries") return String(row.values.businessName || [row.values.firstName, row.values.lastName].filter(Boolean).join(" ") || "Unnamed customer");
   if (type === "jobs") return String(row.values.title || "Untitled job");
   return `${String(row.values.modelNumber || "No model")} | ${String(row.values.name || "Unnamed product")}`;
 }
 
 export function TradeDataImportWorkspace({ user, partnerType, onImported }: { user: User; partnerType: "installer" | "supplier"; onImported?: () => void | Promise<void> }) {
-  const availableTypes = useMemo(() => (partnerType === "supplier" ? ["products"] : ["customers", "jobs"]) as ImportType[], [partnerType]);
+  const availableTypes = useMemo(() => (partnerType === "supplier" ? ["products"] : ["enquiries", "customers", "jobs"]) as ImportType[], [partnerType]);
   const [importType, setImportType] = useState<ImportType>(availableTypes[0]);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [activeBatch, setActiveBatch] = useState<ImportBatch | null>(null);
@@ -49,6 +51,9 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
   const [rowFilter, setRowFilter] = useState("all");
+  const [sourceFile, setSourceFile] = useState<{ name: string; size: number; csv: string } | null>(null);
+  const [sourceHeaders, setSourceHeaders] = useState<string[]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const token = await user.getIdToken();
@@ -89,22 +94,48 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function preview(file: File) {
-    setBusy("preview");
-    setStatus("Checking the file without changing your CRM...");
+  async function prepareFile(file: File) {
+    setBusy("prepare");
+    setStatus("Reading the file and preparing column mapping...");
     try {
-      const csvText = await file.text();
+      const csv = /\.xlsx$/i.test(file.name) ? await workbookToCsv(file) : await file.text();
+      const headers = parseImportCsv(csv)[0] || [];
+      if (!headers.length) throw new Error("The file needs a header row.");
+      const normalized = new Map(headers.map((header: string) => [header.trim().toLowerCase().replaceAll(" ", "_"), header]));
+      setSourceFile({ name: file.name, size: file.size, csv });
+      setSourceHeaders(headers);
+      setMapping(Object.fromEntries(IMPORT_DEFINITIONS[importType].headers.map((header: string) => [header, normalized.get(header) || ""])));
+      setActiveBatch(null); setRows([]);
+      setStatus("File ready. Confirm how its columns map before previewing.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The CSV or Excel file could not be read."); }
+    finally { setBusy(""); }
+  }
+
+  async function previewMapped() {
+    if (!sourceFile) return;
+    setBusy("preview");
+    setStatus("Checking the mapped file without changing your CRM...");
+    try {
+      const csvText = mappedImportCsv(sourceFile.csv, importType, mapping);
       const result = await request("/api/trade-imports", {
         method: "POST",
-        body: JSON.stringify({ action: "preview", importType, fileName: file.name, fileSizeBytes: file.size, csvText }),
+        body: JSON.stringify({ action: "preview", importType, fileName: sourceFile.name, fileSizeBytes: sourceFile.size, csvText }),
       });
       setActiveBatch(result.batch || null);
       setRows(result.rows || []);
       setBatches((current) => result.batch ? [result.batch, ...current.filter((batch) => batch.id !== result.batch!.id)] : current);
       setRowFilter("all");
       setStatus("Preview ready. Nothing has been added yet.");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The CSV could not be checked."); }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The mapped file could not be checked."); }
     finally { setBusy(""); }
+  }
+
+  function downloadErrors() {
+    const problemRows = rows.filter((row) => row.status === "error" || row.status === "duplicate");
+    const csv = `row,status,issues,data\n${problemRows.map((row) => [row.rowNumber, row.status, row.issues.map((issue) => issue.message).join(" "), JSON.stringify(row.values)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n")}\n`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `aea-${importType}-import-errors.csv`; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function resolveRow(row: ImportRow, resolution: "import" | "skip") {
@@ -167,13 +198,14 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
     </ol>
 
     <section className="trade-import-choose">
-      <div className="trade-import-type-grid">{availableTypes.map((type) => <button key={type} type="button" className={importType === type ? "active" : ""} onClick={() => { setImportType(type); setActiveBatch(null); setRows([]); setStatus(""); }}><span>{labels[type].eyebrow}</span><strong>{labels[type].title}</strong><small>{labels[type].description}</small></button>)}</div>
+      <div className="trade-import-type-grid">{availableTypes.map((type) => <button key={type} type="button" className={importType === type ? "active" : ""} onClick={() => { setImportType(type); setActiveBatch(null); setRows([]); setSourceFile(null); setSourceHeaders([]); setMapping({}); setStatus(""); }}><span>{labels[type].eyebrow}</span><strong>{labels[type].title}</strong><small>{labels[type].description}</small></button>)}</div>
       <div className="trade-import-template-card"><div><span>Start with the correct columns</span><strong>{IMPORT_DEFINITIONS[importType].label} template</strong><p>The examples are fictional. Remove them before adding business data.</p></div><div><button type="button" onClick={downloadTemplate}>Download CSV template</button><a href="/downloads/aea-business-data-import-templates.xlsx" download>Download all templates in Excel</a></div></div>
-      <label className={`trade-import-dropzone ${busy === "preview" ? "busy" : ""}`}><span>{busy === "preview" ? "Checking file..." : `Choose completed ${labels[importType].title.toLowerCase()} CSV`}</span><small>CSV only, up to 2 MB and 500 rows. Previewing makes no changes.</small><input type="file" accept=".csv,text/csv" disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void preview(file); event.currentTarget.value = ""; }} /></label>
+      <label className={`trade-import-dropzone ${busy === "prepare" ? "busy" : ""}`}><span>{busy === "prepare" ? "Reading file..." : `Choose completed ${labels[importType].title.toLowerCase()} CSV or Excel file`}</span><small>CSV or .xlsx, up to 2 MB and 500 rows. Previewing makes no changes.</small><input type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void prepareFile(file); event.currentTarget.value = ""; }} /></label>
+      {sourceFile && !activeBatch && <section className="trade-import-mapping"><header><div><span>{sourceFile.name}</span><strong>Map file columns</strong><p>Confirm each AEA field. Unmapped optional fields stay blank and validation will flag missing required data.</p></div></header><div>{IMPORT_DEFINITIONS[importType].headers.map((target: string) => <label key={target}><span>{readable(target)}</span><select value={mapping[target] || ""} onChange={(event) => setMapping((current) => ({ ...current, [target]: event.target.value }))}><option value="">Not mapped</option>{sourceHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void previewMapped()}>{busy === "preview" ? "Checking..." : "Preview mapped rows"}</button></section>}
     </section>
 
     {activeBatch && <section className="trade-import-review">
-      <header><div><span>{activeBatch.fileName}</span><h3>{activeBatch.status === "preview" ? "Review before importing" : `Import ${readable(activeBatch.status)}`}</h3><p>{activeBatch.status === "preview" ? `${includeCount} of ${activeBatch.rowCount} rows are currently selected.` : `${activeBatch.importedCount} imported, ${activeBatch.skippedCount} skipped.`}</p></div><button type="button" className="trade-import-close" onClick={() => { setActiveBatch(null); setRows([]); }}>Close preview</button></header>
+      <header><div><span>{activeBatch.fileName}</span><h3>{activeBatch.status === "preview" ? "Review before importing" : `Import ${readable(activeBatch.status)}`}</h3><p>{activeBatch.status === "preview" ? `${includeCount} of ${activeBatch.rowCount} rows are currently selected.` : `${activeBatch.importedCount} imported, ${activeBatch.skippedCount} skipped.`}</p></div><div>{(activeBatch.errorCount > 0 || activeBatch.duplicateCount > 0) && <button type="button" className="trade-import-close" onClick={downloadErrors}>Export issues</button>}<button type="button" className="trade-import-close" onClick={() => { setActiveBatch(null); setRows([]); setSourceFile(null); }}>Close preview</button></div></header>
       <div className="trade-import-summary"><article><span>Total</span><strong>{activeBatch.rowCount}</strong></article><article className="ready"><span>Ready</span><strong>{activeBatch.readyCount}</strong></article><article className="warning"><span>Warnings</span><strong>{activeBatch.warningCount}</strong></article><article className="duplicate"><span>Duplicates</span><strong>{activeBatch.duplicateCount}</strong></article><article className="error"><span>Invalid</span><strong>{activeBatch.errorCount}</strong></article></div>
       <nav className="trade-import-filters" aria-label="Filter import rows">{["all", "ready", "warning", "duplicate", "error"].map((filter) => <button key={filter} type="button" className={rowFilter === filter ? "active" : ""} onClick={() => setRowFilter(filter)}>{readable(filter)}{filter !== "all" ? ` (${rows.filter((row) => row.status === filter).length})` : ""}</button>)}</nav>
       <div className="trade-import-row-list">{filteredRows.map((row) => <article key={row.id} className={`trade-import-row ${row.status}`}><div><span>Row {row.rowNumber} | {readable(row.status)}</span><strong>{rowTitle(row, activeBatch.importType)}</strong><small>{row.issues.length ? row.issues.map((issue) => issue.message).join(" ") : "Ready to import."}</small>{row.resultStatus !== "pending" && <em>{readable(row.resultStatus)}</em>}</div>{activeBatch.status === "preview" && row.status !== "error" && <button type="button" disabled={busy === `row:${row.id}` || (activeBatch.importType === "products" && row.status === "duplicate")} className={row.resolution === "import" ? "include" : "skip"} onClick={() => void resolveRow(row, row.resolution === "import" ? "skip" : "import")}>{activeBatch.importType === "products" && row.status === "duplicate" ? "Keep existing" : row.resolution === "import" ? "Included" : "Skipped"}</button>}</article>)}</div>
