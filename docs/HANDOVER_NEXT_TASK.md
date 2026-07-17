@@ -12,7 +12,7 @@ Migration `0054_service_follow_up_reporting.sql` adds only the date-first indexe
 
 The reporting payload excludes customer names, account emails, mobile numbers, addresses, message content and customer identifiers. Assigned workload is alphabetical and contains no staff delivery outcomes or performance scoring. CSV export uses only the aggregate rows visible under the current server filters and staff page.
 
-The AEA Resend account, sending-only API key, authenticated webhook and dedicated reminder subdomain are configured, and the domain is verified. The AEA Twilio account, protected credentials, Messaging Service, delivery callback and Advanced Opt-Out are configured. Twilio still requires an upgraded account, an approved Australian sender and a Verify Service. Both production delivery channels remain disabled until the deployed environment reports ready and an owner deliberately enables each channel.
+The AEA Resend account, sending-only API key, authenticated webhook and dedicated reminder subdomain are configured, and the domain is verified. The upgraded AEA Twilio account, protected credentials, Messaging Service, delivery callback, Advanced Opt-Out and SMS Verify Service with Fraud Guard are configured in deployed Sites environment revision 14. The `TLink` Australian sender registration is a draft pending genuine brand-ownership and identity evidence. Both production delivery channels remain disabled until an owner deliberately enables each channel, and SMS must remain disabled until Twilio approves and provisions the sender.
 
 ## Recommended next milestone
 
