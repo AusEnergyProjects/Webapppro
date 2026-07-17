@@ -306,7 +306,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     serviceCategories: categories,
     priority: project.timing === "urgent" ? "urgent" : "standard",
     timing: project.timing,
-    summary: `${propertyLabel} household seeking ${categoryLabels.join(", ").toLowerCase()}. Property context: ${propertyFacts.join(", ").toLowerCase()}${constraints ? `. Access considerations: ${constraints.toLowerCase()}` : ""}. Priorities: ${priorityLabels.join(", ").toLowerCase()}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Quoting photos are available separately to allocated verified installers. Supporting documents stay withheld until the household accepts one connected verified installer. Respond only through the structured platform workflow.`,
+    summary: `${propertyLabel} household seeking ${categoryLabels.join(", ").toLowerCase()}. Property context: ${propertyFacts.join(", ").toLowerCase()}${constraints ? `. Access considerations: ${constraints.toLowerCase()}` : ""}. Priorities: ${priorityLabels.join(", ").toLowerCase()}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Customer-approved photos and documents are available separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
     sourceReference: `customer-project:${projectId}`,
   };
 }

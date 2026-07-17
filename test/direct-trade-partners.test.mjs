@@ -66,11 +66,11 @@ test("partner form avoids collecting sensitive verification documents", () => {
 
 test("partner form uses visible shared controls and required address fields", () => {
   const css = read("../src/app/globals.css");
-  assert.match(form, /Business name"><input required type="text"/);
-  assert.match(form, /Business website" optional="optional"><input type="url"/);
-  assert.match(form, /Business street address"><input required type="text"/);
-  assert.match(form, /State or territory"><select required/);
-  assert.match(form, /Contact name"><input type="text"/);
+  assert.match(form, /Business name"[\s\S]{0,80}<input required type="text"/);
+  assert.match(form, /Business website" optional="optional"[\s\S]{0,80}<input type="url"/);
+  assert.match(form, /Business street address"[\s\S]{0,80}<input required type="text"/);
+  assert.match(form, /State or territory"[\s\S]{0,80}<select required/);
+  assert.match(form, /Contact name"[\s\S]{0,80}<input required type="text"/);
   assert.match(css, /--color-aea-line-strong: #a9c9bd/);
   assert.match(css, /\.direct-trade-form-section \.field-control > input/);
   assert.match(css, /\.direct-trade-form-section \.field-control > select/);

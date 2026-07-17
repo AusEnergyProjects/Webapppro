@@ -16,14 +16,20 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0057_customer_property_arrivals.sql");
+const handoffMigration = read(
+  "../drizzle/0058_trade_contact_arrival_handoff.sql",
+);
 const schema = read("../db/schema.ts");
 const customerRoute = read("../src/app/api/customer-projects/route.ts");
 const evidenceRoute = read("../src/app/api/customer-project-evidence/route.ts");
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const workOrderRoute = read("../src/app/api/trade-work-orders/route.ts");
+const scheduleRoute = read("../src/app/api/trade-schedule/route.ts");
+const tradeProfileRoute = read("../src/app/api/trade-profile/route.ts");
 const customerUi = read("../src/components/CustomerDashboard.tsx");
 const installerUi = read("../src/components/DirectTradeDashboard.tsx");
 const arrivalUi = read("../src/components/InstallerArrivalWindows.tsx");
+const tradeSignupUi = read("../src/components/DirectTradePartnerForm.tsx");
 
 const baseProject = {
   title: "Heating upgrade",
@@ -45,54 +51,113 @@ test("trade requests require structured property context and keep it anonymised"
   const incomplete = normalizeCustomerProject(baseProject);
   assert.equal(incomplete.ok, true);
   assert.equal(submissionReadiness(incomplete.project).ok, false);
-  const complete = normalizeCustomerProject({ ...baseProject, propertyContext: {
-    storeys: "two", ageBand: "1960_1999", floorArea: "100_199", roofType: "tile",
-    switchboard: "older_fuses", occupancy: "away_weekdays", accessConstraints: ["limited_parking"],
-  } });
+  const complete = normalizeCustomerProject({
+    ...baseProject,
+    propertyContext: {
+      storeys: "two",
+      ageBand: "1960_1999",
+      floorArea: "100_199",
+      roofType: "tile",
+      switchboard: "older_fuses",
+      occupancy: "away_weekdays",
+      accessConstraints: ["limited_parking"],
+    },
+  });
   assert.equal(submissionReadiness(complete.project).ok, true);
   const opportunity = buildAnonymizedOpportunity(complete.project, "project-1");
   assert.match(opportunity.summary, /two storeys/);
   assert.match(opportunity.summary, /limited parking/);
-  assert.match(opportunity.summary, /Quoting photos are available separately/);
-  assert.match(opportunity.summary, /Supporting documents stay withheld/);
+  assert.match(
+    opportunity.summary,
+    /photos and documents are available separately/,
+  );
   assert.equal("privateNotes" in opportunity, false);
 });
 
 test("installer arrival windows are bounded, non-overlapping and revision identified", () => {
-  assert.equal(australiaLocalDateTime("WA", new Date("2026-07-18T00:00:00Z")), "2026-07-18T08:00");
-  const windows = normaliseArrivalWindows([
-    { startsAt: "2026-08-10T09:00", endsAt: "2026-08-10T11:00" },
-    { startsAt: "2026-08-11T13:00", endsAt: "2026-08-11T15:00" },
-  ], 3, "2026-07-18T09:00");
-  assert.deepEqual(windows.map((item) => item.id), ["window-3-1", "window-3-2"]);
+  assert.equal(
+    australiaLocalDateTime("WA", new Date("2026-07-18T00:00:00Z")),
+    "2026-07-18T08:00",
+  );
+  const windows = normaliseArrivalWindows(
+    [
+      { startsAt: "2026-08-10T09:00", endsAt: "2026-08-10T11:00" },
+      { startsAt: "2026-08-11T13:00", endsAt: "2026-08-11T15:00" },
+    ],
+    3,
+    "2026-07-18T09:00",
+  );
+  assert.deepEqual(
+    windows.map((item) => item.id),
+    ["window-3-1", "window-3-2"],
+  );
   assert.deepEqual(parseArrivalWindows(JSON.stringify(windows)), windows);
-  assert.equal(selectedArrivalWindow(windows, "window-3-2")?.startsAt, "2026-08-11T13:00");
-  assert.throws(() => normaliseArrivalWindows([{ startsAt: "2026-08-10T09:00", endsAt: "2026-08-10T09:15" }], 1, "2026-07-18T09:00"), /INVALID_ARRIVAL_WINDOWS/);
-  assert.throws(() => normaliseArrivalWindows([{ startsAt: "2026-08-10T09:00", endsAt: "2026-08-11T10:00" }], 1, "2026-07-18T09:00"), /INVALID_ARRIVAL_WINDOWS/);
+  assert.equal(
+    selectedArrivalWindow(windows, "window-3-2")?.startsAt,
+    "2026-08-11T13:00",
+  );
+  assert.throws(
+    () =>
+      normaliseArrivalWindows(
+        [{ startsAt: "2026-08-10T09:00", endsAt: "2026-08-10T09:15" }],
+        1,
+        "2026-07-18T09:00",
+      ),
+    /INVALID_ARRIVAL_WINDOWS/,
+  );
+  assert.throws(
+    () =>
+      normaliseArrivalWindows(
+        [{ startsAt: "2026-08-10T09:00", endsAt: "2026-08-11T10:00" }],
+        1,
+        "2026-07-18T09:00",
+      ),
+    /INVALID_ARRIVAL_WINDOWS/,
+  );
 });
 
 test("the additive migration stores property context, protected evidence and arrival revisions", () => {
-  for (const name of ["customer_project_evidence", "customer_project_evidence_events", "customer_project_arrival_proposals", "customer_project_arrival_events"]) {
+  for (const name of [
+    "customer_project_evidence",
+    "customer_project_evidence_events",
+    "customer_project_arrival_proposals",
+    "customer_project_arrival_events",
+  ]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${name}"`));
     assert.match(migration, new RegExp("CREATE TABLE `" + name + "`"));
   }
-  assert.match(migration, /ALTER TABLE `customer_projects` ADD `property_context`/);
+  assert.match(
+    migration,
+    /ALTER TABLE `customer_projects` ADD `property_context`/,
+  );
   const db = new DatabaseSync(":memory:");
   db.exec("CREATE TABLE customer_projects (id text PRIMARY KEY NOT NULL)");
-  for (const statement of migration.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
-  const columns = db.prepare("PRAGMA table_info(customer_projects)").all().map((item) => item.name);
+  for (const statement of migration
+    .split("--> statement-breakpoint")
+    .map((item) => item.trim())
+    .filter(Boolean))
+    db.exec(statement);
+  const columns = db
+    .prepare("PRAGMA table_info(customer_projects)")
+    .all()
+    .map((item) => item.name);
   assert.ok(columns.includes("property_context"));
-  assert.ok(db.prepare("PRAGMA index_list(customer_project_evidence)").all().some((item) => item.name === "customer_project_evidence_client_idx"));
+  assert.ok(
+    db
+      .prepare("PRAGMA index_list(customer_project_evidence)")
+      .all()
+      .some((item) => item.name === "customer_project_evidence_client_idx"),
+  );
   db.close();
 });
 
-test("project evidence is R2 backed with quoting photos shared to allocated installers and documents acceptance gated", () => {
+test("project evidence is R2 backed with every upload shared to allocated verified installers", () => {
   assert.match(evidenceRoute, /EVIDENCE/);
   assert.match(evidenceRoute, /QUOTING_PHOTO_CATEGORIES/);
-  assert.match(evidenceRoute, /m\.status IN \('offered', 'viewed', 'interested', 'connected'\)/);
-  assert.match(evidenceRoute, /q\.customer_decision = 'accepted'/);
-  assert.match(evidenceRoute, /r\.status = 'active'/);
-  assert.match(evidenceRoute, /m\.status = 'connected'/);
+  assert.match(
+    evidenceRoute,
+    /m\.status IN \('offered', 'viewed', 'interested', 'connected'\)/,
+  );
   assert.match(evidenceRoute, /verification_status = 'approved'/);
   assert.match(evidenceRoute, /client_upload_id/);
   assert.match(evidenceRoute, /hasAllowedSignature/);
@@ -102,8 +167,11 @@ test("project evidence is R2 backed with quoting photos shared to allocated inst
   assert.match(evidenceRoute, /stripWebpMetadata/);
   assert.match(evidenceRoute, /customer-quoting-photo/);
   assert.match(evidenceRoute, /'installer', \?, 'viewed'/);
-  assert.match(opportunityRoute, /e\.category IN \('property-photo', 'existing-equipment', 'switchboard'\)/);
-  assert.match(opportunityRoute, /sharingScope/);
+  assert.match(opportunityRoute, /sharingScope: "allocated-installers"/);
+  assert.doesNotMatch(
+    opportunityRoute,
+    /e\.category IN \('property-photo', 'existing-equipment', 'switchboard'\)/,
+  );
   assert.doesNotMatch(evidenceRoute, /public-read|Cache-Control": "public/);
 });
 
@@ -115,17 +183,29 @@ test("only an accepted installer can propose windows or convert the platform lea
   assert.match(opportunityRoute, /customer_decision !== "accepted"/);
   assert.match(workOrderRoute, /q\.customer_decision = 'accepted'/);
   assert.match(workOrderRoute, /r\.status = 'active'/);
+  assert.match(workOrderRoute, /change_source, source_reference/);
+  assert.match(workOrderRoute, /'customer_arrival'/);
+  assert.match(workOrderRoute, /crm_appointment_id/);
   assert.match(installerUi, /Waiting for customer acceptance/);
   assert.doesNotMatch(installerUi, /Book site visit/);
 });
 
 test("customer devices can choose files or capture a new property photo", () => {
-  assert.match(customerUi, /multiple accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif,application\/pdf"/);
+  assert.match(
+    customerUi,
+    /multiple[\s\S]{0,80}accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif,application\/pdf"/,
+  );
   assert.match(customerUi, /capture="environment"/);
   assert.match(customerUi, /prepareEvidenceUpload/);
   assert.match(customerUi, /maximumDimension = 2400/);
-  assert.match(customerUi, /shared with every verified installer allocated to this enquiry/);
-  assert.match(customerUi, /Supporting documents remain restricted until I accept one connected installer/);
+  assert.match(
+    customerUi,
+    /shared with each\s+verified installer\s+allocated to this enquiry/,
+  );
+  assert.match(
+    customerUi,
+    /every attached photo[\s\S]{0,60}and supporting document/,
+  );
   assert.match(customerRoute, /confirmInstallerPhotoSharing !== true/);
   assert.match(customerUi, /Accept installer for next step/);
   assert.match(arrivalUi, /Provide arrival windows for the customer/);
@@ -134,6 +214,40 @@ test("customer devices can choose files or capture a new property photo", () => 
   assert.match(arrivalUi, /data-date-range-role="end"/);
 });
 
+test("direct installer contact is limited, audited and backed by mandatory trade details", () => {
+  assert.match(handoffMigration, /ALTER TABLE `trade_accounts` ADD `abn`/);
+  assert.match(handoffMigration, /direct_contact_snapshot/);
+  assert.match(customerRoute, /action === "select_installer_contact"/);
+  assert.match(customerRoute, /businessName: String\(proposal\.business_name/);
+  assert.match(customerRoute, /phone: String\(proposal\.installer_phone/);
+  assert.match(customerRoute, /email: String\(proposal\.installer_email/);
+  assert.match(customerRoute, /abn: String\(proposal\.installer_abn/);
+  assert.match(customerRoute, /customer\.installer_direct_contact_selected/);
+  assert.match(customerUi, /Contact installer directly/);
+  assert.match(customerUi, /Agreements or arrangements\s+made\s+outside TLink/);
+  assert.match(tradeProfileRoute, /isValidAbn/);
+  assert.match(tradeProfileRoute, /Enter the business contact number/);
+  assert.match(tradeProfileRoute, /valid business account email is required/);
+  assert.match(tradeSignupUi, /label="ABN"/);
+  assert.match(tradeSignupUi, /label="Business contact number"/);
+});
+
+test("materialised CRM appointments support customer preparation acknowledgement", () => {
+  assert.match(handoffMigration, /crm_work_order_id/);
+  assert.match(handoffMigration, /crm_appointment_id/);
+  assert.match(handoffMigration, /preparation_acknowledged_at/);
+  assert.match(customerRoute, /action === "acknowledge_arrival_preparation"/);
+  assert.match(scheduleRoute, /preparation_acknowledged_at = ''/);
+  assert.match(customerUi, /Confirm site preparation/);
+  assert.match(
+    arrivalUi,
+    /CRM appointment is ready for staff assignment and conflict review/,
+  );
+});
+
 test("new property evidence and arrival copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(customerUi + installerUi + arrivalUi + evidenceRoute, /\u2013|\u2014/);
+  assert.doesNotMatch(
+    customerUi + installerUi + arrivalUi + evidenceRoute,
+    /\u2013|\u2014/,
+  );
 });

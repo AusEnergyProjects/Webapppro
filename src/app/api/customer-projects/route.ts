@@ -122,6 +122,11 @@ function projectShape(
         windows: parseArrivalWindows(quote.arrival_windows),
         installerNote: quote.arrival_installer_note,
         selectedWindow: parseStoredJson(quote.arrival_selected_window, null),
+        directContact: quote.arrival_status === "direct_contact" ? parseStoredJson(quote.arrival_direct_contact_snapshot, null) : null,
+        directContactSelectedAt: quote.arrival_direct_contact_selected_at,
+        crmWorkOrderId: quote.arrival_crm_work_order_id,
+        crmAppointmentId: quote.arrival_crm_appointment_id,
+        preparationAcknowledgedAt: quote.arrival_preparation_acknowledged_at,
         revision: Number(quote.arrival_revision || 1),
         proposedAt: quote.arrival_proposed_at,
         selectedAt: quote.arrival_selected_at,
@@ -179,6 +184,10 @@ async function projectsForOwner(firebaseUid: string) {
     r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at,
     ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
     ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
+    ap.direct_contact_snapshot arrival_direct_contact_snapshot,
+    ap.direct_contact_selected_at arrival_direct_contact_selected_at,
+    ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
+    ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
     ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
     FROM customer_project_quotes q
     JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
@@ -588,7 +597,7 @@ export async function PATCH(request: Request) {
       db.prepare("UPDATE customer_project_quotes SET status = 'closed', updated_at = ? WHERE project_id = ?")
         .bind(now, id),
       db.prepare(`UPDATE customer_project_arrival_proposals SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
-        WHERE project_id = ? AND customer_uid = ? AND status IN ('proposed', 'selected')`).bind(now, now, id, user.uid),
+        WHERE project_id = ? AND customer_uid = ? AND status IN ('proposed', 'selected', 'direct_contact')`).bind(now, now, id, user.uid),
       db.prepare("UPDATE customer_consent_receipts SET withdrawn_at = ? WHERE project_id = ? AND purpose = 'anonymized_installer_matching' AND withdrawn_at = ''")
         .bind(now, id),
     ];
@@ -681,6 +690,88 @@ export async function PATCH(request: Request) {
       }),
     ]);
     await dispatchAdminNotificationDeliveries();
+  } else if (action === "select_installer_contact") {
+    const proposalId = cleanId(raw.proposalId);
+    const expectedRevision = Number(raw.expectedRevision);
+    const proposal = await db.prepare(`SELECT ap.*, q.customer_decision, q.status quote_status,
+      r.status contact_release_status, a.business_name, a.phone installer_phone, a.email installer_email,
+      a.abn installer_abn, a.account_status, a.verification_status
+      FROM customer_project_arrival_proposals ap
+      JOIN customer_project_quotes q ON q.id = ap.quote_id AND q.project_id = ap.project_id
+      JOIN customer_project_contact_releases r ON r.opportunity_match_id = ap.opportunity_match_id
+        AND r.customer_uid = ap.customer_uid AND r.installer_uid = ap.installer_uid
+      JOIN trade_accounts a ON a.firebase_uid = ap.installer_uid
+      WHERE ap.id = ? AND ap.project_id = ? AND ap.customer_uid = ?`)
+      .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
+    if (!proposal) return json({ ok: false, error: "Arrival window proposal not found." }, 404);
+    if (proposal.customer_decision !== "accepted" || proposal.quote_status !== "submitted"
+      || proposal.contact_release_status !== "active" || proposal.status !== "proposed"
+      || proposal.account_status !== "active" || proposal.verification_status !== "approved") {
+      return json({ ok: false, error: "This installer contact option is no longer available." }, 409);
+    }
+    if (!Number.isInteger(expectedRevision) || expectedRevision !== Number(proposal.revision)) {
+      return json({ ok: false, error: "The installer updated these options. Refresh before continuing." }, 409);
+    }
+    const directContact = {
+      businessName: String(proposal.business_name || "").trim(),
+      phone: String(proposal.installer_phone || "").trim(),
+      email: String(proposal.installer_email || "").trim(),
+      abn: String(proposal.installer_abn || "").trim(),
+    };
+    if (!directContact.businessName || directContact.phone.replace(/\D/g, "").length < 8
+      || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(directContact.email) || !/^\d{11}$/.test(directContact.abn)) {
+      return json({ ok: false, error: "This installer must complete its business name, contact number, email and ABN before direct contact can be shown." }, 409);
+    }
+    const nextRevision = Number(proposal.revision) + 1;
+    const contactJson = JSON.stringify(directContact);
+    await db.batch([
+      db.prepare(`UPDATE customer_project_arrival_proposals SET status = 'direct_contact',
+        direct_contact_snapshot = ?, direct_contact_selected_at = ?, selected_at = ?, revision = ?, updated_at = ?
+        WHERE id = ? AND customer_uid = ? AND revision = ? AND status = 'proposed'`)
+        .bind(contactJson, now, now, nextRevision, now, proposalId, user.uid, proposal.revision),
+      db.prepare(`INSERT INTO customer_project_arrival_events
+        (id, proposal_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+         actor_uid, event_type, proposal_revision, windows, selected_window, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'direct_contact_selected', ?, ?, '{}', ?)`)
+        .bind(crypto.randomUUID(), proposalId, id, proposal.opportunity_match_id, user.uid, proposal.installer_uid,
+          user.uid, nextRevision, proposal.windows, now),
+      adminNotificationStatement(db, {
+        eventKey: `customer-installer-direct-contact:${proposalId}:${nextRevision}`,
+        eventType: "customer.installer_direct_contact_selected",
+        category: "customer",
+        priority: "normal",
+        title: "Customer chose direct installer contact",
+        summary: `${String(current.title).slice(0, 120)} may continue directly with ${directContact.businessName}.`,
+        entityType: "customer_project_arrival_proposal",
+        entityId: proposalId,
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: false,
+        metadata: { projectId: id, opportunityMatchId: proposal.opportunity_match_id, installerUid: proposal.installer_uid },
+        occurredAt: now,
+      }),
+    ]);
+    await dispatchAdminNotificationDeliveries();
+  } else if (action === "acknowledge_arrival_preparation") {
+    const proposalId = cleanId(raw.proposalId);
+    if (raw.confirmAccessClear !== true || raw.confirmAdultPresent !== true || raw.confirmPetsManaged !== true) {
+      return json({ ok: false, error: "Confirm each preparation item before continuing." }, 400);
+    }
+    const proposal = await db.prepare(`SELECT * FROM customer_project_arrival_proposals
+      WHERE id = ? AND project_id = ? AND customer_uid = ? AND status = 'selected' AND crm_appointment_id <> ''`)
+      .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
+    if (!proposal) return json({ ok: false, error: "The CRM appointment must be prepared by the installer before confirming site readiness." }, 409);
+    if (proposal.preparation_acknowledged_at) return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    await db.batch([
+      db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = ?, updated_at = ?
+        WHERE id = ? AND customer_uid = ? AND preparation_acknowledged_at = ''`).bind(now, now, proposalId, user.uid),
+      db.prepare(`INSERT INTO customer_project_arrival_events
+        (id, proposal_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+         actor_uid, event_type, proposal_revision, windows, selected_window, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'preparation_acknowledged', ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), proposalId, id, proposal.opportunity_match_id, user.uid, proposal.installer_uid,
+          user.uid, proposal.revision, proposal.windows, proposal.selected_window, now),
+    ]);
   } else if (action === "quote_decision") {
     const quoteId = cleanId(raw.quoteId);
     const decision = typeof raw.decision === "string" ? raw.decision : "";

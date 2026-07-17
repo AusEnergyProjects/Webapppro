@@ -338,13 +338,17 @@ export async function POST(request: Request) {
     let title = cleanAdminText(body.title, 160);
     let serviceCategory = cleanAdminText(body.serviceCategory, 60);
     let siteArea = cleanAdminText(body.siteArea, 80);
+    let selectedArrival: { proposalId: string; startsAt: string; endsAt: string; revision: number } | null = null;
     if (!SERVICE_CATEGORIES.has(serviceCategory)) serviceCategory = "other";
     if (privateDataDetected(`${title} ${siteArea}`)) throw new Error("PRIVATE_DATA");
 
     if (sourceType === "opportunity") {
       if (identity.partnerType !== "installer" || !sourceReference) throw new Error("SOURCE_NOT_FOUND");
-      const source = await db.prepare(`SELECT o.title, o.state, o.service_categories
+      const source = await db.prepare(`SELECT o.title, o.state, o.service_categories,
+        ap.id arrival_proposal_id, ap.selected_window arrival_selected_window, ap.revision arrival_revision
         FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
+        LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id
+          AND ap.installer_uid = m.firebase_uid AND ap.status = 'selected'
         WHERE m.id = ? AND m.firebase_uid = ? AND m.status IN ('interested', 'connected')
           AND (o.source_reference NOT LIKE 'customer-project:%' OR EXISTS (
             SELECT 1 FROM customer_project_quotes q
@@ -360,6 +364,16 @@ export async function POST(request: Request) {
       title = cleanAdminText(source.title, 160);
       serviceCategory = categories.find((item) => SERVICE_CATEGORIES.has(item)) || "other";
       siteArea = cleanAdminText(source.state, 80);
+      if (source.arrival_proposal_id) {
+        try {
+          const selected = JSON.parse(String(source.arrival_selected_window || "{}")) as { startsAt?: unknown; endsAt?: unknown };
+          const startsAt = cleanAdminText(selected.startsAt, 24);
+          const endsAt = cleanAdminText(selected.endsAt, 24);
+          if (startsAt && endsAt && endsAt > startsAt) selectedArrival = {
+            proposalId: String(source.arrival_proposal_id), startsAt, endsAt, revision: Number(source.arrival_revision || 1),
+          };
+        } catch { selectedArrival = null; }
+      }
     } else if (sourceType === "product_enquiry") {
       if (identity.partnerType !== "supplier" || !sourceReference) throw new Error("SOURCE_NOT_FOUND");
       const source = await db.prepare(`SELECT l.name FROM supplier_product_enquiries e
@@ -392,7 +406,8 @@ export async function POST(request: Request) {
     const prefix = identity.partnerType === "supplier" ? "FUL" : "JOB";
     const workNumber = await nextTradeWorkNumber(db, identity.uid, prefix, now);
     const workType = identity.partnerType === "supplier" ? "fulfilment" : "job";
-    await db.batch([
+    const appointmentId = selectedArrival ? crypto.randomUUID() : "";
+    const createStatements = [
       db.prepare(`INSERT INTO trade_work_orders
         (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
          service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
@@ -403,8 +418,29 @@ export async function POST(request: Request) {
           requestedAssignee, now, now),
       eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now),
       ...offlineSyncStatements(db, identity, workOrderId, 1, now),
-    ]);
-    return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, ...(await workOrderPayload(identity)) }, 201);
+    ];
+    if (selectedArrival) createStatements.push(
+      db.prepare(`INSERT INTO trade_crm_appointments
+        (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id,
+         assignee_label, status, notes, revision, created_at, updated_at)
+        VALUES (?, ?, ?, 'site_visit', ?, ?, ?, '', '', 'scheduled', ?, 1, ?, ?)`)
+        .bind(appointmentId, workOrderId, identity.uid, title, selectedArrival.startsAt, selectedArrival.endsAt,
+          "Customer-selected arrival window. Dispatch must assign staff before attendance.", now, now),
+      db.prepare(`INSERT INTO trade_crm_appointment_revisions
+        (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
+         assignee_label, change_source, source_reference, changed_by_uid, created_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?, '', '', 'customer_arrival', ?, ?, ?)`)
+        .bind(crypto.randomUUID(), appointmentId, workOrderId, identity.uid, selectedArrival.startsAt,
+          selectedArrival.endsAt, selectedArrival.proposalId, identity.uid, now),
+      db.prepare(`UPDATE trade_work_orders SET stage = 'scheduled', scheduled_start = ?, scheduled_end = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ?`).bind(selectedArrival.startsAt.slice(0, 10), selectedArrival.endsAt.slice(0, 10), now, workOrderId, identity.uid),
+      db.prepare(`UPDATE customer_project_arrival_proposals SET crm_work_order_id = ?, crm_appointment_id = ?, updated_at = ?
+        WHERE id = ? AND installer_uid = ? AND status = 'selected' AND revision = ? AND crm_appointment_id = ''`)
+        .bind(workOrderId, appointmentId, now, selectedArrival.proposalId, identity.uid, selectedArrival.revision),
+      eventStatement(db, identity.uid, workOrderId, "customer_arrival_materialised", "Customer-selected arrival window created as an unassigned CRM appointment for dispatch review.", now),
+    );
+    await db.batch(createStatements);
+    return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, createdAppointmentId: appointmentId, ...(await workOrderPayload(identity)) }, 201);
   } catch (error) {
     return errorResponse(error);
   }

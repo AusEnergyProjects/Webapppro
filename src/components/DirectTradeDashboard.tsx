@@ -86,16 +86,19 @@ type DashboardOpportunity = {
     postcode: string;
     grantedAt: string;
   };
-  evidence: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; sharingScope: "quoting" | "accepted-installer" }>;
+  evidence: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; sharingScope: "allocated-installers" }>;
   arrivalProposal: null | {
     id: string;
-    status: "proposed" | "selected" | "withdrawn";
+    status: "proposed" | "selected" | "direct_contact" | "withdrawn";
     windows: Array<{ id: string; startsAt: string; endsAt: string }>;
     installerNote: string;
     selectedWindow: null | { id: string; startsAt: string; endsAt: string };
     revision: number;
     proposedAt: string;
     selectedAt: string;
+    crmWorkOrderId: string;
+    crmAppointmentId: string;
+    preparationAcknowledgedAt: string;
   };
   quote: null | {
     productListId: string;
@@ -441,7 +444,9 @@ export function DirectTradeDashboard() {
         throw new Error(workResult.error || "The marketplace opportunity could not be converted.");
       }
       setWorkspace("work");
-      setOpportunityStatus(`${workResult.workNumber} is ready in Work. Use the customer-reviewed arrival window when creating its appointment.`);
+      setOpportunityStatus(workResult.createdAppointmentId
+        ? `${workResult.workNumber} is ready in Work and the customer-selected window is now an unassigned CRM appointment for dispatch review.`
+        : `${workResult.workNumber} is ready in Work.`);
     } catch (conversionError) {
       setOpportunityStatus(
         conversionError instanceof Error
@@ -878,7 +883,7 @@ export function DirectTradeDashboard() {
                               <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button>
                             </section>
                           )}
-                          {opportunity.platformOnly && opportunity.evidence.length > 0 && <section className="dashboard-customer-evidence" aria-label="Customer project evidence"><header><div><strong>Customer property evidence</strong><span>Quoting photos are shared with every verified installer allocated to this enquiry. Supporting documents appear only after customer acceptance.</span></div><b>{opportunity.evidence.length}</b></header><div>{opportunity.evidence.map((item) => <article key={item.id}><div><span>{item.sharingScope === "quoting" ? "Quoting photo" : "Accepted installer file"}</span><strong>{item.sharingScope === "quoting" ? item.category.replaceAll("-", " ") : item.fileName}</strong><small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small></div><button type="button" disabled={opportunityBusy === item.id} onClick={() => void downloadOpportunityEvidence(item)}>Protected download</button></article>)}</div><small>Every download is authorised against this exact allocated match and recorded. Do not redistribute household evidence outside the enquiry.</small></section>}
+                          {opportunity.platformOnly && opportunity.evidence.length > 0 && <section className="dashboard-customer-evidence" aria-label="Customer project evidence"><header><div><strong>Customer property evidence</strong><span>All customer-uploaded photos and documents are shared with every verified installer allocated to this enquiry for quoting guidance.</span></div><b>{opportunity.evidence.length}</b></header><div>{opportunity.evidence.map((item) => <article key={item.id}><div><span>{item.contentType === "application/pdf" ? "Project document" : "Quoting photo"}</span><strong>{item.category.replaceAll("-", " ")}</strong><small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small></div><button type="button" disabled={opportunityBusy === item.id} onClick={() => void downloadOpportunityEvidence(item)}>Protected download</button></article>)}</div><small>Every download is authorised against this exact allocated match and recorded. Do not redistribute household evidence outside the enquiry.</small></section>}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
                             <section className="dashboard-opportunity-conversion" aria-label="Accepted opportunity workflow action"><div><strong>Create the CRM job after customer acceptance</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>

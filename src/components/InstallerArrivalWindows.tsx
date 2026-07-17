@@ -6,13 +6,16 @@ import { firebaseAuth } from "@/lib/firebase-client";
 type ArrivalWindow = { id?: string; startsAt: string; endsAt: string };
 type ArrivalProposal = {
   id: string;
-  status: "proposed" | "selected" | "withdrawn";
+  status: "proposed" | "selected" | "direct_contact" | "withdrawn";
   windows: ArrivalWindow[];
   installerNote: string;
   selectedWindow: ArrivalWindow | null;
   revision: number;
   proposedAt: string;
   selectedAt: string;
+  crmWorkOrderId?: string;
+  crmAppointmentId?: string;
+  preparationAcknowledgedAt?: string;
 };
 
 type WindowDraft = { startDate: string; startTime: string; endDate: string; endTime: string };
@@ -62,8 +65,11 @@ export function InstallerArrivalWindows({ matchId, initialProposal, onStatus }: 
 
   if (proposal?.status === "selected" && proposal.selectedWindow) return <section className="installer-arrival-windows selected">
     <header><div><span>Customer reviewed</span><h4>Arrival window selected</h4></div><strong>{proposal.selectedWindow.startsAt.slice(0, 10)}</strong></header>
-    <p>{proposal.selectedWindow.startsAt.slice(11, 16)} to {proposal.selectedWindow.endsAt.slice(11, 16)}. Use this reviewed window when creating the CRM appointment.</p>
+    <p>{proposal.selectedWindow.startsAt.slice(11, 16)} to {proposal.selectedWindow.endsAt.slice(11, 16)}. {proposal.crmAppointmentId ? "The CRM appointment is ready for staff assignment and conflict review." : "Create the CRM job to materialise this reviewed window as an unassigned appointment."}</p>
+    {proposal.preparationAcknowledgedAt && <small>Customer site-preparation checklist acknowledged.</small>}
   </section>;
+
+  if (proposal?.status === "direct_contact") return <section className="installer-arrival-windows selected"><header><div><span>Customer reviewed</span><h4>Direct contact selected</h4></div></header><p>The customer chose to contact the business directly instead of selecting an arrival window. AEA administrators received an audit notification.</p></section>;
 
   return <section className="installer-arrival-windows" aria-label="Customer arrival window proposal">
     <header><div><span>Accepted installer action</span><h4>Provide arrival windows for the customer</h4><p>Offer one to three windows. The customer reviews and selects an option before scheduling progresses.</p></div>{proposal && <strong>Revision {proposal.revision}</strong>}</header>

@@ -90,8 +90,8 @@ test("installer payload exposes snapshots only through its own active release", 
 test("interfaces name the recipient and explain withdrawal limits", () => {
   assert.match(customerUi, /Connect with \{quote\.installerBusinessName\}/);
   assert.match(customerUi, /confirmContactRelease: true/);
-  assert.match(customerUi, /Other installers remain anonymised/);
-  assert.match(customerUi, /It cannot erase information the installer already viewed or saved/);
+  assert.match(customerUi, /Other\s+installers remain anonymised/);
+  assert.match(customerUi, /It cannot erase\s+information an installer already viewed or saved/);
   assert.match(installerUi, /Customer-authorised contact/);
   assert.match(installerUi, /opportunity\.customerContact\.phone/);
   assert.doesNotMatch(`${customerUi}\n${installerUi}\n${accountRoute}\n${projectsRoute}\n${opportunitiesRoute}`, /[\u2013\u2014]/);

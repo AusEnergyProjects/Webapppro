@@ -56,8 +56,8 @@ test("the scheduling migration applies cleanly to its appointment dependency", (
 
 test("schedule SQL compiles against the production team and CRM migrations", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
-  const queries = [...route.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  const queries = [...route.matchAll(/prepare\(\s*`([\s\S]*?)`,?\s*\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
   assert.ok(queries.length > 10);
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `schedule SQL should compile: ${sql.slice(0, 80)}`);
 });
@@ -71,8 +71,8 @@ test("owners and dispatch roles receive server-enforced conflict and revision ch
 });
 
 test("schedule payloads preserve customer privacy boundaries", () => {
-  assert.match(route, /protectedJob = row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
-  assert.match(route, /protectedJob \? row\.site_area \|\| "Protected service region"/);
+  assert.match(route, /protectedJob =\s*row\.source_type === "opportunity" \|\|\s*row\.customer_source === "platform_private"/);
+  assert.match(route, /protectedJob\s*\?\s*row\.site_area \|\| "Protected service region"/);
   assert.doesNotMatch(route, /c\.email|c\.phone|c\.first_name|c\.last_name|address_line_1/);
 });
 

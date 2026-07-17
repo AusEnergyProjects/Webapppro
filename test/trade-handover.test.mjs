@@ -107,7 +107,7 @@ test("approved asset histories remain available instead of disappearing through 
   assert.match(workOrderRoute, /ASSET_RECORD_RETAINED/);
   assert.match(workOrderRoute, /Work records with an installed asset or handover history stay available/);
   assert.match(customerRoute, /Projects with an approved asset and handover history stay available/);
-  assert.match(customerUi, /Asset and handover history stays in your completed project library/);
+  assert.match(customerUi, /Asset and handover history stays in your completed project\s+library/);
 });
 
 test("new handover user-facing copy avoids prohibited dash characters", () => {

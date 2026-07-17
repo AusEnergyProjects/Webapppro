@@ -127,6 +127,8 @@ export async function GET(request: Request) {
     p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
     ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
     ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
+    ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
+    ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
     ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
     FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN customer_projects p ON p.opportunity_id = o.id
@@ -147,17 +149,7 @@ export async function GET(request: Request) {
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE e.status = 'active' AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND o.status IN ('open', 'paused') AND (
-        e.category IN ('property-photo', 'existing-equipment', 'switchboard')
-        OR EXISTS (
-          SELECT 1 FROM customer_project_quotes q
-          JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
-            AND r.customer_uid = e.customer_uid AND r.installer_uid = q.installer_uid AND r.status = 'active'
-          WHERE q.project_id = e.project_id AND q.opportunity_match_id = m.id
-            AND q.installer_uid = m.firebase_uid AND q.status = 'submitted'
-            AND q.customer_decision = 'accepted' AND m.status = 'connected'
-        )
-      ) ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
+      AND o.status IN ('open', 'paused') ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
   return json({
     ok: true,
     opportunities: rows.results.map((row: Record<string, unknown>) => ({
@@ -206,7 +198,7 @@ export async function GET(request: Request) {
           contentType: item.content_type,
           sizeBytes: Number(item.size_bytes || 0),
           createdAt: item.created_at,
-          sharingScope: ["property-photo", "existing-equipment", "switchboard"].includes(String(item.category)) ? "quoting" : "accepted-installer",
+          sharingScope: "allocated-installers",
         })),
       arrivalProposal: row.arrival_proposal_id ? {
         id: row.arrival_proposal_id,
@@ -214,6 +206,9 @@ export async function GET(request: Request) {
         windows: parseArrivalWindows(row.arrival_windows),
         installerNote: row.arrival_installer_note,
         selectedWindow: parseStoredJson(row.arrival_selected_window, null),
+        crmWorkOrderId: row.arrival_crm_work_order_id,
+        crmAppointmentId: row.arrival_crm_appointment_id,
+        preparationAcknowledgedAt: row.arrival_preparation_acknowledged_at,
         revision: Number(row.arrival_revision || 1),
         proposedAt: row.arrival_proposed_at,
         selectedAt: row.arrival_selected_at,
@@ -305,8 +300,8 @@ export async function PATCH(request: Request) {
       || !["open", "paused"].includes(String(source.opportunity_status)) || source.contact_release_status !== "active") {
       return json({ ok: false, error: "The customer must accept this installer before arrival windows can be proposed." }, 409);
     }
-    if (source.proposal_status === "selected") {
-      return json({ ok: false, error: "The customer already selected an arrival window. Use the reviewed scheduling workflow for later changes." }, 409);
+    if (["selected", "direct_contact"].includes(String(source.proposal_status))) {
+      return json({ ok: false, error: "The customer already chose an arrival pathway. Use the reviewed workflow for later changes." }, 409);
     }
     const currentRevision = Number(source.proposal_revision || 0);
     if (source.proposal_id && Number(body.expectedRevision) !== currentRevision) {

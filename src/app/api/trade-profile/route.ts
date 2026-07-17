@@ -27,6 +27,7 @@ const CAPABILITIES = new Set([
 
 type ProfilePayload = {
   businessName?: unknown;
+  abn?: unknown;
   addressLine1?: unknown;
   suburb?: unknown;
   addressState?: unknown;
@@ -48,6 +49,12 @@ function json(body: object, status = 200) {
 
 function cleanText(value: unknown, maximum: number) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
+}
+
+function isValidAbn(value: string) {
+  if (!/^\d{11}$/.test(value)) return false;
+  const weights = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+  return value.split("").reduce((total, digit, index) => total + (Number(digit) - (index === 0 ? 1 : 0)) * weights[index], 0) % 89 === 0;
 }
 
 function cleanList(value: unknown, allowed: Set<string>) {
@@ -76,7 +83,7 @@ export async function GET(request: Request) {
 
   const db = getD1();
   const record = await db.prepare(`
-    SELECT business_name, address_line_1, suburb, address_state, postcode,
+    SELECT business_name, abn, address_line_1, suburb, address_state, postcode,
            contact_name, phone, partner_type, business_website,
            service_states, capabilities, summary, account_status,
            verification_status, plan_key, billing_status, availability_status,
@@ -107,6 +114,7 @@ export async function GET(request: Request) {
     ok: true,
     profile: {
       businessName: record.business_name,
+      abn: record.abn,
       addressLine1: record.address_line_1,
       suburb: record.suburb,
       addressState: record.address_state,
@@ -213,6 +221,7 @@ export async function POST(request: Request) {
   }
 
   const businessName = cleanText(raw.businessName, 160);
+  const abn = cleanText(raw.abn, 20).replace(/\D/g, "");
   const addressLine1 = cleanText(raw.addressLine1, 180);
   const suburb = cleanText(raw.suburb, 100);
   const addressState = canonicalAustralianState(raw.addressState) || "";
@@ -230,11 +239,14 @@ export async function POST(request: Request) {
   const referralCode = normalizeReferralCode(raw.referralCode);
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
+  if (!isValidAbn(abn)) return json({ ok: false, error: "Enter a valid 11 digit Australian Business Number." }, 400);
   if (!addressLine1) return json({ ok: false, error: "Enter the business street address." }, 400);
   if (!suburb) return json({ ok: false, error: "Enter the business suburb or locality." }, 400);
   if (!STATES.has(addressState)) return json({ ok: false, error: "Choose the business state or territory." }, 400);
   if (!/^\d{4}$/.test(postcode)) return json({ ok: false, error: "Enter a four digit business postcode." }, 400);
   if (!contactName) return json({ ok: false, error: "Enter the contact name." }, 400);
+  if (phone.replace(/\D/g, "").length < 8) return json({ ok: false, error: "Enter the business contact number." }, 400);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(identity.email)) return json({ ok: false, error: "A valid business account email is required." }, 400);
   if (!serviceStates.length) return json({ ok: false, error: "Choose at least one service area." }, 400);
   if (!capabilities.length) return json({ ok: false, error: "Choose at least one capability." }, 400);
   if (!consent) return json({ ok: false, error: "Confirm the account and contact consent." }, 400);
@@ -246,15 +258,16 @@ export async function POST(request: Request) {
   ).bind(identity.uid).first<{ firebase_uid: string }>();
   await db.prepare(`
     INSERT INTO trade_accounts (
-      firebase_uid, email, business_name, address_line_1, suburb, address_state,
+      firebase_uid, email, business_name, abn, address_line_1, suburb, address_state,
       postcode, contact_name, phone, partner_type,
       business_website, service_states, capabilities, summary, account_status,
       verification_status, plan_key, billing_status, consent_version,
       service_base_postcode, service_radius_km, consent_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, 50, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, 50, ?, ?, ?)
     ON CONFLICT(firebase_uid) DO UPDATE SET
       email = excluded.email,
       business_name = excluded.business_name,
+      abn = excluded.abn,
       address_line_1 = excluded.address_line_1,
       suburb = excluded.suburb,
       address_state = excluded.address_state,
@@ -273,6 +286,7 @@ export async function POST(request: Request) {
     identity.uid,
     identity.email,
     businessName,
+    abn,
     addressLine1,
     suburb,
     addressState,

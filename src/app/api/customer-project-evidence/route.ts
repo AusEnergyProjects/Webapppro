@@ -164,34 +164,21 @@ async function ownedProject(customerUid: string, projectId: string) {
 }
 
 async function installerCanAccess(installerUid: string, record: EvidenceRecord) {
-  if (QUOTING_PHOTO_CATEGORIES.has(record.category)) {
-    const quotingAccess = await getD1().prepare(`SELECT m.id
-      FROM customer_projects p
-      JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id
-      JOIN trade_opportunities o ON o.id = m.opportunity_id
-      JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
-      WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
-        AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-        AND o.status IN ('open', 'paused') AND a.partner_type = 'installer'
-        AND a.account_status = 'active' AND a.verification_status = 'approved' LIMIT 1`)
-      .bind(record.project_id, record.customer_uid, installerUid).first();
-    if (quotingAccess) return true;
-  }
-  const access = await getD1().prepare(`SELECT q.id
-    FROM customer_project_quotes q
-    JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
-    JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
-    JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
-      AND r.customer_uid = ? AND r.installer_uid = q.installer_uid AND r.status = 'active'
-    WHERE q.project_id = ? AND q.installer_uid = ? AND q.status = 'submitted'
-      AND q.customer_decision = 'accepted' AND m.status = 'connected'
+  const access = await getD1().prepare(`SELECT m.id
+    FROM customer_projects p
+    JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
+    WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
+      AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND o.status IN ('open', 'paused') AND a.partner_type = 'installer'
       AND a.account_status = 'active' AND a.verification_status = 'approved' LIMIT 1`)
-    .bind(record.customer_uid, record.project_id, installerUid).first();
+    .bind(record.project_id, record.customer_uid, installerUid).first();
   return Boolean(access);
 }
 
 function installerDownloadName(record: EvidenceRecord) {
-  if (!QUOTING_PHOTO_CATEGORIES.has(record.category)) return safeFileName(record.file_name);
+  if (!QUOTING_PHOTO_CATEGORIES.has(record.category)) return `customer-project-document.${record.content_type === "application/pdf" ? "pdf" : "bin"}`;
   const extension = record.content_type === "image/png" ? "png"
     : record.content_type === "image/webp" ? "webp"
       : record.content_type === "image/heic" ? "heic"

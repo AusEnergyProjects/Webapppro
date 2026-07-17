@@ -47,6 +47,7 @@ function shapeAccount(row: Record<string, unknown>) {
     firebaseUid: row.firebase_uid,
     email: row.email,
     businessName: row.business_name,
+    abn: row.abn,
     contactName: row.contact_name,
     phone: row.phone,
     partnerType: row.partner_type,
@@ -159,7 +160,7 @@ export async function GET(request: Request) {
     const rowWhere = rowClauses.length ? `WHERE ${rowClauses.join(" AND ")}` : "";
     const [countRow, rows, counts] = await timer.databases([
       includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_accounts ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
-      db.prepare(`SELECT firebase_uid, email, business_name, contact_name, partner_type,
+      db.prepare(`SELECT firebase_uid, email, business_name, abn, contact_name, phone, partner_type,
       address_state, postcode, service_states, capabilities, account_status, verification_status,
       plan_key, billing_status, availability_status, service_base_postcode, service_radius_km, is_synthetic, created_at, updated_at
       FROM trade_accounts ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)

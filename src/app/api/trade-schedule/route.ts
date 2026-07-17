@@ -246,6 +246,8 @@ export async function PATCH(request: Request) {
               revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(
                 memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
                 current.work_order_id, access.ownerUid),
+            db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
+              WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, current.appointment_id),
             db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
               (id, request_id, appointment_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type,
                request_revision, from_starts_at, from_ends_at, to_starts_at, to_ends_at, summary, created_at)
@@ -276,6 +278,8 @@ export async function PATCH(request: Request) {
           WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(startsAt, endsAt, memberId, member.display_name, revision, now, appointmentId, access.ownerUid, current.revision),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now, current.work_order_id, access.ownerUid),
+        db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
+          WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, appointmentId),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'schedule_updated', ?, ?)`).bind(crypto.randomUUID(), current.work_order_id, access.ownerUid, `Appointment assigned to ${member.display_name} for ${startsAt}.`, now),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: String(current.work_order_id), revision: jobRevision, changedAt: now,

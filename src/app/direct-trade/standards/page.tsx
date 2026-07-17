@@ -38,7 +38,7 @@ const standards = [
   {
     number: "06",
     title: "Evidence follows its stated boundary",
-    text: "Customer-approved property photos are shared with every verified installer allocated to the enquiry so they can quote. Supporting documents remain restricted to the exact connected installer accepted by the household. Every download is recorded.",
+    text: "Customer-approved property photos and documents are shared with every verified installer allocated to the enquiry so they can quote. Every download is authorised against that exact allocation and recorded.",
   },
   {
     number: "07",

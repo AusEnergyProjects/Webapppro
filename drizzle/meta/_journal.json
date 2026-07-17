@@ -400,6 +400,13 @@
       "when": 1784302532334,
       "tag": "0057_customer_property_arrivals",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1784306829905,
+      "tag": "0058_trade_contact_arrival_handoff",
+      "breakpoints": true
     }
   ]
 }
