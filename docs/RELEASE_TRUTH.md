@@ -64,7 +64,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - P6-2A was published as Sites version 123 from commit `e5ddc9471b059342840d2e7c86cb0a91758814ca` on `codex/sites-custom-domain-migration`.
 - P6-2B was published as Sites version 124 from commit `5863f0419c420811bfa145ed9c4523f212888dde` on `codex/sites-custom-domain-migration`.
 - P6-2C was published as Sites version 126 from commit `d711fda4590dfa67c1e09dbb413d18b5fde07f92` on `codex/sites-custom-domain-migration`.
-- P6-2D continues from that exact version 126 source and adds migration `0050_versioned_trade_quotes.sql`, version-owned direct quote lines and verified-email customer acceptance. Publication still requires `npm run validate`, GitHub push, Sites version creation and live provenance verification.
+- P6-2D was published as Sites version 127 from commit `5fb6511845e059d843e29cf179b1134141b52842` on `codex/sites-custom-domain-migration`. The canonical domain and `/api/health` both returned HTTP 200 after publication.
 - Live verification after P6-2C observed HTTPS, HSTS, `Permissions-Policy`, `Referrer-Policy`, `X-Content-Type-Options` and `X-Frame-Options` on the canonical custom domain. No CSP header was observed.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.
 - Historical shared D1 databases may already contain explicit synthetic demo records from migrations 0033 to 0038. They remain marked as synthetic and filterable. Fresh databases no longer receive them automatically.

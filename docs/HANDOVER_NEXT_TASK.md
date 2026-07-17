@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: `d711fda` on `codex/sites-custom-domain-migration`, Sites version 126
+Baseline commit: `5fb6511` on `codex/sites-custom-domain-migration`, Sites version 127
 
 ## Current delivery summary
 
