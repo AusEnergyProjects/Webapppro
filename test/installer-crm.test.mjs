@@ -32,7 +32,7 @@ test("the CRM migration applies cleanly to SQLite", () => {
   assert.deepEqual(tables, ["trade_crm_appointments", "trade_crm_customers", "trade_crm_job_details", "trade_crm_job_notes"]);
 });
 
-test("CRM access is same-origin, installer-only, active, paywalled and owner scoped", () => {
+test("CRM access is same-origin, installer-only, active, verification-gated and owner scoped", () => {
   assert.match(route, /sameOrigin\(request\)/);
   assert.match(route, /requireFirebaseIdentity/);
   assert.match(route, /account\.partner_type !== "installer"/);
@@ -68,7 +68,7 @@ test("direct customers have full addresses while job IDs are chronological and r
   assert.match(numberer, /padStart\(6, "0"\)/);
 });
 
-test("paid installers receive a complete progressive CRM while free accounts keep the foundation", () => {
+test("verified installers receive the complete progressive CRM", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
   for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Money", "Notes", "Handover"]) {

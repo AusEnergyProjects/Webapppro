@@ -103,12 +103,7 @@ function cursorValues(sort: MarketplaceSort, row: Record<string, unknown>) {
 }
 
 const eligibleSupplierSql = `p.listing_status = 'published' AND p.review_status = 'approved'
-  AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
-  AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
-    SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
-      AND fg.feature_key = 'supplier_visibility' AND fg.status = 'active'
-      AND (fg.expires_at = '' OR fg.expires_at > ?)
-  ))`;
+  AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'`;
 
 function integerParam(value: string | null, fallback: number, minimum: number, maximum: number) {
   const number = Number(value);
@@ -122,7 +117,7 @@ async function installerAccount(firebaseUid: string) {
   if (!account || account.account_status !== "active") return { error: "An active business account is required." };
   if (account.partner_type !== "installer") return { error: "The trade product marketplace is reserved for installer accounts." };
   if (!await accountHasFeature(firebaseUid, "installer", account.billing_status, "installer_marketplace")) {
-    return { error: "The wholesale product marketplace is available with paid membership or an administrator feature grant." };
+    return { error: "Complete trade verification before opening the wholesale product marketplace." };
   }
   return { account };
 }
@@ -158,10 +153,8 @@ export async function GET(request: Request) {
   const includeFacets = url.searchParams.get("facets") !== "0";
   const includeTotal = url.searchParams.get("total") !== "0";
   const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2_000);
-  const now = new Date().toISOString();
-
   const conditions = [eligibleSupplierSql];
-  const bindings: unknown[] = [now];
+  const bindings: unknown[] = [];
   if (category) { conditions.push("p.category = ?"); bindings.push(category); }
   if (supplierUid) { conditions.push("a.firebase_uid = ?"); bindings.push(supplierUid); }
   if (brand) { conditions.push("p.brand = ?"); bindings.push(brand); }
@@ -207,15 +200,15 @@ export async function GET(request: Request) {
     includeFacets ? Promise.all([
       db.prepare(`SELECT DISTINCT a.firebase_uid supplier_uid, a.business_name supplier_name
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-        WHERE ${eligibleSupplierSql} ORDER BY a.business_name COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+        WHERE ${eligibleSupplierSql} ORDER BY a.business_name COLLATE NOCASE`).all<Record<string, unknown>>(),
       db.prepare(`SELECT DISTINCT p.brand, a.firebase_uid supplier_uid
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-        WHERE ${eligibleSupplierSql} ORDER BY p.brand COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+        WHERE ${eligibleSupplierSql} ORDER BY p.brand COLLATE NOCASE`).all<Record<string, unknown>>(),
       db.prepare(`SELECT DISTINCT a.service_states FROM supplier_products p
-        JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}`).bind(now).all<Record<string, unknown>>(),
+        JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}`).all<Record<string, unknown>>(),
       db.prepare(`SELECT DISTINCT p.stock_status FROM supplier_products p
         JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}
-        ORDER BY p.stock_status COLLATE NOCASE`).bind(now).all<Record<string, unknown>>(),
+        ORDER BY p.stock_status COLLATE NOCASE`).all<Record<string, unknown>>(),
     ]) : Promise.resolve(null),
   ]);
   const total = count ? Number(count.total || 0) : undefined;

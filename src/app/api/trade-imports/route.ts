@@ -43,7 +43,7 @@ function errorResponse(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This business account is not active." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Guided data migration is available with paid Business Hub access or an administrator feature grant." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using guided data migration." }, 403);
   if (code === "IMPORT_TYPE_ROLE") return adminJson({ ok: false, error: "Choose a data type available to this business account." }, 403);
   if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose customers, historical jobs or wholesaler products." }, 400);
   if (code === "IMPORT_EMPTY") return adminJson({ ok: false, error: "The CSV needs a header row and at least one data row." }, 400);

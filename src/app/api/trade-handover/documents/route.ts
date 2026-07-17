@@ -122,7 +122,7 @@ export async function POST(request: Request) {
   try { pack = await editableInstallerPack(identity.uid, workOrderId); }
   catch (error) {
     return json({ ok: false, error: error instanceof Error && error.message === "FULL_ACCESS_REQUIRED"
-      ? "Handover documents require paid Business Hub access or an administrator grant."
+      ? "Complete trade verification before using handover documents."
       : "The handover pack could not be opened." }, 403);
   }
   if (!pack) return json({ ok: false, error: "Start a valid installer handover pack first." }, 404);

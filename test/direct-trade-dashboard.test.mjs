@@ -82,32 +82,21 @@ test("verification evidence is private, bounded and owner protected", () => {
   assert.doesNotMatch(verificationRoute, /publicUrl|signedUrl/);
 });
 
-test("membership page presents all approved prices and no per-lead model", () => {
-  assert.match(membership, /\$99/);
-  assert.match(membership, /\$1,188 billed once per year/);
-  assert.match(membership, /\$199/);
-  assert.match(membership, /\$2,388 billed once per year/);
-  assert.match(membership, /\$399/);
-  assert.match(membership, /All prices include GST/);
-  assert.match(membership, /One subscription, no per-lead fees/);
-  assert.match(membership, /Secure Stripe billing is live/);
-  assert.match(
-    membership,
-    /monthly member receives the second month free/,
-  );
-  assert.match(
-    membership,
-    /Self-referrals and duplicate businesses are excluded/,
-  );
-  assert.match(dashboard, /Generate my referral link/);
-  assert.match(dashboard, /Annual plan: the next renewal moves out to month 13/);
+test("trade access page presents the free verified operating model", () => {
+  assert.match(membership, /Run the core trade workflow for A\$0/);
+  assert.match(membership, /without a card, subscription, seat fee, job fee, quote fee or/);
+  assert.match(membership, /Free and previously paid businesses use the same core data, screens and workflow/);
+  assert.match(membership, /No new subscription is required for core access/);
+  assert.match(membership, /Manage an existing Stripe membership/);
+  assert.doesNotMatch(membership, /Sign in to choose this plan|\$99|\$399/);
+  assert.match(dashboard, /Unlimited users, leads, jobs and quotes remain A\$0/);
+  assert.doesNotMatch(dashboard, /Start annual membership|Generate my referral link/);
 });
 
-test("membership and verification routes are connected across the account journey", () => {
+test("free access and verification routes are connected across the account journey", () => {
   assert.match(dashboard, /href="\/direct-trade\/dashboard\/verification"/);
-  assert.match(dashboard, /href="\/direct-trade\/membership"/);
-  assert.match(partners, /View membership pricing/);
-  assert.match(standards, /Membership and referrals/);
+  assert.match(partners, /See what is included for free/);
+  assert.match(standards, /Free trade access/);
 });
 
 test("installer leads can be narrowed without exposing household details", () => {

@@ -34,7 +34,7 @@ function errorResponse(error: unknown) {
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Handover corrections are available to installer accounts." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Versioned handover corrections require paid Business Hub access or an administrator grant." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using versioned handover corrections." }, 403);
   if (code === "PACK_NOT_FOUND") return adminJson({ ok: false, error: "A published handover record was not found for this work order." }, 404);
   if (code === "ASSET_NOT_FOUND") return adminJson({ ok: false, error: "Installed asset not found." }, 404);
   if (code === "PRIVATE_DATA") return adminJson({ ok: false, error: "Keep customer contact details and addresses out of correction records." }, 400);

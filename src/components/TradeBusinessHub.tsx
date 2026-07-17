@@ -127,6 +127,9 @@ export function TradeBusinessHub(props: {
   teamAccess: boolean;
   navigationTarget?: TLinkCommandTarget | null;
 }) {
+  if (!props.fullAccess) {
+    return <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open CRM, jobs, scheduling, team, forms and purchasing. No card or subscription is required.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>;
+  }
   if (props.partnerType === "installer" && props.fullAccess) {
     return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} navigationTarget={props.navigationTarget} />;
   }
@@ -287,9 +290,8 @@ function BusinessHubFoundation({
           </p>
         </div>
         <div className={`business-hub-access ${access.fullAccess ? "is-member" : "is-free"}`}>
-          <strong>{access.fullAccess ? "Expanded access" : "Free foundation"}</strong>
+          <strong>Verified trade access</strong>
           <span>{access.activeCount} of {access.activeLimit} active records</span>
-          {!access.fullAccess && <a href="#membership">Unlock platform conversion</a>}
         </div>
       </div>
 

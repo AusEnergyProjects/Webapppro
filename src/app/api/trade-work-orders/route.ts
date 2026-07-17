@@ -8,9 +8,7 @@ import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/
 
 export const runtime = "edge";
 
-const FREE_ACTIVE_LIMIT = 5;
 const MEMBER_ACTIVE_LIMIT = 500;
-const FREE_TASK_LIMIT = 10;
 const MEMBER_TASK_LIMIT = 50;
 const STAGES = new Set([
   "backlog",
@@ -95,6 +93,7 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
   const partnerType = String(account.partner_type) === "supplier" ? "supplier" : "installer";
   const entitlements = await accountEntitlements(identity.uid, partnerType, account.billing_status);
+  if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
   return {
     uid: identity.uid,
     partnerType,
@@ -109,9 +108,8 @@ function errorResponse(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the trade profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This trade account is not active." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Converting platform work requires paid Business Hub access or an administrator grant." }, 403);
-  if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Crew assignment requires the Team access premium feature." }, 403);
-  if (code === "FREE_LIMIT_REACHED") return adminJson({ ok: false, error: `Free accounts can manage up to ${FREE_ACTIVE_LIMIT} active work records. Complete, archive or upgrade to add more.` }, 409);
+  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before converting platform work." }, 403);
+  if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before assigning a crew." }, 403);
   if (code === "MEMBER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its active work-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
@@ -125,7 +123,6 @@ function errorResponse(error: unknown) {
 }
 
 async function sourceOptions(identity: TradeIdentity) {
-  if (!identity.fullAccess) return [];
   const db = getD1();
   if (identity.partnerType === "installer") {
     const rows = await db.prepare(`SELECT m.id, o.title, o.state, o.service_categories
@@ -267,8 +264,8 @@ async function workOrderPayload(identity: TradeIdentity) {
       fullAccess: identity.fullAccess,
       teamAccess: identity.teamAccess,
       activeCount,
-      activeLimit: identity.fullAccess ? MEMBER_ACTIVE_LIMIT : FREE_ACTIVE_LIMIT,
-      taskLimit: identity.fullAccess ? MEMBER_TASK_LIMIT : FREE_TASK_LIMIT,
+      activeLimit: MEMBER_ACTIVE_LIMIT,
+      taskLimit: MEMBER_TASK_LIMIT,
     },
   };
 }
@@ -305,8 +302,7 @@ export async function POST(request: Request) {
       if (!order) throw new Error("WORK_NOT_FOUND");
       const count = await db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ?")
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
-      const taskLimit = identity.fullAccess ? MEMBER_TASK_LIMIT : FREE_TASK_LIMIT;
-      if (Number(count?.count || 0) >= taskLimit) throw new Error("TASK_LIMIT_REACHED");
+      if (Number(count?.count || 0) >= MEMBER_TASK_LIMIT) throw new Error("TASK_LIMIT_REACHED");
       const taskId = crypto.randomUUID();
       const revision = nextJobRevision(order.revision);
       await db.batch([
@@ -327,13 +323,11 @@ export async function POST(request: Request) {
       WHERE firebase_uid = ? AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
       .bind(identity.uid).first<Record<string, unknown>>();
     const activeCount = Number(current?.count || 0);
-    if (!identity.fullAccess && activeCount >= FREE_ACTIVE_LIMIT) throw new Error("FREE_LIMIT_REACHED");
-    if (identity.fullAccess && activeCount >= MEMBER_ACTIVE_LIMIT) throw new Error("MEMBER_LIMIT_REACHED");
+    if (activeCount >= MEMBER_ACTIVE_LIMIT) throw new Error("MEMBER_LIMIT_REACHED");
 
     const requestedSourceType = cleanAdminText(body.sourceType, 40) || "internal";
     const sourceType = SOURCE_TYPES.has(requestedSourceType) ? requestedSourceType : "internal";
     const sourceReference = cleanAdminText(body.sourceReference, 180);
-    if (sourceType !== "internal" && !identity.fullAccess) throw new Error("FULL_ACCESS_REQUIRED");
     let title = cleanAdminText(body.title, 160);
     let serviceCategory = cleanAdminText(body.serviceCategory, 60);
     let siteArea = cleanAdminText(body.siteArea, 80);
@@ -396,7 +390,7 @@ export async function POST(request: Request) {
       eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now),
       ...offlineSyncStatements(db, identity, workOrderId, 1, now),
     ]);
-    return adminJson({ ok: true, ...(await workOrderPayload(identity)) }, 201);
+    return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, ...(await workOrderPayload(identity)) }, 201);
   } catch (error) {
     return errorResponse(error);
   }

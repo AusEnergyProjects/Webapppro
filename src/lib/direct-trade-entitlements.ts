@@ -13,7 +13,6 @@ export type FeatureKey =
   | "supplier_bulk_import"
   | "business_operations"
   | "advanced_analytics"
-  | "featured_placement"
   | "team_access"
   | "priority_support";
 
@@ -30,7 +29,7 @@ export type FeatureDefinition = {
   label: string;
   description: string;
   roles: PartnerType[];
-  tier: "membership" | "premium";
+  tier: "core" | "admin";
 };
 
 export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
@@ -39,63 +38,56 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     label: "Opportunity leads",
     description: "Receive matched household opportunities and submit structured platform quote options.",
     roles: ["installer"],
-    tier: "membership",
+    tier: "core",
   },
   {
     key: "installer_marketplace",
     label: "Wholesale product marketplace",
     description: "Browse approved products, pricing, stock and complete equipment kits.",
     roles: ["installer"],
-    tier: "membership",
+    tier: "core",
   },
   {
     key: "supplier_visibility",
     label: "Installer marketplace visibility",
     description: "Make approved, published products selectable by installer members.",
     roles: ["supplier"],
-    tier: "membership",
+    tier: "core",
   },
   {
     key: "supplier_bulk_import",
     label: "Bulk catalogue tools",
     description: "Import and maintain larger product catalogues using CSV workflows.",
     roles: ["supplier"],
-    tier: "membership",
+    tier: "core",
   },
   {
     key: "business_operations",
     label: "CRM and Business Hub",
     description: "Run customers, jobs, scheduling, tasks, issues, quote and invoice progress, reporting, asset records, compliance and reviewed customer handovers in one workspace.",
     roles: ["installer", "supplier"],
-    tier: "membership",
+    tier: "core",
   },
   {
     key: "advanced_analytics",
     label: "Advanced analytics",
     description: "Access conversion, demand, coverage and catalogue performance insights.",
     roles: ["installer", "supplier"],
-    tier: "premium",
-  },
-  {
-    key: "featured_placement",
-    label: "Featured placement",
-    description: "Add an approved featured badge and enhanced marketplace placement.",
-    roles: ["installer", "supplier"],
-    tier: "premium",
+    tier: "admin",
   },
   {
     key: "team_access",
     label: "Team access",
     description: "Prepare the account for additional users and shared workflow ownership.",
     roles: ["installer", "supplier"],
-    tier: "premium",
+    tier: "core",
   },
   {
     key: "priority_support",
     label: "Priority support",
     description: "Place account support requests into the priority service queue.",
     roles: ["installer", "supplier"],
-    tier: "premium",
+    tier: "admin",
   },
 ];
 
@@ -127,25 +119,27 @@ export function resolveEntitlements(
   partnerType: PartnerType,
   billingStatus: unknown,
   grants: Array<Partial<FeatureGrant>> = [],
+  verified = false,
 ) {
   const paidMembership = isPaidBillingStatus(billingStatus);
   const granted = activeGrantKeys(grants);
   const features = Object.fromEntries(
     FEATURE_DEFINITIONS.map((feature) => {
       const roleApplies = feature.roles.includes(partnerType);
-      const includedWithMembership = feature.tier === "membership";
+      const includedForVerifiedTrades = feature.tier === "core";
       return [
         feature.key,
         roleApplies &&
-          (granted.has(feature.key) ||
-            (paidMembership && includedWithMembership)),
+          verified &&
+          (includedForVerifiedTrades || granted.has(feature.key)),
       ];
     }),
   ) as Record<FeatureKey, boolean>;
 
   return {
     paidMembership,
-    accessLabel: paidMembership ? "Paid membership" : granted.size ? "Free account with admin access" : "Free account",
+    verified,
+    accessLabel: verified ? "Verified trade access" : "Verification required",
     features,
     activeGrants: [...granted],
   };

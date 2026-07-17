@@ -486,7 +486,7 @@ export async function POST(request: Request) {
     if (Array.isArray(body.products)) {
       if (!await accountHasFeature(identity.uid, "supplier", identity.billingStatus, "supplier_bulk_import")) {
         return json(
-          { ok: false, error: "Bulk catalogue import is available with paid membership or an administrator feature grant." },
+          { ok: false, error: "Complete trade verification before importing catalogue products." },
           403,
         );
       }

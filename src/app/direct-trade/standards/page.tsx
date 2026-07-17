@@ -18,7 +18,7 @@ const standards = [
   {
     number: "02",
     title: "Scheme approval is checked separately",
-    text: "Where a certificate, rebate or program requires a specific installer approval, that approval must be current and relevant to the proposed activity. TLink membership does not replace it.",
+    text: "Where a certificate, rebate or program requires a specific installer approval, that approval must be current and relevant to the proposed activity. TLink access does not replace it.",
   },
   {
     number: "03",
@@ -28,7 +28,7 @@ const standards = [
   {
     number: "04",
     title: "Matching is limited and fair",
-    text: "An opportunity is shown to no more than six eligible installers. Postcode distance, the installer service radius, capability, verification, availability and recent allocation load guide the selection. A subscription does not buy higher placement, exclusivity or guaranteed work.",
+    text: "An opportunity is shown to no more than six eligible installers. Postcode distance, the installer service radius, capability, verification, availability and recent allocation load guide the selection. Payment does not buy higher placement, exclusivity or guaranteed work.",
   },
   {
     number: "05",
@@ -85,9 +85,9 @@ export default function DirectTradeStandardsPage() {
           </p>
         </div>
         <aside>
-          <strong>Subscription is disclosed</strong>
+          <strong>Free access is disclosed</strong>
           <p>
-            Paid membership will fund access to the service. It will not replace
+            Free verified access opens the service. It does not replace
             verification, purchase a favourable ranking or create a separate
             charge for each opportunity.
           </p>
@@ -215,7 +215,7 @@ export default function DirectTradeStandardsPage() {
             Trade and supplier participation
           </a>
           <a className="btn ghost" href="/direct-trade/membership">
-            Membership and referrals
+            Free trade access
           </a>
         </div>
       </section>

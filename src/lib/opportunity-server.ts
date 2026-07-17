@@ -265,14 +265,9 @@ export async function allocateNearestInstallers(
     FROM trade_accounts a
     WHERE a.partner_type = 'installer' AND a.account_status = 'active' AND a.verification_status = 'approved'
       AND COALESCE(a.is_synthetic, 0) = ?
-      AND a.availability_status IN ('open', 'limited')
-      AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
-        SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
-          AND fg.feature_key = 'installer_leads' AND fg.status = 'active'
-          AND (fg.expires_at = '' OR fg.expires_at > ?)
-      ))`,
+      AND a.availability_status IN ('open', 'limited')`,
     )
-    .bind(cutoff, Number(opportunity.is_synthetic || 0), new Date().toISOString())
+    .bind(cutoff, Number(opportunity.is_synthetic || 0))
     .all<Record<string, unknown>>();
 
   const candidates = rows.results

@@ -13,10 +13,6 @@ import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import {
-  directTradeCheckoutUrl,
-  directTradePortalLink,
-} from "@/lib/direct-trade-billing";
-import {
   FEATURE_DEFINITIONS,
   type FeatureGrant,
   type FeatureKey,
@@ -43,6 +39,7 @@ type DashboardProfile = {
   featureGrants: FeatureGrant[];
   entitlements: {
     paidMembership: boolean;
+    verified: boolean;
     accessLabel: string;
     features: Record<FeatureKey, boolean>;
     activeGrants: FeatureKey[];
@@ -90,35 +87,6 @@ type DashboardOpportunity = {
   };
 };
 
-type ReferralData = {
-  eligible: boolean;
-  billingStatus: string;
-  code: string;
-  link: string;
-  stats: {
-    joined: number;
-    awaitingPayment: number;
-    rewarded: number;
-    earnedMonths: number;
-  };
-  referrals: Array<{
-    id: string;
-    businessName: string;
-    status: string;
-    statusLabel: string;
-    registeredAt: string;
-    firstPaidAt: string;
-    rewardedAt: string;
-  }>;
-  receivedReferral: null | {
-    status: string;
-    statusLabel: string;
-    registeredAt: string;
-    firstPaidAt: string;
-    rewardedAt: string;
-  };
-};
-
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
   solar: "Rooftop solar",
@@ -134,12 +102,11 @@ const capabilityLabels: Record<string, string> = {
   other: "Other energy upgrades",
 };
 
-const freeAccountFeatures = [
-  "Create and edit the complete business profile",
-  "Set service areas, capabilities and contact preferences",
-  "Upload verification evidence and track review progress",
-  "Manage up to five privacy-safe internal work records",
-  "Access billing, account settings and membership options",
+const verifiedTradeFeatures = [
+  "Leads and privacy-safe marketplace opportunities",
+  "CRM, quotes, scheduling and customer handover",
+  "Team, field work, forms and purchasing",
+  "Catalogue, product selection and guided imports",
 ];
 
 function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
@@ -147,12 +114,6 @@ function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
   const available = FEATURE_DEFINITIONS.filter((feature) =>
     feature.roles.includes(role),
   );
-  const includedFree = [
-    ...freeAccountFeatures,
-    role === "supplier"
-      ? "Create and edit draft wholesaler product listings"
-      : "Prepare service coverage and availability before upgrading",
-  ];
   return (
     <section className="dashboard-plan-access" aria-labelledby="plan-access-title">
       <div className="dashboard-plan-summary">
@@ -160,52 +121,36 @@ function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
           <span>Current access</span>
           <h2 id="plan-access-title">{profile.entitlements.accessLabel}</h2>
           <p>
-            Free accounts can finish setup and become verification-ready. Paid
-            access controls commercial visibility, leads and marketplace tools.
+            Core trade operations cost A$0. Verification, licensing, insurance
+            and role permissions remain mandatory safety controls.
           </p>
         </div>
-        <a href="#membership">
-          {profile.entitlements.paidMembership ? "Manage membership" : "Compare paid access"}
-        </a>
+        <a href="/direct-trade/dashboard/verification">Open verification centre</a>
       </div>
       <div className="dashboard-tier-grid">
         <article>
-          <span>Always included</span>
-          <h3>Free account</h3>
-          <ul>{includedFree.map((item) => <li key={item}>{item}</li>)}</ul>
-          <strong>
-            {role === "supplier"
-              ? "Draft products remain private until commercial access is active."
-              : "No household leads are sent to free installers."}
-          </strong>
+          <span>Before approval</span>
+          <h3>Set up and verify</h3>
+          <ul><li>Complete the business profile</li><li>Set service areas and capabilities</li><li>Provide the required verification evidence</li></ul>
+          <strong>No card or subscription is required.</strong>
         </article>
         <article className="paid">
-          <span>Commercial access</span>
-          <h3>Paid membership</h3>
-          <ul>
-            {available.filter((feature) => feature.tier === "membership").map((feature) => (
-              <li key={feature.key} className={profile.entitlements.features[feature.key] ? "enabled" : "locked"}>
-                {feature.label}
-              </li>
-            ))}
-          </ul>
-          <strong>
-            {role === "supplier"
-              ? "Unpaid wholesalers remain invisible in installer product selection."
-              : "Only paid or specifically granted installers enter lead matching."}
-          </strong>
+          <span>After approval</span>
+          <h3>Verified trade workspace</h3>
+          <ul>{verifiedTradeFeatures.map((item) => <li key={item}>{item}</li>)}</ul>
+          <strong>Unlimited users, leads, jobs and quotes remain A$0.</strong>
         </article>
         <article>
-          <span>Admin assigned</span>
-          <h3>Premium features</h3>
+          <span>Permission controlled</span>
+          <h3>Specialist controls</h3>
           <ul>
-            {available.filter((feature) => feature.tier === "premium").map((feature) => (
+            {available.filter((feature) => feature.tier === "admin").map((feature) => (
               <li key={feature.key} className={profile.entitlements.features[feature.key] ? "enabled" : "locked"}>
                 {feature.label}
               </li>
             ))}
           </ul>
-          <strong>Premium add-ons can be enabled per account by an administrator.</strong>
+          <strong>Administrator grants never change marketplace ranking or lead priority.</strong>
         </article>
       </div>
     </section>
@@ -236,9 +181,7 @@ export function DirectTradeDashboard() {
   const [leadStatusFilter, setLeadStatusFilter] = useState("");
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
-  const [referrals, setReferrals] = useState<ReferralData | null>(null);
-  const [referralBusy, setReferralBusy] = useState(false);
-  const [referralStatus, setReferralStatus] = useState("");
+  const [siteVisitDates, setSiteVisitDates] = useState<Record<string, string>>({});
   const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "import" | "account">("work");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
@@ -250,7 +193,6 @@ export function DirectTradeDashboard() {
         if (!nextUser) {
           setLoading(false);
           setOpportunities([]);
-          setReferrals(null);
         }
       }),
     [],
@@ -286,10 +228,6 @@ export function DirectTradeDashboard() {
               nextProfile.serviceBasePostcode || nextProfile.postcode,
             );
             setServiceRadiusKm(Number(nextProfile.serviceRadiusKm || 50));
-            const referralResponsePromise = fetch("/api/trade-referrals", {
-              headers: { Authorization: `Bearer ${token}` },
-              cache: "no-store",
-            });
             if (
               nextProfile.partnerType !== "supplier" &&
               nextProfile.entitlements?.features?.installer_leads
@@ -307,10 +245,6 @@ export function DirectTradeDashboard() {
               if (opportunityResponse.ok && !cancelled)
                 setOpportunities(opportunityResult.opportunities || []);
             } else if (!cancelled) setOpportunities([]);
-            const referralResponse = await referralResponsePromise;
-            const referralResult = await referralResponse.json().catch(() => ({}));
-            if (referralResponse.ok && !cancelled)
-              setReferrals(referralResult.referrals || null);
           }
         }
       } catch (loadError) {
@@ -337,41 +271,6 @@ export function DirectTradeDashboard() {
   const hasBulkImport = Boolean(profile?.entitlements?.features?.supplier_bulk_import);
   const hasBusinessOperations = Boolean(profile?.entitlements?.features?.business_operations);
   const hasTeamAccess = Boolean(profile?.entitlements?.features?.team_access);
-  const annualMonthly = isSupplier ? 199 : 99;
-  const flexibleMonthly = isSupplier ? 399 : 199;
-  const annualTotal = annualMonthly * 12;
-  const annualCheckout =
-    user && profile
-      ? directTradeCheckoutUrl({
-          partnerType: profile.partnerType,
-          cadence: "annual",
-          firebaseUid: user.uid,
-          email: user.email || "",
-        })
-      : "";
-  const monthlyCheckout =
-    user && profile
-      ? directTradeCheckoutUrl({
-          partnerType: profile.partnerType,
-          cadence: "monthly",
-          firebaseUid: user.uid,
-          email: user.email || "",
-        })
-      : "";
-  const billingLabel: Record<string, string> = {
-    not_connected: "No membership selected",
-    processing: "Payment confirmation in progress",
-    trial: "Trial membership active",
-    active: "Membership active",
-    active_cancels_at_period_end: "Active until the current paid term ends",
-    past_due: "Payment action required",
-    paused: "Membership paused",
-    cancelled: "Membership ended",
-  };
-  const canStartMembership = Boolean(
-    profile &&
-      ["not_connected", "cancelled"].includes(profile.billingStatus),
-  );
   const profileComplete = Boolean(
     profile?.businessName &&
     profile.addressLine1 &&
@@ -393,42 +292,6 @@ export function DirectTradeDashboard() {
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
       .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.distanceBand}`.toLowerCase().includes(term));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
-
-  async function generateReferralLink() {
-    if (!user) return;
-    setReferralBusy(true);
-    setReferralStatus("Generating your secure member referral link...");
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/trade-referrals", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok)
-        throw new Error(result.error || "The referral link could not be generated.");
-      setReferrals(result.referrals);
-      setReferralStatus("Your referral link is ready to share.");
-    } catch (referralError) {
-      setReferralStatus(
-        referralError instanceof Error
-          ? referralError.message
-          : "The referral link could not be generated.",
-      );
-    } finally {
-      setReferralBusy(false);
-    }
-  }
-
-  async function copyReferralLink() {
-    if (!referrals?.link) return;
-    try {
-      await navigator.clipboard.writeText(referrals.link);
-      setReferralStatus("Referral link copied. It is ready to send to a trusted business.");
-    } catch {
-      setReferralStatus("Copy the referral link from the field below.");
-    }
-  }
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -533,6 +396,69 @@ export function DirectTradeDashboard() {
     }
   }
 
+  async function convertOpportunity(
+    matchId: string,
+    action: "create_job" | "book_site_visit",
+  ) {
+    if (!user) return;
+    const visitDate = siteVisitDates[matchId] || "";
+    if (action === "book_site_visit" && !visitDate) {
+      setOpportunityStatus("Choose a site visit date first.");
+      return;
+    }
+    setOpportunityBusy(matchId);
+    setOpportunityStatus(action === "book_site_visit" ? "Creating the job and site visit..." : "Creating the CRM job...");
+    try {
+      const token = await user.getIdToken();
+      const workResponse = await fetch("/api/trade-work-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "create_work_order",
+          sourceType: "opportunity",
+          sourceReference: matchId,
+          scheduledStart: visitDate,
+        }),
+      });
+      const workResult = await workResponse.json().catch(() => ({}));
+      if (!workResponse.ok || !workResult.ok) {
+        throw new Error(workResult.error || "The marketplace opportunity could not be converted.");
+      }
+      if (action === "book_site_visit") {
+        const appointmentResponse = await fetch("/api/trade-crm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            action: "create_appointment",
+            workOrderId: workResult.createdWorkOrderId,
+            appointmentType: "site_visit",
+            title: "Marketplace site visit",
+            startsAt: `${visitDate}T09:00`,
+            endsAt: `${visitDate}T10:00`,
+          }),
+        });
+        const appointmentResult = await appointmentResponse.json().catch(() => ({}));
+        if (!appointmentResponse.ok || !appointmentResult.ok) {
+          throw new Error(`${workResult.workNumber} was created, but the site visit could not be added. Open the job to schedule it.`);
+        }
+      }
+      setWorkspace("work");
+      setOpportunityStatus(
+        action === "book_site_visit"
+          ? `${workResult.workNumber} and its site visit are ready in Work.`
+          : `${workResult.workNumber} is ready in Work.`,
+      );
+    } catch (conversionError) {
+      setOpportunityStatus(
+        conversionError instanceof Error
+          ? conversionError.message
+          : "The marketplace opportunity could not be converted.",
+      );
+    } finally {
+      setOpportunityBusy("");
+    }
+  }
+
   return (
     <main className="wrap direct-trade-dashboard-page">
       <TLinkHeader active="dashboard" />
@@ -622,7 +548,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">02</b><span>Work</span><small>Requests and tasks</small></button>
                 <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">03</b><span>Orders</span><small>Supply and warranties</small></button>
                 <button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}><b aria-hidden="true">04</b><span>Import</span><small>Guided data migration</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and membership</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
               {workspace === "account" && <PlanAccessPanel profile={profile} />}
@@ -641,9 +567,9 @@ export function DirectTradeDashboard() {
                 hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
                 navigationTarget={commandTarget}
               />}
-              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
-              {workspace === "import" && (hasBusinessOperations && hasBulkImport ? <TradeDataImportWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Guided catalogue migration is locked</strong><p>Paid wholesaler access adds preview, duplicate review and rollback for catalogue imports.</p><a href="#membership">Compare membership</a></section>)}
-              {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile, verification and membership</h2><p>Keep occasional administration separate from daily work.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a><a href="/direct-trade/membership"><strong>Membership and referrals</strong><span>Plans, invoices and rewards</span></a></div></section>}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use purchasing, fulfilment milestones and warranty claims.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+              {workspace === "import" && (hasBusinessOperations && hasBulkImport ? <TradeDataImportWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use guided catalogue imports, duplicate review and rollback.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+              {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile and verification</h2><p>Core trade operations cost A$0 after verification.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a></div></section>}
             </>
           ) : (
             <>
@@ -655,7 +581,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">02</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">03</b><span>Products</span><small>Approved trade catalogue</small></button>
                 <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">04</b><span>Orders</span><small>Supply and warranties</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Settings and membership</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
@@ -701,14 +627,14 @@ export function DirectTradeDashboard() {
                   <span>Opportunity inbox</span>
                   <strong>
                     {!hasLeadAccess
-                      ? "Locked on free account"
+                      ? "Verification required"
                       : offeredCount
                       ? `${offeredCount} awaiting response`
                       : "Nothing awaiting response"}
                   </strong>
                   <small>
                     {!hasLeadAccess
-                      ? "No leads can be allocated until access is unlocked."
+                      ? "No leads can be allocated until verification is approved."
                       : interestedCount
                       ? `${interestedCount} expression${interestedCount === 1 ? "" : "s"} of interest active`
                       : "Matching follows coverage and capability."}
@@ -747,15 +673,13 @@ export function DirectTradeDashboard() {
                   </div>
                   {!hasLeadAccess ? (
                     <div className="dashboard-paywall-state">
-                      <span>Paid feature</span>
+                      <span>Verification required</span>
                       <h3>Opportunity delivery is switched off</h3>
                       <p>
-                        This free account can complete its profile and verification,
-                        but it is excluded from automatic and manual lead allocation.
-                        Start membership or ask an administrator to grant Opportunity
-                        leads to activate this inbox.
+                        Complete business verification to enter automatic and manual
+                        opportunity allocation. No card or subscription is required.
                       </p>
-                      <a href="#membership">Unlock opportunity leads</a>
+                      <a href="/direct-trade/dashboard/verification">Open verification centre</a>
                     </div>
                   ) : opportunities.length ? (
                     <>
@@ -913,6 +837,20 @@ export function DirectTradeDashboard() {
                             </div>
                           )}
                           {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
+                          {["interested", "connected"].includes(opportunity.matchStatus) && (
+                            <section className="dashboard-opportunity-conversion" aria-label="Opportunity workflow actions">
+                              <div>
+                                <strong>Move this scope into your trade workflow</strong>
+                                <span>The CRM keeps the opportunity reference, service region and protected privacy boundary.</span>
+                              </div>
+                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId, "create_job")}>Create job</button>
+                              <label>
+                                <span>Site visit date</span>
+                                <input type="date" value={siteVisitDates[opportunity.matchId] || ""} onChange={(event) => setSiteVisitDates((current) => ({ ...current, [opportunity.matchId]: event.target.value }))} />
+                              </label>
+                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId, "book_site_visit")}>Book site visit</button>
+                            </section>
+                          )}
                         </article>
                       ))}
                     </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
@@ -974,13 +912,14 @@ export function DirectTradeDashboard() {
                     </li>
                     <li>
                       <strong>
-                        {profile.entitlements.paidMembership
-                          ? "Membership active"
-                          : "Choose membership"}
+                        {profile.entitlements.verified
+                          ? "Trade workspace active"
+                          : "Verification required"}
                       </strong>
                       <small>
-                        {billingLabel[profile.billingStatus] ||
-                          "Choose a secure Stripe plan below"}
+                        {profile.entitlements.verified
+                          ? "Core trade operations are available at A$0"
+                          : "No card or subscription is required"}
                       </small>
                     </li>
                     <li
@@ -1227,223 +1166,24 @@ export function DirectTradeDashboard() {
               ) : (
                 <section className="dashboard-panel dashboard-paywall-panel">
                   <div className="dashboard-paywall-state">
-                    <span>Paid feature</span>
+                    <span>Verification required</span>
                     <h2>Wholesale product marketplace</h2>
                     <p>
-                      Upgrade to compare approved equipment, trade pricing, stock,
-                      warranties and complete kit dependencies. Products from unpaid
-                      wholesalers never appear in this selection workspace.
+                      Complete business verification to compare approved equipment,
+                      trade pricing, stock, warranties and complete kit dependencies.
                     </p>
-                    <a href="#membership">Unlock product selection</a>
+                    <a href="/direct-trade/dashboard/verification">Open verification centre</a>
                   </div>
                 </section>
               ))}
-              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="installer" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Business purchasing is locked</strong><p>Paid Business Hub access adds system-numbered purchase orders, fulfilment milestones and warranty claims.</p><a href="#membership">Compare membership</a></section>)}
+              {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="installer" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use purchase orders, fulfilment milestones and warranty claims.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
             </>
           )}
 
-          {workspace === "account" && <section
-            className="dashboard-panel dashboard-membership"
-            aria-labelledby="dashboard-membership-title"
-            id="membership"
-          >
-            <div className="dashboard-panel-heading">
-              <span>Secure membership billing</span>
-              <h2 id="dashboard-membership-title">
-                Simple subscription pricing with no per-lead fees
-              </h2>
-              <p>
-                Prices include GST. Stripe securely collects payment details,
-                issues invoices and keeps subscription controls separate from
-                marketplace matching.
-              </p>
-            </div>
-            <div className="dashboard-pricing-grid">
-              <article className="recommended">
-                <span>Best value</span>
-                <h3>Annual membership</h3>
-                <strong>
-                  ${annualMonthly}
-                  <small>/month</small>
-                </strong>
-                <p>
-                  Billed as ${annualTotal.toLocaleString("en-AU")} once each
-                  year, including GST. This is a prepaid 12-month term.
-                </p>
-                <ul>
-                  <li>Full role-specific dashboard access after approval</li>
-                  <li>
-                    {isSupplier
-                      ? "Approved products become visible to installer members"
-                      : "Suitable opportunity leads and product selection unlock"}
-                  </li>
-                  <li>No individual lead charges</li>
-                  <li>Stop renewal before the next annual charge</li>
-                  <li>
-                    No early cancellation or refund except where Australian
-                    Consumer Law requires it
-                  </li>
-                </ul>
-                {canStartMembership ? (
-                  <a className="billing-checkout-link" href={annualCheckout}>
-                    Start annual membership with Stripe
-                  </a>
-                ) : (
-                  <span className="billing-checkout-link is-disabled">
-                    Manage the current membership below
-                  </span>
-                )}
-              </article>
-              <article>
-                <span>Flexible</span>
-                <h3>Month to month</h3>
-                <strong>
-                  ${flexibleMonthly}
-                  <small>/month</small>
-                </strong>
-                <p>
-                  Charged monthly, including GST. Cancel any time and access
-                  continues until the end of the paid monthly billing period.
-                </p>
-                <ul>
-                  <li>The same matching and placement rules</li>
-                  <li>
-                    {isSupplier
-                      ? "Approved products become visible to installer members"
-                      : "Suitable opportunity leads and product selection unlock"}
-                  </li>
-                  <li>No individual lead charges</li>
-                  <li>No annual commitment or early cancellation fee</li>
-                  <li>Manage invoices and payment details in Stripe</li>
-                </ul>
-                {canStartMembership ? (
-                  <a className="billing-checkout-link" href={monthlyCheckout}>
-                    Start monthly membership with Stripe
-                  </a>
-                ) : (
-                  <span className="billing-checkout-link is-disabled">
-                    Manage the current membership below
-                  </span>
-                )}
-              </article>
-            </div>
-            <div className="dashboard-billing-actions">
-              <a
-                className="btn ghost"
-                href={directTradePortalLink}
-                rel="noreferrer"
-              >
-                Manage an existing Stripe membership
-              </a>
-              <a className="btn ghost" href="/direct-trade/membership/terms">
-                Read membership and cancellation terms
-              </a>
-            </div>
-          </section>}
-
-          {workspace === "account" && <section
-            className="dashboard-panel dashboard-referral"
-            aria-labelledby="dashboard-referral-title"
-          >
-            <div>
-              <span>Live referral rewards</span>
-              <h2 id="dashboard-referral-title">
-                Give a free month and earn a free month
-              </h2>
-              <p>
-                Active paying members can create one unique link and share it
-                with trusted trade or wholesale businesses. After a new
-                referred business starts a paid plan and its first payment
-                clears, both renewal dates move forward by one full calendar
-                month.
-              </p>
-              {referrals?.eligible ? (
-                referrals.link ? (
-                  <div className="dashboard-referral-link">
-                    <label htmlFor="member-referral-link">Your member link</label>
-                    <div>
-                      <input
-                        id="member-referral-link"
-                        value={referrals.link}
-                        readOnly
-                        aria-readonly="true"
-                      />
-                      <button type="button" onClick={() => void copyReferralLink()}>
-                        Copy link
-                      </button>
-                    </div>
-                    <small>Referral code {referrals.code}</small>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn dashboard-referral-generate"
-                    disabled={referralBusy}
-                    onClick={() => void generateReferralLink()}
-                  >
-                    {referralBusy ? "Generating..." : "Generate my referral link"}
-                  </button>
-                )
-              ) : (
-                <div className="dashboard-referral-locked">
-                  <strong>Available with active paid membership</strong>
-                  <p>
-                    Start a monthly or annual membership above to unlock your
-                    personal referral link.
-                  </p>
-                </div>
-              )}
-              {referralStatus && (
-                <p className="dashboard-settings-status" role="status">
-                  {referralStatus}
-                </p>
-              )}
-            </div>
-            <aside>
-              <strong>How the free month works</strong>
-              <ul>
-                <li>Monthly plan: the second month is free</li>
-                <li>Annual plan: the next renewal moves out to month 13</li>
-                <li>Each additional eligible referral adds another month</li>
-                <li>
-                  Self-referrals, existing subscribers and duplicate businesses
-                  are excluded or reviewed
-                </li>
-                <li>Rewards are membership time, not cash or lead credits</li>
-              </ul>
-            </aside>
-            {referrals && (
-              <div className="dashboard-referral-history">
-                <div className="dashboard-referral-metrics" aria-label="Referral summary">
-                  <article><span>Businesses joined</span><strong>{referrals.stats.joined}</strong></article>
-                  <article><span>Waiting for payment</span><strong>{referrals.stats.awaitingPayment}</strong></article>
-                  <article><span>Rewards completed</span><strong>{referrals.stats.rewarded}</strong></article>
-                  <article><span>Your free months</span><strong>{referrals.stats.earnedMonths}</strong></article>
-                </div>
-                {referrals.receivedReferral && (
-                  <p className="dashboard-received-referral">
-                    <strong>Your signup referral:</strong>{" "}
-                    {referrals.receivedReferral.statusLabel}
-                  </p>
-                )}
-                {referrals.referrals.length > 0 && (
-                  <div className="dashboard-referral-list">
-                    <strong>Referral history</strong>
-                    {referrals.referrals.map((item) => (
-                      <article key={item.id}>
-                        <div><strong>{item.businessName}</strong><small>Joined {new Date(item.registeredAt).toLocaleDateString("en-AU")}</small></div>
-                        <span className={`referral-status referral-status-${item.status}`}>{item.statusLabel}</span>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>}
         </div>
       )}
       <SiteFooter>
-        TLink membership does not replace trade licensing, government
+        Free TLink access does not replace trade licensing, government
         accreditation, scheme approval, insurance, product compliance or
         customer obligations.
       </SiteFooter>

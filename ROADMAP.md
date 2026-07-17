@@ -296,6 +296,13 @@ Acceptance criteria:
 - Free and previously paid users operate on the same data and screens.
 - No marketplace opportunity requires customer or job information to be entered again.
 
+Progress as at 17 July 2026:
+
+- Core trade entitlements now depend on approved verification and role rather than Stripe billing state or seat grants. Verified installers and wholesalers receive the role-appropriate CRM, marketplace, team, field, forms, purchasing, catalogue and handover tools at A$0.
+- The dashboard, participation journey, platform overview and historical membership route now present the free verified model. No new paid checkout or paid referral reward is offered for core access, while existing subscribers retain a Stripe billing-portal path during transition.
+- Marketplace opportunity cards now expose Create quote, Create job and Book site visit. Job conversion preserves the opportunity match identifier as the protected CRM source reference, and site-visit creation uses the same owner-scoped job without exposing household identity, contact details or a street address.
+- Executable contract coverage protects billing-independent verified access, marketplace-to-CRM conversion, duplicate prevention, protected location handling and dated site-visit creation.
+
 ### Build step 2: establish customers, sites, assets and the enquiry inbox
 
 Customer and site records must support:

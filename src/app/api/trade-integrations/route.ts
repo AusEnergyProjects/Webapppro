@@ -19,7 +19,7 @@ function integrationError(error: unknown) {
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Business integrations are available to installer accounts only." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Business integrations require paid Business Hub access or an administrator grant." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using business integrations." }, 403);
   return adminJson({ ok: false, error: "The integration request could not be completed." }, 500);
 }
 

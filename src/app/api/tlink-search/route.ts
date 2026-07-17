@@ -48,7 +48,6 @@ export async function GET(request: Request) {
 
     const entitlements = await accountEntitlements(identity.uid, partnerType as "installer" | "supplier", account.billing_status);
     const term = `%${rawQuery.toLowerCase()}%`;
-    const now = new Date().toISOString();
     const searches: Array<Promise<SearchRecord[]>> = [];
 
     if (partnerType === "installer" && entitlements.features.business_operations && matches("job", selectedKind)) {
@@ -84,14 +83,10 @@ export async function GET(request: Request) {
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
         WHERE p.listing_status = 'published' AND p.review_status = 'approved'
           AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
-          AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
-            SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
-              AND fg.feature_key = 'supplier_visibility' AND fg.status = 'active'
-              AND (fg.expires_at = '' OR fg.expires_at > ?)))
           AND LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.category || ' ' || a.business_name) LIKE ?
         ORDER BY CASE WHEN LOWER(p.model_number) = LOWER(?) THEN 0 ELSE 1 END,
           p.name COLLATE NOCASE, p.brand COLLATE NOCASE LIMIT ${KIND_LIMIT}`)
-        .bind(now, term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
+        .bind(term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
           id: String(row.id), kind: "product" as const, label: "PR", title: String(row.name || row.model_number || "Product"),
           detail: [row.brand, row.model_number].filter(Boolean).join(" "),
           meta: [row.supplier_name, readable(row.stock_status), money.format(Number(row.unit_price_cents_ex_gst || 0) / 100)].filter(Boolean).join(" | "),

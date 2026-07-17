@@ -36,13 +36,12 @@ test("templates prefill jobs and copy up to 24 checklist tasks", () => {
   assert.match(crm, /Checklist, one item per line/);
 });
 
-test("public access copy makes free and paid boundaries explicit", () => {
+test("public access copy makes free and verification boundaries explicit", () => {
   assert.match(platform, /Always free/);
-  assert.match(platform, /No free installer receives leads/);
-  assert.match(platform, /Unpaid wholesaler products stay invisible/);
-  assert.match(membership, /Nothing is locked behind a household subscription/);
-  assert.match(membership, /No household opportunities/);
-  assert.match(membership, /Products stay invisible to installers/);
+  assert.match(platform, /Core trade operations cost A\$0 after verification/);
+  assert.match(platform, /Wholesalers never receive household opportunities/);
+  assert.match(membership, /Run the core trade workflow for A\$0/);
+  assert.match(membership, /No new subscription is required for core access/);
 });
 
 test("new customer-facing copy avoids prohibited dash characters", () => {

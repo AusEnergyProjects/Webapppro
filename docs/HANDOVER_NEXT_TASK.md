@@ -2,68 +2,58 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: pending the validated product-enquiry workspace and release-audit record
+Baseline commit: pending Phase 6 Build step 1 validation and release
 
 ## Current delivery summary
 
-The platform has one validated release record and a production-safe migration path. Synthetic account, product and opportunity data is opt-in test fixture data, not normal database setup. Active web and worker typechecking, integration testing, fresh D1 migration validation, full automated testing, coverage and production build validation are available. Commercial Stripe links are runtime configuration. Netlify is no longer an active target. GitHub and OpenAI Sites are the release records.
+Phase 6 Build step 1 removes subscription and seat entitlements from core trade operations. A verified installer or wholesaler receives the role-appropriate operating tools at A$0, regardless of current or historical Stripe billing state. Verification, account status, role permissions and customer privacy remain the access controls.
 
-The current release also includes a public certificate-price education guide. It stores six months of validated reported trades for STC, ESC, VEEC, PRC, LGC, ACCU and SMC, refreshes through the scheduled worker and clearly labels the values as indicative reported trades rather than a live exchange quote or guaranteed customer rebate.
+The trade dashboard no longer presents new paid plans or paid referral rewards. The historical membership route now explains free verified access and retains only the Stripe portal path required by businesses with an existing subscription. Marketplace allocation and approved wholesaler product visibility no longer depend on billing or feature-grant rows.
 
-The P1 opportunity, catalogue, account, inbox and product-enquiry workspaces are feature-owned. Account list state, saved views, moderation, exports and privacy boundaries now live in `AdminAccountWorkspace`; product-enquiry filtering and summaries now live in `AdminProductEnquiryWorkspace`. The shared list-view request boundary is used by account, opportunity and catalogue workspaces. The admin performance panel now evaluates explicit 7-day SLOs and shows read-only query plans for the principal keyset lists. The remaining high-value maintainability risk is the still-large admin shell, especially its referral state. Do not start a general rewrite.
+Installer opportunity cards now expose Create quote, Create job and Book site visit actions. Job and visit conversion preserves the owner-scoped opportunity match identifier as the CRM source reference. The CRM continues to show a protected customer and broad service region rather than household contact or street-address data.
+
+The previous P1 referral-workspace extraction is deferred. Phase 6 now owns the product sequence because the roadmap explicitly supersedes the subscription-led operating model.
 
 ## Recommended next milestone
 
-### P1-E: extract the referral workspace
+### P6-2A: establish the customer and service-site foundation
 
-Outcome: make referral-reward review easier to maintain and test without changing eligibility, Stripe actions or administrator workflow.
+Outcome: let a verified trade keep one customer account with multiple contacts, service sites and installed assets without extending the current aggregate CRM job record.
 
 ### In scope
 
-- Extract the referrals tab from `src/components/AdminOperationsPortal.tsx` into an `AdminReferralWorkspace` feature component.
-- Move only referral list state, moderation actions, status summaries and table rendering into that feature boundary.
-- Preserve the existing shell, authentication, notification routing, referral API contract, eligibility rules, Stripe retry action and accessible controls.
-- Move only referral-specific CSS after checking desktop and mobile behaviour.
-- Add executable tests at the feature boundary for approval, rejection, retry, eligibility and privacy-safe rendering.
+- Add explicit owner-scoped customer-account, customer-contact, service-site and site-contact entities.
+- Link current direct-trade CRM customers to the new account and site boundary without changing protected marketplace privacy.
+- Support multiple sites and contacts per customer account.
+- Add service-site access instructions, parking, hazards and service contacts with explicit privacy and role checks.
+- Add focused APIs and CRM views for creating, editing and selecting the authoritative customer and site.
+- Add additive D1 migrations, executable route/domain tests and responsive desktop/mobile checks.
 
 ### Explicitly out of scope
 
-- Opportunities, catalogue, accounts, inbox, customers, partners, billing, product enquiries, field app and consumer dashboard changes.
-- API schema changes, database migrations, new dependencies, visual redesign, text rewrites or broad CSS formatting.
-- Changing administrator roles, referral eligibility, Stripe terms or privacy policy.
-
-### Existing touchpoints
-
-- `src/components/AdminOperationsPortal.tsx`: referral state begins near line 177, loader near line 225, moderation near line 418 and UI near line 1036.
-- `src/app/api/admin/referrals/route.ts`: retain its current eligibility, moderation and audit contract.
-- `src/lib/stripe-referral-server.ts`: retain the existing idempotent reward boundary.
-- `src/app/globals.css`: move only selectors demonstrably owned by the extracted referral workspace.
-
-### Implementation sequence
-
-1. Read the guardrails, release truth and this handover. Confirm the current referral route and UI behaviour before editing.
-2. Extract the referral types and data client first, keeping request parameters and result handling identical.
-3. Move the referral workspace UI behind explicit props from the admin shell.
-4. Remove duplicated parent state only after child behaviour is passing.
-5. Move feature-owned styles, then verify desktop and mobile layouts, table alignment, focus order, search, filters and CSV export.
-6. Update this handover, release truth and the audit register only if implementation state changes.
+- Marketplace, email, SMS, telephony or public API enquiry ingestion.
+- CSV or Excel import.
+- Quote line items, online acceptance, deposits or invoices.
+- Scheduling redesign, stock, purchasing, accounting, AI or mobile-field changes.
+- Releasing protected marketplace contact or street-address fields.
 
 ### Acceptance criteria
 
-- Administrators can review, approve, reject and retry referral actions exactly as before.
-- Notification routing preserves its existing referral destination and status feedback.
-- Referral rows retain their designed data presentation and mobile remains readable without horizontal page overflow.
-- Referral data remains limited to the existing business-account contract.
-- No new dependency, migration, endpoint or duplicate business rule is introduced.
-- `npm run validate` passes. Focused account-workspace tests and a desktop/mobile feature check pass before release.
+- One trade-owned customer account can have multiple contacts and multiple service sites.
+- Each service site can have its own contacts, access instructions, parking and hazard notes.
+- Existing direct-customer CRM records remain accessible and are linked without duplicate entry.
+- Protected marketplace jobs remain region-only until existing consent and assignment rules authorise an address.
+- Every read and write is same-origin, authenticated, owner-scoped and role-checked.
+- Desktop and mobile CRM layouts remain readable without horizontal page overflow.
+- npm run validate passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The extraction needs a response-schema, Stripe contract, privacy-policy or database change.
-- The CSS selectors cannot be isolated without affecting another admin tab.
-- The desired UX needs new product decisions, such as revised referral rewards or eligibility criteria.
-- The work expands into customers, partner management, billing or product-enquiry extraction.
+- The migration would require rewriting shared migration history.
+- Existing direct-customer records cannot be linked without an owner-visible reconciliation decision.
+- The change requires releasing protected marketplace identity, contact or service-address data.
+- The work expands into enquiry-channel ingestion, quote redesign, finance or field workflow.
 
-## Recommendation after P1-E
+## Recommendation after P6-2A
 
-Reassess the admin shell after the referral extraction. The inbox, account, opportunity, catalogue and enquiry boundaries are feature-owned; only consolidate further where an additional extraction proves a stable common contract.
+Build P6-2B as the unified enquiry inbox and generic CSV or Excel import contract. Use the customer and service-site entities from P6-2A as the only conversion targets.

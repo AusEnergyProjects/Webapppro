@@ -23,12 +23,13 @@ test("project product lists and wholesaler enquiries are durable", () => {
   assert.match(selections, /SELECT DISTINCT supplier_uid/);
 });
 
-test("installer selection enforces paid access, ownership and wholesaler visibility", () => {
+test("installer selection enforces verification, ownership and wholesaler visibility", () => {
   assert.match(selections, /requireFirebaseIdentity/);
   assert.match(selections, /accountHasFeature/);
   assert.match(selections, /installer_marketplace/);
   assert.match(selections, /firebase_uid = \? AND status = 'draft'/);
-  assert.match(selections, /fg\.feature_key = 'supplier_visibility'/);
+  assert.match(selections, /a\.verification_status = 'approved'/);
+  assert.doesNotMatch(selections, /fg\.feature_key = 'supplier_visibility'/);
   assert.match(selections, /p\.listing_status = 'published'/);
   assert.match(selections, /p\.review_status = 'approved'/);
   assert.match(selections, /Quantity must start at/);

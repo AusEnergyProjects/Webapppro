@@ -33,6 +33,9 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - Synthetic scale fixtures separated from production migrations.
 - Uppercase canonical Australian state codes for new writes, filters and normalisation.
 - Server-configured membership checkout, billing portal and webhook payment-link mapping.
+- Phase 6 free trade access: verified installers and wholesalers receive role-appropriate CRM, leads, marketplace, scheduling, team, field, forms, purchasing, catalogue and handover tools without a subscription, seat or per-lead entitlement.
+- Marketplace opportunities expose direct quote, CRM job and dated site-visit actions while retaining the protected opportunity match as the owner-scoped source reference.
+- Historical Stripe subscriptions remain manageable through the billing portal, but the public and dashboard journeys no longer offer a new paid plan or paid referral reward for core trade access.
 - Feature-owned admin account, opportunity, catalogue, inbox and product-enquiry workspaces, with shared saved-list request helpers.
 - Admin performance SLO dashboard with 7-day p95 latency, average database time, error-rate and sample-size assessment plus read-only keyset query-plan checks.
 - Stripe production preflight on 17 July 2026: no active account tasks; four active Direct Trade membership payment links at the configured monthly and annual prices; one active membership webhook destination subscribing to five events with a 0% error rate.
@@ -52,7 +55,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 
 ## External or unverified state
 
-- Stripe production account status, membership payment links and webhook destination were inspected on 17 July 2026. Webhook signing secrets are intentionally non-displayable and must remain configured as deployment secrets; a future credential rotation or paid-membership release requires a fresh dashboard verification.
+- Stripe production account status, historical membership payment links and webhook destination were inspected on 17 July 2026. Phase 6 supersedes new subscription-led core access. Existing subscribers retain a billing-portal path while product and commercial owners determine the retirement, cancellation or credit process. Webhook signing secrets remain deployment secrets.
 - Production Sites version 121 was audited on 17 July 2026 and is sourced from `9a497c3` on `codex/sites-custom-domain-migration`. Do not publish an older feature branch directly over that version; first integrate the custom-domain changes and rerun the release audit.
 - The canonical custom-domain response currently exposes HTTPS, HSTS and `X-Content-Type-Options`, but the intended permissions, referrer and frame headers were not observed and no CSP was present. Resolve this before the next public release.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.

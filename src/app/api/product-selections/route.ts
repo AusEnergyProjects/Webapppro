@@ -140,12 +140,7 @@ export async function POST(request: Request) {
         db.prepare(`SELECT p.id, p.firebase_uid, p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment
           FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
           WHERE p.id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
-            AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
-            AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
-              SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
-                AND fg.feature_key = 'supplier_visibility' AND fg.status = 'active'
-                AND (fg.expires_at = '' OR fg.expires_at > ?)
-            ))`).bind(productId, now).first<Record<string, unknown>>(),
+            AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'`).bind(productId).first<Record<string, unknown>>(),
       ]);
       if (!list) return adminJson({ ok: false, error: "Choose an editable draft product list." }, 404);
       if (!product) return adminJson({ ok: false, error: "This product is no longer available for selection." }, 409);

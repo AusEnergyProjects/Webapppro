@@ -44,17 +44,26 @@ test("every Business Hub read and write is authenticated, same-origin and owner 
   assert.match(route, /w\.record_status = 'active'/);
 });
 
-test("free access, membership expansion and premium team access are enforced server side", () => {
+test("verified trade access and team access are enforced server side", () => {
   assert.match(entitlements, /key: "business_operations"/);
   assert.match(entitlements, /key: "team_access"/);
-  assert.match(route, /FREE_ACTIVE_LIMIT = 5/);
   assert.match(route, /entitlements\.features\.business_operations/);
   assert.match(route, /entitlements\.features\.team_access/);
   assert.match(route, /FULL_ACCESS_REQUIRED/);
   assert.match(route, /TEAM_ACCESS_REQUIRED/);
-  assert.match(hub, /Free foundation/);
-  assert.match(hub, /Unlock platform conversion/);
-  assert.match(dashboard, /Manage up to five privacy-safe internal work records/);
+  assert.match(hub, /Verified trade access/);
+  assert.match(hub, /No card or subscription is required/);
+  assert.match(dashboard, /Core trade operations cost A\$0/);
+});
+
+test("marketplace opportunity actions preserve the match through quote and CRM conversion", () => {
+  assert.match(dashboard, />Create job</);
+  assert.match(dashboard, />Book site visit</);
+  assert.match(dashboard, /<InstallerPlatformQuote matchId=\{opportunity\.matchId\}/);
+  assert.match(dashboard, /sourceReference: matchId/);
+  assert.match(route, /source_reference = m\.id/);
+  assert.match(route, /createdWorkOrderId: workOrderId/);
+  assert.match(route, /m\.status IN \('interested', 'connected'\)/);
 });
 
 test("platform conversion respects installer and wholesaler role boundaries", () => {

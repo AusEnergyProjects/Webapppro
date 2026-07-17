@@ -278,7 +278,7 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(installerUi, /Prices are wholesaler-supplied before GST/);
 });
 
-test("Stripe memberships are account matched, signed and term aware", () => {
+test("legacy Stripe memberships remain manageable while core access is free", () => {
   assert.match(billingRoute, /client_reference_id/);
   assert.match(billingRoute, /prefilled_email/);
   assert.match(commercialConfig, /STRIPE_BILLING_PORTAL_URL/);
@@ -287,7 +287,7 @@ test("Stripe memberships are account matched, signed and term aware", () => {
   assert.match(stripeWebhook, /checkout\.session\.completed/);
   assert.match(stripeWebhook, /customer\.subscription\.updated/);
   assert.match(stripeWebhook, /active_cancels_at_period_end/);
-  assert.match(membership, /Cancel any time/);
-  assert.match(membership, /prepaid 12-month term/i);
-  assert.match(membership, /Australian Consumer Law/);
+  assert.match(membership, /No new subscription is required for core access/);
+  assert.match(membership, /Manage an existing Stripe membership/);
+  assert.doesNotMatch(membership, /Sign in to choose this plan/);
 });

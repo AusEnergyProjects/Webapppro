@@ -16,7 +16,7 @@ test("the homepage connects installers and suppliers to a participation route", 
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
   assert.match(form, /Create your free TLink account/);
-  assert.match(form, /No per-lead fees/i);
+  assert.match(form, /No card or subscription/i);
   assert.doesNotMatch(form, /free lead|included lead|paid lead/i);
   assert.match(page, /DirectTradePartnerForm/);
 });
@@ -48,22 +48,13 @@ test("Google sign in uses the official identity mark rather than a simulated bad
   assert.doesNotMatch(form, /aria-hidden="true">G<\/span>/);
 });
 
-test("the starter dashboard separates membership from opportunity matching", () => {
+test("the starter dashboard makes verified core access free", () => {
   assert.match(dashboardPage, /DirectTradeDashboard/);
   assert.match(dashboard, /No opportunities assigned/);
-  assert.match(dashboard, /No per-lead purchase or bidding is required/);
-  assert.match(
-    dashboard,
-    /Stripe securely collects payment details/,
-  );
-  assert.match(dashboard, /Start annual membership with Stripe/);
-  assert.match(dashboard, /Cancel any time/);
-  assert.match(dashboard, /including GST/);
-  assert.match(
-    dashboard,
-    /both renewal dates move forward by one full calendar\s+month/,
-  );
-  assert.match(form, /Member referral applied/);
+  assert.match(dashboard, /Core trade operations cost A\$0/);
+  assert.match(dashboard, /No card or subscription is required/);
+  assert.doesNotMatch(dashboard, /Start annual membership with Stripe|including GST/);
+  assert.match(form, /Referral recorded/);
   assert.match(form, /referralCode/);
   assert.match(dashboard, /partnerType === "supplier"/);
 });

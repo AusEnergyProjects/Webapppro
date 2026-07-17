@@ -40,7 +40,7 @@ function lifecycleError(error: unknown) {
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Asset lifecycle tools are available to installer accounts." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Asset service schedules require paid Business Hub access or an administrator grant." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using asset service schedules." }, 403);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "ASSET_NOT_FOUND") return adminJson({ ok: false, error: "Installed asset not found." }, 404);
   if (code === "PLAN_NOT_FOUND") return adminJson({ ok: false, error: "Service schedule not found." }, 404);

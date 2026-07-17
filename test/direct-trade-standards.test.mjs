@@ -19,8 +19,8 @@ test("Direct Trade standards are connected to every marketplace entry journey", 
   assert.match(partners, /href="\/direct-trade\/standards">Read the marketplace and customer standards/);
 });
 
-test("standards separate membership from licensing and scheme approval", () => {
-  assert.match(standards, /TLink membership does not replace it/);
+test("standards separate free platform access from licensing and scheme approval", () => {
+  assert.match(standards, /TLink access does not replace it/);
   assert.match(
     standards,
     /legal, licensing, safety, scheme and\s+consumer obligation/,
@@ -34,11 +34,11 @@ test("standards separate membership from licensing and scheme approval", () => {
 test("matching and funding rules do not permit paid ranking claims", () => {
   assert.match(
     standards,
-    /subscription does not buy higher placement, exclusivity or\s+guaranteed work/,
+    /Payment does not buy higher placement, exclusivity or guaranteed work/,
   );
   assert.match(
     standards,
-    /will not replace\s+verification, purchase a favourable ranking or create a separate\s+charge for each opportunity/,
+    /does not replace\s+verification, purchase a favourable ranking or create a separate\s+charge for each opportunity/,
   );
   assert.match(
     standards,

@@ -1401,6 +1401,15 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .dashboard-opportunity-actions button { background: #fff; border: 1px solid #9bbdb1; border-radius: 9px; color: var(--color-aea-green-dark); cursor: pointer; font-size: .64rem; font-weight: 850; min-height: 36px; padding: 7px 11px; }
 .dashboard-opportunity-actions button.primary { background: var(--action-primary); border: 0; color: #fff; }
 .dashboard-opportunity-actions button:disabled { cursor: default; opacity: .62; }
+.dashboard-opportunity-conversion { align-items: end; background: #fff; border: 1px solid #b8d5ca; border-radius: 12px; display: grid; gap: 10px; grid-template-columns: minmax(220px, 1fr) auto minmax(145px, auto) auto; margin-top: 14px; padding: 12px; }
+.dashboard-opportunity-conversion > div { align-self: center; }
+.dashboard-opportunity-conversion strong, .dashboard-opportunity-conversion span { display: block; }
+.dashboard-opportunity-conversion strong { color: var(--color-aea-ink); font-size: .72rem; }
+.dashboard-opportunity-conversion span { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.45; margin-top: 3px; }
+.dashboard-opportunity-conversion label { color: var(--color-aea-ink); display: grid; font-size: .59rem; font-weight: 850; gap: 5px; }
+.dashboard-opportunity-conversion input { border: 1px solid #9bbdb1; border-radius: 9px; min-height: 38px; padding: 7px 9px; width: 100%; }
+.dashboard-opportunity-conversion button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 38px; padding: 8px 11px; }
+.dashboard-opportunity-conversion button:disabled { cursor: default; opacity: .62; }
 .dashboard-opportunity-closed { color: var(--color-aea-muted); display: block; font-size: .62rem; margin-top: 11px; }
 .dashboard-profile-summary { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
 .dashboard-profile-summary > div { background: #f8fbfc; border: 1px solid var(--color-aea-line); border-radius: 12px; padding: 14px; }
@@ -3568,7 +3577,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .customer-handover-assets dl,
   .installer-quote-field-grid,
   .installer-platform-quote fieldset > div,
-  .installer-quote-summary dl { grid-template-columns: 1fr; }
+  .installer-quote-summary dl,
+  .dashboard-opportunity-conversion { grid-template-columns: 1fr; }
   .customer-editor-header,
   .customer-project-detail-header { align-items: flex-start; flex-direction: column; gap: 15px; padding: 22px 20px; }
   .customer-stepper { height: 66px; overflow: hidden; }

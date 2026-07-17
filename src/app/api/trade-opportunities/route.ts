@@ -37,11 +37,7 @@ async function productSnapshot(installerUid: string, productListId: string) {
     JOIN trade_accounts a ON a.firebase_uid = i.supplier_uid
     WHERE i.list_id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
       AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
-      AND (a.billing_status IN ('trial', 'active', 'active_cancels_at_period_end') OR EXISTS (
-        SELECT 1 FROM trade_account_feature_grants fg WHERE fg.firebase_uid = a.firebase_uid
-          AND fg.feature_key = 'supplier_visibility' AND fg.status = 'active'
-          AND (fg.expires_at = '' OR fg.expires_at > ?)
-      )) ORDER BY p.brand, p.name`).bind(productListId, new Date().toISOString()).all<Record<string, unknown>>();
+      ORDER BY p.brand, p.name`).bind(productListId).all<Record<string, unknown>>();
   if (!rows.results.length || rows.results.length !== Number(allItems?.count || 0)) throw new Error("PRODUCT_LIST_UNAVAILABLE");
   const products = rows.results.map((row: Record<string, unknown>) => ({
     productId: row.product_id,
@@ -108,7 +104,7 @@ export async function GET(request: Request) {
     );
   if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
     return json(
-      { ok: false, error: "Opportunity leads are available with paid membership or an administrator feature grant." },
+      { ok: false, error: "Complete trade verification before opening marketplace opportunities." },
       403,
     );
   await expireStaleOpportunities();
@@ -217,7 +213,7 @@ export async function PATCH(request: Request) {
     );
   if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
     return json(
-      { ok: false, error: "Opportunity responses require paid lead access." },
+      { ok: false, error: "Complete trade verification before responding to marketplace opportunities." },
       403,
     );
   await expireStaleOpportunities();
@@ -249,7 +245,7 @@ export async function PATCH(request: Request) {
       const code = error instanceof Error ? error.message : "";
       return json({ ok: false, error: code === "PRODUCT_LIST_REQUIRED"
         ? "Choose one of your saved product lists."
-        : "Every quoted product must still be approved and supplied by a visible paid wholesaler." }, 409);
+        : "Every quoted product must still be approved and supplied by a verified wholesaler." }, 409);
     }
     const totalCentsExGst = snapshot.subtotalCentsExGst + quote.labourCentsExGst + quote.otherCentsExGst;
     if (totalCentsExGst <= 0) return json({ ok: false, error: "Add a product, labour or service amount." }, 400);
