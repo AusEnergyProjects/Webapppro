@@ -169,6 +169,34 @@ type AccountResult = {
 const optionLabel = (options: Array<[string, string]>, value: string) => options.find(([key]) => key === value)?.[1] || value.replaceAll("_", " ");
 const currency = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
 const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+async function prepareEvidenceUpload(item: PendingProjectEvidence) {
+  const quotingPhotoCategories = new Set(["property-photo", "existing-equipment", "switchboard"]);
+  if (!quotingPhotoCategories.has(item.category) || !item.file.type.startsWith("image/")) return item.file;
+  const objectUrl = URL.createObjectURL(item.file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("PHOTO_CONVERSION_FAILED"));
+      element.src = objectUrl;
+    });
+    const maximumDimension = 2400;
+    const scale = Math.min(1, maximumDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("PHOTO_CONVERSION_FAILED");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
+      (value) => value ? resolve(value) : reject(new Error("PHOTO_CONVERSION_FAILED")), "image/jpeg", 0.88,
+    ));
+    const baseName = item.file.name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 80) || "property-photo";
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 const statusLabels: Record<string, string> = {
   draft: "Draft",
   matching: "Installer matching",
@@ -474,11 +502,12 @@ export function CustomerDashboard({ initialView = "overview", initialProjectId =
     if (!user) throw new Error("Sign in to continue.");
     const token = await user.getIdToken();
     for (const item of evidence) {
+      const uploadFile = await prepareEvidenceUpload(item);
       const form = new FormData();
       form.set("projectId", projectId);
       form.set("clientUploadId", item.id);
       form.set("category", item.category);
-      form.set("file", item.file);
+      form.set("file", uploadFile);
       const uploadResponse = await fetch("/api/customer-project-evidence", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },

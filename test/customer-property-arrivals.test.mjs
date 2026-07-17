@@ -96,6 +96,10 @@ test("project evidence is R2 backed with quoting photos shared to allocated inst
   assert.match(evidenceRoute, /verification_status = 'approved'/);
   assert.match(evidenceRoute, /client_upload_id/);
   assert.match(evidenceRoute, /hasAllowedSignature/);
+  assert.match(evidenceRoute, /sanitiseQuotingPhoto/);
+  assert.match(evidenceRoute, /stripJpegMetadata/);
+  assert.match(evidenceRoute, /stripPngMetadata/);
+  assert.match(evidenceRoute, /stripWebpMetadata/);
   assert.match(evidenceRoute, /customer-quoting-photo/);
   assert.match(evidenceRoute, /'installer', \?, 'viewed'/);
   assert.match(opportunityRoute, /e\.category IN \('property-photo', 'existing-equipment', 'switchboard'\)/);
@@ -118,6 +122,8 @@ test("only an accepted installer can propose windows or convert the platform lea
 test("customer devices can choose files or capture a new property photo", () => {
   assert.match(customerUi, /multiple accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif,application\/pdf"/);
   assert.match(customerUi, /capture="environment"/);
+  assert.match(customerUi, /prepareEvidenceUpload/);
+  assert.match(customerUi, /maximumDimension = 2400/);
   assert.match(customerUi, /shared with every verified installer allocated to this enquiry/);
   assert.match(customerUi, /Supporting documents remain restricted until I accept one connected installer/);
   assert.match(customerRoute, /confirmInstallerPhotoSharing !== true/);

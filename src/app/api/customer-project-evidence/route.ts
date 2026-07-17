@@ -11,8 +11,6 @@ const ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/heic",
-  "image/heif",
 ]);
 const CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard", "supporting-document", "other"]);
 const QUOTING_PHOTO_CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard"]);
@@ -66,12 +64,82 @@ function hasAllowedSignature(bytes: Uint8Array, contentType: string) {
   if (contentType === "image/webp") return bytes.length >= 12
     && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF"
     && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
-  if (["image/heic", "image/heif"].includes(contentType)) {
-    if (bytes.length < 12 || String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp") return false;
-    return ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"]
-      .includes(String.fromCharCode(...bytes.slice(8, 12)));
-  }
   return false;
+}
+
+function joinBytes(parts: Uint8Array[]) {
+  const output = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) { output.set(part, offset); offset += part.byteLength; }
+  return output;
+}
+
+function stripJpegMetadata(bytes: Uint8Array) {
+  const parts = [bytes.slice(0, 2)];
+  let offset = 2;
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xff || offset + 1 >= bytes.length) return null;
+    let markerOffset = offset + 1;
+    while (bytes[markerOffset] === 0xff) markerOffset += 1;
+    const marker = bytes[markerOffset];
+    if (marker === 0xda || marker === 0xd9) { parts.push(bytes.slice(offset)); return joinBytes(parts); }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      parts.push(bytes.slice(offset, markerOffset + 1)); offset = markerOffset + 1; continue;
+    }
+    if (markerOffset + 2 >= bytes.length) return null;
+    const length = (bytes[markerOffset + 1] << 8) | bytes[markerOffset + 2];
+    const end = markerOffset + 1 + length;
+    if (length < 2 || end > bytes.length) return null;
+    if (!((marker >= 0xe1 && marker <= 0xef) || marker === 0xfe)) parts.push(bytes.slice(offset, end));
+    offset = end;
+  }
+  return null;
+}
+
+function stripPngMetadata(bytes: Uint8Array) {
+  const parts = [bytes.slice(0, 8)];
+  const blocked = new Set(["eXIf", "iTXt", "tEXt", "zTXt", "tIME"]);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 8;
+  while (offset + 12 <= bytes.length) {
+    const length = view.getUint32(offset);
+    const end = offset + 12 + length;
+    if (end > bytes.length) return null;
+    const type = String.fromCharCode(...bytes.slice(offset + 4, offset + 8));
+    if (!blocked.has(type)) parts.push(bytes.slice(offset, end));
+    offset = end;
+    if (type === "IEND") return joinBytes(parts);
+  }
+  return null;
+}
+
+function stripWebpMetadata(bytes: Uint8Array) {
+  const parts = [bytes.slice(0, 12)];
+  const blocked = new Set(["EXIF", "XMP ", "ICCP"]);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const size = view.getUint32(offset + 4, true);
+    const end = offset + 8 + size + (size % 2);
+    if (end > bytes.length) return null;
+    const type = String.fromCharCode(...bytes.slice(offset, offset + 4));
+    if (!blocked.has(type)) {
+      const chunk = bytes.slice(offset, end);
+      if (type === "VP8X" && chunk.length > 8) chunk[8] &= ~0x2c;
+      parts.push(chunk);
+    }
+    offset = end;
+  }
+  const output = joinBytes(parts);
+  new DataView(output.buffer).setUint32(4, output.byteLength - 8, true);
+  return output;
+}
+
+function sanitiseQuotingPhoto(bytes: Uint8Array, contentType: string) {
+  if (contentType === "image/jpeg") return stripJpegMetadata(bytes);
+  if (contentType === "image/png") return stripPngMetadata(bytes);
+  if (contentType === "image/webp") return stripWebpMetadata(bytes);
+  return null;
 }
 
 function publicRecord(record: EvidenceRecord) {
@@ -190,10 +258,12 @@ export async function POST(request: Request) {
   if (!(file instanceof File) || !file.name) return json({ ok: false, error: "Choose a photo or document to upload." }, 400);
   if (!clientUploadId) return json({ ok: false, error: "The upload reference was missing. Choose the file again." }, 400);
   if (!CATEGORIES.has(category)) return json({ ok: false, error: "Choose a valid property evidence category." }, 400);
-  if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a PDF, JPEG, PNG, WebP or supported phone photo." }, 400);
+  if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a PDF, JPEG, PNG or WebP file. Unsupported phone photos must be converted to JPEG first." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "Each file must be no larger than 8 MB." }, 400);
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   if (!hasAllowedSignature(fileBytes, file.type)) return json({ ok: false, error: "The file contents do not match the selected photo or document type." }, 400);
+  const storedBytes = QUOTING_PHOTO_CATEGORIES.has(category) ? sanitiseQuotingPhoto(fileBytes, file.type) : fileBytes;
+  if (!storedBytes) return json({ ok: false, error: "This photo could not be made safe for installer sharing. Convert it to JPEG and try again." }, 400);
   const existing = await getD1().prepare(`SELECT * FROM customer_project_evidence
     WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ? AND status = 'active'`)
     .bind(projectId, user.uid, clientUploadId).first<EvidenceRecord>();
@@ -207,7 +277,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const fileName = safeFileName(file.name);
   const bucket = getEvidenceBucket();
-  await bucket.put(objectKey, fileBytes.buffer, {
+  await bucket.put(objectKey, storedBytes.buffer, {
     httpMetadata: { contentType: file.type },
     customMetadata: { customerUid: user.uid, projectId, evidenceId: id },
   });
@@ -216,7 +286,7 @@ export async function POST(request: Request) {
       getD1().prepare(`INSERT INTO customer_project_evidence
         (id, project_id, customer_uid, client_upload_id, category, file_name, content_type, size_bytes, object_key, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .bind(id, projectId, user.uid, clientUploadId, category, fileName, file.type, file.size, objectKey, now, now),
+        .bind(id, projectId, user.uid, clientUploadId, category, fileName, file.type, storedBytes.byteLength, objectKey, now, now),
       getD1().prepare(`INSERT INTO customer_project_evidence_events
         (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
         VALUES (?, ?, ?, ?, '', 'customer', ?, 'uploaded', ?)`)
@@ -229,7 +299,7 @@ export async function POST(request: Request) {
     throw error;
   }
   return json({ ok: true, evidence: publicRecord({ id, project_id: projectId, customer_uid: user.uid,
-    client_upload_id: clientUploadId, category, file_name: fileName, content_type: file.type, size_bytes: file.size, object_key: objectKey,
+    client_upload_id: clientUploadId, category, file_name: fileName, content_type: file.type, size_bytes: storedBytes.byteLength, object_key: objectKey,
     status: "active", created_at: now }) }, 201);
 }
 
