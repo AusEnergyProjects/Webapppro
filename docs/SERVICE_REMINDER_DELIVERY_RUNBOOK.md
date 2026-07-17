@@ -6,7 +6,7 @@ The code and database boundary are safe while providers are unconfigured. Both c
 
 ## Current production setup
 
-As of 17 July 2026, the AEA Resend account is active under the business Google identity. A sending-only production key and webhook signing secret are protected in Sites. The dedicated `reminders.ausenergyassessments.com` DKIM, SPF and return-path records are present in Squarespace DNS and the domain is verified in Resend. Email remains disabled until the current Sites environment revision is deployed and an owner deliberately enables the channel.
+As of 17 July 2026, the AEA Resend account is active under the business Google identity. A sending-only production key and webhook signing secret are protected in Sites. The dedicated `reminders.ausenergyassessments.com` DKIM, SPF and return-path records are present in Squarespace DNS and the domain is verified in Resend. Sites environment revision 13 is deployed. Email remains disabled until an owner deliberately enables the channel.
 
 The AEA Twilio account owner mobile is verified and the one-time recovery code is saved. The `AEA service reminders` Messaging Service is configured with the production delivery callback and Advanced Opt-Out. Its protected account credentials and Messaging Service identifier are stored in Sites environment revision 13. The trial account has no sender and no Verify Service, so SMS remains disabled. Upgrade the account, complete the Australian sender and compliance requirements, attach the approved sender, create a Verify Service and store `TWILIO_VERIFY_SERVICE_SID` before enabling SMS.
 
