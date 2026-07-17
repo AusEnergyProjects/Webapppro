@@ -1075,6 +1075,86 @@ export const tradeCrmJobDetails = sqliteTable("trade_crm_job_details", {
   index("trade_crm_job_details_customer_idx").on(table.crmCustomerId, table.updatedAt),
 ]);
 
+export const tradeCrmQuotes = sqliteTable("trade_crm_quotes", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  serviceSiteId: text("service_site_id").notNull(),
+  quoteNumber: text("quote_number").notNull(),
+  currentVersionNumber: integer("current_version_number").notNull().default(1),
+  status: text("status").notNull().default("draft"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quotes_owner_work_idx").on(table.firebaseUid, table.workOrderId),
+  uniqueIndex("trade_crm_quotes_owner_number_idx").on(table.firebaseUid, table.quoteNumber),
+  index("trade_crm_quotes_customer_idx").on(table.firebaseUid, table.crmCustomerId, table.updatedAt),
+]);
+
+export const tradeCrmQuoteVersions = sqliteTable("trade_crm_quote_versions", {
+  id: text("id").primaryKey(),
+  quoteId: text("quote_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  status: text("status").notNull().default("draft"),
+  acceptanceEmail: text("acceptance_email").notNull().default(""),
+  subtotalCents: integer("subtotal_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull().default(0),
+  terms: text("terms").notNull().default(""),
+  validUntil: text("valid_until").notNull().default(""),
+  consentStatement: text("consent_statement").notNull().default(""),
+  issuedAt: text("issued_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quote_versions_quote_version_idx").on(table.quoteId, table.versionNumber),
+  index("trade_crm_quote_versions_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_crm_quote_versions_acceptance_email_idx").on(table.acceptanceEmail, table.status, table.issuedAt),
+]);
+
+export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
+  id: text("id").primaryKey(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  lineType: text("line_type").notNull(),
+  description: text("description").notNull(),
+  quantityMilli: integer("quantity_milli").notNull(),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  taxCode: text("tax_code").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  taxCents: integer("tax_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quote_items_version_position_idx").on(table.quoteVersionId, table.position),
+  index("trade_crm_quote_items_owner_idx").on(table.firebaseUid, table.quoteVersionId),
+]);
+
+export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances", {
+  id: text("id").primaryKey(),
+  quoteId: text("quote_id").notNull(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  customerFirebaseUid: text("customer_firebase_uid").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  actorEmailVerified: integer("actor_email_verified", { mode: "boolean" }).notNull().default(false),
+  actorAuthTime: integer("actor_auth_time").notNull().default(0),
+  actorSignInProvider: text("actor_sign_in_provider").notNull().default(""),
+  decision: text("decision").notNull(),
+  consentStatement: text("consent_statement").notNull(),
+  decidedAt: text("decided_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quote_acceptances_version_idx").on(table.quoteVersionId),
+  index("trade_crm_quote_acceptances_owner_idx").on(table.firebaseUid, table.workOrderId, table.decidedAt),
+  index("trade_crm_quote_acceptances_customer_idx").on(table.customerFirebaseUid, table.decidedAt),
+]);
+
 export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),

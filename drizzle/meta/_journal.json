@@ -344,6 +344,13 @@
       "when": 1784282723038,
       "tag": "0049_customer_asset_timeline",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1784284569123,
+      "tag": "0050_versioned_trade_quotes",
+      "breakpoints": true
     }
   ]
 }

@@ -4443,3 +4443,82 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .asset-filters input { grid-column: auto; }
   .asset-list article > header, .asset-list footer { align-items: stretch; flex-direction: column; }
 }
+
+.trade-quote-panel { background: #f7faf8; border: 1px solid #d5e5de; border-radius: 12px; display: grid; gap: 16px; margin-top: 18px; padding: 18px; }
+.trade-quote-panel.unavailable { background: #fff8df; border-color: #ead68b; }
+.trade-quote-panel > header { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
+.trade-quote-panel > header span { color: var(--color-aea-green); font-size: .66rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.trade-quote-panel > header h4 { color: var(--color-aea-green-dark); margin: 4px 0; }
+.trade-quote-panel > header p, .trade-quote-panel.unavailable p { color: var(--color-aea-muted); margin: 0; }
+.quote-status { background: #e8f3ee; border-radius: 20px; color: var(--color-aea-green-dark); font-size: .68rem; padding: 6px 10px; text-transform: uppercase; }
+.quote-status.accepted { background: #dff2e4; color: #1f6537; }
+.quote-status.declined, .quote-status.superseded { background: #f2eded; color: #795454; }
+.trade-quote-lines { display: grid; gap: 7px; overflow-x: auto; }
+.trade-quote-line { display: grid; gap: 7px; grid-template-columns: 120px minmax(210px, 2fr) 90px 110px 100px 78px; min-width: 760px; }
+.trade-quote-line.headings { color: var(--color-aea-muted); font-size: .62rem; font-weight: 850; text-transform: uppercase; }
+.trade-quote-line input, .trade-quote-line select, .trade-quote-settings input, .trade-quote-settings select, .trade-quote-settings textarea { background: #fff; border: 1px solid #c8d8d1; border-radius: 7px; min-width: 0; padding: 9px; }
+.trade-quote-line button { background: transparent; border: 1px solid #d6c8c8; border-radius: 7px; color: #7d3e3e; cursor: pointer; }
+.quote-add-line { background: #fff; border: 1px solid var(--color-aea-green); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 800; justify-self: start; padding: 8px 12px; }
+.trade-quote-settings { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.trade-quote-settings label { display: grid; gap: 5px; }
+.trade-quote-settings label > span { color: #34594d; font-size: .7rem; font-weight: 850; }
+.trade-quote-settings label > small { color: var(--color-aea-muted); }
+.trade-quote-settings .wide { grid-column: 1 / -1; }
+.trade-quote-totals { background: #fff; border: 1px solid #d9e5e0; border-radius: 9px; display: grid; grid-template-columns: repeat(3, 1fr); }
+.trade-quote-totals div { display: grid; gap: 3px; padding: 12px; text-align: right; }
+.trade-quote-totals span { color: var(--color-aea-muted); font-size: .66rem; text-transform: uppercase; }
+.trade-quote-totals strong { color: var(--color-aea-green-dark); }
+.trade-quote-actions { display: flex; gap: 9px; justify-content: flex-end; }
+.trade-quote-actions button { background: #fff; border: 1px solid var(--color-aea-green-dark); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 850; padding: 10px 14px; }
+.trade-quote-actions button.primary { background: var(--color-aea-green-dark); color: #fff; }
+.trade-quote-actions button:disabled { cursor: not-allowed; opacity: .55; }
+.trade-quote-history { border-top: 1px solid #d9e5e0; padding-top: 12px; }
+.trade-quote-history summary { color: var(--color-aea-green-dark); cursor: pointer; font-weight: 850; }
+.trade-quote-history article { align-items: center; border-top: 1px solid #e4ece8; display: flex; gap: 10px; justify-content: space-between; padding: 10px 0; }
+.trade-quote-history article div { display: grid; gap: 3px; }
+.trade-quote-history span, .trade-quote-history small { color: var(--color-aea-muted); }
+
+.customer-trade-quotes { display: grid; gap: 20px; }
+.customer-trade-quotes > header { align-items: flex-start; display: flex; gap: 18px; justify-content: space-between; }
+.customer-trade-quotes > header span { color: var(--color-aea-green); font-size: .68rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.customer-trade-quotes > header h2 { color: var(--color-aea-green-dark); margin: 5px 0; }
+.customer-trade-quotes > header p { color: var(--color-aea-muted); margin: 0; }
+.customer-trade-quotes > header > strong { background: #e6f2ed; border-radius: 20px; color: var(--color-aea-green-dark); padding: 8px 12px; }
+.customer-trade-quote-list { display: grid; gap: 16px; }
+.customer-trade-quote-list > article { background: #fff; border: 1px solid #d8e5df; border-radius: 13px; box-shadow: 0 8px 24px rgba(22, 65, 49, .06); overflow: hidden; }
+.customer-trade-quote-list > article > header { align-items: flex-start; background: #f7faf8; display: flex; gap: 16px; justify-content: space-between; padding: 17px; }
+.customer-trade-quote-list > article > header span { color: var(--color-aea-green); font-size: .66rem; font-weight: 900; text-transform: uppercase; }
+.customer-trade-quote-list > article > header h3 { color: var(--color-aea-green-dark); margin: 5px 0; }
+.customer-trade-quote-list > article > header p { color: var(--color-aea-muted); margin: 0; }
+.customer-trade-quote-list > article > header > strong { color: var(--color-aea-green-dark); text-transform: capitalize; }
+.customer-trade-quote-lines { display: grid; overflow-x: auto; padding: 0 17px; }
+.customer-trade-quote-lines > div { align-items: center; border-bottom: 1px solid #e3ebe7; display: grid; gap: 10px; grid-template-columns: minmax(220px, 2fr) 90px 110px 100px 110px; min-width: 690px; padding: 11px 0; }
+.customer-trade-quote-lines .head { color: var(--color-aea-muted); font-size: .64rem; font-weight: 900; text-transform: uppercase; }
+.customer-trade-quote-lines span:first-child { display: grid; gap: 3px; }
+.customer-trade-quote-lines small { color: var(--color-aea-muted); text-transform: capitalize; }
+.customer-trade-quote-list dl { display: flex; gap: 20px; justify-content: flex-end; margin: 0; padding: 15px 17px; }
+.customer-trade-quote-list dl div { display: grid; gap: 3px; min-width: 110px; text-align: right; }
+.customer-trade-quote-list dt { color: var(--color-aea-muted); font-size: .65rem; font-weight: 850; text-transform: uppercase; }
+.customer-trade-quote-list dd { color: var(--color-aea-green-dark); font-size: 1rem; font-weight: 900; margin: 0; }
+.customer-quote-terms, .customer-quote-decision, .customer-quote-recorded { border-top: 1px solid #e3ebe7; padding: 15px 17px; }
+.customer-quote-terms p, .customer-quote-recorded p { color: var(--color-aea-muted); margin: 6px 0; white-space: pre-wrap; }
+.customer-quote-terms small { color: var(--color-aea-muted); }
+.customer-quote-decision { background: #f2f8f5; display: grid; gap: 14px; }
+.customer-quote-decision label { align-items: flex-start; display: flex; gap: 10px; }
+.customer-quote-decision input { margin-top: 3px; }
+.customer-quote-decision div { display: flex; gap: 9px; justify-content: flex-end; }
+.customer-quote-decision button { background: #fff; border: 1px solid var(--color-aea-green-dark); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 850; padding: 10px 14px; }
+.customer-quote-decision button.primary { background: var(--color-aea-green-dark); color: #fff; }
+.customer-quote-decision button:disabled { cursor: not-allowed; opacity: .5; }
+
+@media (max-width: 720px) {
+  .trade-quote-settings { grid-template-columns: 1fr; }
+  .trade-quote-settings .wide { grid-column: auto; }
+  .trade-quote-panel > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header { flex-direction: column; }
+  .trade-quote-history article { align-items: flex-start; flex-direction: column; }
+  .customer-trade-quote-list dl { display: grid; grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 480px) {
+  .trade-quote-totals, .customer-trade-quote-list dl { grid-template-columns: 1fr; }
+  .trade-quote-actions, .customer-quote-decision div { align-items: stretch; flex-direction: column; }
+}
