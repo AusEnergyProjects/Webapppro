@@ -12,7 +12,7 @@ Migration `0052_service_follow_up_preparation.sql` adds one owner-scoped prepara
 
 The installer dashboard and manager or coordinator staff portal now include customer, site, asset, due-state, assignee, consent and preparation-state filters. Owner and dispatch roles can assign internal preparation, suppress a follow-up with a reason, complete or reopen work, and generate deterministic customer-safe reminder content for review.
 
-Readiness requires an active customer account, an unwithdrawn customer-account consent receipt, an explicit asset lifecycle preference with reminders enabled and the customer's selected lead-time window. Missing or withdrawn consent blocks readiness. Protected marketplace records remain excluded unless they already have authorised customer ownership and direct CRM customer and site links. The API does not select customer email, phone or street-address fields.
+Readiness requires an active customer account, an unwithdrawn customer-account consent receipt, an explicit asset lifecycle preference with reminders enabled and the customer's selected lead-time window. New lifecycle preferences default off until the customer explicitly opts in. Missing or withdrawn consent blocks readiness. Protected marketplace records remain excluded unless they already have authorised customer ownership and direct CRM customer and site links. The API does not select customer email, phone or street-address fields.
 
 ## Recommended next milestone
 

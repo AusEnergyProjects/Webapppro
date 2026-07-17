@@ -12,6 +12,8 @@ const ui = read("../src/components/TradeServiceFollowUpWorkspace.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const teamPortal = read("../src/components/TradeTeamPortal.tsx");
 const lifecycleRoute = read("../src/app/api/trade-asset-lifecycle/route.ts");
+const customerLifecycleRoute = read("../src/app/api/customer-asset-lifecycle/route.ts");
+const customerLifecycleUi = read("../src/components/CustomerAssetLifecycle.tsx");
 
 test("due states and reminder windows are deterministic", () => {
   const now = new Date("2026-07-17T12:00:00Z");
@@ -73,6 +75,10 @@ test("server readiness uses explicit preference, active account consent and cust
   assert.match(route, /receipt\.withdrawn_at = ''/);
   assert.match(route, /lifecycle\.protected_job = 0 OR lifecycle\.customer_uid != ''/);
   assert.match(route, /candidate\.readiness !== "eligible"/);
+  assert.match(customerLifecycleRoute, /remindersEnabled: row \? Boolean\(row\.reminders_enabled\) : false/);
+  assert.match(customerLifecycleRoute, /recorded: Boolean\(row\)/);
+  assert.match(customerLifecycleUi, /Allow service reminders/);
+  assert.match(customerLifecycleUi, /Off until you explicitly enable it/);
 });
 
 test("status writes are revision protected, idempotently materialised and audited", () => {

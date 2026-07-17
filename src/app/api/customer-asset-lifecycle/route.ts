@@ -115,7 +115,8 @@ async function payload(customerUid: string, projectId: string, packId: string) {
   }));
   const preferences = assets.map((asset) => {
     const row = preferenceRows.results.find((item: Record<string, unknown>) => item.asset_id === asset.id);
-    return { assetId: asset.id, remindersEnabled: row ? Boolean(row.reminders_enabled) : true, reminderLeadDays: Number(row?.reminder_lead_days || 30) };
+    return { assetId: asset.id, remindersEnabled: row ? Boolean(row.reminders_enabled) : false,
+      reminderLeadDays: Number(row?.reminder_lead_days || 30), recorded: Boolean(row) };
   });
   return { assets, plans, events, notices, preferences };
 }
