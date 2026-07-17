@@ -770,11 +770,94 @@ export const tradeServiceFollowUpEvents = sqliteTable("trade_service_follow_up_e
   index("trade_service_follow_up_events_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
+export const serviceReminderChannelSettings = sqliteTable("service_reminder_channel_settings", {
+  channel: text("channel").primaryKey(),
+  provider: text("provider").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  senderLabel: text("sender_label").notNull().default("Australian Energy Assessments"),
+  dailyLimit: integer("daily_limit").notNull().default(100),
+  revision: integer("revision").notNull().default(0),
+  updatedByUid: text("updated_by_uid").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("service_reminder_channel_settings_enabled_idx").on(table.enabled, table.channel),
+]);
+
+export const serviceReminderDeliveries = sqliteTable("service_reminder_deliveries", {
+  id: text("id").primaryKey(),
+  followUpId: text("follow_up_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  assetId: text("asset_id").notNull(),
+  channel: text("channel").notNull(),
+  provider: text("provider").notNull(),
+  contentRevision: integer("content_revision").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  status: text("status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  queuedAt: text("queued_at").notNull(),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("service_reminder_deliveries_idempotency_idx").on(table.idempotencyKey),
+  uniqueIndex("service_reminder_deliveries_provider_message_idx").on(table.provider, table.providerMessageId),
+  index("service_reminder_deliveries_follow_up_idx").on(table.followUpId, table.createdAt),
+  index("service_reminder_deliveries_owner_status_idx").on(table.firebaseUid, table.status, table.createdAt),
+  index("service_reminder_deliveries_customer_channel_idx").on(table.customerUid, table.channel, table.createdAt),
+]);
+
+export const serviceReminderDeliveryEvents = sqliteTable("service_reminder_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("service_reminder_delivery_events_provider_idx").on(table.providerEventKey),
+  index("service_reminder_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
+]);
+
+export const customerServiceReminderContacts = sqliteTable("customer_service_reminder_contacts", {
+  customerUid: text("customer_uid").primaryKey(),
+  mobileE164: text("mobile_e164").notNull().default(""),
+  mobileVerifiedAt: text("mobile_verified_at").notNull().default(""),
+  pendingMobileE164: text("pending_mobile_e164").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_service_reminder_contacts_mobile_idx").on(table.mobileE164),
+]);
+
+export const customerServiceReminderOptOuts = sqliteTable("customer_service_reminder_opt_outs", {
+  id: text("id").primaryKey(),
+  customerUid: text("customer_uid").notNull(),
+  channel: text("channel").notNull(),
+  source: text("source").notNull(),
+  providerReference: text("provider_reference").notNull().default(""),
+  optedOutAt: text("opted_out_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_service_reminder_opt_outs_customer_channel_idx").on(table.customerUid, table.channel),
+  index("customer_service_reminder_opt_outs_channel_idx").on(table.channel, table.optedOutAt),
+]);
+
 export const customerAssetLifecyclePreferences = sqliteTable("customer_asset_lifecycle_preferences", {
   id: text("id").primaryKey(),
   customerUid: text("customer_uid").notNull(),
   assetId: text("asset_id").notNull(),
   remindersEnabled: integer("reminders_enabled", { mode: "boolean" }).notNull().default(true),
+  emailEnabled: integer("email_enabled", { mode: "boolean" }).notNull().default(false),
+  smsEnabled: integer("sms_enabled", { mode: "boolean" }).notNull().default(false),
   reminderLeadDays: integer("reminder_lead_days").notNull().default(30),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

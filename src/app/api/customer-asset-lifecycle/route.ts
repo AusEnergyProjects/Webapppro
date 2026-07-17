@@ -3,6 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { lifecycleStatus, safetyNoticeMatchesAsset } from "@/lib/asset-lifecycle.mjs";
 import { canCustomerAccessHandover } from "@/lib/customer-asset-ownership-server";
+import { confirmTwilioMobileVerification, normalizeAustralianMobile, serviceReminderProviderConfiguration, startTwilioMobileVerification } from "@/lib/service-reminder-delivery";
 
 export const runtime = "edge";
 
@@ -75,8 +76,16 @@ async function payload(customerUid: string, projectId: string, packId: string) {
     installedAt: String(row.installed_at || ""), warrantyEnd: String(row.warranty_end || ""),
     serviceCategory: String(row.service_category), workNumber: String(row.work_number),
   }));
+  const contactRow = await db.prepare(`SELECT mobile_e164, mobile_verified_at FROM customer_service_reminder_contacts WHERE customer_uid = ?`)
+    .bind(customerUid).first<Record<string, unknown>>();
+  const providerConfig = serviceReminderProviderConfiguration();
+  const contact = {
+    mobileMasked: contactRow?.mobile_e164 ? `******${String(contactRow.mobile_e164).slice(-3)}` : "",
+    mobileVerified: Boolean(contactRow?.mobile_verified_at),
+    smsVerificationConfigured: providerConfig.sms.configured && providerConfig.sms.verifyService,
+  };
   const assetIds = assets.map((asset) => asset.id);
-  if (!assetIds.length) return { assets: [], plans: [], events: [], notices: [], preferences: [] };
+  if (!assetIds.length) return { assets: [], plans: [], events: [], notices: [], preferences: [], contact };
   const slots = assetIds.map(() => "?").join(",");
   const [planRows, eventRows, noticeRows, preferenceRows, acknowledgementRows] = await Promise.all([
     db.prepare(`SELECT id, asset_id, service_type, cadence_months, next_due_at, status, updated_at
@@ -88,7 +97,7 @@ async function payload(customerUid: string, projectId: string, packId: string) {
       WHERE status = 'published' AND (expires_at = '' OR expires_at >= ?)
       ORDER BY CASE severity WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END, published_at DESC`)
       .bind(new Date().toISOString().slice(0, 10)).all<Record<string, unknown>>(),
-    db.prepare(`SELECT asset_id, reminders_enabled, reminder_lead_days, updated_at
+    db.prepare(`SELECT asset_id, reminders_enabled, email_enabled, sms_enabled, reminder_lead_days, updated_at
       FROM customer_asset_lifecycle_preferences WHERE customer_uid = ? AND asset_id IN (${slots})`)
       .bind(customerUid, ...assetIds).all<Record<string, unknown>>(),
     db.prepare(`SELECT notice_id, asset_id, status, acknowledged_at
@@ -116,9 +125,10 @@ async function payload(customerUid: string, projectId: string, packId: string) {
   const preferences = assets.map((asset) => {
     const row = preferenceRows.results.find((item: Record<string, unknown>) => item.asset_id === asset.id);
     return { assetId: asset.id, remindersEnabled: row ? Boolean(row.reminders_enabled) : false,
+      emailEnabled: row ? Boolean(row.email_enabled) : false, smsEnabled: row ? Boolean(row.sms_enabled) : false,
       reminderLeadDays: Number(row?.reminder_lead_days || 30), recorded: Boolean(row) };
   });
-  return { assets, plans, events, notices, preferences };
+  return { assets, plans, events, notices, preferences, contact };
 }
 
 export async function GET(request: Request) {
@@ -146,16 +156,47 @@ export async function PATCH(request: Request) {
     if (!assetRow) throw new Error("ASSET_NOT_FOUND");
     const db = getD1();
     const now = new Date().toISOString();
+    if (action === "start_sms_verification") {
+      const mobileE164 = normalizeAustralianMobile(body.mobile);
+      if (!mobileE164) return json({ ok: false, error: "Enter a valid Australian mobile number." }, 400);
+      const config = serviceReminderProviderConfiguration();
+      if (!config.sms.configured || !config.sms.verifyService) return json({ ok: false, error: "SMS verification is not configured yet." }, 503);
+      await startTwilioMobileVerification(mobileE164);
+      return json({ ok: true, verificationStarted: true });
+    }
+    if (action === "confirm_sms_verification") {
+      const mobileE164 = normalizeAustralianMobile(body.mobile); const code = cleanAdminText(body.code, 10);
+      if (!mobileE164 || !/^\d{4,10}$/.test(code)) return json({ ok: false, error: "Enter the mobile number and verification code." }, 400);
+      await confirmTwilioMobileVerification(mobileE164, code);
+      await db.prepare(`INSERT INTO customer_service_reminder_contacts (customer_uid, mobile_e164, mobile_verified_at, pending_mobile_e164, updated_at)
+        VALUES (?, ?, ?, '', ?) ON CONFLICT(customer_uid) DO UPDATE SET mobile_e164 = excluded.mobile_e164,
+        mobile_verified_at = excluded.mobile_verified_at, pending_mobile_e164 = '', updated_at = excluded.updated_at`)
+        .bind(identity.uid, mobileE164, now, now).run();
+      return json({ ok: true, ...(await payload(identity.uid, projectId, packId)) });
+    }
     if (action === "update_reminders") {
       const enabled = Boolean(body.enabled);
+      const emailEnabled = enabled && Boolean(body.emailEnabled); const smsEnabled = enabled && Boolean(body.smsEnabled);
       const leadDays = Number(body.leadDays);
       if (!REMINDER_DAYS.has(leadDays)) return json({ ok: false, error: "Choose a supported reminder window." }, 400);
-      await db.prepare(`INSERT INTO customer_asset_lifecycle_preferences
-        (id, customer_uid, asset_id, reminders_enabled, reminder_lead_days, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+      if (emailEnabled && !identity.emailVerified) return json({ ok: false, error: "Verify your account email before enabling email reminders." }, 409);
+      const contact = smsEnabled ? await db.prepare(`SELECT mobile_verified_at FROM customer_service_reminder_contacts WHERE customer_uid = ?`)
+        .bind(identity.uid).first<Record<string, unknown>>() : null;
+      if (smsEnabled && !contact?.mobile_verified_at) return json({ ok: false, error: "Verify your mobile number before enabling SMS reminders." }, 409);
+      const statements = [db.prepare(`INSERT INTO customer_asset_lifecycle_preferences
+        (id, customer_uid, asset_id, reminders_enabled, email_enabled, sms_enabled, reminder_lead_days, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(customer_uid, asset_id) DO UPDATE SET reminders_enabled = excluded.reminders_enabled,
+          email_enabled = excluded.email_enabled, sms_enabled = excluded.sms_enabled,
           reminder_lead_days = excluded.reminder_lead_days, updated_at = excluded.updated_at`)
-        .bind(crypto.randomUUID(), identity.uid, assetId, enabled ? 1 : 0, leadDays, now, now).run();
+        .bind(crypto.randomUUID(), identity.uid, assetId, enabled ? 1 : 0, emailEnabled ? 1 : 0, smsEnabled ? 1 : 0, leadDays, now, now),
+        db.prepare(`UPDATE service_reminder_deliveries SET status = 'opted_out', provider_status = 'customer_preference',
+          failed_at = ?, updated_at = ? WHERE customer_uid = ? AND asset_id = ? AND status IN ('queued', 'failed')
+          AND ((channel = 'email' AND ? = 0) OR (channel = 'sms' AND ? = 0))`)
+          .bind(now, now, identity.uid, assetId, emailEnabled ? 1 : 0, smsEnabled ? 1 : 0)];
+      if (emailEnabled) statements.push(db.prepare("DELETE FROM customer_service_reminder_opt_outs WHERE customer_uid = ? AND channel = 'email'").bind(identity.uid));
+      if (smsEnabled) statements.push(db.prepare("DELETE FROM customer_service_reminder_opt_outs WHERE customer_uid = ? AND channel = 'sms'").bind(identity.uid));
+      await db.batch(statements);
       return json({ ok: true, ...(await payload(identity.uid, projectId, packId)) });
     }
     if (action !== "acknowledge_notice") return json({ ok: false, error: "Unsupported lifecycle preference action." }, 400);

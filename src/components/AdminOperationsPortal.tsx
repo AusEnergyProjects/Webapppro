@@ -29,6 +29,7 @@ import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspac
 import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
 import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
 import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
+import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -1104,6 +1105,7 @@ export function AdminOperationsPortal() {
                 </div>
                 <strong>{activeOwners} active owner{activeOwners === 1 ? "" : "s"}</strong>
               </section>
+              <AdminServiceReminderDelivery api={api} setStatus={setStatus} />
               <div className="admin-access-layout">
                 <form
                   className="admin-panel admin-invite-form"

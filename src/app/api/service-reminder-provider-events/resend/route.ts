@@ -1,0 +1,53 @@
+import { getD1 } from "../../../../../db";
+import { verifyResendWebhook } from "@/lib/service-reminder-delivery";
+
+export const runtime = "edge";
+
+const mappedStatus: Record<string, string> = {
+  "email.sent": "sent", "email.delivered": "delivered", "email.bounced": "bounced",
+  "email.failed": "failed", "email.suppressed": "opted_out", "email.complained": "opted_out",
+};
+
+export async function POST(request: Request) {
+  const rawBody = await request.text(); const eventId = request.headers.get("svix-id") || "";
+  const secret = String(process.env.RESEND_WEBHOOK_SECRET || "");
+  if (!secret || !(await verifyResendWebhook(rawBody, request.headers, secret))) {
+    return Response.json({ ok: false, error: "Invalid provider signature." }, { status: 401 });
+  }
+  let event: Record<string, unknown>;
+  try { event = JSON.parse(rawBody) as Record<string, unknown>; } catch { return Response.json({ ok: false }, { status: 400 }); }
+  const eventType = String(event.type || ""); const data = (event.data || {}) as Record<string, unknown>;
+  const providerMessageId = String(data.email_id || data.id || ""); const status = mappedStatus[eventType];
+  if (!providerMessageId || !status) return Response.json({ ok: true, ignored: true });
+  const db = getD1(); const delivery = await db.prepare(`SELECT id, customer_uid, asset_id, status FROM service_reminder_deliveries
+    WHERE provider = 'resend' AND provider_message_id = ?`).bind(providerMessageId).first<Record<string, unknown>>();
+  if (!delivery) return Response.json({ ok: true, ignored: true });
+  if (await db.prepare("SELECT id FROM service_reminder_delivery_events WHERE provider_event_key = ?").bind(`resend:${eventId}`).first()) {
+    return Response.json({ ok: true, replay: true });
+  }
+  const now = new Date().toISOString(); const terminal = ["bounced", "failed", "opted_out"].includes(status);
+  const statements = [
+    db.prepare(`INSERT OR IGNORE INTO service_reminder_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'Authenticated Resend delivery event received.', ?, ?)`)
+      .bind(crypto.randomUUID(), delivery.id, `resend:${eventId}`, eventType, status, String(event.created_at || now), now),
+    db.prepare(`UPDATE service_reminder_deliveries SET status = ?, provider_status = ?, delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
+      failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END, last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
+      .bind(status, eventType, status, now, terminal ? 1 : 0, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
+  ];
+  if (["email.bounced", "email.suppressed", "email.complained"].includes(eventType)) {
+    statements.push(
+      db.prepare(`INSERT INTO customer_service_reminder_opt_outs (id, customer_uid, channel, source, provider_reference, opted_out_at, created_at)
+        VALUES (?, ?, 'email', ?, ?, ?, ?) ON CONFLICT(customer_uid, channel) DO UPDATE SET source = excluded.source,
+        provider_reference = excluded.provider_reference, opted_out_at = excluded.opted_out_at`)
+        .bind(crypto.randomUUID(), delivery.customer_uid, eventType, providerMessageId, now, now),
+      db.prepare(`UPDATE customer_asset_lifecycle_preferences SET email_enabled = 0, updated_at = ? WHERE customer_uid = ? AND asset_id = ?`)
+        .bind(now, delivery.customer_uid, delivery.asset_id),
+      db.prepare(`UPDATE service_reminder_deliveries SET status = 'opted_out', provider_status = ?, failed_at = ?, updated_at = ?
+        WHERE customer_uid = ? AND channel = 'email' AND status IN ('queued', 'failed')`)
+        .bind(eventType, now, now, delivery.customer_uid),
+    );
+  }
+  await db.batch(statements);
+  return Response.json({ ok: true });
+}

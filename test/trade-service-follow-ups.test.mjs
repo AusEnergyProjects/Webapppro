@@ -60,7 +60,7 @@ test("every static follow-up query compiles against its production migration cha
   const migrations = ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql",
     "0016_fair_ultragirl.sql", "0017_brief_timeslip.sql", "0018_military_starhawk.sql", "0019_melodic_unus.sql",
     "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0049_customer_asset_timeline.sql",
-    "0052_service_follow_up_preparation.sql"];
+    "0052_service_follow_up_preparation.sql", "0053_service_reminder_delivery.sql"];
   for (const file of migrations) for (const statement of fs.readFileSync(new URL(file, directory), "utf8").split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
   const queries = [...route.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1])
     .concat([...route.matchAll(/prepare\("([^"]+)"\)/g)].map((match) => match[1]));
@@ -95,10 +95,10 @@ test("completed service advances the authoritative plan while follow-ups remain 
   assert.match(migration, /UNIQUE INDEX `trade_service_follow_ups_plan_due_idx`/);
 });
 
-test("follow-up payload and interface preserve privacy and outbound boundaries", () => {
+test("follow-up payload preserves privacy while sends require a reviewed provider boundary", () => {
   assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1|customer_contact_id/);
-  assert.doesNotMatch(route, /sendMail|sendSms|fetch\(['"]https?:|email_provider|sms_provider/);
-  for (const copy of ["Consent-aware reminder preparation", "This workspace never sends a message", "Customer", "Site", "Asset", "Due state", "Assignee", "Consent", "Prepare reminder", "Suppression reason"]) assert.match(ui, new RegExp(copy));
+  assert.doesNotMatch(ui, /customer_email|customer_phone|mobile_e164|account\.email/);
+  for (const copy of ["Prepare, review and send service reminders", "I reviewed this exact reminder", "Customer", "Site", "Asset", "Due state", "Assignee", "Consent", "Prepare reminder", "Suppression reason", "Send email", "Send SMS"]) assert.match(ui, new RegExp(copy));
   assert.match(dashboard, /workspace === "follow-ups"/); assert.match(dashboard, /<TradeServiceFollowUpWorkspace/);
   assert.match(teamPortal, /data\.access\.canDispatch && <TradeServiceFollowUpWorkspace/);
 });

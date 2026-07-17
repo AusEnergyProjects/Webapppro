@@ -3264,6 +3264,16 @@ body input[type="number"]::-webkit-outer-spin-button {
 .customer-reminder-preference label strong, .customer-reminder-preference label small { color: var(--color-aea-ink); display: block; font-size: .58rem; }
 .customer-reminder-preference label small { color: var(--color-aea-muted); margin-top: 2px; }
 .customer-reminder-preference select { background: #fff; border: 1px solid #bed3de; border-radius: 7px; font-size: .58rem; min-height: 34px; padding: 6px; }
+.customer-reminder-contact { align-items: center; background: #f3f8fb; border: 1px solid #cadde8; border-radius: 10px; display: flex; gap: 14px; justify-content: space-between; margin: 0 0 12px; padding: 11px; }
+.customer-reminder-contact > div:first-child { display: grid; gap: 3px; }
+.customer-reminder-contact span, .customer-reminder-contact strong, .customer-reminder-contact small { color: var(--color-aea-ink); font-size: .6rem; }
+.customer-reminder-contact span { color: #17618d; font-weight: 900; text-transform: uppercase; }
+.customer-reminder-contact small { color: var(--color-aea-muted); }
+.customer-mobile-verification { display: flex; flex-wrap: wrap; gap: 7px; }
+.customer-mobile-verification input, .customer-mobile-verification button { background: #fff; border: 1px solid #bed3de; border-radius: 7px; font-size: .6rem; min-height: 34px; padding: 7px; }
+.customer-mobile-verification button { color: #155477; cursor: pointer; font-weight: 850; }
+.customer-reminder-channels { display: flex; gap: 10px; }
+.customer-reminder-channels label { font-size: .58rem; font-weight: 850; }
 .customer-lifecycle-warranty, .customer-service-plan { align-items: center; background: #f8fbfd; border-left: 3px solid #4e92b9; border-radius: 9px; display: grid; gap: 12px; grid-template-columns: 1fr auto; margin-top: 8px; padding: 10px; }
 .customer-lifecycle-warranty strong, .customer-service-plan > div > strong { color: var(--color-aea-ink); display: block; font-size: .65rem; margin-top: 2px; }
 .customer-service-plan > div > small { color: var(--color-aea-muted); display: block; font-size: .55rem; margin-top: 2px; }
@@ -4497,6 +4507,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .follow-up-draft p { color: #315247; margin: 0; }
 .follow-up-draft small { color: var(--color-aea-muted); }
 .follow-up-list footer { display: flex; flex-wrap: wrap; gap: 8px; }
+.follow-up-draft label { align-items: center; color: #173f32; display: flex; font-size: .65rem; font-weight: 850; gap: 7px; }
+.follow-up-deliveries { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.follow-up-deliveries article { background: #f6faf8; border: 1px solid #d5e4dd; border-radius: 8px; display: grid; gap: 3px; padding: 9px; }
+.follow-up-deliveries strong, .follow-up-deliveries span, .follow-up-deliveries small { font-size: .61rem; }
+.follow-up-deliveries button { justify-self: start; }
+.admin-reminder-delivery { margin-bottom: 14px; }
+.admin-reminder-channels { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-reminder-channels article, .admin-reminder-failures article { background: #f6faf8; border: 1px solid #d5e4dd; border-radius: 9px; display: grid; gap: 8px; padding: 11px; }
+.admin-reminder-channels header { align-items: flex-start; display: flex; justify-content: space-between; }
+.admin-reminder-channels header div, .admin-reminder-failures article { display: grid; gap: 3px; }
+.admin-reminder-channels input { max-width: 120px; }
+.admin-reminder-channels button { justify-self: start; }
+.admin-reminder-failures { display: grid; gap: 8px; margin-top: 9px; }
 
 @media (max-width: 1180px) {
   .follow-up-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -4506,11 +4529,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 @media (max-width: 760px) {
   .follow-up-heading, .follow-up-list article > header { align-items: stretch; flex-direction: column; }
   .follow-up-list article > header > div:last-child { justify-items: start; text-align: left; }
-  .follow-up-metrics, .follow-up-filters, .follow-up-asset, .follow-up-controls { grid-template-columns: 1fr 1fr; }
+  .follow-up-metrics, .follow-up-filters, .follow-up-asset, .follow-up-controls, .follow-up-deliveries { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 480px) {
-  .follow-up-metrics, .follow-up-filters, .follow-up-asset, .follow-up-controls { grid-template-columns: 1fr; }
+  .follow-up-metrics, .follow-up-filters, .follow-up-asset, .follow-up-controls, .follow-up-deliveries, .admin-reminder-channels { grid-template-columns: 1fr; }
   .follow-up-controls label:nth-child(2) { grid-column: auto; }
+  .customer-reminder-contact { align-items: stretch; flex-direction: column; }
 }
 
 .asset-workspace { display: grid; gap: 18px; }

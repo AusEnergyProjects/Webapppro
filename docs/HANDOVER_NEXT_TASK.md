@@ -2,56 +2,53 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: `86418e5` on `codex/sites-custom-domain-migration`, Sites version 133
+Baseline commit: pending P6-2G release on `codex/sites-custom-domain-migration`
 
 ## Current delivery summary
 
-P6-2F adds a consent-aware service follow-up preparation queue to the existing installed-asset, service-plan, customer, service-site and team sources of truth. It does not send customer messages or create another asset or service-plan model.
+P6-2G adds the outbound service reminder boundary to the existing P6-2F preparation queue. Resend email and Twilio SMS remain disabled until protected Sites credentials, verified senders and authenticated callbacks are ready.
 
-Migration `0052_service_follow_up_preparation.sql` adds one owner-scoped preparation record per service plan and due date plus an immutable audit event stream. The unique plan and due-date boundary prevents duplicate reminder preparation while completed service events continue to advance the authoritative service plan.
+Migration `0053_service_reminder_delivery.sql` adds global channel settings, one idempotent delivery per follow-up, channel and content revision, immutable provider events, verified mobile contacts and customer channel opt-outs. Existing customer accounts, asset preferences, follow-ups and service plans remain authoritative.
 
-The installer dashboard and manager or coordinator staff portal now include customer, site, asset, due-state, assignee, consent and preparation-state filters. Owner and dispatch roles can assign internal preparation, suppress a follow-up with a reason, complete or reopen work, and generate deterministic customer-safe reminder content for review.
+Owners, managers and coordinators must review the exact prepared content before a send control becomes available. Current consent, channel preference, customer ownership, provider readiness and daily limits are rechecked on the server. Resend and Twilio callbacks are authenticated and replay safe. Bounce, complaint and STOP events suppress pending delivery and future eligibility for that channel.
 
-Readiness requires an active customer account, an unwithdrawn customer-account consent receipt, an explicit asset lifecycle preference with reminders enabled and the customer's selected lead-time window. New lifecycle preferences default off until the customer explicitly opts in. Missing or withdrawn consent blocks readiness. Protected marketplace records remain excluded unless they already have authorised customer ownership and direct CRM customer and site links. The API does not select customer email, phone or street-address fields.
+Customers explicitly select email and SMS per asset. Email uses the verified private account address. SMS remains unavailable until Twilio Verify confirms the customer's Australian mobile number. Contact details stay server-side and are released only to the selected provider at the authorised send boundary.
 
 ## Recommended next milestone
 
-### P6-2G: build the outbound service-reminder delivery boundary
+### P6-2H: service follow-up performance and workload reporting
 
-Outcome: allow an authorised person to send an approved service reminder through explicitly configured providers with delivery, deduplication and opt-out controls.
+Outcome: give owners and operations staff consent-safe aggregate reporting for follow-up workload and delivery health without customer ranking or staff performance scoring.
 
 ### In scope
 
-- Add administrator-managed email and SMS provider configuration with protected hosted credentials.
-- Require a prepared P6-2F reminder, current customer consent and a deliberate authorised send action.
-- Add an idempotency key per follow-up, channel and content revision.
-- Store queued, sent, delivered, failed, bounced and opted-out delivery states plus provider receipts.
-- Apply customer opt-out and lifecycle preference changes before every delivery attempt.
-- Add retry boundaries, rate limits and administrator delivery-health monitoring.
-- Add focused authorization, consent-race, deduplication, provider-signature, failure and privacy tests.
+- Add due, ready, sent, delivered, failed, bounced and opted-out trends.
+- Add workload by due-state, asset category, service type and assigned team member.
+- Keep customer and contact identifiers out of aggregate reporting payloads.
+- Add date and channel filters using the delegated date picker contract.
+- Add CSV export for visible aggregate rows only.
+- Add focused aggregation, privacy, pagination and responsive tests.
 
 ### Explicitly out of scope
 
-- Marketing campaigns, lead nurturing, autonomous outreach or AI-written sales copy.
-- Automatic sending without a deliberate authorised action.
-- Push notifications, route optimisation, appointment auto-booking or payments.
-- Replacing provider suppression, unsubscribe or delivery-receipt sources of truth.
+- Customer scoring, staff ranking, commission metrics or productivity surveillance.
+- Marketing attribution, campaign automation or sales lead nurturing.
+- Replacing the P6-2G provider delivery ledger.
 
 ### Acceptance criteria
 
-- Every outbound delivery resolves to one approved P6-2F follow-up and exact content revision.
-- No delivery is queued when consent is missing, withdrawn or outside the selected channel preference.
-- Repeated requests cannot send the same content twice through the same channel.
-- Provider callbacks are authenticated, replay-safe and update one delivery record.
-- Customer opt-out immediately suppresses pending delivery and future preparation eligibility.
+- Every metric resolves to existing follow-up or delivery records.
+- Aggregate payloads exclude customer names, account emails, mobile numbers and street addresses.
+- Filters and exports use identical server-side boundaries.
+- Large result sets remain bounded and indexed.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Provider credentials or verified sending domains and numbers are unavailable.
-- A channel cannot provide authenticated delivery receipts or enforce opt-out handling.
-- The slice expands into marketing automation, autonomous outreach, payments or scheduling.
+- A requested metric requires exposing customer contact details.
+- Reporting would create customer or worker ranking.
+- The slice expands into campaign automation or external analytics tracking.
 
-## Recommendation after P6-2G
+## Recommendation after P6-2H
 
-Build P6-2H as service follow-up performance and workload reporting using consent-safe aggregate metrics, without customer ranking or staff performance scoring.
+Build P6-2I as customer self-service rescheduling requests that create reviewed CRM tasks without automatic appointment changes.
