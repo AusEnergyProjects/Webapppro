@@ -133,7 +133,8 @@ async function handoverPayload(identity: TradeIdentity, work: WorkRecord) {
   }
   const db = getD1();
   const [assetRows, complianceRows, documentRows] = await Promise.all([
-    db.prepare(`SELECT id, asset_category, brand, model_number, serial_number, quantity, installed_at,
+    db.prepare(`SELECT id, crm_customer_id, service_site_id, source_type, source_reference, review_status, asset_status,
+      asset_label, commissioning_reference, asset_category, brand, model_number, serial_number, quantity, installed_at,
       warranty_provider, warranty_reference, warranty_start, warranty_end, supplier_product_id, created_at, updated_at
       FROM trade_installed_assets WHERE handover_pack_id = ? AND firebase_uid = ? AND record_status = 'active'
       ORDER BY created_at`).bind(pack.id, identity.uid).all<Record<string, unknown>>(),
@@ -146,6 +147,14 @@ async function handoverPayload(identity: TradeIdentity, work: WorkRecord) {
   ]);
   const assets = assetRows.results.map((row: Record<string, unknown>) => ({
     id: row.id,
+    crmCustomerId: row.crm_customer_id,
+    serviceSiteId: row.service_site_id,
+    sourceType: row.source_type,
+    sourceReference: row.source_reference,
+    reviewStatus: row.review_status,
+    assetStatus: row.asset_status,
+    assetLabel: row.asset_label,
+    commissioningReference: row.commissioning_reference,
     assetCategory: row.asset_category,
     brand: row.brand,
     modelNumber: row.model_number,
@@ -286,13 +295,19 @@ export async function POST(request: Request) {
       return adminJson({ ok: false, error: "The warranty end date cannot be before the warranty start date." }, 400);
     }
     const assetId = crypto.randomUUID();
+    const crmLink = await db.prepare(`SELECT crm_customer_id, service_site_id, customer_source FROM trade_crm_job_details
+      WHERE work_order_id = ? AND firebase_uid = ?`).bind(work.id, identity.uid).first<Record<string, unknown>>();
+    const directCustomerId = crmLink?.customer_source === "trade_owned" ? String(crmLink.crm_customer_id || "") : "";
+    const directSiteId = directCustomerId ? String(crmLink?.service_site_id || "") : "";
     await db.batch([
       db.prepare(`INSERT INTO trade_installed_assets
-        (id, handover_pack_id, work_order_id, firebase_uid, asset_category, brand, model_number,
+        (id, handover_pack_id, work_order_id, firebase_uid, crm_customer_id, service_site_id, source_type,
+         source_reference, review_status, asset_status, asset_label, commissioning_reference, asset_category, brand, model_number,
          serial_number, quantity, installed_at, warranty_provider, warranty_reference, warranty_start,
          warranty_end, supplier_product_id, record_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .bind(assetId, pack.id, work.id, identity.uid, assetCategory, brand, modelNumber, serialNumber,
+        VALUES (?, ?, ?, ?, ?, ?, 'handover', ?, ?, 'active', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+        .bind(assetId, pack.id, work.id, identity.uid, directCustomerId, directSiteId, pack.id,
+          directCustomerId && directSiteId ? "confirmed" : "pending_review", assetCategory, brand, modelNumber, serialNumber,
           quantity, installedAt, warrantyProvider, warrantyReference, warrantyStart, warrantyEnd,
           supplierProductId, now, now),
       db.prepare("UPDATE trade_handover_packs SET updated_at = ? WHERE id = ? AND firebase_uid = ?")

@@ -579,6 +579,14 @@ export const tradeInstalledAssets = sqliteTable("trade_installed_assets", {
   handoverPackId: text("handover_pack_id").notNull(),
   workOrderId: text("work_order_id").notNull(),
   firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull().default(""),
+  serviceSiteId: text("service_site_id").notNull().default(""),
+  sourceType: text("source_type").notNull().default("handover"),
+  sourceReference: text("source_reference").notNull().default(""),
+  reviewStatus: text("review_status").notNull().default("pending_review"),
+  assetStatus: text("asset_status").notNull().default("active"),
+  assetLabel: text("asset_label").notNull().default(""),
+  commissioningReference: text("commissioning_reference").notNull().default(""),
   assetCategory: text("asset_category").notNull(),
   brand: text("brand").notNull(),
   modelNumber: text("model_number").notNull(),
@@ -597,6 +605,9 @@ export const tradeInstalledAssets = sqliteTable("trade_installed_assets", {
   index("trade_installed_assets_pack_idx").on(table.handoverPackId, table.recordStatus, table.createdAt),
   index("trade_installed_assets_owner_idx").on(table.firebaseUid, table.workOrderId, table.recordStatus),
   index("trade_installed_assets_warranty_idx").on(table.firebaseUid, table.warrantyEnd),
+  index("trade_installed_assets_customer_idx").on(table.firebaseUid, table.crmCustomerId, table.assetStatus, table.updatedAt),
+  index("trade_installed_assets_site_idx").on(table.firebaseUid, table.serviceSiteId, table.assetStatus, table.updatedAt),
+  index("trade_installed_assets_review_idx").on(table.firebaseUid, table.reviewStatus, table.updatedAt),
 ]);
 
 export const tradeComplianceItems = sqliteTable("trade_compliance_items", {

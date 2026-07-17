@@ -2,55 +2,53 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: `e5ddc94` on `codex/sites-custom-domain-migration`, Sites version 123
+Baseline commit: `5863f04` on `codex/sites-custom-domain-migration`, Sites version 124
 
 ## Current delivery summary
 
-P6-2B adds the unified installer enquiry inbox and generic import contract on top of the P6-2A customer, contact and service-site foundation.
+P6-2C extends the existing installed-asset source of truth with authoritative P6-2A customer and service-site links. It does not create a competing asset table or bypass the handover, warranty or field-work workflows.
 
-Migration `0048_unified_enquiry_inbox.sql` adds owner-scoped enquiries, conversation records, attachment metadata and audit events. Existing and future marketplace allocations enter the same inbox as protected reference-only records. The migration and runtime synchronisation retain only the protected reference, project scope and broad service region. They do not copy a household identity, phone, email, postcode or street address into installer CRM.
+Migration `0049_customer_asset_timeline.sql` adds owner-scoped customer, site, provenance, review, lifecycle, label and commissioning fields to `trade_installed_assets`. Existing active handover assets retain their handover-pack reference and enter `pending_review`; they do not receive a customer or site link until an installer explicitly confirms the proposed direct job relationship. New handover assets use the same register, and direct manual asset creation requires an owned customer and one of that customer's active service sites.
 
-Direct enquiries support the states `New`, `contacted`, `site visit`, `quote required`, `quoted`, `booked`, `won` and `lost`. Conversion requires an explicit choice between a new customer and a visible duplicate candidate matched by email, phone, business number or service address. A new conversion creates one P6-2A customer, primary contact, primary service site and site-contact assignment in one database batch. The enquiry remains the authoritative source and conversation record after conversion.
-
-The guided importer now accepts generic CSV and `.xlsx` files. Installers map source columns to the AEA contract before creating a durable preview. Preview and validation do not write live CRM entities. Confirmed enquiry and customer imports use the same owner-scoped batch totals, issue export, row decisions and seven-day rollback as historical jobs and wholesaler products. Customer imports now create the P6-2A contact and service-site structure, while historical jobs link to the customer's primary service site when available.
+The installer CRM now includes a searchable asset register with lifecycle, category and warranty filters. Each direct customer account includes its installed assets, manual asset creation and a site-filtered timeline of enquiry, job, appointment, note, handover, asset and service events. Mixed events use one deterministic descending order with source and record tie-breakers. All reads and writes remain owner-scoped and exclude protected marketplace identity and address sources.
 
 ## Recommended next milestone
 
-### P6-2C: build the installed-asset and customer timeline foundation
+### P6-2D: build quote line items and customer acceptance
 
-Outcome: create one service-history view across customer, site, job and installed equipment without extending aggregate job fields.
+Outcome: replace aggregate-only quote tracking with a durable, versioned quote that a direct customer can review and accept, while keeping payments and accounting out of this slice.
 
 ### In scope
 
-- Add owner-scoped installed assets linked to the authoritative P6-2A customer and service site.
-- Record product identity, model, serial number, installation date, warranty dates and commissioning references.
-- Build a chronological customer and site timeline from enquiry, job, appointment, note, handover and asset events.
-- Reuse published handover product data where it exists, with an explicit installer review before creating an asset.
-- Add asset search, status and warranty filters plus focused ownership and history tests.
-- Keep protected marketplace records reference-only until an existing consent path authorises customer-owned identity data.
+- Add owner-scoped quote headers and versioned line items linked to the authoritative customer, service site and job.
+- Support product, labour and adjustment lines with quantity, unit price, tax treatment, subtotal and total calculations.
+- Preserve quote versions and record which version was issued, accepted, declined or superseded.
+- Add a direct-customer review and acceptance record with consent wording, timestamp and authenticated actor evidence.
+- Show quote status and accepted totals in the existing job finance workspace without duplicating customer, site, job or asset records.
+- Add executable calculation, ownership, versioning and acceptance tests.
 
 ### Explicitly out of scope
 
-- Automated service reminders or outbound communications.
-- Stock, purchasing, accounting, payments or quote redesign.
-- AI recommendations, public write APIs or competitor-specific migrations.
-- Replacing the existing handover, warranty-claim or field-work workflows.
+- Sending quote emails, SMS messages or automated reminders.
+- Deposits, card payments, payment schedules, invoicing or accounting export redesign.
+- Product purchasing, stock allocation or supplier-order automation.
+- AI pricing, public write APIs or protected marketplace identity disclosure.
 
 ### Acceptance criteria
 
-- Every installed asset belongs to one owner-scoped customer and service site.
-- Asset creation never duplicates or bypasses the P6-2A customer and site entities.
-- The timeline preserves source references and orders mixed event types deterministically.
-- Handover-derived assets require an explicit installer review and remain traceable to the handover source.
-- Protected marketplace identity and address fields remain excluded without existing consent.
+- Every quote belongs to one owner-scoped direct job, customer and service site.
+- Quote totals derive only from versioned line items using deterministic integer-cent calculations.
+- Issuing a changed quote creates a new immutable version instead of rewriting the accepted source.
+- Acceptance records the exact quote version, consent statement, actor and timestamp.
+- Protected marketplace jobs cannot create or expose direct-customer acceptance records without an existing authorised customer path.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The asset model would duplicate customer, site, product or handover sources of truth.
-- A timeline entry requires exposing protected marketplace identity or address data.
-- The work expands into outbound messaging, finance, purchasing or quote redesign.
+- The quote model would duplicate the P6-2A customer/site or existing job source of truth.
+- The implementation needs outbound messaging, payment collection, accounting mutation or supplier purchasing.
+- Acceptance cannot be tied to one immutable quote version and authenticated actor.
 
-## Recommendation after P6-2C
+## Recommendation after P6-2D
 
-Build P6-2D as the quote line-item and customer acceptance foundation, using the P6-2A customer/site and P6-2C asset history as authoritative context.
+Build P6-2E as team scheduling and capacity planning across jobs and appointments, preserving the existing job and appointment contracts.
