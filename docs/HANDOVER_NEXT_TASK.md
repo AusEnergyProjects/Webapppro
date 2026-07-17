@@ -2,54 +2,57 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: `61e0a1b837d0762bce250f9bc41db8c16986a5e4` on `codex/sites-custom-domain-migration`, published as Sites version 137.
+Implementation baseline: `17c21503924e3b1fb567cbec04d46a5b6fa5484b` on `codex/sites-custom-domain-migration`, published as Sites version 140.
 
 ## Current delivery summary
 
-P6-2H adds privacy-safe aggregate reporting to the service follow-up and delivery boundary. Owners and administrators can filter a maximum 366-day window by delivery channel, review daily due, ready, sent, delivered, failed, bounced and opted-out totals, inspect workload by due state, asset category and service type, and page through assigned open workload.
+P6-2I adds verified-customer appointment change requests without allowing customer submissions to move the installer calendar. The customer account now has an Appointments workspace where the authoritative CRM customer email controls access to eligible future appointments and a customer can submit one to three bounded preferred windows, a reason and customer-visible access notes.
 
-Migration `0054_service_follow_up_reporting.sql` adds only the date-first indexes needed by the bounded aggregate queries. Existing follow-ups, service plans, installed assets, team members, delivery records and opt-outs remain authoritative.
+Each request creates an owner-scoped CRM task, immutable request event and appointment revision snapshot. Duplicate active requests are prevented at the database boundary. Customer request content remains unchanged while staff decisions, proposed alternatives and accepted appointment revisions are recorded separately.
 
-The reporting payload excludes customer names, account emails, mobile numbers, addresses, message content and customer identifiers. Assigned workload is alphabetical and contains no staff delivery outcomes or performance scoring. CSV export uses only the aggregate rows visible under the current server filters and staff page.
+Owners, managers and coordinators review requests in the existing team schedule. Rejecting or proposing an alternative leaves the appointment unchanged. Acceptance reruns team overlap, unavailability and working-hours checks immediately before the atomic update. Request and appointment revisions protect every decision, including competing dispatch actions, and the prior and accepted schedule remain reconstructable.
 
-The AEA Resend account, sending-only API key, authenticated webhook and dedicated reminder subdomain are configured, and the domain is verified. The upgraded AEA Twilio account, protected credentials, Messaging Service, delivery callback, Advanced Opt-Out and SMS Verify Service with Fraud Guard are configured in deployed Sites environment revision 14. The `TLink` Australian sender registration is a draft pending genuine brand-ownership and identity evidence. Both production delivery channels remain disabled until an owner deliberately enables each channel, and SMS must remain disabled until Twilio approves and provisions the sender.
+Migration `0055_appointment_rescheduling.sql` adds only the request, immutable event and appointment revision records required by this workflow. Existing CRM customers, contacts, jobs, appointments, tasks, team members, working hours and unavailable periods remain authoritative.
+
+The AEA Resend account, sending-only API key, authenticated webhook and dedicated reminder subdomain are configured, and the domain is verified. The upgraded AEA Twilio account, protected credentials, Messaging Service, delivery callback, Advanced Opt-Out and SMS Verify Service with Fraud Guard are configured in deployed Sites environment revision 14. The `TLink` Australian sender registration remains a draft until genuine brand-ownership and identity evidence is available. Both production delivery channels remain disabled until an owner deliberately enables each channel, and SMS must remain disabled until Twilio approves and provisions the sender.
 
 ## Recommended next milestone
 
-### P6-2I: customer self-service rescheduling requests
+### P6-2J: customer-visible appointment preparation and arrival windows
 
-Outcome: let a verified customer request a change to an existing future appointment while keeping every calendar change under installer review.
+Outcome: show the verified appointment customer exactly how to prepare for a reviewed future visit without exposing internal job notes, staff capacity or protected customer data.
 
 ### In scope
 
-- Let customers select an eligible future appointment and propose one or more preferred date windows.
-- Capture a bounded reason and access notes without exposing internal CRM notes.
-- Create one immutable rescheduling request plus an owner-scoped CRM task and audit history.
-- Let authorised dispatch staff accept, reject or propose an alternative with revision protection.
-- Change the appointment only after a deliberate staff decision and preserve the prior schedule revision.
-- Use the delegated date picker contract and add customer, dispatch, conflict and responsive tests.
+- Let authorised dispatch staff publish a bounded preparation checklist for a future appointment.
+- Source the customer-visible arrival window from the reviewed CRM appointment and its current revision.
+- Let the verified appointment customer view the checklist and record readiness acknowledgements.
+- Preserve published checklist revisions and immutable customer acknowledgement history.
+- Create owner-scoped CRM follow-up tasks when required preparation remains incomplete near the visit.
+- Use the delegated date picker contract and add customer, dispatch, revision, privacy and responsive tests.
 
 ### Explicitly out of scope
 
-- Automatic appointment changes when a customer submits a request.
-- Customer access to internal notes, other customers, team capacity or private staff details.
-- Deposits, cancellation fees, route optimisation or third-party calendar writes.
+- Live staff location, GPS tracking, route optimisation or automatic arrival estimates.
+- Customer access to internal CRM notes, hazards, staff rosters, capacity or other customer records.
+- Compliance sign-off, job-form completion, cancellation fees or third-party calendar writes.
+- Automatic email or SMS delivery while production channels remain disabled.
 
 ### Acceptance criteria
 
-- Only the verified appointment customer can create or view the request.
-- Duplicate active requests for one appointment are prevented.
-- Every decision is revision protected, owner scoped and audited.
-- Schedule conflict checks run again immediately before an accepted change.
-- The previous and accepted appointment times remain reconstructable from revisions.
+- Only the verified CRM appointment customer can view or acknowledge a published checklist.
+- Draft and superseded checklist content is never customer visible.
+- Arrival windows cannot fall outside the current reviewed appointment.
+- Staff publication and customer acknowledgements are owner scoped, revision protected and audited.
+- Appointment changes invalidate or explicitly reconfirm customer-visible preparation state.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The appointment cannot be tied to an authoritative customer ownership record.
-- A requested path would change the calendar before staff review.
-- The slice expands into billing penalties, external calendar providers or dispatch optimisation.
+- A checklist item requires exposing an internal note, private hazard record or another customer record.
+- The appointment cannot be tied to the same authoritative verified-customer ownership boundary used by P6-2I.
+- The slice expands into live tracking, automated outbound delivery, regulated compliance certification or dispatch optimisation.
 
-## Recommendation after P6-2I
+## Recommendation after P6-2J
 
-Build P6-2J as customer-visible appointment preparation checklists and arrival windows sourced from the reviewed CRM appointment.
+Build P6-2K as customer appointment reminders and reviewed status notifications using the existing consent, provider and opt-out delivery boundary after the required channels are deliberately enabled.
