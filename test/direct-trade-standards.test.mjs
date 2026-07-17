@@ -46,18 +46,19 @@ test("matching and funding rules do not permit paid ranking claims", () => {
   );
 });
 
-test("standards enforce private accounts and platform-only installer responses", () => {
-  assert.match(standards, /Household contact stays private/);
+test("standards enforce anonymised matching and household-controlled contact release", () => {
+  assert.match(standards, /Households control each contact release/);
   assert.match(standards, /respond through structured platform controls/);
   assert.match(
     standards,
-    /Customer names, emails, phone numbers, street addresses and direct messaging are not available to trade accounts/,
+    /remain unavailable unless the household separately releases them to that exact verified installer/,
   );
   assert.match(standards, /Wholesalers manage products and pricing only/);
   assert.match(standards, /never see household opportunities or customer contact/);
   assert.match(opportunities, /postcode: ""/);
   assert.match(opportunities, /distanceBand: distanceBand\(row\.distance_metres\)/);
-  assert.match(opportunities, /Direct customer contact is not available\. Respond through the structured platform workflow/);
+  assert.match(opportunities, /customer_project_contact_releases/);
+  assert.match(opportunities, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
   assert.match(opportunities, /Wholesalers cannot access or respond to household opportunities/);
 });
 
@@ -66,7 +67,7 @@ test("standards cover structured quote evidence, customer choice and participant
   assert.match(standards, /Certificate or rebate assumptions shown separately/);
   assert.match(
     standards,
-    /Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract or releasing contact details/,
+    /Shortlisting alone does not release contact details/,
   );
   assert.match(opportunities, /action === "submit_quote"/);
   assert.match(opportunities, /INSERT INTO customer_project_quotes/);

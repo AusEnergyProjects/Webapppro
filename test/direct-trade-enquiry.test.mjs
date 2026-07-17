@@ -32,7 +32,7 @@ test("public project and upgrade entry points do not submit household lead recor
   assert.doesNotMatch(brief, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
   assert.doesNotMatch(brief, /<form|type="email"|type="tel"/);
   assert.match(brief, /Customer-authored names and notes never enter it/);
-  assert.match(brief, /No direct messages or contact details are exchanged/);
+  assert.match(brief, /contact details withheld during matching/);
 
   assert.doesNotMatch(upgradeModal, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
   assert.doesNotMatch(upgradeModal, /type="email"|type="tel"/);
@@ -79,13 +79,14 @@ test("anonymised matching is built only from controlled project choices", () => 
   assert.equal("privateNotes" in opportunity, false);
 });
 
-test("installer matching masks location and permits only structured platform responses", () => {
+test("installer matching masks location and releases contact only through exact customer consent", () => {
   assert.match(tradeOpportunitiesRoute, /function distanceBand/);
   assert.match(tradeOpportunitiesRoute, /distanceBand: distanceBand\(row\.distance_metres\)/);
   assert.match(tradeOpportunitiesRoute, /postcode: ""/);
   assert.match(tradeOpportunitiesRoute, /Household opportunities are never available to wholesaler accounts/);
   assert.match(tradeOpportunitiesRoute, /if \(action === "record_contact"\)/);
-  assert.match(tradeOpportunitiesRoute, /Direct customer contact is not available/);
+  assert.match(tradeOpportunitiesRoute, /customer_project_contact_releases/);
+  assert.match(tradeOpportunitiesRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
   assert.match(tradeOpportunitiesRoute, /if \(action === "submit_quote"\)/);
   assert.match(tradeOpportunitiesRoute, /normalizePlatformQuote/);
   assert.match(tradeOpportunitiesRoute, /customer_project_quotes/);
@@ -102,7 +103,9 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /tick off completed steps/i);
   assert.match(customerDashboard, /Review exactly what installers can see/);
   assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and exact postcode stay hidden/);
-  assert.match(customerDashboard, /No direct messages or contact details are exchanged/);
+  assert.match(customerDashboard, /I can later choose whether to release my real contact details to one shortlisted installer/);
+  assert.match(customerDashboard, /confirmContactRelease: true/);
+  assert.match(customerDashboard, /Other installers remain anonymised/);
   assert.match(customerDashboard, /No paid tier, lead fee or feature paywall/);
 });
 

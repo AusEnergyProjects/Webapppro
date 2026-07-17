@@ -118,9 +118,15 @@ export async function GET(request: Request) {
     q.id quote_id, q.product_list_id, q.inclusions quote_inclusions, q.product_snapshot,
     q.product_subtotal_cents_ex_gst, q.labour_cents_ex_gst, q.other_cents_ex_gst, q.total_cents_ex_gst,
     q.quote_type, q.start_window, q.duration_weeks, q.workmanship_warranty_years, q.status quote_status,
-    q.customer_decision, q.submitted_at quote_submitted_at
+    q.customer_decision, q.submitted_at quote_submitted_at,
+    r.id contact_release_id, r.customer_name, r.customer_email, r.customer_phone,
+    r.address_line_1 contact_address_line_1, r.address_line_2 contact_address_line_2,
+    r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
+    r.notice_version contact_notice_version, r.granted_at contact_granted_at
     FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN customer_project_quotes q ON q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
+    LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = m.id
+      AND r.installer_uid = m.firebase_uid AND r.status = 'active'
     WHERE m.firebase_uid = ? AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
     ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1 WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END, m.updated_at DESC
     LIMIT 100`,
@@ -153,6 +159,18 @@ export async function GET(request: Request) {
       summary: row.summary,
       opportunityStatus: row.status,
       platformOnly: String(row.source_reference || "").startsWith("customer-project:"),
+      customerContact: row.contact_release_id ? {
+        name: row.customer_name,
+        email: row.customer_email,
+        phone: row.customer_phone,
+        addressLine1: row.contact_address_line_1,
+        addressLine2: row.contact_address_line_2,
+        suburb: row.contact_suburb,
+        addressState: row.contact_address_state,
+        postcode: row.contact_postcode,
+        grantedAt: row.contact_granted_at,
+        noticeVersion: row.contact_notice_version,
+      } : null,
       quote: row.quote_id ? {
         id: row.quote_id,
         productListId: row.product_list_id,
@@ -220,7 +238,7 @@ export async function PATCH(request: Request) {
   await expireStaleOpportunities();
   const now = new Date().toISOString();
   if (action === "record_contact") {
-    return json({ ok: false, error: "Direct customer contact is not available. Respond through the structured platform workflow." }, 409);
+    return json({ ok: false, error: "Contact attempts cannot be self-recorded. Customer details appear only after that customer releases them to this exact match." }, 409);
   }
   if (action === "submit_quote") {
     const normalized = normalizePlatformQuote(body);

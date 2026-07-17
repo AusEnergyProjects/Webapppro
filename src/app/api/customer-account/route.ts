@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
   const db = getD1();
   const [record, trade] = await Promise.all([
-    db.prepare(`SELECT display_name, postcode, address_state, property_type, household_situation,
+    db.prepare(`SELECT display_name, phone, address_line_1, address_line_2, suburb, postcode, address_state, property_type, household_situation,
       account_updates, account_status, consent_version, consent_at, is_synthetic, created_at, updated_at
       FROM customer_accounts WHERE firebase_uid = ?`).bind(user.uid).first<Record<string, unknown>>(),
     db.prepare("SELECT partner_type FROM trade_accounts WHERE firebase_uid = ?").bind(user.uid).first<Record<string, unknown>>(),
@@ -45,6 +45,10 @@ export async function GET(request: Request) {
     tradeWorkspace: trade ? { partnerType: trade.partner_type } : null,
     profile: record ? {
       displayName: record.display_name,
+      phone: record.phone,
+      addressLine1: record.address_line_1,
+      addressLine2: record.address_line_2,
+      suburb: record.suburb,
       postcode: record.postcode,
       addressState: record.address_state,
       propertyType: record.property_type,
@@ -89,15 +93,18 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const receiptId = crypto.randomUUID();
   const statements = [db.prepare(`INSERT INTO customer_accounts
-    (firebase_uid, email, display_name, postcode, address_state, property_type, household_situation,
+    (firebase_uid, email, display_name, phone, address_line_1, address_line_2, suburb, postcode, address_state, property_type, household_situation,
      account_updates, account_status, consent_version, consent_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
     ON CONFLICT(firebase_uid) DO UPDATE SET email = excluded.email, display_name = excluded.display_name,
+      phone = excluded.phone, address_line_1 = excluded.address_line_1, address_line_2 = excluded.address_line_2,
+      suburb = excluded.suburb,
       postcode = excluded.postcode, address_state = excluded.address_state, property_type = excluded.property_type,
       household_situation = excluded.household_situation, account_updates = excluded.account_updates,
       account_status = 'active', consent_version = excluded.consent_version, consent_at = excluded.consent_at,
       updated_at = excluded.updated_at`)
-    .bind(user.uid, user.email, profile.displayName, profile.postcode,
+    .bind(user.uid, user.email, profile.displayName, profile.phone, profile.addressLine1, profile.addressLine2,
+      profile.suburb, profile.postcode,
       profile.addressState, profile.propertyType, profile.householdSituation,
       profile.accountUpdates ? 1 : 0, CUSTOMER_NOTICE_VERSION, now, now, now)];
   if (!existing || existing.consent_version !== CUSTOMER_NOTICE_VERSION) {

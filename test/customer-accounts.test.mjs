@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   buildAnonymizedOpportunity,
+  CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION,
   MAX_CUSTOMER_PROJECTS,
+  customerContactReadiness,
   normalizeCustomerProject,
   normalizePlatformQuote,
   validateCustomerProfile,
@@ -35,6 +37,31 @@ test("customer profiles are private, free and optional updates default off", () 
   assert.match(accountRoute, /accountTier: "Always free"/);
   assert.match(dashboard, /No paid tier, lead fee or feature paywall/);
   assert.doesNotMatch(accountRoute + projectsRoute, /accountHasFeature|billing_status|subscription|paywall/);
+});
+
+test("trade-seeking profiles require private contact details that match the project location", () => {
+  const incomplete = customerContactReadiness({ postcode: "3000", addressState: "VIC" }, { postcode: "3000", addressState: "VIC" });
+  assert.equal(incomplete.ok, false);
+  const ready = customerContactReadiness({
+    phone: "0400 000 000",
+    addressLine1: "12 Example Street",
+    suburb: "Melbourne",
+    postcode: "3000",
+    addressState: "VIC",
+  }, { postcode: "3000", addressState: "VIC" });
+  assert.equal(ready.ok, true);
+  const wrongProject = customerContactReadiness({
+    phone: "0400 000 000",
+    addressLine1: "12 Example Street",
+    suburb: "Melbourne",
+    postcode: "3000",
+    addressState: "VIC",
+  }, { postcode: "2000", addressState: "NSW" });
+  assert.equal(wrongProject.ok, false);
+  assert.equal(CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, "2026-07-18");
+  assert.match(schema, /phone: text\("phone"\).*?default\(""\)/);
+  assert.match(schema, /addressLine1: text\("address_line_1"\).*?default\(""\)/);
+  assert.match(projectsRoute, /customerContactReadiness\(contactAccount \|\| \{\}, current\)/);
 });
 
 test("customer auth supports Google, email, verification and password recovery", () => {
@@ -99,13 +126,13 @@ test("customer enquiries bypass the public lead relay and use explicit consent r
   assert.match(projectsRoute, /customer-project-submit:\$\{id\}/);
   assert.match(projectsRoute, /anonymized_installer_matching/);
   assert.match(projectsRoute, /allocateNearestInstallers/);
-  assert.doesNotMatch(projectsRoute, /\/api\/leads|LEAD_WEBHOOK|script\.google\.com|customer_email|customer_phone/);
+  assert.doesNotMatch(projectsRoute, /\/api\/leads|LEAD_WEBHOOK|script\.google\.com/);
   assert.match(publicLeadRoute, /raw\?\.submissionType !== "comparison"/);
   assert.match(publicLeadRoute, /Upgrade projects must be created inside a free private customer account/);
   assert.doesNotMatch(publicLeadRoute, /createOpportunityFromLead/);
 });
 
-test("installer responses are structured, anonymous and unavailable to wholesalers", () => {
+test("installer responses stay anonymous until an exact customer-authorised match release", () => {
   const invalid = normalizePlatformQuote({ inclusions: [], labourCentsExGst: 0 });
   assert.equal(invalid.ok, false);
   const valid = normalizePlatformQuote({
@@ -122,10 +149,18 @@ test("installer responses are structured, anonymous and unavailable to wholesale
   assert.match(tradeRoute, /Household opportunities are never available to wholesaler accounts/);
   assert.match(tradeRoute, /postcode: ""/);
   assert.match(tradeRoute, /distanceBand: distanceBand/);
-  assert.match(tradeRoute, /Direct customer contact is not available/);
+  assert.match(tradeRoute, /customer_project_contact_releases r ON r\.opportunity_match_id = m\.id/);
+  assert.match(tradeRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
+  assert.match(tradeRoute, /customerContact: row\.contact_release_id/);
   assert.match(tradeRoute, /normalizePlatformQuote/);
   assert.match(projectsRoute, /optionLabel: `Verified installer option/);
-  assert.doesNotMatch(projectsRoute, /installer_uid|partner_note|business_name|contact_email|contact_phone/);
+  assert.match(projectsRoute, /action === "release_contact"/);
+  assert.match(projectsRoute, /raw\.confirmContactRelease !== true/);
+  assert.match(projectsRoute, /customer_decision !== "shortlisted"/);
+  assert.match(projectsRoute, /verification_status !== "approved"/);
+  assert.match(projectsRoute, /matched_installer_contact_release:/);
+  assert.match(projectsRoute, /customer_project_contact_release_events/);
+  assert.doesNotMatch(projectsRoute, /partner_note/);
 });
 
 test("Account access is always visible in both comparison shells", () => {

@@ -105,6 +105,6 @@ test("ownership and correction workflows preserve platform privacy and account b
   assert.match(correctionRoute, /account\.partner_type !== "installer"/);
   assert.doesNotMatch(correctionRoute, /supplier|wholesaler.*lead/i);
   assert.match(customerUi, /Free home records/);
-  assert.match(customerUi, /Trades cannot see your account or contact details/);
+  assert.match(customerUi, /Trades cannot browse your account or home-record library/);
   assert.doesNotMatch(`${ownershipRoute}\n${ownershipServer}\n${transferAdminRoute}\n${correctionRoute}\n${correctionAdminRoute}\n${customerUi}\n${tradeUi}\n${adminUi}`, /[\u2013\u2014]/);
 });

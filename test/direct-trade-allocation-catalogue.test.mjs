@@ -62,7 +62,7 @@ test("household opportunity exposure, platform response and expiry have hard ser
   );
   assert.match(opportunityServer, /!previouslyMatched\.has/);
   assert.match(partnerRoute, /action === "record_contact"/);
-  assert.match(partnerRoute, /Direct customer contact is not available/);
+  assert.match(partnerRoute, /Customer details appear only after that customer releases them to this exact match/);
   assert.match(partnerRoute, /action === "submit_quote"/);
   assert.match(partnerRoute, /normalizePlatformQuote/);
   assert.match(partnerRoute, /INSERT INTO customer_project_quotes/);
@@ -73,13 +73,13 @@ test("household opportunity exposure, platform response and expiry have hard ser
   assert.match(adminMatches, /progress to platform coordination/);
   assert.match(adminMatches, /reached its platform coordination limit/);
   assert.match(standards, /no more than six eligible installers/i);
-  assert.match(standards, /Household contact stays private/i);
+  assert.match(standards, /Households control each contact release/i);
   assert.match(standards, /respond through structured platform controls/i);
   assert.match(
     customerBrief,
-    /without direct trade contact/i,
+    /customer-controlled connection/i,
   );
-  assert.match(customerBrief, /No direct messages or contact details are exchanged/i);
+  assert.match(customerBrief, /contact details withheld during matching/i);
 });
 
 test("wholesalers cannot access leads and installers only see approved published products", () => {

@@ -29,7 +29,7 @@ export function UpgradeEnquiryModal({ enquiryCode, title, postcode, onClose }: U
       <span className="private-project-modal-label">Private account project</span>
       <h3 id="gas-enquiry-title">Save {title.toLowerCase()} without sharing contact details</h3>
       <p>Create a free project with this upgrade preselected. Your comparison stays private, and installers can respond only to a later anonymised scope inside the platform.</p>
-      <ul><li>No phone number or street address required</li><li>No customer details released to trades</li><li>Save the roadmap and return from any device</li><li>Structured quote options, not sales messages</li></ul>
+      <ul><li>No phone number or street address required to save a plan</li><li>No customer details released while saving or matching</li><li>Save the roadmap and return from any device</li><li>You control any later named-installer handover</li></ul>
       <div className="enqbtns"><a ref={actionRef} className="mclose" href={`/account/projects/new?${params.toString()}`}>Save as a free project</a><button className="mcancel" type="button" onClick={onClose}>Keep comparing</button></div>
       <p className="enqfine">Creating a project does not submit an enquiry. You review the installer view and choose when to request responses.</p>
     </div>

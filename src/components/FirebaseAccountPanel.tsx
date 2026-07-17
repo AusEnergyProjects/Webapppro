@@ -109,6 +109,6 @@ export function FirebaseAccountPanel() {
       </form>
       {status && <p className="customer-auth-status" role="status">{status}</p>}
     </div>
-    <aside className="customer-auth-benefits"><strong>Private by default</strong><ul><li>No phone number or street address required</li><li>Create and save multiple home projects</li><li>Installers receive an anonymised scope only</li><li>No direct trade messaging or sales calls</li></ul></aside>
+    <aside className="customer-auth-benefits"><strong>Private by default</strong><ul><li>No phone number or street address required for planning</li><li>Create and save multiple home projects</li><li>Installers receive an anonymised scope during matching</li><li>You choose any named-installer contact handover</li></ul></aside>
   </section>;
 }

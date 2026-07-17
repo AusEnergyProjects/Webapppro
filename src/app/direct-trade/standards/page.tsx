@@ -32,8 +32,8 @@ const standards = [
   },
   {
     number: "05",
-    title: "Household contact stays private",
-    text: "Installers can review an anonymised scope and respond through structured platform controls. Customer names, emails, phone numbers, street addresses and direct messaging are not available to trade accounts.",
+    title: "Households control each contact release",
+    text: "Installers review an anonymised scope and respond through structured platform controls. Customer names, emails, phone numbers and street addresses remain unavailable unless the household separately releases them to that exact verified installer after shortlisting its option.",
   },
   {
     number: "06",
@@ -48,7 +48,7 @@ const standards = [
   {
     number: "08",
     title: "Households stay in control",
-    text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract or releasing contact details.",
+    text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract. Shortlisting alone does not release contact details.",
   },
 ];
 

@@ -121,12 +121,16 @@ test("moderation, evidence and matching actions have durable audit records", () 
 });
 
 test("opportunities remain privacy-safe and partner responses stay owner scoped", () => {
+  const opportunitySchema = schema.slice(
+    schema.indexOf('sqliteTable("trade_opportunities"'),
+    schema.indexOf('export const tradeOpportunityMatches'),
+  );
   assert.match(schema, /sqliteTable\("trade_opportunities"/);
   assert.match(schema, /trade_opportunity_matches_unique_idx/);
   assert.match(schema, /sqliteTable\("customer_project_quotes"/);
   assert.match(opportunitiesRoute, /privacy-safe project summary/i);
   assert.doesNotMatch(
-    schema,
+    opportunitySchema,
     /household_name|customer_email|customer_phone|street_address/,
   );
   assert.match(partnerOpportunities, /WHERE m\.firebase_uid = \?/);
@@ -138,7 +142,7 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   );
   assert.match(
     partnerOpportunities,
-    /Direct customer contact is not available\. Respond through the structured platform workflow/,
+    /Customer details appear only after that customer releases them to this exact match/,
   );
   assert.match(
     partnerOpportunities,
@@ -147,11 +151,11 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(partnerOpportunities, /action === "submit_quote"/);
   assert.match(
     dashboard,
-    /Household identity, exact location and contact details\s+stay outside the trade workspace/,
+    /Household identity, exact location and contact details\s+stay outside the trade workspace during matching/,
   );
-  assert.match(dashboard, /structured platform controls only/);
+  assert.match(dashboard, /release them to this exact business/);
   assert.match(dashboard, /Platform coordination active/);
-  assert.match(dashboard, /Customer contact details remain private/);
+  assert.match(dashboard, /no active contact release is available/);
   assert.match(dashboard, /<InstallerPlatformQuote/);
   assert.match(dashboard, /I’m interested/);
 });

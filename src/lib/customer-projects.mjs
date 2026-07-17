@@ -2,6 +2,8 @@ import { createHomeEnergyPlan } from "./home-energy-plan.mjs";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "./australian-postcodes.mjs";
 
 export const CUSTOMER_NOTICE_VERSION = "2026-07-15";
+export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
+export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
 export const CUSTOMER_PLAN_VERSION = "2026-07-15";
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
@@ -119,6 +121,10 @@ export function parseStoredJson(value, fallback) {
 
 export function validateCustomerProfile(raw = {}) {
   const displayName = text(raw.displayName, 80);
+  const phone = text(raw.phone, 32);
+  const addressLine1 = text(raw.addressLine1, 120);
+  const addressLine2 = text(raw.addressLine2, 120);
+  const suburb = text(raw.suburb, 80);
   const postcode = text(raw.postcode, 4);
   const addressState = canonicalAustralianState(raw.addressState) || "";
   const propertyType = propertyTypes.has(raw.propertyType) ? raw.propertyType : "house";
@@ -128,11 +134,22 @@ export function validateCustomerProfile(raw = {}) {
   if (!displayName) return { ok: false, error: "Enter the name you want shown in your private account." };
   if (!/^\d{4}$/.test(postcode)) return { ok: false, error: "Enter a four digit Australian postcode." };
   if (!states.has(addressState)) return { ok: false, error: "Choose your state or territory." };
+  const hasContactDetail = Boolean(phone || addressLine1 || addressLine2 || suburb);
+  if (phone && !/^\+?[0-9][0-9 ()-]{6,30}[0-9]$/.test(phone)) {
+    return { ok: false, error: "Enter a contact phone number using digits, spaces or an Australian country code." };
+  }
+  if (hasContactDetail && !phone) return { ok: false, error: "Add a contact phone number or clear the service address fields." };
+  if (hasContactDetail && !addressLine1) return { ok: false, error: "Add the service street address or clear the contact phone number." };
+  if (hasContactDetail && !suburb) return { ok: false, error: "Add the service suburb or clear the contact phone number." };
   if (raw.consent !== true) return { ok: false, error: "Confirm the private account notice to continue." };
   return {
     ok: true,
     profile: {
       displayName,
+      phone,
+      addressLine1,
+      addressLine2,
+      suburb,
       postcode,
       addressState,
       propertyType,
@@ -140,6 +157,20 @@ export function validateCustomerProfile(raw = {}) {
       accountUpdates: raw.accountUpdates === true,
     },
   };
+}
+
+export function customerContactReadiness(profile = {}, project = {}) {
+  if (!text(profile.phone, 32) || !text(profile.addressLine1, 120) || !text(profile.suburb, 80)) {
+    return { ok: false, error: "Add your phone number and full service address in Privacy and profile before requesting trades." };
+  }
+  const projectPostcode = text(project.postcode, 4);
+  const projectState = canonicalAustralianState(project.addressState || project.address_state) || "";
+  const profilePostcode = text(profile.postcode, 4);
+  const profileState = canonicalAustralianState(profile.addressState || profile.address_state) || "";
+  if (projectPostcode !== profilePostcode || projectState !== profileState) {
+    return { ok: false, error: "Update Privacy and profile so the service address matches this project's postcode and state before requesting trades." };
+  }
+  return { ok: true };
 }
 
 export function normalizeCustomerProject(raw = {}) {

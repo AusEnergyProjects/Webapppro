@@ -7,11 +7,14 @@ import { adminNotificationStatement, createAdminNotification } from "@/lib/admin
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import {
   buildAnonymizedOpportunity,
+  CUSTOMER_CONTACT_RELEASE_FIELDS,
+  CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION,
   CUSTOMER_NOTICE_VERSION,
   MAX_CUSTOMER_PROJECTS,
   MAX_OPEN_CUSTOMER_OPPORTUNITIES,
   normalizeCustomerProject,
   parseStoredJson,
+  customerContactReadiness,
   submissionReadiness,
 } from "@/lib/customer-projects.mjs";
 
@@ -44,6 +47,7 @@ function projectShape(
   quotes: Record<string, unknown>[],
   handovers: Record<string, unknown>[],
   hasRetainedAssetHistory: boolean,
+  contactReady: boolean,
 ) {
   const status = String(row.status);
   const responseCount = Number(progress?.response_count || 0);
@@ -79,6 +83,7 @@ function projectShape(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     hasRetainedAssetHistory,
+    contactReady,
     progress: {
       installerCount: Number(progress?.installer_count || 0),
       reviewingCount: Number(progress?.reviewing_count || 0),
@@ -90,6 +95,8 @@ function projectShape(
     quotes: quotes.map((quote, index) => ({
       id: quote.id,
       optionLabel: `Verified installer option ${String.fromCharCode(65 + index)}`,
+      installerBusinessName: quote.installer_business_name,
+      installerVerified: quote.installer_verification_status === "approved",
       inclusions: parseStoredJson(quote.inclusions, []),
       products: parseStoredJson(quote.product_snapshot, []),
       productSubtotalCentsExGst: Number(quote.product_subtotal_cents_ex_gst || 0),
@@ -101,6 +108,11 @@ function projectShape(
       durationWeeks: Number(quote.duration_weeks || 0),
       workmanshipWarrantyYears: Number(quote.workmanship_warranty_years || 0),
       customerDecision: quote.customer_decision,
+      contactRelease: quote.contact_release_status ? {
+        status: quote.contact_release_status,
+        grantedAt: quote.contact_granted_at,
+        withdrawnAt: quote.contact_withdrawn_at,
+      } : null,
       submittedAt: quote.submitted_at,
       updatedAt: quote.updated_at,
     })),
@@ -125,6 +137,9 @@ async function ownedProject(firebaseUid: string, id: string) {
 
 async function projectsForOwner(firebaseUid: string) {
   const db = getD1();
+  const account = await db.prepare(`SELECT display_name, email, phone, address_line_1, address_line_2,
+    suburb, postcode, address_state FROM customer_accounts WHERE firebase_uid = ?`)
+    .bind(firebaseUid).first<Record<string, unknown>>();
   const rows = await db.prepare("SELECT * FROM customer_projects WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100")
     .bind(firebaseUid).all<Record<string, unknown>>();
   const opportunityIds = rows.results.map((row: Record<string, unknown>) => String(row.opportunity_id || "")).filter(Boolean);
@@ -136,11 +151,16 @@ async function projectsForOwner(firebaseUid: string) {
     FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
     WHERE o.id IN (${opportunityIds.map(() => "?").join(",")}) GROUP BY o.id`)
     .bind(...opportunityIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const quoteRows = projectIds.length ? await db.prepare(`SELECT id, project_id, inclusions, product_snapshot,
+  const quoteRows = projectIds.length ? await db.prepare(`SELECT q.id, q.project_id, q.inclusions, q.product_snapshot,
     product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst, total_cents_ex_gst,
-    quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, submitted_at, updated_at
-    FROM customer_project_quotes WHERE project_id IN (${projectIds.map(() => "?").join(",")}) AND status = 'submitted'
-    ORDER BY submitted_at, id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+    quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, q.submitted_at, q.updated_at,
+    a.business_name installer_business_name, a.verification_status installer_verification_status,
+    r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at
+    FROM customer_project_quotes q
+    JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+    LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+    WHERE q.project_id IN (${projectIds.map(() => "?").join(",")}) AND q.status = 'submitted'
+    ORDER BY q.submitted_at, q.id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const retainedHandoverRows = projectIds.length ? await db.prepare(`SELECT DISTINCT customer_project_id
     FROM trade_handover_packs WHERE customer_project_id IN (${projectIds.map(() => "?").join(",")})
       AND status = 'published'`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
@@ -216,6 +236,7 @@ async function projectsForOwner(firebaseUid: string) {
     quoteRows.results.filter((quote: Record<string, unknown>) => quote.project_id === row.id),
     shapedHandovers.filter((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
     retainedHandoverRows.results.some((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
+    Boolean(account && customerContactReadiness(account, row).ok),
   ));
 }
 
@@ -239,7 +260,8 @@ export async function POST(request: Request) {
   try { raw = await request.json() as Record<string, unknown>; }
   catch { return json({ ok: false, error: "Invalid project details." }, 400); }
   const db = getD1();
-  const account = await db.prepare("SELECT account_status, COALESCE(is_synthetic, 0) is_synthetic FROM customer_accounts WHERE firebase_uid = ?")
+  const account = await db.prepare(`SELECT account_status, COALESCE(is_synthetic, 0) is_synthetic,
+    phone, address_line_1, suburb, postcode, address_state FROM customer_accounts WHERE firebase_uid = ?`)
     .bind(user.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete your private household profile first." }, 404);
   if (account.account_status !== "active") return json({ ok: false, error: "This customer account is not active." }, 403);
@@ -319,6 +341,11 @@ export async function PATCH(request: Request) {
     };
     const readiness = submissionReadiness(stored);
     if (!readiness.ok) return json({ ok: false, error: readiness.error }, 400);
+    const contactAccount = await db.prepare(`SELECT phone, address_line_1, suburb, postcode, address_state
+      FROM customer_accounts WHERE firebase_uid = ? AND account_status = 'active'`)
+      .bind(user.uid).first<Record<string, unknown>>();
+    const contactReadiness = customerContactReadiness(contactAccount || {}, current);
+    if (!contactReadiness.ok) return json({ ok: false, error: contactReadiness.error }, 400);
     const open = await db.prepare("SELECT COUNT(*) count FROM customer_projects WHERE firebase_uid = ? AND status IN ('matching', 'quote_review')")
       .bind(user.uid).first<{ count: number }>();
     if (Number(open?.count || 0) >= MAX_OPEN_CUSTOMER_OPPORTUNITIES) return json({ ok: false, error: "Finish or withdraw an active enquiry before submitting another one." }, 409);
@@ -358,6 +385,133 @@ export async function PATCH(request: Request) {
     ]);
     await dispatchAdminNotificationDeliveries();
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
+  } else if (action === "release_contact") {
+    if (!user.emailVerified && !Boolean(current.is_synthetic)) {
+      return json({ ok: false, error: "Verify your account email before sharing contact details with an installer." }, 403);
+    }
+    if (raw.confirmContactRelease !== true) {
+      return json({ ok: false, error: "Confirm the named installer contact release before continuing." }, 400);
+    }
+    if (!["matching", "quote_review"].includes(String(current.status))) {
+      return json({ ok: false, error: "Contact details can be shared only for an active project." }, 409);
+    }
+    const quoteId = cleanId(raw.quoteId);
+    const releaseSource = await db.prepare(`SELECT q.id quote_id, q.installer_uid, q.opportunity_match_id,
+      q.customer_decision, q.status quote_status, m.status match_status, o.status opportunity_status,
+      a.business_name, a.verification_status, a.account_status,
+      c.display_name, c.phone, c.address_line_1, c.address_line_2, c.suburb, c.postcode, c.address_state
+      FROM customer_project_quotes q
+      JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
+      JOIN trade_opportunities o ON o.id = q.opportunity_id
+      JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+      JOIN customer_accounts c ON c.firebase_uid = ?
+      WHERE q.id = ? AND q.project_id = ? AND q.opportunity_id = ?`)
+      .bind(user.uid, quoteId, id, current.opportunity_id).first<Record<string, unknown>>();
+    if (!releaseSource) return json({ ok: false, error: "Choose a valid installer quote." }, 404);
+    if (releaseSource.quote_status !== "submitted" || releaseSource.customer_decision !== "shortlisted") {
+      return json({ ok: false, error: "Shortlist this installer before choosing to share your contact details." }, 409);
+    }
+    if (!["interested", "connected"].includes(String(releaseSource.match_status)) || releaseSource.opportunity_status !== "open") {
+      return json({ ok: false, error: "This installer match is no longer available for contact release." }, 409);
+    }
+    if (releaseSource.verification_status !== "approved" || releaseSource.account_status !== "active") {
+      return json({ ok: false, error: "Contact details can be shared only with an active verified installer." }, 409);
+    }
+    const contactReadiness = customerContactReadiness(releaseSource, current);
+    if (!contactReadiness.ok) return json({ ok: false, error: contactReadiness.error }, 400);
+    const existingRelease = await db.prepare(`SELECT id, status FROM customer_project_contact_releases
+      WHERE opportunity_match_id = ? AND customer_uid = ? AND installer_uid = ?`)
+      .bind(releaseSource.opportunity_match_id, user.uid, releaseSource.installer_uid)
+      .first<{ id: string; status: string }>();
+    if (existingRelease?.status === "active") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    const releaseId = existingRelease?.id || `customer-contact-release:${releaseSource.opportunity_match_id}`;
+    const eventId = crypto.randomUUID();
+    const consentReceiptId = crypto.randomUUID();
+    const disclosedFields = JSON.stringify(CUSTOMER_CONTACT_RELEASE_FIELDS);
+    await db.batch([
+      db.prepare(`INSERT INTO customer_project_contact_releases
+        (id, project_id, opportunity_id, opportunity_match_id, quote_id, customer_uid, installer_uid,
+         status, notice_version, disclosed_fields, customer_name, customer_email, customer_phone,
+         address_line_1, address_line_2, suburb, address_state, postcode, granted_at, withdrawn_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+        ON CONFLICT(opportunity_match_id) DO UPDATE SET quote_id = excluded.quote_id, status = 'active',
+          notice_version = excluded.notice_version, disclosed_fields = excluded.disclosed_fields,
+          customer_name = excluded.customer_name, customer_email = excluded.customer_email,
+          customer_phone = excluded.customer_phone, address_line_1 = excluded.address_line_1,
+          address_line_2 = excluded.address_line_2, suburb = excluded.suburb,
+          address_state = excluded.address_state, postcode = excluded.postcode,
+          granted_at = excluded.granted_at, withdrawn_at = '', updated_at = excluded.updated_at`)
+        .bind(releaseId, id, current.opportunity_id, releaseSource.opportunity_match_id, quoteId, user.uid,
+          releaseSource.installer_uid, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, disclosedFields,
+          releaseSource.display_name, user.email, releaseSource.phone, releaseSource.address_line_1,
+          releaseSource.address_line_2, releaseSource.suburb, releaseSource.address_state,
+          releaseSource.postcode, now, now, now),
+      db.prepare(`INSERT INTO customer_project_contact_release_events
+        (id, release_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+         actor_uid, event_type, notice_version, disclosed_fields, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'granted', ?, ?, ?)`)
+        .bind(eventId, releaseId, id, releaseSource.opportunity_match_id, user.uid, releaseSource.installer_uid,
+          user.uid, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, disclosedFields, now),
+      db.prepare(`INSERT INTO customer_consent_receipts
+        (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, '', ?)`)
+        .bind(consentReceiptId, user.uid, id, `matched_installer_contact_release:${releaseSource.opportunity_match_id}`,
+          CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, now, now),
+      db.prepare(`UPDATE trade_opportunity_matches SET status = 'connected', connected_at = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status IN ('interested', 'connected')`)
+        .bind(now, now, releaseSource.opportunity_match_id, releaseSource.installer_uid),
+      adminNotificationStatement(db, {
+        eventKey: `customer-contact-release:${releaseSource.opportunity_match_id}:${now}`,
+        eventType: "customer.contact_released",
+        category: "customer",
+        priority: "high",
+        title: "Customer connected with a matched installer",
+        summary: `A customer deliberately released contact details to ${String(releaseSource.business_name).slice(0, 160)}.`,
+        entityType: "customer_project_contact_release",
+        entityId: releaseId,
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: { projectId: id, quoteId, opportunityMatchId: releaseSource.opportunity_match_id },
+        occurredAt: now,
+      }),
+    ]);
+    await dispatchAdminNotificationDeliveries();
+  } else if (action === "withdraw_contact") {
+    const quoteId = cleanId(raw.quoteId);
+    const release = await db.prepare(`SELECT id, opportunity_match_id, installer_uid, notice_version, disclosed_fields
+      FROM customer_project_contact_releases
+      WHERE quote_id = ? AND project_id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(quoteId, id, user.uid).first<Record<string, unknown>>();
+    if (!release) return json({ ok: false, error: "No active contact release was found for this installer." }, 404);
+    await db.batch([
+      db.prepare(`UPDATE customer_project_contact_releases SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
+        WHERE id = ? AND customer_uid = ? AND status = 'active'`).bind(now, now, release.id, user.uid),
+      db.prepare(`INSERT INTO customer_project_contact_release_events
+        (id, release_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+         actor_uid, event_type, notice_version, disclosed_fields, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'withdrawn', ?, ?, ?)`)
+        .bind(crypto.randomUUID(), release.id, id, release.opportunity_match_id, user.uid, release.installer_uid,
+          user.uid, release.notice_version, release.disclosed_fields, now),
+      db.prepare(`UPDATE customer_consent_receipts SET withdrawn_at = ?
+        WHERE firebase_uid = ? AND project_id = ? AND purpose = ? AND withdrawn_at = ''`)
+        .bind(now, user.uid, id, `matched_installer_contact_release:${release.opportunity_match_id}`),
+      adminNotificationStatement(db, {
+        eventKey: `customer-contact-withdrawn:${release.id}:${now}`,
+        eventType: "customer.contact_withdrawn",
+        category: "customer",
+        priority: "normal",
+        title: "Customer withdrew future contact visibility",
+        summary: "A customer withdrew future platform access to previously released contact details.",
+        entityType: "customer_project_contact_release",
+        entityId: String(release.id),
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: { projectId: id, quoteId, opportunityMatchId: release.opportunity_match_id },
+        occurredAt: now,
+      }),
+    ]);
   } else if (action === "toggle_milestone") {
     if (current.status === "archived") return json({ ok: false, error: "Restore or duplicate this project before changing its roadmap." }, 409);
     const plan = parseStoredJson(current.plan_snapshot, { items: [] });
@@ -386,7 +540,10 @@ export async function PATCH(request: Request) {
   } else if (action === "withdraw" || action === "complete") {
     if (!current.opportunity_id) return json({ ok: false, error: "This project has not been submitted." }, 409);
     const nextStatus = action === "complete" ? "completed" : "withdrawn";
-    await db.batch([
+    const activeReleases = await db.prepare(`SELECT id, opportunity_match_id, installer_uid, notice_version, disclosed_fields
+      FROM customer_project_contact_releases WHERE project_id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(id, user.uid).all<Record<string, unknown>>();
+    const closeStatements = [
       db.prepare("UPDATE customer_projects SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(nextStatus, now, id, user.uid),
       db.prepare("UPDATE trade_opportunities SET status = 'closed', updated_at = ? WHERE id = ?")
@@ -398,7 +555,23 @@ export async function PATCH(request: Request) {
         .bind(now, id),
       db.prepare("UPDATE customer_consent_receipts SET withdrawn_at = ? WHERE project_id = ? AND purpose = 'anonymized_installer_matching' AND withdrawn_at = ''")
         .bind(now, id),
-    ]);
+    ];
+    for (const release of activeReleases.results) {
+      closeStatements.push(
+        db.prepare(`UPDATE customer_project_contact_releases SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
+          WHERE id = ? AND customer_uid = ? AND status = 'active'`).bind(now, now, release.id, user.uid),
+        db.prepare(`INSERT INTO customer_project_contact_release_events
+          (id, release_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+           actor_uid, event_type, notice_version, disclosed_fields, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'project_closed', ?, ?, ?)`)
+          .bind(crypto.randomUUID(), release.id, id, release.opportunity_match_id, user.uid, release.installer_uid,
+            user.uid, release.notice_version, release.disclosed_fields, now),
+        db.prepare(`UPDATE customer_consent_receipts SET withdrawn_at = ?
+          WHERE firebase_uid = ? AND project_id = ? AND purpose = ? AND withdrawn_at = ''`)
+          .bind(now, user.uid, id, `matched_installer_contact_release:${release.opportunity_match_id}`),
+      );
+    }
+    await db.batch(closeStatements);
     await createAdminNotification({
       eventKey: `customer-project-${action}:${id}:${now}`,
       eventType: `customer.project_${action === "complete" ? "completed" : "withdrawn"}`,

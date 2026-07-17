@@ -73,6 +73,17 @@ type DashboardOpportunity = {
   summary: string;
   opportunityStatus: string;
   platformOnly: boolean;
+  customerContact: null | {
+    name: string;
+    email: string;
+    phone: string;
+    addressLine1: string;
+    addressLine2: string;
+    suburb: string;
+    addressState: string;
+    postcode: string;
+    grantedAt: string;
+  };
   quote: null | {
     productListId: string;
     inclusions: string[];
@@ -675,8 +686,9 @@ export function DirectTradeDashboard() {
                     <p>
                       At most six eligible installers ever see a scope.
                       Household identity, exact location and contact details
-                      stay outside the trade workspace. Respond through the
-                      structured platform controls only.
+                      stay outside the trade workspace during matching. A
+                      customer can later release them to this exact business
+                      after shortlisting its option.
                     </p>
                   </div>
                   {!hasLeadAccess ? (
@@ -779,13 +791,27 @@ export function DirectTradeDashboard() {
                               </span>
                             ))}
                           </div>
-                          {opportunity.matchStatus === "connected" ? (
+                          {opportunity.customerContact ? (
+                            <div className="dashboard-contact-allowance released">
+                              <div>
+                                <strong>Customer-authorised contact</strong>
+                                <span>
+                                  Released to this exact installer match on {new Date(opportunity.customerContact.grantedAt).toLocaleString("en-AU")}.
+                                </span>
+                              </div>
+                              <dl>
+                                <div><dt>Customer</dt><dd>{opportunity.customerContact.name}</dd></div>
+                                <div><dt>Phone</dt><dd><a href={`tel:${opportunity.customerContact.phone}`}>{opportunity.customerContact.phone}</a></dd></div>
+                                <div><dt>Email</dt><dd><a href={`mailto:${opportunity.customerContact.email}`}>{opportunity.customerContact.email}</a></dd></div>
+                                <div><dt>Service address</dt><dd>{[opportunity.customerContact.addressLine1, opportunity.customerContact.addressLine2, opportunity.customerContact.suburb, opportunity.customerContact.addressState, opportunity.customerContact.postcode].filter(Boolean).join(", ")}</dd></div>
+                              </dl>
+                            </div>
+                          ) : opportunity.matchStatus === "connected" ? (
                             <div className="dashboard-contact-allowance">
                               <div>
                                 <strong>Platform coordination active</strong>
                                 <span>
-                                  The household has progressed this option.
-                                  Customer contact details remain private.
+                                  The household progressed this option, but no active contact release is available. Keep coordination inside the platform.
                                 </span>
                               </div>
                             </div>
