@@ -732,6 +732,44 @@ export const tradeAssetServiceEvents = sqliteTable("trade_asset_service_events",
   index("trade_asset_service_events_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
+export const tradeServiceFollowUps = sqliteTable("trade_service_follow_ups", {
+  id: text("id").primaryKey(),
+  servicePlanId: text("service_plan_id").notNull(),
+  assetId: text("asset_id").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  serviceSiteId: text("service_site_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  dueAt: text("due_at").notNull(),
+  status: text("status").notNull().default("preparing"),
+  assigneeMemberId: text("assignee_member_id").notNull().default(""),
+  suppressionReason: text("suppression_reason").notNull().default(""),
+  internalNotes: text("internal_notes").notNull().default(""),
+  reminderSubject: text("reminder_subject").notNull().default(""),
+  reminderBody: text("reminder_body").notNull().default(""),
+  revision: integer("revision").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_service_follow_ups_plan_due_idx").on(table.firebaseUid, table.servicePlanId, table.dueAt),
+  index("trade_service_follow_ups_owner_status_due_idx").on(table.firebaseUid, table.status, table.dueAt),
+  index("trade_service_follow_ups_owner_assignee_due_idx").on(table.firebaseUid, table.assigneeMemberId, table.dueAt),
+  index("trade_service_follow_ups_owner_customer_site_idx").on(table.firebaseUid, table.crmCustomerId, table.serviceSiteId),
+]);
+
+export const tradeServiceFollowUpEvents = sqliteTable("trade_service_follow_up_events", {
+  id: text("id").primaryKey(),
+  followUpId: text("follow_up_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_service_follow_up_events_record_idx").on(table.followUpId, table.createdAt),
+  index("trade_service_follow_up_events_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
 export const customerAssetLifecyclePreferences = sqliteTable("customer_asset_lifecycle_preferences", {
   id: text("id").primaryKey(),
   customerUid: text("customer_uid").notNull(),

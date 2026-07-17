@@ -358,6 +358,13 @@
       "when": 1784286019714,
       "tag": "0051_team_scheduling_capacity",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1784288379385,
+      "tag": "0052_service_follow_up_preparation",
+      "breakpoints": true
     }
   ]
 }
