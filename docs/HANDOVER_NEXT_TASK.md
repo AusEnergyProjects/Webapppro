@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: pending P6-2G release on `codex/sites-custom-domain-migration`
+Baseline commit: `5bff61906e490d8bcd6f60402fb16cb0011b70c1` on `codex/sites-custom-domain-migration`, published as Sites version 135
 
 ## Current delivery summary
 
