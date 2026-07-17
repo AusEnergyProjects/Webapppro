@@ -56,7 +56,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 ## External or unverified state
 
 - Stripe production account status, historical membership payment links and webhook destination were inspected on 17 July 2026. Phase 6 supersedes new subscription-led core access. Existing subscribers retain a billing-portal path while product and commercial owners determine the retirement, cancellation or credit process. Webhook signing secrets remain deployment secrets.
-- Production Sites version 121 was audited on 17 July 2026 and is sourced from `9a497c3` on `codex/sites-custom-domain-migration`. Do not publish an older feature branch directly over that version; first integrate the custom-domain changes and rerun the release audit.
+- The public Sites baseline before the Phase 6 trade CRM release was version 121, sourced from `9a497c3` on `codex/sites-custom-domain-migration`. The Phase 6 release branch includes that baseline; future releases must continue from the newest live Sites version and rerun the release audit.
 - The canonical custom-domain response currently exposes HTTPS, HSTS and `X-Content-Type-Options`, but the intended permissions, referrer and frame headers were not observed and no CSP was present. Resolve this before the next public release.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.
 - Historical shared D1 databases may already contain explicit synthetic demo records from migrations 0033 to 0038. They remain marked as synthetic and filterable. Fresh databases no longer receive them automatically.
