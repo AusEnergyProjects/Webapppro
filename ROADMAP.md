@@ -305,6 +305,13 @@ Progress as at 17 July 2026:
 
 ### Build step 2: establish customers, sites, assets and the enquiry inbox
 
+Progress as at 17 July 2026:
+
+- P6-2A establishes owner-scoped customer contacts, service sites and site-contact assignments around the existing customer account. Each new account receives a primary contact and primary site, while the additive migration backfills the same structure for existing direct customers without duplicating the customer account.
+- Service sites now keep their own address, access, parking and hazard instructions. Verified installers can create and edit multiple contacts and sites, assign service contacts and select the authoritative service site for a direct job.
+- Existing direct jobs are linked to the migrated primary site. Protected marketplace jobs retain an empty customer and site link, broad service region and protected reference until the existing consent boundary authorises more detail.
+- P6-2B remains responsible for the unified enquiry inbox and generic CSV or Excel import. Assets, commercial account settings and complete timelines remain later Build step 2 slices.
+
 Customer and site records must support:
 
 - A payer account with multiple sites and contacts.

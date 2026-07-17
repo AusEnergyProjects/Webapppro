@@ -898,11 +898,68 @@ export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
   index("trade_crm_customers_owner_name_idx").on(table.firebaseUid, table.lastName, table.businessName),
 ]);
 
+export const tradeCrmCustomerContacts = sqliteTable("trade_crm_customer_contacts", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  customerId: text("customer_id").notNull(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  roleLabel: text("role_label").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  isPrimary: integer("is_primary").notNull().default(0),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_customer_contacts_owner_customer_idx").on(table.firebaseUid, table.customerId, table.recordStatus),
+  index("trade_crm_customer_contacts_owner_email_idx").on(table.firebaseUid, table.email),
+  index("trade_crm_customer_contacts_owner_phone_idx").on(table.firebaseUid, table.phone),
+]);
+
+export const tradeCrmServiceSites = sqliteTable("trade_crm_service_sites", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  customerId: text("customer_id").notNull(),
+  siteLabel: text("site_label").notNull().default("Primary site"),
+  addressLine1: text("address_line_1").notNull().default(""),
+  addressLine2: text("address_line_2").notNull().default(""),
+  suburb: text("suburb").notNull().default(""),
+  addressState: text("address_state").notNull().default(""),
+  postcode: text("postcode").notNull().default(""),
+  accessInstructions: text("access_instructions").notNull().default(""),
+  parkingInstructions: text("parking_instructions").notNull().default(""),
+  hazardNotes: text("hazard_notes").notNull().default(""),
+  isPrimary: integer("is_primary").notNull().default(0),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_service_sites_owner_customer_idx").on(table.firebaseUid, table.customerId, table.recordStatus),
+  index("trade_crm_service_sites_owner_postcode_idx").on(table.firebaseUid, table.postcode),
+]);
+
+export const tradeCrmSiteContacts = sqliteTable("trade_crm_site_contacts", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  serviceSiteId: text("service_site_id").notNull(),
+  customerContactId: text("customer_contact_id").notNull(),
+  roleLabel: text("role_label").notNull().default("Service contact"),
+  isPrimary: integer("is_primary").notNull().default(0),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_site_contacts_owner_site_contact_idx").on(table.firebaseUid, table.serviceSiteId, table.customerContactId),
+  index("trade_crm_site_contacts_owner_contact_idx").on(table.firebaseUid, table.customerContactId, table.recordStatus),
+]);
+
 export const tradeCrmJobDetails = sqliteTable("trade_crm_job_details", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
   firebaseUid: text("firebase_uid").notNull(),
   crmCustomerId: text("crm_customer_id").notNull().default(""),
+  serviceSiteId: text("service_site_id").notNull().default(""),
   customerSource: text("customer_source").notNull().default("internal"),
   pipelineStage: text("pipeline_stage").notNull().default("enquiry"),
   description: text("description").notNull().default(""),

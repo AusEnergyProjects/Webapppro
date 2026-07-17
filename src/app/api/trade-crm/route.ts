@@ -73,6 +73,8 @@ function errorResponse(error: unknown) {
   if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using customer CRM, scheduling and financial tracking." }, 403);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before assigning staff." }, 403);
   if (code === "CUSTOMER_NOT_FOUND") return adminJson({ ok: false, error: "Customer record not found." }, 404);
+  if (code === "CONTACT_NOT_FOUND") return adminJson({ ok: false, error: "Customer contact not found." }, 404);
+  if (code === "SERVICE_SITE_NOT_FOUND") return adminJson({ ok: false, error: "Service site not found." }, 404);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
   if (code === "APPOINTMENT_NOT_FOUND") return adminJson({ ok: false, error: "Appointment not found." }, 404);
   if (code === "NOTE_NOT_FOUND") return adminJson({ ok: false, error: "Note or issue not found." }, 404);
@@ -141,6 +143,7 @@ function indexedJob(row: Record<string, unknown>) {
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
     scheduledEnd: row.scheduled_end, assigneeLabel: row.assignee_label, sourceType, customerSource,
     crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
+    serviceSiteId: customerSource === "platform_private" ? "" : String(row.service_site_id || ""),
     customerDisplayName: customerSource === "platform_private" ? "AEA protected customer" : String(row.customer_name || ""),
     pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"),
     description: row.description || "", customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
@@ -150,6 +153,31 @@ function indexedJob(row: Record<string, unknown>) {
     invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
     handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [],
     createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+function indexedContact(row: Record<string, unknown>) {
+  return {
+    id: String(row.id), customerId: String(row.customer_id), firstName: String(row.first_name || ""),
+    lastName: String(row.last_name || ""), roleLabel: String(row.role_label || ""),
+    email: String(row.email || ""), phone: String(row.phone || ""), isPrimary: Boolean(row.is_primary),
+    createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+  };
+}
+
+function indexedServiceSite(row: Record<string, unknown>, siteContacts: Record<string, unknown>[] = []) {
+  return {
+    id: String(row.id), customerId: String(row.customer_id), siteLabel: String(row.site_label || "Primary site"),
+    addressLine1: String(row.address_line_1 || ""), addressLine2: String(row.address_line_2 || ""),
+    suburb: String(row.suburb || ""), addressState: String(row.address_state || ""), postcode: String(row.postcode || ""),
+    accessInstructions: String(row.access_instructions || ""), parkingInstructions: String(row.parking_instructions || ""),
+    hazardNotes: String(row.hazard_notes || ""), isPrimary: Boolean(row.is_primary),
+    contacts: siteContacts.filter((contact) => contact.service_site_id === row.id).map((contact) => ({
+      id: String(contact.id), customerContactId: String(contact.customer_contact_id), roleLabel: String(contact.role_label || "Service contact"),
+      isPrimary: Boolean(contact.is_primary), displayName: String(contact.contact_name || "Contact"),
+      email: String(contact.email || ""), phone: String(contact.phone || ""),
+    })),
+    createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   };
 }
 
@@ -305,16 +333,34 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       FROM trade_crm_customers c WHERE c.id = ? AND c.firebase_uid = ? AND c.record_status = 'active'`)
       .bind(id, identity.uid).first<Record<string, unknown>>();
     if (!row) throw new Error("CUSTOMER_NOT_FOUND");
-    const jobs = await db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage,
+    const [jobs, contacts, sites, siteContacts] = await Promise.all([
+      db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage,
       d.next_action, d.quoted_value_cents, d.invoiced_value_cents, d.paid_value_cents,
       CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name
       FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
       WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 200`)
-      .bind(id, identity.uid).all<Record<string, unknown>>();
-    return { customer: indexedCustomer(row), jobs: jobs.results.map((job: Record<string, unknown>) => indexedJob(job)) };
+        .bind(id, identity.uid).all<Record<string, unknown>>(),
+      db.prepare(`SELECT * FROM trade_crm_customer_contacts
+        WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, last_name, first_name`)
+        .bind(id, identity.uid).all<Record<string, unknown>>(),
+      db.prepare(`SELECT * FROM trade_crm_service_sites
+        WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, site_label`)
+        .bind(id, identity.uid).all<Record<string, unknown>>(),
+      db.prepare(`SELECT sc.*, TRIM(cc.first_name || ' ' || cc.last_name) contact_name, cc.email, cc.phone
+        FROM trade_crm_site_contacts sc JOIN trade_crm_customer_contacts cc
+          ON cc.id = sc.customer_contact_id AND cc.firebase_uid = sc.firebase_uid
+        JOIN trade_crm_service_sites ss ON ss.id = sc.service_site_id AND ss.firebase_uid = sc.firebase_uid
+        WHERE ss.customer_id = ? AND sc.firebase_uid = ? AND sc.record_status = 'active' AND cc.record_status = 'active'`)
+        .bind(id, identity.uid).all<Record<string, unknown>>(),
+    ]);
+    return {
+      customer: indexedCustomer(row), contacts: contacts.results.map(indexedContact),
+      sites: sites.results.map((site) => indexedServiceSite(site, siteContacts.results)),
+      jobs: jobs.results.map((job: Record<string, unknown>) => indexedJob(job)),
+    };
   }
-  const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description,
+  const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.description,
     d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents,
     d.invoiced_value_cents, d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
     CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
@@ -325,7 +371,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     .bind(id, identity.uid).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   const customerId = String(row.crm_customer_id || "");
-  const [tasks, appointments, notes, customer] = await Promise.all([
+  const [tasks, appointments, notes, customer, sites, siteContacts] = await Promise.all([
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
@@ -333,9 +379,22 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       ? db.prepare("SELECT * FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
         .bind(customerId, identity.uid).first<Record<string, unknown>>()
       : Promise.resolve(null),
+    customerId
+      ? db.prepare("SELECT * FROM trade_crm_service_sites WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, site_label")
+        .bind(customerId, identity.uid).all<Record<string, unknown>>()
+      : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    customerId
+      ? db.prepare(`SELECT sc.*, TRIM(cc.first_name || ' ' || cc.last_name) contact_name, cc.email, cc.phone
+          FROM trade_crm_site_contacts sc JOIN trade_crm_customer_contacts cc
+            ON cc.id = sc.customer_contact_id AND cc.firebase_uid = sc.firebase_uid
+          JOIN trade_crm_service_sites ss ON ss.id = sc.service_site_id AND ss.firebase_uid = sc.firebase_uid
+          WHERE ss.customer_id = ? AND sc.firebase_uid = ? AND sc.record_status = 'active' AND cc.record_status = 'active'`)
+        .bind(customerId, identity.uid).all<Record<string, unknown>>()
+      : Promise.resolve({ results: [] as Record<string, unknown>[] }),
   ]);
   const job = indexedJob(row);
-  return { customer: customer ? indexedCustomer(customer) : null, job: { ...job,
+  return { customer: customer ? indexedCustomer(customer) : null,
+    sites: sites.results.map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
     appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at, endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes })),
     notes: notes.results.map((item: Record<string, unknown>) => ({ id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status, createdAt: item.created_at, updatedAt: item.updated_at })),
@@ -478,6 +537,29 @@ async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: stri
   return job;
 }
 
+async function ownedCustomer(db: D1Database, identity: CrmIdentity, customerId: string) {
+  const customer = await db.prepare("SELECT * FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
+    .bind(customerId, identity.uid).first<Record<string, unknown>>();
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+  return customer;
+}
+
+async function ownedContact(db: D1Database, identity: CrmIdentity, contactId: string, customerId = "") {
+  const contact = await db.prepare(`SELECT * FROM trade_crm_customer_contacts
+    WHERE id = ? AND firebase_uid = ? AND record_status = 'active' AND (? = '' OR customer_id = ?)`)
+    .bind(contactId, identity.uid, customerId, customerId).first<Record<string, unknown>>();
+  if (!contact) throw new Error("CONTACT_NOT_FOUND");
+  return contact;
+}
+
+async function ownedServiceSite(db: D1Database, identity: CrmIdentity, siteId: string, customerId = "") {
+  const site = await db.prepare(`SELECT * FROM trade_crm_service_sites
+    WHERE id = ? AND firebase_uid = ? AND record_status = 'active' AND (? = '' OR customer_id = ?)`)
+    .bind(siteId, identity.uid, customerId, customerId).first<Record<string, unknown>>();
+  if (!site) throw new Error("SERVICE_SITE_NOT_FOUND");
+  return site;
+}
+
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
@@ -551,17 +633,100 @@ export async function POST(request: Request) {
       }
       if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
       const id = crypto.randomUUID();
+      const contactId = crypto.randomUUID();
+      const siteId = crypto.randomUUID();
       const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${id.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
-      await db.prepare(`INSERT INTO trade_crm_customers
+      const addressLine1 = cleanAdminText(body.addressLine1, 140);
+      const addressLine2 = cleanAdminText(body.addressLine2, 140);
+      const suburb = cleanAdminText(body.suburb, 80);
+      const addressState = cleanAdminText(body.addressState, 20).toUpperCase();
+      const postcode = cleanAdminText(body.postcode, 12);
+      await db.batch([db.prepare(`INSERT INTO trade_crm_customers
         (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, email,
          phone, address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes,
          record_status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
         .bind(id, identity.uid, customerNumber, customerType, firstName, lastName, businessName, email,
-          phone, cleanAdminText(body.addressLine1, 140), cleanAdminText(body.addressLine2, 140),
-          cleanAdminText(body.suburb, 80), cleanAdminText(body.addressState, 20).toUpperCase(),
-          cleanAdminText(body.postcode, 12), JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now).run();
+          phone, addressLine1, addressLine2, suburb, addressState, postcode,
+          JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now),
+        db.prepare(`INSERT INTO trade_crm_customer_contacts
+          (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'Primary contact', ?, ?, 1, 'active', ?, ?)`)
+          .bind(contactId, identity.uid, id, firstName, lastName, email, phone, now, now),
+        db.prepare(`INSERT INTO trade_crm_service_sites
+          (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+           access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+          .bind(siteId, identity.uid, id, addressLine1, addressLine2, suburb, addressState, postcode, now, now),
+        db.prepare(`INSERT INTO trade_crm_site_contacts
+          (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
+          .bind(crypto.randomUUID(), identity.uid, siteId, contactId, now, now),
+      ]);
       return adminJson({ ok: true, id, customerNumber }, 201);
+    }
+
+    if (action === "create_customer_contact") {
+      const customerId = cleanAdminText(body.customerId, 180);
+      await ownedCustomer(db, identity, customerId);
+      const firstName = cleanAdminText(body.firstName, 80);
+      const lastName = cleanAdminText(body.lastName, 80);
+      const email = cleanAdminText(body.email, 180).toLowerCase();
+      const phone = cleanAdminText(body.phone, 40);
+      if (!firstName && !lastName) return adminJson({ ok: false, error: "Add the contact name." }, 400);
+      if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the contact email address." }, 400);
+      const contactId = crypto.randomUUID();
+      const siteId = cleanAdminText(body.serviceSiteId, 180);
+      if (siteId) await ownedServiceSite(db, identity, siteId, customerId);
+      const statements = [db.prepare(`INSERT INTO trade_crm_customer_contacts
+        (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
+        .bind(contactId, identity.uid, customerId, firstName, lastName, cleanAdminText(body.roleLabel, 80), email, phone, now, now)];
+      if (siteId) statements.push(db.prepare(`INSERT INTO trade_crm_site_contacts
+        (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
+        .bind(crypto.randomUUID(), identity.uid, siteId, contactId, cleanAdminText(body.siteRoleLabel, 80) || "Service contact", now, now));
+      await db.batch(statements);
+      return adminJson({ ok: true, id: contactId }, 201);
+    }
+
+    if (action === "create_service_site") {
+      const customerId = cleanAdminText(body.customerId, 180);
+      await ownedCustomer(db, identity, customerId);
+      const siteLabel = cleanAdminText(body.siteLabel, 100);
+      if (!siteLabel) return adminJson({ ok: false, error: "Add a clear site name." }, 400);
+      const siteId = crypto.randomUUID();
+      const contactId = cleanAdminText(body.customerContactId, 180);
+      if (contactId) await ownedContact(db, identity, contactId, customerId);
+      const statements = [db.prepare(`INSERT INTO trade_crm_service_sites
+        (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+         access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
+        .bind(siteId, identity.uid, customerId, siteLabel, cleanAdminText(body.addressLine1, 140), cleanAdminText(body.addressLine2, 140),
+          cleanAdminText(body.suburb, 80), cleanAdminText(body.addressState, 20).toUpperCase(), cleanAdminText(body.postcode, 12),
+          cleanAdminText(body.accessInstructions, 2000), cleanAdminText(body.parkingInstructions, 1000), cleanAdminText(body.hazardNotes, 2000), now, now)];
+      if (contactId) statements.push(db.prepare(`INSERT INTO trade_crm_site_contacts
+        (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'Service contact', 0, 'active', ?, ?)`)
+        .bind(crypto.randomUUID(), identity.uid, siteId, contactId, now, now));
+      await db.batch(statements);
+      return adminJson({ ok: true, id: siteId }, 201);
+    }
+
+    if (action === "link_site_contact") {
+      const customerId = cleanAdminText(body.customerId, 180);
+      const siteId = cleanAdminText(body.serviceSiteId, 180);
+      const contactId = cleanAdminText(body.customerContactId, 180);
+      await ownedCustomer(db, identity, customerId);
+      await ownedServiceSite(db, identity, siteId, customerId);
+      await ownedContact(db, identity, contactId, customerId);
+      try {
+        await db.prepare(`INSERT INTO trade_crm_site_contacts
+          (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
+          .bind(crypto.randomUUID(), identity.uid, siteId, contactId, cleanAdminText(body.roleLabel, 80) || "Service contact", now, now).run();
+      } catch { return adminJson({ ok: false, error: "This contact is already assigned to the site." }, 409); }
+      return adminJson({ ok: true }, 201);
     }
 
     if (action === "create_job") {
@@ -570,11 +735,18 @@ export async function POST(request: Request) {
         .bind(identity.uid).first<Record<string, unknown>>();
       if (Number(activeJobs?.count || 0) >= MEMBER_ACTIVE_JOB_LIMIT) throw new Error("JOB_LIMIT_REACHED");
       const customerId = cleanAdminText(body.crmCustomerId, 180);
+      let serviceSiteId = cleanAdminText(body.serviceSiteId, 180);
       if (customerId) {
-        const customer = await db.prepare("SELECT id FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
-          .bind(customerId, identity.uid).first<Record<string, unknown>>();
-        if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+        await ownedCustomer(db, identity, customerId);
+        if (!serviceSiteId) {
+          const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
+            WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, created_at LIMIT 1`)
+            .bind(customerId, identity.uid).first<Record<string, unknown>>();
+          serviceSiteId = String(primarySite?.id || "");
+        }
+        if (serviceSiteId) await ownedServiceSite(db, identity, serviceSiteId, customerId);
       }
+      if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
       const templateId = cleanAdminText(body.templateId, 180);
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
@@ -602,11 +774,11 @@ export async function POST(request: Request) {
           .bind(workOrderId, identity.uid, workNumber, title, serviceCategory, cleanAdminText(body.siteArea, 80),
             priority, scheduledStart, scheduledEnd, assignee, now, now),
         db.prepare(`INSERT INTO trade_crm_job_details
-          (id, work_order_id, firebase_uid, crm_customer_id, customer_source, pipeline_stage, description,
+          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
-          .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, customerId ? "trade_owned" : "internal",
+          VALUES (?, ?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
+          .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, serviceSiteId, customerId ? "trade_owned" : "internal",
             cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
@@ -699,9 +871,69 @@ export async function PATCH(request: Request) {
       if (rows.results.some((row: Record<string, unknown>) => Number(row.active_jobs || 0) > 0)) {
         return adminJson({ ok: false, error: "Customers with active jobs cannot be archived. Complete or unlink those jobs first." }, 409);
       }
-      await db.prepare(`UPDATE trade_crm_customers SET record_status = 'archived', updated_at = ?
-        WHERE firebase_uid = ? AND record_status = 'active' AND id IN (${placeholders})`).bind(now, identity.uid, ...ids).run();
+      await db.batch([
+        db.prepare(`UPDATE trade_crm_site_contacts SET record_status = 'archived', updated_at = ?
+          WHERE firebase_uid = ? AND service_site_id IN (SELECT id FROM trade_crm_service_sites WHERE firebase_uid = ? AND customer_id IN (${placeholders}))`)
+          .bind(now, identity.uid, identity.uid, ...ids),
+        db.prepare(`UPDATE trade_crm_customer_contacts SET record_status = 'archived', updated_at = ?
+          WHERE firebase_uid = ? AND customer_id IN (${placeholders})`).bind(now, identity.uid, ...ids),
+        db.prepare(`UPDATE trade_crm_service_sites SET record_status = 'archived', updated_at = ?
+          WHERE firebase_uid = ? AND customer_id IN (${placeholders})`).bind(now, identity.uid, ...ids),
+        db.prepare(`UPDATE trade_crm_customers SET record_status = 'archived', updated_at = ?
+          WHERE firebase_uid = ? AND record_status = 'active' AND id IN (${placeholders})`).bind(now, identity.uid, ...ids),
+      ]);
       return adminJson({ ok: true, archived: ids.length });
+    }
+
+    if (action === "update_customer_contact") {
+      const customerId = cleanAdminText(body.customerId, 180);
+      const contactId = cleanAdminText(body.contactId, 180);
+      const contact = await ownedContact(db, identity, contactId, customerId);
+      const firstName = body.firstName === undefined ? String(contact.first_name) : cleanAdminText(body.firstName, 80);
+      const lastName = body.lastName === undefined ? String(contact.last_name) : cleanAdminText(body.lastName, 80);
+      const email = body.email === undefined ? String(contact.email) : cleanAdminText(body.email, 180).toLowerCase();
+      const phone = body.phone === undefined ? String(contact.phone) : cleanAdminText(body.phone, 40);
+      if (!firstName && !lastName) return adminJson({ ok: false, error: "Add the contact name." }, 400);
+      if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the contact email address." }, 400);
+      const statements = [db.prepare(`UPDATE trade_crm_customer_contacts
+        SET first_name = ?, last_name = ?, role_label = ?, email = ?, phone = ?, updated_at = ?
+        WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
+        .bind(firstName, lastName, body.roleLabel === undefined ? contact.role_label : cleanAdminText(body.roleLabel, 80), email, phone,
+          now, contactId, customerId, identity.uid)];
+      if (Boolean(contact.is_primary)) statements.push(db.prepare(`UPDATE trade_crm_customers
+        SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+        .bind(firstName, lastName, email, phone, now, customerId, identity.uid));
+      await db.batch(statements);
+      return adminJson({ ok: true });
+    }
+
+    if (action === "update_service_site") {
+      const customerId = cleanAdminText(body.customerId, 180);
+      const siteId = cleanAdminText(body.serviceSiteId, 180);
+      const site = await ownedServiceSite(db, identity, siteId, customerId);
+      const siteLabel = body.siteLabel === undefined ? String(site.site_label) : cleanAdminText(body.siteLabel, 100);
+      if (!siteLabel) return adminJson({ ok: false, error: "Add a clear site name." }, 400);
+      const values = {
+        addressLine1: body.addressLine1 === undefined ? String(site.address_line_1) : cleanAdminText(body.addressLine1, 140),
+        addressLine2: body.addressLine2 === undefined ? String(site.address_line_2) : cleanAdminText(body.addressLine2, 140),
+        suburb: body.suburb === undefined ? String(site.suburb) : cleanAdminText(body.suburb, 80),
+        addressState: body.addressState === undefined ? String(site.address_state) : cleanAdminText(body.addressState, 20).toUpperCase(),
+        postcode: body.postcode === undefined ? String(site.postcode) : cleanAdminText(body.postcode, 12),
+      };
+      const statements = [db.prepare(`UPDATE trade_crm_service_sites SET site_label = ?, address_line_1 = ?, address_line_2 = ?,
+        suburb = ?, address_state = ?, postcode = ?, access_instructions = ?, parking_instructions = ?, hazard_notes = ?, updated_at = ?
+        WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
+        .bind(siteLabel, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode,
+          body.accessInstructions === undefined ? site.access_instructions : cleanAdminText(body.accessInstructions, 2000),
+          body.parkingInstructions === undefined ? site.parking_instructions : cleanAdminText(body.parkingInstructions, 1000),
+          body.hazardNotes === undefined ? site.hazard_notes : cleanAdminText(body.hazardNotes, 2000),
+          now, siteId, customerId, identity.uid)];
+      if (Boolean(site.is_primary)) statements.push(db.prepare(`UPDATE trade_crm_customers
+        SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ?`)
+        .bind(values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, now, customerId, identity.uid));
+      await db.batch(statements);
+      return adminJson({ ok: true });
     }
 
     if (action === "update_customer") {
@@ -715,23 +947,32 @@ export async function PATCH(request: Request) {
         JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
         WHERE d.crm_customer_id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
         .bind(customerId, identity.uid).all<Record<string, unknown>>();
+      const firstName = body.firstName === undefined ? String(current.first_name) : cleanAdminText(body.firstName, 80);
+      const lastName = body.lastName === undefined ? String(current.last_name) : cleanAdminText(body.lastName, 80);
+      const phone = body.phone === undefined ? String(current.phone) : cleanAdminText(body.phone, 40);
+      const addressLine1 = body.addressLine1 === undefined ? String(current.address_line_1) : cleanAdminText(body.addressLine1, 140);
+      const addressLine2 = body.addressLine2 === undefined ? String(current.address_line_2) : cleanAdminText(body.addressLine2, 140);
+      const suburb = body.suburb === undefined ? String(current.suburb) : cleanAdminText(body.suburb, 80);
+      const addressState = body.addressState === undefined ? String(current.address_state) : cleanAdminText(body.addressState, 20).toUpperCase();
+      const postcode = body.postcode === undefined ? String(current.postcode) : cleanAdminText(body.postcode, 12);
       const statements = [db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, email = ?,
         phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
         tags = ?, private_notes = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
         .bind(
-          body.firstName === undefined ? current.first_name : cleanAdminText(body.firstName, 80),
-          body.lastName === undefined ? current.last_name : cleanAdminText(body.lastName, 80),
+          firstName, lastName,
           body.businessName === undefined ? current.business_name : cleanAdminText(body.businessName, 140), email,
-          body.phone === undefined ? current.phone : cleanAdminText(body.phone, 40),
-          body.addressLine1 === undefined ? current.address_line_1 : cleanAdminText(body.addressLine1, 140),
-          body.addressLine2 === undefined ? current.address_line_2 : cleanAdminText(body.addressLine2, 140),
-          body.suburb === undefined ? current.suburb : cleanAdminText(body.suburb, 80),
-          body.addressState === undefined ? current.address_state : cleanAdminText(body.addressState, 20).toUpperCase(),
-          body.postcode === undefined ? current.postcode : cleanAdminText(body.postcode, 12),
+          phone, addressLine1, addressLine2, suburb, addressState, postcode,
           body.tags === undefined ? current.tags : JSON.stringify(cleanList(body.tags)),
           body.privateNotes === undefined ? current.private_notes : cleanAdminText(body.privateNotes, 2000),
           now, customerId, identity.uid,
-        )];
+        ),
+        db.prepare(`UPDATE trade_crm_customer_contacts SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = ?
+          WHERE customer_id = ? AND firebase_uid = ? AND is_primary = 1 AND record_status = 'active'`)
+          .bind(firstName, lastName, email, phone, now, customerId, identity.uid),
+        db.prepare(`UPDATE trade_crm_service_sites SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?, updated_at = ?
+          WHERE customer_id = ? AND firebase_uid = ? AND is_primary = 1 AND record_status = 'active'`)
+          .bind(addressLine1, addressLine2, suburb, addressState, postcode, now, customerId, identity.uid),
+      ];
       for (const job of relatedJobs.results) {
         const revision = nextJobRevision(job.revision); const workOrderId = String(job.id);
         statements.push(db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
@@ -789,13 +1030,21 @@ export async function PATCH(request: Request) {
     if (workStage && !WORK_STAGES.has(workStage)) return adminJson({ ok: false, error: "Choose a valid work stage." }, 400);
     if (priority && !PRIORITIES.has(priority)) return adminJson({ ok: false, error: "Choose a valid priority." }, 400);
     const customerId = platformPrivate ? "" : body.crmCustomerId === undefined ? String(current?.crm_customer_id || "") : cleanAdminText(body.crmCustomerId, 180);
+    let serviceSiteId = platformPrivate ? "" : body.serviceSiteId === undefined ? String(current?.service_site_id || "") : cleanAdminText(body.serviceSiteId, 180);
     if (customerId) {
-      const customer = await db.prepare("SELECT id FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
-        .bind(customerId, identity.uid).first<Record<string, unknown>>();
-      if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+      await ownedCustomer(db, identity, customerId);
+      if (!serviceSiteId) {
+        const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
+          WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, created_at LIMIT 1`)
+          .bind(customerId, identity.uid).first<Record<string, unknown>>();
+        serviceSiteId = String(primarySite?.id || "");
+      }
+      if (serviceSiteId) await ownedServiceSite(db, identity, serviceSiteId, customerId);
     }
+    if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
     const values = {
       customerId,
+      serviceSiteId,
       customerSource: platformPrivate ? "platform_private" : customerId ? "trade_owned" : "internal",
       pipelineStage,
       description: body.description === undefined ? String(current?.description || "") : cleanAdminText(body.description, 3000),
@@ -809,19 +1058,19 @@ export async function PATCH(request: Request) {
       paymentDue: body.paymentDueAt === undefined ? String(current?.payment_due_at || "") : dateValue(body.paymentDueAt, true),
     };
     const detailStatement = current
-      ? db.prepare(`UPDATE trade_crm_job_details SET crm_customer_id = ?, customer_source = ?, pipeline_stage = ?,
+      ? db.prepare(`UPDATE trade_crm_job_details SET crm_customer_id = ?, service_site_id = ?, customer_source = ?, pipeline_stage = ?,
           description = ?, customer_reference = ?, next_action = ?, tags = ?, estimated_value_cents = ?,
           quoted_value_cents = ?, invoiced_value_cents = ?, paid_value_cents = ?, quote_status = ?,
           invoice_status = ?, payment_due_at = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
-        .bind(values.customerId, values.customerSource, values.pipelineStage, values.description, values.customerReference,
+        .bind(values.customerId, values.serviceSiteId, values.customerSource, values.pipelineStage, values.description, values.customerReference,
           values.nextAction, values.tags, values.estimated, values.quoted, values.invoiced, values.paid,
           quoteStatus, invoiceStatus, values.paymentDue, now, workOrderId, identity.uid)
       : db.prepare(`INSERT INTO trade_crm_job_details
-          (id, work_order_id, firebase_uid, crm_customer_id, customer_source, pipeline_stage, description,
+          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), workOrderId, identity.uid, values.customerId, values.customerSource, values.pipelineStage,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), workOrderId, identity.uid, values.customerId, values.serviceSiteId, values.customerSource, values.pipelineStage,
           values.description, values.customerReference, values.nextAction, values.tags, values.estimated, values.quoted,
           values.invoiced, values.paid, quoteStatus, invoiceStatus, values.paymentDue, now, now);
     const revision = nextJobRevision(job.revision);
