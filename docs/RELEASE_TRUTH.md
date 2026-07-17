@@ -63,7 +63,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - P6-2A was published as Sites version 123 from commit `e5ddc9471b059342840d2e7c86cb0a91758814ca` on `codex/sites-custom-domain-migration`.
 - P6-2B was published as Sites version 124 from commit `5863f0419c420811bfa145ed9c4523f212888dde` on `codex/sites-custom-domain-migration`.
 - P6-2C continues from that exact version 124 source and adds migration `0049_customer_asset_timeline.sql`, the reviewed installed-asset register and unified direct-customer/site timeline. Publication still requires `npm run validate`, GitHub push, Sites version creation and live provenance verification.
-- The canonical custom-domain response currently exposes HTTPS, HSTS and `X-Content-Type-Options`, but the intended permissions, referrer and frame headers were not observed and no CSP was present. Resolve this before the next public release.
+- Live verification after P6-2C observed HTTPS, HSTS, `Permissions-Policy`, `Referrer-Policy`, `X-Content-Type-Options` and `X-Frame-Options` on the canonical custom domain. No CSP header was observed.
 - Apple and Google developer accounts, signing credentials, mobile Firebase files, OAuth client IDs and APNs or FCM release credentials are required for store distribution.
 - Historical shared D1 databases may already contain explicit synthetic demo records from migrations 0033 to 0038. They remain marked as synthetic and filterable. Fresh databases no longer receive them automatically.
 
