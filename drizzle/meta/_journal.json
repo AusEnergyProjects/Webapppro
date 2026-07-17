@@ -379,6 +379,13 @@
       "when": 1784292753839,
       "tag": "0054_service_follow_up_reporting",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1784297024095,
+      "tag": "0055_appointment_rescheduling",
+      "breakpoints": true
     }
   ]
 }

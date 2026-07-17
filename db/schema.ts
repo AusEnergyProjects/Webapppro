@@ -1330,6 +1330,81 @@ export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   index("trade_crm_appointments_assignee_start_idx").on(table.firebaseUid, table.assigneeMemberId, table.status, table.startsAt),
 ]);
 
+export const tradeCrmAppointmentRevisions = sqliteTable("trade_crm_appointment_revisions", {
+  id: text("id").primaryKey(),
+  appointmentId: text("appointment_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  revision: integer("revision").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull().default(""),
+  assigneeMemberId: text("assignee_member_id").notNull().default(""),
+  assigneeLabel: text("assignee_label").notNull().default(""),
+  changeSource: text("change_source").notNull(),
+  sourceReference: text("source_reference").notNull().default(""),
+  changedByUid: text("changed_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_appointment_revisions_item_revision_idx").on(table.appointmentId, table.revision),
+  index("trade_crm_appointment_revisions_owner_idx").on(table.firebaseUid, table.appointmentId, table.createdAt),
+]);
+
+export const tradeCrmAppointmentRescheduleRequests = sqliteTable("trade_crm_appointment_reschedule_requests", {
+  id: text("id").primaryKey(),
+  appointmentId: text("appointment_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  customerFirebaseUid: text("customer_firebase_uid").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  status: text("status").notNull().default("pending"),
+  activeKey: text("active_key").notNull().default(""),
+  preferredWindows: text("preferred_windows").notNull().default("[]"),
+  reason: text("reason").notNull().default(""),
+  accessNotes: text("access_notes").notNull().default(""),
+  requestedAppointmentRevision: integer("requested_appointment_revision").notNull(),
+  originalStartsAt: text("original_starts_at").notNull(),
+  originalEndsAt: text("original_ends_at").notNull().default(""),
+  originalAssigneeMemberId: text("original_assignee_member_id").notNull().default(""),
+  originalAssigneeLabel: text("original_assignee_label").notNull().default(""),
+  proposedStartsAt: text("proposed_starts_at").notNull().default(""),
+  proposedEndsAt: text("proposed_ends_at").notNull().default(""),
+  proposedAssigneeMemberId: text("proposed_assignee_member_id").notNull().default(""),
+  proposedAssigneeLabel: text("proposed_assignee_label").notNull().default(""),
+  decisionNote: text("decision_note").notNull().default(""),
+  revision: integer("revision").notNull().default(1),
+  requestedAt: text("requested_at").notNull(),
+  decidedByUid: text("decided_by_uid").notNull().default(""),
+  decidedAt: text("decided_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_appointment_reschedule_active_idx").on(table.appointmentId, table.activeKey),
+  index("trade_crm_appointment_reschedule_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_crm_appointment_reschedule_customer_idx").on(table.customerFirebaseUid, table.updatedAt),
+]);
+
+export const tradeCrmAppointmentRescheduleEvents = sqliteTable("trade_crm_appointment_reschedule_events", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull(),
+  appointmentId: text("appointment_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  requestRevision: integer("request_revision").notNull(),
+  fromStartsAt: text("from_starts_at").notNull().default(""),
+  fromEndsAt: text("from_ends_at").notNull().default(""),
+  toStartsAt: text("to_starts_at").notNull().default(""),
+  toEndsAt: text("to_ends_at").notNull().default(""),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_appointment_reschedule_events_request_idx").on(table.requestId, table.createdAt),
+  index("trade_crm_appointment_reschedule_events_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
 export const tradeCrmJobTemplates = sqliteTable("trade_crm_job_templates", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
