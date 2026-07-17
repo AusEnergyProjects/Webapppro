@@ -351,6 +351,13 @@
       "when": 1784284569123,
       "tag": "0050_versioned_trade_quotes",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1784286019714,
+      "tag": "0051_team_scheduling_capacity",
+      "breakpoints": true
     }
   ]
 }

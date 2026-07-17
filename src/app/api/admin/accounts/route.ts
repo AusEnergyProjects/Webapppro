@@ -117,6 +117,7 @@ export async function GET(request: Request) {
           String(account.partner_type) as PartnerType,
           account.billing_status,
           featureGrants,
+          account.verification_status === "approved",
         ),
       });
     }

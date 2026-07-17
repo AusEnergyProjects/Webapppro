@@ -610,6 +610,36 @@ export const tradeInstalledAssets = sqliteTable("trade_installed_assets", {
   index("trade_installed_assets_review_idx").on(table.firebaseUid, table.reviewStatus, table.updatedAt),
 ]);
 
+export const tradeTeamWorkingHours = sqliteTable("trade_team_working_hours", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  teamMemberId: text("team_member_id").notNull(),
+  weekday: integer("weekday").notNull(),
+  startMinute: integer("start_minute").notNull(),
+  endMinute: integer("end_minute").notNull(),
+  isAvailable: integer("is_available", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_team_working_hours_member_day_idx").on(table.ownerUid, table.teamMemberId, table.weekday),
+  index("trade_team_working_hours_owner_day_idx").on(table.ownerUid, table.weekday, table.teamMemberId),
+]);
+
+export const tradeTeamUnavailability = sqliteTable("trade_team_unavailability", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  teamMemberId: text("team_member_id").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  reason: text("reason").notNull().default("Unavailable"),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_team_unavailability_owner_range_idx").on(table.ownerUid, table.startsAt, table.endsAt),
+  index("trade_team_unavailability_member_range_idx").on(table.ownerUid, table.teamMemberId, table.startsAt, table.endsAt),
+]);
+
 export const tradeComplianceItems = sqliteTable("trade_compliance_items", {
   id: text("id").primaryKey(),
   handoverPackId: text("handover_pack_id").notNull(),
@@ -1163,14 +1193,17 @@ export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   title: text("title").notNull(),
   startsAt: text("starts_at").notNull(),
   endsAt: text("ends_at").notNull().default(""),
+  assigneeMemberId: text("assignee_member_id").notNull().default(""),
   assigneeLabel: text("assignee_label").notNull().default(""),
   status: text("status").notNull().default("scheduled"),
   notes: text("notes").notNull().default(""),
+  revision: integer("revision").notNull().default(1),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("trade_crm_appointments_owner_start_idx").on(table.firebaseUid, table.status, table.startsAt),
   index("trade_crm_appointments_work_order_idx").on(table.workOrderId, table.startsAt),
+  index("trade_crm_appointments_assignee_start_idx").on(table.firebaseUid, table.assigneeMemberId, table.status, table.startsAt),
 ]);
 
 export const tradeCrmJobTemplates = sqliteTable("trade_crm_job_templates", {

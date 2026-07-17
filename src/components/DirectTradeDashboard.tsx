@@ -10,6 +10,7 @@ import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
+import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import {
@@ -182,7 +183,7 @@ export function DirectTradeDashboard() {
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
   const [siteVisitDates, setSiteVisitDates] = useState<Record<string, string>>({});
-  const [workspace, setWorkspace] = useState<"work" | "leads" | "products" | "orders" | "import" | "account">("work");
+  const [workspace, setWorkspace] = useState<"work" | "schedule" | "leads" | "products" | "orders" | "import" | "account">("work");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
   useEffect(
@@ -578,10 +579,11 @@ export function DirectTradeDashboard() {
                 aria-label="TLink installer account"
               >
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">01</b><span>Work</span><small>Today, jobs and customers</small></button>
-                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">02</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">03</b><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">04</b><span>Orders</span><small>Supply and warranties</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Settings and verification</small></button>
+                <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => setWorkspace("schedule")}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
+                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">03</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">04</b><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" className={workspace === "orders" ? "active" : ""} onClick={() => setWorkspace("orders")}><b aria-hidden="true">05</b><span>Orders</span><small>Supply and warranties</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">06</b><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
@@ -594,6 +596,8 @@ export function DirectTradeDashboard() {
                 teamAccess={hasTeamAccess}
                 navigationTarget={commandTarget}
               />}
+
+              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "account" && <section
                 className="dashboard-status-grid"

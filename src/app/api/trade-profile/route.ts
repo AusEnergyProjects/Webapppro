@@ -101,6 +101,7 @@ export async function GET(request: Request) {
     String(record.partner_type) as PartnerType,
     record.billing_status,
     featureGrants,
+    record.verification_status === "approved",
   );
   return json({
     ok: true,
