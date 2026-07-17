@@ -1,0 +1,3 @@
+CREATE INDEX `customer_service_reminder_opt_outs_report_time_idx` ON `customer_service_reminder_opt_outs` (`opted_out_at`,`channel`);--> statement-breakpoint
+CREATE INDEX `service_reminder_deliveries_report_time_idx` ON `service_reminder_deliveries` (`created_at`,`channel`,`status`);--> statement-breakpoint
+CREATE INDEX `trade_service_follow_ups_report_due_idx` ON `trade_service_follow_ups` (`due_at`,`status`,`assignee_member_id`);

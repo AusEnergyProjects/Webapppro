@@ -25,6 +25,7 @@ import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
+import { AdminServiceFollowUpReporting } from "@/components/AdminServiceFollowUpReporting";
 import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspace";
 import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
 import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
@@ -950,6 +951,7 @@ export function AdminOperationsPortal() {
                 )}
               </section>
               {["owner", "admin"].includes(session.role) && <AdminPerformancePanel api={api} />}
+              {["owner", "admin"].includes(session.role) && <AdminServiceFollowUpReporting api={api} />}
               <div className="admin-overview-grid">
                 <section className="admin-panel">
                   <div className="admin-panel-heading">

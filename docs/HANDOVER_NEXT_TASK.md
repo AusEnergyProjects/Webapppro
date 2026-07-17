@@ -2,53 +2,54 @@
 
 Status: active rolling handover
 Prepared: 17 July 2026
-Baseline commit: `5bff61906e490d8bcd6f60402fb16cb0011b70c1` on `codex/sites-custom-domain-migration`, published as Sites version 135
+Baseline commit: `e2a57d1774681da69c34069d3631ab6fc00eb6c5` on `codex/sites-custom-domain-migration`, published as Sites version 136. P6-2H release is pending.
 
 ## Current delivery summary
 
-P6-2G adds the outbound service reminder boundary to the existing P6-2F preparation queue. Resend email and Twilio SMS remain disabled until protected Sites credentials, verified senders and authenticated callbacks are ready.
+P6-2H adds privacy-safe aggregate reporting to the service follow-up and delivery boundary. Owners and administrators can filter a maximum 366-day window by delivery channel, review daily due, ready, sent, delivered, failed, bounced and opted-out totals, inspect workload by due state, asset category and service type, and page through assigned open workload.
 
-Migration `0053_service_reminder_delivery.sql` adds global channel settings, one idempotent delivery per follow-up, channel and content revision, immutable provider events, verified mobile contacts and customer channel opt-outs. Existing customer accounts, asset preferences, follow-ups and service plans remain authoritative.
+Migration `0054_service_follow_up_reporting.sql` adds only the date-first indexes needed by the bounded aggregate queries. Existing follow-ups, service plans, installed assets, team members, delivery records and opt-outs remain authoritative.
 
-Owners, managers and coordinators must review the exact prepared content before a send control becomes available. Current consent, channel preference, customer ownership, provider readiness and daily limits are rechecked on the server. Resend and Twilio callbacks are authenticated and replay safe. Bounce, complaint and STOP events suppress pending delivery and future eligibility for that channel.
+The reporting payload excludes customer names, account emails, mobile numbers, addresses, message content and customer identifiers. Assigned workload is alphabetical and contains no staff delivery outcomes or performance scoring. CSV export uses only the aggregate rows visible under the current server filters and staff page.
 
-Customers explicitly select email and SMS per asset. Email uses the verified private account address. SMS remains unavailable until Twilio Verify confirms the customer's Australian mobile number. Contact details stay server-side and are released only to the selected provider at the authorised send boundary.
+The AEA Resend account, sending-only API key, authenticated webhook and dedicated reminder subdomain are configured, and the domain is verified. The AEA Twilio account, protected credentials, Messaging Service, delivery callback and Advanced Opt-Out are configured. Twilio still requires an upgraded account, an approved Australian sender and a Verify Service. Both production delivery channels remain disabled until the deployed environment reports ready and an owner deliberately enables each channel.
 
 ## Recommended next milestone
 
-### P6-2H: service follow-up performance and workload reporting
+### P6-2I: customer self-service rescheduling requests
 
-Outcome: give owners and operations staff consent-safe aggregate reporting for follow-up workload and delivery health without customer ranking or staff performance scoring.
+Outcome: let a verified customer request a change to an existing future appointment while keeping every calendar change under installer review.
 
 ### In scope
 
-- Add due, ready, sent, delivered, failed, bounced and opted-out trends.
-- Add workload by due-state, asset category, service type and assigned team member.
-- Keep customer and contact identifiers out of aggregate reporting payloads.
-- Add date and channel filters using the delegated date picker contract.
-- Add CSV export for visible aggregate rows only.
-- Add focused aggregation, privacy, pagination and responsive tests.
+- Let customers select an eligible future appointment and propose one or more preferred date windows.
+- Capture a bounded reason and access notes without exposing internal CRM notes.
+- Create one immutable rescheduling request plus an owner-scoped CRM task and audit history.
+- Let authorised dispatch staff accept, reject or propose an alternative with revision protection.
+- Change the appointment only after a deliberate staff decision and preserve the prior schedule revision.
+- Use the delegated date picker contract and add customer, dispatch, conflict and responsive tests.
 
 ### Explicitly out of scope
 
-- Customer scoring, staff ranking, commission metrics or productivity surveillance.
-- Marketing attribution, campaign automation or sales lead nurturing.
-- Replacing the P6-2G provider delivery ledger.
+- Automatic appointment changes when a customer submits a request.
+- Customer access to internal notes, other customers, team capacity or private staff details.
+- Deposits, cancellation fees, route optimisation or third-party calendar writes.
 
 ### Acceptance criteria
 
-- Every metric resolves to existing follow-up or delivery records.
-- Aggregate payloads exclude customer names, account emails, mobile numbers and street addresses.
-- Filters and exports use identical server-side boundaries.
-- Large result sets remain bounded and indexed.
+- Only the verified appointment customer can create or view the request.
+- Duplicate active requests for one appointment are prevented.
+- Every decision is revision protected, owner scoped and audited.
+- Schedule conflict checks run again immediately before an accepted change.
+- The previous and accepted appointment times remain reconstructable from revisions.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A requested metric requires exposing customer contact details.
-- Reporting would create customer or worker ranking.
-- The slice expands into campaign automation or external analytics tracking.
+- The appointment cannot be tied to an authoritative customer ownership record.
+- A requested path would change the calendar before staff review.
+- The slice expands into billing penalties, external calendar providers or dispatch optimisation.
 
-## Recommendation after P6-2H
+## Recommendation after P6-2I
 
-Build P6-2I as customer self-service rescheduling requests that create reviewed CRM tasks without automatic appointment changes.
+Build P6-2J as customer-visible appointment preparation checklists and arrival windows sourced from the reviewed CRM appointment.

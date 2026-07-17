@@ -755,6 +755,7 @@ export const tradeServiceFollowUps = sqliteTable("trade_service_follow_ups", {
   index("trade_service_follow_ups_owner_status_due_idx").on(table.firebaseUid, table.status, table.dueAt),
   index("trade_service_follow_ups_owner_assignee_due_idx").on(table.firebaseUid, table.assigneeMemberId, table.dueAt),
   index("trade_service_follow_ups_owner_customer_site_idx").on(table.firebaseUid, table.crmCustomerId, table.serviceSiteId),
+  index("trade_service_follow_ups_report_due_idx").on(table.dueAt, table.status, table.assigneeMemberId),
 ]);
 
 export const tradeServiceFollowUpEvents = sqliteTable("trade_service_follow_up_events", {
@@ -812,6 +813,7 @@ export const serviceReminderDeliveries = sqliteTable("service_reminder_deliverie
   index("service_reminder_deliveries_follow_up_idx").on(table.followUpId, table.createdAt),
   index("service_reminder_deliveries_owner_status_idx").on(table.firebaseUid, table.status, table.createdAt),
   index("service_reminder_deliveries_customer_channel_idx").on(table.customerUid, table.channel, table.createdAt),
+  index("service_reminder_deliveries_report_time_idx").on(table.createdAt, table.channel, table.status),
 ]);
 
 export const serviceReminderDeliveryEvents = sqliteTable("service_reminder_delivery_events", {
@@ -849,6 +851,7 @@ export const customerServiceReminderOptOuts = sqliteTable("customer_service_remi
 }, (table) => [
   uniqueIndex("customer_service_reminder_opt_outs_customer_channel_idx").on(table.customerUid, table.channel),
   index("customer_service_reminder_opt_outs_channel_idx").on(table.channel, table.optedOutAt),
+  index("customer_service_reminder_opt_outs_report_time_idx").on(table.optedOutAt, table.channel),
 ]);
 
 export const customerAssetLifecyclePreferences = sqliteTable("customer_asset_lifecycle_preferences", {
