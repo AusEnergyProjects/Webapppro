@@ -296,7 +296,9 @@ Acceptance criteria:
 - Free and previously paid users operate on the same data and screens.
 - No marketplace opportunity requires customer or job information to be entered again.
 
-Progress as at 17 July 2026:
+Progress as at 18 July 2026:
+
+- P6-2J adds the deliberate contact handover that makes a protected lead actionable. Customers must complete a private phone and service address before requesting trades, remain anonymised through matching and quote review, and can release a snapshotted contact record only to the exact verified installer whose option they shortlisted. Other matches remain redacted and withdrawal removes future portal visibility with immutable audit history.
 
 - Core trade entitlements now depend on approved verification and role rather than Stripe billing state or seat grants. Verified installers and wholesalers receive the role-appropriate CRM, marketplace, team, field, forms, purchasing, catalogue and handover tools at A$0.
 - The dashboard, participation journey, platform overview and historical membership route now present the free verified model. No new paid checkout or paid referral reward is offered for core access, while existing subscribers retain a Stripe billing-portal path during transition.
