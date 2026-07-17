@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: pending validated P6-2L release on `codex/sites-custom-domain-migration`.
+Implementation baseline: `d4036832d0e47ae455d29103f963a78fb3571d5c` on `codex/sites-custom-domain-migration`, published as Sites version 148.
 
 ## Current delivery summary
 
