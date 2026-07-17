@@ -173,3 +173,547 @@ Progress as at 16 July 2026:
 - Assigned native jobs now sync versioned technical form snapshots into the encrypted offline payload. Technicians can save or complete forms without reception, with required-field validation, idempotent replay and revision conflict handling.
 - Remote revocation and sign-out purge the encrypted database, queued evidence, address cache and encryption key. Direct customer addresses expire from the offline cache after 24 hours.
 - Phase 5 implementation is ready for physical-device acceptance testing. Store distribution still requires the business Apple and Google developer accounts, Firebase mobile configuration files, native Google OAuth client IDs and APNs or FCM release credentials.
+
+## Phase 6: make Direct Trade the free trade operating system
+
+### Product decision
+
+Direct Trade will use the trade operating platform to grow marketplace supply. Core trade software is therefore an acquisition product, not a subscription product.
+
+This decision supersedes the subscription-led access model recorded in the Phase 4 implementation history. The current membership pages and entitlement gates remain part of the implemented state until they are removed, but they are not the target product model.
+
+- A verified trade receives the CRM, quoting, scheduling, field app, forms, team access, accounting integrations, marketplace opportunities and customer portal for A$0.
+- Do not charge per user, per job, per quote or per marketplace lead.
+- Do not require a payment card during onboarding.
+- Do not sell marketplace ranking, exclusivity or preferred access to opportunities.
+- Verification, licensing, insurance, role permissions and customer privacy remain mandatory controls.
+- Generic CSV and Excel import is sufficient. Do not build or maintain bespoke Simpro, Tradify, Fergus or ServiceTitan importers.
+- The product must support a sole trader without exposing unnecessary administration while retaining the roles, audit, branch and cost controls required by larger organisations.
+
+The product succeeds when a trade can run the complete workflow without duplicate entry:
+
+`Enquiry -> customer and site -> quote -> acceptance and deposit -> job and phases -> schedule -> field work -> costs -> invoice and payment -> asset and service history -> rebooking`
+
+### Competitive implementation benchmark
+
+Use the current official workflows as acceptance references, then remove their avoidable friction:
+
+- Tradify sets the small-trade baseline for fast quotes, kits, online acceptance and quote-to-job conversion. Match the simplicity while providing complete offline work, stronger stock control and better quote options. See [Tradify quote creation](https://help.tradifyhq.com/hc/en-us/articles/360016443414-Create-a-Quote) and [quote acceptance](https://help.tradifyhq.com/hc/en-us/articles/360016571573-Accept-a-Quote).
+- Fergus sets the growing-trade baseline for job phases, quote options, supplier-document reconciliation, back-costing and AI connectivity. Match the financial depth while simplifying communications, invoice corrections and mobile work. See [Fergus job cards](https://help.fergus.com/en/articles/3491998-the-job-card), [job phases](https://help.fergus.com/en/articles/10518804-job-phases-explained) and [supplier reconciliation](https://help.fergus.com/en/articles/2039991-reconciling-supplier-documents).
+- Simpro sets the enterprise baseline for customer, site and asset hierarchy, cost centres, stock allocation, purchase orders, project costing and recurring maintenance. Provide the same underlying control with progressive disclosure rather than setup-heavy screens. See [Simpro service jobs](https://helpguide.simprogroup.com/Content/Service-and-Enterprise/Service-Jobs.htm).
+- ServiceTitan sets the service-business baseline for booking, dispatch, estimate outcomes, mandatory field completion and operational AI. Reproduce the useful flow without its enterprise-only complexity. See [ServiceTitan estimate workflows](https://help.servicetitan.com/docs/estimate-workflows-in-servicetitan-and-servicetitan-mobile) and [field completion](https://help.servicetitan.com/docs/complete-the-work-in-the-field).
+
+### Current blockers to remove
+
+- The strongest installer CRM is routed to paid installers while free installers receive the older Business Hub.
+- The paid CRM does not expose the existing platform-opportunity-to-work-order conversion, leaving the marketplace lead flow disconnected from the strongest operational workspace.
+- Quotes and invoices are represented primarily by aggregate totals rather than authoritative line items, revisions, accepted scope, payment stages and cost allocations.
+- Scheduling is a chronological list rather than a drag-and-drop dispatch board.
+- Field work supports checklists, time and evidence but not the complete arrive, materials, variation, sign-off, invoice and payment flow.
+- Purchasing is not one continuous quote-to-requirement-to-stock-or-PO-to-receipt-to-job-cost workflow.
+- Accounting export is aggregate and the integration centre is limited to Xero, MYOB, Stripe and Square.
+- Data import is narrow and AI-assisted trade operations are not implemented.
+
+### Product and UX structure
+
+Use one authoritative trade workspace. Remove the separate weak free hub and strong paid CRM paths.
+
+Desktop navigation:
+
+- Today
+- Leads
+- Schedule
+- Jobs
+- Customers
+- Money
+- Stock
+- Marketplace
+
+Mobile navigation:
+
+- Today
+- Jobs
+- Add
+- Inbox
+- More
+
+Every job uses the same tabs:
+
+- Overview
+- Schedule
+- Quote
+- Work
+- Costs
+- Invoice
+- Files
+- Activity
+
+UX requirements:
+
+- One primary action per screen.
+- One authoritative customer, site, quote and job record across marketplace, office and field clients.
+- Autosave drafts and make reversible actions undoable.
+- Use progressive disclosure for branches, cost centres, approvals and other advanced controls.
+- Show an actionable resolution for every validation or sync error.
+- Keep customer quote, booking and payment actions usable on a phone without requiring an account.
+- Keep common field-job completion to six deliberate actions or fewer, excluding the work data itself.
+- Preserve complete keyboard operation, accessible labels, visible focus states and mobile layouts without horizontal overflow.
+
+### Authoritative domain model
+
+Introduce explicit entities instead of adding more aggregate fields to the current CRM job record:
+
+- Customer -> account contacts and sites -> site contacts -> assets -> service history.
+- Enquiry -> source -> conversation -> quote revisions.
+- Quote revision -> sections -> options -> line items -> accepted scope.
+- Accepted scope -> job -> phases -> appointments -> tasks and forms.
+- Quote line -> material requirement -> stock reservation or purchase order -> receipt -> supplier bill -> job cost.
+- Job and phase -> time, materials, subcontractors, overhead, variations and margin.
+- Job -> deposit, progress, phase and final invoices -> payment allocations and credits.
+- Service agreement -> covered sites and assets -> recurring jobs and invoices.
+
+Published quotes, accepted variations, invoices, completed forms and signed service reports must be immutable revisions with a complete audit history.
+
+Create the organisation, branch, user, role, permission and audit entities with this foundation so later scheduling, financial and reporting features do not have to retrofit tenancy or security boundaries.
+
+## Build order for the trade platform
+
+### Build step 1: remove access and workflow blockers
+
+Deliver:
+
+- Remove subscription and seat entitlements from core trade operations.
+- Allow every verified trade to use leads, marketplace, CRM, quotes, scheduler, team, field app, forms, purchasing, catalogue and customer handover.
+- Keep verification and role permissions as the only access gates.
+- Route all trades into one authoritative workspace.
+- Add `Create quote`, `Book site visit` and `Create job` directly to a marketplace opportunity.
+- Preserve every authorised opportunity, customer, site, location, message, photo, document, source, matching and audit field through conversion. Keep protected marketplace locations region-only until the existing consent and assignment rules authorise a service address.
+- Add an end-to-end contract test for marketplace opportunity -> accepted quote -> CRM job.
+
+Acceptance criteria:
+
+- A verified trade can join and start work without a card or paid membership.
+- Free and previously paid users operate on the same data and screens.
+- No marketplace opportunity requires customer or job information to be entered again.
+
+### Build step 2: establish customers, sites, assets and the enquiry inbox
+
+Customer and site records must support:
+
+- A payer account with multiple sites and contacts.
+- Payment terms, pricing tier, tax treatment, account codes, lead source and custom fields.
+- Site access instructions, parking, hazards, keys, photos and service contacts.
+- Installed assets with make, model, serial, install date, warranty, manuals, photos and service interval.
+- A complete timeline of enquiries, calls, email, SMS, marketplace messages, quotes, appointments, jobs, invoices, payments and files.
+- Customer-specific rates and contract pricing.
+
+The enquiry inbox must capture:
+
+- TLink marketplace requests.
+- Hosted and embeddable web forms.
+- Dedicated enquiry email.
+- SMS and manual phone entry.
+- QR code, referral and public API sources.
+- Customer or company, contacts, service site, category, description, urgency, preferred date, budget, source, photos and files.
+
+Use these enquiry states:
+
+`New -> contacted -> site visit -> quote required -> quoted -> booked -> won or lost`
+
+Every enquiry card must provide `Call`, `SMS`, `Email`, `Request information`, `Create quote`, `Book`, `Create job`, `Assign`, `Follow up` and `Decline` actions.
+
+Automate:
+
+- Customer and site matching or creation.
+- Duplicate detection by phone, email, business number and address.
+- Response-time tracking and follow-up reminders.
+- Attachment and conversation transfer into the resulting quote or job.
+- Source, response, conversion and revenue attribution.
+
+Generic import scope for this step:
+
+- Accept CSV and Excel files.
+- Provide downloadable templates for customers, contacts, sites, assets, products, price-book items, open jobs and open invoices.
+- Include column mapping, preview, validation, duplicate handling, error export, reconciliation totals and rollback.
+- Preserve an optional external record ID for audit and later reconciliation.
+- Do not add competitor-specific formats or migration logic.
+
+Acceptance criteria:
+
+- A trade can import ordinary CSV or Excel data without engineering assistance.
+- An enquiry converts without losing fields, files, conversation or source history.
+- One customer can own multiple sites, contacts and assets.
+
+### Build step 3: price book, job packets, quotes and online acceptance
+
+Price-book items must support:
+
+- Labour, material, equipment, subcontractor, travel, call-out, disposal, rebate, discount, non-billable and one-off types.
+- Supplier cost, sell price, GST and tax code, markup, margin, expected duration, required skill, supplier and supplier SKU.
+- Customer-specific price tiers and contract rates.
+
+Reusable job packets must combine:
+
+- Labour and materials.
+- Default quantities and margin.
+- Estimated duration.
+- Tasks and checklists.
+- Required forms and certificates.
+- Skills and suggested crew.
+- Asset type and service reminder.
+
+The quote builder must provide:
+
+- Sections and headings.
+- Good, better and best packages.
+- Optional add-ons and choose-one groups.
+- Customer-facing totals that update when options change.
+- Item, section and document-level markup, margin, discount and tax.
+- Internal cost and margin visible only to authorised roles.
+- Photos, diagrams, warranty information, terms, exclusions and expiry.
+- Deposit and milestone requirements.
+- Templates that preserve all options, job phases, tasks, forms, materials and estimated duration.
+- Autosaved drafts, immutable published revisions, clone-and-revise and PDF output.
+- Email and SMS delivery with viewed, questioned, accepted, declined, signed and deposit-paid events.
+
+The customer flow is:
+
+`View -> choose options -> ask question -> accept or decline -> sign -> pay deposit`
+
+On acceptance, automatically:
+
+- Lock the accepted revision.
+- Create the job, phases, tasks and required forms.
+- Create material requirements and reserve available stock.
+- Draft purchase orders for shortages.
+- Create the deposit invoice.
+- Create an unscheduled appointment using the estimated duration.
+- Create any required asset records.
+- Carry every file, note, exclusion and customer message into the job.
+- Notify the office and assigned estimator.
+
+Support three estimate outcomes:
+
+- Perform now: start the work and carry the accepted scope to the invoice.
+- Perform later: create the sold job and place it in the scheduling queue.
+- Not sold: create a follow-up opportunity with reason and reminder.
+
+Acceptance criteria:
+
+- A standard itemised quote can be sent in under five minutes from an existing job packet.
+- A customer can accept, sign and pay a deposit in under one minute without creating an account.
+- The accepted scope reaches job delivery, purchasing and invoicing without copying or re-entry.
+
+### Build step 4: visual scheduler and dispatch
+
+Deliver:
+
+- Day, week and month calendar views.
+- Rows grouped by technician or crew and colour-coded by job type or status.
+- `Unscheduled`, `Assigned but unscheduled`, `Needs return visit` and `Overdue` trays.
+- Drag-and-drop scheduling, duration resize and one-action reassignment.
+- Multiple appointments per job or phase and multiple workers per appointment.
+- Skills, licences, availability, shifts, leave, location, travel time and conflict checks.
+- Map view, route order and realistic ETA.
+- Recurring appointments and two-way Google and Microsoft calendar sync.
+- Worker push notifications and customer confirmation, reminder and on-my-way messages.
+
+Use these appointment states:
+
+`Unscheduled -> scheduled -> dispatched -> en route -> arrived -> paused -> completed or return required`
+
+Acceptance criteria:
+
+- An unscheduled job can be assigned and timed in one drag operation.
+- The dispatcher sees conflicts before saving.
+- The assigned worker receives the complete job through the existing secure sync contract.
+- The customer receives confirmation, reminder and ETA messages from the same appointment record.
+
+### Build step 5: complete the offline field workflow
+
+Arrive flow:
+
+- Call customer and navigate to the site.
+- Display access instructions, hazards, prior work and asset history.
+- Provide large `Dispatch`, `En route`, `Arrive`, `Pause` and `Complete` actions.
+- Record travel, work, break and crew time automatically while retaining manual correction with audit history.
+- Generate a source-linked pre-job brief.
+
+Work flow:
+
+- Tasks, checklists, notes, voice notes, photos, annotated photos and video.
+- Materials from barcode, catalogue, job packet, recent items or free text.
+- Van or warehouse stock consumption and return.
+- Purchase-order creation and purchase-receipt capture.
+- Forms, certificates, JSA, SWMS, hazards and mitigations.
+- Equipment nameplate scan into an asset record.
+- Variation and onsite quote creation with customer approval.
+- Customer and team messaging.
+
+Complete flow:
+
+- Stop and review time.
+- Review materials, purchases and unbilled charges.
+- Record return work and create the return appointment requirement.
+- Explain and link directly to any missing mandatory task, form or certificate.
+- Capture customer signature.
+- Generate an immutable service report from work evidence.
+- Create or send the invoice and accept onsite payment.
+- Create a service reminder and request a verified review.
+
+Offline requirements:
+
+- Create and edit jobs, time, materials, forms, signatures, photos, variations, quotes and invoices without a connection.
+- Queue writes with stable client action IDs and preserve the existing conflict, replay, encryption, revocation and cache-expiry controls.
+- Show per-job sync state and make conflicts resolvable without discarding field work.
+
+Acceptance criteria:
+
+- A technician can complete the entire normal service call offline.
+- Reconnection safely synchronises all actions and evidence once.
+- Required safety or completion records block completion with an actionable explanation.
+- No office user has to re-enter field time, materials, signatures or documents.
+
+### Build step 6: phases, job costing, purchasing and inventory
+
+Use one continuous financial chain:
+
+`Quote line -> material requirement -> stock reservation or purchase order -> receipt -> supplier bill -> job cost -> customer invoice`
+
+Track by job and phase:
+
+- Estimated, committed and actual labour.
+- Estimated, committed and actual materials.
+- Equipment, subcontractor and overhead cost.
+- Approved and unapproved variations.
+- Invoiced and uninvoiced revenue.
+- Gross profit, margin and budget variance.
+
+Purchasing must support:
+
+- Purchase order from a job, quote section, job packet or low-stock alert.
+- Delivery or branch pickup, expected date, partial receipt and backorder.
+- Returns and approval thresholds.
+- Supplier-invoice capture from email, PDF upload or mobile photo.
+- OCR line items with supplier, PO, receipt, job and phase matching.
+- Quantity and price discrepancy queue.
+- Split supplier bills across jobs or phases.
+
+Inventory must support:
+
+- Warehouses, vans and bin locations.
+- On-hand, reserved, available, consumed, returned and damaged quantities.
+- Minimum and maximum levels, transfers, stocktakes and reorder suggestions.
+- Barcode receiving, transfer and consumption.
+- Serialised equipment.
+
+Acceptance criteria:
+
+- Accepted quote materials become requirements without re-entry.
+- Every stock issue, PO receipt and supplier bill changes actual job cost.
+- The trade sees quoted, committed, actual, invoiced, profit and margin values while the job is active.
+- Price or quantity discrepancies are explicit exceptions rather than silent cost changes.
+
+### Build step 7: itemised invoices, payments and accounting
+
+Support:
+
+- Fixed quote, time-and-material, deposit, percentage, progress, milestone, phase and final invoices.
+- Retention, credit notes, part payments, payment allocation, refund, statement and ageing.
+- Clean customer-facing summaries without losing detailed internal cost records.
+- Draft preview and role-based approval.
+- Email and SMS delivery, online invoice, scheduled reminders, card, tap-to-pay and manual payment.
+- Explicit consent for card-on-file and optional configured surcharges.
+- Guided correct, credit or void, revise and reissue flow with complete history.
+
+Accounting sync must exchange itemised records rather than aggregate job totals:
+
+- Customers and suppliers.
+- Products and services.
+- Tax and account codes.
+- Sales invoices and credits.
+- Supplier bills.
+- Payments, refunds and allocations.
+- Sync state, errors, retries and external identifiers.
+
+Continue Xero and MYOB, add QuickBooks, and prevent duplicate accounting records during reconnect or replay.
+
+Acceptance criteria:
+
+- Booking or accepted scope creates the correct draft invoice state automatically.
+- Field time, material, PO and supplier-bill information reaches the invoice without re-entry.
+- A customer can pay from the invoice link or in the field.
+- Payment state reconciles back to the job and accounting provider.
+
+### Build step 8: unified communications, customer portal and marketplace loop
+
+Create one conversation timeline that automatically links:
+
+- Marketplace chat.
+- Email and SMS.
+- Call notes and permitted call recordings.
+- Quote questions.
+- Appointment messages.
+- Files, customer-visible notes and internal notes.
+
+Provide a magic-link customer portal that allows the customer to:
+
+- Request work.
+- Book or reschedule.
+- Approve quote options, sign and pay a deposit.
+- View appointments and technician ETA.
+- Message the trade.
+- View photos, service reports, forms, certificates and warranties.
+- View and pay invoices.
+- See assets and service history.
+- Rebook, request another job and leave a verified review.
+
+Build the marketplace growth loop into normal trade work:
+
+- Every quote, booking, invoice and handover uses the TLink customer experience.
+- Completed jobs can produce a verified project, asset and review record subject to customer consent and existing privacy controls.
+- The customer can request future work through the portal without the original trade losing ownership of their customer relationship.
+- New marketplace demand returns to the same lead inbox used for a trade's direct enquiries.
+
+Acceptance criteria:
+
+- Customers do not need an account for ordinary quote, booking and payment actions.
+- All communication appears on the correct customer, site and job timeline automatically.
+- A completed direct-trade job creates a safe path for that customer to use TLink again.
+
+### Build step 9: recurring work, asset lifecycle and service agreements
+
+Support:
+
+- Residential service memberships and commercial service agreements as distinct contract types.
+- Covered customers, sites, assets, work types and exclusions.
+- Service levels, response times, not-to-exceed limits and contract rates.
+- Visit frequency, crew, duration, checklist, forms, materials and billing schedule.
+- Automatic recurring job creation without duplicates.
+- Automatic scheduling or placement into the unscheduled queue.
+- Recurring invoices, renewal notices and expiry handling.
+- Asset make, model, serial, installation, warranty, manuals, readings, photos and full service history.
+- QR or barcode access to the asset in the field app.
+- Safety notices, warranty expiry and service-due reminders.
+
+A service reminder must create a prefilled job ready for review, not only send an email.
+
+Acceptance criteria:
+
+- A due service creates exactly one correctly scoped job.
+- The technician sees the asset and complete service history offline.
+- Completion updates asset history and calculates the next due event.
+
+### Build step 10: embedded AI, public API, webhooks and MCP
+
+Do not add a generic chatbot as the primary AI interface. Add AI to existing workflow actions:
+
+- Phone call, email, SMS or marketplace message -> structured enquiry draft.
+- Voice note -> job note, time entry, materials and follow-up tasks.
+- Work-order PDF -> customer, site and job draft.
+- Equipment nameplate photo -> asset fields and suggested service schedule.
+- Supplier invoice or receipt -> line items and PO, receipt, job and phase match.
+- Job description -> suggested job packet, duration, skills, materials and quote draft.
+- Similar completed jobs -> price and duration suggestions.
+- Assigned job -> source-linked pre-job brief.
+- Completed work -> customer service report draft.
+- Missing time, missing material, uninvoiced cost and margin-risk detection.
+- Skill, location, duration and availability -> schedule recommendation.
+
+AI safety requirements:
+
+- Ground prices and durations in the trade's authoritative price book and completed work.
+- Show source records and confidence where extraction or matching is uncertain.
+- Require human confirmation before sending a quote, ordering materials, changing a schedule, issuing an invoice or taking payment.
+- Record every accepted AI change in the normal audit history.
+- Keep the AI provider replaceable behind typed tool and model interfaces.
+
+Open-platform requirements:
+
+- Scoped API keys and OAuth-ready application access.
+- Versioned REST endpoints and documented webhooks for customers, enquiries, quotes, jobs, appointments, stock, purchasing, invoices and payments.
+- Idempotency keys, cursor pagination, rate limits and audit logs.
+- A permission-aware MCP server over the same typed application services, not a separate source of truth.
+
+Use the current [Fergus MCP surface](https://help.fergus.com/en/articles/15439294-what-is-the-fergus-mcp-server), [Simpro Lightning](https://www.simprogroup.com/lightning) and [ServiceTitan Field Pro](https://help.servicetitan.com/docs/field-pro) as minimum competitive references.
+
+Acceptance criteria:
+
+- Every AI-created record is a reviewable draft unless the action is explicitly low risk and reversible.
+- API, webhook, web, mobile and MCP operations use the same validation, permissions and audit services.
+- Replacing the model provider does not require rewriting trade workflow logic.
+
+### Build step 11: enterprise controls, integrations and exception-led reporting
+
+The calendar, communications, accounting and payment connectors required by earlier workflow steps ship with those steps. This step completes their shared administration, adds the remaining connectors and exposes the advanced organisation controls.
+
+Provide these controls without placing them in the default sole-trader flow:
+
+- Multiple branches, business units and cost centres.
+- Owner, administrator, dispatcher, estimator, supervisor, technician, apprentice, subcontractor and accountant roles.
+- Granular action and financial-visibility permissions.
+- Skills, licences, shifts, leave, labour cost and billing rates.
+- Approval thresholds for discounts, quotes, purchase orders, variations, invoices and credits.
+- Mandatory forms and certificates by job type or phase.
+- Immutable audit log for financial, schedule, status, permission and communication changes.
+- Custom fields, statuses, saved views and exports.
+- Single sign-on readiness.
+
+Add integrations for:
+
+- Google and Microsoft email and calendars.
+- SMS and telephony providers.
+- Xero, MYOB and QuickBooks.
+- Stripe, Square and onsite payment hardware.
+- Zapier and Make.
+- Supplier catalogue, price and availability feeds.
+- Payroll exports through documented adapters rather than built-in payroll.
+
+Prioritise exception views over vanity dashboards:
+
+- Unassigned or overdue work.
+- Late arrivals and route conflicts.
+- Missing time, materials, forms or certificates.
+- Unmatched supplier invoices and PO discrepancies.
+- Margin leakage and budget overruns.
+- Completed but uninvoiced work.
+- Overdue customer payments.
+- Quote conversion by source, estimator and job type.
+- Technician utilisation and callback rate.
+- Branch and business-unit performance when those controls are enabled.
+
+Acceptance criteria:
+
+- A sole trader sees none of the enterprise configuration unless they enable it.
+- A larger organisation can enforce roles, approvals, branch separation and audit requirements on the same product.
+- Every operational dashboard item links to the record and action required to resolve it.
+
+## Trade-platform release gate
+
+Do not market Direct Trade as a replacement for an incumbent trade-management system until all of these conditions pass:
+
+- A verified trade joins without a card or subscription.
+- Generic CSV or Excel import supports mapping, preview, validation, duplicate handling, reconciliation and rollback.
+- A first itemised quote can be sent in under five minutes.
+- A customer can accept, sign and pay a deposit without creating an account.
+- Quote acceptance creates the job, phases, material requirements, forms, unscheduled appointment and deposit invoice automatically.
+- An unscheduled job can be assigned in one drag operation.
+- A field worker can complete a normal job offline, including materials, forms, signature and invoice.
+- Labour, materials, stock, purchase orders, receipts and supplier bills reconcile to job cost without duplicate entry.
+- An itemised invoice and payment state synchronise with the connected accounting provider.
+- Asset and service history update from completed work.
+- The completed transaction gives the customer a consented path back into TLink.
+- Unlimited users, leads, jobs and quotes remain A$0.
+- Physical iOS and Android device acceptance, release signing and store distribution prerequisites are complete.
+
+## Deferred until the core workflow passes
+
+- Generic AI chat that does not complete a workflow action.
+- Vanity dashboards without an actionable exception queue.
+- Bespoke competitor migration formats.
+- Built-in payroll.
+- Fleet telematics.
+- Broad marketing-attribution tooling.
+- Franchise administration beyond the branch and role foundations.
+- Bespoke report builders before the standard operational and financial reports are accurate.
+- AI automation that lacks authoritative price, job, stock and cost data.
