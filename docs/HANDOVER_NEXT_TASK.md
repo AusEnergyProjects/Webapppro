@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `b4b1ffd02b1d82a5293ba0a849255f507707a4f0` on `codex/sites-custom-domain-migration` implements the P6-3B reusable job-packet batch. Final GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md` after publication.
+Implementation baseline: `a7ba30f7540b298e966c08601e777b18c87221bb` on `codex/sites-custom-domain-migration` implements the P6-3B reusable job-packet batch and its live-QA mobile job-card alignment correction. GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
