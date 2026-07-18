@@ -15,6 +15,7 @@ const installerUi = read("../src/components/TradeQuotePanel.tsx");
 const customerUi = read("../src/components/CustomerTradeQuotes.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const dashboard = read("../src/components/CustomerDashboard.tsx");
+const styles = read("../src/app/globals.css");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -105,6 +106,8 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(crm, /<TradeQuotePanel/);
   assert.doesNotMatch(crm, /name="quotedValue"|name="quoteStatus"/);
   assert.match(dashboard, /href="\/account\/quotes"/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
+  assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
 });
 
 test("direct quote copy avoids prohibited dash characters", () => {

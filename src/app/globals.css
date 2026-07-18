@@ -4713,6 +4713,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-line { display: grid; gap: 7px; grid-template-columns: 120px minmax(210px, 2fr) 90px 110px 100px 78px; min-width: 760px; }
 .trade-quote-line.headings { color: var(--color-aea-muted); font-size: .62rem; font-weight: 850; text-transform: uppercase; }
 .trade-quote-line input, .trade-quote-line select, .trade-quote-settings input, .trade-quote-settings select, .trade-quote-settings textarea { background: #fff; border: 1px solid #c8d8d1; border-radius: 7px; min-width: 0; padding: 9px; }
+.trade-quote-field { display: grid; gap: 4px; }
+.trade-quote-field > span, .trade-quote-description > span { display: none; }
 .trade-quote-description { display: grid; gap: 2px; }
 .trade-quote-description small { color: var(--color-aea-green); font-size: .55rem; font-weight: 750; }
 .trade-quote-description .trade-quote-section-input { background: #f1f7f4; border-style: dashed; color: #365a4e; font-size: .62rem; padding-block: 6px; }
@@ -4857,6 +4859,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .customer-quote-decision button:disabled { cursor: not-allowed; opacity: .5; }
 
 @media (max-width: 720px) {
+  .trade-quote-lines, .trade-quote-choice-lines { overflow-x: visible; }
+  .trade-quote-line { background: #f7faf8; border: 1px solid #d9e5e0; border-radius: 9px; grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 10px; }
+  .trade-quote-line.headings { display: none; }
+  .trade-quote-field > span, .trade-quote-description > span { color: #34594d; display: block; font-size: .64rem; font-weight: 850; }
+  .trade-quote-line button { min-height: 42px; }
   .trade-quote-settings { grid-template-columns: 1fr; }
   .trade-quote-price-book, .trade-quote-packets { grid-template-columns: 1fr; }
   .trade-quote-packets > small { grid-column: auto; }
