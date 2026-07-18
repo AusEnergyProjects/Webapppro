@@ -7,11 +7,12 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
-import { appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
+import { appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 import { ensureOwnerTeamMember } from "@/lib/trade-team-server";
 import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
 import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
+import { quickInvoiceNumber, resolveQuickInvoiceDraft, sendQuickInvoiceDelivery, type QuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
 import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
 
 export const runtime = "edge";
@@ -104,6 +105,9 @@ function errorResponse(error: unknown) {
   if (code === "NOTE_NOT_FOUND") return adminJson({ ok: false, error: "Note or issue not found." }, 404);
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
+  if (code === "INVALID_APPOINTMENT_SLOT") return adminJson({ ok: false, error: "Choose an appointment time on a 15-minute interval." }, 400);
+  if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add at least one valid invoice line and check the GST choice." }, 400);
+  if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved invoice fee changed or was archived. Choose it again." }, 409);
   if (code === "JOB_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its 500 active job fair-use limit." }, 409);
   if (code === "CUSTOMER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its customer-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
@@ -902,10 +906,15 @@ export async function POST(request: Request) {
       let photoTokenHash = "";
       let encryptedPhotoToken = "";
       let photoRequirements = defaultPhotoRequirements(serviceCategory);
+      let quickInvoice: QuickInvoiceDraft | null = null;
+      let quickInvoiceId = "";
+      let quickInvoiceDueAt = "";
+      let quickInvoiceReference = "";
       if (guided) {
         if (!customerId || !serviceSiteId) return adminJson({ ok: false, error: "Attach a customer and service address before scheduling." }, 400);
         scheduledStart = dateValue(body.startsAt);
         if (!scheduledStart) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
+        assertAppointmentSlot(scheduledStart.slice(0, 16));
         assertFutureAppointment(scheduledStart.slice(0, 16), australiaLocalDateTime(identity.addressState));
         try { scheduledEnd = appointmentEndsAt(scheduledStart.slice(0, 16), body.durationMinutes); }
         catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
@@ -925,6 +934,17 @@ export async function POST(request: Request) {
         photoSecret = newPhotoRequestSecret();
         photoTokenHash = await hashPhotoRequestSecret(photoSecret);
         encryptedPhotoToken = await encryptProtectedPayload({ requestId: photoRequestId, secret: photoSecret, tokenIssue: 1 });
+        if (cleanAdminText(body.invoiceMode, 20) === "send") {
+          if (body.quickInvoiceConsent !== true && body.quickInvoiceConsent !== "true" && body.quickInvoiceConsent !== "on") {
+            return adminJson({ ok: false, error: "Confirm that the customer asked to receive this invoice by email." }, 400);
+          }
+          quickInvoice = await resolveQuickInvoiceDraft(identity.uid, body.quickInvoiceLines);
+          const dueDays = Number(body.quickInvoiceDueDays);
+          if (![0, 7, 14, 30].includes(dueDays)) return adminJson({ ok: false, error: "Choose a valid invoice due date." }, 400);
+          quickInvoiceId = crypto.randomUUID();
+          quickInvoiceReference = quickInvoiceNumber(workNumber);
+          quickInvoiceDueAt = new Date(Date.parse(now) + dueDays * 86_400_000).toISOString().slice(0, 10);
+        }
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
@@ -947,10 +967,11 @@ export async function POST(request: Request) {
           (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 'not_started', ?, ?, ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, serviceSiteId, customerId ? "trade_owned" : "internal",
             pipelineStage, buildingType, cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
-            JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
+            JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), quickInvoice?.totalCents || 0,
+            quickInvoice ? "draft" : "not_started", quickInvoiceDueAt, now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
         ...templateTasks.map((taskTitle, index) => db.prepare(`INSERT INTO trade_work_order_tasks
@@ -978,11 +999,26 @@ export async function POST(request: Request) {
           db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
             VALUES (?, ?, ?, 'customer_photo_request_created', 'Secure customer photo request created.', ?)`)
             .bind(crypto.randomUUID(), workOrderId, identity.uid, now),
+          ...(quickInvoice ? [
+            db.prepare(`INSERT INTO trade_crm_quick_invoices
+              (id, work_order_id, firebase_uid, crm_customer_id, invoice_number, currency, line_items_json,
+               subtotal_cents, tax_cents, total_cents, due_at, status, delivery_status, delivery_provider,
+               provider_message_id, consent_confirmed_at, attempts, last_error, sent_at, created_by_uid, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, 'draft', 'queued', 'resend', '', ?, 0, '', '', ?, ?, ?)`)
+              .bind(quickInvoiceId, workOrderId, identity.uid, customerId, quickInvoiceReference,
+                JSON.stringify(quickInvoice.lines), quickInvoice.subtotalCents, quickInvoice.taxCents, quickInvoice.totalCents,
+                quickInvoiceDueAt, now, identity.uid, now, now),
+            db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+              VALUES (?, ?, ?, 'quick_invoice_created', ?, ?)`)
+              .bind(crypto.randomUUID(), workOrderId, identity.uid, `${quickInvoiceReference} created with the guided job.`, now),
+          ] : []),
         ] : []),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
       let requestSent = false;
       let deliveryError = "";
+      let invoiceSent = false;
+      let invoiceDeliveryError = "";
       if (guided) {
         try {
           await sendPhotoRequestDelivery({ requestId: photoRequestId, ownerUid: identity.uid, actorUid: identity.uid,
@@ -994,9 +1030,21 @@ export async function POST(request: Request) {
             ? "The job and appointment were saved, but the email provider is not active. Send the request from the job once email is available."
             : "The job and appointment were saved, but the information request email could not be sent. Retry it from the job.";
         }
+        if (quickInvoice) {
+          try {
+            await sendQuickInvoiceDelivery({ invoiceId: quickInvoiceId, ownerUid: identity.uid, actorUid: identity.uid, origin: new URL(request.url).origin });
+            invoiceSent = true;
+          } catch (error) {
+            const code = error instanceof Error ? error.message : "";
+            invoiceDeliveryError = code === "waiting_for_channel"
+              ? "The quick invoice was saved, but the email provider is not active. Retry it from the job invoice tab once email is available."
+              : "The quick invoice was saved, but its email could not be sent. Retry it from the job invoice tab.";
+          }
+        }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
-        appointmentId, photoRequestId, requestSent, deliveryError }, 201);
+        appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,
+        invoiceSent, invoiceDeliveryError }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -1005,6 +1053,7 @@ export async function POST(request: Request) {
       const startsAt = dateValue(body.startsAt);
       let endsAt = "";
       if (!startsAt) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
+      assertAppointmentSlot(startsAt.slice(0, 16));
       assertFutureAppointment(startsAt.slice(0, 16), australiaLocalDateTime(identity.addressState));
       try { endsAt = appointmentEndsAt(startsAt.slice(0, 16), body.durationMinutes); }
       catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }

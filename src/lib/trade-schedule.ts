@@ -45,6 +45,18 @@ export function browserLocalDateTime(value = new Date()) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}T${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
 }
 
+export function nextAppointmentSlot(value = new Date(), leadMinutes = 15) {
+  const stepMs = APPOINTMENT_DURATION_STEP_MINUTES * 60_000;
+  const earliest = value.getTime() + Math.max(0, leadMinutes) * 60_000;
+  return browserLocalDateTime(new Date(Math.ceil(earliest / stepMs) * stepMs));
+}
+
+export function assertAppointmentSlot(startsAt: string) {
+  const start = normaliseLocalDateTime(startsAt);
+  if (Number(start.slice(14, 16)) % APPOINTMENT_DURATION_STEP_MINUTES !== 0) throw new Error("INVALID_APPOINTMENT_SLOT");
+  return start;
+}
+
 export function assertFutureAppointment(startsAt: string, localNow: string) {
   const start = normaliseLocalDateTime(startsAt);
   const now = normaliseLocalDateTime(localNow);

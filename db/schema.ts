@@ -2124,6 +2124,35 @@ export const tradeCrmSignoffs = sqliteTable("trade_crm_signoffs", {
   index("trade_crm_signoffs_work_order_idx").on(table.workOrderId, table.signedAt),
 ]);
 
+export const tradeCrmQuickInvoices = sqliteTable("trade_crm_quick_invoices", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  invoiceNumber: text("invoice_number").notNull(),
+  currency: text("currency").notNull().default("AUD"),
+  lineItemsJson: text("line_items_json").notNull().default("[]"),
+  subtotalCents: integer("subtotal_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull().default(0),
+  dueAt: text("due_at").notNull(),
+  status: text("status").notNull().default("draft"),
+  deliveryStatus: text("delivery_status").notNull().default("queued"),
+  deliveryProvider: text("delivery_provider").notNull().default("resend"),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  consentConfirmedAt: text("consent_confirmed_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error").notNull().default(""),
+  sentAt: text("sent_at").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quick_invoices_owner_job_idx").on(table.firebaseUid, table.workOrderId),
+  uniqueIndex("trade_crm_quick_invoices_number_idx").on(table.invoiceNumber),
+  index("trade_crm_quick_invoices_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
 export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

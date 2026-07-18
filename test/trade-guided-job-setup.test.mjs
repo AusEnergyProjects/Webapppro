@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
 const form = read("../src/components/TradeNewJobForm.tsx");
+const invoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");
 const numbers = read("../src/lib/trade-job-number-server.ts");
@@ -41,13 +42,14 @@ test("admin and installer expose and search the same job ID", () => {
 test("guided setup attaches duplicates and creates appointment plus evidence request together", () => {
   assert.match(form, /find_customer_duplicates/);
   assert.match(form, /Use this customer/);
-  assert.match(form, /Schedule and request info/);
+  assert.match(`${form}\n${invoiceStep}`, /Schedule and request info/);
   assert.doesNotMatch(form, /name="title"|datalist/);
   assert.doesNotMatch(workspace, /placeholder="Appointment title"/);
   assert.match(crm, /INSERT INTO trade_crm_appointments/);
   assert.match(crm, /INSERT INTO trade_crm_photo_requests/);
   assert.match(crm, /sendPhotoRequestDelivery/);
   assert.match(crm, /appointmentTitle = `\$\{displayName\} \$\{SERVICE_LABELS\[serviceCategory\]\}`/);
+  assert.match(form, /"Evidence", "Invoice"/);
 });
 
 test("address search supports structured Google Australian results and manual fallback", () => {

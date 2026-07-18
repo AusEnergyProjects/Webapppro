@@ -22,7 +22,9 @@ export async function GET(request: Request) {
         d.customer_source, d.invoice_status, d.invoiced_value_cents, d.paid_value_cents,
         c.first_name, c.last_name, c.business_name,
         h.commercial_reference, h.total_cents accepted_total_cents, h.accepted_at,
-        a.provider, a.status accounting_status, a.external_number, a.external_url, a.last_error
+        a.provider, a.status accounting_status, a.external_number, a.external_url, a.last_error,
+        q.invoice_number quick_invoice_number, q.total_cents quick_total_cents, q.status quick_invoice_status,
+        q.delivery_status quick_delivery_status, q.sent_at quick_sent_at, q.last_error quick_last_error
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
@@ -32,6 +34,7 @@ export async function GET(request: Request) {
           WHERE h2.work_order_id = w.id AND h2.firebase_uid = w.firebase_uid)
       LEFT JOIN trade_crm_accounting_documents a ON a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid
         AND a.document_type = 'invoice'
+      LEFT JOIN trade_crm_quick_invoices q ON q.work_order_id = w.id AND q.firebase_uid = w.firebase_uid AND q.status <> 'void'
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
       ORDER BY CASE WHEN a.status IN ('error', 'overdue') THEN 0
                     WHEN COALESCE(h.total_cents, 0) > COALESCE(d.paid_value_cents, 0) THEN 1 ELSE 2 END,
@@ -41,19 +44,20 @@ export async function GET(request: Request) {
       const customerName = protectedJob
         ? "AEA protected customer"
         : String(row.business_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "Customer not linked");
-      const totalCents = Number(row.accepted_total_cents || row.invoiced_value_cents || 0);
+      const totalCents = Number(row.quick_total_cents || row.accepted_total_cents || row.invoiced_value_cents || 0);
       const paidCents = Number(row.paid_value_cents || 0);
       const accountingStatus = String(row.accounting_status || "");
-      const status = accountingStatus === "error" ? "attention"
+      const quickDeliveryStatus = String(row.quick_delivery_status || "");
+      const status = accountingStatus === "error" || quickDeliveryStatus === "failed" ? "attention"
         : paidCents >= totalCents && totalCents > 0 ? "paid"
           : accountingStatus || (totalCents > 0 ? "ready" : "not_ready");
       return {
         id: row.id, workNumber: row.work_number, title: row.title, customerName, protectedJob,
         stage: row.stage, status, invoiceStatus: row.invoice_status || "not_started",
         commercialReference: row.commercial_reference || "", totalCents, paidCents,
-        outstandingCents: Math.max(0, totalCents - paidCents), provider: row.provider || "",
-        externalNumber: row.external_number || "", externalUrl: row.external_url || "",
-        lastError: row.last_error || "", acceptedAt: row.accepted_at || "", updatedAt: row.updated_at,
+        outstandingCents: Math.max(0, totalCents - paidCents), provider: row.quick_invoice_number ? "tlink" : row.provider || "",
+        externalNumber: row.quick_invoice_number || row.external_number || "", externalUrl: row.external_url || "",
+        lastError: row.quick_last_error || row.last_error || "", acceptedAt: row.quick_sent_at || row.accepted_at || "", updatedAt: row.updated_at,
       };
     });
     return adminJson({

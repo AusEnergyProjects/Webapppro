@@ -4,6 +4,16 @@ Status: active rolling handover
 Prepared: 19 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the validated P6-3I visual dispatch and invoice-home batch on top of the published P6-3H simpler invoicing and dependable dispatch foundation. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
+## Active milestone contract: guided quick invoice
+
+- User outcome: the create-job buttons work without browser validation overlays, and the guided flow can optionally prepare and send a fixed-fee invoice with the appointment and photo request.
+- Owning workflow: `TradeNewJobForm`, installer CRM bootstrap and create action, existing price-book, invoice, accounting, payment and integration contracts, feature-local styles and regression tests.
+- In scope: quarter-hour appointment validation, inline error copy, optional sixth Invoice step, reusable fixed-fee price-book selection, a bounded custom invoice line, connected-provider-aware prompts, and one deliberate final action.
+- Out of scope: new provider adapters, automatic payment collection, accepted-quote changes, protected AEA customer invoicing, accounting-provider calculations, and broad invoice or price-book redesign.
+- Acceptance: no native black validation bubble for a normal quarter-hour time; invoice can be skipped; connected providers are not promoted again; selected invoice values use integer cents and authoritative saved items; the job, appointment, evidence request and optional invoice are owner scoped and idempotent; desktop and phone layouts have no document-level overflow.
+- Validation: focused guided-job and invoice contract tests, complete `npm.cmd run validate`, clean migration replay, signed-in desktop and 390 px interaction QA, canonical health and worker-error checks.
+- Stop condition: a new provider credential, a new payment or accounting adapter, customer card authorisation, or a second financial source of truth requires a separate milestone.
+
 ## Current delivery summary
 
 The installer Jobs API returns the expected owner-scoped job, and the signed-in list and detail workspace show that job. The remaining client race was corrected in `aa771460b190c7e744caca216bb4c8dde3087c77`: superseded Jobs and Customers index requests are aborted and cannot replace current filter results. A regression assertion protects the cancellation boundary.

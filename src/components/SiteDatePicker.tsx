@@ -91,7 +91,7 @@ export function SiteDatePicker() {
     const initial = datePart(input.value) || datePart(range.start?.value || "") || todayIso();
     const initialDate = parseIsoDate(initial) || parseIsoDate(todayIso())!;
     setDraftDate(initial);
-    setDraftTime(timePart(input.value));
+    setDraftTime(timePart(input.value || input.min));
     setDraftRangeStart(datePart(range.start?.value || ""));
     setDraftRangeEnd(datePart(range.end?.value || ""));
     setRangeSelectingEnd(Boolean(range.start && range.end && !range.end.value && range.start.value));
@@ -260,7 +260,7 @@ export function SiteDatePicker() {
           >{day.day}</button>;
         })}
       </div>
-      {!isRange && active.kind === "datetime-local" && <label className="site-date-time"><span>Time</span><input type="time" value={draftTime} onChange={(event) => setDraftTime(event.target.value)} /></label>}
+      {!isRange && active.kind === "datetime-local" && <label className="site-date-time"><span>Time</span><input type="time" step={active.input.step || "60"} value={draftTime} onChange={(event) => setDraftTime(event.target.value)} /></label>}
       <div className="site-date-actions">
         {!required && <button type="button" className="site-date-clear" onClick={clear}>Clear</button>}
         <button type="button" className="site-date-apply" disabled={!canApply} onClick={apply}>Apply</button>

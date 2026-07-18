@@ -10,6 +10,7 @@ import {
   browserLocalDateTime,
   durationLabel,
   moveAppointmentToDate,
+  nextAppointmentSlot,
 } from "@/lib/trade-schedule";
 
 type Member = { id: string; displayName: string; role: string; status: string; isOwner: boolean };
@@ -83,7 +84,7 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined }: { 
   const [edits, setEdits] = useState<Record<string, Edit>>({}); const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState(""); const [dropTarget, setDropTarget] = useState("");
-  const minimumStart = useMemo(() => browserLocalDateTime(), []);
+  const minimumStart = useMemo(() => nextAppointmentSlot(new Date(), 0), []);
 
   const load = useCallback(async () => {
     setLoading(true); setStatus("");

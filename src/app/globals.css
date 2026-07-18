@@ -4268,7 +4268,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-address-options button { background: #fff; border: 0; border-radius: 7px; color: var(--color-aea-ink); cursor: pointer; padding: 10px; text-align: left; }
 .crm-address-options button[aria-selected="true"], .crm-address-options button:hover { background: #edf8f3; }
 .crm-address-fields label:first-child { position: relative; }
-.crm-wizard-steps { display: grid; gap: 8px; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; margin: 0 0 22px; padding: 0; }
+.crm-wizard-steps { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); list-style: none; margin: 0 0 22px; padding: 0; }
 .crm-wizard-steps li { align-items: center; border-bottom: 3px solid #dbe7e2; color: #71827d; display: flex; font-size: .6rem; font-weight: 850; gap: 7px; padding: 7px 4px 10px; }
 .crm-wizard-steps li span { align-items: center; background: #edf3f0; border-radius: 999px; display: flex; height: 22px; justify-content: center; width: 22px; }
 .crm-wizard-steps li.active { border-bottom-color: #0caf7d; color: #075e45; }
@@ -4299,13 +4299,55 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-evidence-choice label span, .crm-consent-confirm span { display: grid; gap: 3px; }
 .crm-evidence-choice label small, .crm-consent-confirm small { color: var(--color-aea-muted); font-size: .56rem; line-height: 1.45; }
 .crm-consent-confirm { background: #edf8f3; margin: 14px 0; }
+.crm-invoice-mode { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.crm-invoice-mode > label { align-items: flex-start; border: 1px solid #cdded8; border-radius: 11px; cursor: pointer; display: flex; gap: 10px; padding: 13px; }
+.crm-invoice-mode > label.selected { background: #edf8f3; border-color: #65bda0; box-shadow: inset 0 0 0 1px #65bda0; }
+.crm-invoice-mode input { flex: 0 0 auto; height: 18px; margin-top: 2px; min-height: 0; width: 18px; }
+.crm-invoice-mode span { display: grid; gap: 3px; }
+.crm-invoice-mode small, .crm-quick-invoice-builder small, .crm-connected-provider-note span, .crm-invoice-connect-prompt p, .crm-invoice-connect-prompt small { color: var(--color-aea-muted); font-size: .56rem; line-height: 1.45; }
+.crm-quick-invoice-builder { display: grid; gap: 10px; margin-top: 14px; }
+.crm-quick-invoice-builder > section { background: #f8fbfa; border: 1px solid #d5e4df; border-radius: 10px; padding: 12px; }
+.crm-quick-invoice-builder header { display: grid; gap: 2px; margin-bottom: 8px; }
+.crm-quick-invoice-builder section > div { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; }
+.crm-quick-invoice-builder section > div.custom { grid-template-columns: minmax(180px, 1fr) 130px 120px auto; }
+.crm-quick-invoice-builder select, .crm-quick-invoice-builder input { background: #fff; border: 1px solid #bcd2ca; border-radius: 8px; color: var(--color-aea-ink); font: inherit; min-height: 42px; min-width: 0; padding: 8px 10px; width: 100%; }
+.crm-quick-invoice-builder button, .crm-invoice-connect-prompt button, .crm-quick-invoice-draft button { background: #e7f5ef; border: 1px solid #acd4c5; border-radius: 8px; color: #17684f; cursor: pointer; font-size: .58rem; font-weight: 850; padding: 8px 12px; }
+.crm-quick-invoice-draft { border: 1px solid #d2e2dc; border-radius: 10px; margin-top: 12px; overflow: hidden; }
+.crm-quick-invoice-draft > div:not(.head) { align-items: center; border-top: 1px solid #e4ece9; display: grid; gap: 9px; grid-template-columns: minmax(0, 1fr) 100px auto; padding: 9px 11px; }
+.crm-quick-invoice-draft > div.head { background: #f1f7f4; display: grid; font-size: .52rem; font-weight: 850; grid-template-columns: 1fr 100px; padding: 8px 11px; text-transform: uppercase; }
+.crm-quick-invoice-draft small { color: var(--color-aea-muted); display: block; font-size: .52rem; margin-top: 2px; }
+.crm-quick-invoice-draft b, .crm-quick-invoice-draft .head span:last-child { text-align: right; }
+.crm-quick-invoice-draft dl, .crm-quick-invoice-panel dl { margin: 0 0 0 auto; max-width: 310px; padding: 10px 12px; }
+.crm-quick-invoice-draft dl div, .crm-quick-invoice-panel dl div { display: flex; font-size: .58rem; justify-content: space-between; padding: 3px 0; }
+.crm-quick-invoice-draft dl .total, .crm-quick-invoice-panel dl .total { border-top: 1px solid #b8cbc4; font-size: .72rem; margin-top: 4px; padding-top: 7px; }
+.crm-quick-invoice-options { margin-top: 12px; }
+.crm-quick-invoice-options .crm-consent-confirm { margin: 0; }
+.crm-connected-provider-note { background: #edf8f3; border-left: 4px solid #0caf7d; border-radius: 9px; display: grid; gap: 3px; margin-top: 12px; padding: 11px 13px; }
+.crm-invoice-connect-prompt { background: #f7faf9; border: 1px solid #d2e2dc; border-radius: 9px; margin-top: 12px; padding: 11px 13px; }
+.crm-invoice-connect-prompt summary { color: #17684f; cursor: pointer; font-size: .62rem; font-weight: 850; }
+.crm-invoice-connect-prompt > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.crm-quick-invoice-panel { background: #f5fbf8; border: 1px solid #b9dacd; border-radius: 12px; margin-bottom: 16px; padding: 15px; }
+.crm-quick-invoice-panel > header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.crm-quick-invoice-panel header span { color: #16805f; font-size: .52rem; font-weight: 900; text-transform: uppercase; }
+.crm-quick-invoice-panel header p { color: var(--color-aea-muted); font-size: .56rem; margin: 3px 0 0; }
+.crm-quick-invoice-panel header > strong { background: #dff4eb; border-radius: 999px; color: #17684f; font-size: .52rem; padding: 6px 9px; }
+.crm-quick-invoice-lines { border-block: 1px solid #d4e3de; margin-top: 12px; }
+.crm-quick-invoice-lines > div { align-items: center; display: flex; gap: 10px; justify-content: space-between; padding: 8px 2px; }
+.crm-quick-invoice-lines > div + div { border-top: 1px solid #e1ebe7; }
+.crm-quick-invoice-lines span { display: grid; font-size: .61rem; gap: 2px; }
+.crm-quick-invoice-lines small { color: var(--color-aea-muted); font-size: .5rem; }
 @keyframes crm-wizard-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 680px) {
-  .crm-wizard-steps { grid-template-columns: repeat(5, 1fr); }
+  .crm-wizard-steps { grid-template-columns: repeat(6, 1fr); }
   .crm-wizard-steps li { font-size: 0; justify-content: center; }
   .crm-wizard-actions { align-items: stretch; flex-direction: column-reverse; }
   .crm-wizard-actions > button { width: 100%; }
   .crm-duplicate-match > div { align-items: stretch; flex-direction: column; }
+  .crm-invoice-mode { grid-template-columns: 1fr; }
+  .crm-quick-invoice-builder section > div, .crm-quick-invoice-builder section > div.custom { grid-template-columns: 1fr; }
+  .crm-quick-invoice-draft > div:not(.head) { grid-template-columns: minmax(0, 1fr) auto; }
+  .crm-quick-invoice-draft > div:not(.head) button { grid-column: 1 / -1; }
+  .crm-quick-invoice-draft > div.head { grid-template-columns: 1fr 85px; }
 }
 .admin-job-directory { display: grid; gap: 16px; }
 .admin-job-directory > header span, .admin-job-search > span { color: #16805f; font-size: .6rem; font-weight: 900; text-transform: uppercase; }
