@@ -390,7 +390,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
-  uniqueIndex("trade_team_members_owner_email_idx").on(table.ownerUid, table.email),
+  uniqueIndex("trade_team_members_owner_email_idx").on(table.ownerUid, table.email).where(sql`${table.email} <> ''`),
   index("trade_team_members_owner_member_idx").on(table.ownerUid, table.memberUid),
   index("trade_team_members_member_status_idx").on(table.memberUid, table.status, table.updatedAt),
   index("trade_team_members_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),

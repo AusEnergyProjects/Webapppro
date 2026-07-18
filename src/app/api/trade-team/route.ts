@@ -41,10 +41,11 @@ async function tokenHash(token: string) {
 
 async function teamPayload(access: TeamAccess) {
   const db = getD1();
-  const memberRows = access.role === "technician" ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, email, display_name, role, status,
-      invited_at, accepted_at, last_active_at, updated_at
+  const memberRows = access.role === "technician" ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, email, display_name, role, status,
+      invited_at, accepted_at, last_active_at, updated_at,
+      EXISTS(SELECT 1 FROM trade_team_invites i WHERE i.team_member_id = trade_team_members.id AND i.consumed_at = '' AND i.expires_at > ?) invite_pending
     FROM trade_team_members WHERE owner_uid = ? ORDER BY status = 'active' DESC, display_name, email`)
-    .bind(access.ownerUid).all<Record<string, unknown>>();
+    .bind(new Date().toISOString(), access.ownerUid).all<Record<string, unknown>>();
   const jobRows = await db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage,
       w.priority, w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label,
       w.source_type, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
@@ -67,7 +68,8 @@ async function teamPayload(access: TeamAccess) {
       isOwner: access.isOwner, canDispatch: canDispatch(access), canManageTeam: canManageTeam(access) },
     members: memberRows.results.map((row) => ({ id: row.id, email: row.email, displayName: row.display_name,
       role: row.role, status: row.status, invitedAt: row.invited_at, acceptedAt: row.accepted_at,
-      lastActiveAt: row.last_active_at, updatedAt: row.updated_at })),
+      lastActiveAt: row.last_active_at, updatedAt: row.updated_at, hasLogin: Boolean(row.member_uid),
+      invitePending: Boolean(row.invite_pending), isOwner: row.member_uid === access.ownerUid })),
     jobs: jobRows.results.map((row) => {
       const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
       const address = protectedJob ? "" : [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
@@ -128,33 +130,63 @@ export async function POST(request: Request) {
 
     const access = await requireInstallerTeamAccess(request);
     if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
-    if (action !== "invite_member" && action !== "reissue_invite") return adminJson({ ok: false, error: "Unsupported team action." }, 400);
+    if (!["add_member", "invite_member", "reissue_invite"].includes(action)) return adminJson({ ok: false, error: "Unsupported team action." }, 400);
     const db = getD1(); const now = new Date().toISOString();
     let memberId = cleanAdminText(body.memberId, 180);
     let email = cleanAdminText(body.email, 180).toLowerCase();
     let displayName = cleanAdminText(body.displayName, 100);
     let role = cleanAdminText(body.role, 30);
-    if (action === "reissue_invite") {
-      const existing = await db.prepare(`SELECT id, email, display_name, role, status FROM trade_team_members
-        WHERE id = ? AND owner_uid = ?`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
-      if (!existing) throw new Error("MEMBER_NOT_FOUND");
-      if (existing.status === "active") return adminJson({ ok: false, error: "This member has already accepted their invitation." }, 409);
-      email = String(existing.email); displayName = String(existing.display_name); role = String(existing.role);
-    } else {
-      if (!EMAIL_PATTERN.test(email) || !displayName || !ROLES.has(role)) return adminJson({ ok: false, error: "Add a valid name, email and team role." }, 400);
+    if (action === "add_member") {
+      if (!displayName || !ROLES.has(role) || (email && !EMAIL_PATTERN.test(email))) {
+        return adminJson({ ok: false, error: "Add a valid name, optional login email and team role." }, 400);
+      }
       const count = await db.prepare("SELECT COUNT(*) count FROM trade_team_members WHERE owner_uid = ? AND status <> 'removed'")
         .bind(access.ownerUid).first<Record<string, unknown>>();
       if (Number(count?.count || 0) >= TEAM_LIMIT) throw new Error("TEAM_LIMIT_REACHED");
-      const existing = await db.prepare("SELECT id, status FROM trade_team_members WHERE owner_uid = ? AND email = ?")
-        .bind(access.ownerUid, email).first<Record<string, unknown>>();
+      if (email) {
+        const duplicate = await db.prepare("SELECT id FROM trade_team_members WHERE owner_uid = ? AND email = ?")
+          .bind(access.ownerUid, email).first();
+        if (duplicate) return adminJson({ ok: false, error: "That login email is already used by someone in this team." }, 409);
+      }
+      memberId = crypto.randomUUID();
+      await db.prepare(`INSERT INTO trade_team_members
+        (id, owner_uid, member_uid, email, display_name, role, status, invited_at, accepted_at, last_active_at, created_at, updated_at)
+        VALUES (?, ?, '', ?, ?, ?, 'active', '', '', '', ?, ?)`)
+        .bind(memberId, access.ownerUid, email, displayName, role, now, now).run();
+      if (!email) return adminJson({ ok: true, ...(await teamPayload(access)) }, 201);
+    } else if (action === "reissue_invite") {
+      const existing = await db.prepare(`SELECT id, member_uid, email, display_name, role, status FROM trade_team_members
+        WHERE id = ? AND owner_uid = ?`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
+      if (!existing) throw new Error("MEMBER_NOT_FOUND");
+      if (existing.member_uid) return adminJson({ ok: false, error: "This person already has login access." }, 409);
+      if (!EMAIL_PATTERN.test(String(existing.email))) return adminJson({ ok: false, error: "Add a login email before creating an invitation." }, 400);
+      email = String(existing.email); displayName = String(existing.display_name); role = String(existing.role);
+    } else {
+      if (!EMAIL_PATTERN.test(email) || !displayName || !ROLES.has(role)) return adminJson({ ok: false, error: "Add a valid name, email and team role." }, 400);
+      if (memberId) {
+        const current = await db.prepare(`SELECT id, member_uid FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
+          .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
+        if (!current) throw new Error("MEMBER_NOT_FOUND");
+        if (current.member_uid) return adminJson({ ok: false, error: "This person already has login access." }, 409);
+        const duplicate = await db.prepare("SELECT id FROM trade_team_members WHERE owner_uid = ? AND email = ? AND id <> ?")
+          .bind(access.ownerUid, email, memberId).first();
+        if (duplicate) return adminJson({ ok: false, error: "That login email is already used by someone in this team." }, 409);
+        await db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, role = ?, invited_at = ?, updated_at = ?
+          WHERE id = ? AND owner_uid = ?`).bind(email, displayName, role, now, now, memberId, access.ownerUid).run();
+      } else {
+      const count = await db.prepare("SELECT COUNT(*) count FROM trade_team_members WHERE owner_uid = ? AND status <> 'removed'")
+        .bind(access.ownerUid).first<Record<string, unknown>>();
+      if (Number(count?.count || 0) >= TEAM_LIMIT) throw new Error("TEAM_LIMIT_REACHED");
+      const existing = await db.prepare("SELECT id, status FROM trade_team_members WHERE owner_uid = ? AND email = ?").bind(access.ownerUid, email).first<Record<string, unknown>>();
       if (existing?.status === "active") return adminJson({ ok: false, error: "That email is already an active team member." }, 409);
       memberId = existing ? String(existing.id) : crypto.randomUUID();
       await db.prepare(`INSERT INTO trade_team_members
         (id, owner_uid, member_uid, email, display_name, role, status, invited_at, accepted_at, last_active_at, created_at, updated_at)
-        VALUES (?, ?, '', ?, ?, ?, 'invited', ?, '', '', ?, ?)
+        VALUES (?, ?, '', ?, ?, ?, 'active', ?, '', '', ?, ?)
         ON CONFLICT(owner_uid, email) DO UPDATE SET display_name = excluded.display_name, role = excluded.role,
-          status = 'invited', member_uid = '', invited_at = excluded.invited_at, accepted_at = '', updated_at = excluded.updated_at`)
+          status = 'active', member_uid = '', invited_at = excluded.invited_at, accepted_at = '', updated_at = excluded.updated_at`)
         .bind(memberId, access.ownerUid, email, displayName, role, now, now, now).run();
+      }
     }
     await db.prepare("DELETE FROM trade_team_invites WHERE team_member_id = ? AND consumed_at = ''").bind(memberId).run();
     const tokenBytes = new Uint8Array(32); crypto.getRandomValues(tokenBytes); const token = base64Url(tokenBytes);
@@ -185,9 +217,7 @@ export async function PATCH(request: Request) {
       const current = await db.prepare(`SELECT member_uid FROM trade_team_members WHERE id = ? AND owner_uid = ?`)
         .bind(memberId, access.ownerUid).first<Record<string, unknown>>();
       if (!current) throw new Error("MEMBER_NOT_FOUND");
-      if (status === "active" && !String(current.member_uid || "")) {
-        return adminJson({ ok: false, error: "This person must accept their secure invitation before the account can be activated." }, 409);
-      }
+      if (String(current.member_uid) === access.ownerUid) return adminJson({ ok: false, error: "The business owner remains active." }, 409);
       const result = await db.prepare(`UPDATE trade_team_members SET role = ?, status = ?, updated_at = ?
         WHERE id = ? AND owner_uid = ?`).bind(role, status, now, memberId, access.ownerUid).run();
       if (!result.meta.changes) throw new Error("MEMBER_NOT_FOUND");

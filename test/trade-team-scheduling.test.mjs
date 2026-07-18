@@ -76,8 +76,9 @@ test("schedule payloads preserve customer privacy boundaries", () => {
   assert.doesNotMatch(route, /c\.email|c\.phone|c\.first_name|c\.last_name|address_line_1/);
 });
 
-test("the installer dashboard exposes the complete week scheduling workflow", () => {
-  for (const copy of ["Capacity and dispatch", "Week capacity", "Conflicts only", "Work awaiting an appointment", "Working hours and unavailable time", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+test("the installer dashboard exposes the complete low-friction week scheduling workflow", () => {
+  for (const copy of ["Plan the week", "Add to schedule", "Conflicts only", "Set working hours and time off", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+  assert.match(route, /member_uid === ownerUid/);
   assert.match(dashboard, /workspace === "schedule"/); assert.match(dashboard, /<TradeScheduleWorkspace/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);
   assert.match(teamPortal, /data\.access\.canDispatch && <TradeScheduleWorkspace/);

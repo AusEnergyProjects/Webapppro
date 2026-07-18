@@ -33,9 +33,10 @@ test("accepted scope becomes an explicitly gated ready job", () => {
   assert.match(panel, /Prepare ready-to-run job/); assert.match(panel, /Confirm only what still needs a human decision/); assert.match(panel, /Mark ready to schedule/);
 });
 
-test("invited technicians can be preassigned without early job access", () => {
+test("roster-only people can be assigned while login access remains separate", () => {
   const route = read("src/app/api/trade-team/route.ts");
   const centre = read("src/components/TradeTeamCentre.tsx");
   assert.match(route, /status IN \('active', 'invited'\)/);
-  assert.match(centre, /invite pending/); assert.match(centre, /Access begins after the invitation is accepted/);
+  assert.match(route, /action === "add_member"/);
+  assert.match(centre, /They can be assigned now/); assert.match(centre, /Create login/);
 });

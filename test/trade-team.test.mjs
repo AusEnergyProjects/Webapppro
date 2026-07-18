@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0025_dizzy_spot.sql");
+const rosterMigration = read("../drizzle/0070_frictionless_team_roster.sql");
 const route = read("../src/app/api/trade-team/route.ts");
 const access = read("../src/lib/trade-team-server.ts");
 const centre = read("../src/components/TradeTeamCentre.tsx");
@@ -42,8 +43,20 @@ test("invitations are random, hashed, expiring, single-use and email bound", () 
   assert.match(route, /7 \* 24 \* 60 \* 60 \* 1000/);
   assert.match(route, /consumed_at = ''/);
   assert.match(route, /String\(invite\.email\)\.toLowerCase\(\) !== identity\.email/);
-  assert.match(route, /must accept their secure invitation before the account can be activated/);
+  assert.match(route, /This person already has login access/);
   assert.doesNotMatch(migration, /`token` text/);
+});
+
+test("owners and roster-only people are assignable before a separate login is created", () => {
+  assert.match(access, /ensureOwnerTeamMember/);
+  assert.match(access, /memberId = await ensureOwnerTeamMember/);
+  assert.match(route, /action === "add_member"/);
+  assert.match(route, /VALUES \(\?, \?, '', \?, \?, \?, 'active'/);
+  assert.match(route, /hasLogin: Boolean\(row\.member_uid\)/);
+  assert.match(centre, /You are ready to assign as Me/);
+  assert.match(centre, /Login email \(optional\)/);
+  assert.match(centre, /Create login/);
+  assert.match(rosterMigration, /WHERE `email` <> ''/);
 });
 
 test("owners manage people while dispatch and technician scopes are server enforced", () => {
@@ -71,10 +84,9 @@ test("the owner CRM and mobile staff portal expose progressive team workflows", 
   assert.match(workspace, /TradeTeamCentre/);
   assert.match(workspace, /hasTeamAccess/);
   assert.match(centre, /Dispatch board/);
-  assert.match(centre, /Create a secure invitation/);
-  assert.match(centre, /Assigned technician/);
-  assert.match(centre, /invite pending/);
-  assert.match(centre, /Preassigned\. Access begins after the invitation is accepted/);
+  assert.match(centre, /Ready for work straight away/);
+  assert.match(centre, /Assigned to/);
+  assert.match(centre, /Scheduling only\. Add a login when needed/);
   assert.match(route, /status IN \('active', 'invited'\)/);
   assert.match(portal, /Continue with Google/);
   assert.match(portal, /Create team login/);

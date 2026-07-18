@@ -58,7 +58,7 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
 async function schedulePayload(ownerUid: string, weekStart: string) {
   const db = getD1(); const weekEnd = addCalendarDays(weekStart, 7);
   const [members, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
-    db.prepare(`SELECT id, display_name, role, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
+    db.prepare(`SELECT id, member_uid, display_name, role, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
       ORDER BY display_name, email`).bind(ownerUid).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, weekday, start_minute, end_minute, is_available FROM trade_team_working_hours
       WHERE owner_uid = ? ORDER BY team_member_id, weekday`).bind(ownerUid).all<Record<string, unknown>>(),
@@ -106,7 +106,7 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
       siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), protectedJob, conflicts };
   });
-  return { weekStart, weekEnd, members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status })),
+  return { weekStart, weekEnd, members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.member_uid === ownerUid })),
     workingHours: hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) })),
     unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
     appointments, rescheduleRequests: rescheduleRows.results.map((row) => ({ id: row.id, appointmentId: row.appointment_id,

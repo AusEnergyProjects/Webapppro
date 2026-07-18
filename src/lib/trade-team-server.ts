@@ -14,6 +14,26 @@ export type TeamAccess = {
   businessName: string;
 };
 
+export async function ensureOwnerTeamMember(ownerUid: string, email: string, displayName: string) {
+  const db = getD1();
+  const existing = await db.prepare(`SELECT id FROM trade_team_members
+    WHERE owner_uid = ? AND (member_uid = ? OR email = ?) ORDER BY member_uid = ? DESC LIMIT 1`)
+    .bind(ownerUid, ownerUid, email, ownerUid).first<{ id: string }>();
+  const now = new Date().toISOString();
+  if (existing) {
+    await db.prepare(`UPDATE trade_team_members SET member_uid = ?, email = ?, display_name = ?, role = 'manager',
+      status = 'active', accepted_at = CASE WHEN accepted_at = '' THEN ? ELSE accepted_at END, updated_at = ?
+      WHERE id = ? AND owner_uid = ?`).bind(ownerUid, email, displayName, now, now, existing.id, ownerUid).run();
+    return existing.id;
+  }
+  const id = crypto.randomUUID();
+  await db.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, member_uid, email, display_name, role, status, invited_at, accepted_at, last_active_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'manager', 'active', '', ?, ?, ?, ?)`)
+    .bind(id, ownerUid, ownerUid, email, displayName, now, now, now, now).run();
+  return id;
+}
+
 export async function requireInstallerTeamAccess(request: Request, requireTeamFeature = true): Promise<TeamAccess> {
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
@@ -26,8 +46,10 @@ export async function requireInstallerTeamAccess(request: Request, requireTeamFe
     if (requireTeamFeature ? !entitlements.features.team_access : !entitlements.features.business_operations) {
       throw new Error(requireTeamFeature ? "TEAM_ACCESS_REQUIRED" : "FULL_ACCESS_REQUIRED");
     }
-    return { ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId: "",
-      displayName: String(owner.business_name || "Business owner"), role: "owner", isOwner: true,
+    const displayName = String(owner.business_name || "Business owner");
+    const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, displayName);
+    return { ownerUid: identity.uid, actorUid: identity.uid, actorEmail: identity.email, memberId,
+      displayName, role: "owner", isOwner: true,
       businessName: String(owner.business_name || "Installer business") };
   }
   const member = await db.prepare(`SELECT m.id, m.owner_uid, m.display_name, m.role, a.business_name,
