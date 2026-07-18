@@ -381,6 +381,9 @@ Progress as at 18 July 2026:
 - P6-3A completes the reusable item foundation for the first two requirements above. Customer-specific price tiers and contract rates remain a later bounded slice.
 - The default path asks only for the item name, type and sell price, with GST and common trade units already selected. Cost, duration, capability and supplier details stay optional and collapsed until needed.
 - Every quote created from a saved item snapshots its current sell price, GST treatment, type, cost, markup and margin into the immutable quote revision. Later price-book changes cannot rewrite an issued quote.
+- P6-3B completes the reusable job-packet foundation. An office user can bundle active price-book items and quantities, an existing job-template checklist, published forms and a suggested crew size without creating competing task, form, capability or team records.
+- Packet cost, sell, margin, duration and required capabilities are calculated from the current price book. Archived dependencies block new quote application while existing quote snapshots remain unchanged.
+- A ready packet can populate a direct-job quote in one choice. Applying the same packet again replaces its packet lines instead of duplicating them, and the saved quote records the exact packet and revision used.
 
 Reusable job packets must combine:
 

@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `ab7331b0ae1d6b0ce4a2981278a74a09c95ac708` on `codex/sites-custom-domain-migration` implements the P6-3A price-book batch and was published through release commit `9ed209550357d66d3c2ef996a21fa6b311465958` as Sites version 161.
+Implementation baseline: `b4b1ffd02b1d82a5293ba0a849255f507707a4f0` on `codex/sites-custom-domain-migration` implements the P6-3B reusable job-packet batch. Final GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md` after publication.
 
 ## Current delivery summary
 
@@ -52,46 +52,50 @@ P6-3A establishes the authoritative owner-scoped price book. Owners, managers an
 
 Migration `0064_trade_price_book.sql` stores integer-cent supplier cost and sell price, deterministic basis-point markup and margin, immutable price-change revisions and optional references to existing business capabilities and approved supplier catalogue products. Direct-job quote drafts can select an active item and the server snapshots its current authoritative commercial fields into the immutable quote version. Existing issued versions remain unchanged.
 
+P6-3B adds a two-choice Items and Job packets library inside the existing Price book workspace, avoiding another navigation area for installers to learn. The first-run path sends an empty workspace back to add a reusable item, then asks only for packet name, service and saved items. Checklist, forms and suggested crew stay behind optional progressive disclosure.
+
+Migration `0065_trade_job_packets.sql` adds owner-scoped packet composition and quote-line packet revision references. Current price-book values drive deterministic cost, sell, margin, duration and required-capability summaries. Existing job-template tasks, published forms and active team members remain authoritative. A packet with an archived item is visibly blocked from quote application. Applying the same ready packet again replaces its previous draft lines rather than duplicating them, while issued quote revisions remain immutable.
+
 ## Next milestone contract
 
-### P6-3B batch: reusable job-packet foundation
+### P6-3C batch: optioned quote packages and customer choice
 
-Outcome: an office user can turn a common service into a ready-to-quote scope in under one minute, without re-entering price-book items, tasks, forms, duration or skill requirements.
+Outcome: an office user can turn one job packet into a clear good, better or best customer quote, and the customer can choose permitted options with accurate totals before accepting the exact immutable revision.
 
 ### Five linked foundation items
 
-1. Add owner-scoped reusable job packets with a plain-language name, service type and draft, active or archived state.
-2. Compose each packet from active price-book items with default quantities and a live cost, sell, markup and margin summary.
-3. Reference the existing CRM job-template tasks and form templates instead of creating competing checklist or form records.
-4. Calculate estimated duration and required capabilities from the selected items, then show a simple suggested-crew readiness summary from the existing team source.
-5. Apply one active packet to a direct-job quote draft in one choice, with duplicate prevention, access tests and desktop plus 390 px responsive coverage.
+1. Add quote sections and plain-language headings so a long trade scope remains scannable without forcing extra setup for a simple quote.
+2. Add good, better and best packages plus optional add-ons and choose-one groups, reusing price-book and packet lines rather than copying commercial records.
+3. Recalculate customer-facing subtotal, GST and total deterministically as permitted options change, with server validation of every selection.
+4. Keep internal cost and margin restricted to authorised trade roles while publishing an immutable customer-visible revision with the exact available choices.
+5. Let the authenticated authorised customer choose options, accept or decline and record exact consent evidence against that revision with desktop and 390 px responsive coverage.
 
 ### In scope
 
-- Existing active price-book items, job-template tasks, form templates, team capabilities and versioned direct-job quote boundaries.
-- Office packet management for verified trade roles already authorised to manage business data.
-- Additive packet and packet-line schema with deterministic quantity and estimate calculations.
-- A fast first-run path with common-service examples and optional detail progressively disclosed.
+- Existing price-book items, job packets, direct-job quote versions and verified customer acceptance identity.
+- Simple quotes with no packages must retain their current fast path.
+- Additive section, package, option and customer-selection records with deterministic integer totals.
+- Customer copy that explains choices without exposing cost, margin, internal notes or protected trade data.
 
 ### Explicitly out of scope
 
-- Customer-facing quote packages, acceptance, signatures, deposits, PDFs or delivery messaging.
-- Creating a new task, checklist, form, catalogue, capability or team source of truth.
-- Inventory reservations, purchasing, invoicing, accounting sync, asset service reminders or field material consumption.
-- Automated scheduling or assigning staff; the packet may only report readiness from existing team data.
+- Deposits, payment processing, PDF output, email or SMS delivery and unauthenticated acceptance.
+- Purchasing, inventory reservation, invoicing, scheduling, job materialisation or field consumption.
+- Photos, diagrams, warranty libraries, customer questions or complex document-level discount rules.
+- Replacing the existing price book, packets, quote-version immutability or verified-customer identity boundary.
 
 ### Acceptance criteria
 
-- A standard packet can be created or selected and applied to a direct-job quote draft in under one minute without copying line details.
-- Packet estimates use the authoritative current price-book items and clearly identify archived or unavailable dependencies before application.
-- Tasks, forms, capabilities and team members remain referenced from their existing owner-scoped records.
-- Applying a packet is idempotent for one quote draft and never changes an issued quote revision.
-- Only authorised owner-scoped office users can mutate packets; customer and field payloads do not expose internal cost or margin.
-- Desktop and 390 px packet-library and apply views have no document-level horizontal overflow.
+- A trade can create a three-package quote from a ready packet without re-entering standard lines.
+- A simple itemised quote remains no slower than the current workflow.
+- Customer totals exactly match the server-calculated selected package and options, including GST.
+- An issued revision and its available choices cannot be edited; changes create the next draft revision.
+- Customer payloads never expose supplier cost, markup, margin or internal records.
+- The authorised customer can choose, accept or decline on desktop and 390 px without document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Existing job templates or forms cannot be referenced without duplicating their source of truth.
-- Applying a packet would require rewriting an issued quote revision or bypassing owner scope.
-- The slice expands into customer acceptance, deposits, purchasing, inventory, accounting, scheduling or staff assignment.
+- Package modelling would require copying price-book or packet commercial data instead of referencing and snapshotting it.
+- Customer option changes could alter an already accepted or superseded revision.
+- The slice expands into payment, delivery messaging, PDF generation, purchasing, inventory, invoicing, scheduling or job creation.
