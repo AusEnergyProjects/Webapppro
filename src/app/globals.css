@@ -4336,6 +4336,9 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-quick-invoice-lines > div + div { border-top: 1px solid #e1ebe7; }
 .crm-quick-invoice-lines span { display: grid; font-size: .61rem; gap: 2px; }
 .crm-quick-invoice-lines small { color: var(--color-aea-muted); font-size: .5rem; }
+.crm-quick-invoice-handoff { border: 1px solid #cbded7; border-radius: 12px; margin-bottom: 16px; padding: 12px 15px; }
+.crm-quick-invoice-handoff > summary { color: #17684f; cursor: pointer; font-size: .65rem; font-weight: 900; }
+.crm-quick-invoice-handoff > p { color: var(--color-aea-muted); font-size: .56rem; line-height: 1.45; margin: 6px 0 0; }
 @keyframes crm-wizard-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 680px) {
   .crm-wizard-steps { grid-template-columns: repeat(6, 1fr); }

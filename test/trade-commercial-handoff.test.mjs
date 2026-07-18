@@ -45,7 +45,8 @@ test("the handoff migration is additive and deposit idempotency is commercial-re
 
 test("accepted quote drives one provider-hosted deposit and verified payment state", () => {
   for (const boundary of ["sameOrigin", "requireInstallerOperations", "trade_crm_commercial_handovers", "deposit_amount_cents", "commercial_reference"]) assert.match(paymentRoute, new RegExp(boundary));
-  assert.match(paymentRoute, /purpose = 'deposit'/);
+  assert.match(paymentRoute, /\? "invoice" : "deposit"/);
+  assert.match(paymentRoute, /AND purpose = \?/);
   assert.match(paymentRoute, /Idempotency-Key/);
   assert.match(paymentRoute, /online-checkout\/payment-links/);
   assert.match(reconciliation, /status = 'deposit_paid'/);

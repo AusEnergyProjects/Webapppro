@@ -14,6 +14,7 @@ function paymentError(error: unknown) {
   }
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Payment links can only be created for customers who contacted your business directly. AEA protected customers remain inside the protected AEA process." }, 403);
   if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before requesting its deposit." }, 409);
+  if (code === "QUICK_INVOICE_REQUIRED") return adminJson({ ok: false, error: "Create the TLink quick invoice before requesting its payment." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this payment provider in Integrations first." }, 409);
   if (code === "PROVIDER_PAYMENT_FAILED") return adminJson({ ok: false, error: "The payment provider could not create the checkout link. Check the connection and try again." }, 502);
   return adminJson({ ok: false, error: "The payment request could not be created." }, 500);
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     const provider = cleanAdminText(body.provider, 20).toLowerCase();
     if (provider !== "stripe" && provider !== "square") return adminJson({ ok: false, error: "Choose Stripe or Square." }, 400);
     const workOrderId = cleanAdminText(body.workOrderId, 180);
+    const purpose = cleanAdminText(body.purpose, 20).toLowerCase() === "invoice" ? "invoice" : "deposit";
     const db = getD1();
     const job = await db.prepare(`SELECT w.id, w.work_number, w.title, w.source_type, d.customer_source,
         c.email, c.first_name, c.last_name, c.business_name
@@ -63,23 +65,31 @@ export async function POST(request: Request) {
       WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!job || job.source_type !== "internal" || job.customer_source !== "trade_owned") throw new Error("DIRECT_CUSTOMER_REQUIRED");
-    const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers
-      WHERE firebase_uid = ? AND work_order_id = ? AND status IN ('accepted', 'deposit_requested', 'deposit_paid')
-      ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Record<string, unknown>>();
-    if (!handoff) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
-    const amountCents = Number(handoff.deposit_amount_cents);
-    if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > Number(handoff.total_cents)) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
+    const source = purpose === "invoice"
+      ? await db.prepare(`SELECT id, invoice_number commercial_reference, total_cents amount_cents
+          FROM trade_crm_quick_invoices WHERE firebase_uid = ? AND work_order_id = ? LIMIT 1`)
+        .bind(identity.uid, workOrderId).first<Record<string, unknown>>()
+      : await db.prepare(`SELECT id, commercial_reference, deposit_amount_cents amount_cents, total_cents
+          FROM trade_crm_commercial_handovers
+          WHERE firebase_uid = ? AND work_order_id = ? AND status IN ('accepted', 'deposit_requested', 'deposit_paid')
+          ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Record<string, unknown>>();
+    if (!source) throw new Error(purpose === "invoice" ? "QUICK_INVOICE_REQUIRED" : "ACCEPTED_HANDOFF_REQUIRED");
+    const amountCents = Number(source.amount_cents);
+    if (!Number.isInteger(amountCents) || amountCents < 100 || (purpose === "deposit" && amountCents > Number(source.total_cents))) {
+      throw new Error(purpose === "invoice" ? "QUICK_INVOICE_REQUIRED" : "ACCEPTED_HANDOFF_REQUIRED");
+    }
     const existing = await db.prepare(`SELECT * FROM trade_crm_payment_links WHERE firebase_uid = ? AND commercial_reference = ?
-      AND purpose = 'deposit' LIMIT 1`).bind(identity.uid, handoff.commercial_reference).first<Record<string, unknown>>();
+      AND purpose = ? LIMIT 1`).bind(identity.uid, source.commercial_reference, purpose).first<Record<string, unknown>>();
     if (existing) return adminJson({ ok: true, duplicate: true, paymentLink: {
-      id: String(existing.id), workOrderId, commercialReference: String(existing.commercial_reference), purpose: "deposit", provider: String(existing.provider), externalId: String(existing.external_id), amountCents: Number(existing.amount_cents),
+      id: String(existing.id), workOrderId, commercialReference: String(existing.commercial_reference), purpose, provider: String(existing.provider), externalId: String(existing.external_id), amountCents: Number(existing.amount_cents),
       checkoutUrl: String(existing.checkout_url), status: String(existing.status), createdAt: String(existing.created_at),
     } });
     const connection = await db.prepare(`SELECT * FROM trade_crm_integrations
       WHERE firebase_uid = ? AND provider = ? AND status = 'connected'`).bind(identity.uid, provider).first<Record<string, unknown>>();
     if (!connection) throw new Error("INTEGRATION_REQUIRED");
     const id = crypto.randomUUID();
-    const idempotencyKey = `deposit-${String(handoff.id)}`;
+    const idempotencyKey = `${purpose}-${String(source.id)}`;
+    const paymentLabel = purpose === "invoice" ? "Invoice payment" : "Deposit";
     let externalId = "";
     let providerOrderId = "";
     let checkoutUrl = "";
@@ -90,16 +100,18 @@ export async function POST(request: Request) {
       const params = new URLSearchParams({
         mode: "payment",
         "line_items[0][price_data][currency]": "aud",
-        "line_items[0][price_data][product_data][name]": `Deposit | ${String(handoff.commercial_reference)}`.slice(0, 180),
+        "line_items[0][price_data][product_data][name]": `${paymentLabel} | ${String(source.commercial_reference)}`.slice(0, 180),
         "line_items[0][price_data][unit_amount]": String(amountCents),
         "line_items[0][quantity]": "1",
         client_reference_id: String(job.id),
         "metadata[aea_payment_link_id]": id,
         "metadata[aea_work_order_id]": String(job.id),
-        "metadata[aea_commercial_reference]": String(handoff.commercial_reference),
+        "metadata[aea_commercial_reference]": String(source.commercial_reference),
+        "metadata[aea_payment_purpose]": purpose,
         "payment_intent_data[metadata][aea_payment_link_id]": id,
         "payment_intent_data[metadata][aea_work_order_id]": String(job.id),
-        "payment_intent_data[metadata][aea_commercial_reference]": String(handoff.commercial_reference),
+        "payment_intent_data[metadata][aea_commercial_reference]": String(source.commercial_reference),
+        "payment_intent_data[metadata][aea_payment_purpose]": purpose,
         success_url: `${origin}/direct-trade/dashboard?payment_status=returned#business-hub`,
         cancel_url: `${origin}/direct-trade/dashboard?payment_status=cancelled#business-hub`,
       });
@@ -130,10 +142,10 @@ export async function POST(request: Request) {
           idempotency_key: idempotencyKey,
           order: {
             location_id: credentials.location_id,
-            reference_id: String(handoff.commercial_reference).slice(0, 40),
-            metadata: { aea_payment_link_id: id, aea_work_order_id: String(job.id).slice(0, 255), aea_commercial_reference: String(handoff.commercial_reference).slice(0, 255) },
+            reference_id: String(source.commercial_reference).slice(0, 40),
+            metadata: { aea_payment_link_id: id, aea_work_order_id: String(job.id).slice(0, 255), aea_commercial_reference: String(source.commercial_reference).slice(0, 255), aea_payment_purpose: purpose },
             line_items: [{
-              name: `Deposit | ${String(handoff.commercial_reference)}`.slice(0, 180),
+              name: `${paymentLabel} | ${String(source.commercial_reference)}`.slice(0, 180),
               quantity: "1",
               base_price_money: { amount: amountCents, currency: "AUD" },
             }],
@@ -150,15 +162,16 @@ export async function POST(request: Request) {
       db.prepare(`INSERT OR IGNORE INTO trade_crm_payment_links
         (id, work_order_id, firebase_uid, commercial_handoff_id, commercial_reference, purpose, provider, external_id,
          provider_order_id, amount_cents, checkout_url, status, idempotency_key, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'deposit', ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
-        .bind(id, workOrderId, identity.uid, handoff.id, handoff.commercial_reference, provider, externalId, providerOrderId,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
+        .bind(id, workOrderId, identity.uid, purpose === "deposit" ? source.id : "", source.commercial_reference, purpose, provider, externalId, providerOrderId,
           amountCents, checkoutUrl, idempotencyKey, now, now),
-      db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_requested', updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = 'accepted'`).bind(now, handoff.id, identity.uid),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, 'deposit_requested', 'Provider-hosted deposit request created from the accepted quote.', ?)`)
-        .bind(crypto.randomUUID(), workOrderId, identity.uid, now),
+        VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), workOrderId, identity.uid, purpose === "invoice" ? "invoice_payment_requested" : "deposit_requested",
+          purpose === "invoice" ? "Provider-hosted full invoice payment request created from the TLink quick invoice." : "Provider-hosted deposit request created from the accepted quote.", now),
+      ...(purpose === "deposit" ? [db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_requested', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'accepted'`).bind(now, source.id, identity.uid)] : []),
     ]);
-    return adminJson({ ok: true, paymentLink: { id, workOrderId, commercialReference: String(handoff.commercial_reference), purpose: "deposit", provider, externalId, amountCents, checkoutUrl, status: "open", createdAt: now } }, 201);
+    return adminJson({ ok: true, paymentLink: { id, workOrderId, commercialReference: String(source.commercial_reference), purpose, provider, externalId, amountCents, checkoutUrl, status: "open", createdAt: now } }, 201);
   } catch (error) { return paymentError(error); }
 }

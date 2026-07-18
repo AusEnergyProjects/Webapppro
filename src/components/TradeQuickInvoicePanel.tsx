@@ -2,13 +2,15 @@
 
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
+import { TradeAccountingPanel } from "./TradeAccountingPanel";
+import { TradePaymentPanel } from "./TradePaymentPanel";
 
-type Line = { lineId: string; description: string; subtotalCents: number; taxCode: "gst" | "none" };
+type Line = { lineId: string; description: string; quantity: number; subtotalCents: number; taxCents: number; totalCents: number; taxCode: "gst" | "none" };
 type QuickInvoice = { id: string; invoiceNumber: string; lines: Line[]; subtotalCents: number; taxCents: number; totalCents: number; dueAt: string; status: string; deliveryStatus: string; attempts: number; sentAt: string };
 
 function money(cents: number) { return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
 
-export function TradeQuickInvoicePanel({ user, workOrderId, onChanged }: { user: User; workOrderId: string; onChanged: () => Promise<void> }) {
+export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTitle, onOpenIntegrations, onChanged }: { user: User; workOrderId: string; customerName: string; jobTitle: string; onOpenIntegrations?: () => void; onChanged: () => Promise<void> }) {
   const [invoice, setInvoice] = useState<QuickInvoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -47,11 +49,16 @@ export function TradeQuickInvoicePanel({ user, workOrderId, onChanged }: { user:
 
   if (loading) return null;
   if (!invoice) return status ? <p className="crm-status" role="status">{status}</p> : null;
-  return <section className="crm-quick-invoice-panel">
+  return <><section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>{invoice.invoiceNumber}</h4><p>{invoice.deliveryStatus === "sent" ? `Sent ${new Date(invoice.sentAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : "Saved in this job and waiting to be sent."}</p></div><strong>{invoice.deliveryStatus === "sent" ? "Sent" : "Needs attention"}</strong></header>
     <div className="crm-quick-invoice-lines">{invoice.lines.map((line) => <div key={line.lineId}><span>{line.description}<small>{line.taxCode === "gst" ? "GST added" : "GST-free"}</small></span><strong>{money(line.subtotalCents)}</strong></div>)}</div>
     <dl><div><dt>Subtotal</dt><dd>{money(invoice.subtotalCents)}</dd></div><div><dt>GST</dt><dd>{money(invoice.taxCents)}</dd></div><div className="total"><dt>Total</dt><dd>{money(invoice.totalCents)}</dd></div><div><dt>Due</dt><dd>{invoice.dueAt}</dd></div></dl>
     {invoice.deliveryStatus !== "sent" && <button type="button" className="btn" disabled={busy} onClick={() => void retry()}>{busy ? "Sending..." : "Retry invoice email"}</button>}
     {status && <p className="crm-status" role="status">{status}</p>}
-  </section>;
+  </section><details className="crm-quick-invoice-handoff"><summary>Accounting and payment, optional</summary><p>Reuse this invoice in your connected system without entering the customer or total again.</p>
+    <TradeAccountingPanel user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer invoiceAmountCents={invoice.totalCents}
+      invoiceReference={invoice.invoiceNumber} invoiceLines={invoice.lines.map((line) => ({ lineId: line.lineId, section: line.taxCode === "gst" ? "GST taxable" : "GST-free", description: line.description, quantityMilli: Math.max(1, line.quantity || 1) * 1000, totalCents: line.totalCents }))}
+      invoiceSubtotalCents={invoice.subtotalCents} invoiceTaxCents={invoice.taxCents} customerName={customerName} jobTitle={jobTitle} invoiceTerms="" invoiceSource="quick_invoice" onOpenIntegrations={onOpenIntegrations} onChanged={onChanged} />
+    <TradePaymentPanel user={user} workOrderId={workOrderId} isProtected={false} suggestedAmountCents={invoice.totalCents} purpose="invoice" onOpenIntegrations={onOpenIntegrations} onChanged={onChanged} />
+  </details></>;
 }

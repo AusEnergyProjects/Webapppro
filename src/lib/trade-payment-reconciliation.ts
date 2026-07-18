@@ -23,6 +23,8 @@ type ReconciliationInput = {
 type PaymentLinkRow = {
   id: string;
   commercial_handoff_id: string;
+  commercial_reference: string;
+  purpose: string;
   work_order_id: string;
   firebase_uid: string;
   amount_cents: number;
@@ -51,7 +53,8 @@ async function matchingPaymentLink(input: ReconciliationInput) {
   const identifierColumn = input.provider === "stripe" ? "l.external_id" : "l.provider_order_id";
   const identifier = input.provider === "stripe" ? cleanReference(input.externalId || "") : cleanReference(input.providerOrderId || "");
   if (!identifier || !input.connectedAccountId) return undefined;
-  const link = await db.prepare(`SELECT l.id, l.commercial_handoff_id, l.work_order_id, l.firebase_uid, l.amount_cents, l.status,
+  const link = await db.prepare(`SELECT l.id, l.commercial_handoff_id, l.commercial_reference, l.purpose,
+      l.work_order_id, l.firebase_uid, l.amount_cents, l.status,
       a.business_name, w.work_number
     FROM trade_crm_payment_links l
     JOIN trade_crm_integrations i ON i.firebase_uid = l.firebase_uid
@@ -155,9 +158,14 @@ export async function reconcileTradePayment(input: ReconciliationInput): Promise
         eventId, occurredAt, receivedAt, link.id, link.firebase_uid),
   ];
   if (becamePaid) {
-    statements.push(
+    if (link.purpose === "deposit" && link.commercial_handoff_id) statements.push(
       db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_paid', updated_at = ?
-        WHERE id = ? AND firebase_uid = ?`).bind(receivedAt, link.commercial_handoff_id, link.firebase_uid),
+        WHERE id = ? AND firebase_uid = ?`).bind(receivedAt, link.commercial_handoff_id, link.firebase_uid));
+    if (link.purpose === "invoice") statements.push(
+      db.prepare(`UPDATE trade_crm_quick_invoices SET status = 'paid', updated_at = ?
+        WHERE firebase_uid = ? AND work_order_id = ? AND invoice_number = ?`)
+        .bind(receivedAt, link.firebase_uid, link.work_order_id, link.commercial_reference));
+    statements.push(
       db.prepare(`UPDATE trade_crm_job_details SET
         paid_value_cents = CASE WHEN invoiced_value_cents > 0
           THEN MIN(invoiced_value_cents, paid_value_cents + ?)

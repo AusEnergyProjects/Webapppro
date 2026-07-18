@@ -23,10 +23,12 @@ const statusLabels: Record<string, string> = {
 export function TradeAccountingPanel({
   user, workOrderId, isProtected, hasDirectCustomer, invoiceAmountCents, invoiceReference, invoiceLines,
   invoiceSubtotalCents, invoiceTaxCents, customerName, jobTitle, invoiceTerms, onOpenIntegrations, onChanged,
+  invoiceSource = "accepted_quote",
 }: {
   user: User; workOrderId: string; isProtected: boolean; hasDirectCustomer: boolean;
   invoiceAmountCents: number; invoiceReference: string; invoiceLines: InvoiceLine[]; invoiceSubtotalCents: number;
   invoiceTaxCents: number; customerName: string; jobTitle: string; invoiceTerms: string;
+  invoiceSource?: "accepted_quote" | "quick_invoice";
   onOpenIntegrations?: () => void; onChanged: () => Promise<void>;
 }) {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -40,7 +42,7 @@ export function TradeAccountingPanel({
 
   const load = useCallback(async (provider?: "myob" | "quickbooks") => {
     const token = await user.getIdToken();
-    const query = new URLSearchParams({ workOrderId });
+    const query = new URLSearchParams({ workOrderId, invoiceSource });
     if (provider) query.set("provider", provider);
     const response = await fetch(`/api/trade-accounting?${query}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as AccountingResult;
@@ -52,7 +54,7 @@ export function TradeAccountingPanel({
       setPreparedProvider(provider);
       setAccounts(nextAccounts); setAccountReference((current) => nextAccounts.some((item) => item.id === current) ? current : nextAccounts[0]?.id || "");
     }
-  }, [user, workOrderId]);
+  }, [invoiceSource, user, workOrderId]);
 
   useEffect(() => {
     if (isProtected || !hasDirectCustomer) return;
@@ -78,7 +80,7 @@ export function TradeAccountingPanel({
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-accounting", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "export", provider, workOrderId, accountReference: provider === "xero" ? "" : accountReference }),
+        body: JSON.stringify({ action: "export", provider, workOrderId, invoiceSource, accountReference: provider === "xero" ? "" : accountReference }),
       });
       const result = await response.json().catch(() => ({})) as AccountingResult;
       if (!response.ok || !result.document) throw new Error(result.error || "The draft invoice could not be exported.");
@@ -94,7 +96,7 @@ export function TradeAccountingPanel({
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-accounting", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "refresh", workOrderId }),
+        body: JSON.stringify({ action: "refresh", workOrderId, invoiceSource }),
       });
       const result = await response.json().catch(() => ({})) as AccountingResult;
       if (!response.ok || !result.document) throw new Error(result.error || "The invoice status could not be refreshed.");
@@ -115,7 +117,7 @@ export function TradeAccountingPanel({
   const provider = selectedProvider === "xero" ? xero : selectedProvider === "myob" ? myob : quickbooks;
   const providerLabel = selectedProvider === "xero" ? "Xero" : selectedProvider === "myob" ? "MYOB" : "QuickBooks";
   return <section className="crm-accounting-panel">
-    <header><div><span>Invoice</span><h4>Preview, then create the draft</h4><p>Check the customer view first. TLink reuses the accepted scope and exact total, so there is nothing to retype.</p></div></header>
+    <header><div><span>Invoice</span><h4>Preview, then create the draft</h4><p>Check the customer view first. TLink reuses this invoice and its exact total, so there is nothing to retype.</p></div></header>
     <div className="crm-invoice-workspace">
       <article className="crm-invoice-preview" aria-label="Invoice preview">
         <header><div><span>Invoice preview</span><strong>{invoiceReference}</strong></div><em>Draft, not sent</em></header>

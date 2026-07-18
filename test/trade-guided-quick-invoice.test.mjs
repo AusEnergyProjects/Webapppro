@@ -11,6 +11,12 @@ const invoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const invoiceRoute = read("../src/app/api/trade-quick-invoices/route.ts");
 const invoiceServer = read("../src/lib/trade-quick-invoice-server.ts");
+const invoicePanel = read("../src/components/TradeQuickInvoicePanel.tsx");
+const accountingPanel = read("../src/components/TradeAccountingPanel.tsx");
+const paymentPanel = read("../src/components/TradePaymentPanel.tsx");
+const accountingRoute = read("../src/app/api/trade-accounting/route.ts");
+const paymentRoute = read("../src/app/api/trade-payment-links/route.ts");
+const reconciliation = read("../src/lib/trade-payment-reconciliation.ts");
 const migration = read("../drizzle/0075_guided_quick_invoices.sql");
 
 test("appointment minimums are stable quarter-hour values", () => {
@@ -50,4 +56,27 @@ test("quick invoice migration creates owner-scoped durable invoice records", () 
   const indexes = db.prepare("PRAGMA index_list(trade_crm_quick_invoices)").all().map((row) => row.name);
   assert.ok(indexes.includes("trade_crm_quick_invoices_owner_job_idx"));
   assert.ok(indexes.includes("trade_crm_quick_invoices_number_idx"));
+});
+
+test("quick invoice reuses authoritative totals in connected accounting and payment providers", () => {
+  assert.match(accountingRoute, /q\.total_cents quick_total_cents/);
+  assert.match(accountingRoute, /commercial_reference: row\.invoice_number/);
+  assert.match(accountingRoute, /accepted_total_cents: row\.quick_total_cents/);
+  assert.match(accountingRoute, /invoice_source: source/);
+  assert.match(accountingRoute, /taxCents !== Number\(job\.accepted_tax_cents/);
+  assert.match(accountingPanel, /invoiceSource/);
+  assert.match(invoicePanel, /invoiceSource="quick_invoice"/);
+
+  assert.match(paymentRoute, /purpose === "invoice"/);
+  assert.match(paymentRoute, /invoice_number commercial_reference, total_cents amount_cents/);
+  assert.match(paymentRoute, /const idempotencyKey = `\$\{purpose\}-\$\{String\(source\.id\)\}`/);
+  assert.match(paymentPanel, /purpose\?: "deposit" \| "invoice"/);
+  assert.match(invoicePanel, /purpose="invoice"/);
+});
+
+test("verified full invoice payments reconcile without changing quote deposit state", () => {
+  assert.match(reconciliation, /link\.purpose === "deposit" && link\.commercial_handoff_id/);
+  assert.match(reconciliation, /link\.purpose === "invoice"/);
+  assert.match(reconciliation, /UPDATE trade_crm_quick_invoices SET status = 'paid'/);
+  assert.match(reconciliation, /reportedAmount !== Number\(link\.amount_cents\)/);
 });
