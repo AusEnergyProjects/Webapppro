@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `a7ba30f7540b298e966c08601e777b18c87221bb` on `codex/sites-custom-domain-migration` implements the P6-3B reusable job-packet batch and its live-QA mobile job-card alignment correction. GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` release implements P6-3C optioned quote packages and exact customer selection evidence on top of the P6-3B reusable job-packet batch. GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
@@ -56,46 +56,50 @@ P6-3B adds a two-choice Items and Job packets library inside the existing Price 
 
 Migration `0065_trade_job_packets.sql` adds owner-scoped packet composition and quote-line packet revision references. Current price-book values drive deterministic cost, sell, margin, duration and required-capability summaries. Existing job-template tasks, published forms and active team members remain authoritative. A packet with an archived item is visibly blocked from quote application. Applying the same ready packet again replaces its previous draft lines rather than duplicating them, while issued quote revisions remain immutable.
 
+P6-3C adds one-action standard or Essential, Recommended and Complete quote creation from a ready job packet. The unchanged simple itemised path remains available. Office users can add customer-facing sections, optional extras and choose-one groups without enabling a feature flag or changing a document template.
+
+Migration `0066_optioned_trade_quotes.sql` adds immutable choice definitions, option-line associations and exact customer selection evidence. Customer subtotal, GST and total update immediately and are recalculated on the server before acceptance. The verified acceptance records chosen option IDs, selection summary, integer totals and the exact consent statement. Internal cost and margin are limited to owners, managers and coordinators and are omitted from customer payloads.
+
 ## Next milestone contract
 
-### P6-3C batch: optioned quote packages and customer choice
+### P6-3D batch: effortless quote sharing, questions and signature
 
-Outcome: an office user can turn one job packet into a clear good, better or best customer quote, and the customer can choose permitted options with accurate totals before accepting the exact immutable revision.
+Outcome: a trade can issue one polished, branded quote link that a customer can open without creating an account, review on any phone, ask a question, sign and accept, while the office sees one authoritative status timeline.
 
 ### Five linked foundation items
 
-1. Add quote sections and plain-language headings so a long trade scope remains scannable without forcing extra setup for a simple quote.
-2. Add good, better and best packages plus optional add-ons and choose-one groups, reusing price-book and packet lines rather than copying commercial records.
-3. Recalculate customer-facing subtotal, GST and total deterministically as permitted options change, with server validation of every selection.
-4. Keep internal cost and margin restricted to authorised trade roles while publishing an immutable customer-visible revision with the exact available choices.
-5. Let the authenticated authorised customer choose options, accept or decline and record exact consent evidence against that revision with desktop and 390 px responsive coverage.
+1. Issue a revocable, expiring, hashed secure link for the exact immutable quote revision, with manual copy available immediately and no customer account requirement.
+2. Render a polished business-branded phone-first quote and automatic print or PDF view from the same authoritative sections, packages, options, totals and terms, with no document-template setup.
+3. Add deliberate email delivery through the existing consent-aware provider controls, plus SMS only when the approved Australian sender gate is active, with idempotent delivery and masked-recipient preview.
+4. Let the authorised link holder ask a bounded quote question, choose options, type a signature and accept or decline while recording the exact revision, total, consent, signer evidence and event time.
+5. Give the office one status timeline for issued, delivered, viewed, questioned, accepted, declined, expired, revoked and superseded states, with one-action clone and revise from an immutable version.
 
 ### In scope
 
-- Existing price-book items, job packets, direct-job quote versions and verified customer acceptance identity.
-- Simple quotes with no packages must retain their current fast path.
-- Additive section, package, option and customer-selection records with deterministic integer totals.
-- Customer copy that explains choices without exposing cost, margin, internal notes or protected trade data.
+- Existing immutable quote versions, choice calculations, direct-customer contacts, protected credential key, consent-aware delivery controls and provider callbacks.
+- One secure customer link per current issued revision, with replacement and revocation invalidating future access.
+- Automatic business branding from the existing installer profile, with accessible browser, print and 390 px layouts from one source.
+- Privacy-safe quote events and questions that never expose customer contact or the secure token in operational payloads.
 
 ### Explicitly out of scope
 
-- Deposits, payment processing, PDF output, email or SMS delivery and unauthenticated acceptance.
-- Purchasing, inventory reservation, invoicing, scheduling, job materialisation or field consumption.
-- Photos, diagrams, warranty libraries, customer questions or complex document-level discount rules.
-- Replacing the existing price book, packets, quote-version immutability or verified-customer identity boundary.
+- Deposits, payment processing, purchasing, inventory reservation, invoicing, scheduling, job materialisation or field consumption.
+- Open public quote URLs, reusable tokens, customer contact exposure in events, or SMS before the Australian sender gate is approved.
+- A bespoke drag-and-drop document-template designer or duplicated PDF-only commercial calculations.
+- Replacing the price book, packets, quote choice model, revision immutability or existing provider callback boundaries.
 
 ### Acceptance criteria
 
-- A trade can create a three-package quote from a ready packet without re-entering standard lines.
-- A simple itemised quote remains no slower than the current workflow.
-- Customer totals exactly match the server-calculated selected package and options, including GST.
-- An issued revision and its available choices cannot be edited; changes create the next draft revision.
-- Customer payloads never expose supplier cost, markup, margin or internal records.
-- The authorised customer can choose, accept or decline on desktop and 390 px without document-level horizontal overflow.
+- A trade can issue, copy and deliberately email a professional quote without configuring a template or asking the customer to create an account.
+- The secure link exposes only the exact quote and business/customer display context needed for review, expires, can be revoked and never stores its plaintext secret.
+- Browser and print or PDF views use the same server-calculated choices and totals, with no independent calculation path.
+- A customer question and signed decision appear in one office timeline and cannot alter the issued revision.
+- Email delivery is idempotent, SMS remains impossible while its approval flag is false, and delivery payloads contain no raw secure link or customer contact.
+- The customer review, question and signature flow works at 390 px without document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Package modelling would require copying price-book or packet commercial data instead of referencing and snapshotting it.
-- Customer option changes could alter an already accepted or superseded revision.
-- The slice expands into payment, delivery messaging, PDF generation, purchasing, inventory, invoicing, scheduling or job creation.
+- A secure-link design would permit token reuse after replacement, revocation, expiry, acceptance or supersession.
+- PDF output would require separate quote calculation or editable issued data.
+- The slice expands into deposits, payments, purchasing, inventory, invoicing, scheduling or job creation.

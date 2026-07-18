@@ -81,14 +81,14 @@ test("packet management reuses authoritative owner-scoped business sources", () 
 });
 
 test("ready packets apply once and preserve immutable quote snapshots", () => {
-  assert.match(quoteRoute, /jobPacketsForQuote\(identity\.uid\)/);
-  assert.match(quoteRoute, /resolveJobPacketQuoteLines\(identity\.uid, body\.lines\)/);
-  assert.match(quoteRoute, /resolvedPacket\.references\[position\]\?\.packetRevision/);
+  assert.match(quoteRoute, /jobPacketsForQuote\(access\.ownerUid\)/);
+  assert.match(quoteRoute, /resolveJobPacketQuoteLines\(ownerUid, rawLines\)/);
+  assert.match(quoteRoute, /packet\?\.packetRevision/);
   assert.match(server, /JOB_PACKET_DUPLICATE_LINE/);
   assert.match(server, /p\.record_status = 'active' AND i\.record_status = 'active'/);
-  assert.match(quoteUi, /Applying the same packet again replaces its lines instead of duplicating them/);
-  assert.match(quoteUi, /currentLines\.filter\(\(line\) => line\.jobPacketId !== packet\.id\)/);
-  assert.match(quoteUi, /Saving uses current price-book values and keeps a quote snapshot/);
+  assert.match(quoteUi, /Build Good, Better, Best/);
+  assert.match(quoteUi, /current\.filter\(\(line\) => line\.description && line\.jobPacketId !== packet\.id\)/);
+  assert.match(quoteUi, /Edit only what differs/);
 });
 
 test("the packet workspace keeps the installer path short and details optional", () => {

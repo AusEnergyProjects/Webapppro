@@ -1455,10 +1455,33 @@ export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
   jobPacketId: text("job_packet_id").notNull().default(""),
   jobPacketRevision: integer("job_packet_revision").notNull().default(0),
   jobPacketLineId: text("job_packet_line_id").notNull().default(""),
+  sectionHeading: text("section_heading").notNull().default("Included work"),
+  quoteChoiceId: text("quote_choice_id").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_quote_items_version_position_idx").on(table.quoteVersionId, table.position),
   index("trade_crm_quote_items_owner_idx").on(table.firebaseUid, table.quoteVersionId),
+]);
+
+export const tradeCrmQuoteChoices = sqliteTable("trade_crm_quote_choices", {
+  id: text("id").primaryKey(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  choiceKey: text("choice_key").notNull(),
+  choiceKind: text("choice_kind").notNull(),
+  groupKey: text("group_key").notNull(),
+  name: text("name").notNull(),
+  summary: text("summary").notNull().default(""),
+  recommended: integer("recommended", { mode: "boolean" }).notNull().default(false),
+  subtotalCents: integer("subtotal_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quote_choices_version_key_idx").on(table.quoteVersionId, table.choiceKey),
+  uniqueIndex("trade_crm_quote_choices_version_position_idx").on(table.quoteVersionId, table.position),
+  index("trade_crm_quote_choices_owner_version_idx").on(table.firebaseUid, table.quoteVersionId),
 ]);
 
 export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances", {
@@ -1475,6 +1498,11 @@ export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances
   actorSignInProvider: text("actor_sign_in_provider").notNull().default(""),
   decision: text("decision").notNull(),
   consentStatement: text("consent_statement").notNull(),
+  selectedChoiceIdsJson: text("selected_choice_ids_json").notNull().default("[]"),
+  selectedSubtotalCents: integer("selected_subtotal_cents").notNull().default(0),
+  selectedTaxCents: integer("selected_tax_cents").notNull().default(0),
+  selectedTotalCents: integer("selected_total_cents").notNull().default(0),
+  selectionSummary: text("selection_summary").notNull().default(""),
   decidedAt: text("decided_at").notNull(),
   createdAt: text("created_at").notNull(),
 }, (table) => [

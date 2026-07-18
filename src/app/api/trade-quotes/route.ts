@@ -1,44 +1,39 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
-import { normaliseTradeQuoteLines } from "@/lib/trade-quote";
+import { normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
+import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
 import { jobPacketsForQuote, resolveJobPacketQuoteLines } from "@/lib/trade-job-packet-server";
+import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 
 export const runtime = "edge";
 
+type Row = Record<string, unknown>;
+type ResolvedGroup = Awaited<ReturnType<typeof resolveLineGroup>>;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-async function installerIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?`)
-    .bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
-  if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  return identity;
+async function installerAccess(request: Request) {
+  const access = await requireInstallerTeamAccess(request, false);
+  if (!canDispatch(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+  return access;
 }
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
-  if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Direct customer quotes are available to installer accounts only." }, 403);
-  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using customer quotes." }, 403);
+  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
+  if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can prepare customer quotes." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose a direct customer job with an authoritative service site." }, 404);
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);
   if (code === "IMMUTABLE_VERSION") return adminJson({ ok: false, error: "Issued quote versions cannot be changed. Create the next version instead." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
-  if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code))
-    return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
+  if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
+  if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code)) return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
   return adminJson({ ok: false, error: "The private quote request could not be completed." }, 500);
 }
 
-async function directJob(uid: string, workOrderId: string) {
+async function directJob(ownerUid: string, workOrderId: string) {
   const row = await getD1().prepare(`SELECT w.id, w.work_number, w.title, d.crm_customer_id, d.service_site_id,
       c.customer_number, c.first_name, c.last_name, c.business_name, c.email customer_email,
       s.site_label, s.address_line_1, s.suburb, s.address_state, s.postcode
@@ -46,154 +41,193 @@ async function directJob(uid: string, workOrderId: string) {
     JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
     JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.customer_id = c.id AND s.firebase_uid = w.firebase_uid AND s.record_status = 'active'
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active' AND d.customer_source = 'trade_owned'`)
-    .bind(workOrderId, uid).first<Record<string, unknown>>();
+    .bind(workOrderId, ownerUid).first<Row>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   return row;
 }
 
-async function authorisedEmails(uid: string, customerId: string) {
+async function authorisedEmails(ownerUid: string, customerId: string) {
   const rows = await getD1().prepare(`SELECT email FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active' AND email != ''
     UNION SELECT email FROM trade_crm_customer_contacts WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' AND email != ''`)
-    .bind(customerId, uid, customerId, uid).all<Record<string, unknown>>();
+    .bind(customerId, ownerUid, customerId, ownerUid).all<Row>();
   return [...new Set(rows.results.map((row) => String(row.email || "").trim().toLowerCase()).filter(Boolean))].sort();
 }
 
-async function quotePayload(uid: string, workOrderId: string) {
+function itemPayload(item: Row, includeInternal: boolean) {
+  const payload: Row = {
+    id: String(item.id), position: Number(item.position), lineType: String(item.line_type), description: String(item.description),
+    quantityMilli: Number(item.quantity_milli), unitPriceCents: Number(item.unit_price_cents), taxCode: String(item.tax_code),
+    subtotalCents: Number(item.subtotal_cents), taxCents: Number(item.tax_cents), totalCents: Number(item.total_cents),
+    priceBookItemId: String(item.price_book_item_id || ""), priceBookItemType: String(item.price_book_item_type || ""),
+    jobPacketId: String(item.job_packet_id || ""), jobPacketRevision: Number(item.job_packet_revision || 0), jobPacketLineId: String(item.job_packet_line_id || ""),
+    sectionHeading: String(item.section_heading || "Included work"), quoteChoiceId: String(item.quote_choice_id || ""),
+  };
+  if (includeInternal) {
+    payload.unitCostCentsExGst = Number(item.unit_cost_cents_ex_gst || 0);
+    payload.marginBasisPoints = Number(item.margin_basis_points || 0);
+  }
+  return payload;
+}
+
+async function quotePayload(ownerUid: string, workOrderId: string, includeInternal = true) {
   const db = getD1();
-  const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`)
-    .bind(workOrderId, uid).first<Record<string, unknown>>();
+  const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, ownerUid).first<Row>();
   if (!quote) return null;
-  const versions = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? ORDER BY version_number DESC`)
-    .bind(quote.id, uid).all<Record<string, unknown>>();
+  const versions = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? ORDER BY version_number DESC`).bind(quote.id, ownerUid).all<Row>();
   const versionIds = versions.results.map((row) => String(row.id));
-  const items = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE firebase_uid = ? AND quote_version_id IN (${versionIds.map(() => "?").join(",")}) ORDER BY quote_version_id, position`)
-    .bind(uid, ...versionIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const acceptances = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_acceptances WHERE firebase_uid = ? AND quote_version_id IN (${versionIds.map(() => "?").join(",")})`)
-    .bind(uid, ...versionIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const placeholders = versionIds.map(() => "?").join(",");
+  const items = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE firebase_uid = ? AND quote_version_id IN (${placeholders}) ORDER BY quote_version_id, position`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
+  const choices = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_choices WHERE firebase_uid = ? AND quote_version_id IN (${placeholders}) ORDER BY quote_version_id, position`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
+  const acceptances = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_acceptances WHERE firebase_uid = ? AND quote_version_id IN (${placeholders})`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
   return {
     id: String(quote.id), workOrderId: String(quote.work_order_id), customerId: String(quote.crm_customer_id), serviceSiteId: String(quote.service_site_id),
     quoteNumber: String(quote.quote_number), currentVersionNumber: Number(quote.current_version_number), status: String(quote.status),
-    versions: versions.results.map((version) => ({
-      id: String(version.id), versionNumber: Number(version.version_number), status: String(version.status), customerEmail: String(version.acceptance_email || ""),
-      subtotalCents: Number(version.subtotal_cents), taxCents: Number(version.tax_cents), totalCents: Number(version.total_cents), terms: String(version.terms || ""),
-      validUntil: String(version.valid_until || ""), consentStatement: String(version.consent_statement || ""), issuedAt: String(version.issued_at || ""),
-      createdAt: String(version.created_at), updatedAt: String(version.updated_at),
-      items: items.results.filter((item) => item.quote_version_id === version.id).map((item) => ({
-        id: String(item.id), position: Number(item.position), lineType: String(item.line_type), description: String(item.description),
-        quantityMilli: Number(item.quantity_milli), unitPriceCents: Number(item.unit_price_cents), taxCode: String(item.tax_code),
-        subtotalCents: Number(item.subtotal_cents), taxCents: Number(item.tax_cents), totalCents: Number(item.total_cents),
-        priceBookItemId: String(item.price_book_item_id || ""), priceBookItemType: String(item.price_book_item_type || ""),
-        jobPacketId: String(item.job_packet_id || ""), jobPacketRevision: Number(item.job_packet_revision || 0), jobPacketLineId: String(item.job_packet_line_id || ""),
-      })),
-      acceptance: acceptances.results.find((item) => item.quote_version_id === version.id) ? (() => {
-        const acceptance = acceptances.results.find((item) => item.quote_version_id === version.id)!;
-        return { decision: String(acceptance.decision), actorEmail: String(acceptance.actor_email), decidedAt: String(acceptance.decided_at), consentStatement: String(acceptance.consent_statement) };
-      })() : null,
-    })),
+    versions: versions.results.map((version) => {
+      const versionItems = items.results.filter((item) => item.quote_version_id === version.id);
+      const versionChoices = choices.results.filter((choice) => choice.quote_version_id === version.id);
+      const acceptance = acceptances.results.find((item) => item.quote_version_id === version.id);
+      const internalCostCents = versionItems.reduce((sum, item) => sum + Math.round(Number(item.quantity_milli) * Number(item.unit_cost_cents_ex_gst || 0) / 1000), 0);
+      return {
+        id: String(version.id), versionNumber: Number(version.version_number), status: String(version.status), customerEmail: String(version.acceptance_email || ""),
+        subtotalCents: Number(version.subtotal_cents), taxCents: Number(version.tax_cents), totalCents: Number(version.total_cents), terms: String(version.terms || ""),
+        validUntil: String(version.valid_until || ""), consentStatement: String(version.consent_statement || ""), issuedAt: String(version.issued_at || ""),
+        createdAt: String(version.created_at), updatedAt: String(version.updated_at),
+        items: versionItems.filter((item) => !item.quote_choice_id).map((item) => itemPayload(item, includeInternal)),
+        choices: versionChoices.map((choice) => ({ id: String(choice.id), clientKey: String(choice.choice_key), kind: String(choice.choice_kind),
+          groupKey: String(choice.group_key), name: String(choice.name), summary: String(choice.summary || ""), recommended: Boolean(choice.recommended),
+          subtotalCents: Number(choice.subtotal_cents), taxCents: Number(choice.tax_cents), totalCents: Number(choice.total_cents),
+          items: versionItems.filter((item) => item.quote_choice_id === choice.id).map((item) => itemPayload(item, includeInternal)) })),
+        ...(includeInternal ? { internalSummary: { costCentsExGst: internalCostCents,
+          sellCentsExGst: versionItems.reduce((sum, item) => sum + Number(item.subtotal_cents), 0),
+          marginCentsExGst: versionItems.reduce((sum, item) => sum + Number(item.subtotal_cents), 0) - internalCostCents } } : {}),
+        acceptance: acceptance ? { decision: String(acceptance.decision), actorEmail: String(acceptance.actor_email), decidedAt: String(acceptance.decided_at),
+          consentStatement: String(acceptance.consent_statement), selectionSummary: String(acceptance.selection_summary || ""), selectedTotalCents: Number(acceptance.selected_total_cents || 0) } : null,
+      };
+    }),
   };
+}
+
+async function resolveLineGroup(ownerUid: string, rawLines: unknown, allowEmpty = false) {
+  const packet = await resolveJobPacketQuoteLines(ownerUid, rawLines);
+  const priceBook = await resolvePriceBookQuoteLines(ownerUid, packet.lines);
+  const calculated = normaliseTradeQuoteLineGroup(priceBook.lines, (value) => cleanAdminText(value, 500), allowEmpty);
+  const raw = Array.isArray(priceBook.lines) ? priceBook.lines as Row[] : [];
+  return { calculated, priceReferences: priceBook.references, packetReferences: packet.references,
+    sectionHeadings: raw.map((line) => cleanAdminText(line.sectionHeading, 120) || "Included work") };
+}
+
+function choiceDefaultTotal(base: ResolvedGroup, choices: Array<{ input: ReturnType<typeof normaliseQuoteChoices>[number]; resolved: ResolvedGroup }>) {
+  const selected = new Map<string, typeof choices[number]>();
+  for (const choice of choices.filter((item) => item.input.kind !== "addon")) {
+    const key = `${choice.input.kind}:${choice.input.groupKey}`;
+    const current = selected.get(key);
+    if (!current || choice.input.recommended) selected.set(key, choice);
+  }
+  return base.calculated.totalCents + [...selected.values()].reduce((sum, item) => sum + item.resolved.calculated.totalCents, 0);
+}
+
+function appendItems(db: D1Database, statements: D1PreparedStatement[], ownerUid: string,
+  versionId: string, choiceId: string, resolved: ResolvedGroup, startPosition: number, now: string) {
+  resolved.calculated.lines.forEach((line, index) => {
+    const price = resolved.priceReferences[index]; const packet = resolved.packetReferences[index];
+    statements.push(db.prepare(`INSERT INTO trade_crm_quote_items
+      (id, quote_version_id, firebase_uid, position, line_type, description, quantity_milli, unit_price_cents, tax_code,
+       subtotal_cents, tax_cents, total_cents, price_book_item_id, price_book_item_type, unit_cost_cents_ex_gst,
+       markup_basis_points, margin_basis_points, job_packet_id, job_packet_revision, job_packet_line_id, section_heading, quote_choice_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), versionId, ownerUid, startPosition + index, line.lineType, line.description, line.quantityMilli,
+        line.unitPriceCents, line.taxCode, line.subtotalCents, line.taxCents, line.totalCents, price?.id || "", price?.itemType || "",
+        price?.unitCostCentsExGst || 0, price?.markupBasisPoints || 0, price?.marginBasisPoints || 0, packet?.packetId || "",
+        packet?.packetRevision || 0, packet?.packetLineId || "", resolved.sectionHeadings[index], choiceId, now));
+  });
+  return startPosition + resolved.calculated.lines.length;
 }
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await installerIdentity(request); const url = new URL(request.url);
-    const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180); const job = await directJob(identity.uid, workOrderId);
-    const emails = await authorisedEmails(identity.uid, String(job.crm_customer_id));
-    return adminJson({ ok: true, job: { workNumber: job.work_number, title: job.title, customerNumber: job.customer_number,
-      customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" "), siteLabel: job.site_label,
+    const access = await installerAccess(request); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
+    const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id));
+    return adminJson({ ok: true, access: { role: access.role, canViewInternal: true }, job: { workNumber: job.work_number, title: job.title,
+      customerNumber: job.customer_number, customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" "), siteLabel: job.site_label,
       siteSummary: [job.address_line_1, job.suburb, job.address_state, job.postcode].filter(Boolean).join(", ") }, authorisedEmails: emails,
-      priceBookItems: await priceBookItemsForQuote(identity.uid), jobPackets: await jobPacketsForQuote(identity.uid), quote: await quotePayload(identity.uid, workOrderId) });
+      priceBookItems: await priceBookItemsForQuote(access.ownerUid), jobPackets: await jobPacketsForQuote(access.ownerUid), quote: await quotePayload(access.ownerUid, workOrderId) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await installerIdentity(request); const body = await request.json() as Record<string, unknown>;
-    const action = cleanAdminText(body.action, 40); const workOrderId = cleanAdminText(body.workOrderId, 180); const job = await directJob(identity.uid, workOrderId);
+    const access = await installerAccess(request); const body = await request.json() as Row;
+    const action = cleanAdminText(body.action, 40); const workOrderId = cleanAdminText(body.workOrderId, 180); const job = await directJob(access.ownerUid, workOrderId);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "save_draft") {
-      const resolvedPacket = await resolveJobPacketQuoteLines(identity.uid, body.lines);
-      const resolvedPriceBook = await resolvePriceBookQuoteLines(identity.uid, resolvedPacket.lines);
-      const calculated = normaliseTradeQuoteLines(resolvedPriceBook.lines, (value) => cleanAdminText(value, 500));
-      const customerEmail = cleanAdminText(body.customerEmail, 180).toLowerCase(); const emails = await authorisedEmails(identity.uid, String(job.crm_customer_id));
+      const choiceInputs = normaliseQuoteChoices(body.choices, (value, maximum = 500) => cleanAdminText(value, maximum));
+      const base = await resolveLineGroup(access.ownerUid, body.lines, choiceInputs.length > 0);
+      const choices = await Promise.all(choiceInputs.map(async (input) => ({ input, resolved: await resolveLineGroup(access.ownerUid, input.lines) })));
+      if (!base.calculated.lines.length && !choices.length) throw new Error("INVALID_LINES");
+      const customerEmail = cleanAdminText(body.customerEmail, 180).toLowerCase(); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id));
       if (customerEmail && !emails.includes(customerEmail)) return adminJson({ ok: false, error: "Choose an email from this customer's authorised contacts." }, 400);
       const validUntil = cleanAdminText(body.validUntil, 10); if (validUntil && !DATE_PATTERN.test(validUntil)) return adminJson({ ok: false, error: "Choose a valid quote expiry date." }, 400);
       const terms = cleanAdminText(body.terms, 4000);
-      const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, identity.uid).first<Record<string, unknown>>();
-      const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = "";
-      const statements = [];
+      const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, access.ownerUid).first<Row>();
+      const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = ""; const statements: D1PreparedStatement[] = [];
       if (!quote) {
         const quoteNumber = `Q-${String(job.work_number).replace(/^JOB-/, "")}`;
-        statements.push(db.prepare(`INSERT INTO trade_crm_quotes
-          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, quote_number, current_version_number, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?)`).bind(quoteId, workOrderId, identity.uid, job.crm_customer_id, job.service_site_id, quoteNumber, now, now));
+        statements.push(db.prepare(`INSERT INTO trade_crm_quotes (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, quote_number, current_version_number, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, 1, 'draft', ?, ?)`).bind(quoteId, workOrderId, access.ownerUid, job.crm_customer_id, job.service_site_id, quoteNumber, now, now));
         versionId = crypto.randomUUID();
-        statements.push(db.prepare(`INSERT INTO trade_crm_quote_versions
-          (id, quote_id, firebase_uid, version_number, status, acceptance_email, subtotal_cents, tax_cents, total_cents, terms, valid_until, consent_statement, issued_at, created_at, updated_at)
-          VALUES (?, ?, ?, 1, 'draft', ?, ?, ?, ?, ?, ?, '', '', ?, ?)`)
-          .bind(versionId, quoteId, identity.uid, customerEmail, calculated.subtotalCents, calculated.taxCents, calculated.totalCents, terms, validUntil, now, now));
+        statements.push(db.prepare(`INSERT INTO trade_crm_quote_versions (id, quote_id, firebase_uid, version_number, status, acceptance_email, subtotal_cents, tax_cents, total_cents, terms, valid_until, consent_statement, issued_at, created_at, updated_at)
+          VALUES (?, ?, ?, 1, 'draft', ?, ?, ?, ?, ?, ?, '', '', ?, ?)`).bind(versionId, quoteId, access.ownerUid, customerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents, terms, validUntil, now, now));
       } else {
-        const current = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ?`)
-          .bind(quoteId, identity.uid, versionNumber).first<Record<string, unknown>>();
+        const current = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ?`).bind(quoteId, access.ownerUid, versionNumber).first<Row>();
         if (!current) throw new Error("QUOTE_NOT_FOUND");
         if (current.status === "draft") {
           versionId = String(current.id);
-          statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET acceptance_email = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?,
-            terms = ?, valid_until = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
-            .bind(customerEmail, calculated.subtotalCents, calculated.taxCents, calculated.totalCents, terms, validUntil, now, versionId, identity.uid));
-          statements.push(db.prepare(`DELETE FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, identity.uid));
+          statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET acceptance_email = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, terms = ?, valid_until = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
+            .bind(customerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents, terms, validUntil, now, versionId, access.ownerUid));
+          statements.push(db.prepare(`DELETE FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, access.ownerUid));
+          statements.push(db.prepare(`DELETE FROM trade_crm_quote_choices WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, access.ownerUid));
         } else {
           versionNumber += 1; versionId = crypto.randomUUID();
-          if (current.status === "issued") statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, current.id, identity.uid));
-          statements.push(db.prepare(`INSERT INTO trade_crm_quote_versions
-            (id, quote_id, firebase_uid, version_number, status, acceptance_email, subtotal_cents, tax_cents, total_cents, terms, valid_until, consent_statement, issued_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '', '', ?, ?)`)
-            .bind(versionId, quoteId, identity.uid, versionNumber, customerEmail, calculated.subtotalCents, calculated.taxCents, calculated.totalCents, terms, validUntil, now, now));
-          statements.push(db.prepare(`UPDATE trade_crm_quotes SET current_version_number = ?, status = 'draft', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-            .bind(versionNumber, job.crm_customer_id, job.service_site_id, now, quoteId, identity.uid));
+          if (current.status === "issued") statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, current.id, access.ownerUid));
+          statements.push(db.prepare(`INSERT INTO trade_crm_quote_versions (id, quote_id, firebase_uid, version_number, status, acceptance_email, subtotal_cents, tax_cents, total_cents, terms, valid_until, consent_statement, issued_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '', '', ?, ?)`).bind(versionId, quoteId, access.ownerUid, versionNumber, customerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents, terms, validUntil, now, now));
+          statements.push(db.prepare(`UPDATE trade_crm_quotes SET current_version_number = ?, status = 'draft', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(versionNumber, job.crm_customer_id, job.service_site_id, now, quoteId, access.ownerUid));
         }
       }
-      calculated.lines.forEach((line, position) => {
-        const reference = resolvedPriceBook.references[position];
-        statements.push(db.prepare(`INSERT INTO trade_crm_quote_items
-          (id, quote_version_id, firebase_uid, position, line_type, description, quantity_milli, unit_price_cents, tax_code,
-          subtotal_cents, tax_cents, total_cents, price_book_item_id, price_book_item_type, unit_cost_cents_ex_gst,
-          markup_basis_points, margin_basis_points, job_packet_id, job_packet_revision, job_packet_line_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(crypto.randomUUID(), versionId, identity.uid, position + 1, line.lineType, line.description, line.quantityMilli,
-            line.unitPriceCents, line.taxCode, line.subtotalCents, line.taxCents, line.totalCents, reference?.id || "",
-            reference?.itemType || "", reference?.unitCostCentsExGst || 0, reference?.markupBasisPoints || 0,
-            reference?.marginBasisPoints || 0, resolvedPacket.references[position]?.packetId || "",
-            resolvedPacket.references[position]?.packetRevision || 0, resolvedPacket.references[position]?.packetLineId || "", now));
+      let position = appendItems(db, statements, access.ownerUid, versionId, "", base, 1, now);
+      choices.forEach(({ input, resolved }, index) => {
+        const choiceId = crypto.randomUUID();
+        statements.push(db.prepare(`INSERT INTO trade_crm_quote_choices (id, quote_version_id, firebase_uid, position, choice_key, choice_kind, group_key, name, summary, recommended, subtotal_cents, tax_cents, total_cents, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(choiceId, versionId, access.ownerUid, index + 1, input.clientKey, input.kind, input.groupKey, input.name, input.summary, input.recommended ? 1 : 0, resolved.calculated.subtotalCents, resolved.calculated.taxCents, resolved.calculated.totalCents, now));
+        position = appendItems(db, statements, access.ownerUid, versionId, choiceId, resolved, position, now);
       });
-      statements.push(db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
-        .bind(calculated.totalCents, now, workOrderId, identity.uid));
+      const displayTotal = choiceDefaultTotal(base, choices);
+      statements.push(db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(displayTotal, now, workOrderId, access.ownerUid));
       await db.batch(statements);
-      return adminJson({ ok: true, quote: await quotePayload(identity.uid, workOrderId) });
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId) });
     }
     if (action === "issue_quote") {
-      const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, identity.uid).first<Record<string, unknown>>();
+      const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, access.ownerUid).first<Row>();
       if (!quote) throw new Error("QUOTE_NOT_FOUND");
-      const version = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND status = 'draft'`)
-        .bind(quote.id, identity.uid, quote.current_version_number).first<Record<string, unknown>>();
+      const version = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND status = 'draft'`).bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>();
       if (!version) throw new Error("IMMUTABLE_VERSION");
-      const customerEmail = String(version.acceptance_email || ""); const emails = await authorisedEmails(identity.uid, String(job.crm_customer_id));
+      const customerEmail = String(version.acceptance_email || ""); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id));
       if (!customerEmail || !emails.includes(customerEmail)) return adminJson({ ok: false, error: "Choose an authorised customer email before issuing this quote." }, 400);
       if (!String(version.terms || "").trim()) return adminJson({ ok: false, error: "Record the quote scope, exclusions and completion terms before issuing." }, 400);
       if (version.valid_until && String(version.valid_until) < now.slice(0, 10)) return adminJson({ ok: false, error: "The quote expiry date must not be in the past." }, 400);
-      const itemCount = await db.prepare(`SELECT COUNT(*) count FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(version.id, identity.uid).first<Record<string, unknown>>();
+      const itemCount = await db.prepare(`SELECT COUNT(*) count FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(version.id, access.ownerUid).first<Row>();
       if (!Number(itemCount?.count)) return adminJson({ ok: false, error: "Add at least one quote line before issuing." }, 400);
-      const consentStatement = `I accept quote ${quote.quote_number} version ${version.version_number} for AUD ${(Number(version.total_cents) / 100).toFixed(2)} and authorise the described work subject to its recorded terms.`;
+      const consentStatement = `I accept quote ${quote.quote_number} version ${version.version_number}, including my recorded choices and final server-calculated total, subject to its recorded terms.`;
       await db.batch([
-        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, quote.id, identity.uid),
-        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`).bind(consentStatement, now, now, version.id, identity.uid),
-        db.prepare(`UPDATE trade_crm_quotes SET status = 'issued', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(job.crm_customer_id, job.service_site_id, now, quote.id, identity.uid),
-        db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'sent', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(version.total_cents, now, workOrderId, identity.uid),
-        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'quote_issued', ?, ?)`)
-          .bind(crypto.randomUUID(), workOrderId, identity.uid, `${quote.quote_number} version ${version.version_number} issued for authenticated customer review.`, now),
+        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, quote.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`).bind(consentStatement, now, now, version.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_quotes SET status = 'issued', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(job.crm_customer_id, job.service_site_id, now, quote.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_job_details SET quote_status = 'sent', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(now, workOrderId, access.ownerUid),
+        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'quote_issued', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${quote.quote_number} version ${version.version_number} issued for authenticated customer review.`, now),
       ]);
-      return adminJson({ ok: true, quote: await quotePayload(identity.uid, workOrderId) });
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId) });
     }
     return adminJson({ ok: false, error: "Unsupported quote action." }, 400);
   } catch (error) { return errorResponse(error); }

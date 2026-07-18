@@ -4696,6 +4696,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-panel > header p, .trade-quote-panel.unavailable p { color: var(--color-aea-muted); margin: 0; }
 .trade-quote-price-book, .trade-quote-packets { align-items: end; background: #e8f5f0; border: 1px solid #b8dfd0; border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(240px, 1fr) minmax(180px, .7fr); padding: 12px; }
 .trade-quote-packets { background: #fff8df; border-color: #ebd08b; }
+.trade-quote-packets { grid-template-columns: minmax(220px, 1fr) auto; }
+.trade-quote-packets > small { grid-column: 1 / -1; }
+.trade-quote-packet-actions, .trade-quote-builder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trade-quote-packet-actions button, .trade-quote-builder-actions button, .trade-quote-choice-builder > header button { background: #fff; border: 1px solid #9fc5b7; border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-size: .66rem; font-weight: 850; min-height: 40px; padding: 8px 11px; }
+.trade-quote-packet-actions button:last-child { background: var(--color-aea-green-dark); border-color: var(--color-aea-green-dark); color: #fff; }
+.trade-quote-packet-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .trade-quote-price-book label, .trade-quote-packets label { display: grid; gap: 5px; }
 .trade-quote-price-book label span, .trade-quote-packets label span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; }
 .trade-quote-price-book select, .trade-quote-packets select { background: white; border: 1px solid #a9cfc0; border-radius: 8px; min-height: 42px; padding: 9px; width: 100%; }
@@ -4709,8 +4715,30 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-line input, .trade-quote-line select, .trade-quote-settings input, .trade-quote-settings select, .trade-quote-settings textarea { background: #fff; border: 1px solid #c8d8d1; border-radius: 7px; min-width: 0; padding: 9px; }
 .trade-quote-description { display: grid; gap: 2px; }
 .trade-quote-description small { color: var(--color-aea-green); font-size: .55rem; font-weight: 750; }
+.trade-quote-description .trade-quote-section-input { background: #f1f7f4; border-style: dashed; color: #365a4e; font-size: .62rem; padding-block: 6px; }
 .trade-quote-line button { background: transparent; border: 1px solid #d6c8c8; border-radius: 7px; color: #7d3e3e; cursor: pointer; }
 .quote-add-line { background: #fff; border: 1px solid var(--color-aea-green); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 800; justify-self: start; padding: 8px 12px; }
+.trade-quote-base { background: #fff; border: 1px solid #d9e5e0; border-radius: 11px; display: grid; gap: 10px; padding: 12px; }
+.trade-quote-base > header div { display: grid; gap: 2px; }
+.trade-quote-base > header span { color: var(--color-aea-muted); font-size: .64rem; }
+.trade-quote-choice-builder { display: grid; gap: 12px; }
+.trade-quote-choice-builder > header { align-items: flex-start; display: flex; gap: 14px; justify-content: space-between; }
+.trade-quote-choice-builder > header span, .trade-quote-choice-builder article > header span { color: var(--color-aea-green); font-size: .6rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.trade-quote-choice-builder > header h5 { color: var(--color-aea-green-dark); font-size: 1rem; margin: 3px 0; }
+.trade-quote-choice-builder > header p { color: var(--color-aea-muted); margin: 0; }
+.trade-quote-choice-grid { display: grid; gap: 12px; }
+.trade-quote-choice-grid > article { background: #fff; border: 1px solid #d4e3dc; border-radius: 12px; display: grid; gap: 10px; padding: 13px; }
+.trade-quote-choice-grid > article.recommended { border-color: #2f9673; box-shadow: inset 4px 0 #2f9673; }
+.trade-quote-choice-grid article > header { align-items: flex-start; display: flex; gap: 10px; justify-content: space-between; }
+.trade-quote-choice-grid article > header > div { display: grid; gap: 4px; width: min(420px, 100%); }
+.trade-quote-choice-grid article > header input, .trade-quote-choice-grid article textarea, .trade-quote-choice-add select { background: #fff; border: 1px solid #bed3ca; border-radius: 8px; color: var(--color-aea-ink); font: inherit; padding: 8px; width: 100%; }
+.trade-quote-choice-grid article > header input { color: var(--color-aea-green-dark); font-weight: 900; }
+.trade-quote-choice-grid article > header button { background: transparent; border: 0; color: #8a4d4d; cursor: pointer; font-size: .62rem; }
+.trade-quote-recommended { align-items: center; display: flex; gap: 7px; font-size: .64rem; font-weight: 800; }
+.trade-quote-choice-add { display: grid; gap: 5px; }
+.trade-quote-choice-add > span { color: var(--color-aea-muted); font-size: .62rem; font-weight: 800; }
+.trade-quote-choice-lines { display: grid; gap: 8px; overflow-x: auto; }
+.trade-quote-choice-total { color: var(--color-aea-green-dark); justify-self: end; }
 .trade-quote-settings { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .trade-quote-settings label { display: grid; gap: 5px; }
 .trade-quote-settings label > span { color: #34594d; font-size: .7rem; font-weight: 850; }
@@ -4720,6 +4748,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-totals div { display: grid; gap: 3px; padding: 12px; text-align: right; }
 .trade-quote-totals span { color: var(--color-aea-muted); font-size: .66rem; text-transform: uppercase; }
 .trade-quote-totals strong { color: var(--color-aea-green-dark); }
+.trade-quote-internal { align-items: center; background: #062d3d; border-radius: 10px; color: #fff; display: grid; gap: 12px; grid-template-columns: auto 1fr; padding: 12px; }
+.trade-quote-internal > div, .trade-quote-internal dl div { display: grid; gap: 2px; }
+.trade-quote-internal span, .trade-quote-internal dt, .trade-quote-internal small { color: #b8d4d7; font-size: .6rem; }
+.trade-quote-internal dl { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin: 0; }
+.trade-quote-internal dd { font-weight: 900; margin: 0; }
+.trade-quote-internal > small { grid-column: 1 / -1; }
 .trade-quote-actions { display: flex; gap: 9px; justify-content: flex-end; }
 .trade-quote-actions button { background: #fff; border: 1px solid var(--color-aea-green-dark); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 850; padding: 10px 14px; }
 .trade-quote-actions button.primary { background: var(--color-aea-green-dark); color: #fff; }
@@ -4782,15 +4816,35 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .customer-trade-quote-list > article > header h3 { color: var(--color-aea-green-dark); margin: 5px 0; }
 .customer-trade-quote-list > article > header p { color: var(--color-aea-muted); margin: 0; }
 .customer-trade-quote-list > article > header > strong { color: var(--color-aea-green-dark); text-transform: capitalize; }
-.customer-trade-quote-lines { display: grid; overflow-x: auto; padding: 0 17px; }
-.customer-trade-quote-lines > div { align-items: center; border-bottom: 1px solid #e3ebe7; display: grid; gap: 10px; grid-template-columns: minmax(220px, 2fr) 90px 110px 100px 110px; min-width: 690px; padding: 11px 0; }
-.customer-trade-quote-lines .head { color: var(--color-aea-muted); font-size: .64rem; font-weight: 900; text-transform: uppercase; }
-.customer-trade-quote-lines span:first-child { display: grid; gap: 3px; }
-.customer-trade-quote-lines small { color: var(--color-aea-muted); text-transform: capitalize; }
-.customer-trade-quote-list dl { display: flex; gap: 20px; justify-content: flex-end; margin: 0; padding: 15px 17px; }
-.customer-trade-quote-list dl div { display: grid; gap: 3px; min-width: 110px; text-align: right; }
-.customer-trade-quote-list dt { color: var(--color-aea-muted); font-size: .65rem; font-weight: 850; text-transform: uppercase; }
-.customer-trade-quote-list dd { color: var(--color-aea-green-dark); font-size: 1rem; font-weight: 900; margin: 0; }
+.customer-quote-included { border-bottom: 1px solid #e3ebe7; padding: 17px; }
+.customer-quote-included > div { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.customer-quote-included > div span { color: var(--color-aea-green); font-size: .64rem; font-weight: 900; text-transform: uppercase; }
+.customer-quote-sections { display: grid; gap: 8px; margin-top: 10px; }
+.customer-quote-sections section { background: #f7faf8; border-radius: 9px; display: grid; padding: 9px 11px; }
+.customer-quote-sections h4 { color: var(--color-aea-green-dark); font-size: .67rem; margin: 0 0 5px; }
+.customer-quote-sections section > div { align-items: center; border-top: 1px solid #e1ebe6; display: flex; gap: 12px; justify-content: space-between; padding: 7px 0; }
+.customer-quote-sections section > div > span { display: grid; gap: 2px; }
+.customer-quote-sections small { color: var(--color-aea-muted); font-size: .6rem; }
+.customer-quote-choice-group { border: 0; display: grid; gap: 10px; margin: 0; padding: 17px; }
+.customer-quote-choice-group legend { color: var(--color-aea-green-dark); font-size: 1rem; font-weight: 900; padding: 0; }
+.customer-quote-choice-group > p { color: var(--color-aea-muted); margin: -6px 0 0; }
+.customer-quote-choice-group > div { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.customer-quote-choice-group > div > label { background: #fff; border: 1px solid #cfded7; border-radius: 12px; cursor: pointer; display: grid; gap: 9px; min-width: 0; padding: 12px; }
+.customer-quote-choice-group > div > label.selected { background: #f0f8f4; border-color: #16825f; box-shadow: inset 0 0 0 1px #16825f; }
+.customer-quote-choice-group > div > label.recommended { border-top: 4px solid #16825f; }
+.customer-quote-choice-group label > input { height: 18px; width: 18px; }
+.customer-quote-choice-group label > span { display: grid; gap: 4px; }
+.customer-quote-choice-group label > span > span { color: var(--color-aea-green); font-size: .58rem; font-weight: 900; text-transform: uppercase; }
+.customer-quote-choice-group label > span small { color: var(--color-aea-muted); line-height: 1.45; }
+.customer-quote-choice-group label > span b { color: var(--color-aea-green-dark); font-size: .8rem; margin-top: 4px; }
+.customer-quote-choice-group .customer-quote-sections { font-size: .62rem; }
+.customer-quote-choice-group.addons > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.customer-quote-live-total { background: #062d3d; color: #fff; display: grid; gap: 10px; padding: 17px; }
+.customer-quote-live-total > span { color: #83e3bd; font-size: .65rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.customer-quote-live-total dl { display: grid; gap: 9px; grid-template-columns: repeat(3, 1fr); margin: 0; }
+.customer-quote-live-total dl div { display: grid; gap: 2px; }
+.customer-quote-live-total dt, .customer-quote-live-total small { color: #b8d4d7; font-size: .62rem; }
+.customer-quote-live-total dd { font-size: 1.05rem; font-weight: 900; margin: 0; }
 .customer-quote-terms, .customer-quote-decision, .customer-quote-recorded { border-top: 1px solid #e3ebe7; padding: 15px 17px; }
 .customer-quote-terms p, .customer-quote-recorded p { color: var(--color-aea-muted); margin: 6px 0; white-space: pre-wrap; }
 .customer-quote-terms small { color: var(--color-aea-muted); }
@@ -4805,15 +4859,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 @media (max-width: 720px) {
   .trade-quote-settings { grid-template-columns: 1fr; }
   .trade-quote-price-book, .trade-quote-packets { grid-template-columns: 1fr; }
+  .trade-quote-packets > small { grid-column: auto; }
   .trade-quote-settings .wide { grid-column: auto; }
-  .trade-quote-panel > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header, .customer-appointment-changes > header, .customer-preferred-windows > header, .customer-reschedule-history article > header { flex-direction: column; }
+  .trade-quote-panel > header, .trade-quote-choice-builder > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header, .customer-appointment-changes > header, .customer-preferred-windows > header, .customer-reschedule-history article > header { flex-direction: column; }
   .customer-reschedule-form, .customer-preferred-windows fieldset, .customer-reschedule-history dl { grid-template-columns: 1fr; }
   .trade-quote-history article { align-items: flex-start; flex-direction: column; }
-  .customer-trade-quote-list dl { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .customer-quote-choice-group > div, .customer-quote-choice-group.addons > div { grid-template-columns: 1fr; }
+  .trade-quote-internal { grid-template-columns: 1fr; }
+  .trade-quote-internal > small { grid-column: auto; }
 }
 @media (max-width: 480px) {
-  .trade-quote-totals, .customer-trade-quote-list dl { grid-template-columns: 1fr; }
+  .trade-quote-totals, .trade-quote-internal dl, .customer-quote-live-total dl { grid-template-columns: 1fr; }
   .trade-quote-actions, .customer-quote-decision div { align-items: stretch; flex-direction: column; }
+  .trade-quote-packet-actions, .trade-quote-builder-actions { display: grid; }
 }
 
 .customer-property-context-grid { margin-top: 18px; }

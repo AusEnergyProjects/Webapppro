@@ -384,6 +384,9 @@ Progress as at 18 July 2026:
 - P6-3B completes the reusable job-packet foundation. An office user can bundle active price-book items and quantities, an existing job-template checklist, published forms and a suggested crew size without creating competing task, form, capability or team records.
 - Packet cost, sell, margin, duration and required capabilities are calculated from the current price book. Archived dependencies block new quote application while existing quote snapshots remain unchanged.
 - A ready packet can populate a direct-job quote in one choice. Applying the same packet again replaces its packet lines instead of duplicating them, and the saved quote records the exact packet and revision used.
+- P6-3C completes the optioned quote foundation. One ready packet can remain a fast standard quote or become Essential, Recommended and Complete packages in one action. Office users can add plain-language sections, optional extras and choose-one groups while preserving current price-book and packet references in the immutable version.
+- Customer package and option totals update immediately and are recalculated from integer cents on the server before acceptance. The acceptance record snapshots the exact chosen option IDs, subtotal, GST, total, summary, verified identity and consent statement. Supplier cost, markup and margin remain restricted to owners, managers and coordinators.
+- This path is deliberately simpler than the reviewed WorkGuru flow: it requires no global feature switch, no document-template modification and no later re-entry of customer choices when recording acceptance.
 
 Reusable job packets must combine:
 

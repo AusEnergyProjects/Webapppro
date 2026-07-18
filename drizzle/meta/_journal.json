@@ -449,6 +449,13 @@
       "when": 1784365200000,
       "tag": "0065_trade_job_packets",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "6",
+      "when": 1784372400000,
+      "tag": "0066_optioned_trade_quotes",
+      "breakpoints": true
     }
   ]
 }

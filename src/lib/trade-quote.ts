@@ -59,8 +59,8 @@ export function calculateTradeQuoteLine(quantityMilli: number, unitPriceCents: n
   return { subtotalCents, taxCents, totalCents };
 }
 
-export function normaliseTradeQuoteLines(rawLines: unknown, cleanDescription: (value: unknown) => string) {
-  if (!Array.isArray(rawLines) || rawLines.length < 1 || rawLines.length > 100) throw new Error("INVALID_LINES");
+export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription: (value: unknown) => string, allowEmpty = false) {
+  if (!Array.isArray(rawLines) || (!allowEmpty && rawLines.length < 1) || rawLines.length > 100) throw new Error("INVALID_LINES");
   const lines = rawLines.map((raw) => {
     if (!raw || typeof raw !== "object") throw new Error("INVALID_LINES");
     const record = raw as Record<string, unknown>;
@@ -76,6 +76,10 @@ export function normaliseTradeQuoteLines(rawLines: unknown, cleanDescription: (v
   const subtotalCents = lines.reduce((sum, line) => sum + line.subtotalCents, 0);
   const taxCents = lines.reduce((sum, line) => sum + line.taxCents, 0);
   const totalCents = subtotalCents + taxCents;
-  if (![subtotalCents, taxCents, totalCents].every(Number.isSafeInteger) || totalCents <= 0 || totalCents > MAX_ABS_CENTS) throw new Error("INVALID_TOTAL");
+  if (![subtotalCents, taxCents, totalCents].every(Number.isSafeInteger) || (!allowEmpty && totalCents <= 0) || totalCents < 0 || totalCents > MAX_ABS_CENTS) throw new Error("INVALID_TOTAL");
   return { lines, subtotalCents, taxCents, totalCents };
+}
+
+export function normaliseTradeQuoteLines(rawLines: unknown, cleanDescription: (value: unknown) => string) {
+  return normaliseTradeQuoteLineGroup(rawLines, cleanDescription);
 }
