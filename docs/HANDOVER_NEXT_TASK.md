@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `76bdbebdef353d0c53dfa1530935568cd99ab2ed` on `codex/sites-custom-domain-migration`, published as Sites version 151.
+Implementation baseline: `0fbdd62d05acf54a8e284e051b47a3c2e79ed06b` on `codex/sites-custom-domain-migration`, published as Sites version 154 before the P6-2O batch.
 
 ## Current delivery summary
 
@@ -32,53 +32,58 @@ P6-2N completes the direct-customer photo request loop. An authorised installer 
 
 The customer link exposes no name, address or contact details. It guides phone capture through clarity, relevance and private-information checks before every upload. Accepted JPEG, PNG and WebP files keep the existing signature checks, metadata stripping, size limits and private R2 storage, and appear in the exact job's field proof with the requirement, request revision, checklist version and acknowledgement time. The customer can remove a mistaken upload while the request remains active.
 
-## Active milestone contract
+## Completed milestone
 
-### P6-2O batch: reusable business photo-request templates
+P6-2O adds an owner-scoped photo-template library with draft, published and archived states. Owners, managers and coordinators can create, duplicate, revise and publish requirements with useful and avoid examples. Published versions are insert-only, archived templates cannot seed new requests, and the safe service defaults remain available.
 
-Outcome: an installer business can maintain reusable upgrade-specific photo guidance based on trade feedback, while every job continues to receive an independent editable snapshot.
+Each direct-job request stores its complete editable requirements plus source template and immutable version. Later template publication or archival does not rewrite the job snapshot or customer link. The business library reports selections, job edits, requested and completed requirements and controlled useful, unclear, unnecessary or missing feedback. Queries contain no customer identity, address, contact details or image-derived content.
+
+## Live-trade gate before the next implementation batch
+
+Use P6-2N and P6-2O with participating trades to confirm the requested photo wording, useful and avoid examples, typical requirement count and whether customers understand the existing manual share flow. Record changes through the versioned template library rather than altering issued requests. Do not add image analysis or customer free-text feedback.
+
+## Next milestone contract
+
+### P6-2P batch: consent-aware photo-request link delivery
+
+Outcome: an authorised installer office user can send, monitor and safely resend a job photo-request link through the customer's permitted channel without exposing the capability token in administrator reporting.
 
 ### Five linked delivery items
 
-1. Add owner-scoped template records grouped by upgrade or service category, with draft, published and archived states.
-2. Let authorised owner and coordinator users create, duplicate and revise template requirements with useful and avoid examples.
-3. Snapshot the selected published template into each new job request so later template edits never rewrite an issued customer request.
-4. Keep every job snapshot independently editable and record the template version that seeded it.
-5. Add privacy-safe usage and feedback counts so trade interviews can identify unclear or unused requirements without analysing customer images.
+1. Add an explicit email or SMS channel choice and recipient preview before sending the current active photo-request link.
+2. Create idempotent, privacy-safe delivery records with provider message references, timestamps and authenticated receipt updates.
+3. Add bounded resend and expiring-link reminder controls that always use the current token and stop after revocation, replacement, completion or opt-out.
+4. Apply the existing customer channel consent, verified-mobile, channel opt-out, provider availability, daily-limit and SMS sender-approval checks.
+5. Extend administrator delivery health with aggregate photo-request delivery outcomes and bounded retry controls without showing customer contact details or link secrets.
 
 ### In scope
 
-- Reuse the existing trade account, team roles, service categories and P6-2N job-request editor.
-- Store templates within one installer business only. No cross-business sharing.
-- Publish immutable template versions and copy their requirement payload into the job request.
-- Count template selection, job-level edits, requested requirements and customer completion without inspecting image content.
-- Keep the P6-2N defaults as the safe fallback when a business has no published template.
+- Reuse the existing Resend, Twilio, consent, opt-out, callback, delivery-claim and administrator health boundaries.
+- Require a current active P6-2N request and direct customer owned by the installer business.
+- Keep manual copy and share available when a provider channel is unavailable.
+- Keep SMS suppressed while the `TLink` Australian sender remains unapproved.
 
 ### Explicitly out of scope
 
-- Automatic image scoring, object recognition or image-content analytics.
-- Global AEA-authored template distribution or cross-business template sharing.
-- Automatic provider email or SMS delivery of request links.
-- Marketplace customer evidence, appointment, dispatch or live-tracking changes.
-- Rewriting historical job requests when a template is revised or archived.
+- Marketing messages, recurring campaigns or unbounded automated reminders.
+- New customer contact fields, consent models or provider accounts.
+- Template editing, image scoring or photo-content analysis.
+- Marketplace customer evidence, appointment delivery, dispatch or live tracking.
 
 ### Acceptance criteria
 
-- Templates are owner scoped, role protected, versioned and migration safe.
-- Published versions are immutable and archived versions cannot seed a new request.
-- Creating a job request records a complete independent snapshot and its source template version.
-- Editing a template does not alter an existing request or its customer link.
-- Reporting contains no customer identity, address, contact details or image-derived content.
-- Template library and job selection remain usable at desktop and 390 px without document-level horizontal overflow.
+- Only an owner, manager or coordinator can send or retry a photo-request link.
+- Delivery is suppressed unless the exact customer and channel pass existing consent and provider checks.
+- Idempotency prevents duplicate sends for the same request revision, token issue and delivery intent.
+- Revoked, expired or replaced links cannot be sent or retried from stale delivery records.
+- Provider callbacks update delivery health without accepting unauthenticated events.
+- Administrator payloads contain no contact details, capability tokens or customer images.
+- Desktop and 390 px send and delivery-history controls have no document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Trade feedback requires image-content inspection or storing new household facts.
-- A proposed template edit would mutate a previously issued job request.
-- Cross-business or AEA-wide distribution is required without an explicit governance and approval model.
-- The slice expands into automatic link delivery or the protected marketplace evidence domain.
-
-## Recommendation after P6-2O
-
-Batch consent-aware email and SMS delivery of photo-request links, delivery receipts, resend and expiry reminders, customer channel opt-outs and administrator delivery health only after the P6-2N share flow and P6-2O templates have been tested with live trades.
+- Live-trade testing shows the request or template workflow must change before delivery automation.
+- A provider requires a new paid service, credential or unapproved Australian sender.
+- The work would create a second consent source of truth or expose link secrets in logs, events or admin payloads.
+- The slice expands into marketing automation or protected marketplace evidence.

@@ -1648,6 +1648,12 @@ export const tradeCrmPhotoRequests = sqliteTable("trade_crm_photo_requests", {
   revision: integer("revision").notNull().default(1),
   expiresAt: text("expires_at").notNull(),
   lastSharedAt: text("last_shared_at").notNull().default(""),
+  sourceTemplateId: text("source_template_id").notNull().default(""),
+  sourceTemplateVersionId: text("source_template_version_id").notNull().default(""),
+  sourceTemplateVersion: integer("source_template_version").notNull().default(0),
+  sourceTemplateEdited: integer("source_template_edited").notNull().default(0),
+  templateFeedback: text("template_feedback").notNull().default("{}"),
+  templateMissingFeedback: integer("template_missing_feedback").notNull().default(0),
   createdByUid: text("created_by_uid").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -1655,6 +1661,40 @@ export const tradeCrmPhotoRequests = sqliteTable("trade_crm_photo_requests", {
   uniqueIndex("trade_crm_photo_requests_work_order_idx").on(table.workOrderId),
   index("trade_crm_photo_requests_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
   index("trade_crm_photo_requests_expiry_idx").on(table.status, table.expiresAt),
+  index("trade_crm_photo_requests_template_version_idx").on(table.firebaseUid, table.sourceTemplateVersionId, table.createdAt),
+]);
+
+export const tradeCrmPhotoTemplates = sqliteTable("trade_crm_photo_templates", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  name: text("name").notNull(),
+  serviceCategory: text("service_category").notNull().default("other"),
+  status: text("status").notNull().default("draft"),
+  draftRequirements: text("draft_requirements").notNull().default("[]"),
+  publishedVersion: integer("published_version").notNull().default(0),
+  createdByUid: text("created_by_uid").notNull(),
+  updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_crm_photo_templates_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_crm_photo_templates_owner_service_idx").on(table.firebaseUid, table.serviceCategory, table.updatedAt),
+]);
+
+export const tradeCrmPhotoTemplateVersions = sqliteTable("trade_crm_photo_template_versions", {
+  id: text("id").primaryKey(),
+  templateId: text("template_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  version: integer("version").notNull(),
+  name: text("name").notNull(),
+  serviceCategory: text("service_category").notNull(),
+  requirements: text("requirements").notNull(),
+  requirementCount: integer("requirement_count").notNull(),
+  publishedByUid: text("published_by_uid").notNull(),
+  publishedAt: text("published_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_template_versions_template_version_idx").on(table.templateId, table.version),
+  index("trade_crm_photo_template_versions_owner_idx").on(table.firebaseUid, table.templateId, table.publishedAt),
 ]);
 
 export const tradeCrmPhotoRequestEvents = sqliteTable("trade_crm_photo_request_events", {

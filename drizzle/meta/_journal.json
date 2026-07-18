@@ -414,6 +414,13 @@
       "when": 1784336348050,
       "tag": "0060_customer_photo_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1784341500000,
+      "tag": "0061_photo_request_templates",
+      "breakpoints": true
     }
   ]
 }

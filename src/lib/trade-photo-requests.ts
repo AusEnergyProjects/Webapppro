@@ -1,6 +1,15 @@
 export const PHOTO_REQUEST_CHECKLIST_VERSION = "2026-07-18-customer-photo-self-review";
 export const PHOTO_REQUEST_MAX_REQUIREMENTS = 12;
 export const PHOTO_REQUEST_LINK_DAYS = 30;
+export const PHOTO_TEMPLATE_LIMIT = 60;
+export const PHOTO_TEMPLATE_FEEDBACK_VALUES = ["useful", "unclear", "unnecessary"] as const;
+export const PHOTO_REQUEST_SERVICE_CATEGORIES = [
+  "assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts",
+  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+] as const;
+
+export type PhotoTemplateFeedbackValue = typeof PHOTO_TEMPLATE_FEEDBACK_VALUES[number];
+export type PhotoTemplateFeedback = Record<string, PhotoTemplateFeedbackValue>;
 
 export type PhotoRequirement = {
   id: string;
@@ -77,6 +86,18 @@ export function normalisePhotoRequirements(value: unknown): PhotoRequirement[] {
     seen.add(id);
     return { id, label, guidance, usefulExample, avoidExample, required: item.required === true };
   });
+}
+
+export function photoRequirementsEqual(left: PhotoRequirement[], right: PhotoRequirement[]) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function normalisePhotoTemplateFeedback(value: unknown, sourceRequirements: PhotoRequirement[]): PhotoTemplateFeedback {
+  const sourceIds = new Set(sourceRequirements.map((item) => item.id));
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return Object.fromEntries(Object.entries(input).filter(([id, feedback]) =>
+    sourceIds.has(id) && PHOTO_TEMPLATE_FEEDBACK_VALUES.includes(feedback as PhotoTemplateFeedbackValue),
+  )) as PhotoTemplateFeedback;
 }
 
 export function newPhotoRequestSecret() {
