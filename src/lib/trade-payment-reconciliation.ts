@@ -22,6 +22,7 @@ type ReconciliationInput = {
 
 type PaymentLinkRow = {
   id: string;
+  commercial_handoff_id: string;
   work_order_id: string;
   firebase_uid: string;
   amount_cents: number;
@@ -50,7 +51,7 @@ async function matchingPaymentLink(input: ReconciliationInput) {
   const identifierColumn = input.provider === "stripe" ? "l.external_id" : "l.provider_order_id";
   const identifier = input.provider === "stripe" ? cleanReference(input.externalId || "") : cleanReference(input.providerOrderId || "");
   if (!identifier || !input.connectedAccountId) return undefined;
-  const link = await db.prepare(`SELECT l.id, l.work_order_id, l.firebase_uid, l.amount_cents, l.status,
+  const link = await db.prepare(`SELECT l.id, l.commercial_handoff_id, l.work_order_id, l.firebase_uid, l.amount_cents, l.status,
       a.business_name, w.work_number
     FROM trade_crm_payment_links l
     JOIN trade_crm_integrations i ON i.firebase_uid = l.firebase_uid
@@ -155,6 +156,8 @@ export async function reconcileTradePayment(input: ReconciliationInput): Promise
   ];
   if (becamePaid) {
     statements.push(
+      db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_paid', updated_at = ?
+        WHERE id = ? AND firebase_uid = ?`).bind(receivedAt, link.commercial_handoff_id, link.firebase_uid),
       db.prepare(`UPDATE trade_crm_job_details SET
         paid_value_cents = CASE WHEN invoiced_value_cents > 0
           THEN MIN(invoiced_value_cents, paid_value_cents + ?)

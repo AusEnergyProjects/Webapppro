@@ -3,6 +3,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { calculateQuoteSelection, type QuoteChoiceTotals } from "@/lib/trade-quote-options";
 import { providerNeutralCommercialRecord } from "@/lib/trade-commercial-reference";
 import { hashQuoteLinkSecret, splitQuoteLinkToken } from "@/lib/trade-quote-links";
+import { acceptedScopeSnapshot, depositAmountCents } from "@/lib/trade-commercial-handoff";
 
 export const runtime = "edge";
 type Context = { params: Promise<{ token: string }> };
@@ -101,17 +102,32 @@ export async function POST(request: Request, context: Context) {
       : { selectedIds: [] as string[], subtotalCents: 0, taxCents: 0, totalCents: 0, selectionSummary: "" };
     const commercial = providerNeutralCommercialRecord({ quoteNumber: String(row.quote_number), versionNumber: Number(row.version_number), subtotalCents: selection.subtotalCents, taxCents: selection.taxCents, totalCents: selection.totalCents, selectedChoiceIds: selection.selectedIds });
     const statement = decision === "accepted" ? `I, ${signerName}, accept quote ${row.quote_number} version ${row.version_number} for AUD ${(selection.totalCents / 100).toFixed(2)}${selection.selectionSummary ? ` with ${selection.selectionSummary}` : ""}, subject to its recorded terms.` : `I, ${signerName}, decline quote ${row.quote_number} version ${row.version_number}.`;
-    await db.batch([
+    const acceptanceId = crypto.randomUUID();
+    const statements = [
       db.prepare(`INSERT INTO trade_crm_quote_acceptances (id, quote_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, customer_firebase_uid, actor_email, actor_email_verified, actor_auth_time, actor_sign_in_provider, decision, consent_statement, selected_choice_ids_json, selected_subtotal_cents, selected_tax_cents, selected_total_cents, selection_summary, signer_name, actor_type, quote_link_id, token_issue, commercial_reference, currency, decided_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, '', '', 0, 0, 'secure_link', ?, ?, ?, ?, ?, ?, ?, ?, 'secure_link_holder', ?, ?, ?, 'AUD', ?, ?)`)
-        .bind(crypto.randomUUID(), row.quote_id, row.quote_version_id, row.work_order_id, row.firebase_uid, row.crm_customer_id, decision, statement, JSON.stringify(selection.selectedIds), selection.subtotalCents, selection.taxCents, selection.totalCents, selection.selectionSummary, signerName, row.id, row.token_issue, commercial.reference, now, now),
+        .bind(acceptanceId, row.quote_id, row.quote_version_id, row.work_order_id, row.firebase_uid, row.crm_customer_id, decision, statement, JSON.stringify(selection.selectedIds), selection.subtotalCents, selection.taxCents, selection.totalCents, selection.selectionSummary, signerName, row.id, row.token_issue, commercial.reference, now, now),
       db.prepare("UPDATE trade_crm_quote_versions SET status = ?, updated_at = ? WHERE id = ? AND status = 'issued'").bind(decision, now, row.quote_version_id),
       db.prepare("UPDATE trade_crm_quotes SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(decision, now, row.quote_id, row.firebase_uid),
       db.prepare("UPDATE trade_crm_quote_links SET status = ?, token_hash = '', encrypted_token = '', updated_at = ? WHERE id = ? AND token_issue = ?").bind(decision, now, row.id, row.token_issue),
       db.prepare("UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?").bind(selection.totalCents || row.total_cents, decision, now, row.work_order_id, row.firebase_uid),
       db.prepare(`INSERT INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'link_holder', ?, ?, ?)`).bind(crypto.randomUUID(), row.id, row.quote_id, row.quote_version_id, row.work_order_id, row.firebase_uid, decision, `Quote ${decision} with typed signature and exact total evidence.`, `decision:${row.quote_version_id}`, now),
-    ]);
+    ];
+    if (decision === "accepted") {
+      const itemRows = await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY position`)
+        .bind(row.quote_version_id, row.firebase_uid).all<Row>();
+      const scope = acceptedScopeSnapshot(itemRows.results, selection.selectedIds);
+      statements.push(db.prepare(`INSERT INTO trade_crm_commercial_handovers
+        (id, acceptance_id, quote_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, commercial_reference,
+         currency, scope_snapshot_json, terms_snapshot, subtotal_cents, tax_cents, total_cents, deposit_kind,
+         deposit_basis_points, deposit_fixed_cents, deposit_amount_cents, status, accepted_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, 'percentage', 1000, 0, ?, 'accepted', ?, ?, ?)`)
+        .bind(crypto.randomUUID(), acceptanceId, row.quote_id, row.quote_version_id, row.work_order_id, row.firebase_uid,
+          row.crm_customer_id, commercial.reference, JSON.stringify(scope), String(row.terms || ""), selection.subtotalCents,
+          selection.taxCents, selection.totalCents, depositAmountCents(selection.totalCents, "percentage", 1000), now, now, now));
+    }
+    await db.batch(statements);
     return adminJson({ ok: true, decision, commercial });
   } catch (error) { return publicError(error); }
 }

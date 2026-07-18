@@ -43,7 +43,7 @@ test("provider references are deterministic and fit provider limits", () => {
   assert.equal(accountingReference("***", 13), "AEA");
 });
 
-test("Xero and MYOB statuses map into the simple CRM invoice states", () => {
+test("Xero, MYOB and QuickBooks statuses map into the simple CRM invoice states", () => {
   assert.equal(accountingStatus("xero", "DRAFT", 10000, 0, ""), "draft");
   assert.equal(accountingStatus("xero", "AUTHORISED", 10000, 0, "2026-01-01", "2026-01-02"), "overdue");
   assert.equal(accountingStatus("xero", "AUTHORISED", 10000, 2500, ""), "part_paid");
@@ -51,6 +51,8 @@ test("Xero and MYOB statuses map into the simple CRM invoice states", () => {
   assert.equal(accountingStatus("myob", "Open", 10000, 0, ""), "issued");
   assert.equal(accountingStatus("myob", "Closed", 10000, 10000, ""), "paid");
   assert.equal(accountingStatus("myob", "Credit", 10000, 0, ""), "void");
+  assert.equal(accountingStatus("quickbooks", "DRAFT", 10000, 0, ""), "draft");
+  assert.equal(accountingStatus("quickbooks", "DRAFT", 10000, 10000, ""), "paid");
   assert.equal(centsFromProvider("123.455"), 12346);
 });
 
@@ -58,7 +60,7 @@ test("server blocks protected jobs before provider export", () => {
   assert.match(route, /row\.source_type !== "internal"/);
   assert.match(route, /row\.customer_source !== "trade_owned"/);
   assert.match(route, /DIRECT_CUSTOMER_REQUIRED/);
-  assert.match(route, /AEA protected customer details cannot be sent to Xero or MYOB/);
+  assert.match(route, /AEA protected customer details cannot be sent to an accounting provider/);
 });
 
 test("exports are drafts, do not email, and refresh provider totals", () => {

@@ -539,6 +539,38 @@
 .crm-payment-panel li.payment-failed strong, .crm-payment-panel li.payment-review_required strong { color: #8c2f21; }
 .crm-payment-panel li small { color: var(--color-aea-muted); display: block; font-size: .5rem; margin-top: 2px; }
 .crm-payment-panel li a { background: #e8f5f0; border-radius: 7px; color: #185c45; font-size: .54rem; font-weight: 900; padding: 7px 9px; text-decoration: none; }
+.crm-payment-create > div span, .crm-payment-create > div small { color: var(--color-aea-muted); display: block; font-size: .52rem; }
+.crm-payment-create > div strong { color: var(--color-aea-ink); display: block; font-size: .84rem; margin: 3px 0; }
+.crm-commercial-handoff { background: #fbfdfc; border: 1px solid #cfe0da; border-radius: 14px; margin-top: 18px; padding: 16px; }
+.crm-commercial-handoff > header { align-items: start; display: flex; gap: 16px; justify-content: space-between; }
+.crm-commercial-handoff > header span, .crm-commercial-handoff.empty > span, .crm-deposit-choice span, .crm-commercial-timeline header span { color: #147153; display: block; font-size: .56rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.crm-commercial-handoff > header h4, .crm-commercial-handoff.empty h4, .crm-commercial-timeline h4 { color: var(--color-aea-ink); font-size: .9rem; margin: 4px 0 0; }
+.crm-commercial-handoff > header p, .crm-commercial-handoff.empty p { color: var(--color-aea-muted); font-size: .62rem; line-height: 1.5; margin: 5px 0 0; }
+.crm-commercial-handoff > header > strong { color: #0f6047; font-size: 1.15rem; white-space: nowrap; }
+.crm-commercial-summary { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; }
+.crm-commercial-summary article { background: #eef7f3; border-radius: 10px; padding: 10px; }
+.crm-commercial-summary span { color: var(--color-aea-muted); display: block; font-size: .52rem; font-weight: 800; text-transform: uppercase; }
+.crm-commercial-summary strong { color: var(--color-aea-ink); display: block; font-size: .7rem; margin-top: 4px; }
+.crm-commercial-scope { border-top: 1px solid #dce9e4; margin-top: 13px; padding-top: 11px; }
+.crm-commercial-scope summary { color: #176f54; cursor: pointer; font-size: .61rem; font-weight: 900; }
+.crm-commercial-scope ol { display: grid; gap: 6px; list-style: none; margin: 10px 0; padding: 0; }
+.crm-commercial-scope li { align-items: center; background: #fff; border: 1px solid #e0e9e6; border-radius: 8px; display: flex; gap: 10px; justify-content: space-between; padding: 8px 10px; }
+.crm-commercial-scope li strong, .crm-commercial-scope li span, .crm-commercial-scope li b, .crm-commercial-scope p { color: var(--color-aea-ink); display: block; font-size: .56rem; }
+.crm-commercial-scope li span, .crm-commercial-scope p { color: var(--color-aea-muted); margin-top: 2px; }
+.crm-deposit-choice { align-items: end; background: #fff8e6; border: 1px solid #f0d995; border-radius: 11px; display: grid; gap: 9px; grid-template-columns: minmax(180px, 1fr) minmax(120px, .5fr) minmax(100px, .4fr) auto; margin-top: 14px; padding: 12px; }
+.crm-deposit-choice h5 { color: var(--color-aea-ink); font-size: 1rem; margin: 3px 0; }
+.crm-deposit-choice p { color: var(--color-aea-muted); font-size: .54rem; margin: 0; }
+.crm-deposit-choice label > span { margin-bottom: 4px; }
+.crm-deposit-choice input, .crm-deposit-choice select { background: #fff; border: 1px solid #d7c27f; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .62rem; min-height: 39px; padding: 8px 10px; width: 100%; }
+.crm-deposit-choice button, .crm-commercial-timeline header button { background: #176f54; border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .56rem; font-weight: 900; min-height: 39px; padding: 8px 12px; }
+.crm-deposit-choice button:disabled { cursor: not-allowed; opacity: .55; }
+.crm-commercial-timeline { border-top: 1px solid #dce9e4; margin-top: 18px; padding-top: 15px; }
+.crm-commercial-timeline header { align-items: center; display: flex; justify-content: space-between; }
+.crm-commercial-timeline ol { display: grid; gap: 8px; list-style: none; margin: 12px 0 0; padding: 0; }
+.crm-commercial-timeline li { align-items: center; display: grid; gap: 9px; grid-template-columns: 9px minmax(0, 1fr) auto; }
+.crm-commercial-timeline li i { background: #24a276; border: 2px solid #d7f0e6; border-radius: 50%; height: 9px; width: 9px; }
+.crm-commercial-timeline li strong { color: var(--color-aea-ink); display: block; font-size: .58rem; }
+.crm-commercial-timeline li span, .crm-commercial-timeline li time { color: var(--color-aea-muted); display: block; font-size: .5rem; margin-top: 2px; }
 .crm-payment-boundary { background: #edf5fa; border-left: 4px solid #4b8db5; border-radius: 9px; margin-top: 16px; padding: 11px 13px; }
 .crm-payment-boundary strong { color: #204d64; font-size: .63rem; }
 .crm-status { background: #fff8e8; border-top: 1px solid #e6d19e; color: #674e19; font-size: .6rem; margin: 0; padding: 10px 28px; position: sticky; bottom: 0; z-index: 8; }
@@ -614,6 +646,13 @@
   .crm-myob-export, .crm-accounting-document, .crm-accounting-document > div:last-child { align-items: stretch; flex-direction: column; }
   .crm-myob-export select { max-width: none; width: 100%; }
   .crm-payment-create { grid-template-columns: 1fr; }
+  .crm-commercial-handoff { padding: 13px; }
+  .crm-commercial-handoff > header { display: block; }
+  .crm-commercial-handoff > header > strong { display: block; margin-top: 10px; }
+  .crm-commercial-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .crm-deposit-choice { grid-template-columns: 1fr; }
+  .crm-commercial-timeline li { align-items: start; grid-template-columns: 9px minmax(0, 1fr); }
+  .crm-commercial-timeline li time { grid-column: 2; }
   .crm-template-library article { align-items: flex-start; }
   .crm-page-heading { align-items: stretch; flex-direction: column; }
   .crm-page-heading > details { align-self: flex-start; }

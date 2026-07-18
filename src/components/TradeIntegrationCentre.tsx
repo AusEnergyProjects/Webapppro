@@ -21,7 +21,7 @@ type IntegrationResult = { ok?: boolean; providers?: Provider[]; error?: string 
 const providerNotes: Record<Provider["provider"], string> = {
   xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
   myob: "Export a direct-customer job as a draft MYOB service invoice, then refresh its total and payment status without giving AEA your MYOB login.",
-  quickbooks: "Keep direct-customer quote and invoice references ready for QuickBooks Online without making QuickBooks the source of truth.",
+  quickbooks: "Create a draft QuickBooks Online invoice from the exact accepted quote, then refresh its status without making QuickBooks the source of truth.",
   stripe: "Create secure checkout links from a direct customer job. Card details stay with Stripe and never enter this CRM.",
   square: "Create secure Square checkout links from a direct customer job using the connected business location.",
 };

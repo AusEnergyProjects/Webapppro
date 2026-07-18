@@ -86,7 +86,7 @@ test("online payment links are direct-customer only and provider hosted", () => 
   assert.match(payments, /Idempotency-Key/);
   assert.match(payments, /idempotency_key/);
   assert.match(paymentUi, /AEA protected payment path/);
-  assert.match(paymentUi, /Card data stays with Stripe or Square/);
+  assert.match(paymentUi, /Card data stays with the payment provider/);
 });
 
 test("field records are owner or assigned-team scoped and protected customer sign-off stays with AEA", () => {
@@ -116,7 +116,7 @@ test("installer CRM exposes progressive integrations, field and payment workflow
   for (const label of ["integrations", "Field work", "Quote and invoice"]) assert.match(crm, new RegExp(label));
   assert.match(crm, /TradeIntegrationCentre/);
   assert.match(crm, /TradeFieldWorkPanel/);
-  assert.match(crm, /TradePaymentPanel/);
+  assert.match(crm, /TradeCommercialHandoffPanel/);
   for (const label of ["Xero", "MYOB", "QuickBooks", "Stripe", "Square"]) assert.match(integrationUi, new RegExp(label));
   assert.match(integrationUi, /never asks for or stores the provider password/);
   assert.doesNotMatch(`${providerLayer}\n${integrationUi}\n${crm}`, /GOOGLE_MAPS_API_KEY|Google property tools|TradePropertyView/);

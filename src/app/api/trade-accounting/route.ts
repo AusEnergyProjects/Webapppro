@@ -11,11 +11,13 @@ import {
 } from "@/lib/trade-accounting";
 import { decryptIntegrationCredentials, encryptIntegrationCredentials } from "@/lib/trade-integration-crypto";
 import { providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
+import { conciseScopeDescription, type AcceptedScopeLine } from "@/lib/trade-commercial-handoff";
 
 export const runtime = "edge";
 
 type Row = Record<string, unknown>;
 type MyobAccount = { id: string; code: string; name: string; taxCodeId: string; taxCode: string };
+type QuickBooksItem = { id: string; code: string; name: string; taxCode: string };
 
 function accountingError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
@@ -23,11 +25,12 @@ function accountingError(error: unknown) {
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) {
     return adminJson({ ok: false, error: "Accounting export is not available to this account." }, 403);
   }
-  if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. AEA protected customer details cannot be sent to Xero or MYOB." }, 403);
-  if (code === "INVOICE_AMOUNT_REQUIRED") return adminJson({ ok: false, error: "Save an invoice amount above $0 before exporting it." }, 400);
+  if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. AEA protected customer details cannot be sent to an accounting provider." }, 403);
+  if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before preparing its accounting draft." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this accounting provider in Integrations first." }, 409);
   if (code === "INTEGRATION_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect MYOB in Integrations once so it can access customers, invoices and your income account list." }, 409);
   if (code === "MYOB_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the MYOB income account that should receive this sale." }, 400);
+  if (code === "QUICKBOOKS_ITEM_REQUIRED") return adminJson({ ok: false, error: "Choose the QuickBooks product or service that should receive this sale." }, 400);
   if (code === "DOCUMENT_ALREADY_EXPORTED") return adminJson({ ok: false, error: "This job already has an accounting invoice. Refresh the existing invoice instead of exporting a duplicate." }, 409);
   if (code === "EXPORT_IN_PROGRESS") return adminJson({ ok: false, error: "This invoice is already being prepared. Wait a moment, then refresh the job." }, 409);
   if (code === "ACCOUNTING_DOCUMENT_REQUIRED") return adminJson({ ok: false, error: "Export the invoice before refreshing it." }, 404);
@@ -44,6 +47,7 @@ function documentJson(row: Row) {
     status: String(row.status || "draft"), providerStatus: String(row.provider_status || ""),
     dueAt: String(row.due_at || ""), lastSyncedAt: String(row.last_synced_at || ""),
     lastError: String(row.last_error || ""), createdAt: String(row.created_at || ""),
+    commercialReference: String(row.commercial_reference || ""),
   };
 }
 
@@ -63,21 +67,26 @@ async function directJob(firebaseUid: string, workOrderId: string) {
   const row = await getD1().prepare(`SELECT w.id, w.work_number, w.title, w.source_type, w.partner_type,
       d.customer_source, d.crm_customer_id, d.invoiced_value_cents, d.paid_value_cents, d.payment_due_at,
       c.customer_number, c.customer_type, c.first_name, c.last_name, c.business_name, c.email, c.phone,
-      c.address_line_1, c.address_line_2, c.suburb, c.address_state, c.postcode
+      c.address_line_1, c.address_line_2, c.suburb, c.address_state, c.postcode,
+      h.id commercial_handoff_id, h.commercial_reference, h.scope_snapshot_json, h.subtotal_cents accepted_subtotal_cents,
+      h.tax_cents accepted_tax_cents, h.total_cents accepted_total_cents, h.accepted_at
     FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
+    LEFT JOIN trade_crm_commercial_handovers h ON h.work_order_id = w.id AND h.firebase_uid = w.firebase_uid
+      AND h.accepted_at = (SELECT MAX(h2.accepted_at) FROM trade_crm_commercial_handovers h2 WHERE h2.work_order_id = w.id AND h2.firebase_uid = w.firebase_uid)
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
     .bind(workOrderId, firebaseUid).first<Row>();
   if (!row || row.partner_type !== "installer" || row.source_type !== "internal" || row.customer_source !== "trade_owned" || !row.crm_customer_id || !row.customer_number) {
     throw new Error("DIRECT_CUSTOMER_REQUIRED");
   }
+  if (!row.commercial_handoff_id || Number(row.accepted_total_cents || 0) <= 0) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
   return row;
 }
 
 async function connections(firebaseUid: string) {
   const result = await getD1().prepare(`SELECT * FROM trade_crm_integrations
-    WHERE firebase_uid = ? AND provider IN ('xero', 'myob') ORDER BY provider`).bind(firebaseUid).all<Row>();
+    WHERE firebase_uid = ? AND provider IN ('xero', 'myob', 'quickbooks') ORDER BY provider`).bind(firebaseUid).all<Row>();
   return Object.fromEntries(result.results.map((row) => [String(row.provider), row])) as Partial<Record<AccountingProvider, Row>>;
 }
 
@@ -97,7 +106,7 @@ async function activeCredentials(provider: AccountingProvider, connection: Row) 
   const setting = providerSetting(provider);
   const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: String(credentials.refresh_token) });
   const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
-  if (provider === "xero") {
+  if (provider === "xero" || provider === "quickbooks") {
     headers.Authorization = `Basic ${btoa(`${setting.clientId}:${setting.clientSecret}`)}`;
   } else {
     body.set("client_id", setting.clientId); body.set("client_secret", setting.clientSecret);
@@ -163,6 +172,16 @@ async function myobFetch(connection: Row, credentials: Row, path: string, init: 
   return { response, result };
 }
 
+async function quickBooksFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {
+  const realmId = cleanAdminText(connection.external_account_id, 80);
+  if (!realmId || !/^\d+$/.test(realmId)) throw new Error("INTEGRATION_REQUIRED");
+  const response = await fetch(`https://quickbooks.api.intuit.com/v3/company/${encodeURIComponent(realmId)}/${path}`,
+    { ...init, headers: { Authorization: `Bearer ${String(credentials.access_token || "")}`, Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
+  const result = await response.json().catch(() => ({})) as Row;
+  if (!response.ok) throw new Error("PROVIDER_REQUEST_FAILED");
+  return { response, result };
+}
+
 function escapedFilter(value: string) {
   return value.replaceAll("'", "''");
 }
@@ -188,6 +207,23 @@ async function listMyobAccounts(connection: Row, credentials: Row) {
       const tax = item.TaxCode && typeof item.TaxCode === "object" ? item.TaxCode as Row : {};
       return { id: String(item.UID || ""), code: String(item.DisplayID || ""), name: String(item.Name || "Income account"), taxCodeId: String(tax.UID || ""), taxCode: String(tax.Code || "") };
     }).filter((item) => item.id);
+}
+
+async function listQuickBooksItems(connection: Row, credentials: Row) {
+  const query = encodeURIComponent("SELECT * FROM Item WHERE Active = true MAXRESULTS 1000");
+  const { result } = await quickBooksFetch(connection, credentials, `query?query=${query}&minorversion=75`);
+  const response = result.QueryResponse && typeof result.QueryResponse === "object" ? result.QueryResponse as Row : {};
+  const items = Array.isArray(response.Item) ? response.Item as Row[] : [];
+  return items.filter((item) => ["Service", "NonInventory", "Inventory"].includes(String(item.Type || "")))
+    .map((item): QuickBooksItem => ({ id: String(item.Id || ""), code: String(item.Sku || ""), name: String(item.Name || "Product or service"), taxCode: String((item.SalesTaxCodeRef as Row | undefined)?.value || "") }))
+    .filter((item) => item.id);
+}
+
+function acceptedScope(job: Row) {
+  try {
+    const parsed = JSON.parse(String(job.scope_snapshot_json || "[]"));
+    return Array.isArray(parsed) ? parsed as AcceptedScopeLine[] : [];
+  } catch { return []; }
 }
 
 async function findXeroContact(connection: Row, credentials: Row, contactNumber: string) {
@@ -222,7 +258,7 @@ async function findXeroInvoice(connection: Row, credentials: Row, invoiceNumber:
 }
 
 async function createXeroInvoice(connection: Row, credentials: Row, job: Row, contactId: string) {
-  const invoiceNumber = accountingReference(String(job.work_number), 50);
+  const invoiceNumber = accountingReference(String(job.commercial_reference), 50);
   const existing = await findXeroInvoice(connection, credentials, invoiceNumber);
   if (existing?.InvoiceID) return existing;
   const today = new Date().toISOString().slice(0, 10);
@@ -231,9 +267,9 @@ async function createXeroInvoice(connection: Row, credentials: Row, job: Row, co
     method: "POST",
     body: JSON.stringify({ Invoices: [{
       Type: "ACCREC", Contact: { ContactID: contactId }, InvoiceNumber: invoiceNumber,
-      Date: today, DueDate: dueAt, Reference: cleanAdminText(job.work_number, 100), CurrencyCode: "AUD",
+      Date: today, DueDate: dueAt, Reference: cleanAdminText(job.commercial_reference, 100), CurrencyCode: "AUD",
       Status: "DRAFT", LineAmountTypes: "Inclusive",
-      LineItems: [{ Description: cleanAdminText(job.title, 180) || "Trade services", Quantity: 1, UnitAmount: Number(job.invoiced_value_cents || 0) / 100 }],
+      LineItems: [{ Description: conciseScopeDescription(acceptedScope(job), String(job.title)), Quantity: 1, UnitAmount: Number(job.accepted_total_cents || 0) / 100 }],
     }] }),
   });
   const created = firstItem(result.Invoices);
@@ -266,25 +302,69 @@ async function myobContact(connection: Row, credentials: Row, job: Row, existing
 }
 
 async function createMyobInvoice(connection: Row, credentials: Row, job: Row, contactId: string, account: MyobAccount) {
-  const invoiceNumber = accountingReference(String(job.work_number), 13);
+  const invoiceNumber = accountingReference(String(job.commercial_reference), 13);
   const existing = await findMyobItem(connection, credentials, "Sale/Invoice/Service", "Number", invoiceNumber);
   if (existing?.UID) return existing;
   const line: Row = {
-    Type: "Transaction", Description: cleanAdminText(job.title, 180) || "Trade services",
-    Total: Number(job.invoiced_value_cents || 0) / 100, Account: { UID: account.id },
+    Type: "Transaction", Description: conciseScopeDescription(acceptedScope(job), String(job.title)),
+    Total: Number(job.accepted_total_cents || 0) / 100, Account: { UID: account.id },
   };
   if (account.taxCodeId) line.TaxCode = { UID: account.taxCodeId };
   const { response, result } = await myobFetch(connection, credentials, "Sale/Invoice/Service", {
     method: "POST",
     body: JSON.stringify({
       Number: invoiceNumber, Date: `${new Date().toISOString().slice(0, 10)} 00:00:00`, Customer: { UID: contactId },
-      CustomerPurchaseOrderNumber: cleanAdminText(job.work_number, 100), Lines: [line], InvoiceDeliveryStatus: "Nothing",
+      CustomerPurchaseOrderNumber: cleanAdminText(job.commercial_reference, 100), Lines: [line], InvoiceDeliveryStatus: "Nothing",
       IsTaxInclusive: true,
     }),
   });
   const createdId = String(result.UID || idFromLocation(response));
   if (!createdId) throw new Error("PROVIDER_REQUEST_FAILED");
-  return { ...result, UID: createdId, Number: String(result.Number || invoiceNumber), Status: String(result.Status || "Open"), TotalAmount: result.TotalAmount ?? Number(job.invoiced_value_cents || 0) / 100, BalanceDueAmount: result.BalanceDueAmount ?? Number(job.invoiced_value_cents || 0) / 100 };
+  return { ...result, UID: createdId, Number: String(result.Number || invoiceNumber), Status: String(result.Status || "Open"), TotalAmount: result.TotalAmount ?? Number(job.accepted_total_cents || 0) / 100, BalanceDueAmount: result.BalanceDueAmount ?? Number(job.accepted_total_cents || 0) / 100 };
+}
+
+function quickBooksQueryValue(value: unknown) {
+  return String(value || "").replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+}
+
+async function quickBooksContact(connection: Row, credentials: Row, job: Row, existingId: string) {
+  if (existingId) return existingId;
+  const customerName = cleanAdminText(job.business_name, 100) || [job.first_name, job.last_name].map((value) => cleanAdminText(value, 80)).filter(Boolean).join(" ") || String(job.customer_number);
+  const displayName = `TLink ${cleanAdminText(job.customer_number, 40)} | ${customerName}`.slice(0, 100);
+  const query = encodeURIComponent(`SELECT * FROM Customer WHERE DisplayName = '${quickBooksQueryValue(displayName)}' MAXRESULTS 1`);
+  const { result: found } = await quickBooksFetch(connection, credentials, `query?query=${query}&minorversion=75`);
+  const foundResponse = found.QueryResponse && typeof found.QueryResponse === "object" ? found.QueryResponse as Row : {};
+  const existing = firstItem(foundResponse.Customer);
+  if (existing?.Id) return String(existing.Id);
+  const { result } = await quickBooksFetch(connection, credentials, "customer?minorversion=75", { method: "POST", body: JSON.stringify({
+    DisplayName: displayName, CompanyName: cleanAdminText(job.business_name, 100), GivenName: cleanAdminText(job.first_name, 80), FamilyName: cleanAdminText(job.last_name, 80),
+    PrimaryEmailAddr: cleanAdminText(job.email, 180) ? { Address: cleanAdminText(job.email, 180) } : undefined,
+    PrimaryPhone: cleanAdminText(job.phone, 40) ? { FreeFormNumber: cleanAdminText(job.phone, 40) } : undefined,
+    BillAddr: { Line1: cleanAdminText(job.address_line_1, 140), Line2: cleanAdminText(job.address_line_2, 140), City: cleanAdminText(job.suburb, 80), CountrySubDivisionCode: cleanAdminText(job.address_state, 20), PostalCode: cleanAdminText(job.postcode, 12), Country: "Australia" },
+  }) });
+  const customer = result.Customer && typeof result.Customer === "object" ? result.Customer as Row : {};
+  if (!customer.Id) throw new Error("PROVIDER_REQUEST_FAILED");
+  return String(customer.Id);
+}
+
+async function createQuickBooksInvoice(connection: Row, credentials: Row, job: Row, contactId: string, item: QuickBooksItem) {
+  const reference = cleanAdminText(job.commercial_reference, 21);
+  const query = encodeURIComponent(`SELECT * FROM Invoice WHERE DocNumber = '${quickBooksQueryValue(reference)}' MAXRESULTS 1`);
+  const { result: found } = await quickBooksFetch(connection, credentials, `query?query=${query}&minorversion=75`);
+  const foundResponse = found.QueryResponse && typeof found.QueryResponse === "object" ? found.QueryResponse as Row : {};
+  const existing = firstItem(foundResponse.Invoice);
+  if (existing?.Id) return existing;
+  const totalCents = Number(job.accepted_total_cents); const scope = acceptedScope(job);
+  const salesDetail: Row = { ItemRef: { value: item.id, name: item.name }, Qty: 1, UnitPrice: totalCents / 100 };
+  if (item.taxCode) salesDetail.TaxCodeRef = { value: item.taxCode };
+  const { result } = await quickBooksFetch(connection, credentials, "invoice?minorversion=75", { method: "POST", body: JSON.stringify({
+    CustomerRef: { value: contactId }, DocNumber: reference, TxnDate: new Date().toISOString().slice(0, 10), DueDate: invoiceDueAt(job),
+    PrivateNote: `TLink accepted quote ${String(job.commercial_reference)}`.slice(0, 4000), CustomerMemo: { value: conciseScopeDescription(scope, String(job.title)).slice(0, 1000) },
+    GlobalTaxCalculation: "TaxInclusive", Line: [{ Amount: totalCents / 100, Description: conciseScopeDescription(scope, String(job.title)), DetailType: "SalesItemLineDetail", SalesItemLineDetail: salesDetail }],
+  }) });
+  const invoice = result.Invoice && typeof result.Invoice === "object" ? result.Invoice as Row : {};
+  if (!invoice.Id) throw new Error("PROVIDER_REQUEST_FAILED");
+  return invoice;
 }
 
 async function documentRow(firebaseUid: string, workOrderId: string) {
@@ -301,20 +381,23 @@ async function addEvent(document: Row, action: string, status: string, providerS
 }
 
 async function exportInvoice(firebaseUid: string, provider: AccountingProvider, job: Row, accountReference: string) {
-  const amountCents = Number(job.invoiced_value_cents || 0);
-  if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("INVOICE_AMOUNT_REQUIRED");
+  const amountCents = Number(job.accepted_total_cents || 0);
+  if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
   const connection = await connectionFor(firebaseUid, provider);
   const credentials = await activeCredentials(provider, connection);
   const db = getD1();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const inserted = await db.prepare(`INSERT INTO trade_crm_accounting_documents
-    (id, work_order_id, firebase_uid, provider, document_type, amount_cents, paid_amount_cents, currency,
-     status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'invoice', ?, 0, 'AUD', 'exporting', ?, ?, ?)
+    (id, work_order_id, firebase_uid, commercial_handoff_id, commercial_reference, scope_snapshot_json,
+     subtotal_cents, tax_cents, provider, document_type, amount_cents, paid_amount_cents, currency,
+     status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, 0, 'AUD', 'exporting', ?, ?, ?)
     ON CONFLICT(firebase_uid, work_order_id, document_type) DO NOTHING`)
-    .bind(id, job.id, firebaseUid, provider, amountCents, invoiceDueAt(job), now, now).run();
+    .bind(id, job.id, firebaseUid, job.commercial_handoff_id, job.commercial_reference, job.scope_snapshot_json,
+      job.accepted_subtotal_cents, job.accepted_tax_cents, provider, amountCents, invoiceDueAt(job), now, now).run();
   let document = await documentRow(firebaseUid, String(job.id));
   if (!document) throw new Error("PROVIDER_REQUEST_FAILED");
+  if (document.commercial_handoff_id !== job.commercial_handoff_id) throw new Error("DOCUMENT_ALREADY_EXPORTED");
   if (document.provider !== provider) throw new Error("DOCUMENT_ALREADY_EXPORTED");
   if (document.external_document_id) return document;
   if (Number(inserted.meta.changes || 0) !== 1) {
@@ -335,7 +418,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
       await db.prepare("UPDATE trade_crm_accounting_documents SET external_contact_id = ?, updated_at = ? WHERE id = ?")
         .bind(externalContactId, now, document.id).run();
       external = await createXeroInvoice(connection, credentials, job, externalContactId);
-    } else {
+    } else if (provider === "myob") {
       const accounts = await listMyobAccounts(connection, credentials);
       const account = accounts.find((item) => item.id === accountReference);
       if (!account) throw new Error("MYOB_ACCOUNT_REQUIRED");
@@ -344,12 +427,22 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
       await db.prepare("UPDATE trade_crm_accounting_documents SET external_contact_id = ?, account_reference = ?, updated_at = ? WHERE id = ?")
         .bind(externalContactId, selectedAccount, now, document.id).run();
       external = await createMyobInvoice(connection, credentials, job, externalContactId, account);
+    } else {
+      const items = await listQuickBooksItems(connection, credentials);
+      const item = items.find((entry) => entry.id === accountReference);
+      if (!item) throw new Error("QUICKBOOKS_ITEM_REQUIRED");
+      selectedAccount = item.id;
+      externalContactId = await quickBooksContact(connection, credentials, job, externalContactId);
+      await db.prepare("UPDATE trade_crm_accounting_documents SET external_contact_id = ?, account_reference = ?, updated_at = ? WHERE id = ?")
+        .bind(externalContactId, selectedAccount, now, document.id).run();
+      external = await createQuickBooksInvoice(connection, credentials, job, externalContactId, item);
     }
-    const externalId = String(provider === "xero" ? external.InvoiceID : external.UID);
-    const externalNumber = String(provider === "xero" ? external.InvoiceNumber : external.Number);
-    const providerStatus = String(external.Status || (provider === "xero" ? "DRAFT" : "Open"));
-    const totalCents = centsFromProvider(provider === "xero" ? external.Total : external.TotalAmount) || amountCents;
-    const paidCents = provider === "xero" ? centsFromProvider(external.AmountPaid) : Math.max(0, totalCents - centsFromProvider(external.BalanceDueAmount));
+    const externalId = String(provider === "xero" ? external.InvoiceID : provider === "myob" ? external.UID : external.Id);
+    const externalNumber = String(provider === "xero" ? external.InvoiceNumber : provider === "myob" ? external.Number : external.DocNumber);
+    const providerStatus = String(external.Status || (provider === "myob" ? "Open" : "DRAFT"));
+    const totalCents = centsFromProvider(provider === "xero" ? external.Total : provider === "myob" ? external.TotalAmount : external.TotalAmt) || amountCents;
+    if (totalCents !== amountCents) throw new Error("PROVIDER_REQUEST_FAILED");
+    const paidCents = provider === "xero" ? centsFromProvider(external.AmountPaid) : provider === "myob" ? Math.max(0, totalCents - centsFromProvider(external.BalanceDueAmount)) : Math.max(0, totalCents - centsFromProvider(external.Balance));
     const status = accountingStatus(provider, providerStatus, totalCents, paidCents, cleanAdminText(job.payment_due_at, 10));
     const syncedAt = new Date().toISOString();
     await db.batch([
@@ -393,14 +486,17 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
     if (provider === "xero") {
       const { result } = await xeroFetch(connection, credentials, `Invoices/${encodeURIComponent(String(document.external_document_id))}`);
       invoice = firstItem(result.Invoices) || {};
-    } else {
+    } else if (provider === "myob") {
       const { result } = await myobFetch(connection, credentials, `Sale/Invoice/Service/${encodeURIComponent(String(document.external_document_id))}`);
       invoice = result;
+    } else {
+      const { result } = await quickBooksFetch(connection, credentials, `invoice/${encodeURIComponent(String(document.external_document_id))}?minorversion=75`);
+      invoice = result.Invoice && typeof result.Invoice === "object" ? result.Invoice as Row : {};
     }
-    if (!(provider === "xero" ? invoice.InvoiceID : invoice.UID)) throw new Error("PROVIDER_REQUEST_FAILED");
-    const providerStatus = String(invoice.Status || "");
-    const amountCents = centsFromProvider(provider === "xero" ? invoice.Total : invoice.TotalAmount) || Number(document.amount_cents || 0);
-    const providerPaidCents = provider === "xero" ? centsFromProvider(invoice.AmountPaid) : Math.max(0, amountCents - centsFromProvider(invoice.BalanceDueAmount));
+    if (!(provider === "xero" ? invoice.InvoiceID : provider === "myob" ? invoice.UID : invoice.Id)) throw new Error("PROVIDER_REQUEST_FAILED");
+    const providerStatus = String(invoice.Status || (provider === "quickbooks" ? "DRAFT" : ""));
+    const amountCents = centsFromProvider(provider === "xero" ? invoice.Total : provider === "myob" ? invoice.TotalAmount : invoice.TotalAmt) || Number(document.amount_cents || 0);
+    const providerPaidCents = provider === "xero" ? centsFromProvider(invoice.AmountPaid) : provider === "myob" ? Math.max(0, amountCents - centsFromProvider(invoice.BalanceDueAmount)) : Math.max(0, amountCents - centsFromProvider(invoice.Balance));
     const effectivePaidCents = Math.max(Number(job.paid_value_cents || 0), providerPaidCents);
     const status = accountingStatus(provider, providerStatus, amountCents, providerPaidCents, String(document.due_at || job.payment_due_at || ""));
     const jobStatus = accountingStatus(provider, providerStatus, amountCents, effectivePaidCents, String(document.due_at || job.payment_due_at || ""));
@@ -442,16 +538,17 @@ export async function GET(request: Request) {
     const connected = await connections(identity.uid);
     const document = await documentRow(identity.uid, workOrderId);
     const providerValue = cleanAdminText(url.searchParams.get("provider"), 20).toLowerCase();
-    let accounts: MyobAccount[] = [];
+    let accounts: (MyobAccount | QuickBooksItem)[] = [];
     if (providerValue) {
-      if (providerValue !== "myob") return adminJson({ ok: false, error: "Only MYOB needs an income account choice." }, 400);
-      const connection = await connectionFor(identity.uid, "myob");
-      accounts = await listMyobAccounts(connection, await activeCredentials("myob", connection));
+      if (providerValue !== "myob" && providerValue !== "quickbooks") return adminJson({ ok: false, error: "Choose MYOB or QuickBooks to load its account choice." }, 400);
+      const connection = await connectionFor(identity.uid, providerValue);
+      const credentials = await activeCredentials(providerValue, connection);
+      accounts = providerValue === "myob" ? await listMyobAccounts(connection, credentials) : await listQuickBooksItems(connection, credentials);
     }
     return adminJson({
       ok: true,
-      providers: (["xero", "myob"] as AccountingProvider[]).map((provider) => ({
-        provider, label: provider === "xero" ? "Xero" : "MYOB", connected: connected[provider]?.status === "connected",
+      providers: (["xero", "myob", "quickbooks"] as AccountingProvider[]).map((provider) => ({
+        provider, label: provider === "xero" ? "Xero" : provider === "myob" ? "MYOB" : "QuickBooks", connected: connected[provider]?.status === "connected",
         needsReconnect: provider === "myob" && needsMyobReconsent(connected.myob || null),
       })),
       documents: document ? [documentJson(document)] : [],
@@ -473,7 +570,7 @@ export async function POST(request: Request) {
     let document: Row;
     if (action === "export") {
       const providerValue = cleanAdminText(body.provider, 20).toLowerCase();
-      if (!isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero or MYOB." }, 400);
+      if (!isAccountingProvider(providerValue)) return adminJson({ ok: false, error: "Choose Xero, MYOB or QuickBooks." }, 400);
       document = await exportInvoice(identity.uid, providerValue, job, cleanAdminText(body.accountReference, 180));
     } else if (action === "refresh") {
       document = await refreshInvoice(identity.uid, job);

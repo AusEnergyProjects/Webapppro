@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` release implements P6-3C optioned quote packages and exact customer selection evidence on top of the P6-3B reusable job-packet batch. GitHub and Sites release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements P6-3E accepted quote, deposit and accounting handoff on top of the published P6-3D secure quote-link release. Exact release identity is recorded in `RELEASE_TRUTH.md` after publication.
 
 ## Current delivery summary
 
@@ -64,46 +64,51 @@ P6-3D adds one secure no-account quote link per issued revision, immediate manua
 
 Migration `0067_secure_quote_sharing.sql` adds quote links, privacy-safe events, questions and consent-aware delivery records plus exact signer, link issue, AUD commercial reference and actor evidence. The provider-neutral acceptance record uses stable references and integer cents for future Xero, MYOB, QuickBooks, Stripe and Square adapters. QuickBooks OAuth connection compatibility is present; its invoice export remains gated until the next adapter milestone.
 
+P6-3E materialises every accepted quote as one immutable commercial handoff containing the selected scope, recorded terms, stable commercial reference and exact AUD subtotal, GST and total. Existing accepted quotes are materialised safely on first office access. The simple default is a 10 percent deposit, which can be changed to a percentage or fixed amount until a payment request exists.
+
+Stripe and Square create at most one provider-hosted deposit request for the handoff using a deterministic idempotency key. TLink never handles card data, browser return is not payment evidence and only the existing authenticated provider callbacks can mark the deposit paid. Xero, MYOB and QuickBooks reuse the same accepted total and scope. QuickBooks now lists the connected company products and services, creates an unsent invoice through Accounting API minor version 75 and verifies that the provider total still equals the accepted TLink cents. No adapter approves or emails an invoice automatically.
+
+Migration `0068_accepted_quote_handoff.sql` adds the immutable commercial handoff and binds deposit and accounting records to it. The office sees one progressive acceptance, deposit and accounting timeline with direct reconnect actions. Manual financial tracking remains available behind disclosure for work that does not use the accepted quote flow.
+
 ## Next milestone contract
 
-### P6-3E batch: accepted quote to deposit and accounting handoff
+### P6-3F batch: accepted scope to ready-to-run job
 
-Outcome: an accepted quote becomes one clear office handoff that can request a provider-hosted deposit and prepare an accounting draft without re-entering the customer, scope, reference or total.
+Outcome: one deliberate office action converts the immutable accepted scope into an executable job plan without re-entering tasks, materials, forms, crew needs or budget.
 
 ### Five linked foundation items
 
-1. Materialise one immutable accepted-scope handoff from the recorded quote choices, AUD integer-cent totals and stable commercial reference.
-2. Let the office set a simple percentage or fixed deposit requirement with an immediate plain-language amount preview and safe defaults.
-3. Create an idempotent provider-hosted deposit request through the connected Stripe or Square adapter, with no card data handled by TLink.
-4. Prepare one provider-neutral accounting draft and complete the missing QuickBooks adapter alongside the existing Xero and MYOB boundaries, without emailing or approving an invoice automatically.
-5. Show acceptance, deposit request, verified payment and accounting-draft state in one job timeline with one recovery action for a disconnected provider.
+1. Convert the accepted scope once into immutable job phases and customer-visible work descriptions.
+2. Reuse originating job-packet tasks, forms, durations, capabilities and crew suggestions when present, with a clear lightweight fallback when the quote was built manually.
+3. Materialise material and labour requirements from accepted quote lines without reserving stock or creating supplier orders automatically.
+4. Establish the accepted sell, cost and margin budget baseline, then show actual time and material costs against it without changing the accepted customer total.
+5. Present one readiness checklist and one `Ready to schedule` action covering scope, forms, people, materials and deposit state.
 
 ### In scope
 
-- Existing immutable acceptance evidence, provider-neutral commercial references, direct-customer ownership, integration credentials and verified Stripe or Square callback boundaries.
-- One deposit request and one accounting draft per accepted commercial reference, with explicit retry and reconciliation rather than duplicate creation.
-- Xero, MYOB and QuickBooks accounting adapters plus Stripe and Square payment adapters behind the same narrow internal contracts.
-- Progressive disclosure: the installer sees the next useful action, amount and provider status without accounting setup language in the ordinary job flow.
+- Existing immutable commercial handoff, accepted quote lines, packet revision references, price-book cost snapshots, tasks, forms, capabilities, team and deposit status.
+- One conversion receipt per accepted handoff so retries return the existing plan rather than duplicating phases or requirements.
+- Progressive disclosure: default phase and readiness choices first, with detailed work breakdown and budget available when needed.
+- Owner-scoped job records and the existing protected-customer boundaries.
 
 ### Explicitly out of scope
 
-- Automatic invoice approval or sending, card-data collection, accounting-ledger ownership, refunds, partial allocations or payout operations.
-- Purchasing, inventory reservation, scheduling, field work, asset creation or full accepted-quote job materialisation.
-- Provider-specific totals, references or duplicate calculations outside the authoritative accepted record.
-- Enabling a provider without real credentials, verified callbacks and a safe disconnected or failed state.
+- Automatic scheduling, dispatch assignment, purchase-order submission, stock reservation, supplier bills or field completion.
+- Variations, progress claims, payroll, subcontractor onboarding or customer asset creation.
+- Recalculating the accepted sell total, mutating the accepted scope or deriving provider-specific commercial truth.
+- Requiring a deposit when the business deliberately chooses to proceed without one.
 
 ### Acceptance criteria
 
-- An accepted quote exposes one next action and can create at most one live deposit request and one accounting draft per provider.
-- Stripe and Square requests stay provider hosted and only authenticated provider evidence can mark a deposit paid.
-- Xero, MYOB and QuickBooks receive the same stable reference, AUD integer-cent totals and direct-customer scope; none becomes TLink's source of truth.
-- A disconnected provider does not block the accepted quote or hide its evidence, and reconnect or retry is explicit.
-- The job timeline distinguishes requested, provider-confirmed, failed and reconciled financial states without exposing secrets or raw customer contact.
-- The primary office flow works at 390 px without document-level horizontal overflow.
+- Repeating conversion returns the same phases, requirements and readiness record without duplication.
+- Packet-backed quotes reuse the exact packet revision; manually built quotes receive a useful simple plan without technical setup.
+- Accepted materials and labour flow into requirements and budget once, while the accepted customer total remains immutable.
+- The office can see exactly what blocks `Ready to schedule` and resolve each blocker from that view.
+- The primary office flow works at 390 px without document-level horizontal overflow and keeps advanced breakdowns collapsed initially.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A provider requires browser-return success to be treated as payment truth.
-- An adapter would recalculate totals, mutate accepted scope or require provider IDs to become authoritative TLink IDs.
-- The slice expands into automatic invoice sending, refunds, purchasing, inventory, scheduling or full job materialisation.
+- Conversion requires mutating the accepted quote or replacing its stable commercial reference.
+- Packet revision data is insufficient to reconstruct quoted tasks or forms accurately.
+- The slice expands into automatic supplier ordering, stock allocation, scheduling, dispatch or field execution.

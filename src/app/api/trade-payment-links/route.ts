@@ -13,6 +13,7 @@ function paymentError(error: unknown) {
     return adminJson({ ok: false, error: "Payment requests are not available to this account." }, 403);
   }
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Payment links can only be created for customers who contacted your business directly. AEA protected customers remain inside the protected AEA process." }, 403);
+  if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before requesting its deposit." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this payment provider in Integrations first." }, 409);
   if (code === "PROVIDER_PAYMENT_FAILED") return adminJson({ ok: false, error: "The payment provider could not create the checkout link. Check the connection and try again." }, 502);
   return adminJson({ ok: false, error: "The payment request could not be created." }, 500);
@@ -53,10 +54,6 @@ export async function POST(request: Request) {
     const provider = cleanAdminText(body.provider, 20).toLowerCase();
     if (provider !== "stripe" && provider !== "square") return adminJson({ ok: false, error: "Choose Stripe or Square." }, 400);
     const workOrderId = cleanAdminText(body.workOrderId, 180);
-    const amountCents = Number(body.amountCents);
-    if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > 100_000_000_00) {
-      return adminJson({ ok: false, error: "Enter a payment amount of at least $1.00." }, 400);
-    }
     const db = getD1();
     const job = await db.prepare(`SELECT w.id, w.work_number, w.title, w.source_type, d.customer_source,
         c.email, c.first_name, c.last_name, c.business_name
@@ -66,11 +63,23 @@ export async function POST(request: Request) {
       WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!job || job.source_type !== "internal" || job.customer_source !== "trade_owned") throw new Error("DIRECT_CUSTOMER_REQUIRED");
+    const handoff = await db.prepare(`SELECT * FROM trade_crm_commercial_handovers
+      WHERE firebase_uid = ? AND work_order_id = ? AND status IN ('accepted', 'deposit_requested', 'deposit_paid')
+      ORDER BY accepted_at DESC LIMIT 1`).bind(identity.uid, workOrderId).first<Record<string, unknown>>();
+    if (!handoff) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
+    const amountCents = Number(handoff.deposit_amount_cents);
+    if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > Number(handoff.total_cents)) throw new Error("ACCEPTED_HANDOFF_REQUIRED");
+    const existing = await db.prepare(`SELECT * FROM trade_crm_payment_links WHERE firebase_uid = ? AND commercial_reference = ?
+      AND purpose = 'deposit' LIMIT 1`).bind(identity.uid, handoff.commercial_reference).first<Record<string, unknown>>();
+    if (existing) return adminJson({ ok: true, duplicate: true, paymentLink: {
+      id: String(existing.id), workOrderId, commercialReference: String(existing.commercial_reference), purpose: "deposit", provider: String(existing.provider), externalId: String(existing.external_id), amountCents: Number(existing.amount_cents),
+      checkoutUrl: String(existing.checkout_url), status: String(existing.status), createdAt: String(existing.created_at),
+    } });
     const connection = await db.prepare(`SELECT * FROM trade_crm_integrations
       WHERE firebase_uid = ? AND provider = ? AND status = 'connected'`).bind(identity.uid, provider).first<Record<string, unknown>>();
     if (!connection) throw new Error("INTEGRATION_REQUIRED");
     const id = crypto.randomUUID();
-    const idempotencyKey = `aea-payment-${id}`;
+    const idempotencyKey = `deposit-${String(handoff.id)}`;
     let externalId = "";
     let providerOrderId = "";
     let checkoutUrl = "";
@@ -81,14 +90,16 @@ export async function POST(request: Request) {
       const params = new URLSearchParams({
         mode: "payment",
         "line_items[0][price_data][currency]": "aud",
-        "line_items[0][price_data][product_data][name]": `${String(job.work_number)} | ${String(job.title)}`.slice(0, 180),
+        "line_items[0][price_data][product_data][name]": `Deposit | ${String(handoff.commercial_reference)}`.slice(0, 180),
         "line_items[0][price_data][unit_amount]": String(amountCents),
         "line_items[0][quantity]": "1",
         client_reference_id: String(job.id),
         "metadata[aea_payment_link_id]": id,
         "metadata[aea_work_order_id]": String(job.id),
+        "metadata[aea_commercial_reference]": String(handoff.commercial_reference),
         "payment_intent_data[metadata][aea_payment_link_id]": id,
         "payment_intent_data[metadata][aea_work_order_id]": String(job.id),
+        "payment_intent_data[metadata][aea_commercial_reference]": String(handoff.commercial_reference),
         success_url: `${origin}/direct-trade/dashboard?payment_status=returned#business-hub`,
         cancel_url: `${origin}/direct-trade/dashboard?payment_status=cancelled#business-hub`,
       });
@@ -119,10 +130,10 @@ export async function POST(request: Request) {
           idempotency_key: idempotencyKey,
           order: {
             location_id: credentials.location_id,
-            reference_id: id.slice(0, 40),
-            metadata: { aea_payment_link_id: id, aea_work_order_id: String(job.id).slice(0, 255) },
+            reference_id: String(handoff.commercial_reference).slice(0, 40),
+            metadata: { aea_payment_link_id: id, aea_work_order_id: String(job.id).slice(0, 255), aea_commercial_reference: String(handoff.commercial_reference).slice(0, 255) },
             line_items: [{
-              name: `${String(job.work_number)} | ${String(job.title)}`.slice(0, 180),
+              name: `Deposit | ${String(handoff.commercial_reference)}`.slice(0, 180),
               quantity: "1",
               base_price_money: { amount: amountCents, currency: "AUD" },
             }],
@@ -135,11 +146,19 @@ export async function POST(request: Request) {
       externalId = String(result.payment_link.id); providerOrderId = String(result.payment_link.order_id); checkoutUrl = String(result.payment_link.url);
     }
     const now = new Date().toISOString();
-    await db.prepare(`INSERT INTO trade_crm_payment_links
-      (id, work_order_id, firebase_uid, provider, external_id, provider_order_id, amount_cents,
-       checkout_url, status, idempotency_key, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
-      .bind(id, workOrderId, identity.uid, provider, externalId, providerOrderId, amountCents, checkoutUrl, idempotencyKey, now, now).run();
-    return adminJson({ ok: true, paymentLink: { id, workOrderId, provider, externalId, amountCents, checkoutUrl, status: "open", createdAt: now } }, 201);
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO trade_crm_payment_links
+        (id, work_order_id, firebase_uid, commercial_handoff_id, commercial_reference, purpose, provider, external_id,
+         provider_order_id, amount_cents, checkout_url, status, idempotency_key, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'deposit', ?, ?, ?, ?, ?, 'open', ?, ?, ?)`)
+        .bind(id, workOrderId, identity.uid, handoff.id, handoff.commercial_reference, provider, externalId, providerOrderId,
+          amountCents, checkoutUrl, idempotencyKey, now, now),
+      db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_requested', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'accepted'`).bind(now, handoff.id, identity.uid),
+      db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+        VALUES (?, ?, ?, 'deposit_requested', 'Provider-hosted deposit request created from the accepted quote.', ?)`)
+        .bind(crypto.randomUUID(), workOrderId, identity.uid, now),
+    ]);
+    return adminJson({ ok: true, paymentLink: { id, workOrderId, commercialReference: String(handoff.commercial_reference), purpose: "deposit", provider, externalId, amountCents, checkoutUrl, status: "open", createdAt: now } }, 201);
   } catch (error) { return paymentError(error); }
 }

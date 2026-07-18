@@ -1,7 +1,7 @@
-export type AccountingProvider = "xero" | "myob";
+export type AccountingProvider = "xero" | "myob" | "quickbooks";
 
 export function isAccountingProvider(value: string): value is AccountingProvider {
-  return value === "xero" || value === "myob";
+  return value === "xero" || value === "myob" || value === "quickbooks";
 }
 export function accountingReference(workNumber: string, maximumLength: number) {
   const cleaned = `AEA-${workNumber}`.toUpperCase().replace(/[^A-Z0-9-]/g, "-").replace(/-+/g, "-");
@@ -36,6 +36,13 @@ export function accountingStatus(
     if (status === "AUTHORISED") return "issued";
     return "draft";
   }
+  if (provider === "quickbooks") {
+    if (status === "VOID" || status === "DELETED") return "void";
+    if (status === "PAID" || (amountCents > 0 && paidAmountCents >= amountCents)) return "paid";
+    if (paidAmountCents > 0) return "part_paid";
+    if (dueAt && dueAt < today) return "overdue";
+    return "draft";
+  }
   if (status === "CREDIT") return "void";
   if (status === "CLOSED" || (amountCents > 0 && paidAmountCents >= amountCents)) return "paid";
   if (paidAmountCents > 0) return "part_paid";
@@ -50,5 +57,6 @@ export function accountingProviderUrl(provider: AccountingProvider, externalDocu
       ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${encodeURIComponent(externalDocumentId)}`
       : "https://go.xero.com/AccountsReceivable/Search.aspx";
   }
+  if (provider === "quickbooks") return "https://qbo.intuit.com/app/invoices";
   return "https://app.myob.com/";
 }

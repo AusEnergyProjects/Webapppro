@@ -59,10 +59,11 @@ The MYOB income account is selected for each first export. This avoids guessing 
 
 2. Store the client ID as `QUICKBOOKS_CLIENT_ID` and client secret as `QUICKBOOKS_CLIENT_SECRET`.
 3. Confirm the app requests `com.intuit.quickbooks.accounting` and returns a company `realmId` to the callback.
-4. Connect a test company from an installer account and confirm the encrypted connection is isolated to that trade owner.
-5. Do not enable invoice export until the QuickBooks adapter maps the same provider-neutral AUD reference and integer-cent totals already used by Xero and MYOB.
+4. From an accepted direct-customer quote, choose the QuickBooks product or service that should receive the sale. TLink creates one unsent invoice using the immutable commercial reference, accepted scope and exact AUD total, then verifies the returned total before storing the provider link.
+5. Confirm the invoice is reviewed in QuickBooks before any manual approval or customer delivery. TLink does not send it automatically.
+6. Connect a test company from an installer account and confirm the encrypted connection and selected product or service remain isolated to that trade owner.
 
-QuickBooks connection compatibility is available in the integration centre. Invoice export remains deliberately gated until its adapter and reconciliation tests are complete.
+QuickBooks invoice export is available only after the production OAuth application is configured and the installer connects a company. A disconnected provider leaves the accepted TLink handoff intact.
 
 ## Square
 
