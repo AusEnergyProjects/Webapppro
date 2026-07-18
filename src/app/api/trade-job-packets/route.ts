@@ -13,11 +13,11 @@ function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
-  if (code === "JOB_PACKET_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage job packets." }, 403);
-  if (code === "JOB_PACKET_NOT_FOUND") return adminJson({ ok: false, error: "Job packet not found." }, 404);
+  if (code === "JOB_PACKET_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage common jobs." }, 403);
+  if (code === "JOB_PACKET_NOT_FOUND") return adminJson({ ok: false, error: "Common job not found." }, 404);
   if (code === "JOB_PACKET_LIMIT") return adminJson({ ok: false, error: "This workspace has reached its 200 job-packet limit." }, 409);
-  if (code === "JOB_PACKET_NAME_EXISTS") return adminJson({ ok: false, error: "A job packet with this name already exists." }, 409);
-  if (["INVALID_JOB_PACKET", "INVALID_JOB_PACKET_LINES", "INVALID_JOB_PACKET_FORMS", "INVALID_JOB_PACKET_CREW", "INVALID_QUANTITY"].includes(code)) return adminJson({ ok: false, error: "Check the packet name, service, items, quantities, forms and crew size." }, 400);
+  if (code === "JOB_PACKET_NAME_EXISTS") return adminJson({ ok: false, error: "A common job with this name already exists." }, 409);
+  if (["INVALID_JOB_PACKET", "INVALID_JOB_PACKET_LINES", "INVALID_JOB_PACKET_FORMS", "INVALID_JOB_PACKET_CREW", "INVALID_QUANTITY"].includes(code)) return adminJson({ ok: false, error: "Check the common job name, service, items, quantities, forms and crew size." }, 400);
   return adminJson({ ok: false, error: "The job-packet request could not be completed." }, 500);
 }
 
@@ -117,7 +117,7 @@ export async function PATCH(request: Request) {
         WHERE id = ? AND firebase_uid = ? AND record_status != 'archived'`).bind(access.actorUid, now, id, access.ownerUid).run();
       return adminJson({ ok: true });
     }
-    if (action !== "update" || existing.record_status === "archived") return adminJson({ ok: false, error: "Archived job packets are read only." }, 409);
+    if (action !== "update" || existing.record_status === "archived") return adminJson({ ok: false, error: "Archived common jobs are read only." }, 409);
     const input = await prepared(access.ownerUid, body); const revision = Number(existing.revision) + 1;
     const statements = [db.prepare(`UPDATE trade_job_packets SET name = ?, service_category = ?, job_template_id = ?, suggested_crew_size = ?,
       record_status = ?, revision = ?, updated_by_uid = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND record_status != 'archived'`)

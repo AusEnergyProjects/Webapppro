@@ -71,13 +71,16 @@ test("direct customers have full addresses while job IDs are chronological and r
 test("verified installers receive the complete progressive CRM", () => {
   assert.match(hub, /props\.partnerType === "installer" && props\.fullAccess/);
   assert.match(hub, /BusinessHubFoundation/);
-  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Money", "Notes", "Handover"]) {
+  for (const label of ["My day", "Jobs", "Schedule", "Customers", "Reports", "Field work", "Quote", "Invoice", "Notes", "Handover"]) {
     assert.match(crm, new RegExp(label));
   }
   assert.match(crm, /NewJobForm/);
   assert.match(crm, /CustomerForm/);
   assert.match(crm, /TradeHandoverCentre/);
   assert.match(crm, /outstandingCents/);
+  assert.match(crm, /min=\{minimumStart\}/);
+  assert.match(route, /assertFutureAppointment/);
+  assert.match(route, /PAST_APPOINTMENT/);
 });
 
 test("large installer job and customer directories use server paging, sorting and lazy detail", () => {

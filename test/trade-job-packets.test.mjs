@@ -92,12 +92,13 @@ test("ready packets apply once and preserve immutable quote snapshots", () => {
 });
 
 test("the packet workspace keeps the installer path short and details optional", () => {
-  for (const copy of ["Job packets", "Start in under a minute", "Add a price-book item first", "New job packet",
-    "The essential path is name, service and saved items", "Tasks, forms and crew, optional", "Save ready packet"]) {
+  for (const copy of ["Common jobs", "Start in under a minute", "Add a price-book item first", "New common job",
+    "The essential path is name, service and saved items", "Tasks, forms and crew details remain optional", "Save common job"]) {
     assert.match(`${workspace}\n${priceBookWorkspace}`, new RegExp(copy));
   }
   assert.match(priceBookWorkspace, /Price-book items/);
-  assert.match(quoteUi, /Start with a job packet/);
+  assert.match(quoteUi, /Start from a common job/);
+  assert.doesNotMatch(`${workspace}\n${priceBookWorkspace}\n${quoteUi}`, />Job packets<|>New packet<|Start with a job packet/);
   assert.match(globalCss, /\.crm-job-tabs \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(globalCss, /\.crm-job-tabs > button \{ min-width: 0;[^}]*white-space: normal/);
   assert.doesNotMatch(`${workspace}\n${priceBookWorkspace}\n${quoteUi}\n${route}`, /[\u2013\u2014]/);

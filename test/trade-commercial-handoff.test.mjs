@@ -60,11 +60,13 @@ test("Xero, MYOB and QuickBooks reuse the accepted handoff", () => {
   assert.match(accountingRoute, /minorversion=75/);
   assert.match(accountingRoute, /SELECT \* FROM Item WHERE Active = true/);
   assert.match(accountingRoute, /totalCents !== amountCents/);
-  assert.match(accountingUi, /Create QuickBooks invoice/);
+  assert.match(accountingUi, /Create QuickBooks draft/);
 });
 
 test("the office flow is progressive and exposes one commercial timeline", () => {
   for (const copy of ["Accepted quote handoff", "10% is the simple default", "Request with Stripe", "Request with Square", "Commercial timeline", "No retyping or provider calculations"]) assert.match(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const copy of ["Invoice preview", "Draft, not sent", "Preview, then create the draft", "Accounting system", "Nothing is approved or emailed automatically"]) assert.match(accountingUi, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(accountingUi, /invoiceLines\.map/);
   assert.match(handoffRoute, /DEPOSIT_ALREADY_REQUESTED/);
   assert.match(handoffRoute, /timeline/);
   assert.doesNotMatch(`${handoffRoute}\n${paymentRoute}\n${accountingRoute}\n${ui}\n${accountingUi}`, /[\u2013\u2014]/);

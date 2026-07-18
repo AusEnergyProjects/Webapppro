@@ -7,6 +7,7 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
+import { assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
 
@@ -46,11 +47,11 @@ const CUSTOMER_SORTS: Record<string, CrmSort> = {
 };
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
 
-type CrmIdentity = { uid: string; businessName: string; teamAccess: boolean };
+type CrmIdentity = { uid: string; businessName: string; addressState: string; teamAccess: boolean };
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
   const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
+  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name, address_state
     FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
   if (!account) throw new Error("PROFILE_REQUIRED");
   if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
@@ -60,6 +61,7 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
   return {
     uid: identity.uid,
     businessName: String(account.business_name || "Trade business"),
+    addressState: String(account.address_state || "NSW"),
     teamAccess: entitlements.features.team_access,
   };
 }
@@ -79,6 +81,7 @@ function errorResponse(error: unknown) {
   if (code === "APPOINTMENT_NOT_FOUND") return adminJson({ ok: false, error: "Appointment not found." }, 404);
   if (code === "NOTE_NOT_FOUND") return adminJson({ ok: false, error: "Note or issue not found." }, 404);
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
+  if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
   if (code === "JOB_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its 500 active job fair-use limit." }, 409);
   if (code === "CUSTOMER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its customer-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
@@ -799,6 +802,7 @@ export async function POST(request: Request) {
       const startsAt = dateValue(body.startsAt);
       const endsAt = dateValue(body.endsAt);
       if (!startsAt) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
+      assertFutureAppointment(startsAt.slice(0, 16), australiaLocalDateTime(identity.addressState));
       if (endsAt && endsAt < startsAt) return adminJson({ ok: false, error: "The appointment finish cannot be before its start." }, 400);
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       const assignee = cleanAdminText(body.assigneeLabel, 80);

@@ -194,6 +194,8 @@ The product succeeds when a trade can run the complete workflow without duplicat
 
 `Enquiry -> customer and site -> quote -> acceptance and deposit -> job and phases -> schedule -> field work -> costs -> invoice and payment -> asset and service history -> rebooking`
 
+V1 purchasing decision, 19 July 2026: keep wholesaler fulfilment capability and existing purchasing records, but remove installer Orders from the primary workflow until active trades and participating wholesalers validate how orders will actually enter TLink. Do not build direct wholesaler ordering, stock or receipt administration ahead of that evidence.
+
 ### Competitive implementation benchmark
 
 Use the current official workflows as acceptance references, then remove their avoidable friction:
@@ -207,10 +209,10 @@ Use the current official workflows as acceptance references, then remove their a
 
 - The strongest installer CRM is routed to paid installers while free installers receive the older Business Hub.
 - The paid CRM does not expose the existing platform-opportunity-to-work-order conversion, leaving the marketplace lead flow disconnected from the strongest operational workspace.
-- Quotes and invoices are represented primarily by aggregate totals rather than authoritative line items, revisions, accepted scope, payment stages and cost allocations.
-- Scheduling is a chronological list rather than a drag-and-drop dispatch board.
+- Quote revisions and accepted scope are authoritative; the remaining financial gap is invoice corrections, credits and payment allocation after the current exact accepted-scope preview and provider draft handoff.
+- Scheduling now has a seven-day drag-and-drop dispatch board; the remaining gap is validating denser multi-technician days and mobile touch movement with active trade usage.
 - Field work supports checklists, time and evidence but not the complete arrive, materials, variation, sign-off, invoice and payment flow.
-- Purchasing is not one continuous quote-to-requirement-to-stock-or-PO-to-receipt-to-job-cost workflow.
+- Installer purchasing remains intentionally deferred until active trade and wholesaler workflows can be validated without forcing a false direct-order model.
 - Accounting export is aggregate and the integration centre is limited to Xero, MYOB, Stripe and Square.
 - Data import is narrow and AI-assisted trade operations are not implemented.
 

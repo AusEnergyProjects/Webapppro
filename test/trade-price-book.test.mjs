@@ -104,7 +104,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
   assert.match(quoteUi, /Quick add to included work/);
   assert.match(quoteUi, /snapshot current prices when the draft is saved/);
-  assert.match(quoteUi, /Packet item" : "Saved item"\}, current price applied on save/);
+  assert.match(quoteUi, /Common job item" : "Saved item"\}, current price applied on save/);
 });
 
 test("the trade workspace prioritises quick setup and progressive disclosure", () => {

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeAccountingPanel } from "./TradeAccountingPanel";
 import { TradePaymentPanel } from "./TradePaymentPanel";
-import { TradeJobReadinessPanel } from "./TradeJobReadinessPanel";
 
 type ScopeLine = { lineId: string; section: string; description: string; quantityMilli: number; totalCents: number };
 type Handoff = {
@@ -16,8 +15,8 @@ type TimelineEvent = { type: string; status: string; provider: string; summary: 
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 
-export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, hasDirectCustomer, onOpenIntegrations, onChanged }: {
-  user: User; workOrderId: string; isProtected: boolean; hasDirectCustomer: boolean; onOpenIntegrations: () => void; onChanged: () => Promise<void>;
+export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, hasDirectCustomer, customerName, jobTitle, onOpenIntegrations, onChanged }: {
+  user: User; workOrderId: string; isProtected: boolean; hasDirectCustomer: boolean; customerName: string; jobTitle: string; onOpenIntegrations: () => void; onChanged: () => Promise<void>;
 }) {
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -70,8 +69,10 @@ export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, ha
     <div className="crm-deposit-choice"><div><span>Deposit amount</span><h5>{money(handoff.depositAmountCents)}</h5><p>10% is the simple default. Change it before creating the payment request.</p></div><label><span>Method</span><select value={depositKind} disabled={depositLocked} onChange={(event) => setDepositKind(event.target.value as "percentage" | "fixed")}><option value="percentage">Percentage</option><option value="fixed">Fixed amount</option></select></label><label><span>{depositKind === "percentage" ? "Percent" : "Amount"}</span><input type="number" min={depositKind === "percentage" ? 1 : 1} max={depositKind === "percentage" ? 100 : handoff.totalCents / 100} step={depositKind === "percentage" ? 1 : 0.01} value={depositValue} disabled={depositLocked} onChange={(event) => setDepositValue(event.target.value)} /></label><button type="button" disabled={busy || depositLocked} onClick={() => void saveDeposit()}>{depositLocked ? "Locked after request" : busy ? "Saving..." : "Use this deposit"}</button></div>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
     <TradePaymentPanel user={user} workOrderId={workOrderId} isProtected={false} suggestedAmountCents={handoff.depositAmountCents} onOpenIntegrations={onOpenIntegrations} onChanged={refreshAll} />
-    <TradeAccountingPanel user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer invoiceAmountCents={handoff.totalCents} onOpenIntegrations={onOpenIntegrations} onChanged={refreshAll} />
-    <section className="crm-commercial-timeline"><header><div><span>Commercial timeline</span><h4>Acceptance, deposit and accounting</h4></div><button type="button" onClick={() => void refreshAll()}>Refresh</button></header><ol>{timeline.map((event, index) => <li key={`${event.type}:${event.provider}:${event.occurredAt}:${index}`}><i aria-hidden="true" /><div><strong>{event.summary}</strong><span>{event.provider === "tlink" ? "TLink" : event.provider === "quickbooks" ? "QuickBooks" : event.provider.toUpperCase()} | {event.status.replaceAll("_", " ")}</span></div><time>{new Date(event.occurredAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}</ol></section>
-    <TradeJobReadinessPanel user={user} workOrderId={workOrderId} onChanged={refreshAll} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} />
+    <TradeAccountingPanel user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer invoiceAmountCents={handoff.totalCents}
+      invoiceReference={handoff.commercialReference} invoiceLines={handoff.scope} invoiceSubtotalCents={handoff.subtotalCents}
+      invoiceTaxCents={handoff.taxCents} customerName={customerName} jobTitle={jobTitle} invoiceTerms={handoff.terms}
+      onOpenIntegrations={onOpenIntegrations} onChanged={refreshAll} />
+    <details className="crm-commercial-timeline"><summary>Activity and provider history ({timeline.length})</summary><header><div><span>Commercial timeline</span><h4>Acceptance, deposit and accounting</h4></div><button type="button" onClick={() => void refreshAll()}>Refresh</button></header><ol>{timeline.map((event, index) => <li key={`${event.type}:${event.provider}:${event.occurredAt}:${index}`}><i aria-hidden="true" /><div><strong>{event.summary}</strong><span>{event.provider === "tlink" ? "TLink" : event.provider === "quickbooks" ? "QuickBooks" : event.provider.toUpperCase()} | {event.status.replaceAll("_", " ")}</span></div><time>{new Date(event.occurredAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}</ol></details>
   </section>;
 }

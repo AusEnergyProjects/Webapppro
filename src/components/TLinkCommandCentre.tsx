@@ -116,12 +116,13 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
     };
   }, [category, open, query, user]);
 
-  const results = records;
+  const results = records.filter((record) => partnerType === "supplier" || record.kind !== "order");
   const availableKinds = useMemo(() => (["job", "customer", "product", "order", "team"] as SearchKind[])
     .filter((kind) => {
       if (partnerType === "supplier") return kind === "product" || (kind === "order" && businessOperations);
       if (kind === "product") return marketplace;
       if (kind === "team") return teamAccess;
+      if (kind === "order") return false;
       return businessOperations;
     }), [businessOperations, marketplace, partnerType, teamAccess]);
 
@@ -193,7 +194,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
               if (value.trim().length < 2) { setRecords([]); setLoading(false); setStatus(""); }
             }}
             onKeyDown={onInputKeyDown}
-            placeholder={partnerType === "supplier" ? "Search product, model, order or installer" : "Search job, customer, product, order or team member"}
+            placeholder={partnerType === "supplier" ? "Search product, model, order or installer" : "Search job, customer, product or team member"}
             aria-label="Search TLink business records"
             aria-controls="tlink-command-results"
           />
@@ -213,14 +214,14 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
                 <button type="button" onClick={() => navigateAction("new-customer", "work")}><b>+</b><span><strong>New customer</strong><small>Add a direct business contact</small></span></button>
               </>}
               {(partnerType === "supplier" || marketplace) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Search approved equipment"}</small></span></button>}
-              {businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
+              {partnerType === "supplier" && businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
               {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "work")}><b>T</b><span><strong>Team</strong><small>Open people and dispatch</small></span></button>}
             </div>
             <p>Only records this business can already access are included. AEA protected household contact details are never indexed.</p>
           </div>}
           {query.trim().length === 1 && <div className="tlink-command-empty"><strong>Keep typing</strong><span>Enter at least two characters to search.</span></div>}
           {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Checking the latest matching records...</span></div>}
-          {query.trim().length >= 2 && !loading && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>Try a job ID, customer name, model code, order number or team member.</span></div>}
+          {query.trim().length >= 2 && !loading && !results.length && <div className="tlink-command-empty"><strong>No matching records</strong><span>{partnerType === "supplier" ? "Try a model code, product name, order number or installer." : "Try a job ID, customer name, model code or team member."}</span></div>}
           {results.length > 0 && <div className="tlink-command-results" role="listbox" aria-label="TLink search results">
             {results.map((record, index) => <button
               key={`${record.kind}:${record.id}`}

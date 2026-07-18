@@ -113,7 +113,7 @@ test("retired Google property storage is removed from the active schema", () => 
 });
 
 test("installer CRM exposes progressive integrations, field and payment workflows", () => {
-  for (const label of ["integrations", "Field work", "Quote and invoice"]) assert.match(crm, new RegExp(label));
+  for (const label of ["integrations", "Field work", "Quote", "Invoice"]) assert.match(crm, new RegExp(label));
   assert.match(crm, /TradeIntegrationCentre/);
   assert.match(crm, /TradeFieldWorkPanel/);
   assert.match(crm, /TradeCommercialHandoffPanel/);

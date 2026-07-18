@@ -6,6 +6,7 @@ import type { User } from "firebase/auth";
 type AccountingProvider = "xero" | "myob" | "quickbooks";
 type Provider = { provider: AccountingProvider; label: string; connected: boolean; needsReconnect: boolean };
 type Account = { id: string; code: string; name: string; taxCode: string };
+type InvoiceLine = { lineId: string; section: string; description: string; quantityMilli: number; totalCents: number };
 type Document = {
   id: string; workOrderId: string; provider: AccountingProvider; externalNumber: string; externalUrl: string;
   exported: boolean; amountCents: number; paidAmountCents: number; status: string; providerStatus: string;
@@ -20,15 +21,19 @@ const statusLabels: Record<string, string> = {
 };
 
 export function TradeAccountingPanel({
-  user, workOrderId, isProtected, hasDirectCustomer, invoiceAmountCents, onOpenIntegrations, onChanged,
+  user, workOrderId, isProtected, hasDirectCustomer, invoiceAmountCents, invoiceReference, invoiceLines,
+  invoiceSubtotalCents, invoiceTaxCents, customerName, jobTitle, invoiceTerms, onOpenIntegrations, onChanged,
 }: {
   user: User; workOrderId: string; isProtected: boolean; hasDirectCustomer: boolean;
-  invoiceAmountCents: number; onOpenIntegrations?: () => void; onChanged: () => Promise<void>;
+  invoiceAmountCents: number; invoiceReference: string; invoiceLines: InvoiceLine[]; invoiceSubtotalCents: number;
+  invoiceTaxCents: number; customerName: string; jobTitle: string; invoiceTerms: string;
+  onOpenIntegrations?: () => void; onChanged: () => Promise<void>;
 }) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [preparedProvider, setPreparedProvider] = useState<"myob" | "quickbooks" | "">("");
+  const [selectedProvider, setSelectedProvider] = useState<AccountingProvider>("xero");
   const [accountReference, setAccountReference] = useState("");
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -41,6 +46,7 @@ export function TradeAccountingPanel({
     const result = await response.json().catch(() => ({})) as AccountingResult;
     if (!response.ok) throw new Error(result.error || "Accounting information could not be loaded.");
     setProviders(result.providers || []); setDocuments(result.documents || []);
+    if (result.documents?.[0]) setSelectedProvider(result.documents[0].provider);
     if (provider) {
       const nextAccounts = result.accounts || [];
       setPreparedProvider(provider);
@@ -106,17 +112,32 @@ export function TradeAccountingPanel({
   const myob = providers.find((provider) => provider.provider === "myob");
   const quickbooks = providers.find((provider) => provider.provider === "quickbooks");
   const retryProvider = document && !document.exported ? document.provider : null;
+  const provider = selectedProvider === "xero" ? xero : selectedProvider === "myob" ? myob : quickbooks;
+  const providerLabel = selectedProvider === "xero" ? "Xero" : selectedProvider === "myob" ? "MYOB" : "QuickBooks";
   return <section className="crm-accounting-panel">
-    <header><div><span>Accounting handoff</span><h4>Prepare the accepted quote</h4><p>Create one draft in Xero, MYOB or QuickBooks. Review it there before approval or sending.</p></div></header>
-    {document?.exported ? <article className={`crm-accounting-document accounting-${document.status}`}>
-      <div><span>{document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"} invoice</span><strong>{document.externalNumber || "Invoice created"}</strong><small>{statusLabels[document.status] || document.status} | {money(document.paidAmountCents)} paid of {money(document.amountCents)}{document.lastSyncedAt ? ` | Checked ${new Date(document.lastSyncedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}</small>{document.lastError && <em>{document.lastError === "PROVIDER_REQUEST_FAILED" ? "The last provider check failed. Reconnect the provider if this continues." : "The last sync needs attention."}</em>}</div>
-      <div><button type="button" disabled={Boolean(busy)} onClick={() => void refreshInvoice()}>{busy === "refresh" ? "Checking..." : "Refresh status"}</button>{document.externalUrl && <a href={document.externalUrl} target="_blank" rel="noreferrer">Open in {document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"}</a>}</div>
-    </article> : <div className="crm-accounting-create">
-      <div><strong>{money(invoiceAmountCents || 0)}</strong><span>Accepted quote total</span><small>The immutable accepted scope and total are reused. Only one accounting draft can be linked to this handoff.</small></div>
-      {(!retryProvider || retryProvider === "xero") && <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => xero?.connected ? void exportInvoice("xero") : onOpenIntegrations?.()}>{busy === "xero" ? "Exporting..." : !xero?.connected ? "Connect Xero" : retryProvider ? "Retry Xero export" : "Export draft to Xero"}</button>}
-      {(!retryProvider || retryProvider === "myob") && <div className="crm-myob-export">{myob?.needsReconnect ? <button type="button" onClick={onOpenIntegrations}>Reconnect MYOB</button> : preparedProvider === "myob" && accounts.length ? <><label><span>MYOB income account</span><select value={accountReference} onChange={(event) => setAccountReference(event.target.value)}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} | {account.name}{account.taxCode ? ` | ${account.taxCode}` : ""}</option>)}</select></label><button type="button" disabled={!accountReference || invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => void exportInvoice("myob")}>{busy === "myob" ? "Exporting..." : retryProvider ? "Retry MYOB export" : "Create MYOB draft"}</button></> : <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => myob?.connected ? void prepareProvider("myob") : onOpenIntegrations?.()}>{busy === "prepare-myob" ? "Loading accounts..." : myob?.connected ? "Choose MYOB account" : "Connect MYOB"}</button>}</div>}
-      {(!retryProvider || retryProvider === "quickbooks") && <div className="crm-myob-export">{preparedProvider === "quickbooks" && accounts.length ? <><label><span>QuickBooks product or service</span><select value={accountReference} onChange={(event) => setAccountReference(event.target.value)}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code ? `${account.code} | ` : ""}{account.name}</option>)}</select></label><button type="button" disabled={!accountReference || invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => void exportInvoice("quickbooks")}>{busy === "quickbooks" ? "Creating..." : retryProvider ? "Retry QuickBooks invoice" : "Create QuickBooks invoice"}</button></> : <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => quickbooks?.connected ? void prepareProvider("quickbooks") : onOpenIntegrations?.()}>{busy === "prepare-quickbooks" ? "Loading choices..." : quickbooks?.connected ? "Choose QuickBooks item" : "Connect QuickBooks"}</button>}</div>}
-    </div>}
+    <header><div><span>Invoice</span><h4>Preview, then create the draft</h4><p>Check the customer view first. TLink reuses the accepted scope and exact total, so there is nothing to retype.</p></div></header>
+    <div className="crm-invoice-workspace">
+      <article className="crm-invoice-preview" aria-label="Invoice preview">
+        <header><div><span>Invoice preview</span><strong>{invoiceReference}</strong></div><em>Draft, not sent</em></header>
+        <div className="crm-invoice-parties"><div><span>Invoice to</span><strong>{customerName || "Direct customer"}</strong></div><div><span>For</span><strong>{jobTitle || "Accepted work"}</strong></div></div>
+        <div className="crm-invoice-lines"><div className="head"><span>Description</span><span>Qty</span><span>Incl GST</span></div>{invoiceLines.map((line) => <div key={line.lineId}><span><strong>{line.description}</strong><small>{line.section}</small></span><span>{(line.quantityMilli / 1000).toLocaleString("en-AU")}</span><b>{money(line.totalCents)}</b></div>)}</div>
+        <dl><div><dt>Subtotal</dt><dd>{money(invoiceSubtotalCents)}</dd></div><div><dt>GST</dt><dd>{money(invoiceTaxCents)}</dd></div><div className="total"><dt>Total</dt><dd>{money(invoiceAmountCents)}</dd></div></dl>
+        {invoiceTerms && <details><summary>Invoice terms</summary><p>{invoiceTerms}</p></details>}
+      </article>
+      <aside className="crm-invoice-actions">
+        {document?.exported ? <article className={`crm-accounting-document accounting-${document.status}`}>
+          <div><span>{document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"} invoice</span><strong>{document.externalNumber || "Invoice created"}</strong><small>{statusLabels[document.status] || document.status} | {money(document.paidAmountCents)} paid of {money(document.amountCents)}{document.lastSyncedAt ? ` | Checked ${new Date(document.lastSyncedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}</small>{document.lastError && <em>{document.lastError === "PROVIDER_REQUEST_FAILED" ? "The last provider check failed. Reconnect the provider if this continues." : "The last sync needs attention."}</em>}</div>
+          <div><button type="button" disabled={Boolean(busy)} onClick={() => void refreshInvoice()}>{busy === "refresh" ? "Checking..." : "Refresh status"}</button>{document.externalUrl && <a href={document.externalUrl} target="_blank" rel="noreferrer">Open in {document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"}</a>}</div>
+        </article> : <div className="crm-accounting-create">
+          <div><span>Ready to create</span><strong>{money(invoiceAmountCents || 0)}</strong><small>Creates one draft only. Nothing is approved or emailed automatically.</small></div>
+          <label><span>Accounting system</span><select value={selectedProvider} disabled={Boolean(retryProvider)} onChange={(event) => { setSelectedProvider(event.target.value as AccountingProvider); setPreparedProvider(""); setAccounts([]); setAccountReference(""); }}><option value="xero">Xero</option><option value="myob">MYOB</option><option value="quickbooks">QuickBooks</option></select></label>
+          {selectedProvider === "xero" && <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => provider?.connected ? void exportInvoice("xero") : onOpenIntegrations?.()}>{busy === "xero" ? "Creating draft..." : !provider?.connected ? "Connect Xero" : retryProvider ? "Retry Xero draft" : "Create Xero draft"}</button>}
+          {selectedProvider === "myob" && <div className="crm-myob-export">{provider?.needsReconnect ? <button type="button" onClick={onOpenIntegrations}>Reconnect MYOB</button> : preparedProvider === "myob" && accounts.length ? <><label><span>Income account</span><select value={accountReference} onChange={(event) => setAccountReference(event.target.value)}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} | {account.name}{account.taxCode ? ` | ${account.taxCode}` : ""}</option>)}</select></label><button type="button" disabled={!accountReference || invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => void exportInvoice("myob")}>{busy === "myob" ? "Creating draft..." : retryProvider ? "Retry MYOB draft" : "Create MYOB draft"}</button></> : <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => provider?.connected ? void prepareProvider("myob") : onOpenIntegrations?.()}>{busy === "prepare-myob" ? "Loading accounts..." : provider?.connected ? "Choose income account" : "Connect MYOB"}</button>}</div>}
+          {selectedProvider === "quickbooks" && <div className="crm-myob-export">{preparedProvider === "quickbooks" && accounts.length ? <><label><span>Product or service</span><select value={accountReference} onChange={(event) => setAccountReference(event.target.value)}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code ? `${account.code} | ` : ""}{account.name}</option>)}</select></label><button type="button" disabled={!accountReference || invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => void exportInvoice("quickbooks")}>{busy === "quickbooks" ? "Creating draft..." : retryProvider ? "Retry QuickBooks draft" : "Create QuickBooks draft"}</button></> : <button type="button" disabled={invoiceAmountCents <= 0 || Boolean(busy)} onClick={() => provider?.connected ? void prepareProvider("quickbooks") : onOpenIntegrations?.()}>{busy === "prepare-quickbooks" ? "Loading choices..." : provider?.connected ? "Choose product or service" : "Connect QuickBooks"}</button>}</div>}
+          <small>Selected system: {providerLabel}. Review the draft there before sending it.</small>
+        </div>}
+      </aside>
+    </div>
     {status && <p className="crm-inline-status" role="status">{status}</p>}
   </section>;
 }

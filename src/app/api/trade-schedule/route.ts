@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { addCalendarDays, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
+import { addCalendarDays, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 
@@ -24,7 +24,7 @@ function errorResponse(error: unknown) {
   }
   if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
   if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
-  if (code === "WORKING_HOURS_CONFLICT") return adminJson({ ok: false, error: "The selected time is outside that team member's recorded working hours." }, 409);
+  if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
   if (["INVALID_WEEK", "INVALID_TIME", "INVALID_HOURS"].includes(code)) return adminJson({ ok: false, error: "Choose a valid week, time range and working-hours window." }, 400);
   if (code === "INVALID_DECISION") return adminJson({ ok: false, error: "Choose accept, reject or propose an alternative." }, 400);
   return adminJson({ ok: false, error: "The team schedule request could not be completed." }, 500);
@@ -39,10 +39,7 @@ async function activeMember(ownerUid: string, memberId: string) {
 
 async function assertScheduleAvailable(ownerUid: string, memberId: string, startsAt: string, endsAt: string, excludeAppointmentId = "") {
   const db = getD1();
-  const { weekday } = localDayAndMinute(startsAt);
-  const [hours, overlap, unavailable] = await Promise.all([
-    db.prepare(`SELECT start_minute, end_minute, is_available FROM trade_team_working_hours
-      WHERE owner_uid = ? AND team_member_id = ? AND weekday = ?`).bind(ownerUid, memberId, weekday).first<Record<string, unknown>>(),
+  const [overlap, unavailable] = await Promise.all([
     db.prepare(`SELECT id FROM trade_crm_appointments WHERE firebase_uid = ? AND assignee_member_id = ?
       AND status = 'scheduled' AND id <> ? AND starts_at < ? AND COALESCE(NULLIF(ends_at, ''), starts_at) > ? LIMIT 1`)
       .bind(ownerUid, memberId, excludeAppointmentId, endsAt, startsAt).first(),
@@ -51,8 +48,6 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
   ]);
   if (overlap) throw new Error("APPOINTMENT_CONFLICT");
   if (unavailable) throw new Error("UNAVAILABLE_CONFLICT");
-  const window = hours ? { isAvailable: Boolean(hours.is_available), startMinute: Number(hours.start_minute), endMinute: Number(hours.end_minute) } : defaultWorkingWindow(weekday);
-  if (!insideWorkingWindow(startsAt, endsAt, window)) throw new Error("WORKING_HOURS_CONFLICT");
 }
 
 async function schedulePayload(ownerUid: string, weekStart: string) {
@@ -96,18 +91,23 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
       WHERE r.firebase_uid = ? AND r.status IN ('pending', 'alternative_proposed')
       ORDER BY r.requested_at LIMIT 100`).bind(ownerUid).all<Record<string, unknown>>(),
   ]);
+  const workingHours = hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) }));
   const appointments = appointmentRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
     const conflicts = appointmentRows.results.some((other) => other.id !== row.id && other.assignee_member_id && other.assignee_member_id === row.assignee_member_id
       && rangesOverlap(String(row.starts_at), String(row.ends_at || row.starts_at), String(other.starts_at), String(other.ends_at || other.starts_at)));
+    const weekday = localDayAndMinute(String(row.starts_at)).weekday;
+    const savedHours = workingHours.find((item) => item.teamMemberId === row.assignee_member_id && item.weekday === weekday);
+    const workingWindow = savedHours || defaultWorkingWindow(weekday);
     return { id: row.id, workOrderId: row.work_order_id, workNumber: row.work_number, title: row.title, appointmentType: row.appointment_type,
       startsAt: row.starts_at, endsAt: row.ends_at, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
       status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
-      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), protectedJob, conflicts };
+      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), protectedJob, conflicts,
+      outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
   return { weekStart, weekEnd, members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.member_uid === ownerUid })),
-    workingHours: hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) })),
+    workingHours,
     unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
     appointments, rescheduleRequests: rescheduleRows.results.map((row) => ({ id: row.id, appointmentId: row.appointment_id,
       workOrderId: row.work_order_id, workNumber: row.work_number, title: row.title, status: row.status,
@@ -139,6 +139,8 @@ export async function PATCH(request: Request) {
     const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
     const weekStart = normaliseWeekStart(body.weekStart);
+    const account = await db.prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?").bind(access.ownerUid).first<Record<string, unknown>>();
+    const localNow = australiaLocalDateTime(String(account?.address_state || "NSW"));
     let notification: Parameters<typeof queueAppointmentNotifications>[0] | null = null;
     if (action === "save_working_hours") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
@@ -193,6 +195,7 @@ export async function PATCH(request: Request) {
         const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
         const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt);
         if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+        assertFutureAppointment(startsAt, localNow);
         await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt, String(current.appointment_id));
         if (decision === "alternative_proposed") {
           await db.batch([
@@ -271,6 +274,7 @@ export async function PATCH(request: Request) {
     } else if (action === "schedule_appointment") {
       const appointmentId = cleanAdminText(body.appointmentId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+      assertFutureAppointment(startsAt, localNow);
       const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id, w.revision job_revision
         FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
         WHERE a.id = ? AND a.firebase_uid = ? AND a.status = 'scheduled'`).bind(appointmentId, access.ownerUid).first<Record<string, unknown>>();
@@ -295,6 +299,7 @@ export async function PATCH(request: Request) {
     } else if (action === "schedule_job") {
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+      assertFutureAppointment(startsAt, localNow);
       const job = await db.prepare(`SELECT id, work_number, title, revision, assignee_member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
         AND partner_type = 'installer' AND record_status = 'active'`).bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
       if (!job) throw new Error("JOB_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");

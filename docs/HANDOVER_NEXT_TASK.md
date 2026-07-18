@@ -80,43 +80,44 @@ P6-3G snapshots exact packet tasks, form keys and versions, duration, required c
 
 ## Next milestone contract
 
-### P6-3H batch: material demand, purchasing and receipt
+### P6-3H batch: simpler invoicing and dependable dispatch
 
-Outcome: accepted material requirements become one low-effort purchasing queue, and trades can source, order and receive them without retyping job scope or losing supplier and job-cost provenance.
+Outcome: the signed-in installer workflow removes premature purchasing complexity, explains reusable work in trade language, previews the exact accepted invoice before export and makes weekly scheduling fast, visible and mistake resistant.
 
 ### Five linked foundation items
 
-1. Materialise accepted job-plan materials into one owner-scoped purchasing queue with job, phase, required quantity and required-by context already filled.
-2. Let the office choose an approved catalogue product, wholesaler and dispatch or warehouse location, with delivery or pickup as a simple explicit choice.
-3. Create a reviewable draft purchase order with immutable job and supplier references, integer-cent subtotal, GST, freight and total, without sending it automatically.
-4. Record full or partial receipt, backorder and bounded return outcomes with one-action normal defaults and exception details behind disclosure.
-5. Feed committed and received material cost into the existing job variance while preserving provider-neutral supplier-bill references for Xero, MYOB and QuickBooks.
+1. Remove installer purchasing from the primary navigation and command centre while preserving its existing records and supplier-side capability for later validation with active trades and wholesalers.
+2. Rename the installer-facing job-packet workflow to Common jobs and explain it as saved common work without changing its authoritative storage or immutable quote snapshots.
+3. Show the accepted scope, line amounts, subtotal, GST and total as a live invoice preview beside one progressive accounting action area.
+4. Reject appointment starts in the past on both the client and server, while treating work outside recorded hours as an advisory instead of silently preventing a deliberate dispatch choice.
+5. Make scheduled cards draggable between the visible seven days, preserve duration and time where safe, and immediately regroup every successfully edited or dropped appointment under its saved day.
 
 ### In scope
 
-- Existing accepted job-plan material requirements, approved catalogue and wholesaler profiles.
-- Owner-scoped purchase-order drafts, lines, delivery or pickup choice and receipt state.
-- Partial receipt, backorder and return quantities with integer-cent committed and received cost.
-- Existing provider-neutral accounting adapter boundaries and job variance source of truth.
+- Installer navigation, command centre, price-book template copy, accepted commercial handoff and seven-day schedule.
+- Existing immutable accepted scope and integer-cent totals.
+- Existing provider-neutral Xero, MYOB and QuickBooks draft-invoice adapters.
+- Owner-scoped appointment revisions, conflict checks, working-hours records and immediate response payloads.
 
 ### Explicitly out of scope
 
-- Automatic supplier sending, autonomous purchasing or inventory forecasting.
-- Supplier bill approval, payment, bank reconciliation or making an accounting provider authoritative.
-- Multi-warehouse stock ledgers, serialised inventory, payroll, subcontractors, variations or progress claims.
-- Mutating the accepted customer scope, sell total or completed execution actuals.
+- New purchasing, stock, purchase-order, receipt or wholesaler-order functionality for installers.
+- Removing supplier-side fulfilment tools or deleting preserved installer purchasing data.
+- Invoice editing outside the immutable accepted scope or sending an invoice automatically.
+- Calendar month views, route optimisation, payroll, subcontractors, variations or progress claims.
 
 ### Acceptance criteria
 
-- Every accepted material requirement appears once without office re-entry and remains traceable to its job phase.
-- The normal path from need to draft order to full receipt uses useful defaults and no repeated product, supplier, location or quantity entry.
-- Partial receipts and backorders cannot over-receive or silently change ordered quantities, costs or the accepted customer scope.
-- Committed and received costs update job variance from TLink records while external accounting remains an adapter destination.
-- The primary office flow works at 390 px without document-level horizontal overflow and keeps supplier and receipt exceptions collapsed initially.
+- Installer primary navigation and search no longer suggest that direct wholesaler ordering is ready for v1.
+- Reusable saved work is labelled Common jobs everywhere in the installer interface without changing stored packet identifiers.
+- The invoice preview visibly reconciles to the accepted integer-cent subtotal, GST and total before any accounting export.
+- Past starts are rejected server side and unavailable in delegated date inputs; saved edits and drops appear under the returned appointment date immediately.
+- Dragging to a day preserves duration, uses a safe future time for today and leaves keyboard and explicit date editing available.
+- The primary office flow works at 390 px without document-level horizontal overflow and keeps provider setup, timeline and manual finance details progressively disclosed.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A required product cannot be matched without changing accepted customer scope.
-- Supplier ordering requires transmitting a draft or payment without a separate deliberate user action.
-- The slice expands into a full stock ledger, supplier-bill approval, payroll, variations or progress claims.
+- The accepted quote cannot produce an exact integer-cent invoice preview without changing its immutable scope.
+- A schedule move would bypass owner scope, revision, overlap or recorded time-off checks.
+- The slice expands into new wholesaler ordering, stock control, invoice calculation or a replacement calendar framework.

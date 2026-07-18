@@ -116,7 +116,7 @@ export function TradePriceBookWorkspace({ user }: { user: User }) {
   return <section className={styles.workspace} aria-labelledby={libraryView === "items" ? "price-book-title" : "job-packets-title"}>
     <nav className={styles.librarySwitch} aria-label="Pricing library">
       <button type="button" className={libraryView === "items" ? styles.libraryActive : ""} onClick={() => setLibraryView("items")}>Price-book items</button>
-      <button type="button" className={libraryView === "packets" ? styles.libraryActive : ""} onClick={() => setLibraryView("packets")}>Job packets</button>
+      <button type="button" className={libraryView === "packets" ? styles.libraryActive : ""} onClick={() => setLibraryView("packets")}>Common jobs</button>
     </nav>
     {libraryView === "packets" ? <TradeJobPacketWorkspace user={user} onOpenItems={() => setLibraryView("items")} /> : <>
     <header className={styles.hero}><div><span>Commercial source of truth</span><h3 id="price-book-title">Price book</h3><p>Save common work once, then add it to a quote in one choice with the right price and GST.</p></div><button type="button" onClick={() => startNew()}>New item</button></header>

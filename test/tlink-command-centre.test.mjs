@@ -41,6 +41,9 @@ test("command results open the matching focused workspace", () => {
   assert.match(products, /navigationTarget\?\.kind !== "product"/);
   assert.match(supplierProducts, /setCatalogueView\("catalogue"\)/);
   assert.match(purchasing, /setSelectedId\(navigationTarget\.id\)/);
+  assert.match(command, /record\.kind !== "order"/);
+  assert.match(command, /partnerType === "supplier" && businessOperations/);
+  assert.doesNotMatch(dashboard, /TradePurchasingWorkspace user=\{user\} partnerType="installer"/);
 });
 
 test("command search supports keyboard and responsive field use", () => {

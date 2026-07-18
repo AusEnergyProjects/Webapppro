@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { addCalendarDays, defaultWorkingWindow, insideWorkingWindow, normaliseWeekStart, rangesOverlap } from "../src/lib/trade-schedule.ts";
+import { addCalendarDays, assertFutureAppointment, defaultWorkingWindow, insideWorkingWindow, moveAppointmentToDate, normaliseWeekStart, rangesOverlap } from "../src/lib/trade-schedule.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -31,6 +31,10 @@ test("week and capacity calculations are deterministic", () => {
   assert.equal(rangesOverlap("2026-07-13T09:00", "2026-07-13T10:00", "2026-07-13T10:00", "2026-07-13T11:00"), false);
   assert.equal(insideWorkingWindow("2026-07-13T09:00", "2026-07-13T17:00", defaultWorkingWindow(1)), true);
   assert.equal(insideWorkingWindow("2026-07-13T08:59", "2026-07-13T10:00", defaultWorkingWindow(1)), false);
+  assert.equal(assertFutureAppointment("2026-07-19T09:01", "2026-07-19T09:00"), "2026-07-19T09:01");
+  assert.throws(() => assertFutureAppointment("2026-07-19T09:00", "2026-07-19T09:00"), /PAST_APPOINTMENT/);
+  assert.deepEqual(moveAppointmentToDate("2026-07-13T09:00", "2026-07-13T10:30", "2026-07-19", "2026-07-18T12:00"), { startsAt: "2026-07-19T09:00", endsAt: "2026-07-19T10:30" });
+  assert.deepEqual(moveAppointmentToDate("2026-07-13T09:00", "2026-07-13T10:00", "2026-07-19", "2026-07-19T09:07"), { startsAt: "2026-07-19T09:15", endsAt: "2026-07-19T10:15" });
 });
 
 test("the additive migration extends existing team and appointment sources", () => {
@@ -64,7 +68,8 @@ test("schedule SQL compiles against the production team and CRM migrations", () 
 
 test("owners and dispatch roles receive server-enforced conflict and revision checks", () => {
   for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canDispatch", "activeMember", "owner_uid = ?", "firebase_uid = ?"]) assert.match(route, new RegExp(boundary));
-  for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "WORKING_HOURS_CONFLICT"]) assert.match(route, new RegExp(conflict));
+  for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(route, new RegExp(conflict));
+  assert.doesNotMatch(route, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
   assert.match(route, /status = 'scheduled' AND id <> \?/);
   assert.match(route, /ON CONFLICT\(owner_uid, team_member_id, weekday\) DO UPDATE/);
   assert.match(route, /schedule_updated/); assert.match(route, /schedule_created/); assert.match(route, /jobSyncChangeStatements/);
@@ -77,7 +82,9 @@ test("schedule payloads preserve customer privacy boundaries", () => {
 });
 
 test("the installer dashboard exposes the complete low-friction week scheduling workflow", () => {
-  for (const copy of ["Plan the week", "Add to schedule", "Conflicts only", "Set working hours and time off", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+  for (const copy of ["Plan the week", "Add to schedule", "Conflicts only", "Set working hours and time off", "Drag an appointment to another day", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+  assert.match(ui, /draggable=\{!busy\}/);
+  assert.match(ui, /min=\{minimumStart\}/);
   assert.match(route, /member_uid === ownerUid/);
   assert.match(dashboard, /workspace === "schedule"/); assert.match(dashboard, /<TradeScheduleWorkspace/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);

@@ -1,5 +1,9 @@
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const STATE_TIME_ZONES: Record<string, string> = {
+  ACT: "Australia/Sydney", NSW: "Australia/Sydney", NT: "Australia/Darwin", QLD: "Australia/Brisbane",
+  SA: "Australia/Adelaide", TAS: "Australia/Hobart", VIC: "Australia/Melbourne", WA: "Australia/Perth",
+};
 
 export type WorkingWindow = { isAvailable: boolean; startMinute: number; endMinute: number };
 
@@ -23,6 +27,41 @@ export function normaliseLocalDateTime(value: unknown) {
   const parsed = new Date(`${dateTime}:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 16) !== dateTime) throw new Error("INVALID_TIME");
   return dateTime;
+}
+
+export function australiaLocalDateTime(addressState = "NSW", value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: STATE_TIME_ZONES[addressState] || STATE_TIME_ZONES.NSW,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+export function browserLocalDateTime(value = new Date()) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}T${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+}
+
+export function assertFutureAppointment(startsAt: string, localNow: string) {
+  const start = normaliseLocalDateTime(startsAt);
+  const now = normaliseLocalDateTime(localNow);
+  if (start <= now) throw new Error("PAST_APPOINTMENT");
+  return start;
+}
+
+export function moveAppointmentToDate(startsAt: string, endsAt: string, targetDate: string, localNow = browserLocalDateTime()) {
+  const start = normaliseLocalDateTime(startsAt); const end = normaliseLocalDateTime(endsAt);
+  if (!DATE_PATTERN.test(targetDate) || end <= start) throw new Error("INVALID_TIME");
+  const duration = Date.parse(`${end}:00Z`) - Date.parse(`${start}:00Z`);
+  let nextStart = `${targetDate}T${start.slice(11)}`;
+  if (nextStart <= localNow) {
+    const rounded = new Date(`${normaliseLocalDateTime(localNow)}:00Z`);
+    rounded.setUTCMinutes(Math.floor(rounded.getUTCMinutes() / 15) * 15 + 15, 0, 0);
+    nextStart = rounded.toISOString().slice(0, 16);
+    if (nextStart.slice(0, 10) !== targetDate) throw new Error("PAST_APPOINTMENT");
+  }
+  const nextEnd = new Date(Date.parse(`${nextStart}:00Z`) + duration).toISOString().slice(0, 16);
+  return { startsAt: nextStart, endsAt: nextEnd };
 }
 
 export function localDayAndMinute(value: string) {
