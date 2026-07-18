@@ -4,6 +4,7 @@ import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { addCalendarDays, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
+import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 
 export const runtime = "edge";
 
@@ -138,6 +139,7 @@ export async function PATCH(request: Request) {
     const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
     const weekStart = normaliseWeekStart(body.weekStart);
+    let notification: Parameters<typeof queueAppointmentNotifications>[0] | null = null;
     if (action === "save_working_hours") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
       const weekday = Number(body.weekday); const startMinute = Number(body.startMinute); const endMinute = Number(body.endMinute); const isAvailable = Boolean(body.isAvailable);
@@ -262,6 +264,8 @@ export async function PATCH(request: Request) {
               revision: jobRevision, changedAt: now, audienceMemberId: memberId,
               previousAudienceMemberId: String(current.current_assignee_member_id || "") }),
           ]);
+          notification = { appointmentId: String(current.appointment_id), ownerUid: access.ownerUid,
+            eventType: "appointment_changed", appointmentRevision, origin: new URL(request.url).origin, occurredAt: now };
         }
       }
     } else if (action === "schedule_appointment") {
@@ -285,6 +289,9 @@ export async function PATCH(request: Request) {
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: String(current.work_order_id), revision: jobRevision, changedAt: now,
           audienceMemberId: memberId, previousAudienceMemberId: String(current.assignee_member_id || "") }),
       ]);
+      notification = { appointmentId, ownerUid: access.ownerUid,
+        eventType: current.assignee_member_id ? "appointment_changed" : "staff_assigned",
+        appointmentRevision: revision, origin: new URL(request.url).origin, occurredAt: now };
     } else if (action === "schedule_job") {
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
@@ -304,6 +311,7 @@ export async function PATCH(request: Request) {
           previousAudienceMemberId: String(job.assignee_member_id || "") }),
       ]);
     } else return adminJson({ ok: false, error: "Unsupported schedule action." }, 400);
+    if (notification) await queueAppointmentNotifications(notification);
     return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, weekStart)) });
   } catch (error) { return errorResponse(error); }
 }

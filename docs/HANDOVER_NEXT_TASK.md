@@ -2,11 +2,11 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `d4036832d0e47ae455d29103f963a78fb3571d5c` on `codex/sites-custom-domain-migration`, published as Sites version 148.
+Implementation baseline: `754f59137684b0ed1edf9b9a720fe8cebbaf136b` on `codex/sites-custom-domain-migration`, published as Sites version 150.
 
 ## Current delivery summary
 
-The current branch includes a post-release correction for the installer Jobs index. The dashboard summary and job list use the same owner-scoped active-work boundary, but the list query had a trailing comma immediately before `FROM`, causing the live Jobs request to return HTTP 500 while My day still counted the open job. A regression assertion now protects that SQL boundary. This correction is not live until its validated commit is published.
+The installer Jobs index correction is live on Sites version 150. The dashboard summary and job list use the same owner-scoped active-work boundary, the Jobs API returns HTTP 200, and signed-in visual verification showed the expected single job in the list and detail workspace. A regression assertion protects the corrected SQL boundary.
 
 P6-2K makes customer trade requests useful for quoting before personal contact is released. The guided request now requires structured property context covering storeys, approximate age and floor area, roof, switchboard and normal access timing. Customers can add property photos, take a new photo through a supported phone or tablet camera, or attach PDF supporting documents.
 
@@ -24,39 +24,52 @@ Migration `0058_trade_contact_arrival_handoff.sql` adds mandatory trade ABN stor
 
 The upgraded AEA Twilio account remains configured, but the `TLink` Australian sender registration still needs the genuine brand evidence that becomes available on Monday. SMS remains disabled until Twilio approves and provisions the sender.
 
+P6-2M adds one revision-bound operational notification event for each customer-arrival appointment creation, first staff assignment, authorised appointment change and customer preparation confirmation. Customer email requires active optional project updates, an active customer-account consent receipt and no channel opt-out. Installer email requires an active consenting trade account with operational email enabled. Customer SMS additionally requires a verified mobile, current channel consent, active provider callbacks and the explicit `TLINK_SMS_SENDER_APPROVED` release flag, which remains false by default.
+
+Each event creates idempotent audience and channel delivery records without storing recipient contact details in the admin payload. Provider sends are atomically claimed, daily-limit checked and capped at three attempts. Authenticated Resend and Twilio callbacks update both service-reminder and appointment delivery ledgers. The existing administrator delivery workspace now shows privacy-safe appointment delivery health and bounded retry controls.
+
 ## Recommended next milestone
 
-### P6-2M: consent-aware appointment notifications
+### P6-2N batch: useful-photo checklist and self-review
 
-Outcome: notify the customer and installer about reviewed appointment and preparation milestones through the existing consent, opt-out, delivery and callback boundaries.
+Outcome: customers can capture quote-useful project photos with service-specific guidance and complete a private self-review before sharing, without automated image scoring.
+
+### Five linked delivery items
+
+1. Add service-specific photo examples for solar, batteries, switchboards, heating and cooling, hot water, insulation and EV charging.
+2. Add accessible capture guidance covering lighting, distance, orientation and avoiding people, documents, street numbers and unrelated belongings.
+3. Add a customer self-review checklist for clarity, relevance and accidental private information before upload consent.
+4. Record checklist version and customer acknowledgement with the existing evidence event, without storing image scores or inferred property facts.
+5. Show verified installers the customer-confirmed checklist categories and limitations beside authorised evidence without changing evidence-access scope.
 
 ### In scope
 
-- Prepare customer and installer appointment-created, staff-assigned, changed and preparation-confirmed notification events.
-- Reuse the existing email and SMS consent, verified-contact, opt-out, idempotency and authenticated callback sources.
-- Keep SMS disabled until the `TLink` Australian sender is approved and provisioned.
-- Add administrator delivery health and retry visibility for the new appointment events.
+- Reuse the existing customer project evidence upload, phone capture, R2 storage, metadata stripping, consent and installer authorisation boundaries.
+- Keep the checklist service-specific, keyboard accessible and readable on phone capture screens.
+- Store only the checklist version, selected category and acknowledgement time needed to explain the evidence context.
+- Keep the implementation inside the customer-project evidence boundary and its existing installer evidence view.
 
 ### Explicitly out of scope
 
-- Live location, route optimisation, automated arrival estimates or third-party calendar writes.
-- Marketing campaigns or unrelated service reminders.
-- The future useful-photo checklist, photo scoring or automated image analysis.
+- Automated image scoring, quality ranking, object recognition or AI analysis.
+- New evidence recipients, public media links or changes to installer allocation rules.
+- Appointment notification, dispatch, live tracking or marketing work.
 
 ### Acceptance criteria
 
-- Every outbound event is consent and opt-out checked and idempotently recorded.
-- SMS remains disabled until provider approval is confirmed.
-- Provider callbacks authenticate before changing delivery state.
-- Notification payloads exclude private notes, staff capacity and unrelated customer records.
+- Every supported service category has concise useful and avoid examples.
+- The customer must review clarity, relevance and private-information warnings before sharing new evidence.
+- Evidence MIME, signature, metadata stripping, size, R2 privacy and allocated-installer authorisation checks remain unchanged.
+- Installer evidence context reveals checklist category and limitations but no additional customer identity or contact data.
+- Desktop and mobile capture flows remain usable without horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A notification cannot be tied to the authoritative appointment, verified contact and active consent record.
-- The sender approval remains unavailable and implementation would require enabling unapproved SMS traffic.
-- The slice expands into marketing automation, live tracking or dispatch optimisation.
+- A checklist field would require retaining new household identity, documents or inferred private facts.
+- The work would weaken current evidence signatures, metadata stripping, consent or installer allocation checks.
+- The slice expands into automated image analysis or a broad evidence-workspace redesign.
 
-## Recommendation after P6-2M
+## Recommendation after P6-2N
 
-Build P6-2N as the customer useful-photo checklist requested for a later stage, with service-specific examples, accessibility guidance and no automated image scoring in the first slice.
+Batch the next five linked customer-to-installer arrival follow-through items only after P6-2N live evidence confirms the checklist is understandable on desktop and mobile.

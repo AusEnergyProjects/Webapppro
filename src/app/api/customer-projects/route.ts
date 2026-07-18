@@ -5,6 +5,7 @@ import { postcodeCoordinate } from "@/lib/postcode-distance";
 import { allocateNearestInstallers, DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, opportunityExpiry } from "@/lib/opportunity-server";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
+import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_CONTACT_RELEASE_FIELDS,
@@ -757,8 +758,12 @@ export async function PATCH(request: Request) {
     if (raw.confirmAccessClear !== true || raw.confirmAdultPresent !== true || raw.confirmPetsManaged !== true) {
       return json({ ok: false, error: "Confirm each preparation item before continuing." }, 400);
     }
-    const proposal = await db.prepare(`SELECT * FROM customer_project_arrival_proposals
-      WHERE id = ? AND project_id = ? AND customer_uid = ? AND status = 'selected' AND crm_appointment_id <> ''`)
+    const proposal = await db.prepare(`SELECT proposal.*, appointment.revision appointment_revision
+      FROM customer_project_arrival_proposals proposal
+      JOIN trade_crm_appointments appointment ON appointment.id = proposal.crm_appointment_id
+        AND appointment.firebase_uid = proposal.installer_uid AND appointment.status = 'scheduled'
+      WHERE proposal.id = ? AND proposal.project_id = ? AND proposal.customer_uid = ?
+        AND proposal.status = 'selected' AND proposal.crm_appointment_id <> ''`)
       .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
     if (!proposal) return json({ ok: false, error: "The CRM appointment must be prepared by the installer before confirming site readiness." }, 409);
     if (proposal.preparation_acknowledged_at) return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
@@ -772,6 +777,9 @@ export async function PATCH(request: Request) {
         .bind(crypto.randomUUID(), proposalId, id, proposal.opportunity_match_id, user.uid, proposal.installer_uid,
           user.uid, proposal.revision, proposal.windows, proposal.selected_window, now),
     ]);
+    await queueAppointmentNotifications({ appointmentId: String(proposal.crm_appointment_id), ownerUid: String(proposal.installer_uid),
+      eventType: "preparation_confirmed", appointmentRevision: Number(proposal.appointment_revision || 1),
+      origin: new URL(request.url).origin, occurredAt: now });
   } else if (action === "quote_decision") {
     const quoteId = cleanId(raw.quoteId);
     const decision = typeof raw.decision === "string" ? raw.decision : "";

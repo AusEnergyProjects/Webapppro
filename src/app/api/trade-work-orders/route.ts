@@ -5,6 +5,7 @@ import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
 import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/lib/trade-team-sync-server";
+import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 
 export const runtime = "edge";
 
@@ -440,6 +441,8 @@ export async function POST(request: Request) {
       eventStatement(db, identity.uid, workOrderId, "customer_arrival_materialised", "Customer-selected arrival window created as an unassigned CRM appointment for dispatch review.", now),
     );
     await db.batch(createStatements);
+    if (appointmentId) await queueAppointmentNotifications({ appointmentId, ownerUid: identity.uid,
+      eventType: "appointment_created", appointmentRevision: 1, origin: new URL(request.url).origin, occurredAt: now });
     return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, createdAppointmentId: appointmentId, ...(await workOrderPayload(identity)) }, 201);
   } catch (error) {
     return errorResponse(error);

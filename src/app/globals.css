@@ -4562,6 +4562,10 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .admin-reminder-channels input { max-width: 120px; }
 .admin-reminder-channels button { justify-self: start; }
 .admin-reminder-failures { display: grid; gap: 8px; margin-top: 9px; }
+.admin-appointment-delivery { border-top: 1px solid var(--color-aea-line); display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; }
+.admin-appointment-delivery > header h3 { color: var(--color-aea-green-dark); margin: 3px 0; }
+.admin-appointment-delivery > header p { color: var(--color-aea-muted); margin: 0; max-width: 760px; }
+.admin-appointment-delivery > header span { color: var(--color-aea-green); font-size: .62rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .admin-follow-up-reporting { margin-bottom: 18px; }
 .admin-follow-up-report-filters { align-items: end; display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(135px, 1fr)) auto auto; padding: 0 18px 14px; }
 .admin-follow-up-report-filters label > span { color: var(--color-aea-muted); display: block; font-size: .58rem; font-weight: 850; margin-bottom: 5px; text-transform: uppercase; }

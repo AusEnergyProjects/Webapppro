@@ -14,6 +14,7 @@ export type ReminderProviderMessage = {
   body: string;
   idempotencyKey: string;
   callbackUrl: string;
+  messageType?: string;
 };
 
 const textEncoder = new TextEncoder();
@@ -88,7 +89,7 @@ export async function sendServiceReminderProviderMessage(
         subject: input.subject,
         text: input.body,
         reply_to: values.RESEND_REPLY_TO || undefined,
-        tags: [{ name: "message_type", value: "service_reminder" }],
+        tags: [{ name: "message_type", value: String(input.messageType || "service_reminder").replace(/[^a-z0-9_]/gi, "_").slice(0, 40) }],
       }),
       cache: "no-store",
     });

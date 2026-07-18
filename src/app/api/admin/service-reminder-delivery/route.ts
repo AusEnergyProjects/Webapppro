@@ -1,17 +1,26 @@
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
+import { retryAppointmentNotificationDelivery } from "@/lib/appointment-notification-server";
 
 export const runtime = "edge";
 
 async function payload() {
   const db = getD1(); const providers = serviceReminderProviderConfiguration();
-  const [settings, counts, failures] = await Promise.all([
+  const [settings, counts, failures, appointmentCounts, appointmentDeliveries] = await Promise.all([
     db.prepare(`SELECT channel, provider, enabled, sender_label, daily_limit, revision, updated_at
       FROM service_reminder_channel_settings ORDER BY channel`).all<Record<string, unknown>>(),
     db.prepare(`SELECT channel, status, COUNT(*) total FROM service_reminder_deliveries GROUP BY channel, status`).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, channel, provider, status, attempts, provider_status, last_error, updated_at
       FROM service_reminder_deliveries WHERE status IN ('failed', 'bounced', 'opted_out') ORDER BY updated_at DESC LIMIT 30`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT audience, channel, status, COUNT(*) total FROM appointment_notification_deliveries
+      GROUP BY audience, channel, status ORDER BY audience, channel, status`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT delivery.id, event.event_type, delivery.audience, delivery.channel, delivery.provider,
+      delivery.status, delivery.eligibility_reason, delivery.attempts, delivery.provider_status,
+      delivery.last_error, delivery.updated_at
+      FROM appointment_notification_deliveries delivery
+      JOIN appointment_notification_events event ON event.id = delivery.event_id
+      ORDER BY delivery.updated_at DESC LIMIT 50`).all<Record<string, unknown>>(),
   ]);
   return {
     settings: settings.results.map((row) => ({ channel: String(row.channel), provider: String(row.provider), enabled: Boolean(row.enabled),
@@ -21,6 +30,13 @@ async function payload() {
     failures: failures.results.map((row) => ({ id: String(row.id), channel: String(row.channel), provider: String(row.provider),
       status: String(row.status), attempts: Number(row.attempts), providerStatus: String(row.provider_status),
       lastError: String(row.last_error), updatedAt: String(row.updated_at) })),
+    appointmentCounts: appointmentCounts.results.map((row) => ({ audience: String(row.audience), channel: String(row.channel),
+      status: String(row.status), total: Number(row.total) })),
+    appointmentDeliveries: appointmentDeliveries.results.map((row) => ({ id: String(row.id), eventType: String(row.event_type),
+      audience: String(row.audience), channel: String(row.channel), provider: String(row.provider), status: String(row.status),
+      eligibilityReason: String(row.eligibility_reason), attempts: Number(row.attempts), providerStatus: String(row.provider_status),
+      lastError: String(row.last_error), updatedAt: String(row.updated_at) })),
+    smsSenderApproved: String(process.env.TLINK_SMS_SENDER_APPROVED || "").toLowerCase() === "true",
   };
 }
 
@@ -51,4 +67,19 @@ export async function PATCH(request: Request) {
       `${enabled ? "Enabled" : "Disabled"} ${channel} service reminder delivery with a daily limit of ${dailyLimit}.`, { channel, enabled, dailyLimit });
     return adminJson({ ok: true, ...(await payload()) });
   } catch (error) { return error instanceof SyntaxError ? adminJson({ ok: false, error: "Invalid channel settings." }, 400) : adminError(error); }
+}
+
+export async function POST(request: Request) {
+  if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
+  try {
+    const admin = await requireAdminIdentity(request, ["owner", "admin"]); const body = await request.json() as Record<string, unknown>;
+    if (cleanAdminText(body.action, 40) !== "retry_appointment_delivery") return adminJson({ ok: false, error: "Unsupported delivery action." }, 400);
+    const deliveryId = cleanAdminText(body.deliveryId, 180); if (!deliveryId) return adminJson({ ok: false, error: "Choose an appointment delivery." }, 400);
+    const result = await retryAppointmentNotificationDelivery(deliveryId, new URL(request.url).origin);
+    if (!result.ok && result.error === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This appointment delivery cannot be retried." }, 409);
+    if (!result.ok && result.error === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Appointment delivery not found." }, 404);
+    await writeAdminAudit(admin, "appointment_notification.delivery_retry", "appointment_notification_delivery", deliveryId,
+      "Retried an appointment notification through current consent and channel controls.", { deliveryId, result: result.ok ? "sent" : String(result.error || "held") });
+    return adminJson({ ok: true, ...(await payload()) });
+  } catch (error) { return error instanceof SyntaxError ? adminJson({ ok: false, error: "Invalid appointment delivery request." }, 400) : adminError(error); }
 }

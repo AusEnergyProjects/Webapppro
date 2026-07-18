@@ -831,6 +831,74 @@ export const serviceReminderDeliveryEvents = sqliteTable("service_reminder_deliv
   index("service_reminder_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
 ]);
 
+export const appointmentNotificationEvents = sqliteTable("appointment_notification_events", {
+  id: text("id").primaryKey(),
+  eventKey: text("event_key").notNull(),
+  appointmentId: text("appointment_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  proposalId: text("proposal_id").notNull(),
+  projectId: text("project_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  appointmentRevision: integer("appointment_revision").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("appointment_notification_events_key_idx").on(table.eventKey),
+  index("appointment_notification_events_appointment_idx").on(table.appointmentId, table.appointmentRevision),
+  index("appointment_notification_events_project_idx").on(table.customerUid, table.projectId, table.occurredAt),
+]);
+
+export const appointmentNotificationDeliveries = sqliteTable("appointment_notification_deliveries", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  appointmentId: text("appointment_id").notNull(),
+  audience: text("audience").notNull(),
+  recipientUid: text("recipient_uid").notNull(),
+  channel: text("channel").notNull(),
+  provider: text("provider").notNull(),
+  contentRevision: integer("content_revision").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  status: text("status").notNull().default("queued"),
+  eligibilityReason: text("eligibility_reason").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  queuedAt: text("queued_at").notNull(),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("appointment_notification_deliveries_idempotency_idx").on(table.idempotencyKey),
+  uniqueIndex("appointment_notification_deliveries_provider_message_idx").on(table.provider, table.providerMessageId),
+  index("appointment_notification_deliveries_event_idx").on(table.eventId, table.audience, table.channel),
+  index("appointment_notification_deliveries_status_idx").on(table.status, table.updatedAt),
+  index("appointment_notification_deliveries_recipient_idx").on(table.recipientUid, table.channel, table.createdAt),
+]);
+
+export const appointmentNotificationDeliveryEvents = sqliteTable("appointment_notification_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("appointment_notification_delivery_events_provider_idx").on(table.providerEventKey),
+  index("appointment_notification_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
+]);
+
 export const customerServiceReminderContacts = sqliteTable("customer_service_reminder_contacts", {
   customerUid: text("customer_uid").primaryKey(),
   mobileE164: text("mobile_e164").notNull().default(""),
