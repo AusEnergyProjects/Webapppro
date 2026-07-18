@@ -82,6 +82,9 @@ test("the public request validates the capability and places safe photos into th
   assert.match(publicRoute, /parsePhotoRequestToken/);
   assert.match(publicRoute, /token_hash !== await hashPhotoRequestSecret/);
   assert.match(publicRoute, /expires_at <= new Date/);
+  assert.match(publicRoute, /d\.crm_customer_id = r\.crm_customer_id/);
+  assert.match(publicRoute, /d\.customer_source = 'trade_owned'/);
+  assert.match(publicRoute, /w\.source_type <> 'opportunity'/);
   assert.match(publicRoute, /sameOrigin/);
   assert.match(publicRoute, /hasAllowedSignature/);
   assert.match(publicRoute, /sanitiseQuotingPhoto/);

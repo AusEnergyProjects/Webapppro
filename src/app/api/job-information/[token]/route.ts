@@ -68,8 +68,10 @@ async function authorisedRequest(context: RouteContext) {
       w.revision job_revision, w.assignee_member_id, a.business_name
     FROM trade_crm_photo_requests r
     JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
+    JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      AND d.crm_customer_id = r.crm_customer_id AND d.customer_source = 'trade_owned'
     JOIN trade_accounts a ON a.firebase_uid = r.firebase_uid
-    WHERE r.id = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+    WHERE r.id = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND w.source_type <> 'opportunity'
       AND a.partner_type = 'installer' AND a.account_status = 'active'`)
     .bind(parsed.requestId).first<PublicRequestRecord>();
   if (!record || !record.token_hash || record.token_hash !== await hashPhotoRequestSecret(parsed.secret)) throw new Error("REQUEST_NOT_FOUND");
