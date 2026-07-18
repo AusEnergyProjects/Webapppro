@@ -210,16 +210,17 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     return () => { active = false; };
   }, [user]);
 
-  const loadJobIndex = useCallback(async () => {
+  const loadJobIndex = useCallback(async (signal: AbortSignal) => {
     const token = await user.getIdToken();
     const params = new URLSearchParams({ mode: "index", resource: "jobs", search, customer: jobCustomer, service: jobService,
       pipeline: pipelineFocus || jobPipeline, stage: jobStage, location: jobLocation, filter: jobFilter, sort: jobSort,
       page: String(jobPage), pageSize: String(jobPageSize) });
     const cursor = jobCursors.current[jobPage - 1] || ""; if (cursor) params.set("cursor", cursor);
     if (jobTotalReady.current) params.set("total", "0");
-    const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The job list could not be loaded.");
+    if (signal.aborted) return;
     const items = (result.items || []) as Job[];
     setIndexedJobs(items);
     setJobPagination((current) => {
@@ -231,16 +232,17 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     setSelectedJobId((current) => current && items.some((item) => item.id === current) ? current : items[0]?.id || "");
   }, [jobCustomer, jobFilter, jobLocation, jobPage, jobPageSize, jobPipeline, jobService, jobSort, jobStage, pipelineFocus, search, user]);
 
-  const loadCustomerIndex = useCallback(async () => {
+  const loadCustomerIndex = useCallback(async (signal: AbortSignal) => {
     const token = await user.getIdToken();
     const params = new URLSearchParams({ mode: "index", resource: "customers", search: customerSearch, street: customerStreet,
       phone: customerPhone, postcode: customerPostcode, suburb: customerSuburb, state: customerState, service: customerService,
       jobId: customerJobId, pipeline: customerPipeline, sort: customerSort, page: String(customerPage), pageSize: String(customerPageSize) });
     const cursor = customerCursors.current[customerPage - 1] || ""; if (cursor) params.set("cursor", cursor);
     if (customerTotalReady.current) params.set("total", "0");
-    const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const response = await fetch(`/api/trade-crm?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     const result = await response.json().catch(() => ({})) as CrmIndexResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The customer list could not be loaded.");
+    if (signal.aborted) return;
     const items = (result.items || []) as Customer[];
     setIndexedCustomers(items);
     setCustomerPagination((current) => {
@@ -265,23 +267,25 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
   useEffect(() => {
     if (view !== "jobs" || creating === "job" || jobLayout !== "list") return;
     let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       if (active) setIndexLoading(true);
-      void loadJobIndex().catch((error) => active && setStatus(error instanceof Error ? error.message : "The job list could not be loaded."))
+      void loadJobIndex(controller.signal).catch((error) => active && setStatus(error instanceof Error ? error.message : "The job list could not be loaded."))
         .finally(() => active && setIndexLoading(false));
     }, 180);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; controller.abort(); window.clearTimeout(timer); };
   }, [creating, jobLayout, loadJobIndex, refreshNonce, view]);
 
   useEffect(() => {
     if (view !== "customers" || creating === "customer") return;
     let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       if (active) setIndexLoading(true);
-      void loadCustomerIndex().catch((error) => active && setStatus(error instanceof Error ? error.message : "The customer list could not be loaded."))
+      void loadCustomerIndex(controller.signal).catch((error) => active && setStatus(error instanceof Error ? error.message : "The customer list could not be loaded."))
         .finally(() => active && setIndexLoading(false));
     }, 180);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; controller.abort(); window.clearTimeout(timer); };
   }, [creating, loadCustomerIndex, refreshNonce, view]);
 
   useEffect(() => {

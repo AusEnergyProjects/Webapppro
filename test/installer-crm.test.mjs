@@ -99,6 +99,16 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(crm, /Name A to Z/);
 });
 
+test("job and customer indexes cancel stale requests before they can replace current results", () => {
+  assert.match(crm, /loadJobIndex = useCallback\(async \(signal: AbortSignal\)/);
+  assert.match(crm, /loadCustomerIndex = useCallback\(async \(signal: AbortSignal\)/);
+  assert.equal((crm.match(/const controller = new AbortController\(\);/g) || []).length, 2);
+  assert.equal((crm.match(/signal\.aborted\) return;/g) || []).length, 2);
+  assert.equal((crm.match(/controller\.abort\(\); window\.clearTimeout\(timer\)/g) || []).length, 2);
+  assert.match(crm, /loadJobIndex\(controller\.signal\)/);
+  assert.match(crm, /loadCustomerIndex\(controller\.signal\)/);
+});
+
 test("job and customer directories expose granular server filters and single-line data columns", () => {
   for (const field of ["customer", "service", "pipeline", "stage", "location", "street", "phone", "postcode", "suburb", "state", "jobId"]) {
     assert.match(route, new RegExp(`searchParams\\.get\\("${field}"\\)`));
