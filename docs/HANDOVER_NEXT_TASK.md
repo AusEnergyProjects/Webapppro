@@ -2,11 +2,11 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `0118e8a53665d296606b2a7263a22bbb6ac75547` on `codex/sites-custom-domain-migration`, published as Sites version 158 before the P6-2Q batch.
+Implementation baseline: `aa771460b190c7e744caca216bb4c8dde3087c77` on `codex/sites-custom-domain-migration`, published as Sites version 160 with the P6-2Q batch and the Jobs index race correction.
 
 ## Current delivery summary
 
-The installer Jobs index correction is live on Sites version 150. The dashboard summary and job list use the same owner-scoped active-work boundary, the Jobs API returns HTTP 200, and signed-in visual verification showed the expected single job in the list and detail workspace. A regression assertion protects the corrected SQL boundary.
+The installer Jobs API returns the expected owner-scoped job, and the signed-in list and detail workspace show that job. The remaining client race was corrected in `aa771460b190c7e744caca216bb4c8dde3087c77`: superseded Jobs and Customers index requests are aborted and cannot replace current filter results. A regression assertion protects the cancellation boundary.
 
 P6-2K makes customer trade requests useful for quoting before personal contact is released. The guided request now requires structured property context covering storeys, approximate age and floor area, roof, switchboard and normal access timing. Customers can add property photos, take a new photo through a supported phone or tablet camera, or attach PDF supporting documents.
 
