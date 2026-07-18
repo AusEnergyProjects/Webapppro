@@ -142,7 +142,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
     await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
     await refreshLocal();
-    if (sync.online) void syncNow();
+    if (sync.online) await syncNow();
   }, [refreshLocal, sync.online, syncNow]);
 
   const saveUpload = useCallback(async (input: UploadInput) => {

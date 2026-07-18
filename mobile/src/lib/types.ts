@@ -53,7 +53,19 @@ export type FieldJob = {
   assigneeMemberId: string;
   assigneeLabel: string;
   protectedJob: boolean;
+  customerName: string;
+  customerPhone: string;
   serviceAddress: string;
+  appointmentId: string;
+  appointmentStatus: string;
+  appointmentStartsAt: string;
+  appointmentEndsAt: string;
+  travelStartedAt: string;
+  arrivedAt: string;
+  workStartedAt: string;
+  completedAt: string;
+  description: string;
+  openIssues: number;
   revision: number;
   updatedAt: string;
   offlinePolicy: {
@@ -93,7 +105,7 @@ export type SyncResponse = {
   devicePolicy?: DevicePolicy;
 };
 
-export type OfflineActionType = 'set_job_stage' | 'set_task_status' | 'add_time_entry' | 'save_job_form';
+export type OfflineActionType = 'advance_field_job' | 'set_job_stage' | 'set_task_status' | 'add_time_entry' | 'save_job_form';
 
 export type OfflineAction = {
   clientActionId: string;
@@ -103,6 +115,7 @@ export type OfflineAction = {
   formId?: string;
   baseRevision: number;
   stage?: JobStage;
+  transition?: 'start_travel' | 'arrive' | 'start_work' | 'finish';
   status?: TaskStatus;
   workDate?: string;
   durationMinutes?: number;

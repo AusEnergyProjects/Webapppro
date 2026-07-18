@@ -197,6 +197,11 @@ export async function queueAction(action: OfflineAction) {
   if (!row) return;
   const job = JSON.parse(row.payload) as FieldJob;
   if (action.type === 'set_job_stage' && action.stage) job.stage = action.stage;
+  if (action.type === 'advance_field_job' && action.transition) {
+    const states = { start_travel: 'en_route', arrive: 'arrived', start_work: 'in_progress', finish: 'completed' } as const;
+    if (action.transition !== 'finish') job.appointmentStatus = states[action.transition];
+    if (action.transition === 'start_work') job.stage = 'in_progress';
+  }
   if (action.type === 'set_task_status' && action.taskId && action.status) {
     const task = job.tasks.find((item) => item.id === action.taskId);
     if (task) {

@@ -82,46 +82,39 @@ P6-3H removes premature installer purchasing from primary navigation and search 
 
 P6-3I gives Invoices its own main destination over the existing accepted-scope and accounting sources, and opens invoice rows directly into the focused live job invoice. Job rows and timetable blocks support deliberate double-click and keyboard opening while keeping visible touch actions. Appointments now use one start plus a server-bounded 15-minute to eight-hour duration. Schedule is a time and team grid with stable person colours, drag-to-day movement and response-driven updates. Optional Google Calendar and Outlook connections mirror the authoritative TLink week through revision-mapped events; external failure never rolls back a local save, and protected appointments never disclose customer identity, contact or exact address.
 
+P6-3J replaces the two-step customer matcher with one accessible search and creates a direct customer, primary contact, structured service site and linked job in one D1 batch when no match exists. Duplicate checks reuse email, phone, business-number and exact service-address evidence. Existing customer sites remain authoritative. The initial form keeps only customer, site, editable title presets, work type, building type and priority; dates and value remain owned by Schedule and commercial records. Address suggestions are authenticated and provider neutral, with truthful manual fallback until an approved endpoint and credential are configured.
+
+The same batch moves next action, description and tags into one Notes owner; replaces custom New and More disclosures with one listener-safe accessible menu; and adds an audited, ordered and idempotent Start travel, Arrive, Start work and Finish flow to web and native field surfaces. Direct-customer Call and directions use the selected service-site contact boundary, while protected and internal work remains redacted. Finish reuses tasks, forms, requested proof, issues, accepted work-plan requirements and sync receipts as blockers, then exposes the existing invoice and handover paths. Migration `0073_phone_first_field_job.sql` adds building type and appointment transition timestamps and actor evidence.
+
 ## Next milestone contract
 
-### P6-3J batch: one simple field job page
+### P6-3K: audited correction of an active field state
 
-Outcome: a technician can open one job on a phone and immediately understand where to go, who they may contact, what to do next, what proof is required and when the job is safe to finish without learning the office CRM.
-
-### Five linked foundation items
-
-1. Replace the technician's scattered job sections with one phone-first job header showing job number, scheduled time, allowed customer context and the authoritative service site, with the existing protected-customer boundary intact.
-2. Present one status-aware primary action such as Start travel, Arrive, Start work or Finish, while keeping corrections and exceptional states behind progressive disclosure.
-3. Put Call customer and Get directions beside the site only when the installer is authorised to see those direct-customer details; never reveal protected AEA identity or exact address fields.
-4. Combine accepted scope, required tasks, forms, requested photo proof and open issues into one ordered Today checklist that reuses the existing immutable execution snapshot and proof records.
-5. Keep offline and sync state visible but quiet, and make Finish explain the smallest missing requirement before it prepares the existing invoice and handover paths.
+Outcome: an owner or dispatch coordinator can correct one accidental active field transition without database intervention, hiding the recovery control from the technician's normal one-action flow and preserving the original audit evidence.
 
 ### In scope
 
-- The existing assigned-job and native field application surfaces, job detail header and field-work panel.
-- Existing customer ownership and AEA-protected privacy boundaries.
-- Existing appointment, execution snapshot, task, form, photo proof, issue, sync and completion-gate sources of truth.
-- Desktop office access to the same records where needed for support and correction.
+- One office-only correction action for `en_route`, `arrived` or `in_progress` appointments.
+- A required plain-language reason, expected appointment revision, authorised actor and immutable work-order event.
+- Clearing only the timestamp made invalid by the one-step correction while retaining prior transition evidence in the event history.
+- Immediate job-sync publication so assigned field devices receive the corrected authoritative state.
 
 ### Explicitly out of scope
 
-- GPS tracking, route optimisation, call recording, customer messaging infrastructure or background location access.
-- New task, form, photo, timing, customer, appointment or invoice sources of truth.
-- Payroll, timesheets, subcontractor management, variations, progress claims or automatic invoice sending.
-- Replacing the office CRM or exposing protected AEA customer contact or exact location data.
+- Reopening a successfully finished job, reversing invoice or handover preparation, or editing historical transition timestamps.
+- General appointment history editing, GPS tracking, route optimisation or a replacement state model.
+- Technician self-approval of corrections.
 
 ### Acceptance criteria
 
-- An assigned technician reaches the job's next safe action without navigating the office-only Quote, Invoice, Price book or Business workspaces.
-- Direct-customer contact and directions appear once beside the service site; protected jobs remain reference and region only.
-- The Today checklist is derived from the immutable accepted execution snapshot and current proof records, not duplicated editable setup.
-- Start, arrive and finish transitions remain owner scoped, revision safe and idempotent, and the existing completion gate names the first blocking requirement plainly.
-- Offline or stale data is never presented as saved; sync conflicts retain the existing explicit resolution boundary.
-- The primary job flow works at 390 px without document-level horizontal overflow, buried horizontal tabs or more than one competing primary action.
+- Only an owner, manager or coordinator can correct the immediately previous active transition.
+- A stale revision, invalid target or repeated correction is rejected without changing the appointment or job.
+- The correction reason and actor are visible in the existing job history, and field sync receives the corrected revision.
+- The phone-first technician surface still presents one primary forward action and no competing recovery button.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The field view would need a second customer, appointment, execution or proof record to render the simple flow.
-- A shortcut would expose protected customer contact or exact location, bypass the execution revision or weaken offline conflict handling.
-- The slice expands into GPS tracking, route optimisation, call recording, payroll, messaging infrastructure or a replacement field framework.
+- Correction would require mutating or deleting historical event evidence.
+- Reopening a completed job would invalidate an invoice, handover or customer-facing record.
+- The slice expands beyond one-step active-state recovery or creates a second appointment state source.

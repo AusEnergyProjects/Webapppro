@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
 type TimeEntry = { id: string; staffLabel: string; workDate: string; durationMinutes: number; notes: string; createdAt: string };
@@ -8,16 +8,23 @@ type Media = { id: string; category: string; fileName: string; contentType: stri
 type Signoff = { id: string; signerRole: string; signerName: string; confirmationText: string; method: string; signedAt: string };
 type ProofReview = { proofReady: boolean; counts: { total: number; required: number; supplied: number; accepted: number; retakeRequested: number; notNeeded: number; pending: number };
   completion: null | { current: boolean; evidenceCurrent: boolean; completedAt: string }; reviews: Array<{ requirementId: string; label: string; status: string; guidance: string; retakeAnswered: boolean }> };
-type Result = { ok?: boolean; protectedJob?: boolean; timeEntries?: TimeEntry[]; media?: Media[]; signoffs?: Signoff[]; proofReview?: ProofReview | null; error?: string };
+type FieldBlocker = { key: string; label: string; target: string };
+type FieldJob = { id: string; workNumber: string; title: string; status: string; customerName: string; serviceSite: string; scheduledStart: string; scheduledEnd: string;
+  primaryAction: null | { action: string; label: string }; actionUnavailableReason: string; phone: string; address: string; directionsUrl: string;
+  checklist: Array<{ key: string; label: string; complete: boolean; count: number; target: string }>; blockers: FieldBlocker[];
+  completion: { ready: boolean; invoiceReady: boolean; handoverReady: boolean } };
+type Result = { ok?: boolean; protectedJob?: boolean; timeEntries?: TimeEntry[]; media?: Media[]; signoffs?: Signoff[]; proofReview?: ProofReview | null; fieldJob?: FieldJob | null; blockers?: FieldBlocker[]; error?: string };
 
 const day = () => new Date().toISOString().slice(0, 10);
 const timeLabel = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`.trim() : `${minutes}m`;
 
-export function TradeFieldWorkPanel({ user, workOrderId, isProtected }: { user: User; workOrderId: string; isProtected: boolean }) {
+export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate, onChanged }: { user: User; workOrderId: string; isProtected: boolean; onNavigate?: (target: "forms" | "tasks" | "notes" | "invoice" | "handover") => void; onChanged?: () => Promise<void> }) {
   const [data, setData] = useState<Result>({ protectedJob: isProtected, timeEntries: [], media: [], signoffs: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
+  const [online, setOnline] = useState(true);
+  const actionId = useRef("");
 
   const load = useCallback(async () => {
     const token = await user.getIdToken();
@@ -38,7 +45,34 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected }: { user: 
     return () => { active = false; window.cancelAnimationFrame(frame); };
   }, [load]);
 
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update(); window.addEventListener("online", update); window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
+
   const totalMinutes = useMemo(() => (data.timeEntries || []).reduce((sum, item) => sum + item.durationMinutes, 0), [data.timeEntries]);
+
+  function openChecklist(target: string) {
+    if (target === "evidence") document.getElementById("field-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (target === "work-plan") document.getElementById("field-work-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (["forms", "tasks", "notes", "invoice", "handover"].includes(target)) onNavigate?.(target as "forms" | "tasks" | "notes" | "invoice" | "handover");
+  }
+
+  async function advance() {
+    const fieldJob = data.fieldJob; if (!fieldJob?.primaryAction) return;
+    if (!online) { setStatus(fieldJob.primaryAction.action === "finish" ? "Reconnect before finishing. Offline completion is not accepted because blockers and sync state must be checked." : "Reconnect before advancing the job. This web page does not queue field actions offline."); return; }
+    if (fieldJob.primaryAction.action === "finish" && fieldJob.blockers.length) { setStatus(`Finish these items first: ${fieldJob.blockers.map((item) => item.label).join("; ")}.`); openChecklist(fieldJob.blockers[0].target); return; }
+    actionId.current ||= `web-field-${crypto.randomUUID()}`; setBusy("transition"); setStatus("Syncing");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-field-work", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "field_transition", transition: fieldJob.primaryAction.action, clientActionId: actionId.current, workOrderId }) });
+      const result = await response.json().catch(() => ({})) as Result;
+      if (!response.ok || !result.ok) throw new Error(result.blockers?.length ? `${result.error} ${result.blockers.map((item) => item.label).join("; ")}.` : result.error || "The job state could not be advanced.");
+      setData(result); actionId.current = ""; setStatus("Saved"); await onChanged?.();
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Action required"); }
+    finally { setBusy(""); }
+  }
 
   async function jsonAction(event: FormEvent<HTMLFormElement>, action: string, success: string) {
     event.preventDefault();
@@ -87,13 +121,14 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected }: { user: 
   if (loading) return <div className="crm-empty"><strong>Opening field tools</strong><span>Loading time, files and sign-offs...</span></div>;
 
   return <div className="crm-field-work">
+        {data.fieldJob && <><header className="crm-field-job-header"><div className="crm-field-job-heading"><span>{data.fieldJob.workNumber} | {data.fieldJob.status.replaceAll("_", " ")}</span><h3>{data.fieldJob.title}</h3><p>{data.fieldJob.customerName} | {data.fieldJob.serviceSite}</p>{data.fieldJob.scheduledStart && <small>{new Date(data.fieldJob.scheduledStart).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small>}</div><div className="crm-field-job-primary">{data.fieldJob.primaryAction ? <button type="button" disabled={busy === "transition"} onClick={() => void advance()}>{busy === "transition" ? "Syncing..." : data.fieldJob.primaryAction.label}</button> : <strong>{data.fieldJob.actionUnavailableReason}</strong>}<span className={`crm-sync-state ${!online ? "offline" : status && status !== "Saved" && status !== "Syncing" ? "attention" : ""}`}>{!online ? "Offline" : busy === "transition" ? "Syncing" : status && status !== "Saved" ? "Action required" : "Saved"}</span></div></header><div className="crm-field-contact-actions">{data.fieldJob.phone && <a href={`tel:${data.fieldJob.phone.replace(/[^+\d]/g, "")}`}>Call</a>}{data.fieldJob.directionsUrl && <a href={data.fieldJob.directionsUrl} target="_blank" rel="noreferrer">Get directions</a>}</div><section className="crm-today-checklist" aria-labelledby="today-checklist-title"><header><span>Today</span><h4 id="today-checklist-title">What must happen on this job</h4></header><ol>{data.fieldJob.checklist.map((item) => <li key={item.key}><button type="button" onClick={() => openChecklist(item.target)}><span aria-hidden="true">{item.complete ? "✓" : item.count ? String(item.count) : "•"}</span><strong>{item.label}</strong><small>{item.complete ? "Ready" : item.count ? `${item.count} outstanding` : "Review"}</small></button></li>)}</ol>{data.fieldJob.blockers.length > 0 && <div className="crm-finish-blockers"><strong>Finish blockers</strong>{data.fieldJob.blockers.map((blocker) => <button type="button" key={blocker.key} onClick={() => openChecklist(blocker.target)}>{blocker.label}</button>)}</div>}{data.fieldJob.completion.invoiceReady && onNavigate && <div className="crm-field-next-paths"><button type="button" onClick={() => onNavigate("invoice")}>Prepare invoice</button><button type="button" onClick={() => onNavigate("handover")}>Open handover</button></div>}</section></>}
     <div className={`crm-field-privacy ${isProtected ? "protected" : "owned"}`}>
       <strong>{isProtected ? "AEA protected field record" : "Direct customer field record"}</strong>
       <span>{isProtected ? "Record work, time and site evidence without names, contact details or a precise address. Customer sign-off stays with AEA." : "This job belongs to your business, so the customer may complete a recorded sign-off."}</span>
     </div>
     <section className="crm-field-summary"><article><span>Time recorded</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
     {data.proofReview && <section className={`crm-photo-proof-readiness ${data.proofReview.proofReady ? "ready" : "pending"}`}><header><div><span>Customer photo proof</span><h4>{data.proofReview.proofReady ? "Ready for field use" : data.proofReview.completion?.evidenceCurrent ? "Installer review in progress" : "Waiting for customer completion"}</h4></div><strong>{data.proofReview.counts.accepted} accepted | {data.proofReview.counts.retakeRequested} retake | {data.proofReview.counts.pending} pending</strong></header><ul>{data.proofReview.reviews.map((review) => <li key={review.requirementId}><span>{review.label}</span><strong>{review.status.replaceAll("_", " ")}</strong>{review.status === "retake_requested" && <small>{review.retakeAnswered ? "Replacement added" : "Replacement outstanding"}</small>}</li>)}</ul></section>}
-    <div className="crm-field-grid">
+    <div className="crm-field-grid" id="field-evidence">
       <section className="crm-field-card"><header><div><span>Technician time</span><h4>Log work completed</h4></div></header>
         <form className="crm-field-form" onSubmit={(event) => void jsonAction(event, "add_time", "Technician time added.")}>
           <label><span>Work date</span><input type="date" name="workDate" required defaultValue={day()} /></label>
@@ -123,6 +158,6 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected }: { user: 
         {(data.signoffs || []).length > 0 && <ol className="crm-field-records signoffs">{(data.signoffs || []).map((item) => <li key={item.id}><div><strong>{item.signerName}</strong><span>{item.signerRole} | {new Date(item.signedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</span><p>{item.confirmationText}</p></div></li>)}</ol>}
       </section>
     </div>
-    {status && <p className="crm-inline-status" role="status">{status}</p>}
+    {status && status !== "Saved" && status !== "Syncing" && <p className="crm-inline-status" role="status">{status}</p>}
   </div>;
 }

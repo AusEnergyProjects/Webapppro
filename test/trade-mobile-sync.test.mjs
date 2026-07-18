@@ -80,10 +80,13 @@ test("the mobile sync contract is authenticated, assignment scoped and cursor bo
 
 test("mobile payloads preserve AEA customer privacy and short-lived direct addresses", () => {
   assert.match(syncRoute, /row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
-  assert.match(syncRoute, /const serviceAddress = protectedJob \? ""/);
-  assert.doesNotMatch(syncRoute, /c\.email|c\.phone|c\.first_name|c\.last_name/);
-  assert.match(syncRoute, /containsPersonalData: Boolean\(serviceAddress\)/);
-  assert.match(syncRoute, /maxAgeSeconds: serviceAddress \? 86_400 : 604_800/);
+  assert.match(syncRoute, /const directCustomer = !protectedJob && row\.customer_source === "trade_owned"/);
+  assert.match(syncRoute, /const serviceAddress = directCustomer \?/);
+  assert.doesNotMatch(syncRoute, /c\.email/);
+  assert.match(syncRoute, /customerName: protectedJob \? "AEA protected customer"/);
+  assert.match(syncRoute, /customerPhone: directCustomer \?/);
+  assert.match(syncRoute, /containsPersonalData: Boolean\(serviceAddress \|\| \(directCustomer && row\.customer_phone\)\)/);
+  assert.match(syncRoute, /maxAgeSeconds: serviceAddress \|\| \(directCustomer && row\.customer_phone\) \? 86_400 : 604_800/);
   assert.match(mobileServer, /protectedCustomerContactDataAllowed: false/);
   assert.match(syncRoute, /purgeWhenUnassigned: true/);
   assert.match(syncRoute, /PROTECTED_CUSTOMER_DATA/);

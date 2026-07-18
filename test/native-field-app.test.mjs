@@ -77,7 +77,7 @@ test("technician UI stays focused while retaining full field capability", () => 
   assert.match(work, /AEA protected/);
   assert.match(job, /job\.workNumber/);
   assert.doesNotMatch(job, /setWorkNumber|changeWorkNumber|editWorkNumber/);
-  assert.match(job, /set_job_stage/);
+  assert.match(job, /advance_field_job/);
   assert.match(job, /set_task_status/);
   assert.match(job, /add_time_entry/);
   assert.match(job, /launchCameraAsync/);

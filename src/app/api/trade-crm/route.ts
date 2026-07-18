@@ -8,6 +8,7 @@ import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirecti
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
+import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 
 export const runtime = "edge";
 
@@ -21,6 +22,8 @@ const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
 const APPOINTMENT_TYPES = new Set(["phone_call", "site_visit", "quote_review", "installation", "service", "admin"]);
 const APPOINTMENT_STATUSES = new Set(["scheduled", "completed", "cancelled", "no_show"]);
+const BUILDING_TYPES = new Set(["house_townhouse", "apartment_unit", "commercial_office", "retail_hospitality", "industrial_warehouse", "institutional_community_health", "other", "not_sure"]);
+const ADDRESS_STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 const NOTE_TYPES = new Set(["internal", "issue"]);
 const ISSUE_STATUSES = new Set(["not_applicable", "open", "resolved"]);
 const QUOTE_STATUSES = new Set(["not_started", "draft", "sent", "accepted", "declined"]);
@@ -148,7 +151,7 @@ function indexedJob(row: Record<string, unknown>) {
     crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
     serviceSiteId: customerSource === "platform_private" ? "" : String(row.service_site_id || ""),
     customerDisplayName: customerSource === "platform_private" ? "AEA protected customer" : String(row.customer_name || ""),
-    pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"),
+    pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"), buildingType: row.building_type || "not_sure",
     description: row.description || "", customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
     nextAction: row.next_action || "", tags: storedList(row.job_tags), estimatedValueCents: Number(row.estimated_value_cents || 0),
     quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
@@ -264,8 +267,12 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   }
   const conditions = ["c.firebase_uid = ?", "c.record_status = 'active'"];
   if (search) {
-    conditions.push("c.id IN (SELECT entity_id FROM tlink_crm_customer_search WHERE owner_uid = ? AND tlink_crm_customer_search MATCH ?)");
-    bindings.push(identity.uid, ftsPrefixQuery(search));
+    conditions.push(`(c.id IN (SELECT entity_id FROM tlink_crm_customer_search WHERE owner_uid = ? AND tlink_crm_customer_search MATCH ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_customer_contacts sc WHERE sc.customer_id = c.id AND sc.firebase_uid = c.firebase_uid
+        AND sc.record_status = 'active' AND LOWER(sc.phone || ' ' || sc.email) LIKE ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_service_sites ss WHERE ss.customer_id = c.id AND ss.firebase_uid = c.firebase_uid
+        AND ss.record_status = 'active' AND LOWER(ss.suburb || ' ' || ss.postcode) LIKE ?))`);
+    bindings.push(identity.uid, ftsPrefixQuery(search), `%${search}%`, `%${search}%`);
   }
   const street = cleanAdminText(url.searchParams.get("street"), 120).toLowerCase();
   if (street) { conditions.push("LOWER(c.address_line_1 || ' ' || c.address_line_2) LIKE ?"); bindings.push(`%${street}%`); }
@@ -363,7 +370,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       jobs: jobs.results.map((job: Record<string, unknown>) => indexedJob(job)),
     };
   }
-  const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.description,
+  const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type, d.description,
     d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents,
     d.invoiced_value_cents, d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
     CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
@@ -444,7 +451,7 @@ async function crmSummary(identity: CrmIdentity) {
       FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
       WHERE d.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`).bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
       WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?`)
@@ -454,7 +461,7 @@ async function crmSummary(identity: CrmIdentity) {
       .bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?
       ORDER BY a.starts_at, a.created_at LIMIT 6`).bind(identity.uid, today).all<Record<string, unknown>>(),
     db.prepare(`SELECT t.*, w.id work_order_id, w.work_number, w.title job_title
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
@@ -499,11 +506,11 @@ async function crmSchedule(identity: CrmIdentity, url: URL) {
   const cursorWhere = cursor ? keysetAfter(SCHEDULE_SORT.terms, cursor) : null;
   const [countRow, rows] = await Promise.all([
     includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
       .bind(identity.uid, today).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`SELECT a.*, w.id work_order_id, w.work_number, w.title job_title
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
-      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status = 'scheduled' AND SUBSTR(a.starts_at, 1, 10) >= ?
+      WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?
       ${cursorWhere ? `AND (${cursorWhere.sql})` : ""}
       ORDER BY ${SCHEDULE_SORT.orderBy} LIMIT ?`).bind(identity.uid, today, ...(cursorWhere?.bindings || []), pageSize + 1).all<Record<string, unknown>>(),
   ]);
@@ -738,17 +745,75 @@ export async function POST(request: Request) {
         WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
         .bind(identity.uid).first<Record<string, unknown>>();
       if (Number(activeJobs?.count || 0) >= MEMBER_ACTIVE_JOB_LIMIT) throw new Error("JOB_LIMIT_REACHED");
-      const customerId = cleanAdminText(body.crmCustomerId, 180);
+      let customerId = cleanAdminText(body.crmCustomerId, 180);
       let serviceSiteId = cleanAdminText(body.serviceSiteId, 180);
+      const customerMode = cleanAdminText(body.customerMode, 20);
+      const serviceSiteMode = cleanAdminText(body.serviceSiteMode, 20);
+      const createCustomer = customerMode === "new";
+      const firstName = cleanAdminText(body.firstName, 80);
+      const lastName = cleanAdminText(body.lastName, 80);
+      const businessName = cleanAdminText(body.businessName, 140);
+      const businessNumber = cleanAdminText(body.businessNumber, 30);
+      const customerType = CUSTOMER_TYPES.has(cleanAdminText(body.customerType, 20)) ? cleanAdminText(body.customerType, 20) : "residential";
+      const email = cleanAdminText(body.email, 180).toLowerCase();
+      const phone = cleanAdminText(body.phone, 40);
+      const siteLabel = cleanAdminText(body.siteLabel, 100) || "Primary site";
+      const addressLine1 = cleanAdminText(body.addressLine1, 140);
+      const addressLine2 = cleanAdminText(body.addressLine2, 140);
+      const suburb = cleanAdminText(body.suburb, 80);
+      const addressState = cleanAdminText(body.addressState, 10).toUpperCase();
+      const postcode = cleanAdminText(body.postcode, 12);
+      const intakeStatements: D1PreparedStatement[] = [];
+      if (createCustomer) {
+        const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
+          .bind(identity.uid).first<Record<string, unknown>>();
+        if (Number(customerCount?.count || 0) >= CRM_CUSTOMER_LIMIT) throw new Error("CUSTOMER_LIMIT_REACHED");
+        if (customerType === "business" ? !businessName : !firstName && !lastName) return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
+        if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+        if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
+        const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
+        if (duplicateCandidates.length) return adminJson({ ok: false, error: "A matching customer already exists. Select that customer or review the match before continuing.", duplicateCandidates }, 409);
+        customerId = crypto.randomUUID(); serviceSiteId = crypto.randomUUID();
+        const contactId = crypto.randomUUID();
+        const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${customerId.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
+        intakeStatements.push(
+          db.prepare(`INSERT INTO trade_crm_customers
+            (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email, phone,
+             address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '', 'active', ?, ?)`)
+            .bind(customerId, identity.uid, customerNumber, customerType, firstName, lastName, businessName, businessNumber, email, phone, addressLine1, addressLine2, suburb, addressState, postcode, now, now),
+          db.prepare(`INSERT INTO trade_crm_customer_contacts
+            (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'Primary contact', ?, ?, 1, 'active', ?, ?)`)
+            .bind(contactId, identity.uid, customerId, firstName, lastName, email, phone, now, now),
+          db.prepare(`INSERT INTO trade_crm_service_sites
+            (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+             access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode, now, now),
+          db.prepare(`INSERT INTO trade_crm_site_contacts
+            (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
+            .bind(crypto.randomUUID(), identity.uid, serviceSiteId, contactId, now, now),
+        );
+      }
       if (customerId) {
-        await ownedCustomer(db, identity, customerId);
-        if (!serviceSiteId) {
+        if (!createCustomer) await ownedCustomer(db, identity, customerId);
+        if (!createCustomer && serviceSiteMode === "new") {
+          if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
+          serviceSiteId = crypto.randomUUID();
+          intakeStatements.push(db.prepare(`INSERT INTO trade_crm_service_sites
+            (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+             access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 0, 'active', ?, ?)`)
+            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode, now, now));
+        } else if (!serviceSiteId) {
           const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
             WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, created_at LIMIT 1`)
             .bind(customerId, identity.uid).first<Record<string, unknown>>();
           serviceSiteId = String(primarySite?.id || "");
         }
-        if (serviceSiteId) await ownedServiceSite(db, identity, serviceSiteId, customerId);
+        if (serviceSiteId && !createCustomer && serviceSiteMode !== "new") await ownedServiceSite(db, identity, serviceSiteId, customerId);
       }
       if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
       const templateId = cleanAdminText(body.templateId, 180);
@@ -761,6 +826,8 @@ export async function POST(request: Request) {
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
       const requestedPriority = cleanAdminText(body.priority, 20) || cleanAdminText(template?.priority, 20);
       const priority = PRIORITIES.has(requestedPriority) ? requestedPriority : "standard";
+      const requestedBuildingType = cleanAdminText(body.buildingType, 40);
+      const buildingType = BUILDING_TYPES.has(requestedBuildingType) ? requestedBuildingType : "not_sure";
       const scheduledStart = dateValue(body.scheduledStart, true);
       const scheduledEnd = dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
@@ -769,21 +836,27 @@ export async function POST(request: Request) {
       const assignee = cleanAdminText(body.assigneeLabel, 80);
       if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
+      let serviceArea = cleanAdminText(body.siteArea, 80);
+      if (serviceSiteId) {
+        const site = createCustomer || serviceSiteMode === "new" ? { suburb, address_state: addressState, postcode } : await ownedServiceSite(db, identity, serviceSiteId, customerId);
+        serviceArea = [site.suburb, site.address_state, site.postcode].filter(Boolean).join(" ").trim();
+      }
       await db.batch([
+        ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
            service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
            record_status, created_at, updated_at)
           VALUES (?, ?, 'installer', 'job', 'internal', '', ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, 'active', ?, ?)`)
-          .bind(workOrderId, identity.uid, workNumber, title, serviceCategory, cleanAdminText(body.siteArea, 80),
+          .bind(workOrderId, identity.uid, workNumber, title, serviceCategory, serviceArea,
             priority, scheduledStart, scheduledEnd, assignee, now, now),
         db.prepare(`INSERT INTO trade_crm_job_details
-          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description,
+          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
+          VALUES (?, ?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, serviceSiteId, customerId ? "trade_owned" : "internal",
-            cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
+            buildingType, cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
@@ -793,7 +866,7 @@ export async function POST(request: Request) {
           .bind(crypto.randomUUID(), workOrderId, identity.uid, taskTitle, index, now, now)),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
-      return adminJson({ ok: true, id: workOrderId, workNumber }, 201);
+      return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -1005,6 +1078,9 @@ export async function PATCH(request: Request) {
         WHERE a.id = ? AND a.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(appointmentId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND");
+      if (["en_route", "arrived", "in_progress"].includes(String(current.status))) {
+        return adminJson({ ok: false, error: "Use the field-job action to advance an active appointment." }, 409);
+      }
       const status = body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
       if (!APPOINTMENT_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid appointment status." }, 400);
       await db.prepare("UPDATE trade_crm_appointments SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
@@ -1054,6 +1130,7 @@ export async function PATCH(request: Request) {
       serviceSiteId,
       customerSource: platformPrivate ? "platform_private" : customerId ? "trade_owned" : "internal",
       pipelineStage,
+      buildingType: body.buildingType === undefined ? String(current?.building_type || "not_sure") : cleanAdminText(body.buildingType, 40),
       description: body.description === undefined ? String(current?.description || "") : cleanAdminText(body.description, 3000),
       customerReference: platformPrivate ? "" : String(current?.customer_reference || ""),
       nextAction: body.nextAction === undefined ? String(current?.next_action || "") : cleanAdminText(body.nextAction, 200),
@@ -1064,21 +1141,22 @@ export async function PATCH(request: Request) {
       paid: body.paidValueCents === undefined ? Number(current?.paid_value_cents || 0) : moneyValue(body.paidValueCents),
       paymentDue: body.paymentDueAt === undefined ? String(current?.payment_due_at || "") : dateValue(body.paymentDueAt, true),
     };
+    if (!BUILDING_TYPES.has(values.buildingType)) return adminJson({ ok: false, error: "Choose a valid building type." }, 400);
     const detailStatement = current
-      ? db.prepare(`UPDATE trade_crm_job_details SET crm_customer_id = ?, service_site_id = ?, customer_source = ?, pipeline_stage = ?,
+      ? db.prepare(`UPDATE trade_crm_job_details SET crm_customer_id = ?, service_site_id = ?, customer_source = ?, pipeline_stage = ?, building_type = ?,
           description = ?, customer_reference = ?, next_action = ?, tags = ?, estimated_value_cents = ?,
           quoted_value_cents = ?, invoiced_value_cents = ?, paid_value_cents = ?, quote_status = ?,
           invoice_status = ?, payment_due_at = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
-        .bind(values.customerId, values.serviceSiteId, values.customerSource, values.pipelineStage, values.description, values.customerReference,
+        .bind(values.customerId, values.serviceSiteId, values.customerSource, values.pipelineStage, values.buildingType, values.description, values.customerReference,
           values.nextAction, values.tags, values.estimated, values.quoted, values.invoiced, values.paid,
           quoteStatus, invoiceStatus, values.paymentDue, now, workOrderId, identity.uid)
       : db.prepare(`INSERT INTO trade_crm_job_details
-          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, description,
+          (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(crypto.randomUUID(), workOrderId, identity.uid, values.customerId, values.serviceSiteId, values.customerSource, values.pipelineStage,
-          values.description, values.customerReference, values.nextAction, values.tags, values.estimated, values.quoted,
+          values.buildingType, values.description, values.customerReference, values.nextAction, values.tags, values.estimated, values.quoted,
           values.invoiced, values.paid, quoteStatus, invoiceStatus, values.paymentDue, now, now);
     const revision = nextJobRevision(job.revision);
     const statements = [detailStatement, db.prepare(`UPDATE trade_work_orders SET stage = COALESCE(NULLIF(?, ''), stage),

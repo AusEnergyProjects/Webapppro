@@ -160,10 +160,10 @@ test("installer dashboard, schedule and reports use compact server-owned read mo
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId \}, 201\)/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
   assert.match(crm, /CustomerLookupSelect/);
-  assert.match(crm, /Name, number, phone or suburb/);
+  assert.match(crm, /Name, number, phone, suburb or postcode/);
   assert.match(crm, /pageSize: "25"/);
 });
 

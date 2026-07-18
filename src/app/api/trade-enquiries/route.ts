@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 
 export const runtime = "edge";
 
@@ -48,33 +49,6 @@ async function ownedEnquiry(uid: string, id: string) {
   return row;
 }
 
-async function duplicateCandidates(uid: string, enquiry: Record<string, unknown>) {
-  if (Number(enquiry.protected_source)) return [];
-  const email = String(enquiry.email || "").trim().toLowerCase();
-  const phone = String(enquiry.phone || "").replace(/\D/g, "");
-  const businessNumber = String(enquiry.business_number || "").replace(/\D/g, "");
-  const address = [enquiry.address_line_1, enquiry.suburb, enquiry.address_state, enquiry.postcode].map((item) => String(item || "").trim().toLowerCase()).join("|");
-  const rows = await getD1().prepare(`SELECT c.id, c.customer_number, c.first_name, c.last_name, c.business_name,
-      c.business_number, c.email, c.phone, s.id service_site_id, s.site_label, s.address_line_1, s.suburb, s.address_state, s.postcode,
-      COALESCE(GROUP_CONCAT(DISTINCT cc.email), '') contact_emails, COALESCE(GROUP_CONCAT(DISTINCT cc.phone), '') contact_phones
-    FROM trade_crm_customers c
-    LEFT JOIN trade_crm_customer_contacts cc ON cc.customer_id = c.id AND cc.firebase_uid = c.firebase_uid AND cc.record_status = 'active'
-    LEFT JOIN trade_crm_service_sites s ON s.customer_id = c.id AND s.firebase_uid = c.firebase_uid AND s.record_status = 'active'
-    WHERE c.firebase_uid = ? AND c.record_status = 'active'
-    GROUP BY c.id, s.id ORDER BY c.updated_at DESC LIMIT 500`).bind(uid).all<Record<string, unknown>>();
-  return rows.results.flatMap((row) => {
-    const reasons: string[] = [];
-    const emails = [row.email, ...String(row.contact_emails || "").split(",")].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
-    const phones = [row.phone, ...String(row.contact_phones || "").split(",")].map((item) => String(item || "").replace(/\D/g, "")).filter(Boolean);
-    const rowAddress = [row.address_line_1, row.suburb, row.address_state, row.postcode].map((item) => String(item || "").trim().toLowerCase()).join("|");
-    if (email && emails.includes(email)) reasons.push("email");
-    if (phone && phones.includes(phone)) reasons.push("phone");
-    if (businessNumber && String(row.business_number || "").replace(/\D/g, "") === businessNumber) reasons.push("business number");
-    if (address.replaceAll("|", "") && rowAddress === address) reasons.push("service address");
-    return reasons.length ? [{ customerId: String(row.id), customerNumber: String(row.customer_number), displayName: String(row.business_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "Unnamed customer"), serviceSiteId: String(row.service_site_id || ""), siteLabel: String(row.site_label || ""), reasons }] : [];
-  });
-}
-
 function enquiryValues(body: Record<string, unknown>) {
   const customerType = cleanAdminText(body.customerType, 20).toLowerCase() || "residential";
   const addressState = cleanAdminText(body.addressState, 10).toUpperCase();
@@ -104,7 +78,10 @@ export async function GET(request: Request) {
         db.prepare("SELECT * FROM trade_crm_enquiry_messages WHERE enquiry_id = ? AND firebase_uid = ? ORDER BY occurred_at DESC").bind(id, uid).all<Record<string, unknown>>(),
         db.prepare("SELECT * FROM trade_crm_enquiry_attachments WHERE enquiry_id = ? AND firebase_uid = ? ORDER BY created_at DESC").bind(id, uid).all<Record<string, unknown>>(),
         db.prepare("SELECT * FROM trade_crm_enquiry_events WHERE enquiry_id = ? AND firebase_uid = ? ORDER BY created_at DESC").bind(id, uid).all<Record<string, unknown>>(),
-        duplicateCandidates(uid, enquiry),
+        Number(enquiry.protected_source) ? Promise.resolve([]) : findDirectCustomerDuplicates(db, uid, {
+          email: enquiry.email, phone: enquiry.phone, businessNumber: enquiry.business_number,
+          addressLine1: enquiry.address_line_1, suburb: enquiry.suburb, addressState: enquiry.address_state, postcode: enquiry.postcode,
+        }),
       ]);
       return adminJson({ ok: true, enquiry: parseRow(enquiry), messages: parseRows(messages), attachments: parseRows(attachments), events: parseRows(events), duplicateCandidates: candidates });
     }

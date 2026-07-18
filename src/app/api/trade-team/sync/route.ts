@@ -6,6 +6,8 @@ import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
 import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
 import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
+import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
+import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
 
 export const runtime = "edge";
 
@@ -70,11 +72,23 @@ async function accessibleJobs(access: TeamAccess) {
   const [jobRows, taskRows, mediaRows, formRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
-        w.revision, w.updated_at, d.customer_source, c.address_line_1, c.address_line_2, c.suburb,
-        c.address_state, c.postcode
+        w.revision, w.updated_at, d.customer_source, d.description,
+        CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+        COALESCE((SELECT cc.phone FROM trade_crm_site_contacts sc JOIN trade_crm_customer_contacts cc
+          ON cc.id = sc.customer_contact_id AND cc.firebase_uid = sc.firebase_uid
+          WHERE sc.service_site_id = ss.id AND sc.firebase_uid = w.firebase_uid AND sc.record_status = 'active' AND cc.record_status = 'active'
+          AND cc.phone <> '' ORDER BY sc.is_primary DESC, sc.created_at LIMIT 1), c.phone, '') customer_phone,
+        ss.site_label, ss.address_line_1, ss.address_line_2, ss.suburb, ss.address_state, ss.postcode,
+        a.id appointment_id, a.status appointment_status, a.starts_at appointment_starts_at, a.ends_at appointment_ends_at,
+        a.travel_started_at, a.arrived_at, a.work_started_at, a.completed_at,
+        (SELECT COUNT(*) FROM trade_crm_job_notes n WHERE n.work_order_id = w.id AND n.firebase_uid = w.firebase_uid AND n.note_type = 'issue' AND n.issue_status = 'open') open_issues
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_appointments a ON a.id = (SELECT fa.id FROM trade_crm_appointments fa WHERE fa.work_order_id = w.id AND fa.firebase_uid = w.firebase_uid
+        AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
+        ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
       ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC LIMIT 500`)
@@ -101,8 +115,9 @@ async function accessibleJobs(access: TeamAccess) {
   ]);
   return new Map(jobRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
-    const serviceAddress = protectedJob ? "" : [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
-      .map((part) => String(part || "").trim()).filter(Boolean).join(", ");
+    const directCustomer = !protectedJob && row.customer_source === "trade_owned";
+    const serviceAddress = directCustomer ? [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
+      .map((part) => String(part || "").trim()).filter(Boolean).join(", ") : "";
     return [String(row.id), {
       id: row.id,
       workNumber: row.work_number,
@@ -116,12 +131,24 @@ async function accessibleJobs(access: TeamAccess) {
       assigneeMemberId: row.assignee_member_id,
       assigneeLabel: row.assignee_label,
       protectedJob,
+      customerName: protectedJob ? "AEA protected customer" : directCustomer ? String(row.customer_name || "Direct customer") : "Internal job",
+      customerPhone: directCustomer ? String(row.customer_phone || "") : "",
       serviceAddress,
+      appointmentId: row.appointment_id || "",
+      appointmentStatus: row.appointment_status || "",
+      appointmentStartsAt: row.appointment_starts_at || "",
+      appointmentEndsAt: row.appointment_ends_at || "",
+      travelStartedAt: row.travel_started_at || "",
+      arrivedAt: row.arrived_at || "",
+      workStartedAt: row.work_started_at || "",
+      completedAt: row.completed_at || "",
+      description: row.description || "",
+      openIssues: Number(row.open_issues || 0),
       revision: Number(row.revision || 1),
       updatedAt: row.updated_at,
       offlinePolicy: {
-        containsPersonalData: Boolean(serviceAddress),
-        maxAgeSeconds: serviceAddress ? 86_400 : 604_800,
+        containsPersonalData: Boolean(serviceAddress || (directCustomer && row.customer_phone)),
+        maxAgeSeconds: serviceAddress || (directCustomer && row.customer_phone) ? 86_400 : 604_800,
         purgeWhenUnassigned: true,
       },
       tasks: taskRows.results.filter((task) => task.work_order_id === row.id).map((task) => ({
@@ -268,6 +295,24 @@ async function releaseConflict(access: TeamAccess, action: OfflineAction, curren
     .bind(currentRevision, now, access.ownerUid, cleanAdminText(action.clientActionId, 120)).run();
 }
 
+async function fieldFinishBlockers(ownerUid: string, workOrderId: string) {
+  const db = getD1();
+  const [tasks, forms, issues, plan, request] = await Promise.all([
+    db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
+      WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare("SELECT id, revision, requirements, status FROM trade_crm_photo_requests WHERE work_order_id = ? AND firebase_uid = ?").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+  ]);
+  const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
+  if (request && request.status !== "revoked") {
+    try { const proof = await photoRequestProofOverview({ ownerUid, workOrderId, requestId: String(request.id), requestRevision: Number(request.revision), requirements: normalisePhotoRequirements(JSON.parse(String(request.requirements || "[]"))) }); if (!proof.proofReady) blockers.push("required photo proof"); }
+    catch { blockers.push("required photo proof"); }
+  }
+  return blockers;
+}
+
 async function applyAction(access: TeamAccess, deviceId: string, action: OfflineAction) {
   const clientActionId = cleanAdminText(action.clientActionId, 120);
   const actionType = cleanAdminText(action.type, 40);
@@ -278,6 +323,64 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
   if (replay) return replay;
   const db = getD1();
   const now = new Date().toISOString();
+
+  if (actionType === "advance_field_job") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180); const transitionName = cleanAdminText(action.transition, 30);
+    const transitions: Record<string, { from: string; to: string; timestamp: string; label: string }> = {
+      start_travel: { from: "scheduled", to: "en_route", timestamp: "travel_started_at", label: "Start travel" },
+      arrive: { from: "en_route", to: "arrived", timestamp: "arrived_at", label: "Arrive" },
+      start_work: { from: "arrived", to: "in_progress", timestamp: "work_started_at", label: "Start work" },
+      finish: { from: "in_progress", to: "completed", timestamp: "completed_at", label: "Finish" },
+    };
+    const transition = transitions[transitionName]; const baseRevision = Number(action.baseRevision);
+    if (!transition || !Number.isInteger(baseRevision) || baseRevision < 1) return { clientActionId, status: "rejected", code: "INVALID_FIELD_TRANSITION", error: "Use the next available field-job action." };
+    const job = await assignedJob(access, workOrderId);
+    if (Number(job.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId, baseRevision, currentRevision: Number(job.revision) };
+    const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
+      AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed') ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
+      .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
+    if (!appointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
+    if (appointment.status !== transition.from) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` };
+    if (transitionName === "finish") { const blockers = await fieldFinishBlockers(access.ownerUid, workOrderId); if (blockers.length) return { clientActionId, status: "rejected", code: "FINISH_BLOCKED", error: `Complete ${blockers.join(", ")} before finishing.` }; }
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now); if (reserved) return reserved;
+    const resultRevision = nextJobRevision(job.revision);
+    const guard = `EXISTS (SELECT 1 FROM trade_crm_appointments fa WHERE fa.id = ? AND fa.firebase_uid = ?
+      AND fa.status = ? AND fa.${transition.timestamp} = ? AND fa.last_transition_by_uid = ?)`;
+    const results = await db.batch([
+      db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${transition.timestamp} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = ?`).bind(transition.to, now, access.actorUid, now, appointment.id, access.ownerUid, transition.from),
+      db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
+        revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND ${guard}`)
+        .bind(transitionName, transitionName, resultRevision, now, workOrderId, access.ownerUid, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`UPDATE trade_crm_job_details SET pipeline_stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'complete' ELSE pipeline_stage END,
+        updated_at = ? WHERE work_order_id = ? AND firebase_uid = ? AND ${guard}`)
+        .bind(transitionName, transitionName, now, workOrderId, access.ownerUid, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`UPDATE trade_crm_job_plans SET status = 'completed', completed_at = ?, updated_at = ?
+        WHERE work_order_id = ? AND firebase_uid = ? AND ? = 'finish' AND ${guard}`)
+        .bind(now, now, workOrderId, access.ownerUid, transitionName, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`UPDATE trade_crm_job_plan_phases SET status = 'completed', completed_at = ?, updated_at = ?
+        WHERE firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)
+        AND ? = 'finish' AND ${guard}`)
+        .bind(now, now, access.ownerUid, workOrderId, access.ownerUid, transitionName, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`UPDATE trade_offline_actions SET result_revision = ?, status = 'applied', lease_until = '', error_code = '', updated_at = ?
+        WHERE owner_uid = ? AND client_action_id = ? AND payload_hash = ? AND device_id = ? AND entity_id = ? AND base_revision = ?
+        AND status = 'processing' AND ${guard}`)
+        .bind(resultRevision, now, access.ownerUid, clientActionId, hash, deviceId, workOrderId, baseRevision,
+          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+        SELECT ?, ?, ?, 'field_state_changed', ?, ? WHERE ${guard}`)
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${transition.label} recorded in the field app.`, now,
+          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+      db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+        SELECT ?, ?, ?, 'job_completed', 'Required work, forms, proof and blockers cleared. Invoice and handover preparation are ready.', ?
+        WHERE ? = 'finish' AND ${guard}`)
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, transitionName,
+          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+    ]);
+    if (!results[0]?.meta.changes) { await releaseConflict(access, action, Number(job.revision), now); return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId }; }
+    await db.batch(jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: resultRevision, changedAt: now, audienceMemberId: job.assignee_member_id }));
+    return { clientActionId, status: "applied", actionType, entityId: workOrderId, resultRevision, appliedAt: now };
+  }
 
   if (actionType === "set_job_stage") {
     const workOrderId = cleanAdminText(action.workOrderId, 180);

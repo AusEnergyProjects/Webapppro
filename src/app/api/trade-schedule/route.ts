@@ -41,7 +41,7 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
   const db = getD1();
   const [overlap, unavailable] = await Promise.all([
     db.prepare(`SELECT id FROM trade_crm_appointments WHERE firebase_uid = ? AND assignee_member_id = ?
-      AND status = 'scheduled' AND id <> ? AND starts_at < ? AND COALESCE(NULLIF(ends_at, ''), starts_at) > ? LIMIT 1`)
+      AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND id <> ? AND starts_at < ? AND COALESCE(NULLIF(ends_at, ''), starts_at) > ? LIMIT 1`)
       .bind(ownerUid, memberId, excludeAppointmentId, endsAt, startsAt).first(),
     db.prepare(`SELECT id FROM trade_team_unavailability WHERE owner_uid = ? AND team_member_id = ?
       AND starts_at < ? AND ends_at > ? LIMIT 1`).bind(ownerUid, memberId, endsAt, startsAt).first(),
@@ -65,7 +65,7 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
-      WHERE a.firebase_uid = ? AND a.status = 'scheduled' AND a.starts_at < ?
+      WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND a.starts_at < ?
         AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? ORDER BY a.starts_at, a.created_at`)
       .bind(ownerUid, `${weekEnd}T00:00`, `${weekStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.priority, w.stage, w.revision, w.source_type,
@@ -76,7 +76,7 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND w.stage NOT IN ('completed', 'cancelled') AND NOT EXISTS (
           SELECT 1 FROM trade_crm_appointments pending WHERE pending.work_order_id = w.id
-            AND pending.firebase_uid = w.firebase_uid AND pending.status = 'scheduled'
+            AND pending.firebase_uid = w.firebase_uid AND pending.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
         )
       ORDER BY w.priority = 'urgent' DESC, w.updated_at DESC LIMIT 100`).bind(ownerUid).all<Record<string, unknown>>(),
     db.prepare(`SELECT r.id, r.appointment_id, r.work_order_id, r.status, r.preferred_windows, r.reason, r.access_notes,

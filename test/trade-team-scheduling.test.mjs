@@ -75,7 +75,7 @@ test("owners and dispatch roles receive server-enforced conflict and revision ch
   for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canDispatch", "activeMember", "owner_uid = ?", "firebase_uid = ?"]) assert.match(route, new RegExp(boundary));
   for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(route, new RegExp(conflict));
   assert.doesNotMatch(route, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
-  assert.match(route, /status = 'scheduled' AND id <> \?/);
+  assert.match(route, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) AND id <> \?/);
   assert.match(route, /ON CONFLICT\(owner_uid, team_member_id, weekday\) DO UPDATE/);
   assert.match(route, /schedule_updated/); assert.match(route, /schedule_created/); assert.match(route, /jobSyncChangeStatements/);
 });

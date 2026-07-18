@@ -134,7 +134,7 @@ test("TLink has a consistent trade platform identity and installable app icon", 
 
 test("the mobile More menu opens above the CRM view instead of being clipped", () => {
   assert.match(styles, /\.trade-portal-shell \.crm-nav \{ overflow: visible;/);
-  assert.match(styles, /\.trade-portal-shell \.crm-more-nav\[open\] \{ z-index: 25;/);
+  assert.match(styles, /\.trade-portal-shell \.crm-more-nav\[data-open\] \{ z-index: 25;/);
   assert.match(styles, /max-width: calc\(100vw - 30px\)/);
 });
 

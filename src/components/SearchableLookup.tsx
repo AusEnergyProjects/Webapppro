@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export type SearchableLookupOption = { id: string; label: string; secondary?: string };
 
@@ -19,27 +19,29 @@ export function SearchableLookup({ label, value, placeholder, required, disabled
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const selectedValue = useRef("");
 
   function choose(option: SearchableLookupOption) {
     setQuery(option.label);
     setOpen(false);
+    selectedValue.current = option.id;
     onChange(option.id, option);
   }
 
   useEffect(() => {
-    if (!value || query) return;
+    if (!value || selectedValue.current === value) return;
     let active = true;
     void load("", value).then((items) => {
       if (!active) return;
       setOptions(items);
       const selected = items.find((item) => item.id === value);
-      if (selected) setQuery(selected.label);
+      if (selected) { selectedValue.current = value; setQuery(selected.label); }
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [load, query, value]);
+  }, [load, value]);
 
   useEffect(() => {
-    if (query.trim().length < 2 || (value && options.some((item) => item.id === value && item.label === query))) return;
+    if (query.trim().length < 2 || (value && selectedValue.current === value)) return;
     let active = true;
     const timer = window.setTimeout(() => {
       setBusy(true);
@@ -51,7 +53,7 @@ export function SearchableLookup({ label, value, placeholder, required, disabled
       }).catch(() => active && setOptions([])).finally(() => active && setBusy(false));
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [load, options, query, value]);
+  }, [load, query, value]);
 
   return <label className="searchable-lookup" htmlFor={id}>
     <span>{label}</span>
@@ -59,7 +61,7 @@ export function SearchableLookup({ label, value, placeholder, required, disabled
       placeholder={placeholder} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-options`}
       aria-activedescendant={open && options[activeIndex] ? `${id}-option-${activeIndex}` : undefined}
       onFocus={() => query.length >= 2 && setOpen(true)}
-      onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); onChange(""); }}
+      onChange={(event) => { selectedValue.current = ""; setQuery(event.target.value); setActiveIndex(0); onChange(""); }}
       onKeyDown={(event) => {
         if (event.key === "Escape") { setOpen(false); return; }
         if (!open || !options.length) return;

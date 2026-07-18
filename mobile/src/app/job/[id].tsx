@@ -2,6 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as Linking from 'expo-linking';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,14 +10,15 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
 import { colours, radius, spacing } from '@/lib/theme';
-import type { FieldForm, FieldJob, JobStage } from '@/lib/types';
+import type { FieldForm, FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
 
-const nextStages: { value: JobStage; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }[] = [
-  { value: 'in_progress', label: 'Start work', icon: 'play-circle-outline' },
-  { value: 'blocked', label: 'Mark blocked', icon: 'alert-circle-outline' },
-  { value: 'completed', label: 'Complete job', icon: 'check-circle-outline' },
-];
+const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'start_work' | 'finish'; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
+  scheduled: { transition: 'start_travel', label: 'Start travel', icon: 'car-arrow-right' },
+  en_route: { transition: 'arrive', label: 'Arrive', icon: 'map-marker-check-outline' },
+  arrived: { transition: 'start_work', label: 'Start work', icon: 'play-circle-outline' },
+  in_progress: { transition: 'finish', label: 'Finish', icon: 'check-circle-outline' },
+};
 
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -31,11 +33,15 @@ export default function JobScreen() {
   const load = useCallback(async () => setJob(await findJob(String(id))), [findJob, id]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  async function setStage(stage: JobStage) {
-    if (!job) return;
-    setBusy(`stage:${stage}`);
-    await saveAction({ type: 'set_job_stage', workOrderId: job.id, baseRevision: job.revision, stage });
-    await load(); setBusy('');
+  async function advanceFieldJob() {
+    if (!job) return; const action = fieldActions[job.appointmentStatus]; if (!action) return;
+    const localBlockers = [job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '', job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '', job.openIssues ? 'open issues' : ''].filter(Boolean);
+    if (action.transition === 'finish' && !sync.online) return Alert.alert('Reconnect before finishing', 'Finish must check current forms, evidence, issues and unsynchronised changes. Other field updates remain safely queued offline.');
+    if (action.transition === 'finish' && localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
+    setBusy(`field:${action.transition}`);
+    try { await saveAction({ type: 'advance_field_job', workOrderId: job.id, baseRevision: job.revision, transition: action.transition }); await load(); }
+    catch { Alert.alert('Action required', 'The field action remains saved on this device. Open Sync to review it or try again when the connection is stable.'); }
+    finally { setBusy(''); }
   }
 
   async function toggleTask(taskId: string) {
@@ -99,12 +105,15 @@ export default function JobScreen() {
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
+  const fieldAction = fieldActions[job.appointmentStatus];
+  const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   return (
     <Screen>
       <View style={styles.hero}>
         <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{readable(job.stage)}</Text></View></View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
-        <Text style={styles.body}>{readable(job.serviceCategory || 'general work')}</Text>
+        <Text style={styles.body}>{job.customerName} | {job.protectedJob ? job.siteArea || 'Protected service area' : job.serviceAddress || job.siteArea || 'Service site not added'}</Text>
+        {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
       </View>
 
       <View style={[styles.privacy, job.protectedJob && styles.protected]}>
@@ -114,12 +123,18 @@ export default function JobScreen() {
 
       <View style={styles.card}>
         <Text style={styles.label}>NEXT ACTION</Text>
-        <View style={styles.actionGrid}>{nextStages.map((stage) => <Pressable key={stage.value} disabled={busy !== '' || job.stage === stage.value} onPress={() => void setStage(stage.value)} style={({ pressed }) => [styles.stageAction, job.stage === stage.value && styles.selected, pressed && styles.pressed]}><MaterialCommunityIcons name={stage.icon} size={25} color={colours.green} /><Text style={styles.stageActionText}>{job.stage === stage.value ? `${stage.label.replace('Mark ', '')} now` : stage.label}</Text></Pressable>)}</View>
+        {fieldAction ? <Pressable accessibilityRole="button" accessibilityLabel={fieldAction.label} disabled={busy !== ''} onPress={() => void advanceFieldJob()} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><MaterialCommunityIcons name={fieldAction.icon} size={28} color={colours.white} /><Text style={styles.primaryActionText}>{busy === `field:${fieldAction.transition}` ? 'Saving...' : fieldAction.label}</Text></Pressable> : <Text style={styles.body}>{job.appointmentStatus === 'completed' && job.stage === 'completed' ? 'Field work is complete. Invoice and handover are ready in TLink.' : job.appointmentStatus === 'completed' ? 'This appointment was completed outside the field workflow. Ask dispatch to reopen or reschedule it.' : 'Schedule this job before starting travel.'}</Text>}
+        {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Get directions</Text></Pressable> : null}</View> : null}
       </View>
 
       <View style={styles.card}>
-        <View style={styles.cardHeading}><View><Text style={styles.label}>CHECKLIST</Text><Text style={styles.cardTitle}>What needs doing</Text></View><Text style={styles.progress}>{completed}/{job.tasks.length}</Text></View>
+        <View style={styles.cardHeading}><View><Text style={styles.label}>TODAY</Text><Text style={styles.cardTitle}>What must happen</Text></View></View>
+        <View style={styles.todayItem}><MaterialCommunityIcons name={job.description ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={job.description ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Scope and instructions</Text><Text style={styles.meta}>{job.description || 'Open Notes in TLink before starting.'}</Text></View></View>
+        <View style={styles.todayItem}><MaterialCommunityIcons name={completed === job.tasks.length ? 'check-circle-outline' : 'clipboard-check-outline'} size={25} color={completed === job.tasks.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Assigned tasks</Text><Text style={styles.meta}>{completed}/{job.tasks.length} complete</Text></View></View>
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
+        <View style={styles.todayItem}><MaterialCommunityIcons name={fieldForms.every((form) => form.status === 'complete') ? 'check-circle-outline' : 'file-document-edit-outline'} size={25} color={fieldForms.every((form) => form.status === 'complete') ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required forms</Text><Text style={styles.meta}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length} complete</Text></View></View>
+        <View style={styles.todayItem}><MaterialCommunityIcons name={job.media.length ? 'check-circle-outline' : 'camera-outline'} size={25} color={job.media.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required photo proof</Text><Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} synced</Text></View></View>
+        <View style={styles.todayItem}><MaterialCommunityIcons name={!job.openIssues ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={!job.openIssues ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Open issues or blockers</Text><Text style={styles.meta}>{job.openIssues ? `${job.openIssues} need attention in TLink Notes` : 'None open'}</Text></View></View>
       </View>
 
       <View style={styles.card}>
@@ -141,7 +156,7 @@ export default function JobScreen() {
         <FieldButton loading={busy === 'time'} disabled={!duration} onPress={() => void addTime()}>Save time entry</FieldButton>
       </View>
 
-      <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{sync.online ? 'Changes sync automatically.' : 'Offline mode. Your changes are saved securely.'}</Text></View>
+      <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
     </Screen>
   );
 }
@@ -182,12 +197,13 @@ const styles = StyleSheet.create({
   cardHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   label: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   progress: { color: colours.green, fontSize: 18, fontWeight: '800' },
-  actionGrid: { gap: spacing.sm },
-  stageAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm },
-  selected: { backgroundColor: colours.mint, borderColor: colours.green },
-  stageActionText: { color: colours.ink, fontSize: 16, fontWeight: '700' },
+  primaryAction: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colours.green, borderRadius: radius.md },
+  primaryActionText: { color: colours.white, fontSize: 18, fontWeight: '800' },
+  contactAction: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colours.green, borderRadius: radius.sm },
+  contactActionText: { color: colours.green, fontWeight: '800' },
   pressed: { opacity: 0.7 },
   task: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },
+  todayItem: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },
   taskTitle: { color: colours.ink, fontSize: 16, fontWeight: '600' },
   taskDone: { color: colours.muted, textDecorationLine: 'line-through' },
   formRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colours.line, paddingVertical: spacing.sm },

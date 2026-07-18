@@ -8,6 +8,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0028_fearless_white_queen.sql");
 const route = read("../src/app/api/trade-crm/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
+const newJob = read("../src/components/TradeNewJobForm.tsx");
 const platform = read("../src/app/platform/page.tsx");
 const membership = read("../src/app/direct-trade/membership/page.tsx");
 
@@ -32,7 +33,7 @@ test("templates prefill jobs and copy up to 24 checklist tasks", () => {
   assert.match(route, /cleanTemplateTasks\(storedList\(template\.task_titles, 24\)\)/);
   assert.match(route, /templateTasks\.map/);
   assert.match(crm, /Templates/);
-  assert.match(crm, /Start from a template, optional/);
+  assert.match(newJob, /Start from a template, optional/);
   assert.match(crm, /Checklist, one item per line/);
 });
 
