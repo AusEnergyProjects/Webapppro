@@ -23,7 +23,7 @@ type Result = {
   error?: string;
 };
 
-export function TradePhotoRequestPanel({ user, workOrderId, onChanged }: { user: User; workOrderId: string; onChanged: () => Promise<void> }) {
+export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; workOrderId: string }) {
   const [record, setRecord] = useState<RequestRecord | null>(null);
   const [requirements, setRequirements] = useState<PhotoRequirement[]>([]);
   const [shareUrl, setShareUrl] = useState("");
@@ -88,7 +88,6 @@ export function TradePhotoRequestPanel({ user, workOrderId, onChanged }: { user:
       setStatus(actionName === "issue_link" || result.shareUrl
         ? "Secure link ready. Copy or share it now. Creating another link later will replace this one."
         : "Photo requirements saved. The active customer link now shows this revision.");
-      await onChanged();
     } catch (error) { setStatus(error instanceof Error ? error.message : "The customer photo request could not be saved."); }
     finally { setBusy(""); }
   }
@@ -102,7 +101,7 @@ export function TradePhotoRequestPanel({ user, workOrderId, onChanged }: { user:
       });
       const result = await response.json().catch(() => ({})) as Result;
       if (!response.ok || !result.ok) throw new Error(result.error || "The customer link could not be revoked.");
-      apply(result); setShareUrl(""); setStatus("The previous customer link is no longer active."); await onChanged();
+      apply(result); setShareUrl(""); setStatus("The previous customer link is no longer active.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The customer link could not be revoked."); }
     finally { setBusy(""); }
   }

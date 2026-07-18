@@ -101,6 +101,7 @@ test("installer and customer interfaces expose the complete request and proof fl
   assert.match(installerUi, />Request info</);
   assert.match(installerUi, /TradePhotoRequestPanel/);
   assert.match(requestUi, /Save requirement changes/);
+  assert.doesNotMatch(requestUi, /onChanged/);
   assert.match(requestUi, /Create request and link/);
   assert.match(requestUi, /Replace secure link/);
   assert.match(requestUi, /Revoke link/);
