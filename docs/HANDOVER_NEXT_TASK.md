@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the P6-3F readiness foundation and the installer catalogue usability batch on top of the published P6-3E accepted quote handoff. Exact release identity is recorded in `RELEASE_TRUTH.md` after publication.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the P6-3F readiness and catalogue usability foundation plus the published frictionless self-and-staff scheduling batch on top of the P6-3E accepted quote handoff. Exact release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
@@ -73,6 +73,8 @@ Migration `0068_accepted_quote_handoff.sql` adds the immutable commercial handof
 P6-3F foundation converts an accepted direct-customer scope once into owner-scoped job phases and requirements, preserves the accepted sell and known cost baseline, and exposes one readiness checklist for scope, forms, technician, materials and deposit. The office can preassign an invited technician while access remains blocked until invitation acceptance. The job does not schedule, reserve stock or order materials automatically.
 
 Installer catalogue usability now includes obvious horizontal navigation, a pinned first column and header dropdowns with searchable include and exclude choices for wholesaler, brand and model code. Clicking a wholesaler opens a verified TLink profile with trade contacts, dispatch and warehouse locations, coverage and the approved product catalogue. Verified wholesalers maintain those locations from their existing overview.
+
+The scheduling follow-up removes the empty-owner trap. The signed-in installer owner is materialised once as the active Me resource, while any added person becomes assignable immediately without an account or invitation confirmation. Login access is optional and can be created later through a separate expiring secure link. The Schedule workspace defaults unassigned work to Me, presents one labelled dispatch row, collapses working-hours administration and uses a compact empty-week strip instead of seven tall blank columns.
 
 ## Next milestone contract
 
