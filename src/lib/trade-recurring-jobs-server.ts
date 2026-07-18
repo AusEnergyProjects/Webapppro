@@ -1,4 +1,4 @@
-import { nextTradeWorkNumber } from "./trade-job-number-server";
+import { nextTlinkJobNumber } from "./trade-job-number-server";
 import { jobSyncChangeStatements } from "./trade-team-sync-server";
 import { publishedTradeFormTemplatesFor } from "./trade-form-templates-server";
 
@@ -63,7 +63,7 @@ export async function generateDueServiceJobs(db: D1Database, options: GenerateOp
     try {
       const now = new Date().toISOString();
       const workOrderId = crypto.randomUUID();
-      const workNumber = await nextTradeWorkNumber(db, String(row.firebase_uid), "JOB", now);
+      const workNumber = await nextTlinkJobNumber(db, now);
       const label = serviceLabels[String(row.service_type)] || "Scheduled service";
       const title = String(row.template_title || "").trim() || `${label}: ${String(row.brand)} ${String(row.model_number)}`;
       const tasks = storedTasks(row.task_titles);

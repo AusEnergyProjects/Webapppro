@@ -372,6 +372,7 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_work_orders_owner_number_idx").on(table.firebaseUid, table.workNumber),
+  uniqueIndex("trade_work_orders_tlink_job_number_idx").on(table.workNumber).where(sql`${table.workNumber} GLOB 'TLJ-*'`),
   index("trade_work_orders_owner_stage_idx").on(table.firebaseUid, table.recordStatus, table.stage, table.updatedAt),
   index("trade_work_orders_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
 ]);

@@ -3,7 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
-import { reserveTradeWorkNumbers } from "@/lib/trade-job-number-server";
+import { reserveTlinkJobNumbers } from "@/lib/trade-job-number-server";
 import { IMPORT_DEFINITIONS, IMPORT_MAX_ROWS, validateImportCsv } from "@/lib/trade-data-imports.mjs";
 
 export const runtime = "edge";
@@ -278,7 +278,7 @@ export async function POST(request: Request) {
             target_entity_id = ?, updated_at = ? WHERE id = ? AND batch_id = ?`).bind(id, now, row.id, batchId));
         }
       } else if (importType === "jobs") {
-        const numbers = await reserveTradeWorkNumbers(db, identity.uid, "JOB", selected.length, now);
+        const numbers = await reserveTlinkJobNumbers(db, selected.length, now);
         const customers = await db.prepare(`SELECT c.id, LOWER(c.email) email,
           COALESCE((SELECT s.id FROM trade_crm_service_sites s WHERE s.customer_id = c.id AND s.firebase_uid = c.firebase_uid AND s.record_status = 'active' ORDER BY s.is_primary DESC, s.created_at LIMIT 1), '') service_site_id
           FROM trade_crm_customers c WHERE c.firebase_uid = ? AND c.record_status = 'active' AND c.email != ''`).bind(identity.uid).all<{ id: string; email: string; service_site_id: string }>();

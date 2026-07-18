@@ -54,14 +54,13 @@ test("new job uses structured sites, provider-neutral suggestions and manual fal
   assert.match(newJob, /role="listbox"/);
 });
 
-test("intake presets stay editable and low-value schedule and price fields stay out", () => {
-  assert.match(newJob, /Inspection or quote/);
-  assert.match(newJob, /categoryTitles/);
-  assert.match(newJob, /list=\{titleListId\}/);
-  assert.match(newJob, /You can always type a custom title/);
+test("guided intake removes manual titles and carries scheduling into the same flow", () => {
+  assert.doesNotMatch(newJob, /name="title"|datalist|type your own|Appointment title/);
+  for (const step of ["Create the job", "Add or attach the customer", "Choose who and what", "Schedule the time", "Request information"]) assert.match(newJob, new RegExp(step));
   assert.match(newJob, /name="buildingType"/);
-  assert.doesNotMatch(newJob, /name="scheduledStart"|name="scheduledEnd"|name="estimatedValue"/);
-  assert.match(crmRoute, /dateValue\(body\.scheduledStart/);
+  assert.match(newJob, /name="startsAt"/);
+  assert.match(newJob, /Schedule and request info/);
+  assert.match(crmRoute, /action === "create_scheduled_job"/);
   assert.match(crmRoute, /moneyValue\(body\.estimatedValueCents\)/);
 });
 

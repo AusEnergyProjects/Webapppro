@@ -89,7 +89,7 @@ test("guided imports store durable previews, row decisions, results and rollback
   assert.match(schema, /sqliteTable\("trade_data_import_batches"/);
   assert.match(schema, /sqliteTable\("trade_data_import_rows"/);
   assert.match(route, /validateImportCsv/);
-  assert.match(route, /reserveTradeWorkNumbers\(db, identity\.uid, "JOB"/);
+  assert.match(route, /reserveTlinkJobNumbers\(db, selected\.length, now\)/);
   assert.match(route, /target_entity_type = 'work_order'/);
   assert.match(route, /Record changed after import/);
   assert.match(route, /listing_status = 'archived'/);

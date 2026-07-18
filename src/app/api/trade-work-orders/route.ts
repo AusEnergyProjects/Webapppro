@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
-import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
+import { nextTlinkJobNumber, nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
 import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/lib/trade-team-sync-server";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
@@ -405,7 +405,9 @@ export async function POST(request: Request) {
     if (privateDataDetected(requestedAssignee)) throw new Error("PRIVATE_DATA");
     const workOrderId = crypto.randomUUID();
     const prefix = identity.partnerType === "supplier" ? "FUL" : "JOB";
-    const workNumber = await nextTradeWorkNumber(db, identity.uid, prefix, now);
+    const workNumber = prefix === "JOB"
+      ? await nextTlinkJobNumber(db, now)
+      : await nextTradeWorkNumber(db, identity.uid, prefix, now);
     const workType = identity.partnerType === "supplier" ? "fulfilment" : "job";
     const appointmentId = selectedArrival ? crypto.randomUUID() : "";
     const createStatements = [

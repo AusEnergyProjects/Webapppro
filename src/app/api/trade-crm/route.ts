@@ -2,13 +2,17 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
-import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
+import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
+import { ensureOwnerTeamMember } from "@/lib/trade-team-server";
+import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
+import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
+import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
 
 export const runtime = "edge";
 
@@ -30,6 +34,17 @@ const QUOTE_STATUSES = new Set(["not_started", "draft", "sent", "accepted", "dec
 const INVOICE_STATUSES = new Set(["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAGE_SIZES = new Set([25, 50, 100]);
+const SERVICE_LABELS: Record<string, string> = {
+  assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
+  "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
+  "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging",
+  electrical: "Electrical services", plumbing: "Plumbing services",
+  "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
+};
+const APPOINTMENT_LABELS: Record<string, string> = {
+  phone_call: "Phone call", site_visit: "Site visit", quote_review: "Quote review",
+  installation: "Installation", service: "Service visit", admin: "Office task",
+};
 type CrmSortTerm = { expression: string; direction: KeysetDirection; rowKey: string; numeric?: boolean };
 type CrmSort = { orderBy: string; terms: CrmSortTerm[] };
 const crmTerm = (expression: string, direction: KeysetDirection, rowKey: string, numeric = false): CrmSortTerm => ({ expression, direction, rowKey, numeric });
@@ -50,7 +65,7 @@ const CUSTOMER_SORTS: Record<string, CrmSort> = {
 };
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
 
-type CrmIdentity = { uid: string; businessName: string; addressState: string; teamAccess: boolean };
+type CrmIdentity = { uid: string; email: string; memberId: string; businessName: string; addressState: string; teamAccess: boolean };
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
   const identity = await requireFirebaseIdentity(request);
@@ -61,9 +76,13 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
   if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
   const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
+  const businessName = String(account.business_name || "Trade business");
+  const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, businessName);
   return {
     uid: identity.uid,
-    businessName: String(account.business_name || "Trade business"),
+    email: identity.email,
+    memberId,
+    businessName,
     addressState: String(account.address_state || "NSW"),
     teamAccess: entitlements.features.team_access,
   };
@@ -129,7 +148,7 @@ function moneyValue(value: unknown) {
 }
 
 function customerDisplayName(row: Record<string, unknown>) {
-  return String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim() || row.customer_number);
+  return String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim() || row.customer_number || "");
 }
 
 function pagination(url: URL) {
@@ -420,11 +439,21 @@ function activityJob(row: Record<string, unknown>) {
 }
 
 async function crmBootstrap(identity: CrmIdentity) {
-  const templateRows = await getD1().prepare(`SELECT id, name, title, service_category, priority, description, task_titles, created_at, updated_at
-    FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'
-    ORDER BY name COLLATE NOCASE LIMIT 60`).bind(identity.uid).all<Record<string, unknown>>();
+  const db = getD1();
+  const [templateRows, memberRows] = await Promise.all([
+    db.prepare(`SELECT id, name, title, service_category, priority, description, task_titles, created_at, updated_at
+      FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'
+      ORDER BY name COLLATE NOCASE LIMIT 60`).bind(identity.uid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, display_name, role, status, member_uid FROM trade_team_members
+      WHERE owner_uid = ? AND status IN ('active', 'invited')
+      ORDER BY member_uid = ? DESC, status = 'active' DESC, display_name COLLATE NOCASE`)
+      .bind(identity.uid, identity.uid).all<Record<string, unknown>>(),
+  ]);
   return {
     teamAccess: identity.teamAccess,
+    teamMembers: memberRows.results
+      .filter((row) => identity.teamAccess || row.id === identity.memberId)
+      .map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.id === identity.memberId })),
     templates: templateRows.results.map((row: Record<string, unknown>) => ({
       id: row.id, name: row.name, title: row.title, serviceCategory: row.service_category,
       priority: row.priority, description: row.description, taskTitles: storedList(row.task_titles, 24),
@@ -540,8 +569,12 @@ async function crmReports(identity: CrmIdentity) {
 }
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
-  const job = await db.prepare(`SELECT id, source_type, assignee_member_id, revision FROM trade_work_orders
-    WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'`)
+  const job = await db.prepare(`SELECT w.id, w.source_type, w.service_category, w.assignee_member_id, w.revision,
+      c.customer_number, c.business_name, c.first_name, c.last_name
+    FROM trade_work_orders w
+    LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+    LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
+    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
     .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
   if (!job) throw new Error("JOB_NOT_FOUND");
   return job;
@@ -626,6 +659,19 @@ export async function POST(request: Request) {
             cleanAdminText(body.description, 3000), JSON.stringify(cleanTemplateTasks(body.taskTitles)), now, now).run();
       } catch { return adminJson({ ok: false, error: "A template with this name already exists." }, 409); }
       return adminJson({ ok: true }, 201);
+    }
+
+    if (action === "find_customer_duplicates") {
+      const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, {
+        email: cleanAdminText(body.email, 180).toLowerCase(),
+        phone: cleanAdminText(body.phone, 40),
+        businessNumber: cleanAdminText(body.businessNumber, 30),
+        addressLine1: cleanAdminText(body.addressLine1, 140),
+        suburb: cleanAdminText(body.suburb, 80),
+        addressState: cleanAdminText(body.addressState, 10).toUpperCase(),
+        postcode: cleanAdminText(body.postcode, 12),
+      });
+      return adminJson({ ok: true, duplicateCandidates });
     }
 
     if (action === "create_customer") {
@@ -740,13 +786,15 @@ export async function POST(request: Request) {
       return adminJson({ ok: true }, 201);
     }
 
-    if (action === "create_job") {
+    if (action === "create_job" || action === "create_scheduled_job") {
+      const guided = action === "create_scheduled_job";
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
         WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
         .bind(identity.uid).first<Record<string, unknown>>();
       if (Number(activeJobs?.count || 0) >= MEMBER_ACTIVE_JOB_LIMIT) throw new Error("JOB_LIMIT_REACHED");
       let customerId = cleanAdminText(body.crmCustomerId, 180);
       let serviceSiteId = cleanAdminText(body.serviceSiteId, 180);
+      let existingCustomer: Record<string, unknown> | null = null;
       const customerMode = cleanAdminText(body.customerMode, 20);
       const serviceSiteMode = cleanAdminText(body.serviceSiteMode, 20);
       const createCustomer = customerMode === "new";
@@ -772,7 +820,8 @@ export async function POST(request: Request) {
         if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
         if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
         const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
-        if (duplicateCandidates.length) return adminJson({ ok: false, error: "A matching customer already exists. Select that customer or review the match before continuing.", duplicateCandidates }, 409);
+        const duplicateOverride = body.duplicateOverride === true || body.duplicateOverride === "true" || body.duplicateOverride === "on";
+        if (duplicateCandidates.length && !duplicateOverride) return adminJson({ ok: false, error: "A matching customer already exists. Select that customer or review the match before continuing.", duplicateCandidates }, 409);
         customerId = crypto.randomUUID(); serviceSiteId = crypto.randomUUID();
         const contactId = crypto.randomUUID();
         const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${customerId.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
@@ -798,7 +847,7 @@ export async function POST(request: Request) {
         );
       }
       if (customerId) {
-        if (!createCustomer) await ownedCustomer(db, identity, customerId);
+        if (!createCustomer) existingCustomer = await ownedCustomer(db, identity, customerId);
         if (!createCustomer && serviceSiteMode === "new") {
           if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
           serviceSiteId = crypto.randomUUID();
@@ -820,43 +869,87 @@ export async function POST(request: Request) {
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
       if (templateId && !template) return adminJson({ ok: false, error: "Job template not found." }, 404);
-      const title = cleanAdminText(body.title, 160) || cleanAdminText(template?.title, 160);
-      if (!title) return adminJson({ ok: false, error: "Add a short job title." }, 400);
       const requestedCategory = cleanAdminText(body.serviceCategory, 60) || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
+      const displayName = createCustomer
+        ? (businessName || `${firstName} ${lastName}`.trim())
+        : existingCustomer ? customerDisplayName(existingCustomer) : "";
+      const title = [displayName, SERVICE_LABELS[serviceCategory]].filter(Boolean).join(" ");
+      if (!title) return adminJson({ ok: false, error: "Attach a customer before creating the job." }, 400);
       const requestedPriority = cleanAdminText(body.priority, 20) || cleanAdminText(template?.priority, 20);
       const priority = PRIORITIES.has(requestedPriority) ? requestedPriority : "standard";
       const requestedBuildingType = cleanAdminText(body.buildingType, 40);
       const buildingType = BUILDING_TYPES.has(requestedBuildingType) ? requestedBuildingType : "not_sure";
-      const scheduledStart = dateValue(body.scheduledStart, true);
-      const scheduledEnd = dateValue(body.scheduledEnd, true);
+      let scheduledStart = dateValue(body.scheduledStart, true);
+      let scheduledEnd = dateValue(body.scheduledEnd, true);
       if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
       const workOrderId = crypto.randomUUID();
-      const workNumber = await nextTradeWorkNumber(db, identity.uid, "JOB", now);
-      const assignee = cleanAdminText(body.assigneeLabel, 80);
-      if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
+      const workNumber = await nextTlinkJobNumber(db, now);
+      const assigneeMemberId = cleanAdminText(body.assigneeMemberId, 180) || (guided ? identity.memberId : "");
+      let assignee = "";
+      if (assigneeMemberId) {
+        const member = await db.prepare(`SELECT display_name FROM trade_team_members
+          WHERE id = ? AND owner_uid = ? AND status IN ('active', 'invited')`)
+          .bind(assigneeMemberId, identity.uid).first<Record<string, unknown>>();
+        if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
+        assignee = String(member.display_name || "");
+      }
+      const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
+      let appointmentId = "";
+      let appointmentTitle = "";
+      let photoRequestId = "";
+      let photoSecret = "";
+      let photoTokenHash = "";
+      let encryptedPhotoToken = "";
+      let photoRequirements = defaultPhotoRequirements(serviceCategory);
+      if (guided) {
+        if (!customerId || !serviceSiteId) return adminJson({ ok: false, error: "Attach a customer and service address before scheduling." }, 400);
+        scheduledStart = dateValue(body.startsAt);
+        if (!scheduledStart) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
+        assertFutureAppointment(scheduledStart.slice(0, 16), australiaLocalDateTime(identity.addressState));
+        try { scheduledEnd = appointmentEndsAt(scheduledStart.slice(0, 16), body.durationMinutes); }
+        catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
+        appointmentId = crypto.randomUUID();
+        appointmentTitle = `${displayName} ${SERVICE_LABELS[serviceCategory]}`.trim();
+        try {
+          const rawRequirements = typeof body.evidenceRequirements === "string"
+            ? JSON.parse(body.evidenceRequirements) : body.evidenceRequirements;
+          photoRequirements = normalisePhotoRequirements(rawRequirements);
+        } catch { return adminJson({ ok: false, error: "Choose at least one evidence request." }, 400); }
+        if (body.deliveryConsent !== true && body.deliveryConsent !== "true" && body.deliveryConsent !== "on") {
+          return adminJson({ ok: false, error: "Confirm that the customer asked to receive this information request by email." }, 400);
+        }
+        const deliveryEmail = createCustomer ? email : String(existingCustomer?.email || "").toLowerCase();
+        if (!EMAIL_PATTERN.test(deliveryEmail)) return adminJson({ ok: false, error: "Add a valid customer email before requesting information." }, 400);
+        photoRequestId = crypto.randomUUID();
+        photoSecret = newPhotoRequestSecret();
+        photoTokenHash = await hashPhotoRequestSecret(photoSecret);
+        encryptedPhotoToken = await encryptProtectedPayload({ requestId: photoRequestId, secret: photoSecret, tokenIssue: 1 });
+      }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
       if (serviceSiteId) {
         const site = createCustomer || serviceSiteMode === "new" ? { suburb, address_state: addressState, postcode } : await ownedServiceSite(db, identity, serviceSiteId, customerId);
         serviceArea = [site.suburb, site.address_state, site.postcode].filter(Boolean).join(" ").trim();
       }
+      const recordStage = guided ? "scheduled" : "backlog";
+      const pipelineStage = guided ? "scheduled" : "enquiry";
       await db.batch([
         ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
-           service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
-           record_status, created_at, updated_at)
-          VALUES (?, ?, 'installer', 'job', 'internal', '', ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, 'active', ?, ?)`)
+           service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label,
+            record_status, created_at, updated_at)
+          VALUES (?, ?, 'installer', 'job', 'internal', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
           .bind(workOrderId, identity.uid, workNumber, title, serviceCategory, serviceArea,
-            priority, scheduledStart, scheduledEnd, assignee, now, now),
+            recordStage, priority, scheduledStart, scheduledEnd, assigneeMemberId, assignee, now, now),
         db.prepare(`INSERT INTO trade_crm_job_details
           (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'enquiry', ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, serviceSiteId, customerId ? "trade_owned" : "internal",
-            buildingType, cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
+            pipelineStage, buildingType, cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
             JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
@@ -864,13 +957,50 @@ export async function POST(request: Request) {
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, '', 'pending', '', 1, ?, ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, taskTitle, index, now, now)),
+        ...(guided ? [
+          db.prepare(`INSERT INTO trade_crm_appointments
+            (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
+             status, notes, revision, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, 1, ?, ?)`)
+            .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
+              assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
+          db.prepare(`INSERT INTO trade_crm_photo_requests
+            (id, work_order_id, firebase_uid, crm_customer_id, token_hash, encrypted_token, token_issue, status, requirements, revision,
+             expires_at, last_shared_at, source_template_id, source_template_version_id, source_template_version,
+             source_template_edited, template_feedback, template_missing_feedback, created_by_uid, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, 1, ?, ?, '', '', 0, 0, '{}', 0, ?, ?, ?)`)
+            .bind(photoRequestId, workOrderId, identity.uid, customerId, photoTokenHash, encryptedPhotoToken,
+              JSON.stringify(photoRequirements), photoRequestExpiry(new Date(now)), now, identity.uid, now, now),
+          db.prepare(`INSERT INTO trade_crm_photo_request_events
+            (id, photo_request_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type, request_revision, created_at)
+            VALUES (?, ?, ?, ?, 'installer', ?, 'request_created', 1, ?)`)
+            .bind(crypto.randomUUID(), photoRequestId, workOrderId, identity.uid, identity.uid, now),
+          db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'customer_photo_request_created', 'Secure customer photo request created.', ?)`)
+            .bind(crypto.randomUUID(), workOrderId, identity.uid, now),
+        ] : []),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ]);
-      return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId }, 201);
+      let requestSent = false;
+      let deliveryError = "";
+      if (guided) {
+        try {
+          await sendPhotoRequestDelivery({ requestId: photoRequestId, ownerUid: identity.uid, actorUid: identity.uid,
+            channel: "email", requestedIntent: "initial", consentConfirmed: true, origin: new URL(request.url).origin });
+          requestSent = true;
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "";
+          deliveryError = code === "waiting_for_channel"
+            ? "The job and appointment were saved, but the email provider is not active. Send the request from the job once email is available."
+            : "The job and appointment were saved, but the information request email could not be sent. Retry it from the job.";
+        }
+      }
+      return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
+        appointmentId, photoRequestId, requestSent, deliveryError }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
-    await ownedJob(db, identity, workOrderId);
+    const job = await ownedJob(db, identity, workOrderId);
     if (action === "create_appointment") {
       const startsAt = dateValue(body.startsAt);
       let endsAt = "";
@@ -879,13 +1009,19 @@ export async function POST(request: Request) {
       try { endsAt = appointmentEndsAt(startsAt.slice(0, 16), body.durationMinutes); }
       catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
-      const assignee = cleanAdminText(body.assigneeLabel, 80);
-      if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
+      const assigneeMemberId = cleanAdminText(body.assigneeMemberId, 180) || identity.memberId;
+      const member = await db.prepare(`SELECT display_name FROM trade_team_members
+        WHERE id = ? AND owner_uid = ? AND status IN ('active', 'invited')`)
+        .bind(assigneeMemberId, identity.uid).first<Record<string, unknown>>();
+      if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
+      const assignee = String(member.display_name || "");
+      const displayName = customerDisplayName(job);
+      const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
       await db.prepare(`INSERT INTO trade_crm_appointments
-        (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_label,
-         status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`)
+        (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
+         status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`)
         .bind(crypto.randomUUID(), workOrderId, identity.uid, appointmentType,
-          cleanAdminText(body.title, 160) || "Job appointment", startsAt, endsAt, assignee,
+          appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
           cleanAdminText(body.notes, 1000), now, now).run();
       return adminJson({ ok: true }, 201);
     }

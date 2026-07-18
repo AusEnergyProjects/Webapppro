@@ -74,7 +74,7 @@ test("job forms enforce assignment scope, paid operations and privacy-safe evide
 });
 
 test("recurring jobs use system numbers, a due-date ledger and protected customer boundaries", () => {
-  assert.match(recurringServer, /nextTradeWorkNumber/);
+  assert.match(recurringServer, /nextTlinkJobNumber/);
   assert.match(recurringServer, /INSERT OR IGNORE INTO trade_service_job_generations/);
   assert.match(recurringServer, /generated_work_order_id = ''[\s\S]*-30 minutes/);
   assert.match(recurringServer, /source_type, source_reference, work_number/);

@@ -31,6 +31,7 @@ import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
 import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
 import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
 import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
+import { AdminJobDirectory } from "@/components/AdminJobDirectory";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -154,7 +155,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -713,77 +714,83 @@ export function AdminOperationsPortal() {
             <span>03</span>All accounts
           </button>
           <button
+            className={tab === "jobs" ? "active" : ""}
+            onClick={() => setTab("jobs")}
+          >
+            <span>04</span>Jobs
+          </button>
+          <button
             className={tab === "customers" ? "active" : ""}
             onClick={() => setTab("customers")}
           >
-            <span>04</span>Customers ({customerCounts.total || 0})
+            <span>05</span>Customers ({customerCounts.total || 0})
           </button>
           <button
             className={tab === "partners" ? "active" : ""}
             onClick={() => setTab("partners")}
           >
-            <span>05</span>Partners ({accountCounts.total || 0})
+            <span>06</span>Partners ({accountCounts.total || 0})
           </button>
           <button
             className={tab === "opportunities" ? "active" : ""}
             onClick={() => setTab("opportunities")}
           >
-            <span>06</span>Leads ({opportunityCounts.total || 0})
+            <span>07</span>Leads ({opportunityCounts.total || 0})
           </button>
           <button
             className={tab === "catalogue" ? "active" : ""}
             onClick={() => setTab("catalogue")}
           >
-            <span>07</span>Products ({productCounts.total || 0})
+            <span>08</span>Products ({productCounts.total || 0})
           </button>
           <button
             className={tab === "enquiries" ? "active" : ""}
             onClick={() => setTab("enquiries")}
           >
-            <span>08</span>Product enquiries
+            <span>09</span>Product enquiries
           </button>
           <button
             className={tab === "handovers" ? "active" : ""}
             onClick={() => setTab("handovers")}
           >
-            <span>09</span>Handovers
+            <span>10</span>Handovers
           </button>
           <button
             className={tab === "asset-safety" ? "active" : ""}
             onClick={() => setTab("asset-safety")}
           >
-            <span>10</span>Asset safety
+            <span>11</span>Asset safety
           </button>
           <button
             className={tab === "asset-governance" ? "active" : ""}
             onClick={() => setTab("asset-governance")}
           >
-            <span>11</span>Asset governance
+            <span>12</span>Asset governance
           </button>
           <button
             className={tab === "form-governance" ? "active" : ""}
             onClick={() => setTab("form-governance")}
           >
-            <span>12</span>Field forms
+            <span>13</span>Field forms
           </button>
           <button
             className={tab === "referrals" ? "active" : ""}
             onClick={() => setTab("referrals")}
           >
-            <span>13</span>Referrals
+            <span>14</span>Referrals
           </button>
           <button
             className={tab === "field-pilot" ? "active" : ""}
             onClick={() => setTab("field-pilot")}
           >
-            <span>14</span>Field pilot
+            <span>15</span>Field pilot
           </button>
           {session.role === "owner" && (
             <button
               className={tab === "access" ? "active" : ""}
               onClick={() => setTab("access")}
             >
-              <span>15</span>Access & audit
+              <span>16</span>Access & audit
             </button>
           )}
           <aside>
@@ -827,6 +834,7 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
+          {tab === "jobs" && <AdminJobDirectory api={api} />}
           {tab === "customers" && (
             <AdminAccountDirectory
               api={api}

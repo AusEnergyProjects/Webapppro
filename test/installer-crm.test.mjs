@@ -8,6 +8,7 @@ const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0019_melodic_unus.sql");
 const route = read("../src/app/api/trade-crm/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
+const newJob = read("../src/components/TradeNewJobForm.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
 const customerAssets = read("../src/components/CustomerAssetOwnershipCentre.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
@@ -56,16 +57,16 @@ test("platform households stay separate from installer-owned contacts", () => {
   assert.match(crm, /AEA protected households never appear here/);
 });
 
-test("direct customers have full addresses while job IDs are chronological and read only", () => {
+test("direct customers have full addresses while global TLink job IDs are read only", () => {
   assert.match(crm, /name="addressLine1"/);
   assert.match(crm, /name="addressLine2"/);
-  assert.match(crm, /Assigned automatically/);
-  assert.match(crm, /cannot be edited/);
+  assert.match(newJob, /Assigned automatically/);
+  assert.match(crm, /This same ID is used by your team and TLink support/);
   assert.doesNotMatch(crm, /name="customerReference"/);
-  assert.match(route, /nextTradeWorkNumber/);
+  assert.match(route, /nextTlinkJobNumber/);
   assert.match(numberer, /ON CONFLICT\(firebase_uid, counter_key\) DO UPDATE/);
   assert.match(numberer, /last_value = last_value \+ 1/);
-  assert.match(numberer, /padStart\(6, "0"\)/);
+  assert.match(numberer, /TLJ-[\s\S]*padStart\(8, "0"\)/);
 });
 
 test("verified installers receive the complete progressive CRM", () => {
@@ -160,7 +161,7 @@ test("installer dashboard, schedule and reports use compact server-owned read mo
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,[\s\S]*appointmentId, photoRequestId, requestSent, deliveryError \}, 201\)/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
   assert.match(crm, /CustomerLookupSelect/);
   assert.match(crm, /Name, number, phone, suburb or postcode/);
