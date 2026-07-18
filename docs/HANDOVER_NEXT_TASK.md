@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `aa771460b190c7e744caca216bb4c8dde3087c77` on `codex/sites-custom-domain-migration`, published as Sites version 160 with the P6-2Q batch and the Jobs index race correction.
+Implementation baseline: P6-3A is implemented on `codex/sites-custom-domain-migration`; replace this sentence with the exact Git and Sites release identity after publication.
 
 ## Current delivery summary
 
@@ -48,46 +48,50 @@ P6-2Q closes the direct-customer photo-proof review loop. Customers can explicit
 
 Retake guidance uses fixed reason codes and one revision-bound targeted follow-up through the existing consent-aware delivery controls. Field work receives read-only proof readiness, and photo-template reporting receives only aggregate review outcomes. No customer contact, capability token, image analysis or image-derived content is added to those payloads.
 
+P6-3A establishes the authoritative owner-scoped price book. Owners, managers and coordinators receive a top-level workspace with quick-start labour, material and call-out presets; the default form requires only a name, type and sell price while cost, duration, capability and supplier detail remain optional. Active items support search, edit and archive without exposing internal commercial data to customer-facing quote payloads.
+
+Migration `0064_trade_price_book.sql` stores integer-cent supplier cost and sell price, deterministic basis-point markup and margin, immutable price-change revisions and optional references to existing business capabilities and approved supplier catalogue products. Direct-job quote drafts can select an active item and the server snapshots its current authoritative commercial fields into the immutable quote version. Existing issued versions remain unchanged.
+
 ## Next milestone contract
 
-### P6-3A batch: authoritative price-book item foundation
+### P6-3B batch: reusable job-packet foundation
 
-Outcome: a verified trade can maintain one owner-scoped source of truth for reusable labour, material, equipment and other quoted cost items before the quote builder expands.
+Outcome: an office user can turn a common service into a ready-to-quote scope in under one minute, without re-entering price-book items, tasks, forms, duration or skill requirements.
 
 ### Five linked foundation items
 
-1. Define canonical item types for labour, material, equipment, subcontractor, travel, call-out, disposal, rebate, discount, non-billable and one-off work.
-2. Store supplier cost, sell price, GST treatment, markup and margin using integer money values and deterministic calculations.
-3. Add optional expected duration, required skill, supplier and supplier SKU fields without duplicating the existing catalogue or team sources of truth.
-4. Add owner-scoped create, edit, archive, search and role enforcement with immutable price-change history.
-5. Connect the authoritative items to existing direct-job quote lines and cover migration, calculations, access boundaries and responsive library views.
+1. Add owner-scoped reusable job packets with a plain-language name, service type and draft, active or archived state.
+2. Compose each packet from active price-book items with default quantities and a live cost, sell, markup and margin summary.
+3. Reference the existing CRM job-template tasks and form templates instead of creating competing checklist or form records.
+4. Calculate estimated duration and required capabilities from the selected items, then show a simple suggested-crew readiness summary from the existing team source.
+5. Apply one active packet to a direct-job quote draft in one choice, with duplicate prevention, access tests and desktop plus 390 px responsive coverage.
 
 ### In scope
 
-- Existing owner-scoped catalogue, team skills and versioned direct-job quote boundaries.
-- Office price-book management for verified trade roles authorised to manage business data.
-- Additive schema and migration changes with an auditable item price history.
-- Existing integer-cent quote calculations and Australian GST conventions where already authoritative.
+- Existing active price-book items, job-template tasks, form templates, team capabilities and versioned direct-job quote boundaries.
+- Office packet management for verified trade roles already authorised to manage business data.
+- Additive packet and packet-line schema with deterministic quantity and estimate calculations.
+- A fast first-run path with common-service examples and optional detail progressively disclosed.
 
 ### Explicitly out of scope
 
-- Quote packages, customer acceptance, signatures, deposits, PDFs or delivery messaging.
-- Inventory reservations, purchase orders, supplier bills, accounting sync or customer-specific contract pricing.
-- AI-generated descriptions, supplier scraping or automated margin recommendations.
-- Job packets, forms, scheduling, invoicing or field material consumption.
+- Customer-facing quote packages, acceptance, signatures, deposits, PDFs or delivery messaging.
+- Creating a new task, checklist, form, catalogue, capability or team source of truth.
+- Inventory reservations, purchasing, invoicing, accounting sync, asset service reminders or field material consumption.
+- Automated scheduling or assigning staff; the packet may only report readiness from existing team data.
 
 ### Acceptance criteria
 
-- Every active item has one canonical type, sell price and GST treatment, with valid cost and margin behaviour.
-- Price changes append history and existing published quote revisions remain unchanged.
-- Only authorised owner-scoped users can mutate a price-book item; field users receive only the data their workflow needs.
-- Existing catalogue and team records are referenced rather than copied into a competing source of truth.
-- A direct-job quote line can be created from an active item without re-entering its commercial fields.
-- Desktop and 390 px price-book library views have no document-level horizontal overflow.
+- A standard packet can be created or selected and applied to a direct-job quote draft in under one minute without copying line details.
+- Packet estimates use the authoritative current price-book items and clearly identify archived or unavailable dependencies before application.
+- Tasks, forms, capabilities and team members remain referenced from their existing owner-scoped records.
+- Applying a packet is idempotent for one quote draft and never changes an issued quote revision.
+- Only authorised owner-scoped office users can mutate packets; customer and field payloads do not expose internal cost or margin.
+- Desktop and 390 px packet-library and apply views have no document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The existing catalogue or quote model already provides an authoritative price-book boundary that conflicts with the proposed source of truth.
-- Correct calculations would require floating-point money or rewriting published quote revisions.
-- The slice expands into quote acceptance, deposits, purchasing, inventory, accounting or customer-specific pricing.
+- Existing job templates or forms cannot be referenced without duplicating their source of truth.
+- Applying a packet would require rewriting an issued quote revision or bypassing owner scope.
+- The slice expands into customer acceptance, deposits, purchasing, inventory, accounting, scheduling or staff assignment.

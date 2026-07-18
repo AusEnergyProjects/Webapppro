@@ -1298,6 +1298,55 @@ export const tradeCrmJobDetails = sqliteTable("trade_crm_job_details", {
   index("trade_crm_job_details_customer_idx").on(table.crmCustomerId, table.updatedAt),
 ]);
 
+export const tradePriceBookItems = sqliteTable("trade_price_book_items", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  itemCode: text("item_code").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  itemType: text("item_type").notNull(),
+  unitLabel: text("unit_label").notNull().default("each"),
+  supplierCostCentsExGst: integer("supplier_cost_cents_ex_gst").notNull().default(0),
+  sellPriceCentsExGst: integer("sell_price_cents_ex_gst").notNull(),
+  taxCode: text("tax_code").notNull().default("gst"),
+  markupBasisPoints: integer("markup_basis_points").notNull().default(0),
+  marginBasisPoints: integer("margin_basis_points").notNull().default(0),
+  expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0),
+  requiredSkill: text("required_skill").notNull().default(""),
+  supplierName: text("supplier_name").notNull().default(""),
+  supplierSku: text("supplier_sku").notNull().default(""),
+  supplierProductId: text("supplier_product_id").notNull().default(""),
+  recordStatus: text("record_status").notNull().default("active"),
+  priceRevision: integer("price_revision").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(),
+  updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_price_book_items_owner_code_idx").on(table.firebaseUid, table.itemCode),
+  index("trade_price_book_items_owner_status_name_idx").on(table.firebaseUid, table.recordStatus, table.name),
+  index("trade_price_book_items_owner_type_idx").on(table.firebaseUid, table.recordStatus, table.itemType, table.updatedAt),
+  index("trade_price_book_items_supplier_product_idx").on(table.supplierProductId, table.recordStatus),
+]);
+
+export const tradePriceBookPriceHistory = sqliteTable("trade_price_book_price_history", {
+  id: text("id").primaryKey(),
+  priceBookItemId: text("price_book_item_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  priceRevision: integer("price_revision").notNull(),
+  supplierCostCentsExGst: integer("supplier_cost_cents_ex_gst").notNull(),
+  sellPriceCentsExGst: integer("sell_price_cents_ex_gst").notNull(),
+  taxCode: text("tax_code").notNull(),
+  markupBasisPoints: integer("markup_basis_points").notNull(),
+  marginBasisPoints: integer("margin_basis_points").notNull(),
+  changeType: text("change_type").notNull(),
+  changedByUid: text("changed_by_uid").notNull(),
+  changedAt: text("changed_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_price_book_price_history_revision_idx").on(table.priceBookItemId, table.priceRevision),
+  index("trade_price_book_price_history_owner_changed_idx").on(table.firebaseUid, table.changedAt),
+]);
+
 export const tradeCrmQuotes = sqliteTable("trade_crm_quotes", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
@@ -1350,6 +1399,11 @@ export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
   subtotalCents: integer("subtotal_cents").notNull(),
   taxCents: integer("tax_cents").notNull(),
   totalCents: integer("total_cents").notNull(),
+  priceBookItemId: text("price_book_item_id").notNull().default(""),
+  priceBookItemType: text("price_book_item_type").notNull().default(""),
+  unitCostCentsExGst: integer("unit_cost_cents_ex_gst").notNull().default(0),
+  markupBasisPoints: integer("markup_basis_points").notNull().default(0),
+  marginBasisPoints: integer("margin_basis_points").notNull().default(0),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_quote_items_version_position_idx").on(table.quoteVersionId, table.position),

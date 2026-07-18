@@ -306,6 +306,7 @@ Progress as at 18 July 2026:
 - P6-2O adds business-owned photo-request templates with draft, published and archived states. Published versions are immutable, new requests keep an independently editable snapshot and source version, and privacy-safe usage plus controlled trade-feedback counts identify unclear or unused guidance without image analysis.
 - P6-2P adds consent-aware direct-customer photo-request delivery with masked recipient previews, protected current-link recovery, bounded resend and expiry reminders, authenticated provider receipts and privacy-safe administrator health.
 - P6-2Q adds explicit customer completion, immutable per-requirement installer proof review, fixed retake guidance and one current-link targeted follow-up per review revision. Reviewed originals remain protected, field work receives proof readiness and template reporting receives privacy-safe aggregate outcomes without image analysis.
+- P6-3A adds an owner-scoped trade price book for labour, materials, equipment and the other canonical charge types. Office users can create, search, edit and archive reusable items from a guided first-run workspace; integer-cent cost and sell values produce deterministic markup and margin history, existing business capabilities and approved supplier catalogue products remain authoritative, and direct-job quote drafts can apply an active item without re-entering its commercial fields.
 
 - Core trade entitlements now depend on approved verification and role rather than Stripe billing state or seat grants. Verified installers and wholesalers receive the role-appropriate CRM, marketplace, team, field, forms, purchasing, catalogue and handover tools at A$0.
 - The dashboard, participation journey, platform overview and historical membership route now present the free verified model. No new paid checkout or paid referral reward is offered for core access, while existing subscribers retain a Stripe billing-portal path during transition.
@@ -374,6 +375,12 @@ Price-book items must support:
 - Labour, material, equipment, subcontractor, travel, call-out, disposal, rebate, discount, non-billable and one-off types.
 - Supplier cost, sell price, GST and tax code, markup, margin, expected duration, required skill, supplier and supplier SKU.
 - Customer-specific price tiers and contract rates.
+
+Progress as at 18 July 2026:
+
+- P6-3A completes the reusable item foundation for the first two requirements above. Customer-specific price tiers and contract rates remain a later bounded slice.
+- The default path asks only for the item name, type and sell price, with GST and common trade units already selected. Cost, duration, capability and supplier details stay optional and collapsed until needed.
+- Every quote created from a saved item snapshots its current sell price, GST treatment, type, cost, markup and margin into the immutable quote revision. Later price-book changes cannot rewrite an issued quote.
 
 Reusable job packets must combine:
 

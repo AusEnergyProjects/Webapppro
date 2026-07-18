@@ -4693,6 +4693,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-panel > header span { color: var(--color-aea-green); font-size: .66rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .trade-quote-panel > header h4 { color: var(--color-aea-green-dark); margin: 4px 0; }
 .trade-quote-panel > header p, .trade-quote-panel.unavailable p { color: var(--color-aea-muted); margin: 0; }
+.trade-quote-price-book { align-items: end; background: #e8f5f0; border: 1px solid #b8dfd0; border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(240px, 1fr) minmax(180px, .7fr); padding: 12px; }
+.trade-quote-price-book label { display: grid; gap: 5px; }
+.trade-quote-price-book label span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; }
+.trade-quote-price-book select { background: white; border: 1px solid #a9cfc0; border-radius: 8px; min-height: 42px; padding: 9px; width: 100%; }
+.trade-quote-price-book small { color: var(--color-aea-muted); line-height: 1.45; }
 .quote-status { background: #e8f3ee; border-radius: 20px; color: var(--color-aea-green-dark); font-size: .68rem; padding: 6px 10px; text-transform: uppercase; }
 .quote-status.accepted { background: #dff2e4; color: #1f6537; }
 .quote-status.declined, .quote-status.superseded { background: #f2eded; color: #795454; }
@@ -4700,6 +4705,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-line { display: grid; gap: 7px; grid-template-columns: 120px minmax(210px, 2fr) 90px 110px 100px 78px; min-width: 760px; }
 .trade-quote-line.headings { color: var(--color-aea-muted); font-size: .62rem; font-weight: 850; text-transform: uppercase; }
 .trade-quote-line input, .trade-quote-line select, .trade-quote-settings input, .trade-quote-settings select, .trade-quote-settings textarea { background: #fff; border: 1px solid #c8d8d1; border-radius: 7px; min-width: 0; padding: 9px; }
+.trade-quote-description { display: grid; gap: 2px; }
+.trade-quote-description small { color: var(--color-aea-green); font-size: .55rem; font-weight: 750; }
 .trade-quote-line button { background: transparent; border: 1px solid #d6c8c8; border-radius: 7px; color: #7d3e3e; cursor: pointer; }
 .quote-add-line { background: #fff; border: 1px solid var(--color-aea-green); border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-weight: 800; justify-self: start; padding: 8px 12px; }
 .trade-quote-settings { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -4795,6 +4802,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 
 @media (max-width: 720px) {
   .trade-quote-settings { grid-template-columns: 1fr; }
+  .trade-quote-price-book { grid-template-columns: 1fr; }
   .trade-quote-settings .wide { grid-column: auto; }
   .trade-quote-panel > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header, .customer-appointment-changes > header, .customer-preferred-windows > header, .customer-reschedule-history article > header { flex-direction: column; }
   .customer-reschedule-form, .customer-preferred-windows fieldset, .customer-reschedule-history dl { grid-template-columns: 1fr; }

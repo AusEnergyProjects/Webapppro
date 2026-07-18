@@ -15,6 +15,7 @@ import { TradeAssetWorkspace } from "./TradeAssetWorkspace";
 import { TradeQuotePanel } from "./TradeQuotePanel";
 import { TradePhotoRequestPanel } from "./TradePhotoRequestPanel";
 import { TradePhotoTemplateLibrary } from "./TradePhotoTemplateLibrary";
+import { TradePriceBookWorkspace } from "./TradePriceBookWorkspace";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 
@@ -67,7 +68,7 @@ type CrmMetrics = {
 type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type CrmScheduleResult = { ok?: boolean; items?: ActivityAppointment[]; pagination?: IndexPagination; error?: string };
 type CrmReportResult = { ok?: boolean; metrics?: CrmMetrics; pipeline?: Record<string, number>; error?: string };
-type View = "today" | "enquiries" | "jobs" | "schedule" | "customers" | "assets" | "templates" | "reports" | "import" | "integrations" | "team";
+type View = "today" | "enquiries" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations" | "team";
 
 const serviceLabels: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
@@ -539,7 +540,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       <div className="crm-primary-actions"><details className="crm-quick-create"><summary>New</summary><div><button type="button" onClick={() => { setView("jobs"); setCreating("job"); }}>Job</button><button type="button" onClick={() => { setView("customers"); setCreating("customer"); }}>Customer</button></div></details></div>
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
-      {(["today", "enquiries", "jobs", "schedule", "customers", "assets"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item[0].toUpperCase() + item.slice(1)}</button>)}
+      {(["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item === "pricebook" ? "Price book" : item[0].toUpperCase() + item.slice(1)}</button>)}
       <details className="crm-more-nav"><summary className={["templates", "reports", "import", "integrations", "team"].includes(view) ? "active" : ""}>{["templates", "reports", "import", "integrations", "team"].includes(view) ? view[0].toUpperCase() + view.slice(1) : "More"}</summary><div>{(["templates", "reports", "import", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={(event) => { setView(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}</div></details>
     </nav>
     <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>AEA protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>
@@ -626,6 +627,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       <div className="crm-report-grid"><section className="crm-card"><header><div><span>Sales flow</span><h3>Jobs by stage</h3></div></header><div className="crm-pipeline-report">{Object.entries(pipelineLabels).map(([stage, label]) => { const count = pipelineCounts[stage] || 0; return <div key={stage}><span>{label}</span><meter min="0" max={Math.max(1, pipelineTotal)} value={count} /><strong>{count}</strong></div>; })}</div></section><section className="crm-card"><header><div><span>Work health</span><h3>Operational checks</h3></div></header><dl className="crm-report-list"><div><dt>Open jobs</dt><dd>{reportMetrics.openJobs}</dd></div><div><dt>Jobs waiting</dt><dd>{reportMetrics.waitingJobs}</dd></div><div><dt>Open issues</dt><dd>{reportMetrics.openIssues}</dd></div><div><dt>Overdue tasks</dt><dd>{reportMetrics.overdueTasks}</dd></div><div><dt>Completed jobs</dt><dd>{reportMetrics.completedJobs}</dd></div></dl></section></div>
     </div>}
     {view === "import" && <div className="crm-view"><TradeDataImportWorkspace user={user} partnerType="installer" onImported={async () => { await load(); setRefreshNonce((value) => value + 1); }} /></div>}
+    {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace user={user} /></div>}
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     {view === "team" && hasTeamAccess && <div className="crm-view"><TradeTeamCentre user={user} /></div>}

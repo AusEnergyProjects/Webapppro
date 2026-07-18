@@ -3,6 +3,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { normaliseTradeQuoteLines } from "@/lib/trade-quote";
+import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
 
 export const runtime = "edge";
 
@@ -29,6 +30,7 @@ function errorResponse(error: unknown) {
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose a direct customer job with an authoritative service site." }, 404);
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);
   if (code === "IMMUTABLE_VERSION") return adminJson({ ok: false, error: "Issued quote versions cannot be changed. Create the next version instead." }, 409);
+  if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
   if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code))
     return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
   return adminJson({ ok: false, error: "The private quote request could not be completed." }, 500);
@@ -78,6 +80,7 @@ async function quotePayload(uid: string, workOrderId: string) {
         id: String(item.id), position: Number(item.position), lineType: String(item.line_type), description: String(item.description),
         quantityMilli: Number(item.quantity_milli), unitPriceCents: Number(item.unit_price_cents), taxCode: String(item.tax_code),
         subtotalCents: Number(item.subtotal_cents), taxCents: Number(item.tax_cents), totalCents: Number(item.total_cents),
+        priceBookItemId: String(item.price_book_item_id || ""), priceBookItemType: String(item.price_book_item_type || ""),
       })),
       acceptance: acceptances.results.find((item) => item.quote_version_id === version.id) ? (() => {
         const acceptance = acceptances.results.find((item) => item.quote_version_id === version.id)!;
@@ -95,7 +98,8 @@ export async function GET(request: Request) {
     const emails = await authorisedEmails(identity.uid, String(job.crm_customer_id));
     return adminJson({ ok: true, job: { workNumber: job.work_number, title: job.title, customerNumber: job.customer_number,
       customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" "), siteLabel: job.site_label,
-      siteSummary: [job.address_line_1, job.suburb, job.address_state, job.postcode].filter(Boolean).join(", ") }, authorisedEmails: emails, quote: await quotePayload(identity.uid, workOrderId) });
+      siteSummary: [job.address_line_1, job.suburb, job.address_state, job.postcode].filter(Boolean).join(", ") }, authorisedEmails: emails,
+      priceBookItems: await priceBookItemsForQuote(identity.uid), quote: await quotePayload(identity.uid, workOrderId) });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -106,7 +110,8 @@ export async function POST(request: Request) {
     const action = cleanAdminText(body.action, 40); const workOrderId = cleanAdminText(body.workOrderId, 180); const job = await directJob(identity.uid, workOrderId);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "save_draft") {
-      const calculated = normaliseTradeQuoteLines(body.lines, (value) => cleanAdminText(value, 500));
+      const resolvedPriceBook = await resolvePriceBookQuoteLines(identity.uid, body.lines);
+      const calculated = normaliseTradeQuoteLines(resolvedPriceBook.lines, (value) => cleanAdminText(value, 500));
       const customerEmail = cleanAdminText(body.customerEmail, 180).toLowerCase(); const emails = await authorisedEmails(identity.uid, String(job.crm_customer_id));
       if (customerEmail && !emails.includes(customerEmail)) return adminJson({ ok: false, error: "Choose an email from this customer's authorised contacts." }, 400);
       const validUntil = cleanAdminText(body.validUntil, 10); if (validUntil && !DATE_PATTERN.test(validUntil)) return adminJson({ ok: false, error: "Choose a valid quote expiry date." }, 400);
@@ -145,10 +150,18 @@ export async function POST(request: Request) {
             .bind(versionNumber, job.crm_customer_id, job.service_site_id, now, quoteId, identity.uid));
         }
       }
-      calculated.lines.forEach((line, position) => statements.push(db.prepare(`INSERT INTO trade_crm_quote_items
-        (id, quote_version_id, firebase_uid, position, line_type, description, quantity_milli, unit_price_cents, tax_code, subtotal_cents, tax_cents, total_cents, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), versionId, identity.uid, position + 1, line.lineType, line.description, line.quantityMilli, line.unitPriceCents, line.taxCode, line.subtotalCents, line.taxCents, line.totalCents, now)));
+      calculated.lines.forEach((line, position) => {
+        const reference = resolvedPriceBook.references[position];
+        statements.push(db.prepare(`INSERT INTO trade_crm_quote_items
+          (id, quote_version_id, firebase_uid, position, line_type, description, quantity_milli, unit_price_cents, tax_code,
+          subtotal_cents, tax_cents, total_cents, price_book_item_id, price_book_item_type, unit_cost_cents_ex_gst,
+          markup_basis_points, margin_basis_points, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), versionId, identity.uid, position + 1, line.lineType, line.description, line.quantityMilli,
+            line.unitPriceCents, line.taxCode, line.subtotalCents, line.taxCents, line.totalCents, reference?.id || "",
+            reference?.itemType || "", reference?.unitCostCentsExGst || 0, reference?.markupBasisPoints || 0,
+            reference?.marginBasisPoints || 0, now));
+      });
       statements.push(db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
         .bind(calculated.totalCents, now, workOrderId, identity.uid));
       await db.batch(statements);
