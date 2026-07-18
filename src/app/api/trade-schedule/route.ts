@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { addCalendarDays, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
+import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 
@@ -25,7 +25,7 @@ function errorResponse(error: unknown) {
   if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
   if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
-  if (["INVALID_WEEK", "INVALID_TIME", "INVALID_HOURS"].includes(code)) return adminJson({ ok: false, error: "Choose a valid week, time range and working-hours window." }, 400);
+  if (["INVALID_WEEK", "INVALID_TIME", "INVALID_HOURS", "INVALID_DURATION"].includes(code)) return adminJson({ ok: false, error: "Choose a valid week, start time and duration from 15 minutes to 8 hours." }, 400);
   if (code === "INVALID_DECISION") return adminJson({ ok: false, error: "Choose accept, reject or propose an alternative." }, 400);
   return adminJson({ ok: false, error: "The team schedule request could not be completed." }, 500);
 }
@@ -193,8 +193,7 @@ export async function PATCH(request: Request) {
         ]);
       } else {
         const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
-        const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt);
-        if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+        const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
         assertFutureAppointment(startsAt, localNow);
         await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt, String(current.appointment_id));
         if (decision === "alternative_proposed") {
@@ -273,7 +272,7 @@ export async function PATCH(request: Request) {
       }
     } else if (action === "schedule_appointment") {
       const appointmentId = cleanAdminText(body.appointmentId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
-      const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+      const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
       const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id, w.revision job_revision
         FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
@@ -298,7 +297,7 @@ export async function PATCH(request: Request) {
         appointmentRevision: revision, origin: new URL(request.url).origin, occurredAt: now };
     } else if (action === "schedule_job") {
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
-      const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
+      const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
       const job = await db.prepare(`SELECT id, work_number, title, revision, assignee_member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
         AND partner_type = 'installer' AND record_status = 'active'`).bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();

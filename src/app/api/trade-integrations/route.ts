@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     let body: Record<string, unknown>;
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid integration request." }, 400); }
-    const providerValue = cleanAdminText(body.provider, 20).toLowerCase();
+    const providerValue = cleanAdminText(body.provider, 40).toLowerCase();
     if (!isIntegrationProvider(providerValue)) return adminJson({ ok: false, error: "Choose a supported provider." }, 400);
     const setting = providerSetting(providerValue);
     if (!setting.clientId || !setting.clientSecret || !integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY) {
@@ -101,6 +101,7 @@ export async function POST(request: Request) {
     authorization.searchParams.set("state", state);
     if (providerValue === "myob") authorization.searchParams.set("prompt", "consent");
     if (providerValue === "square") authorization.searchParams.set("session", "false");
+    if (providerValue === "google_calendar") { authorization.searchParams.set("access_type", "offline"); authorization.searchParams.set("prompt", "consent"); }
     return adminJson({ ok: true, authorizationUrl: authorization.toString() });
   } catch (error) { return integrationError(error); }
 }
@@ -137,7 +138,7 @@ export async function PATCH(request: Request) {
     let body: Record<string, unknown>;
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid integration request." }, 400); }
-    const providerValue = cleanAdminText(body.provider, 20).toLowerCase();
+    const providerValue = cleanAdminText(body.provider, 40).toLowerCase();
     if (!isIntegrationProvider(providerValue)) return adminJson({ ok: false, error: "Choose a supported provider." }, 400);
     const db = getD1();
     const row = await db.prepare(`SELECT * FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?`)

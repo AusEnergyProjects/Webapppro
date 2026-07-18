@@ -38,7 +38,7 @@ test("the integrations migration applies cleanly to SQLite", () => {
   assert.deepEqual(tables, ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links", "trade_crm_property_views"]);
 });
 
-test("all business connections are installer-only, paid, same-origin and owner scoped", () => {
+test("all business and calendar connections are installer-only, paid, same-origin and owner scoped", () => {
   assert.match(providerLayer, /requireInstallerOperations/);
   assert.match(providerLayer, /account\.partner_type !== "installer"/);
   assert.match(providerLayer, /account\.account_status !== "active"/);
@@ -46,7 +46,7 @@ test("all business connections are installer-only, paid, same-origin and owner s
   assert.match(integrations, /sameOrigin\(request\)/);
   assert.match(integrations, /WHERE firebase_uid = \?/);
   assert.match(payments, /sameOrigin\(request\)/);
-  assert.match(providerLayer, /\["xero", "myob", "quickbooks", "stripe", "square"\]/);
+  assert.match(providerLayer, /\["xero", "myob", "quickbooks", "stripe", "square", "google_calendar", "microsoft_calendar"\]/);
 });
 
 test("OAuth credentials are encrypted and state is one-time, hashed and short-lived", () => {

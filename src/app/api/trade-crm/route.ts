@@ -7,7 +7,7 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
-import { assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
+import { appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
 
@@ -800,10 +800,11 @@ export async function POST(request: Request) {
     await ownedJob(db, identity, workOrderId);
     if (action === "create_appointment") {
       const startsAt = dateValue(body.startsAt);
-      const endsAt = dateValue(body.endsAt);
+      let endsAt = "";
       if (!startsAt) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
       assertFutureAppointment(startsAt.slice(0, 16), australiaLocalDateTime(identity.addressState));
-      if (endsAt && endsAt < startsAt) return adminJson({ ok: false, error: "The appointment finish cannot be before its start." }, 400);
+      try { endsAt = appointmentEndsAt(startsAt.slice(0, 16), body.durationMinutes); }
+      catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       const assignee = cleanAdminText(body.assigneeLabel, 80);
       if (assignee && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");

@@ -12,6 +12,7 @@ import { TradeBusinessHub } from "./TradeBusinessHub";
 import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
 import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
 import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
+import { TradeInvoiceWorkspace } from "./TradeInvoiceWorkspace";
 import { TradeServiceFollowUpWorkspace } from "./TradeServiceFollowUpWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
@@ -115,6 +116,7 @@ type DashboardOpportunity = {
     customerDecision: string;
   };
 };
+type DashboardWorkspace = "work" | "schedule" | "invoices" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account";
 
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
@@ -210,7 +212,7 @@ export function DirectTradeDashboard() {
   const [leadStatusFilter, setLeadStatusFilter] = useState("");
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
-  const [workspace, setWorkspace] = useState<"work" | "schedule" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account">("work");
+  const [workspace, setWorkspace] = useState<DashboardWorkspace>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "work");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
   useEffect(
@@ -594,10 +596,11 @@ export function DirectTradeDashboard() {
               >
                 <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">01</b><span>Work</span><small>Today, jobs and customers</small></button>
                 <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => setWorkspace("schedule")}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
-                <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">03</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
-                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">04</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">05</b><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">06</b><span>Business</span><small>Settings and verification</small></button>
+                <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
+                <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
+                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
+                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">06</b><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">07</b><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
@@ -611,7 +614,15 @@ export function DirectTradeDashboard() {
                 navigationTarget={commandTarget}
               />}
 
-              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} onOpenJob={(workOrderId) => {
+                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "summary", nonce: Date.now() });
+                setWorkspace("work");
+              }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+
+              {workspace === "invoices" && (hasBusinessOperations ? <TradeInvoiceWorkspace user={user} onOpenJob={(workOrderId) => {
+                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "invoice", nonce: Date.now() });
+                setWorkspace("work");
+              }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before invoicing is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "follow-ups" && (hasBusinessOperations && hasTeamAccess ? <TradeServiceFollowUpWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before service follow-up preparation is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 

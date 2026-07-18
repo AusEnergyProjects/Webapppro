@@ -2348,6 +2348,24 @@ export const customerProjectQuotes = sqliteTable("customer_project_quotes", {
   index("customer_project_quotes_installer_idx").on(table.installerUid, table.updatedAt),
 ]);
 
+export const tradeCrmCalendarEvents = sqliteTable("trade_crm_calendar_events", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  appointmentId: text("appointment_id").notNull(),
+  provider: text("provider").notNull(),
+  externalEventId: text("external_event_id").notNull().default(""),
+  externalUrl: text("external_url").notNull().default(""),
+  appointmentRevision: integer("appointment_revision").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+  lastError: text("last_error").notNull().default(""),
+  lastSyncedAt: text("last_synced_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_calendar_events_owner_appointment_provider_idx").on(table.firebaseUid, table.appointmentId, table.provider),
+  index("trade_crm_calendar_events_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
 export const customerProjectContactReleases = sqliteTable("customer_project_contact_releases", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull(),

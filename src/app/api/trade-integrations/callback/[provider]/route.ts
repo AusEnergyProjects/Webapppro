@@ -11,6 +11,7 @@ function dashboardRedirect(request: Request, provider: string, status: "connecte
   const url = new URL("/direct-trade/dashboard", request.url);
   url.searchParams.set("integration", provider);
   url.searchParams.set("integration_status", status);
+  if (provider === "google_calendar" || provider === "microsoft_calendar") url.searchParams.set("workspace", "schedule");
   url.hash = "business-hub";
   return Response.redirect(url.toString(), 303);
 }
@@ -71,6 +72,18 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
     if (!accountId) throw new Error("ACCOUNT_LOOKUP_FAILED");
     return { id: accountId, label: `Stripe account ${accountId.slice(-6)}` };
   }
+  if (provider === "google_calendar") {
+    const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+    const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || !result.sub) throw new Error("ACCOUNT_LOOKUP_FAILED");
+    return { id: String(result.sub), label: cleanAdminText(result.email, 180) || "Google Calendar" };
+  }
+  if (provider === "microsoft_calendar") {
+    const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName", { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+    const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || !result.id) throw new Error("ACCOUNT_LOOKUP_FAILED");
+    return { id: String(result.id), label: cleanAdminText(result.mail || result.userPrincipalName || result.displayName, 180) || "Outlook Calendar" };
+  }
   const setting = providerSetting(provider);
   const response = await fetch(setting.tokenUrl.replace("/oauth2/token", "/v2/locations"), {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json", "Square-Version": "2026-05-20" },
@@ -83,7 +96,7 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
 }
 
 export async function GET(request: Request, context: CallbackContext) {
-  const provider = cleanAdminText((await context.params).provider, 20).toLowerCase();
+  const provider = cleanAdminText((await context.params).provider, 40).toLowerCase();
   if (!isIntegrationProvider(provider)) return dashboardRedirect(request, "unknown", "failed");
   const url = new URL(request.url);
   if (url.searchParams.get("error")) return dashboardRedirect(request, provider, "cancelled");

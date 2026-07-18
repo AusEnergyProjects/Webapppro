@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 19 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the published P6-3H simpler invoicing and dependable dispatch batch on top of the P6-3G immutable execution snapshot and actual job progress foundation. Exact release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the validated P6-3I visual dispatch and invoice-home batch on top of the published P6-3H simpler invoicing and dependable dispatch foundation. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
@@ -80,9 +80,11 @@ P6-3G snapshots exact packet tasks, form keys and versions, duration, required c
 
 P6-3H removes premature installer purchasing from primary navigation and search while preserving the existing records, APIs and supplier-side fulfilment for later validation. Installer-facing Job packets are now Common jobs, with stored identifiers and immutable quote snapshots unchanged. The separate Invoice tab previews the exact accepted lines, subtotal, GST and total beside one progressive accounting-system action. The seven-day schedule blocks past starts on both trust boundaries, treats normal working hours as advice, preserves hard overlap and recorded-time-off checks and lets an office user drag an appointment to another visible day with immediate response-driven regrouping.
 
+P6-3I gives Invoices its own main destination over the existing accepted-scope and accounting sources, and opens invoice rows directly into the focused live job invoice. Job rows and timetable blocks support deliberate double-click and keyboard opening while keeping visible touch actions. Appointments now use one start plus a server-bounded 15-minute to eight-hour duration. Schedule is a time and team grid with stable person colours, drag-to-day movement and response-driven updates. Optional Google Calendar and Outlook connections mirror the authoritative TLink week through revision-mapped events; external failure never rolls back a local save, and protected appointments never disclose customer identity, contact or exact address.
+
 ## Next milestone contract
 
-### P6-3I batch: one simple field job page
+### P6-3J batch: one simple field job page
 
 Outcome: a technician can open one job on a phone and immediately understand where to go, who they may contact, what to do next, what proof is required and when the job is safe to finish without learning the office CRM.
 

@@ -9,6 +9,7 @@ export type TLinkCommandTarget = {
   id: string;
   query: string;
   nonce: number;
+  jobTab?: "summary" | "schedule" | "quote" | "field" | "invoice";
 };
 
 type SearchKind = "job" | "customer" | "product" | "order" | "team";

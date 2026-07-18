@@ -6,6 +6,9 @@ const STATE_TIME_ZONES: Record<string, string> = {
 };
 
 export type WorkingWindow = { isAvailable: boolean; startMinute: number; endMinute: number };
+export const APPOINTMENT_MIN_DURATION_MINUTES = 15;
+export const APPOINTMENT_MAX_DURATION_MINUTES = 8 * 60;
+export const APPOINTMENT_DURATION_STEP_MINUTES = 15;
 
 export function normaliseWeekStart(value: unknown) {
   const date = String(value || "");
@@ -47,6 +50,41 @@ export function assertFutureAppointment(startsAt: string, localNow: string) {
   const now = normaliseLocalDateTime(localNow);
   if (start <= now) throw new Error("PAST_APPOINTMENT");
   return start;
+}
+
+export function normaliseAppointmentDuration(value: unknown, fallback = 60) {
+  const duration = value === "" || value === undefined || value === null ? fallback : Number(value);
+  if (!Number.isInteger(duration)
+    || duration < APPOINTMENT_MIN_DURATION_MINUTES
+    || duration > APPOINTMENT_MAX_DURATION_MINUTES
+    || duration % APPOINTMENT_DURATION_STEP_MINUTES !== 0) throw new Error("INVALID_DURATION");
+  return duration;
+}
+
+export function appointmentEndsAt(startsAt: unknown, durationMinutes: unknown, fallback = 60) {
+  const start = normaliseLocalDateTime(startsAt);
+  const duration = normaliseAppointmentDuration(durationMinutes, fallback);
+  return new Date(Date.parse(`${start}:00Z`) + duration * 60_000).toISOString().slice(0, 16);
+}
+
+export function appointmentDurationMinutes(startsAt: string, endsAt: string, fallback = 60) {
+  try {
+    const start = normaliseLocalDateTime(startsAt);
+    const end = normaliseLocalDateTime(endsAt);
+    const minutes = (Date.parse(`${end}:00Z`) - Date.parse(`${start}:00Z`)) / 60_000;
+    if (minutes <= 0) return normaliseAppointmentDuration(fallback);
+    const stepped = Math.round(minutes / APPOINTMENT_DURATION_STEP_MINUTES) * APPOINTMENT_DURATION_STEP_MINUTES;
+    return Math.min(APPOINTMENT_MAX_DURATION_MINUTES, Math.max(APPOINTMENT_MIN_DURATION_MINUTES, stepped));
+  } catch { return normaliseAppointmentDuration(fallback); }
+}
+
+export function durationLabel(minutes: number) {
+  const duration = normaliseAppointmentDuration(minutes);
+  const hours = Math.floor(duration / 60);
+  const remainder = duration % 60;
+  if (!hours) return `${remainder} min`;
+  if (!remainder) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `${hours}h ${remainder}m`;
 }
 
 export function moveAppointmentToDate(startsAt: string, endsAt: string, targetDate: string, localNow = browserLocalDateTime()) {

@@ -3,7 +3,7 @@ import { getD1 } from "../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 
-export const INTEGRATION_PROVIDERS = ["xero", "myob", "quickbooks", "stripe", "square"] as const;
+export const INTEGRATION_PROVIDERS = ["xero", "myob", "quickbooks", "stripe", "square", "google_calendar", "microsoft_calendar"] as const;
 export type IntegrationProvider = typeof INTEGRATION_PROVIDERS[number];
 
 type ProviderSetting = {
@@ -31,6 +31,10 @@ type IntegrationEnvironment = {
   SQUARE_APPLICATION_ID?: string;
   SQUARE_APPLICATION_SECRET?: string;
   SQUARE_ENVIRONMENT?: string;
+  GOOGLE_CALENDAR_CLIENT_ID?: string;
+  GOOGLE_CALENDAR_CLIENT_SECRET?: string;
+  MICROSOFT_CALENDAR_CLIENT_ID?: string;
+  MICROSOFT_CALENDAR_CLIENT_SECRET?: string;
 };
 
 export function integrationEnvironment() {
@@ -66,12 +70,25 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     clientSecret: values.STRIPE_SECRET_KEY || values.STRIPE_REFERRAL_SECRET_KEY || "", authorizeUrl: "https://connect.stripe.com/oauth/authorize",
     tokenUrl: "https://connect.stripe.com/oauth/token", scopes: ["read_write"],
   };
-  return {
+  if (provider === "square") return {
     provider, label: "Square", purpose: "Secure customer payment requests", clientId: values.SQUARE_APPLICATION_ID || "",
     clientSecret: values.SQUARE_APPLICATION_SECRET || "",
     authorizeUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/authorize" : "https://connect.squareup.com/oauth2/authorize",
     tokenUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/token" : "https://connect.squareup.com/oauth2/token",
     scopes: ["MERCHANT_PROFILE_READ", "ORDERS_READ", "ORDERS_WRITE", "PAYMENTS_READ", "PAYMENTS_WRITE"],
+  };
+  if (provider === "google_calendar") return {
+    provider, label: "Google Calendar", purpose: "One-way TLink appointment sync",
+    clientId: values.GOOGLE_CALENDAR_CLIENT_ID || "", clientSecret: values.GOOGLE_CALENDAR_CLIENT_SECRET || "",
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth", tokenUrl: "https://oauth2.googleapis.com/token",
+    scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/calendar.events"],
+  };
+  return {
+    provider, label: "Outlook Calendar", purpose: "One-way TLink appointment sync",
+    clientId: values.MICROSOFT_CALENDAR_CLIENT_ID || "", clientSecret: values.MICROSOFT_CALENDAR_CLIENT_SECRET || "",
+    authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    scopes: ["openid", "profile", "email", "offline_access", "User.Read", "Calendars.ReadWrite"],
   };
 }
 

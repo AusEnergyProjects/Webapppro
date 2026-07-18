@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 
 type Provider = {
-  provider: "xero" | "myob" | "quickbooks" | "stripe" | "square";
+  provider: "xero" | "myob" | "quickbooks" | "stripe" | "square" | "google_calendar" | "microsoft_calendar";
   label: string;
   purpose: string;
   configured: boolean;
@@ -24,6 +24,8 @@ const providerNotes: Record<Provider["provider"], string> = {
   quickbooks: "Create a draft QuickBooks Online invoice from the exact accepted quote, then refresh its status without making QuickBooks the source of truth.",
   stripe: "Create secure checkout links from a direct customer job. Card details stay with Stripe and never enter this CRM.",
   square: "Create secure Square checkout links from a direct customer job using the connected business location.",
+  google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",
+  microsoft_calendar: "Mirror TLink appointments to Outlook. TLink stays authoritative and protected customer details are withheld.",
 };
 
 export function TradeIntegrationCentre({ user }: { user: User }) {

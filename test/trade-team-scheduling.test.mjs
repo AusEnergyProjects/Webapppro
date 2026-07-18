@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { addCalendarDays, assertFutureAppointment, defaultWorkingWindow, insideWorkingWindow, moveAppointmentToDate, normaliseWeekStart, rangesOverlap } from "../src/lib/trade-schedule.ts";
+import { addCalendarDays, appointmentDurationMinutes, appointmentEndsAt, assertFutureAppointment, defaultWorkingWindow, durationLabel, insideWorkingWindow, moveAppointmentToDate, normaliseAppointmentDuration, normaliseWeekStart, rangesOverlap } from "../src/lib/trade-schedule.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -35,6 +35,11 @@ test("week and capacity calculations are deterministic", () => {
   assert.throws(() => assertFutureAppointment("2026-07-19T09:00", "2026-07-19T09:00"), /PAST_APPOINTMENT/);
   assert.deepEqual(moveAppointmentToDate("2026-07-13T09:00", "2026-07-13T10:30", "2026-07-19", "2026-07-18T12:00"), { startsAt: "2026-07-19T09:00", endsAt: "2026-07-19T10:30" });
   assert.deepEqual(moveAppointmentToDate("2026-07-13T09:00", "2026-07-13T10:00", "2026-07-19", "2026-07-19T09:07"), { startsAt: "2026-07-19T09:15", endsAt: "2026-07-19T10:15" });
+  assert.equal(appointmentEndsAt("2026-07-19T09:00", 30), "2026-07-19T09:30");
+  assert.equal(appointmentDurationMinutes("2026-07-19T09:00", "2026-07-19T17:00"), 480);
+  assert.equal(durationLabel(75), "1h 15m");
+  assert.throws(() => normaliseAppointmentDuration(10), /INVALID_DURATION/);
+  assert.throws(() => normaliseAppointmentDuration(495), /INVALID_DURATION/);
 });
 
 test("the additive migration extends existing team and appointment sources", () => {
