@@ -1,8 +1,8 @@
 # Next task handover
 
 Status: active rolling handover
-Prepared: 18 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the published P6-3G immutable execution snapshot, actual job progress and completion-gate batch on top of the P6-3F readiness, catalogue and frictionless scheduling foundation. Exact release identity is recorded in `RELEASE_TRUTH.md`.
+Prepared: 19 July 2026
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the published P6-3H simpler invoicing and dependable dispatch batch on top of the P6-3G immutable execution snapshot and actual job progress foundation. Exact release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
@@ -78,46 +78,48 @@ The scheduling follow-up removes the empty-owner trap. The signed-in installer o
 
 P6-3G snapshots exact packet tasks, form keys and versions, duration, required capabilities and crew size at quote issue. Accepted jobs use only that immutable execution metadata, while legacy manual quotes retain their lightweight fallback. Trades record normal labour and material results with one action, open detailed actuals only when work differs, see forecast cost and margin variance, follow phase progress and cannot complete until scope, forms, materials and requested proof are clear. Completion prepares invoice and handover work without changing the accepted customer scope or total.
 
+P6-3H removes premature installer purchasing from primary navigation and search while preserving the existing records, APIs and supplier-side fulfilment for later validation. Installer-facing Job packets are now Common jobs, with stored identifiers and immutable quote snapshots unchanged. The separate Invoice tab previews the exact accepted lines, subtotal, GST and total beside one progressive accounting-system action. The seven-day schedule blocks past starts on both trust boundaries, treats normal working hours as advice, preserves hard overlap and recorded-time-off checks and lets an office user drag an appointment to another visible day with immediate response-driven regrouping.
+
 ## Next milestone contract
 
-### P6-3H batch: simpler invoicing and dependable dispatch
+### P6-3I batch: one simple field job page
 
-Outcome: the signed-in installer workflow removes premature purchasing complexity, explains reusable work in trade language, previews the exact accepted invoice before export and makes weekly scheduling fast, visible and mistake resistant.
+Outcome: a technician can open one job on a phone and immediately understand where to go, who they may contact, what to do next, what proof is required and when the job is safe to finish without learning the office CRM.
 
 ### Five linked foundation items
 
-1. Remove installer purchasing from the primary navigation and command centre while preserving its existing records and supplier-side capability for later validation with active trades and wholesalers.
-2. Rename the installer-facing job-packet workflow to Common jobs and explain it as saved common work without changing its authoritative storage or immutable quote snapshots.
-3. Show the accepted scope, line amounts, subtotal, GST and total as a live invoice preview beside one progressive accounting action area.
-4. Reject appointment starts in the past on both the client and server, while treating work outside recorded hours as an advisory instead of silently preventing a deliberate dispatch choice.
-5. Make scheduled cards draggable between the visible seven days, preserve duration and time where safe, and immediately regroup every successfully edited or dropped appointment under its saved day.
+1. Replace the technician's scattered job sections with one phone-first job header showing job number, scheduled time, allowed customer context and the authoritative service site, with the existing protected-customer boundary intact.
+2. Present one status-aware primary action such as Start travel, Arrive, Start work or Finish, while keeping corrections and exceptional states behind progressive disclosure.
+3. Put Call customer and Get directions beside the site only when the installer is authorised to see those direct-customer details; never reveal protected AEA identity or exact address fields.
+4. Combine accepted scope, required tasks, forms, requested photo proof and open issues into one ordered Today checklist that reuses the existing immutable execution snapshot and proof records.
+5. Keep offline and sync state visible but quiet, and make Finish explain the smallest missing requirement before it prepares the existing invoice and handover paths.
 
 ### In scope
 
-- Installer navigation, command centre, price-book template copy, accepted commercial handoff and seven-day schedule.
-- Existing immutable accepted scope and integer-cent totals.
-- Existing provider-neutral Xero, MYOB and QuickBooks draft-invoice adapters.
-- Owner-scoped appointment revisions, conflict checks, working-hours records and immediate response payloads.
+- The existing assigned-job and native field application surfaces, job detail header and field-work panel.
+- Existing customer ownership and AEA-protected privacy boundaries.
+- Existing appointment, execution snapshot, task, form, photo proof, issue, sync and completion-gate sources of truth.
+- Desktop office access to the same records where needed for support and correction.
 
 ### Explicitly out of scope
 
-- New purchasing, stock, purchase-order, receipt or wholesaler-order functionality for installers.
-- Removing supplier-side fulfilment tools or deleting preserved installer purchasing data.
-- Invoice editing outside the immutable accepted scope or sending an invoice automatically.
-- Calendar month views, route optimisation, payroll, subcontractors, variations or progress claims.
+- GPS tracking, route optimisation, call recording, customer messaging infrastructure or background location access.
+- New task, form, photo, timing, customer, appointment or invoice sources of truth.
+- Payroll, timesheets, subcontractor management, variations, progress claims or automatic invoice sending.
+- Replacing the office CRM or exposing protected AEA customer contact or exact location data.
 
 ### Acceptance criteria
 
-- Installer primary navigation and search no longer suggest that direct wholesaler ordering is ready for v1.
-- Reusable saved work is labelled Common jobs everywhere in the installer interface without changing stored packet identifiers.
-- The invoice preview visibly reconciles to the accepted integer-cent subtotal, GST and total before any accounting export.
-- Past starts are rejected server side and unavailable in delegated date inputs; saved edits and drops appear under the returned appointment date immediately.
-- Dragging to a day preserves duration, uses a safe future time for today and leaves keyboard and explicit date editing available.
-- The primary office flow works at 390 px without document-level horizontal overflow and keeps provider setup, timeline and manual finance details progressively disclosed.
+- An assigned technician reaches the job's next safe action without navigating the office-only Quote, Invoice, Price book or Business workspaces.
+- Direct-customer contact and directions appear once beside the service site; protected jobs remain reference and region only.
+- The Today checklist is derived from the immutable accepted execution snapshot and current proof records, not duplicated editable setup.
+- Start, arrive and finish transitions remain owner scoped, revision safe and idempotent, and the existing completion gate names the first blocking requirement plainly.
+- Offline or stale data is never presented as saved; sync conflicts retain the existing explicit resolution boundary.
+- The primary job flow works at 390 px without document-level horizontal overflow, buried horizontal tabs or more than one competing primary action.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- The accepted quote cannot produce an exact integer-cent invoice preview without changing its immutable scope.
-- A schedule move would bypass owner scope, revision, overlap or recorded time-off checks.
-- The slice expands into new wholesaler ordering, stock control, invoice calculation or a replacement calendar framework.
+- The field view would need a second customer, appointment, execution or proof record to render the simple flow.
+- A shortcut would expose protected customer contact or exact location, bypass the execution revision or weaken offline conflict handling.
+- The slice expands into GPS tracking, route optimisation, call recording, payroll, messaging infrastructure or a replacement field framework.
