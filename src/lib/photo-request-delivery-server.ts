@@ -75,7 +75,7 @@ function smsSenderApproved() {
 }
 
 async function deliveryContext(requestId: string, ownerUid = "") {
-  return getD1().prepare(`SELECT r.*, w.status work_status, w.record_status work_record_status, w.work_number,
+  return getD1().prepare(`SELECT r.*, w.stage work_status, w.record_status work_record_status, w.work_number,
       c.email customer_email, c.phone customer_phone, c.record_status customer_record_status,
       trade.business_name
     FROM trade_crm_photo_requests r

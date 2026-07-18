@@ -62,6 +62,8 @@ test("the additive migration stores protected token issues and privacy-safe deli
 });
 
 test("installer delivery reuses current contact, consent, opt-out, provider and daily-limit boundaries", () => {
+  assert.match(server, /w\.stage work_status/);
+  assert.doesNotMatch(server, /w\.status work_status/);
   for (const boundary of ["customer_accounts", "customer_consent_receipts", "customer_service_reminder_opt_outs", "mobile_verified_at",
     "service_reminder_channel_settings", "daily_limit", "TLINK_SMS_SENDER_APPROVED", "CRM_INTEGRATION_ENCRYPTION_KEY"]) {
     assert.match(`${server}\n${read("../src/lib/trade-integration-crypto.ts")}`, new RegExp(boundary));
