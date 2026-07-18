@@ -69,7 +69,7 @@ test("customer decisions require verified matching identity and retain exact acc
 
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0064_trade_price_book.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);

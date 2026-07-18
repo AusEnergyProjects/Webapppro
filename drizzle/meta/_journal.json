@@ -442,6 +442,13 @@
       "when": 1784359200000,
       "tag": "0064_trade_price_book",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "6",
+      "when": 1784365200000,
+      "tag": "0065_trade_job_packets",
+      "breakpoints": true
     }
   ]
 }

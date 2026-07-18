@@ -95,7 +95,7 @@ test("price-book writes are office-role protected, owner scoped and append price
 });
 
 test("active price-book items become authoritative direct-quote snapshots", () => {
-  assert.match(quoteRoute, /resolvePriceBookQuoteLines\(identity\.uid, body\.lines\)/);
+  assert.match(quoteRoute, /resolvePriceBookQuoteLines\(identity\.uid, resolvedPacket\.lines\)/);
   assert.match(quoteRoute, /priceBookItemsForQuote\(identity\.uid\)/);
   assert.match(quoteRoute, /reference\?\.unitCostCentsExGst/);
   assert.match(quoteRoute, /reference\?\.marginBasisPoints/);
@@ -104,7 +104,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
   assert.match(quoteUi, /Quick add from price book/);
   assert.match(quoteUi, /The quote keeps its own snapshot after saving/);
-  assert.match(quoteUi, /Saved item, current price applied on save/);
+  assert.match(quoteUi, /Saved item"\}, current price applied on save/);
 });
 
 test("the trade workspace prioritises quick setup and progressive disclosure", () => {

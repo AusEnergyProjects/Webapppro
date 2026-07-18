@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { dollarsToCents } from "@/lib/trade-quote";
 import { calculatePriceBookRates, PRICE_BOOK_ITEM_TYPES, PRICE_BOOK_TYPE_LABELS, PRICE_BOOK_UNITS, type PriceBookItemType } from "@/lib/trade-price-book";
+import { TradeJobPacketWorkspace } from "./TradeJobPacketWorkspace";
 import styles from "./TradePriceBookWorkspace.module.css";
 
 type PriceBookItem = {
@@ -31,6 +32,7 @@ const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, descriptio
   supplierName: item.supplierName, supplierSku: item.supplierSku, supplierProductId: item.supplierProductId });
 
 export function TradePriceBookWorkspace({ user }: { user: User }) {
+  const [libraryView, setLibraryView] = useState<"items" | "packets">("items");
   const [items, setItems] = useState<PriceBookItem[]>([]); const [counts, setCounts] = useState({ total: 0, active: 0, archived: 0 });
   const [capabilities, setCapabilities] = useState<string[]>([]); const [catalogue, setCatalogue] = useState<CatalogueOption[]>([]);
   const [search, setSearch] = useState(""); const [status, setStatus] = useState("active"); const [loading, setLoading] = useState(true);
@@ -111,7 +113,12 @@ export function TradePriceBookWorkspace({ user }: { user: User }) {
     finally { setBusy(""); }
   }
 
-  return <section className={styles.workspace} aria-labelledby="price-book-title">
+  return <section className={styles.workspace} aria-labelledby={libraryView === "items" ? "price-book-title" : "job-packets-title"}>
+    <nav className={styles.librarySwitch} aria-label="Pricing library">
+      <button type="button" className={libraryView === "items" ? styles.libraryActive : ""} onClick={() => setLibraryView("items")}>Price-book items</button>
+      <button type="button" className={libraryView === "packets" ? styles.libraryActive : ""} onClick={() => setLibraryView("packets")}>Job packets</button>
+    </nav>
+    {libraryView === "packets" ? <TradeJobPacketWorkspace user={user} onOpenItems={() => setLibraryView("items")} /> : <>
     <header className={styles.hero}><div><span>Commercial source of truth</span><h3 id="price-book-title">Price book</h3><p>Save common work once, then add it to a quote in one choice with the right price and GST.</p></div><button type="button" onClick={() => startNew()}>New item</button></header>
     <div className={styles.metrics}><article><span>Ready to quote</span><strong>{counts.active}</strong></article><article><span>Archived</span><strong>{counts.archived}</strong></article><article><span>Total history</span><strong>{counts.total}</strong></article></div>
 
@@ -147,5 +154,6 @@ export function TradePriceBookWorkspace({ user }: { user: User }) {
       {loading && <p className={styles.loading}>Loading the price book...</p>}
     </>}
     {message && <p className={styles.message} role="status">{message}</p>}
+    </>}
   </section>;
 }

@@ -1,4 +1,7 @@
 .workspace { display: grid; gap: 16px; min-width: 0; }
+.librarySwitch { background: #edf5f2; border-radius: 11px; display: grid; gap: 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-self: start; padding: 4px; }
+.librarySwitch button { background: transparent; border: 0; border-radius: 8px; color: var(--color-aea-muted); cursor: pointer; font-size: .7rem; font-weight: 850; padding: 10px 14px; }
+.librarySwitch button.libraryActive { background: white; box-shadow: 0 2px 7px #06363b12; color: var(--color-aea-green); }
 .hero { align-items: center; display: flex; gap: 18px; justify-content: space-between; }
 .hero span, .editor header span, .firstRun > span { color: var(--color-aea-green); display: block; font-size: .68rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .hero h3, .editor h4, .firstRun h4 { color: var(--color-aea-ink); font-family: Georgia, serif; font-size: clamp(1.35rem, 3vw, 2rem); font-weight: 500; margin: 4px 0; }
@@ -60,6 +63,7 @@
 }
 
 @media (max-width: 600px) {
+  .librarySwitch { justify-self: stretch; }
   .hero, .editor > header { align-items: stretch; flex-direction: column; }
   .hero > button, .secondary { width: 100%; }
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 
-type QuoteLine = { id?: string; priceBookItemId?: string; lineType: string; description: string; quantity: string; unitPrice: string; taxCode: string; totalCents?: number };
-type SavedLine = { id: string; priceBookItemId: string; lineType: string; description: string; quantityMilli: number; unitPriceCents: number; taxCode: string; totalCents: number };
+type QuoteLine = { id?: string; priceBookItemId?: string; jobPacketId?: string; jobPacketLineId?: string; lineType: string; description: string; quantity: string; unitPrice: string; taxCode: string; totalCents?: number };
+type SavedLine = { id: string; priceBookItemId: string; jobPacketId: string; jobPacketLineId: string; lineType: string; description: string; quantityMilli: number; unitPriceCents: number; taxCode: string; totalCents: number };
 type PriceBookItem = { id: string; itemCode: string; name: string; itemType: string; lineType: string; unitLabel: string; sellPriceCentsExGst: number; taxCode: string };
+type JobPacket = { id: string; packetCode: string; name: string; revision: number; suggestedCrewSize: number; taskCount: number; formCount: number;
+  activeCrewCount: number; crewReady: boolean; unavailableItemCount: number; canApply: boolean;
+  summary: { sellCentsExGst: number; estimatedDurationMinutes: number }; lines: Array<{ id: string; priceBookItemId: string; name: string; lineType: string; quantityMilli: number; sellPriceCentsExGst: number; taxCode: string }> };
 type QuoteVersion = { id: string; versionNumber: number; status: string; customerEmail: string; subtotalCents: number; taxCents: number; totalCents: number; terms: string; validUntil: string; consentStatement: string; issuedAt: string; items: SavedLine[]; acceptance: null | { decision: string; actorEmail: string; decidedAt: string; consentStatement: string } };
 type Quote = { id: string; quoteNumber: string; currentVersionNumber: number; status: string; versions: QuoteVersion[] };
-type QuoteResult = { ok?: boolean; authorisedEmails?: string[]; priceBookItems?: PriceBookItem[]; quote?: Quote | null; error?: string };
+type QuoteResult = { ok?: boolean; authorisedEmails?: string[]; priceBookItems?: PriceBookItem[]; jobPackets?: JobPacket[]; quote?: Quote | null; error?: string };
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const blankLine = (): QuoteLine => ({ lineType: "product", description: "", quantity: "1", unitPrice: "0.00", taxCode: "gst" });
@@ -19,6 +22,7 @@ const editLine = (line: SavedLine, activeIds: Set<string>): QuoteLine => ({ ...l
 export function TradeQuotePanel({ user, workOrderId, available, onChanged }: { user: User; workOrderId: string; available: boolean; onChanged?: () => void | Promise<void> }) {
   const [quote, setQuote] = useState<Quote | null>(null); const [emails, setEmails] = useState<string[]>([]);
   const [priceBookItems, setPriceBookItems] = useState<PriceBookItem[]>([]);
+  const [jobPackets, setJobPackets] = useState<JobPacket[]>([]);
   const [lines, setLines] = useState<QuoteLine[]>([blankLine()]); const [customerEmail, setCustomerEmail] = useState("");
   const [terms, setTerms] = useState(""); const [validUntil, setValidUntil] = useState("");
   const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
@@ -36,6 +40,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onChanged }: { u
     setQuote(result.quote || null); if (result.authorisedEmails) setEmails(result.authorisedEmails);
     const activePriceBookItems = result.priceBookItems || [];
     if (result.priceBookItems) setPriceBookItems(result.priceBookItems);
+    if (result.jobPackets) setJobPackets(result.jobPackets);
     const current = result.quote?.versions.find((version) => version.versionNumber === result.quote?.currentVersionNumber);
     if (current) { const activeIds = new Set(activePriceBookItems.map((item) => item.id)); setLines(current.items.map((line) => editLine(line, activeIds))); setCustomerEmail(current.customerEmail); setTerms(current.terms); setValidUntil(current.validUntil); }
   }, []);
@@ -52,7 +57,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onChanged }: { u
     setBusy(action); setMessage("");
     try {
       const result = await request({ method: "POST", body: JSON.stringify({ action, workOrderId, lines, customerEmail, terms, validUntil }) });
-      applyResult({ ...result, authorisedEmails: emails, priceBookItems }); await onChanged?.(); setMessage(action === "issue_quote" ? "Quote issued for verified customer review." : "Quote draft saved with server-calculated totals.");
+      applyResult({ ...result, authorisedEmails: emails, priceBookItems, jobPackets }); await onChanged?.(); setMessage(action === "issue_quote" ? "Quote issued for verified customer review." : "Quote draft saved with server-calculated totals.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "The quote could not be updated."); }
     finally { setBusy(""); }
   }
@@ -66,10 +71,23 @@ export function TradeQuotePanel({ user, workOrderId, available, onChanged }: { u
       unitPrice: (item.sellPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode };
     setLines((currentLines) => currentLines.length === 1 && !currentLines[0].description && currentLines[0].unitPrice === "0.00" ? [line] : [...currentLines, line]);
   }
+  function applyJobPacket(packetId: string) {
+    const packet = jobPackets.find((candidate) => candidate.id === packetId); if (!packet?.canApply) return;
+    const packetLines: QuoteLine[] = packet.lines.map((line) => ({ priceBookItemId: line.priceBookItemId,
+      jobPacketId: packet.id, jobPacketLineId: line.id, lineType: line.lineType, description: line.name,
+      quantity: (line.quantityMilli / 1000).toString(), unitPrice: (line.sellPriceCentsExGst / 100).toFixed(2), taxCode: line.taxCode }));
+    setLines((currentLines) => {
+      const withoutPacket = currentLines.filter((line) => line.jobPacketId !== packet.id);
+      const base = withoutPacket.length === 1 && !withoutPacket[0].description && withoutPacket[0].unitPrice === "0.00" ? [] : withoutPacket;
+      return [...base, ...packetLines];
+    });
+    setMessage(`${packet.name} applied once. Saving uses current price-book values and keeps a quote snapshot.`);
+  }
   return <section className="trade-quote-panel">
     <header><div><span>Versioned customer quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Issued versions are immutable. Saving changes after issue creates the next draft version.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
+    {jobPackets.length > 0 && <div className="trade-quote-packets"><label><span>Start with a job packet</span><select value="" onChange={(event) => applyJobPacket(event.target.value)}><option value="">Choose a ready packet</option>{jobPackets.map((packet) => <option key={packet.id} value={packet.id} disabled={!packet.canApply}>{packet.name} | {packet.lines.length} items | {money(packet.summary.sellCentsExGst)} ex GST{packet.canApply ? "" : " | needs attention"}</option>)}</select></label><small>One choice adds the standard scope. Applying the same packet again replaces its lines instead of duplicating them.</small></div>}
     {priceBookItems.length > 0 && <div className="trade-quote-price-book"><label><span>Quick add from price book</span><select value="" onChange={(event) => addPriceBookItem(event.target.value)}><option value="">Choose a saved item</option>{priceBookItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} ex GST / {item.unitLabel}</option>)}</select></label><small>One choice fills the description, current sell price and GST. The quote keeps its own snapshot after saving.</small></div>}
-    <div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Type</span><span>Description</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => <div className="trade-quote-line" key={`${index}:${line.id || "new"}`}><select aria-label={`Line ${index + 1} type`} value={line.lineType} onChange={(event) => updateLine(index, "lineType", event.target.value)}><option value="product">Product</option><option value="labour">Labour</option><option value="adjustment">Adjustment</option></select><label className="trade-quote-description"><span className="sr-only">Line {index + 1} description</span><input aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} placeholder="Description" />{line.priceBookItemId && <small>Saved item, current price applied on save</small>}</label><input aria-label={`Line ${index + 1} quantity`} value={line.quantity} inputMode="decimal" onChange={(event) => updateLine(index, "quantity", event.target.value)} /><input aria-label={`Line ${index + 1} unit price`} value={line.unitPrice} inputMode="decimal" onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /><select aria-label={`Line ${index + 1} tax`} value={line.taxCode} onChange={(event) => updateLine(index, "taxCode", event.target.value)}><option value="gst">GST 10%</option><option value="none">No GST</option></select><button type="button" disabled={lines.length === 1} onClick={() => setLines((currentLines) => currentLines.filter((_, position) => position !== index))}>Remove</button></div>)}</div>
+    <div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Type</span><span>Description</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => <div className="trade-quote-line" key={`${index}:${line.id || "new"}`}><select aria-label={`Line ${index + 1} type`} value={line.lineType} onChange={(event) => updateLine(index, "lineType", event.target.value)}><option value="product">Product</option><option value="labour">Labour</option><option value="adjustment">Adjustment</option></select><label className="trade-quote-description"><span className="sr-only">Line {index + 1} description</span><input aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} placeholder="Description" />{line.priceBookItemId && <small>{line.jobPacketId ? "Packet item" : "Saved item"}, current price applied on save</small>}</label><input aria-label={`Line ${index + 1} quantity`} value={line.quantity} inputMode="decimal" onChange={(event) => updateLine(index, "quantity", event.target.value)} /><input aria-label={`Line ${index + 1} unit price`} value={line.unitPrice} inputMode="decimal" onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /><select aria-label={`Line ${index + 1} tax`} value={line.taxCode} onChange={(event) => updateLine(index, "taxCode", event.target.value)}><option value="gst">GST 10%</option><option value="none">No GST</option></select><button type="button" disabled={lines.length === 1} onClick={() => setLines((currentLines) => currentLines.filter((_, position) => position !== index))}>Remove</button></div>)}</div>
     <button className="quote-add-line" type="button" onClick={() => setLines((currentLines) => [...currentLines, blankLine()])}>Add line item</button>
     <div className="trade-quote-settings"><label><span>Customer acceptance email</span><select value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)}><option value="">Choose authorised contact</option>{emails.map((email) => <option key={email}>{email}</option>)}</select><small>The customer must sign in to AEA with this verified email.</small></label><label><span>Valid until</span><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></label><label className="wide"><span>Recorded terms</span><textarea rows={4} maxLength={4000} value={terms} onChange={(event) => setTerms(event.target.value)} placeholder="Scope assumptions, exclusions and completion terms" /></label></div>
     {current && <div className="trade-quote-totals"><div><span>Subtotal</span><strong>{money(current.subtotalCents)}</strong></div><div><span>GST</span><strong>{money(current.taxCents)}</strong></div><div><span>Total</span><strong>{money(current.totalCents)}</strong></div></div>}

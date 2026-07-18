@@ -1347,6 +1347,54 @@ export const tradePriceBookPriceHistory = sqliteTable("trade_price_book_price_hi
   index("trade_price_book_price_history_owner_changed_idx").on(table.firebaseUid, table.changedAt),
 ]);
 
+export const tradeJobPackets = sqliteTable("trade_job_packets", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  packetCode: text("packet_code").notNull(),
+  name: text("name").notNull(),
+  serviceCategory: text("service_category").notNull().default("other"),
+  jobTemplateId: text("job_template_id").notNull().default(""),
+  suggestedCrewSize: integer("suggested_crew_size").notNull().default(1),
+  recordStatus: text("record_status").notNull().default("draft"),
+  revision: integer("revision").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(),
+  updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_job_packets_owner_code_idx").on(table.firebaseUid, table.packetCode),
+  uniqueIndex("trade_job_packets_owner_name_idx").on(table.firebaseUid, table.name),
+  index("trade_job_packets_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.updatedAt),
+]);
+
+export const tradeJobPacketItems = sqliteTable("trade_job_packet_items", {
+  id: text("id").primaryKey(),
+  packetId: text("packet_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  priceBookItemId: text("price_book_item_id").notNull(),
+  quantityMilli: integer("quantity_milli").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_job_packet_items_position_idx").on(table.packetId, table.position),
+  uniqueIndex("trade_job_packet_items_price_idx").on(table.packetId, table.priceBookItemId),
+  index("trade_job_packet_items_owner_idx").on(table.firebaseUid, table.packetId),
+]);
+
+export const tradeJobPacketForms = sqliteTable("trade_job_packet_forms", {
+  id: text("id").primaryKey(),
+  packetId: text("packet_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  templateKey: text("template_key").notNull(),
+  templateVersion: integer("template_version").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_job_packet_forms_position_idx").on(table.packetId, table.position),
+  uniqueIndex("trade_job_packet_forms_template_idx").on(table.packetId, table.templateKey, table.templateVersion),
+  index("trade_job_packet_forms_owner_idx").on(table.firebaseUid, table.packetId),
+]);
+
 export const tradeCrmQuotes = sqliteTable("trade_crm_quotes", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
@@ -1404,6 +1452,9 @@ export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
   unitCostCentsExGst: integer("unit_cost_cents_ex_gst").notNull().default(0),
   markupBasisPoints: integer("markup_basis_points").notNull().default(0),
   marginBasisPoints: integer("margin_basis_points").notNull().default(0),
+  jobPacketId: text("job_packet_id").notNull().default(""),
+  jobPacketRevision: integer("job_packet_revision").notNull().default(0),
+  jobPacketLineId: text("job_packet_line_id").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_quote_items_version_position_idx").on(table.quoteVersionId, table.position),

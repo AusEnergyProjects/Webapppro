@@ -4693,11 +4693,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-panel > header span { color: var(--color-aea-green); font-size: .66rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .trade-quote-panel > header h4 { color: var(--color-aea-green-dark); margin: 4px 0; }
 .trade-quote-panel > header p, .trade-quote-panel.unavailable p { color: var(--color-aea-muted); margin: 0; }
-.trade-quote-price-book { align-items: end; background: #e8f5f0; border: 1px solid #b8dfd0; border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(240px, 1fr) minmax(180px, .7fr); padding: 12px; }
-.trade-quote-price-book label { display: grid; gap: 5px; }
-.trade-quote-price-book label span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; }
-.trade-quote-price-book select { background: white; border: 1px solid #a9cfc0; border-radius: 8px; min-height: 42px; padding: 9px; width: 100%; }
-.trade-quote-price-book small { color: var(--color-aea-muted); line-height: 1.45; }
+.trade-quote-price-book, .trade-quote-packets { align-items: end; background: #e8f5f0; border: 1px solid #b8dfd0; border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(240px, 1fr) minmax(180px, .7fr); padding: 12px; }
+.trade-quote-packets { background: #fff8df; border-color: #ebd08b; }
+.trade-quote-price-book label, .trade-quote-packets label { display: grid; gap: 5px; }
+.trade-quote-price-book label span, .trade-quote-packets label span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; }
+.trade-quote-price-book select, .trade-quote-packets select { background: white; border: 1px solid #a9cfc0; border-radius: 8px; min-height: 42px; padding: 9px; width: 100%; }
+.trade-quote-price-book small, .trade-quote-packets small { color: var(--color-aea-muted); line-height: 1.45; }
 .quote-status { background: #e8f3ee; border-radius: 20px; color: var(--color-aea-green-dark); font-size: .68rem; padding: 6px 10px; text-transform: uppercase; }
 .quote-status.accepted { background: #dff2e4; color: #1f6537; }
 .quote-status.declined, .quote-status.superseded { background: #f2eded; color: #795454; }
@@ -4802,7 +4803,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 
 @media (max-width: 720px) {
   .trade-quote-settings { grid-template-columns: 1fr; }
-  .trade-quote-price-book { grid-template-columns: 1fr; }
+  .trade-quote-price-book, .trade-quote-packets { grid-template-columns: 1fr; }
   .trade-quote-settings .wide { grid-column: auto; }
   .trade-quote-panel > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header, .customer-appointment-changes > header, .customer-preferred-windows > header, .customer-reschedule-history article > header { flex-direction: column; }
   .customer-reschedule-form, .customer-preferred-windows fieldset, .customer-reschedule-history dl { grid-template-columns: 1fr; }
