@@ -21,6 +21,7 @@ const resend = read("../src/app/api/service-reminder-provider-events/resend/rout
 const twilio = read("../src/app/api/service-reminder-provider-events/twilio/route.ts");
 const adminRoute = read("../src/app/api/admin/service-reminder-delivery/route.ts");
 const adminUi = read("../src/components/AdminServiceReminderDelivery.tsx");
+const globalStyles = read("../src/app/globals.css");
 
 test("delivery identity is bound to request revision, token issue, intent and channel", async () => {
   const base = { requestId: "request-1", requestRevision: 3, tokenIssue: 2, intent: "initial", channel: "email" };
@@ -85,6 +86,7 @@ test("installer controls preview destinations and keep manual sharing available"
   assert.match(panel, /navigator\.share/);
   assert.match(panel, /consentConfirmed/);
   assert.match(panel, /delivery\.linkDeliverable/);
+  assert.match(globalStyles, /\.crm-jobs-layout > \*, \.crm-customers-layout > \* \{ min-width: 0; \}/);
 });
 
 test("authenticated callbacks and administrator health include photo delivery without private payloads", () => {

@@ -4120,6 +4120,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-granular-filters input, .crm-granular-filters select { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: var(--color-aea-text); font: inherit; font-size: .63rem; min-height: 38px; padding: 7px 9px; width: 100%; }
 .crm-granular-filters button { background: #e5f3ed; border: 0; border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-size: .58rem; font-weight: 850; min-height: 38px; padding: 7px 9px; }
 .crm-jobs-layout, .crm-customers-layout { grid-template-columns: 1fr; }
+.crm-jobs-layout > *, .crm-customers-layout > * { min-width: 0; }
 .crm-record-table, .trade-portal-shell .crm-record-table { background: #fff; display: block; max-height: none; overflow-x: auto; padding: 0; }
 .crm-record-columns { align-items: center; background: #edf6f2; border-bottom: 1px solid var(--color-aea-line); color: #467065; display: grid; font-size: .58rem; font-weight: 950; letter-spacing: .04em; min-width: 1380px; padding: 10px; text-transform: uppercase; }
 .crm-job-columns, .crm-job-list.crm-record-table > article { gap: 10px; grid-template-columns: 30px 105px 150px 140px minmax(190px, 1fr) 125px 125px 115px 105px 95px; min-width: 1380px; }
