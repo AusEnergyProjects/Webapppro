@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements P6-3E accepted quote, deposit and accounting handoff on top of the published P6-3D secure quote-link release. Exact release identity is recorded in `RELEASE_TRUTH.md` after publication.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the P6-3F readiness foundation and the installer catalogue usability batch on top of the published P6-3E accepted quote handoff. Exact release identity is recorded in `RELEASE_TRUTH.md` after publication.
 
 ## Current delivery summary
 
@@ -70,45 +70,49 @@ Stripe and Square create at most one provider-hosted deposit request for the han
 
 Migration `0068_accepted_quote_handoff.sql` adds the immutable commercial handoff and binds deposit and accounting records to it. The office sees one progressive acceptance, deposit and accounting timeline with direct reconnect actions. Manual financial tracking remains available behind disclosure for work that does not use the accepted quote flow.
 
+P6-3F foundation converts an accepted direct-customer scope once into owner-scoped job phases and requirements, preserves the accepted sell and known cost baseline, and exposes one readiness checklist for scope, forms, technician, materials and deposit. The office can preassign an invited technician while access remains blocked until invitation acceptance. The job does not schedule, reserve stock or order materials automatically.
+
+Installer catalogue usability now includes obvious horizontal navigation, a pinned first column and header dropdowns with searchable include and exclude choices for wholesaler, brand and model code. Clicking a wholesaler opens a verified TLink profile with trade contacts, dispatch and warehouse locations, coverage and the approved product catalogue. Verified wholesalers maintain those locations from their existing overview.
+
 ## Next milestone contract
 
-### P6-3F batch: accepted scope to ready-to-run job
+### P6-3G batch: immutable execution snapshots and actual job progress
 
-Outcome: one deliberate office action converts the immutable accepted scope into an executable job plan without re-entering tasks, materials, forms, crew needs or budget.
+Outcome: every newly issued packet-backed quote snapshots the exact execution metadata needed later, and ready jobs can record progress and actual costs without changing the accepted customer scope or total.
 
 ### Five linked foundation items
 
-1. Convert the accepted scope once into immutable job phases and customer-visible work descriptions.
-2. Reuse originating job-packet tasks, forms, durations, capabilities and crew suggestions when present, with a clear lightweight fallback when the quote was built manually.
-3. Materialise material and labour requirements from accepted quote lines without reserving stock or creating supplier orders automatically.
-4. Establish the accepted sell, cost and margin budget baseline, then show actual time and material costs against it without changing the accepted customer total.
-5. Present one readiness checklist and one `Ready to schedule` action covering scope, forms, people, materials and deposit state.
+1. Snapshot packet task titles, form keys and versions, duration, required capability and crew size into each issued quote revision.
+2. Use only that immutable snapshot during accepted-scope conversion, with the existing lightweight manual-quote fallback for legacy quotes.
+3. Record actual labour time and material usage against the job-plan requirement without changing accepted scope.
+4. Show budget versus actual cost and margin variance with simple attention thresholds.
+5. Add phase progress and a completion gate that carries authoritative results into invoice and handover preparation.
 
 ### In scope
 
-- Existing immutable commercial handoff, accepted quote lines, packet revision references, price-book cost snapshots, tasks, forms, capabilities, team and deposit status.
-- One conversion receipt per accepted handoff so retries return the existing plan rather than duplicating phases or requirements.
-- Progressive disclosure: default phase and readiness choices first, with detailed work breakdown and budget available when needed.
-- Owner-scoped job records and the existing protected-customer boundaries.
+- New quote-version execution snapshots and the existing accepted job plan.
+- Actual labour minutes and material costs against owner-scoped requirements.
+- Simple phase progress, variance and completion gates using integer cents.
+- Existing protected-customer, provider-neutral accounting and payment boundaries.
 
 ### Explicitly out of scope
 
-- Automatic scheduling, dispatch assignment, purchase-order submission, stock reservation, supplier bills or field completion.
-- Variations, progress claims, payroll, subcontractor onboarding or customer asset creation.
+- Automatic purchase orders, stock reservation, supplier bills, payroll or subcontractor onboarding.
+- Variations and progress claims.
 - Recalculating the accepted sell total, mutating the accepted scope or deriving provider-specific commercial truth.
 - Requiring a deposit when the business deliberately chooses to proceed without one.
 
 ### Acceptance criteria
 
-- Repeating conversion returns the same phases, requirements and readiness record without duplication.
-- Packet-backed quotes reuse the exact packet revision; manually built quotes receive a useful simple plan without technical setup.
-- Accepted materials and labour flow into requirements and budget once, while the accepted customer total remains immutable.
-- The office can see exactly what blocks `Ready to schedule` and resolve each blocker from that view.
+- A newly issued packet quote contains enough immutable metadata to reproduce tasks, forms, duration, capabilities and crew after the packet or price book changes.
+- Actual time and materials update the job budget comparison without mutating the accepted total.
+- Phase progress is usable by office and field roles without repeated entry.
+- Completion blocks clearly when required proof, forms or scope remain unfinished.
 - The primary office flow works at 390 px without document-level horizontal overflow and keeps advanced breakdowns collapsed initially.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Conversion requires mutating the accepted quote or replacing its stable commercial reference.
-- Packet revision data is insufficient to reconstruct quoted tasks or forms accurately.
-- The slice expands into automatic supplier ordering, stock allocation, scheduling, dispatch or field execution.
+- Snapshotting would mutate an already issued quote revision.
+- Actual costs would require making Xero, MYOB, QuickBooks, Stripe or Square the TLink source of truth.
+- The slice expands into supplier ordering, payroll, variations or progress claims.

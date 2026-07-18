@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { WorkspaceListControls, WorkspaceListPreferences } from "./WorkspaceListControls";
 import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
+import { SupplierLocationManager } from "./SupplierLocationManager";
 
 type ProductDependency = {
   linkedProductId: string;
@@ -869,6 +870,7 @@ export function SupplierCatalogueWorkspace({
           <span>03</span><strong>Add a product</strong><small>Create one complete model listing at a time</small>
         </button>
       </section>
+      <SupplierLocationManager user={user} />
       </>}
 
       {catalogueView === "enquiries" && <section className="dashboard-panel supplier-enquiry-workspace" aria-labelledby="supplier-enquiry-title">

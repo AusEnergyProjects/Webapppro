@@ -195,11 +195,11 @@ export async function PATCH(request: Request) {
       if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180);
       const job = await assignedJob(access, workOrderId);
-      let label = "";
+      let label = ""; let memberStatus = "";
       if (memberId) {
-        const member = await db.prepare(`SELECT display_name FROM trade_team_members
-          WHERE id = ? AND owner_uid = ? AND status = 'active'`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
-        if (!member) throw new Error("MEMBER_NOT_FOUND"); label = String(member.display_name);
+        const member = await db.prepare(`SELECT display_name, status FROM trade_team_members
+          WHERE id = ? AND owner_uid = ? AND status IN ('active', 'invited')`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
+        if (!member) throw new Error("MEMBER_NOT_FOUND"); label = String(member.display_name); memberStatus = String(member.status);
       }
       const revision = nextJobRevision(job.revision);
       await db.batch([
@@ -207,7 +207,9 @@ export async function PATCH(request: Request) {
           .bind(memberId, label, revision, now, workOrderId, access.ownerUid),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'team_assignment', ?, ?)`)
-          .bind(crypto.randomUUID(), workOrderId, access.ownerUid, memberId ? `Assigned to ${label}.` : "Team assignment cleared.", now),
+          .bind(crypto.randomUUID(), workOrderId, access.ownerUid, memberId
+            ? `Assigned to ${label}${memberStatus === "invited" ? " while invitation is pending" : ""}.`
+            : "Team assignment cleared.", now),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
           audienceMemberId: memberId, previousAudienceMemberId: job.assignee_member_id }),
       ]);

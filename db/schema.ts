@@ -40,6 +40,27 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   index("trade_accounts_business_nocase_idx").on(sql`${table.businessName} COLLATE NOCASE`, table.firebaseUid),
 ]);
 
+export const tradeSupplierLocations = sqliteTable("trade_supplier_locations", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  locationName: text("location_name").notNull(),
+  locationType: text("location_type").notNull().default("warehouse"),
+  addressLine1: text("address_line_1").notNull(),
+  suburb: text("suburb").notNull(),
+  addressState: text("address_state").notNull(),
+  postcode: text("postcode").notNull(),
+  salesEmail: text("sales_email").notNull().default(""),
+  contactNumber: text("contact_number").notNull().default(""),
+  dispatchNotes: text("dispatch_notes").notNull().default(""),
+  serviceStatesJson: text("service_states_json").notNull().default("[]"),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_supplier_locations_owner_name_idx").on(table.firebaseUid, table.locationName),
+  index("trade_supplier_locations_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.addressState, table.postcode),
+]);
+
 export const stripeMemberships = sqliteTable("stripe_memberships", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -1544,6 +1565,68 @@ export const tradeCrmCommercialHandovers = sqliteTable("trade_crm_commercial_han
   uniqueIndex("trade_crm_commercial_handovers_acceptance_idx").on(table.acceptanceId),
   uniqueIndex("trade_crm_commercial_handovers_reference_idx").on(table.firebaseUid, table.commercialReference),
   index("trade_crm_commercial_handovers_work_idx").on(table.firebaseUid, table.workOrderId, table.acceptedAt),
+]);
+
+export const tradeCrmJobPlans = sqliteTable("trade_crm_job_plans", {
+  id: text("id").primaryKey(),
+  commercialHandoffId: text("commercial_handoff_id").notNull(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  commercialReference: text("commercial_reference").notNull(),
+  sourceKind: text("source_kind").notNull().default("manual_quote"),
+  status: text("status").notNull().default("planning"),
+  acceptedSubtotalCents: integer("accepted_subtotal_cents").notNull(),
+  acceptedTaxCents: integer("accepted_tax_cents").notNull(),
+  acceptedTotalCents: integer("accepted_total_cents").notNull(),
+  budgetCostCents: integer("budget_cost_cents").notNull().default(0),
+  budgetMarginCents: integer("budget_margin_cents").notNull().default(0),
+  expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0),
+  suggestedCrewSize: integer("suggested_crew_size").notNull().default(1),
+  depositRequirement: text("deposit_requirement").notNull().default("optional"),
+  readyAt: text("ready_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_job_plans_handoff_idx").on(table.commercialHandoffId),
+  index("trade_crm_job_plans_work_idx").on(table.firebaseUid, table.workOrderId, table.updatedAt),
+]);
+
+export const tradeCrmJobPlanPhases = sqliteTable("trade_crm_job_plan_phases", {
+  id: text("id").primaryKey(),
+  jobPlanId: text("job_plan_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  title: text("title").notNull(),
+  customerDescription: text("customer_description").notNull(),
+  sourcePacketId: text("source_packet_id").notNull().default(""),
+  sourcePacketRevision: integer("source_packet_revision").notNull().default(0),
+  expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_job_plan_phases_position_idx").on(table.jobPlanId, table.position),
+  index("trade_crm_job_plan_phases_owner_idx").on(table.firebaseUid, table.jobPlanId),
+]);
+
+export const tradeCrmJobPlanRequirements = sqliteTable("trade_crm_job_plan_requirements", {
+  id: text("id").primaryKey(),
+  jobPlanId: text("job_plan_id").notNull(),
+  jobPlanPhaseId: text("job_plan_phase_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  requirementType: text("requirement_type").notNull(),
+  sourceId: text("source_id").notNull().default(""),
+  description: text("description").notNull(),
+  quantityMilli: integer("quantity_milli").notNull().default(1000),
+  unitCostCents: integer("unit_cost_cents").notNull().default(0),
+  totalCostCents: integer("total_cost_cents").notNull().default(0),
+  expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0),
+  requiredCapability: text("required_capability").notNull().default(""),
+  status: text("status").notNull().default("required"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_job_plan_requirements_position_idx").on(table.jobPlanId, table.position),
+  index("trade_crm_job_plan_requirements_owner_idx").on(table.firebaseUid, table.jobPlanId, table.requirementType),
 ]);
 
 export const tradeCrmQuoteLinks = sqliteTable("trade_crm_quote_links", {

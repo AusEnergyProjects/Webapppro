@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { TradeAccountingPanel } from "./TradeAccountingPanel";
 import { TradePaymentPanel } from "./TradePaymentPanel";
+import { TradeJobReadinessPanel } from "./TradeJobReadinessPanel";
 
 type ScopeLine = { lineId: string; section: string; description: string; quantityMilli: number; totalCents: number };
 type Handoff = {
@@ -71,5 +72,6 @@ export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, ha
     <TradePaymentPanel user={user} workOrderId={workOrderId} isProtected={false} suggestedAmountCents={handoff.depositAmountCents} onOpenIntegrations={onOpenIntegrations} onChanged={refreshAll} />
     <TradeAccountingPanel user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer invoiceAmountCents={handoff.totalCents} onOpenIntegrations={onOpenIntegrations} onChanged={refreshAll} />
     <section className="crm-commercial-timeline"><header><div><span>Commercial timeline</span><h4>Acceptance, deposit and accounting</h4></div><button type="button" onClick={() => void refreshAll()}>Refresh</button></header><ol>{timeline.map((event, index) => <li key={`${event.type}:${event.provider}:${event.occurredAt}:${index}`}><i aria-hidden="true" /><div><strong>{event.summary}</strong><span>{event.provider === "tlink" ? "TLink" : event.provider === "quickbooks" ? "QuickBooks" : event.provider.toUpperCase()} | {event.status.replaceAll("_", " ")}</span></div><time>{new Date(event.occurredAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time></li>)}</ol></section>
+    <TradeJobReadinessPanel user={user} workOrderId={workOrderId} onChanged={refreshAll} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} />
   </section>;
 }

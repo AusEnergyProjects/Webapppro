@@ -137,6 +137,18 @@ export async function GET(request: Request) {
   const category = CATEGORIES.has(categoryValue) ? categoryValue : "";
   const supplierUid = cleanAdminText(url.searchParams.get("supplier"), 160);
   const brand = cleanAdminText(url.searchParams.get("brand"), 100);
+  const filterList = (name: string, limit: number) => {
+    try {
+      const parsed = JSON.parse(url.searchParams.get(name) || "[]");
+      return Array.isArray(parsed) ? [...new Set(parsed.map((value) => cleanAdminText(value, limit)).filter(Boolean))].slice(0, 100) : [];
+    } catch { return []; }
+  };
+  const supplierInclude = filterList("supplierInclude", 160);
+  const supplierExclude = filterList("supplierExclude", 160);
+  const brandInclude = filterList("brandInclude", 100);
+  const brandExclude = filterList("brandExclude", 100);
+  const modelInclude = filterList("modelInclude", 100);
+  const modelExclude = filterList("modelExclude", 100);
   const serviceStateValue = cleanAdminText(url.searchParams.get("state"), 12).toUpperCase();
   const serviceState = STATES.has(serviceStateValue) ? serviceStateValue : "";
   const stockValue = cleanAdminText(url.searchParams.get("stock"), 30);
@@ -158,6 +170,14 @@ export async function GET(request: Request) {
   if (category) { conditions.push("p.category = ?"); bindings.push(category); }
   if (supplierUid) { conditions.push("a.firebase_uid = ?"); bindings.push(supplierUid); }
   if (brand) { conditions.push("p.brand = ?"); bindings.push(brand); }
+  const addSet = (column: string, values: string[], excluded = false) => {
+    if (!values.length) return;
+    conditions.push(`${column} ${excluded ? "NOT IN" : "IN"} (${values.map(() => "?").join(",")})`);
+    bindings.push(...values);
+  };
+  addSet("a.firebase_uid", supplierInclude); addSet("a.firebase_uid", supplierExclude, true);
+  addSet("p.brand", brandInclude); addSet("p.brand", brandExclude, true);
+  addSet("p.model_number", modelInclude); addSet("p.model_number", modelExclude, true);
   if (serviceState) { conditions.push("a.service_states LIKE ?"); bindings.push(`%\"${serviceState}\"%`); }
   if (stock) { conditions.push("p.stock_status = ?"); bindings.push(stock); }
   if (minimumPriceCents) { conditions.push("p.unit_price_cents_ex_gst >= ?"); bindings.push(minimumPriceCents); }
@@ -209,6 +229,9 @@ export async function GET(request: Request) {
       db.prepare(`SELECT DISTINCT p.stock_status FROM supplier_products p
         JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}
         ORDER BY p.stock_status COLLATE NOCASE`).all<Record<string, unknown>>(),
+      db.prepare(`SELECT DISTINCT p.model_number FROM supplier_products p
+        JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid WHERE ${eligibleSupplierSql}
+        ORDER BY p.model_number COLLATE NOCASE LIMIT 2000`).all<Record<string, unknown>>(),
     ]) : Promise.resolve(null),
   ]);
   const total = count ? Number(count.total || 0) : undefined;
@@ -229,7 +252,7 @@ export async function GET(request: Request) {
     linkedProducts.push(...links.results);
   }
 
-  const [supplierRows, brandRows, stateRows, stockRows] = facetResults || [{ results: [] }, { results: [] }, { results: [] }, { results: [] }];
+  const [supplierRows, brandRows, stateRows, stockRows, modelRows] = facetResults || [{ results: [] }, { results: [] }, { results: [] }, { results: [] }, { results: [] }];
   const states = new Set<string>();
   stateRows.results.forEach((row) => {
     try {
@@ -259,6 +282,7 @@ export async function GET(request: Request) {
       brands: brandRows.results.map((row) => ({ name: String(row.brand), supplierUid: String(row.supplier_uid) })),
       states: [...states].sort((left, right) => left.localeCompare(right)),
       stocks: stockRows.results.map((row) => String(row.stock_status)),
+      models: modelRows.results.map((row) => String(row.model_number)),
     } : undefined,
   });
 }

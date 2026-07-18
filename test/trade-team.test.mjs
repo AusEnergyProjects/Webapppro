@@ -72,7 +72,10 @@ test("the owner CRM and mobile staff portal expose progressive team workflows", 
   assert.match(workspace, /hasTeamAccess/);
   assert.match(centre, /Dispatch board/);
   assert.match(centre, /Create a secure invitation/);
-  assert.match(centre, /Assigned to/);
+  assert.match(centre, /Assigned technician/);
+  assert.match(centre, /invite pending/);
+  assert.match(centre, /Preassigned\. Access begins after the invitation is accepted/);
+  assert.match(route, /status IN \('active', 'invited'\)/);
   assert.match(portal, /Continue with Google/);
   assert.match(portal, /Create team login/);
   assert.match(portal, /Work queue/);

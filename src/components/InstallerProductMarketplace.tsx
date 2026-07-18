@@ -4,6 +4,8 @@ import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useS
 import type { User } from "firebase/auth";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { downloadWorkspaceCsv, WorkspaceTableTools } from "./WorkspaceTableTools";
+import { MarketplaceColumnFilter } from "./MarketplaceColumnFilter";
+import { WholesalerProfileDrawer } from "./WholesalerProfileDrawer";
 
 type MarketplaceProduct = {
   id: string;
@@ -93,6 +95,7 @@ type CatalogueFacets = {
   brands: Array<{ name: string; supplierUid: string }>;
   states: string[];
   stocks: string[];
+  models: string[];
 };
 
 const defaultPreferences: CataloguePreferences = {
@@ -155,7 +158,7 @@ function readable(value: string) {
 
 export function InstallerProductMarketplace({ user, navigationTarget }: { user: User; navigationTarget?: TLinkCommandTarget | null }) {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
-  const [facets, setFacets] = useState<CatalogueFacets>({ suppliers: [], brands: [], states: [], stocks: [] });
+  const [facets, setFacets] = useState<CatalogueFacets>({ suppliers: [], brands: [], states: [], stocks: [], models: [] });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPreferences.pageSize);
   const [pageCount, setPageCount] = useState(1);
@@ -179,6 +182,13 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const [maximumLeadTime, setMaximumLeadTime] = useState("");
   const [minimumWarranty, setMinimumWarranty] = useState("");
   const [sort, setSort] = useState("name-asc");
+  const [supplierInclude, setSupplierInclude] = useState<string[]>([]);
+  const [supplierExclude, setSupplierExclude] = useState<string[]>([]);
+  const [brandInclude, setBrandInclude] = useState<string[]>([]);
+  const [brandExclude, setBrandExclude] = useState<string[]>([]);
+  const [modelInclude, setModelInclude] = useState<string[]>([]);
+  const [modelExclude, setModelExclude] = useState<string[]>([]);
+  const [profileSupplierUid, setProfileSupplierUid] = useState("");
   const [status, setStatus] = useState("Loading approved wholesaler products...");
   const [busy, setBusy] = useState(false);
   const [catalogueLoading, setCatalogueLoading] = useState(false);
@@ -191,6 +201,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   const catalogueCountReadyRef = useRef(false);
   const catalogueFilterKeyRef = useRef("");
   const pageCursorsRef = useRef<string[]>([""]);
+  const catalogueTableRef = useRef<HTMLDivElement>(null);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const token = await user.getIdToken();
@@ -258,7 +269,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
   useEffect(() => {
     if (!preferencesReady) return;
     const controller = new AbortController();
-    const filterKey = JSON.stringify([search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty, sort, pageSize]);
+    const filterKey = JSON.stringify([search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty, sort, pageSize, supplierInclude, supplierExclude, brandInclude, brandExclude, modelInclude, modelExclude]);
     const previousFilterKey = catalogueFilterKeyRef.current;
     catalogueFilterKeyRef.current = filterKey;
     if (previousFilterKey && previousFilterKey !== filterKey) {
@@ -285,6 +296,9 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
         facets: facetsReadyRef.current ? "0" : "1",
         total: catalogueCountReadyRef.current ? "0" : "1",
         cursor: pageCursorsRef.current[page - 1] || "",
+        supplierInclude: JSON.stringify(supplierInclude), supplierExclude: JSON.stringify(supplierExclude),
+        brandInclude: JSON.stringify(brandInclude), brandExclude: JSON.stringify(brandExclude),
+        modelInclude: JSON.stringify(modelInclude), modelExclude: JSON.stringify(modelExclude),
       });
       try {
         setCatalogueLoading(true);
@@ -315,7 +329,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [brand, category, maximumLeadTime, maximumPrice, minimumPrice, minimumWarranty, modelSearch, page, pageSize, preferencesReady, request, search, serviceState, sort, stock, supplier]);
+  }, [brand, brandExclude, brandInclude, category, maximumLeadTime, maximumPrice, minimumPrice, minimumWarranty, modelExclude, modelInclude, modelSearch, page, pageSize, preferencesReady, request, search, serviceState, sort, stock, supplier, supplierExclude, supplierInclude]);
 
   useEffect(() => {
     if (navigationTarget?.kind !== "product" || !navigationTarget.query) return;
@@ -345,11 +359,13 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
     brands: [...new Set(facets.brands.filter((item) => !supplier || item.supplierUid === supplier).map((item) => item.name))].sort((a, b) => a.localeCompare(b)),
     states: facets.states,
     stocks: facets.stocks,
+    models: facets.models,
   }), [facets, supplier]);
-  const activeFilterCount = [search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty].filter(Boolean).length;
+  const activeFilterCount = [search, modelSearch, category, supplier, brand, serviceState, stock, minimumPrice, maximumPrice, maximumLeadTime, minimumWarranty].filter(Boolean).length + supplierInclude.length + supplierExclude.length + brandInclude.length + brandExclude.length + modelInclude.length + modelExclude.length;
   function clearFilters() {
     setSearch(""); setModelSearch(""); setCategory(""); setSupplier(""); setBrand(""); setServiceState(""); setStock("");
     setMinimumPrice(""); setMaximumPrice(""); setMaximumLeadTime(""); setMinimumWarranty(""); setSort("name-asc");
+    setSupplierInclude([]); setSupplierExclude([]); setBrandInclude([]); setBrandExclude([]); setModelInclude([]); setModelExclude([]);
     resetCataloguePaging();
   }
   function changeFilter(setter: (value: string) => void, value: string) {
@@ -625,18 +641,22 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
               exportDisabled={!products.length}
               noun="products"
             />
+            <div className="marketplace-table-navigation">
+              <span>All selected columns are available. Move sideways to see more.</span>
+              <div><button type="button" onClick={() => catalogueTableRef.current?.scrollBy({ left: -Math.max(360, catalogueTableRef.current.clientWidth * .75), behavior: "smooth" })}>Scroll left</button><button type="button" onClick={() => catalogueTableRef.current?.scrollBy({ left: Math.max(360, catalogueTableRef.current.clientWidth * .75), behavior: "smooth" })}>Scroll right</button></div>
+            </div>
           </div>
           {status && <p className="dashboard-settings-status" role="status">{status}</p>}
           {products.length ? (
-            <div className={`tlink-data-table marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading} role="table" aria-label="Approved wholesale products" aria-rowcount={totalProducts + 1}>
+            <div ref={catalogueTableRef} id="approved-product-catalogue" className={`tlink-data-table marketplace-product-grid${catalogueLoading ? " is-loading" : ""}`} aria-busy={catalogueLoading} role="table" aria-label="Approved wholesale products" aria-rowcount={totalProducts + 1}>
               <div className="marketplace-product-columns" role="row" style={productGridStyle}>
-                {orderedColumns.map((column) => <span key={column.key} role="columnheader" className="workspace-sort-column" aria-sort={columnSortState(column.key)}>{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}</span>)}
+                {orderedColumns.map((column, index) => <span key={column.key} role="columnheader" className={`workspace-sort-column${index === 0 ? " is-pinned-column" : ""}`} aria-sort={columnSortState(column.key)}><span className="marketplace-column-heading">{["supplier", "brand", "model", "name", "price", "lead"].includes(column.key) ? <button type="button" className="workspace-sort-header" onClick={() => changeColumnSort(column.key)}>{column.label}</button> : column.label}{column.key === "supplier" && <MarketplaceColumnFilter label="Wholesaler" options={filterOptions.suppliers.map((item) => ({ value: item.uid, label: item.name }))} include={supplierInclude} exclude={supplierExclude} onChange={(next) => { setSupplierInclude(next.include); setSupplierExclude(next.exclude); resetCataloguePaging(); }} />}{column.key === "brand" && <MarketplaceColumnFilter label="Brand" options={filterOptions.brands.map((item) => ({ value: item, label: item }))} include={brandInclude} exclude={brandExclude} onChange={(next) => { setBrandInclude(next.include); setBrandExclude(next.exclude); resetCataloguePaging(); }} />}{column.key === "model" && <MarketplaceColumnFilter label="Model code" options={filterOptions.models.map((item) => ({ value: item, label: item }))} include={modelInclude} exclude={modelExclude} onChange={(next) => { setModelInclude(next.include); setModelExclude(next.exclude); resetCataloguePaging(); }} />}</span></span>)}
               </div>
               {products.map((product) => {
                 const selected = activeList?.items.some((item) => item.productId === product.id);
                 return (
                   <article key={product.id} style={productGridStyle} role="row">
-                    {orderedColumns.map((column) => column.key === "supplier" ? <strong key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-supplier" title={product.supplierName}>{product.supplierName}</strong>
+                    {orderedColumns.map((column, index) => column.key === "supplier" ? <strong key={column.key} role="cell" data-label={column.label} className={`marketplace-table-cell marketplace-supplier${index === 0 ? " is-pinned-column" : ""}`} title={product.supplierName}><button type="button" onClick={() => setProfileSupplierUid(product.supplierUid)}>{product.supplierName}</button></strong>
                       : column.key === "brand" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell" title={product.brand}>{product.brand}</span>
                       : column.key === "model" ? <span key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-model" title={product.modelNumber}>{product.modelNumber}</span>
                       : column.key === "name" ? <strong key={column.key} role="cell" data-label={column.label} className="marketplace-table-cell marketplace-product-name" title={product.name}>{product.name}</strong>
@@ -740,6 +760,7 @@ export function InstallerProductMarketplace({ user, navigationTarget }: { user: 
           ) : !creating && <div className="dashboard-empty-state"><strong>No project lists yet</strong><p>Create a list to start selecting products.</p></div>}
         </aside>
       </div>
+      {profileSupplierUid && <WholesalerProfileDrawer user={user} supplierUid={profileSupplierUid} onClose={() => setProfileSupplierUid("")} />}
     </section>
   );
 }
