@@ -1484,6 +1484,13 @@ export const tradeCrmQuoteItems = sqliteTable("trade_crm_quote_items", {
   index("trade_crm_quote_items_owner_idx").on(table.firebaseUid, table.quoteVersionId),
 ]);
 
+export const tradeCrmQuoteExecutionSnapshots = sqliteTable("trade_crm_quote_execution_snapshots", {
+  id: text("id").primaryKey(), quoteVersionId: text("quote_version_id").notNull(), firebaseUid: text("firebase_uid").notNull(),
+  sourceKind: text("source_kind").notNull().default("manual_quote"), packetsJson: text("packets_json").notNull().default("[]"),
+  expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0), suggestedCrewSize: integer("suggested_crew_size").notNull().default(1),
+  requiredCapabilitiesJson: text("required_capabilities_json").notNull().default("[]"), createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("trade_crm_quote_execution_snapshots_version_idx").on(table.quoteVersionId), index("trade_crm_quote_execution_snapshots_owner_idx").on(table.firebaseUid, table.createdAt)]);
+
 export const tradeCrmQuoteChoices = sqliteTable("trade_crm_quote_choices", {
   id: text("id").primaryKey(),
   quoteVersionId: text("quote_version_id").notNull(),
@@ -1585,6 +1592,7 @@ export const tradeCrmJobPlans = sqliteTable("trade_crm_job_plans", {
   suggestedCrewSize: integer("suggested_crew_size").notNull().default(1),
   depositRequirement: text("deposit_requirement").notNull().default("optional"),
   readyAt: text("ready_at").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
@@ -1602,7 +1610,8 @@ export const tradeCrmJobPlanPhases = sqliteTable("trade_crm_job_plan_phases", {
   sourcePacketId: text("source_packet_id").notNull().default(""),
   sourcePacketRevision: integer("source_packet_revision").notNull().default(0),
   expectedDurationMinutes: integer("expected_duration_minutes").notNull().default(0),
-  createdAt: text("created_at").notNull(),
+  status: text("status").notNull().default("pending"), completedAt: text("completed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull().default(""),
 }, (table) => [
   uniqueIndex("trade_crm_job_plan_phases_position_idx").on(table.jobPlanId, table.position),
   index("trade_crm_job_plan_phases_owner_idx").on(table.firebaseUid, table.jobPlanId),
@@ -1628,6 +1637,14 @@ export const tradeCrmJobPlanRequirements = sqliteTable("trade_crm_job_plan_requi
   uniqueIndex("trade_crm_job_plan_requirements_position_idx").on(table.jobPlanId, table.position),
   index("trade_crm_job_plan_requirements_owner_idx").on(table.firebaseUid, table.jobPlanId, table.requirementType),
 ]);
+
+export const tradeCrmJobActuals = sqliteTable("trade_crm_job_actuals", {
+  id: text("id").primaryKey(), jobPlanId: text("job_plan_id").notNull(), jobPlanPhaseId: text("job_plan_phase_id").notNull(),
+  jobPlanRequirementId: text("job_plan_requirement_id").notNull(), workOrderId: text("work_order_id").notNull(), firebaseUid: text("firebase_uid").notNull(),
+  actualType: text("actual_type").notNull(), quantityMilli: integer("quantity_milli").notNull().default(0), durationMinutes: integer("duration_minutes").notNull().default(0),
+  totalCostCents: integer("total_cost_cents").notNull().default(0), note: text("note").notNull().default(""), recordedByUid: text("recorded_by_uid").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("trade_crm_job_actuals_requirement_idx").on(table.jobPlanRequirementId), index("trade_crm_job_actuals_work_idx").on(table.firebaseUid, table.workOrderId, table.updatedAt), index("trade_crm_job_actuals_plan_idx").on(table.jobPlanId, table.actualType)]);
 
 export const tradeCrmQuoteLinks = sqliteTable("trade_crm_quote_links", {
   id: text("id").primaryKey(), quoteId: text("quote_id").notNull(), quoteVersionId: text("quote_version_id").notNull(),

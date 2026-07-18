@@ -8,6 +8,7 @@ import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server
 import { newQuoteLinkSecret, hashQuoteLinkSecret, protectQuoteLinkSecret, quoteReviewPath, recoverQuoteLinkSecret } from "@/lib/trade-quote-links";
 import { maskPhotoRequestEmail } from "@/lib/trade-photo-request-delivery";
 import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
+import { buildQuoteExecutionSnapshot } from "@/lib/trade-quote-execution-server";
 
 export const runtime = "edge";
 
@@ -257,10 +258,16 @@ export async function POST(request: Request) {
       const itemCount = await db.prepare(`SELECT COUNT(*) count FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(version.id, access.ownerUid).first<Row>();
       if (!Number(itemCount?.count)) return adminJson({ ok: false, error: "Add at least one quote line before issuing." }, 400);
       const consentStatement = `I accept quote ${quote.quote_number} version ${version.version_number}, including my recorded choices and final server-calculated total, subject to its recorded terms.`;
+      const execution = await buildQuoteExecutionSnapshot(access.ownerUid, String(version.id));
       const linkId = crypto.randomUUID(); const secret = newQuoteLinkSecret(); const tokenIssue = 1;
       const validExpiry = version.valid_until ? new Date(`${version.valid_until}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000);
       const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
       await db.batch([
+        db.prepare(`INSERT INTO trade_crm_quote_execution_snapshots
+          (id, quote_version_id, firebase_uid, source_kind, packets_json, expected_duration_minutes, suggested_crew_size, required_capabilities_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), version.id, access.ownerUid, execution.sourceKind, JSON.stringify(execution.packets), execution.expectedDurationMinutes,
+            execution.suggestedCrewSize, JSON.stringify(execution.requiredCapabilities), now),
         db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, quote.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`).bind(consentStatement, now, now, version.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_quotes SET status = 'issued', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(job.crm_customer_id, job.service_site_id, now, quote.id, access.ownerUid),
