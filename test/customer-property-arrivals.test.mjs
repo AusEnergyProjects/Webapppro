@@ -22,11 +22,13 @@ const handoffMigration = read(
 const schema = read("../db/schema.ts");
 const customerRoute = read("../src/app/api/customer-projects/route.ts");
 const evidenceRoute = read("../src/app/api/customer-project-evidence/route.ts");
+const privateImageEvidence = read("../src/lib/private-image-evidence.ts");
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const workOrderRoute = read("../src/app/api/trade-work-orders/route.ts");
 const scheduleRoute = read("../src/app/api/trade-schedule/route.ts");
 const tradeProfileRoute = read("../src/app/api/trade-profile/route.ts");
 const customerUi = read("../src/components/CustomerDashboard.tsx");
+const customerPhotoUpload = read("../src/lib/customer-photo-upload.ts");
 const installerUi = read("../src/components/DirectTradeDashboard.tsx");
 const arrivalUi = read("../src/components/InstallerArrivalWindows.tsx");
 const tradeSignupUi = read("../src/components/DirectTradePartnerForm.tsx");
@@ -162,9 +164,9 @@ test("project evidence is R2 backed with every upload shared to allocated verifi
   assert.match(evidenceRoute, /client_upload_id/);
   assert.match(evidenceRoute, /hasAllowedSignature/);
   assert.match(evidenceRoute, /sanitiseQuotingPhoto/);
-  assert.match(evidenceRoute, /stripJpegMetadata/);
-  assert.match(evidenceRoute, /stripPngMetadata/);
-  assert.match(evidenceRoute, /stripWebpMetadata/);
+  assert.match(privateImageEvidence, /stripJpegMetadata/);
+  assert.match(privateImageEvidence, /stripPngMetadata/);
+  assert.match(privateImageEvidence, /stripWebpMetadata/);
   assert.match(evidenceRoute, /customer-quoting-photo/);
   assert.match(evidenceRoute, /'installer', \?, 'viewed'/);
   assert.match(opportunityRoute, /sharingScope: "allocated-installers"/);
@@ -197,7 +199,7 @@ test("customer devices can choose files or capture a new property photo", () => 
   );
   assert.match(customerUi, /capture="environment"/);
   assert.match(customerUi, /prepareEvidenceUpload/);
-  assert.match(customerUi, /maximumDimension = 2400/);
+  assert.match(customerPhotoUpload, /maximumDimension = 2400/);
   assert.match(
     customerUi,
     /shared with each\s+verified installer\s+allocated to this enquiry/,

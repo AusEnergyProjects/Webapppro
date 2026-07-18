@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `754f59137684b0ed1edf9b9a720fe8cebbaf136b` on `codex/sites-custom-domain-migration`, published as Sites version 150.
+Implementation baseline: `76bdbebdef353d0c53dfa1530935568cd99ab2ed` on `codex/sites-custom-domain-migration`, published as Sites version 151.
 
 ## Current delivery summary
 
@@ -28,48 +28,57 @@ P6-2M adds one revision-bound operational notification event for each customer-a
 
 Each event creates idempotent audience and channel delivery records without storing recipient contact details in the admin payload. Provider sends are atomically claimed, daily-limit checked and capped at three attempts. Authenticated Resend and Twilio callbacks update both service-reminder and appointment delivery ledgers. The existing administrator delivery workspace now shows privacy-safe appointment delivery health and bounded retry controls.
 
-## Recommended next milestone
+P6-2N completes the direct-customer photo request loop. An authorised installer office user can open a direct job, start from service-specific photo guidance, edit the exact requirements, issue or replace a 30-day secure link and revoke it when no longer needed. Only the link secret leaves the server; the database stores its hash.
 
-### P6-2N batch: useful-photo checklist and self-review
+The customer link exposes no name, address or contact details. It guides phone capture through clarity, relevance and private-information checks before every upload. Accepted JPEG, PNG and WebP files keep the existing signature checks, metadata stripping, size limits and private R2 storage, and appear in the exact job's field proof with the requirement, request revision, checklist version and acknowledgement time. The customer can remove a mistaken upload while the request remains active.
 
-Outcome: customers can capture quote-useful project photos with service-specific guidance and complete a private self-review before sharing, without automated image scoring.
+## Active milestone contract
+
+### P6-2O batch: reusable business photo-request templates
+
+Outcome: an installer business can maintain reusable upgrade-specific photo guidance based on trade feedback, while every job continues to receive an independent editable snapshot.
 
 ### Five linked delivery items
 
-1. Add service-specific photo examples for solar, batteries, switchboards, heating and cooling, hot water, insulation and EV charging.
-2. Add accessible capture guidance covering lighting, distance, orientation and avoiding people, documents, street numbers and unrelated belongings.
-3. Add a customer self-review checklist for clarity, relevance and accidental private information before upload consent.
-4. Record checklist version and customer acknowledgement with the existing evidence event, without storing image scores or inferred property facts.
-5. Show verified installers the customer-confirmed checklist categories and limitations beside authorised evidence without changing evidence-access scope.
+1. Add owner-scoped template records grouped by upgrade or service category, with draft, published and archived states.
+2. Let authorised owner and coordinator users create, duplicate and revise template requirements with useful and avoid examples.
+3. Snapshot the selected published template into each new job request so later template edits never rewrite an issued customer request.
+4. Keep every job snapshot independently editable and record the template version that seeded it.
+5. Add privacy-safe usage and feedback counts so trade interviews can identify unclear or unused requirements without analysing customer images.
 
 ### In scope
 
-- Reuse the existing customer project evidence upload, phone capture, R2 storage, metadata stripping, consent and installer authorisation boundaries.
-- Keep the checklist service-specific, keyboard accessible and readable on phone capture screens.
-- Store only the checklist version, selected category and acknowledgement time needed to explain the evidence context.
-- Keep the implementation inside the customer-project evidence boundary and its existing installer evidence view.
+- Reuse the existing trade account, team roles, service categories and P6-2N job-request editor.
+- Store templates within one installer business only. No cross-business sharing.
+- Publish immutable template versions and copy their requirement payload into the job request.
+- Count template selection, job-level edits, requested requirements and customer completion without inspecting image content.
+- Keep the P6-2N defaults as the safe fallback when a business has no published template.
 
 ### Explicitly out of scope
 
-- Automated image scoring, quality ranking, object recognition or AI analysis.
-- New evidence recipients, public media links or changes to installer allocation rules.
-- Appointment notification, dispatch, live tracking or marketing work.
+- Automatic image scoring, object recognition or image-content analytics.
+- Global AEA-authored template distribution or cross-business template sharing.
+- Automatic provider email or SMS delivery of request links.
+- Marketplace customer evidence, appointment, dispatch or live-tracking changes.
+- Rewriting historical job requests when a template is revised or archived.
 
 ### Acceptance criteria
 
-- Every supported service category has concise useful and avoid examples.
-- The customer must review clarity, relevance and private-information warnings before sharing new evidence.
-- Evidence MIME, signature, metadata stripping, size, R2 privacy and allocated-installer authorisation checks remain unchanged.
-- Installer evidence context reveals checklist category and limitations but no additional customer identity or contact data.
-- Desktop and mobile capture flows remain usable without horizontal overflow.
+- Templates are owner scoped, role protected, versioned and migration safe.
+- Published versions are immutable and archived versions cannot seed a new request.
+- Creating a job request records a complete independent snapshot and its source template version.
+- Editing a template does not alter an existing request or its customer link.
+- Reporting contains no customer identity, address, contact details or image-derived content.
+- Template library and job selection remain usable at desktop and 390 px without document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A checklist field would require retaining new household identity, documents or inferred private facts.
-- The work would weaken current evidence signatures, metadata stripping, consent or installer allocation checks.
-- The slice expands into automated image analysis or a broad evidence-workspace redesign.
+- Trade feedback requires image-content inspection or storing new household facts.
+- A proposed template edit would mutate a previously issued job request.
+- Cross-business or AEA-wide distribution is required without an explicit governance and approval model.
+- The slice expands into automatic link delivery or the protected marketplace evidence domain.
 
-## Recommendation after P6-2N
+## Recommendation after P6-2O
 
-Batch the next five linked customer-to-installer arrival follow-through items only after P6-2N live evidence confirms the checklist is understandable on desktop and mobile.
+Batch consent-aware email and SMS delivery of photo-request links, delivery receipts, resend and expiry reminders, customer channel opt-outs and administrator delivery health only after the P6-2N share flow and P6-2O templates have been tested with live trades.

@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 
 type TimeEntry = { id: string; staffLabel: string; workDate: string; durationMinutes: number; notes: string; createdAt: string };
-type Media = { id: string; category: string; fileName: string; contentType: string; sizeBytes: number; caption: string; createdAt: string };
+type Media = { id: string; category: string; fileName: string; contentType: string; sizeBytes: number; caption: string; source: string; photoRequirementId: string; requestRevision: number; checklistVersion: string; customerAcknowledgedAt: string; createdAt: string };
 type Signoff = { id: string; signerRole: string; signerName: string; confirmationText: string; method: string; signedAt: string };
 type Result = { ok?: boolean; protectedJob?: boolean; timeEntries?: TimeEntry[]; media?: Media[]; signoffs?: Signoff[]; error?: string };
 
@@ -108,7 +108,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected }: { user: 
           <label className="wide"><span>Caption</span><input name="caption" maxLength={300} placeholder="Switchboard before upgrade" /></label>
           <button disabled={busy === "upload"}>{busy === "upload" ? "Uploading..." : "Add file"}</button>
         </form>
-        {(data.media || []).length > 0 && <ol className="crm-field-records">{(data.media || []).map((item) => <li key={item.id}><div><strong>{item.caption || item.fileName}</strong><span>{item.category.replaceAll("_", " ")} | {Math.max(1, Math.round(item.sizeBytes / 1024))} KB</span></div><button type="button" disabled={busy === `download:${item.id}`} onClick={() => void download(item.id, item.fileName)}>Open</button></li>)}</ol>}
+        {(data.media || []).length > 0 && <ol className="crm-field-records">{(data.media || []).map((item) => <li key={item.id}><div><strong>{item.caption || item.fileName}</strong><span>{item.source === "customer_request" ? "Customer requested photo" : item.category.replaceAll("_", " ")} | {Math.max(1, Math.round(item.sizeBytes / 1024))} KB</span>{item.source === "customer_request" && <small>Customer self-review confirmed | request revision {item.requestRevision}</small>}</div><button type="button" disabled={busy === `download:${item.id}`} onClick={() => void download(item.id, item.fileName)}>Open</button></li>)}</ol>}
       </section>
       <section className="crm-field-card wide"><header><div><span>Digital sign-off</span><h4>Create a timestamped acknowledgement</h4><p>This is an operational record. Your business remains responsible for deciding when a formal contract or regulated certificate is required.</p></div></header>
         <form className="crm-field-form signoff" onSubmit={(event) => void jsonAction(event, "add_signoff", "Digital sign-off recorded.")}>

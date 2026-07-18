@@ -49,7 +49,8 @@ async function payload(firebaseUid: string, workOrderId: string) {
     db.prepare(`SELECT id, staff_label, work_date, duration_minutes, notes, created_at
       FROM trade_crm_time_entries WHERE firebase_uid = ? AND work_order_id = ? ORDER BY work_date DESC, created_at DESC`)
       .bind(firebaseUid, workOrderId).all<Record<string, unknown>>(),
-    db.prepare(`SELECT id, category, file_name, content_type, size_bytes, caption, created_at
+    db.prepare(`SELECT id, category, file_name, content_type, size_bytes, caption, source, photo_requirement_id,
+      request_revision, checklist_version, customer_acknowledged_at, created_at
       FROM trade_crm_job_media WHERE firebase_uid = ? AND work_order_id = ? ORDER BY created_at DESC`)
       .bind(firebaseUid, workOrderId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, signer_role, signer_name, confirmation_text, method, signed_at
@@ -60,7 +61,9 @@ async function payload(firebaseUid: string, workOrderId: string) {
     timeEntries: time.results.map((row) => ({ id: row.id, staffLabel: row.staff_label, workDate: row.work_date,
       durationMinutes: Number(row.duration_minutes), notes: row.notes, createdAt: row.created_at })),
     media: media.results.map((row) => ({ id: row.id, category: row.category, fileName: row.file_name,
-      contentType: row.content_type, sizeBytes: Number(row.size_bytes), caption: row.caption, createdAt: row.created_at })),
+      contentType: row.content_type, sizeBytes: Number(row.size_bytes), caption: row.caption, source: row.source,
+      photoRequirementId: row.photo_requirement_id, requestRevision: Number(row.request_revision || 0),
+      checklistVersion: row.checklist_version, customerAcknowledgedAt: row.customer_acknowledged_at, createdAt: row.created_at })),
     signoffs: signoffs.results.map((row) => ({ id: row.id, signerRole: row.signer_role, signerName: row.signer_name,
       confirmationText: row.confirmation_text, method: row.method, signedAt: row.signed_at })),
   };

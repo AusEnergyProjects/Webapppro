@@ -173,6 +173,7 @@
 .crm-job-card-header > div:last-child span { border-radius: 999px; font-size: .52rem; font-weight: 850; padding: 5px 8px; }
 .crm-job-card-header span.protected { background: #e8f1f8; color: #285e7e; }
 .crm-job-card-header span.owned { background: #e4f6ed; color: #276448; }
+.crm-job-card-header .crm-request-info-button { background: #10ad7c; border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .62rem; font-weight: 850; margin-top: 3px; padding: 8px 10px; }
 .crm-job-tabs { background: #eef4f2; display: flex; gap: 2px; overflow: visible; padding: 5px; position: relative; }
 .crm-job-tabs button { background: transparent; border: 0; border-radius: 7px; color: #61726d; cursor: pointer; font-size: .65rem; font-weight: 850; padding: 9px 11px; white-space: nowrap; }
 .crm-job-tabs button.active { background: #fff; box-shadow: 0 1px 5px rgba(20,50,43,.1); color: #145c44; }

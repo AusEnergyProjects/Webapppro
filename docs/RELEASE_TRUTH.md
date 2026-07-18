@@ -1,6 +1,6 @@
 # TLink and AEA release truth
 
-Last verified: 17 July 2026
+Last verified: 18 July 2026
 
 This is the canonical implementation-status document. README, roadmap, runbooks and historical architecture notes must link here instead of defining competing release states.
 
@@ -49,6 +49,7 @@ Future AI-assisted changes follow [AI delivery guardrails](./AI_DELIVERY_GUARDRA
 - Additive migration `0057_customer_property_arrivals.sql` adds structured project property context, R2-backed evidence metadata, immutable evidence access events, revisioned installer arrival-window proposals and immutable proposal and customer-selection events. Customer-approved uploads are available to every active verified installer allocated to the exact enquiry. Job conversion and arrival proposals remain gated to the accepted connected installer.
 - Additive migration `0058_trade_contact_arrival_handoff.sql` adds mandatory trade ABN storage, customer-selected direct installer contact snapshots, CRM job and appointment linkage and preparation acknowledgement state. Direct contact exposes only installer business name, contact number, email and ABN and creates an admin-visible audit notification.
 - Additive migration `0059_appointment_notifications.sql` adds revision-bound appointment events, audience and channel delivery records and authenticated provider event history. Appointment creation, first staff assignment, authorised schedule changes and customer preparation confirmation reuse existing customer account updates, trade operational email, channel opt-out, daily limit and provider callback controls. The `TLink` SMS sender approval flag remains false by default, so appointment SMS cannot send before approval.
+- Additive migration `0060_customer_photo_requests.sql` adds one revisioned photo request per direct-customer job, hashed expiring capability links, immutable request events and request context on existing private job media. Authorised installer office users can edit job-specific requirements and issue or revoke links. Customers complete a privacy self-review before signature-checked, metadata-stripped photos enter the exact job proof.
 - Feature-owned admin account, opportunity, catalogue, inbox and product-enquiry workspaces, with shared saved-list request helpers.
 - Admin performance SLO dashboard with 7-day p95 latency, average database time, error-rate and sample-size assessment plus read-only keyset query-plan checks.
 - Stripe production preflight on 17 July 2026: no active account tasks; four active Direct Trade membership payment links at the configured monthly and annual prices; one active membership webhook destination subscribing to five events with a 0% error rate.

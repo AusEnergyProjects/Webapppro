@@ -1623,11 +1623,53 @@ export const tradeCrmJobMedia = sqliteTable("trade_crm_job_media", {
   sizeBytes: integer("size_bytes").notNull(),
   objectKey: text("object_key").notNull(),
   caption: text("caption").notNull().default(""),
+  source: text("source").notNull().default("installer"),
+  photoRequestId: text("photo_request_id").notNull().default(""),
+  photoRequirementId: text("photo_requirement_id").notNull().default(""),
+  requestRevision: integer("request_revision").notNull().default(0),
+  checklistVersion: text("checklist_version").notNull().default(""),
+  customerAcknowledgedAt: text("customer_acknowledged_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("trade_crm_job_media_owner_idx").on(table.firebaseUid, table.createdAt),
   index("trade_crm_job_media_work_order_idx").on(table.workOrderId, table.createdAt),
+  index("trade_crm_job_media_photo_request_idx").on(table.photoRequestId, table.createdAt),
+]);
+
+export const tradeCrmPhotoRequests = sqliteTable("trade_crm_photo_requests", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  status: text("status").notNull().default("active"),
+  requirements: text("requirements").notNull().default("[]"),
+  revision: integer("revision").notNull().default(1),
+  expiresAt: text("expires_at").notNull(),
+  lastSharedAt: text("last_shared_at").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_requests_work_order_idx").on(table.workOrderId),
+  index("trade_crm_photo_requests_owner_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_crm_photo_requests_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const tradeCrmPhotoRequestEvents = sqliteTable("trade_crm_photo_request_events", {
+  id: text("id").primaryKey(),
+  photoRequestId: text("photo_request_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull().default(""),
+  eventType: text("event_type").notNull(),
+  requestRevision: integer("request_revision").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trade_crm_photo_request_events_request_idx").on(table.photoRequestId, table.createdAt),
+  index("trade_crm_photo_request_events_job_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
 ]);
 
 export const tradeCrmSignoffs = sqliteTable("trade_crm_signoffs", {

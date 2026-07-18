@@ -1,0 +1,46 @@
+.panel { border-top: 1px solid var(--color-aea-line); margin-top: 20px; padding-top: 20px; }
+.heading { align-items: start; display: flex; gap: 18px; justify-content: space-between; }
+.heading > div:first-child { max-width: 720px; }
+.heading > div > span, .linkCard > div > span { color: var(--color-aea-green); font-size: .68rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+.heading h4 { color: var(--color-aea-ink); font-family: Georgia, serif; font-size: 1.18rem; margin: 4px 0 6px; }
+.heading p { color: var(--color-aea-muted); font-size: .82rem; line-height: 1.5; margin: 0; }
+.heading > div:last-child { align-items: end; display: grid; flex: 0 0 auto; }
+.heading > div:last-child strong { color: var(--color-aea-ink); font-size: 1.6rem; }
+.heading > div:last-child span { color: var(--color-aea-muted); font-size: .68rem; }
+.boundary { align-items: center; background: #e9f7f1; border: 1px solid #b9dfd1; border-radius: 10px; display: flex; gap: 12px; margin-top: 14px; padding: 11px 13px; }
+.boundary strong { color: #087c61; flex: 0 0 auto; font-size: .72rem; text-transform: uppercase; }
+.boundary span { color: #4b6a65; font-size: .76rem; line-height: 1.4; }
+.requirements { display: grid; gap: 12px; margin-top: 14px; }
+.requirements article { background: #f8fbfa; border: 1px solid var(--color-aea-line); border-radius: 12px; display: grid; gap: 10px; padding: 14px; }
+.requirements article > header, .requirements article > footer { align-items: center; display: flex; justify-content: space-between; }
+.requirements article > header strong { color: var(--color-aea-ink); font-size: .75rem; }
+.requirements article > header label { align-items: center; display: flex; font-size: .72rem; gap: 6px; }
+.requirements article > label, .requirements article > div > label { display: grid; gap: 5px; }
+.requirements article label > span { color: var(--color-aea-muted); font-size: .68rem; font-weight: 760; }
+.requirements article input:not([type="checkbox"]), .requirements article textarea, .share input { background: #fff; border: 1px solid #c8dad4; border-radius: 8px; color: var(--color-aea-ink); font: inherit; font-size: .78rem; padding: 9px 10px; resize: vertical; width: 100%; }
+.requirements article > div { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.requirements article > footer span { color: var(--color-aea-green); font-size: .7rem; font-weight: 800; }
+.requirements article > footer button { background: transparent; border: 0; color: #9a3d3d; cursor: pointer; font-size: .7rem; }
+.editorActions, .share { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+.editorActions button, .linkCard > button, .share button { background: var(--action-primary); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font-size: .72rem; font-weight: 850; padding: 10px 12px; }
+.editorActions button:disabled, .linkCard button:disabled { cursor: not-allowed; opacity: .5; }
+.editorActions .secondary { background: #e8f3ef; color: #0a745c; }
+.linkCard { align-items: center; background: #f3f8f6; border: 1px solid var(--color-aea-line); border-radius: 12px; display: grid; gap: 10px; grid-template-columns: 1fr auto auto; margin-top: 14px; padding: 14px; }
+.linkCard > div { display: grid; gap: 3px; }
+.linkCard strong { color: var(--color-aea-ink); font-size: .8rem; }
+.linkCard small { color: var(--color-aea-muted); font-size: .68rem; }
+.linkCard .danger { background: #fff0f0; color: #933b3b; }
+.share { background: #062e36; border-radius: 12px; padding: 12px; }
+.share label { display: grid; flex: 1 1 320px; gap: 5px; }
+.share label span { color: #b8e7d8; font-size: .68rem; font-weight: 800; }
+.share input { color: #0b3534; }
+.share button { background: #19b787; }
+.status { background: #eef7f4; border-radius: 8px; color: #155e4c; font-size: .75rem; margin: 12px 0 0; padding: 10px 12px; }
+.state { color: var(--color-aea-muted); display: grid; font-size: .78rem; gap: 4px; padding: 16px 0; }
+@media (max-width: 700px) {
+  .heading { flex-direction: column; }
+  .heading > div:last-child { align-items: baseline; display: flex; gap: 7px; }
+  .requirements article > div, .linkCard { grid-template-columns: 1fr; }
+  .linkCard > button, .editorActions button, .share button { width: 100%; }
+  .boundary { align-items: flex-start; flex-direction: column; }
+}
