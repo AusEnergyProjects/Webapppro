@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `ab7331b0ae1d6b0ce4a2981278a74a09c95ac708` on `codex/sites-custom-domain-migration` implements the P6-3A price-book batch. Its exact Sites release version is recorded after publication.
+Implementation baseline: `ab7331b0ae1d6b0ce4a2981278a74a09c95ac708` on `codex/sites-custom-domain-migration` implements the P6-3A price-book batch and was published through release commit `9ed209550357d66d3c2ef996a21fa6b311465958` as Sites version 161.
 
 ## Current delivery summary
 
