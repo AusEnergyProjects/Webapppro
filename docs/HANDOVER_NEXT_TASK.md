@@ -6,6 +6,8 @@ Implementation baseline: `d4036832d0e47ae455d29103f963a78fb3571d5c` on `codex/si
 
 ## Current delivery summary
 
+The current branch includes a post-release correction for the installer Jobs index. The dashboard summary and job list use the same owner-scoped active-work boundary, but the list query had a trailing comma immediately before `FROM`, causing the live Jobs request to return HTTP 500 while My day still counted the open job. A regression assertion now protects that SQL boundary. This correction is not live until its validated commit is published.
+
 P6-2K makes customer trade requests useful for quoting before personal contact is released. The guided request now requires structured property context covering storeys, approximate age and floor area, roof, switchboard and normal access timing. Customers can add property photos, take a new photo through a supported phone or tablet camera, or attach PDF supporting documents.
 
 The privacy boundary is explicit and enforced server side. Every active verified installer allocated to the exact enquiry can view every customer-approved photo and document for quoting guidance while identity, contact details, exact location, private notes and usage data remain withheld. Every installer evidence download is authorised against the current match and recorded. Browser MIME claims are checked against the uploaded file signature. Supported phone photos are converted to bounded JPEGs in the browser, and the server strips JPEG, PNG or WebP metadata before storage. Installer downloads use neutral filenames.

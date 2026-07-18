@@ -90,6 +90,7 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(route, /SELECT COUNT\(\*\) total/);
   assert.match(route, /"number-asc"/);
   assert.match(route, /"name-desc"/);
+  assert.doesNotMatch(route, /schedule_empty,\s*\$\{joins\}/, "the job index SELECT must not leave a trailing comma before FROM");
   assert.match(crm, /mode: "index", resource: "jobs"/);
   assert.match(crm, /mode: "index", resource: "customers"/);
   assert.match(crm, /mode=detail&resource=job/);

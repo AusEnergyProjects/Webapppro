@@ -250,7 +250,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
-        w.scheduled_start = '' schedule_empty,
+        w.scheduled_start = '' schedule_empty
         ${joins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
