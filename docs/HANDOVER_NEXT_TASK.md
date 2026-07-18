@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the P6-3F readiness and catalogue usability foundation plus the published frictionless self-and-staff scheduling batch on top of the P6-3E accepted quote handoff. Exact release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree implements the published P6-3G immutable execution snapshot, actual job progress and completion-gate batch on top of the P6-3F readiness, catalogue and frictionless scheduling foundation. Exact release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Current delivery summary
 
@@ -76,45 +76,47 @@ Installer catalogue usability now includes obvious horizontal navigation, a pinn
 
 The scheduling follow-up removes the empty-owner trap. The signed-in installer owner is materialised once as the active Me resource, while any added person becomes assignable immediately without an account or invitation confirmation. Login access is optional and can be created later through a separate expiring secure link. The Schedule workspace defaults unassigned work to Me, presents one labelled dispatch row, collapses working-hours administration and uses a compact empty-week strip instead of seven tall blank columns.
 
+P6-3G snapshots exact packet tasks, form keys and versions, duration, required capabilities and crew size at quote issue. Accepted jobs use only that immutable execution metadata, while legacy manual quotes retain their lightweight fallback. Trades record normal labour and material results with one action, open detailed actuals only when work differs, see forecast cost and margin variance, follow phase progress and cannot complete until scope, forms, materials and requested proof are clear. Completion prepares invoice and handover work without changing the accepted customer scope or total.
+
 ## Next milestone contract
 
-### P6-3G batch: immutable execution snapshots and actual job progress
+### P6-3H batch: material demand, purchasing and receipt
 
-Outcome: every newly issued packet-backed quote snapshots the exact execution metadata needed later, and ready jobs can record progress and actual costs without changing the accepted customer scope or total.
+Outcome: accepted material requirements become one low-effort purchasing queue, and trades can source, order and receive them without retyping job scope or losing supplier and job-cost provenance.
 
 ### Five linked foundation items
 
-1. Snapshot packet task titles, form keys and versions, duration, required capability and crew size into each issued quote revision.
-2. Use only that immutable snapshot during accepted-scope conversion, with the existing lightweight manual-quote fallback for legacy quotes.
-3. Record actual labour time and material usage against the job-plan requirement without changing accepted scope.
-4. Show budget versus actual cost and margin variance with simple attention thresholds.
-5. Add phase progress and a completion gate that carries authoritative results into invoice and handover preparation.
+1. Materialise accepted job-plan materials into one owner-scoped purchasing queue with job, phase, required quantity and required-by context already filled.
+2. Let the office choose an approved catalogue product, wholesaler and dispatch or warehouse location, with delivery or pickup as a simple explicit choice.
+3. Create a reviewable draft purchase order with immutable job and supplier references, integer-cent subtotal, GST, freight and total, without sending it automatically.
+4. Record full or partial receipt, backorder and bounded return outcomes with one-action normal defaults and exception details behind disclosure.
+5. Feed committed and received material cost into the existing job variance while preserving provider-neutral supplier-bill references for Xero, MYOB and QuickBooks.
 
 ### In scope
 
-- New quote-version execution snapshots and the existing accepted job plan.
-- Actual labour minutes and material costs against owner-scoped requirements.
-- Simple phase progress, variance and completion gates using integer cents.
-- Existing protected-customer, provider-neutral accounting and payment boundaries.
+- Existing accepted job-plan material requirements, approved catalogue and wholesaler profiles.
+- Owner-scoped purchase-order drafts, lines, delivery or pickup choice and receipt state.
+- Partial receipt, backorder and return quantities with integer-cent committed and received cost.
+- Existing provider-neutral accounting adapter boundaries and job variance source of truth.
 
 ### Explicitly out of scope
 
-- Automatic purchase orders, stock reservation, supplier bills, payroll or subcontractor onboarding.
-- Variations and progress claims.
-- Recalculating the accepted sell total, mutating the accepted scope or deriving provider-specific commercial truth.
-- Requiring a deposit when the business deliberately chooses to proceed without one.
+- Automatic supplier sending, autonomous purchasing or inventory forecasting.
+- Supplier bill approval, payment, bank reconciliation or making an accounting provider authoritative.
+- Multi-warehouse stock ledgers, serialised inventory, payroll, subcontractors, variations or progress claims.
+- Mutating the accepted customer scope, sell total or completed execution actuals.
 
 ### Acceptance criteria
 
-- A newly issued packet quote contains enough immutable metadata to reproduce tasks, forms, duration, capabilities and crew after the packet or price book changes.
-- Actual time and materials update the job budget comparison without mutating the accepted total.
-- Phase progress is usable by office and field roles without repeated entry.
-- Completion blocks clearly when required proof, forms or scope remain unfinished.
-- The primary office flow works at 390 px without document-level horizontal overflow and keeps advanced breakdowns collapsed initially.
+- Every accepted material requirement appears once without office re-entry and remains traceable to its job phase.
+- The normal path from need to draft order to full receipt uses useful defaults and no repeated product, supplier, location or quantity entry.
+- Partial receipts and backorders cannot over-receive or silently change ordered quantities, costs or the accepted customer scope.
+- Committed and received costs update job variance from TLink records while external accounting remains an adapter destination.
+- The primary office flow works at 390 px without document-level horizontal overflow and keeps supplier and receipt exceptions collapsed initially.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Snapshotting would mutate an already issued quote revision.
-- Actual costs would require making Xero, MYOB, QuickBooks, Stripe or Square the TLink source of truth.
-- The slice expands into supplier ordering, payroll, variations or progress claims.
+- A required product cannot be matched without changing accepted customer scope.
+- Supplier ordering requires transmitting a draft or payment without a separate deliberate user action.
+- The slice expands into a full stock ledger, supplier-bill approval, payroll, variations or progress claims.
