@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: P6-3A is implemented on `codex/sites-custom-domain-migration`; replace this sentence with the exact Git and Sites release identity after publication.
+Implementation baseline: `ab7331b0ae1d6b0ce4a2981278a74a09c95ac708` on `codex/sites-custom-domain-migration` implements the P6-3A price-book batch. Its exact Sites release version is recorded after publication.
 
 ## Current delivery summary
 
