@@ -600,9 +600,10 @@
   .crm-create-popover[open], .crm-create-popover > form { width: calc(100vw - 28px); }
   .crm-create-popover > form { right: -14px; }
   .crm-job-card-header { flex-direction: column; }
-  .crm-job-tabs { overflow: visible; }
-  .crm-job-tabs > button { flex: 1 1 auto; padding-inline: 6px; }
-  .crm-job-more > summary { padding-inline: 7px; }
+  .crm-job-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .crm-job-tabs > button { min-width: 0; padding-inline: 6px; white-space: normal; }
+  .crm-job-more { margin-left: 0; }
+  .crm-job-more > summary { padding-inline: 7px; text-align: center; }
   .crm-job-card-header > div:last-child { align-items: start; text-align: left; }
   .crm-inline-form, .crm-inline-form.task, .crm-inline-form.note { grid-template-columns: 1fr; }
   .crm-job-appointments li, .crm-notes-list li { align-items: flex-start; flex-direction: column; }

@@ -13,6 +13,7 @@ const quoteRoute = read("../src/app/api/trade-quotes/route.ts");
 const workspace = read("../src/components/TradeJobPacketWorkspace.tsx");
 const priceBookWorkspace = read("../src/components/TradePriceBookWorkspace.tsx");
 const quoteUi = read("../src/components/TradeQuotePanel.tsx");
+const globalCss = read("../src/app/globals.css");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -97,5 +98,7 @@ test("the packet workspace keeps the installer path short and details optional",
   }
   assert.match(priceBookWorkspace, /Price-book items/);
   assert.match(quoteUi, /Start with a job packet/);
+  assert.match(globalCss, /\.crm-job-tabs \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(globalCss, /\.crm-job-tabs > button \{ min-width: 0;[^}]*white-space: normal/);
   assert.doesNotMatch(`${workspace}\n${priceBookWorkspace}\n${quoteUi}\n${route}`, /[\u2013\u2014]/);
 });
