@@ -1714,6 +1714,46 @@ export const tradeCrmPhotoRequestEvents = sqliteTable("trade_crm_photo_request_e
   index("trade_crm_photo_request_events_job_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
 ]);
 
+export const tradeCrmPhotoRequestCompletions = sqliteTable("trade_crm_photo_request_completions", {
+  id: text("id").primaryKey(),
+  photoRequestId: text("photo_request_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  requestRevision: integer("request_revision").notNull(),
+  completionRevision: integer("completion_revision").notNull(),
+  checklistVersion: text("checklist_version").notNull(),
+  evidenceKey: text("evidence_key").notNull(),
+  requiredCount: integer("required_count").notNull(),
+  suppliedCount: integer("supplied_count").notNull(),
+  completedAt: text("completed_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_request_completions_evidence_idx").on(table.evidenceKey),
+  uniqueIndex("trade_crm_photo_request_completions_revision_idx").on(table.photoRequestId, table.completionRevision),
+  index("trade_crm_photo_request_completions_request_idx").on(table.photoRequestId, table.completedAt),
+  index("trade_crm_photo_request_completions_job_idx").on(table.firebaseUid, table.workOrderId, table.completedAt),
+]);
+
+export const tradeCrmPhotoRequirementReviews = sqliteTable("trade_crm_photo_requirement_reviews", {
+  id: text("id").primaryKey(),
+  photoRequestId: text("photo_request_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  requestRevision: integer("request_revision").notNull(),
+  reviewRevision: integer("review_revision").notNull(),
+  photoRequirementId: text("photo_requirement_id").notNull(),
+  status: text("status").notNull(),
+  reasonCode: text("reason_code").notNull().default(""),
+  guidance: text("guidance").notNull().default(""),
+  reviewedUploadCount: integer("reviewed_upload_count").notNull().default(0),
+  actorUid: text("actor_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_requirement_reviews_revision_idx").on(table.photoRequestId, table.reviewRevision),
+  index("trade_crm_photo_requirement_reviews_requirement_idx").on(table.photoRequestId, table.photoRequirementId, table.reviewRevision),
+  index("trade_crm_photo_requirement_reviews_job_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
+]);
+
 export const tradeCrmPhotoRequestDeliveries = sqliteTable("trade_crm_photo_request_deliveries", {
   id: text("id").primaryKey(),
   photoRequestId: text("photo_request_id").notNull(),
@@ -1725,6 +1765,8 @@ export const tradeCrmPhotoRequestDeliveries = sqliteTable("trade_crm_photo_reque
   provider: text("provider").notNull(),
   requestRevision: integer("request_revision").notNull(),
   tokenIssue: integer("token_issue").notNull(),
+  reviewRevision: integer("review_revision").notNull().default(0),
+  photoRequirementId: text("photo_requirement_id").notNull().default(""),
   intent: text("intent").notNull(),
   idempotencyKey: text("idempotency_key").notNull(),
   consentBasis: text("consent_basis").notNull(),

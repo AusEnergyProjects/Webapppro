@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
+import type { PhotoRequirementReview } from "@/lib/photo-request-review";
 import type { PhotoRequirement } from "@/lib/trade-photo-requests";
 import styles from "./JobInformationUpload.module.css";
 
@@ -11,8 +12,11 @@ type Result = {
   ok?: boolean;
   businessName?: string;
   job?: { workNumber: string; title: string; serviceCategory: string };
-  request?: { revision: number; expiresAt: string; checklistVersion: string; requirements: PhotoRequirement[] };
+  request?: { revision: number; expiresAt: string; checklistVersion: string; requirements: PhotoRequirement[];
+    completion: null | { revision: number; completedAt: string; current: boolean }; reviews: PhotoRequirementReview[];
+    outstandingRequirementIds: string[]; proofReady: boolean };
   uploads?: Upload[];
+  missingRequirements?: string[];
   error?: string;
 };
 
@@ -27,6 +31,7 @@ export function JobInformationUpload({ token }: { token: string }) {
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<Record<string, File | undefined>>({});
   const [checks, setChecks] = useState({ clarity: false, relevance: false, privacy: false });
+  const [completionConfirmed, setCompletionConfirmed] = useState(false);
   const endpoint = `/api/job-information/${encodeURIComponent(token)}`;
 
   useEffect(() => {
@@ -89,6 +94,20 @@ export function JobInformationUpload({ token }: { token: string }) {
     finally { setBusy(""); }
   }
 
+  async function complete() {
+    if (!data.request) return;
+    setBusy("complete"); setStatus("Checking the required photos...");
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete_request", checklistVersion: data.request.checklistVersion, confirmed: completionConfirmed }) });
+      const result = await response.json().catch(() => ({})) as Result;
+      if (!response.ok || !result.ok) throw new Error(result.missingRequirements?.length
+        ? `Still needed: ${result.missingRequirements.join(", ")}.` : result.error || "The request could not be finished.");
+      setData(result); setCompletionConfirmed(false); setStatus("Your photos are ready for installer review.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The request could not be finished."); }
+    finally { setBusy(""); }
+  }
+
   if (loading) return <main className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>Opening your installer request</h1><p>Checking the private link...</p></section></main>;
   if (!data.ok || !data.request || !data.job) return <main className={styles.shell}><section className={styles.state}><span>Secure photo request</span><h1>This link cannot be used</h1><p>{status || data.error || "Ask the installer for a new link."}</p></section></main>;
 
@@ -115,18 +134,26 @@ export function JobInformationUpload({ token }: { token: string }) {
     <section className={styles.requirements} aria-label="Requested photos">
       {data.request.requirements.map((requirement, index) => {
         const requirementUploads = (data.uploads || []).filter((item) => item.requirementId === requirement.id);
+        const review = data.request?.reviews.find((item) => item.requirementId === requirement.id);
         return <article key={requirement.id} className={styles.requirement}>
           <header><span>{String(index + 1).padStart(2, "0")}</span><div><small>{requirement.required ? "Required" : "Optional"}</small><h2>{requirement.label}</h2></div><strong>{requirementUploads.length} added</strong></header>
           <p>{requirement.guidance}</p>
+          {review?.status === "retake_requested" && <div className={styles.retake}><strong>{review.retakeAnswered ? "Replacement received" : "Retake requested"}</strong><span>{review.guidance}</span><small>{review.retakeAnswered ? "Finish the request again when every outstanding item is ready." : "Your original photo remains in the installer job. Add a new photo below."}</small></div>}
+          {(review?.status === "accepted" || review?.status === "not_needed") && <div className={styles.reviewed}><strong>{review.status === "accepted" ? "Accepted by installer" : "No longer needed"}</strong><span>The original job evidence remains in the review history.</span></div>}
           <div className={styles.examples}><span><b>Useful</b>{requirement.usefulExample}</span><span><b>Avoid</b>{requirement.avoidExample}</span></div>
           {requirementUploads.length > 0 && <ul className={styles.uploads}>{requirementUploads.map((item) => <li key={item.id}><span><strong>{item.label}</strong><small>{sizeLabel(item.sizeBytes)} | sent {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</small></span><button type="button" disabled={busy === `remove:${item.id}`} onClick={() => void remove(item)}>{busy === `remove:${item.id}` ? "Removing..." : "Remove"}</button></li>)}</ul>}
           <div className={styles.capture}>
-            <label><span>{selected[requirement.id] ? "Choose a different photo" : "Choose or take a photo"}</span><input type="file" accept="image/*" capture="environment" onChange={(event) => setSelected((current) => ({ ...current, [requirement.id]: event.target.files?.[0] }))} /></label>
+            <label><span>{selected[requirement.id] ? "Choose a different photo" : review?.status === "retake_requested" && !review.retakeAnswered ? "Choose or take the replacement" : "Choose or take a photo"}</span><input type="file" accept="image/*" capture="environment" onChange={(event) => setSelected((current) => ({ ...current, [requirement.id]: event.target.files?.[0] }))} /></label>
             {selected[requirement.id] && <small>{selected[requirement.id]?.name} | {sizeLabel(selected[requirement.id]?.size || 0)}</small>}
             <button type="button" disabled={!selected[requirement.id] || !allConfirmed || Boolean(busy)} onClick={() => void upload(requirement)}>{busy === requirement.id ? "Uploading..." : "Add to installer job"}</button>
           </div>
         </article>;
       })}
+    </section>
+    <section className={styles.completion} aria-labelledby="photo-request-completion">
+      <div><span>Finish this request</span><h2 id="photo-request-completion">Send the set for installer review</h2><p>{data.request.completion?.current ? `Submitted on ${new Date(data.request.completion.completedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}. Additions or retake requests will reopen completion.` : data.request.outstandingRequirementIds.length ? `${data.request.outstandingRequirementIds.length} requested photo type${data.request.outstandingRequirementIds.length === 1 ? " is" : "s are"} still outstanding.` : "Every required photo is present. Confirm the set is ready."}</p></div>
+      {!data.request.completion?.current && <><label><input type="checkbox" checked={completionConfirmed} onChange={(event) => setCompletionConfirmed(event.target.checked)} /><span>I confirm the required photos are ready for the installer to review.</span></label><button type="button" disabled={!completionConfirmed || Boolean(busy)} onClick={() => void complete()}>{busy === "complete" ? "Checking..." : "Finish and notify installer"}</button></>}
+      {data.request.completion?.current && <strong className={styles.complete}>Ready for installer review</strong>}
     </section>
     {status && <p className={styles.status} role="status">{status}</p>}
     <footer className={styles.footer}><span>Secure link expires {new Date(data.request.expiresAt).toLocaleDateString("en-AU", { dateStyle: "long" })}</span><a href="/privacy">Privacy</a></footer>

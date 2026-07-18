@@ -3,6 +3,8 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
+import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
 
 export const runtime = "edge";
 
@@ -57,6 +59,16 @@ async function payload(firebaseUid: string, workOrderId: string) {
       FROM trade_crm_signoffs WHERE firebase_uid = ? AND work_order_id = ? ORDER BY signed_at DESC`)
       .bind(firebaseUid, workOrderId).all<Record<string, unknown>>(),
   ]);
+  const request = await db.prepare(`SELECT id, revision, requirements FROM trade_crm_photo_requests
+    WHERE firebase_uid = ? AND work_order_id = ?`).bind(firebaseUid, workOrderId).first<Record<string, unknown>>();
+  let proofReview = null;
+  if (request) {
+    try {
+      const requirements = normalisePhotoRequirements(JSON.parse(String(request.requirements || "[]")));
+      proofReview = await photoRequestProofOverview({ ownerUid: firebaseUid, workOrderId, requestId: String(request.id),
+        requestRevision: Number(request.revision), requirements });
+    } catch { proofReview = null; }
+  }
   return {
     timeEntries: time.results.map((row) => ({ id: row.id, staffLabel: row.staff_label, workDate: row.work_date,
       durationMinutes: Number(row.duration_minutes), notes: row.notes, createdAt: row.created_at })),
@@ -66,6 +78,7 @@ async function payload(firebaseUid: string, workOrderId: string) {
       checklistVersion: row.checklist_version, customerAcknowledgedAt: row.customer_acknowledged_at, createdAt: row.created_at })),
     signoffs: signoffs.results.map((row) => ({ id: row.id, signerRole: row.signer_role, signerName: row.signer_name,
       confirmationText: row.confirmation_text, method: row.method, signedAt: row.signed_at })),
+    proofReview,
   };
 }
 

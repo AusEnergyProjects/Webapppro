@@ -88,7 +88,7 @@ async function ownedTemplate(ownerUid: string, templateId: string) {
 
 async function libraryPayload(ownerUid: string) {
   const db = getD1();
-  const [templateRows, versionRows, usageRows, completionRows] = await Promise.all([
+  const [templateRows, versionRows, usageRows, completionRows, reviewRows] = await Promise.all([
     db.prepare(`SELECT * FROM trade_crm_photo_templates WHERE firebase_uid = ?
       ORDER BY status = 'archived', updated_at DESC, name COLLATE NOCASE`).bind(ownerUid).all<TemplateRow>(),
     db.prepare(`SELECT id, template_id, version, name, service_category, requirements, published_at
@@ -101,6 +101,11 @@ async function libraryPayload(ownerUid: string) {
         ON m.photo_request_id = r.id AND m.firebase_uid = r.firebase_uid
       WHERE r.firebase_uid = ? AND r.source_template_version_id <> '' AND m.source = 'customer_request'
       GROUP BY r.id, m.photo_requirement_id`).bind(ownerUid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT review.photo_request_id, review.photo_requirement_id, review.status, review.review_revision
+      FROM trade_crm_photo_requirement_reviews review JOIN trade_crm_photo_requests request
+        ON request.id = review.photo_request_id AND request.firebase_uid = review.firebase_uid
+      WHERE review.firebase_uid = ? AND review.request_revision = request.revision
+      ORDER BY review.review_revision`).bind(ownerUid).all<Record<string, unknown>>(),
   ]);
   const completedByRequest = new Map<string, Set<string>>();
   for (const row of completionRows.results) {
@@ -109,6 +114,8 @@ async function libraryPayload(ownerUid: string) {
     completed.add(String(row.photo_requirement_id || ""));
     completedByRequest.set(requestId, completed);
   }
+  const latestReviews = new Map<string, string>();
+  for (const row of reviewRows.results) latestReviews.set(`${row.photo_request_id}:${row.photo_requirement_id}`, String(row.status));
   const versionsByTemplate = new Map<string, VersionRow[]>();
   const versionsById = new Map<string, VersionRow>();
   for (const version of versionRows.results) {
@@ -133,17 +140,30 @@ async function libraryPayload(ownerUid: string) {
     const latestUsage = latestVersion ? parsedUsage.filter((row) => row.source_template_version_id === latestVersion.id) : [];
     const latestRequirements = latestVersion ? parseRequirements(latestVersion.requirements) : [];
     const feedbackCounts = { useful: 0, unclear: 0, unnecessary: 0 };
+    const reviewCounts = { accepted: 0, retakeRequested: 0, notNeeded: 0 };
     for (const row of parsedUsage) for (const value of Object.values(row.feedback)) feedbackCounts[value] += 1;
+    for (const row of parsedUsage) for (const requirement of row.parsedRequirements) {
+      const status = latestReviews.get(`${row.id}:${requirement.id}`);
+      if (status === "accepted") reviewCounts.accepted += 1;
+      else if (status === "retake_requested") reviewCounts.retakeRequested += 1;
+      else if (status === "not_needed") reviewCounts.notNeeded += 1;
+    }
     const requirementStats = latestRequirements.map((requirement) => {
       let selectedCount = 0; let completedCount = 0; let usefulCount = 0; let unclearCount = 0; let unnecessaryCount = 0;
+      let acceptedCount = 0; let retakeCount = 0; let notNeededCount = 0;
       for (const row of latestUsage) {
         if (row.parsedRequirements.some((item) => item.id === requirement.id)) selectedCount += 1;
         if (completedByRequest.get(row.id)?.has(requirement.id)) completedCount += 1;
         if (row.feedback[requirement.id] === "useful") usefulCount += 1;
         if (row.feedback[requirement.id] === "unclear") unclearCount += 1;
         if (row.feedback[requirement.id] === "unnecessary") unnecessaryCount += 1;
+        const review = latestReviews.get(`${row.id}:${requirement.id}`);
+        if (review === "accepted") acceptedCount += 1;
+        if (review === "retake_requested") retakeCount += 1;
+        if (review === "not_needed") notNeededCount += 1;
       }
-      return { id: requirement.id, label: requirement.label, selectedCount, completedCount, usefulCount, unclearCount, unnecessaryCount };
+      return { id: requirement.id, label: requirement.label, selectedCount, completedCount, usefulCount, unclearCount, unnecessaryCount,
+        acceptedCount, retakeCount, notNeededCount };
     });
     return {
       id: template.id,
@@ -168,6 +188,7 @@ async function libraryPayload(ownerUid: string) {
         completedRequirements: parsedUsage.reduce((sum, row) => sum + row.parsedRequirements.filter((item) => completedByRequest.get(row.id)?.has(item.id)).length, 0),
         missingFeedback: parsedUsage.filter((row) => Boolean(row.template_missing_feedback)).length,
         feedbackCounts,
+        reviewCounts,
         requirementStats,
       },
       createdAt: template.created_at,

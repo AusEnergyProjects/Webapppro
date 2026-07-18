@@ -209,6 +209,18 @@
 .crm-field-summary article { background: #f4f7f6; border: 1px solid #dce6e2; border-radius: 10px; padding: 12px; }
 .crm-field-summary span { color: #657772; display: block; font-size: .62rem; }
 .crm-field-summary strong { color: #153f35; display: block; font-size: 1.05rem; margin-top: 3px; }
+.crm-photo-proof-readiness { border: 1px solid #dce6e2; border-radius: 11px; display: grid; gap: 10px; margin-bottom: 14px; padding: 13px; }
+.crm-photo-proof-readiness.ready { background: #edf8f3; border-color: #b9dfd1; }
+.crm-photo-proof-readiness.pending { background: #fff8e8; border-color: #ead49a; }
+.crm-photo-proof-readiness > header { align-items: start; display: flex; gap: 12px; justify-content: space-between; }
+.crm-photo-proof-readiness > header > div { display: grid; gap: 3px; }
+.crm-photo-proof-readiness header span { color: #148b66; font-size: .62rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.crm-photo-proof-readiness h4 { color: #153f35; font-size: .8rem; margin: 0; }
+.crm-photo-proof-readiness header > strong { color: #5d716c; font-size: .66rem; }
+.crm-photo-proof-readiness ul { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.crm-photo-proof-readiness li { align-items: center; background: rgba(255,255,255,.7); border-radius: 8px; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto auto; padding: 8px 10px; }
+.crm-photo-proof-readiness li span { color: #315b51; font-size: .68rem; }
+.crm-photo-proof-readiness li strong, .crm-photo-proof-readiness li small { color: #5d716c; font-size: .63rem; text-transform: capitalize; }
 .crm-field-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-field-card { border: 1px solid #dbe5e1; border-radius: 13px; padding: 16px; }
 .crm-field-card.wide { grid-column: 1 / -1; }
@@ -553,6 +565,8 @@
   .dashboard-workspace-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-workspace-nav small { display: none; }
   .dashboard-account-links, .crm-field-grid, .crm-field-summary { grid-template-columns: 1fr; }
+  .crm-photo-proof-readiness > header { flex-direction: column; }
+  .crm-photo-proof-readiness li { align-items: start; grid-template-columns: 1fr; }
   .crm-field-card.wide { grid-column: auto; }
   .crm-field-form { grid-template-columns: 1fr; }
   .crm-field-form label.wide, .crm-field-form .confirm { grid-column: auto; }

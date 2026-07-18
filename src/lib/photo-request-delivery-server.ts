@@ -9,7 +9,8 @@ import {
   photoRequestReminderAvailable,
   type PhotoRequestDeliveryIntent,
 } from "@/lib/trade-photo-request-delivery";
-import { hashPhotoRequestSecret } from "@/lib/trade-photo-requests";
+import { hashPhotoRequestSecret, normalisePhotoRequirements, type PhotoRequirement } from "@/lib/trade-photo-requests";
+import { photoRetakeGuidance } from "@/lib/photo-request-review";
 import {
   normalizeAustralianMobile,
   sendServiceReminderProviderMessage,
@@ -31,6 +32,7 @@ type DeliveryContext = Row & {
   revision: number;
   token_issue: number;
   expires_at: string;
+  requirements: string;
   work_status: string;
   work_record_status: string;
   work_number: string;
@@ -203,6 +205,7 @@ function deliveryPayload(row: Row) {
     providerStatus: String(row.provider_status || ""), lastError: String(row.last_error || ""),
     queuedAt: String(row.queued_at), sentAt: String(row.sent_at || ""), deliveredAt: String(row.delivered_at || ""),
     failedAt: String(row.failed_at || ""), updatedAt: String(row.updated_at),
+    reviewRevision: Number(row.review_revision || 0), photoRequirementId: String(row.photo_requirement_id || ""),
   };
 }
 
@@ -212,6 +215,7 @@ export async function photoRequestDeliveryOverview(requestId: string, ownerUid: 
   const [email, sms, deliveries] = await Promise.all([
     readiness(context, "email"), readiness(context, "sms"),
     getD1().prepare(`SELECT id, channel, provider, intent, status, eligibility_reason, attempts, provider_status,
+        review_revision, photo_requirement_id,
         last_error, queued_at, sent_at, delivered_at, failed_at, updated_at
       FROM trade_crm_photo_request_deliveries WHERE photo_request_id = ? AND firebase_uid = ?
       ORDER BY created_at DESC LIMIT 20`).bind(requestId, ownerUid).all<Row>(),
@@ -239,6 +243,24 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
       .bind(new Date().toISOString(), deliveryId).run();
     return { ok: false, error: "PHOTO_REQUEST_LINK_STALE" };
   }
+  let retakeLabel = ""; let retakeGuidance = "";
+  if (String(delivery.intent) === "retake_followup") {
+    const review = await db.prepare(`SELECT review_revision, photo_requirement_id, status, reason_code FROM trade_crm_photo_requirement_reviews
+      WHERE photo_request_id = ? AND request_revision = ? AND review_revision = ? AND photo_requirement_id = ?
+        AND review_revision = (SELECT MAX(review_revision) FROM trade_crm_photo_requirement_reviews
+          WHERE photo_request_id = ? AND request_revision = ? AND photo_requirement_id = ?)`)
+      .bind(context.id, context.revision, delivery.review_revision, delivery.photo_requirement_id,
+        context.id, context.revision, delivery.photo_requirement_id).first<Row>();
+    if (!review || review.status !== "retake_requested") {
+      await db.prepare("UPDATE trade_crm_photo_request_deliveries SET status = 'replaced', eligibility_reason = 'A newer proof review replaced this follow-up.', updated_at = ? WHERE id = ?")
+        .bind(new Date().toISOString(), deliveryId).run();
+      return { ok: false, error: "PHOTO_RETAKE_REVIEW_STALE" };
+    }
+    let requirements: PhotoRequirement[] = [];
+    try { requirements = normalisePhotoRequirements(JSON.parse(context.requirements)); } catch { requirements = []; }
+    retakeLabel = requirements.find((item) => item.id === String(delivery.photo_requirement_id))?.label || "one job item";
+    retakeGuidance = photoRetakeGuidance(review.reason_code);
+  }
   const channel = String(delivery.channel) as ReminderChannel;
   const ready = await readiness(context, channel); const now = new Date().toISOString();
   if (!ready.allowed) {
@@ -254,7 +276,8 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
   try {
     const shareUrl = await currentShareUrl(context, origin);
     const draft = photoRequestDeliveryDraft({ intent: String(delivery.intent) as PhotoRequestDeliveryIntent,
-      businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at });
+      businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at,
+      requirementLabel: retakeLabel, retakeGuidance });
     const result = await sendServiceReminderProviderMessage({ channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
       idempotencyKey: String(delivery.idempotency_key), messageType: "photo_request_link",
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString() });
@@ -297,26 +320,40 @@ export async function sendPhotoRequestDelivery(input: {
   ownerUid: string;
   actorUid: string;
   channel: ReminderChannel;
-  requestedIntent: "initial" | "resend" | "expiry_reminder";
+  requestedIntent: "initial" | "resend" | "expiry_reminder" | "retake_followup";
   consentConfirmed: boolean;
   origin: string;
+  reviewRevision?: number;
+  photoRequirementId?: string;
 }) {
   const context = await deliveryContext(input.requestId, input.ownerUid);
   if (!context) throw new Error("PHOTO_REQUEST_NOT_FOUND");
   if (!input.consentConfirmed) throw new Error("CONSENT_CONFIRMATION_REQUIRED");
   const ready = await readiness(context, input.channel);
   if (!ready.allowed) throw new Error(ready.status);
-  const intent = await deliveryIntent(context.id, Number(context.token_issue), input.channel, input.requestedIntent, context.expires_at);
+  let intent: PhotoRequestDeliveryIntent;
+  let reviewRevision = 0; let photoRequirementId = "";
+  if (input.requestedIntent === "retake_followup") {
+    reviewRevision = Number(input.reviewRevision || 0); photoRequirementId = text(input.photoRequirementId, 80);
+    const review = await getD1().prepare(`SELECT status FROM trade_crm_photo_requirement_reviews
+      WHERE photo_request_id = ? AND request_revision = ? AND review_revision = ? AND photo_requirement_id = ?
+        AND review_revision = (SELECT MAX(review_revision) FROM trade_crm_photo_requirement_reviews
+          WHERE photo_request_id = ? AND request_revision = ? AND photo_requirement_id = ?)`)
+      .bind(context.id, context.revision, reviewRevision, photoRequirementId,
+        context.id, context.revision, photoRequirementId).first<Row>();
+    if (!review || review.status !== "retake_requested") throw new Error("PHOTO_RETAKE_REVIEW_STALE");
+    intent = "retake_followup";
+  } else intent = await deliveryIntent(context.id, Number(context.token_issue), input.channel, input.requestedIntent, context.expires_at);
   const idempotencyKey = await photoRequestDeliveryIdempotencyKey({ requestId: context.id, requestRevision: Number(context.revision),
-    tokenIssue: Number(context.token_issue), intent, channel: input.channel });
+    tokenIssue: Number(context.token_issue), intent, channel: input.channel, reviewRevision, photoRequirementId });
   const db = getD1(); const deliveryId = crypto.randomUUID(); const now = new Date().toISOString();
   await db.prepare(`INSERT OR IGNORE INTO trade_crm_photo_request_deliveries
     (id, photo_request_id, work_order_id, firebase_uid, crm_customer_id, customer_uid, channel, provider,
-     request_revision, token_issue, intent, idempotency_key, consent_basis, consent_confirmed_at, status,
+     request_revision, token_issue, review_revision, photo_requirement_id, intent, idempotency_key, consent_basis, consent_confirmed_at, status,
      eligibility_reason, attempts, provider_message_id, queued_at, created_by_uid, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', '', 0, ?, ?, ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', '', 0, ?, ?, ?, ?, ?)`)
     .bind(deliveryId, context.id, context.work_order_id, context.firebase_uid, context.crm_customer_id, ready.customerUid,
-      input.channel, ready.provider, context.revision, context.token_issue, intent, idempotencyKey, ready.consentBasis, now,
+      input.channel, ready.provider, context.revision, context.token_issue, reviewRevision, photoRequirementId, intent, idempotencyKey, ready.consentBasis, now,
       deliveryId, now, input.actorUid, now, now).run();
   const stored = await db.prepare("SELECT id, status, attempts FROM trade_crm_photo_request_deliveries WHERE idempotency_key = ?")
     .bind(idempotencyKey).first<Row>();

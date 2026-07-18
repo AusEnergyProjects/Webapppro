@@ -4,6 +4,8 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
 import { photoRequestDeliveryOverview, retryPhotoRequestDelivery, sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
+import { PHOTO_REVIEW_STATUSES, photoRetakeGuidance } from "@/lib/photo-request-review";
+import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import {
   defaultPhotoRequirements,
   hashPhotoRequestSecret,
@@ -86,6 +88,11 @@ function responseForError(error: unknown) {
   if (code === "PHOTO_REQUEST_RESEND_LIMIT") return adminJson({ ok: false, error: "This link has reached its two deliberate resends for this channel." }, 409);
   if (code === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This delivery cannot be retried." }, 409);
   if (code === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Photo request delivery not found." }, 404);
+  if (code === "PHOTO_REVIEW_REQUIRED") return adminJson({ ok: false, error: "The customer must finish the current photo set before review." }, 409);
+  if (code === "PHOTO_REQUIREMENT_NOT_FOUND") return adminJson({ ok: false, error: "That photo requirement is no longer current." }, 409);
+  if (code === "PHOTO_REVIEW_UPLOAD_REQUIRED") return adminJson({ ok: false, error: "A photo must be present before it can be accepted or sent back for a retake." }, 409);
+  if (code === "PHOTO_RETAKE_REASON_REQUIRED") return adminJson({ ok: false, error: "Choose one of the safe retake reasons." }, 400);
+  if (code === "PHOTO_RETAKE_REVIEW_STALE") return adminJson({ ok: false, error: "This retake request changed. Reload the current review before sending." }, 409);
   return adminJson({ ok: false, error: "The customer photo request could not be completed." }, 500);
 }
 
@@ -146,14 +153,13 @@ async function publishedTemplateOptions(ownerUid: string) {
 async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "") {
   const record = await getD1().prepare(`SELECT * FROM trade_crm_photo_requests WHERE work_order_id = ? AND firebase_uid = ?`)
     .bind(job.id, access.ownerUid).first<PhotoRequestRecord>();
-  const [media, templates, sourceVersion, delivery] = await Promise.all([
-    record ? getD1().prepare(`SELECT photo_requirement_id, COUNT(*) count
-      FROM trade_crm_job_media WHERE firebase_uid = ? AND work_order_id = ? AND photo_request_id = ?
-      GROUP BY photo_requirement_id`)
-      .bind(access.ownerUid, job.id, record.id).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+  const requestRequirements = parseRequirements(record, job.service_category);
+  const [templates, sourceVersion, delivery, proof] = await Promise.all([
     publishedTemplateOptions(access.ownerUid),
     record?.source_template_version_id ? templateVersion(access.ownerUid, record.source_template_version_id) : Promise.resolve(null),
     record ? photoRequestDeliveryOverview(record.id, access.ownerUid) : Promise.resolve({ channels: [], deliveries: [], reminderAvailable: false, linkDeliverable: false }),
+    record ? photoRequestProofOverview({ ownerUid: access.ownerUid, workOrderId: job.id, requestId: record.id,
+      requestRevision: Number(record.revision), requirements: requestRequirements }) : Promise.resolve(null),
   ]);
   const sourceRequirements = sourceVersion ? storedRequirements(sourceVersion.requirements) : [];
   let templateFeedback = {};
@@ -164,12 +170,13 @@ async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "")
       id: record.id,
       status: record.status,
       revision: Number(record.revision),
-      requirements: parseRequirements(record, job.service_category),
+      requirements: requestRequirements,
       expiresAt: record.expires_at,
       lastSharedAt: record.last_shared_at,
       linkActive: record.status === "active" && record.expires_at > new Date().toISOString(),
       tokenIssue: Number(record.token_issue),
-      uploadCounts: Object.fromEntries(media.results.map((row) => [String(row.photo_requirement_id), Number(row.count)])),
+      uploadCounts: proof?.uploadCounts || {},
+      proof,
       sourceTemplate: sourceVersion ? { id: sourceVersion.template_id, versionId: sourceVersion.id,
         version: Number(sourceVersion.version), name: sourceVersion.name, serviceCategory: sourceVersion.service_category,
         requirements: sourceRequirements } : null,
@@ -299,6 +306,58 @@ export async function POST(request: Request) {
       await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
         channel, requestedIntent: requestedIntent as "initial" | "resend" | "expiry_reminder",
         consentConfirmed: body.consentConfirmed === true, origin: new URL(request.url).origin });
+    } else if (action === "review_requirement") {
+      if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
+      const expectedRevision = Number(body.expectedRevision || 0);
+      if (expectedRevision !== Number(current.revision)) throw new Error("PHOTO_REQUEST_CHANGED");
+      const requirements = storedRequirements(current.requirements);
+      const requirementId = cleanAdminText(body.requirementId, 80);
+      const requirement = requirements.find((item) => item.id === requirementId);
+      if (!requirement) throw new Error("PHOTO_REQUIREMENT_NOT_FOUND");
+      const status = cleanAdminText(body.reviewStatus, 30);
+      if (!PHOTO_REVIEW_STATUSES.includes(status as (typeof PHOTO_REVIEW_STATUSES)[number])) {
+        return adminJson({ ok: false, error: "Choose accept, retake requested or not needed." }, 400);
+      }
+      const proof = await photoRequestProofOverview({ ownerUid: access.ownerUid, workOrderId, requestId: current.id,
+        requestRevision: Number(current.revision), requirements });
+      if (!proof.completion?.evidenceCurrent) throw new Error("PHOTO_REVIEW_REQUIRED");
+      if ((status === "accepted" || status === "retake_requested") && !proof.uploadCounts[requirementId]) {
+        throw new Error("PHOTO_REVIEW_UPLOAD_REQUIRED");
+      }
+      const reasonCode = status === "retake_requested" ? cleanAdminText(body.reasonCode, 40) : "";
+      const guidance = status === "retake_requested" ? photoRetakeGuidance(reasonCode) : "";
+      if (status === "retake_requested" && !guidance) throw new Error("PHOTO_RETAKE_REASON_REQUIRED");
+      const previous = await db.prepare(`SELECT MAX(review_revision) revision FROM trade_crm_photo_requirement_reviews
+        WHERE photo_request_id = ?`).bind(current.id).first<Record<string, unknown>>();
+      const reviewRevision = Number(previous?.revision || 0) + 1;
+      const jobRevision = nextJobRevision(job.revision);
+      await db.batch([
+        db.prepare(`INSERT INTO trade_crm_photo_requirement_reviews
+          (id, photo_request_id, work_order_id, firebase_uid, request_revision, review_revision, photo_requirement_id,
+           status, reason_code, guidance, reviewed_upload_count, actor_uid, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(crypto.randomUUID(), current.id, workOrderId, access.ownerUid, Number(current.revision), reviewRevision,
+            requirementId, status, reasonCode, guidance, Number(proof.uploadCounts[requirementId] || 0), access.actorUid, now),
+        eventStatement(db, { requestId: current.id, workOrderId, ownerUid: access.ownerUid, actorUid: access.actorUid,
+          eventType: status === "retake_requested" ? "retake_requested" : status === "accepted" ? "requirement_accepted" : "requirement_not_needed",
+          revision: Number(current.revision), now }),
+        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+          VALUES (?, ?, ?, 'customer_photo_requirement_reviewed', ?, ?)`)
+          .bind(crypto.randomUUID(), workOrderId, access.ownerUid,
+            status === "retake_requested" ? "A requested customer photo needs a bounded retake." : "A requested customer photo was reviewed.", now),
+        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+          .bind(jobRevision, now, workOrderId, access.ownerUid),
+        ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: jobRevision,
+          changedAt: now, audienceMemberId: job.assignee_member_id }),
+      ]);
+    } else if (action === "send_retake") {
+      if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
+      const channel = cleanAdminText(body.channel, 10);
+      if (channel !== "email" && channel !== "sms") return adminJson({ ok: false, error: "Choose email or SMS." }, 400);
+      await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
+        channel, requestedIntent: "retake_followup", reviewRevision: Number(body.reviewRevision || 0),
+        photoRequirementId: cleanAdminText(body.requirementId, 80), consentConfirmed: body.consentConfirmed === true,
+        origin: new URL(request.url).origin });
     } else if (action === "retry_delivery") {
       if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
       const deliveryId = cleanAdminText(body.deliveryId, 180);
@@ -306,7 +365,7 @@ export async function POST(request: Request) {
         .bind(deliveryId, current.id, access.ownerUid).first();
       if (!owned) throw new Error("DELIVERY_NOT_FOUND");
       const result = await retryPhotoRequestDelivery(deliveryId, new URL(request.url).origin);
-      if (!result.ok && ["DELIVERY_NOT_FOUND", "DELIVERY_NOT_RETRYABLE", "PHOTO_REQUEST_LINK_STALE"].includes(String(result.error))) {
+      if (!result.ok && ["DELIVERY_NOT_FOUND", "DELIVERY_NOT_RETRYABLE", "PHOTO_REQUEST_LINK_STALE", "PHOTO_RETAKE_REVIEW_STALE"].includes(String(result.error))) {
         throw new Error(String(result.error));
       }
     } else {

@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `17c82f062ef83f6c2be52012b87d4752a6619f89` on `codex/sites-custom-domain-migration`, published as Sites version 155 before the P6-2P batch.
+Implementation baseline: `0118e8a53665d296606b2a7263a22bbb6ac75547` on `codex/sites-custom-domain-migration`, published as Sites version 158 before the P6-2Q batch.
 
 ## Current delivery summary
 
@@ -44,47 +44,50 @@ Authenticated Resend and Twilio callbacks now update the photo-request delivery 
 
 Live-trade wording validation remains deferred until trades are onboarded, as authorised on 18 July 2026. This does not block implementation or signed-in responsive release inspection.
 
+P6-2Q closes the direct-customer photo-proof review loop. Customers can explicitly finish a complete current request, while owners, managers and coordinators can accept, waive or request a bounded retake for each requirement. Completion and review revisions are append-only, reviewed originals cannot be removed, and a retake reopens only the affected requirement through the current secure link.
+
+Retake guidance uses fixed reason codes and one revision-bound targeted follow-up through the existing consent-aware delivery controls. Field work receives read-only proof readiness, and photo-template reporting receives only aggregate review outcomes. No customer contact, capability token, image analysis or image-derived content is added to those payloads.
+
 ## Next milestone contract
 
-### P6-2Q batch: customer completion, proof review and targeted retake
+### P6-3A batch: authoritative price-book item foundation
 
-Outcome: a customer can clearly finish a photo request, and the installer can review each requirement, accept useful proof or request a bounded retake without losing the original evidence or sending a new broad request.
+Outcome: a verified trade can maintain one owner-scoped source of truth for reusable labour, material, equipment and other quoted cost items before the quote builder expands.
 
-### Five linked review items
+### Five linked foundation items
 
-1. Add a customer completion action that checks every required requirement has at least one current upload and records the request revision and checklist acknowledgement.
-2. Add installer review states for each requested requirement: pending, accepted, retake requested or not needed, while preserving every original upload and audit event.
-3. Add bounded reason codes and safe prewritten guidance for retakes, with no image analysis and no unrestricted customer or administrator notes.
-4. Reopen only the affected requirement through the current secure link and reuse P6-2P for one targeted follow-up per review revision.
-5. Add job-level proof readiness and privacy-safe aggregate review outcomes to the field record and template reporting without exposing image content or customer identity.
+1. Define canonical item types for labour, material, equipment, subcontractor, travel, call-out, disposal, rebate, discount, non-billable and one-off work.
+2. Store supplier cost, sell price, GST treatment, markup and margin using integer money values and deterministic calculations.
+3. Add optional expected duration, required skill, supplier and supplier SKU fields without duplicating the existing catalogue or team sources of truth.
+4. Add owner-scoped create, edit, archive, search and role enforcement with immutable price-change history.
+5. Connect the authoritative items to existing direct-job quote lines and cover migration, calculations, access boundaries and responsive library views.
 
 ### In scope
 
-- The exact direct job, current P6-2N request, P6-2O requirement snapshot and P6-2P delivery controls.
-- Owner, manager and coordinator review, plus read-only field visibility of review state.
-- Additive review and completion records with immutable events.
-- Existing private R2 evidence and signature, metadata and authorisation controls.
+- Existing owner-scoped catalogue, team skills and versioned direct-job quote boundaries.
+- Office price-book management for verified trade roles authorised to manage business data.
+- Additive schema and migration changes with an auditable item price history.
+- Existing integer-cent quote calculations and Australian GST conventions where already authoritative.
 
 ### Explicitly out of scope
 
-- AI or automated image scoring, OCR, face detection or photo-content classification.
-- Customer free-text messaging, marketing campaigns or recurring reminders.
-- Deleting rejected evidence, editing original uploads or changing published templates from a job review.
-- Marketplace evidence, quoting, scheduling, dispatch, invoicing or live tracking.
+- Quote packages, customer acceptance, signatures, deposits, PDFs or delivery messaging.
+- Inventory reservations, purchase orders, supplier bills, accounting sync or customer-specific contract pricing.
+- AI-generated descriptions, supplier scraping or automated margin recommendations.
+- Job packets, forms, scheduling, invoicing or field material consumption.
 
 ### Acceptance criteria
 
-- Customer completion fails with a clear requirement list until every required item has an upload.
-- Only the current active capability can complete or answer a targeted retake.
-- Only an owner, manager or coordinator can accept, waive or request a retake.
-- Review history is immutable and original evidence remains available to authorised job users.
-- A targeted follow-up is idempotent for the request revision, review revision and current token issue.
-- Field and administrator payloads expose no customer contact, capability token or image-derived content.
-- Desktop and 390 px customer completion and installer review have no document-level horizontal overflow.
+- Every active item has one canonical type, sell price and GST treatment, with valid cost and margin behaviour.
+- Price changes append history and existing published quote revisions remain unchanged.
+- Only authorised owner-scoped users can mutate a price-book item; field users receive only the data their workflow needs.
+- Existing catalogue and team records are referenced rather than copied into a competing source of truth.
+- A direct-job quote line can be created from an active item without re-entering its commercial fields.
+- Desktop and 390 px price-book library views have no document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Review would require image analysis, customer free text or a new provider.
-- A retake flow would rotate the current link unexpectedly or remove original evidence.
-- The slice expands into quoting, appointment messaging, protected marketplace evidence or general chat.
+- The existing catalogue or quote model already provides an authoritative price-book boundary that conflicts with the proposed source of truth.
+- Correct calculations would require floating-point money or rewriting published quote revisions.
+- The slice expands into quote acceptance, deposits, purchasing, inventory, accounting or customer-specific pricing.

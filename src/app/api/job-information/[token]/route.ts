@@ -3,6 +3,8 @@ import { getD1 } from "../../../../../db";
 import { cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
+import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import {
   hashPhotoRequestSecret,
   normalisePhotoRequirements,
@@ -84,14 +86,18 @@ async function authorisedRequest(context: RouteContext) {
 }
 
 async function publicPayload(record: PublicRequestRecord, requirements: PhotoRequirement[]) {
-  const rows = await getD1().prepare(`SELECT id, photo_requirement_id, caption, content_type, size_bytes, created_at
+  const [rows, proof] = await Promise.all([getD1().prepare(`SELECT id, photo_requirement_id, caption, content_type, size_bytes, created_at
     FROM trade_crm_job_media WHERE firebase_uid = ? AND work_order_id = ? AND photo_request_id = ? AND source = 'customer_request'
     ORDER BY created_at DESC`)
-    .bind(record.firebase_uid, record.work_order_id, record.id).all<Record<string, unknown>>();
+    .bind(record.firebase_uid, record.work_order_id, record.id).all<Record<string, unknown>>(),
+  photoRequestProofOverview({ ownerUid: record.firebase_uid, workOrderId: record.work_order_id, requestId: record.id,
+    requestRevision: Number(record.revision), requirements })]);
   return {
     businessName: record.business_name,
     job: { workNumber: record.work_number, title: record.title, serviceCategory: record.service_category },
-    request: { revision: Number(record.revision), expiresAt: record.expires_at, checklistVersion: PHOTO_REQUEST_CHECKLIST_VERSION, requirements },
+    request: { revision: Number(record.revision), expiresAt: record.expires_at, checklistVersion: PHOTO_REQUEST_CHECKLIST_VERSION,
+      requirements, completion: proof.completion, reviews: proof.reviews, outstandingRequirementIds: proof.outstandingRequirementIds,
+      proofReady: proof.proofReady },
     uploads: rows.results.map((row) => ({
       id: row.id,
       requirementId: row.photo_requirement_id,
@@ -123,6 +129,54 @@ export async function POST(request: Request, context: RouteContext) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const { record, requirements } = await authorisedRequest(context);
+    if ((request.headers.get("content-type") || "").includes("application/json")) {
+      const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+      if (body.action !== "complete_request") return json({ ok: false, error: "Unsupported photo request action." }, 400);
+      if (body.checklistVersion !== PHOTO_REQUEST_CHECKLIST_VERSION || body.confirmed !== true) {
+        return json({ ok: false, error: "Confirm that the required photos are ready for installer review." }, 400);
+      }
+      const proof = await photoRequestProofOverview({ ownerUid: record.firebase_uid, workOrderId: record.work_order_id,
+        requestId: record.id, requestRevision: Number(record.revision), requirements });
+      if (proof.outstandingRequirementIds.length) {
+        const labels = requirements.filter((item) => proof.outstandingRequirementIds.includes(item.id)).map((item) => item.label);
+        return json({ ok: false, error: "Add or retake every outstanding photo before finishing.", missingRequirements: labels }, 409);
+      }
+      const media = await getD1().prepare(`SELECT id FROM trade_crm_job_media
+        WHERE firebase_uid = ? AND work_order_id = ? AND photo_request_id = ? AND source = 'customer_request' ORDER BY id`)
+        .bind(record.firebase_uid, record.work_order_id, record.id).all<{ id: string }>();
+      const evidenceKey = await photoRequestEvidenceKey({ requestId: record.id, requestRevision: Number(record.revision),
+        checklistVersion: PHOTO_REQUEST_CHECKLIST_VERSION, mediaIds: media.results.map((item) => item.id) });
+      const previous = await getD1().prepare(`SELECT MAX(completion_revision) revision FROM trade_crm_photo_request_completions
+        WHERE photo_request_id = ?`).bind(record.id).first<{ revision: number }>();
+      const completionRevision = Number(previous?.revision || 0) + 1;
+      const now = new Date().toISOString(); const completionId = crypto.randomUUID();
+      const inserted = await getD1().prepare(`INSERT OR IGNORE INTO trade_crm_photo_request_completions
+        (id, photo_request_id, work_order_id, firebase_uid, request_revision, completion_revision, checklist_version,
+         evidence_key, required_count, supplied_count, completed_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(completionId, record.id, record.work_order_id, record.firebase_uid, Number(record.revision), completionRevision,
+          PHOTO_REQUEST_CHECKLIST_VERSION, evidenceKey, requirements.filter((item) => item.required).length,
+          proof.counts.supplied, now, now).run();
+      if (inserted.meta.changes) {
+        const jobRevision = nextJobRevision(record.job_revision); const db = getD1();
+        await db.batch([
+          db.prepare(`INSERT INTO trade_crm_photo_request_events
+            (id, photo_request_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type, request_revision, created_at)
+            VALUES (?, ?, ?, ?, 'customer_link', '', 'request_completed', ?, ?)`)
+            .bind(crypto.randomUUID(), record.id, record.work_order_id, record.firebase_uid, Number(record.revision), now),
+          db.prepare(`INSERT INTO trade_work_order_events
+            (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'customer_photo_request_completed', 'Customer marked the requested photos ready for review.', ?)`)
+            .bind(crypto.randomUUID(), record.work_order_id, record.firebase_uid, now),
+          db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
+            .bind(jobRevision, now, record.work_order_id, record.firebase_uid),
+          ...jobSyncChangeStatements(db, { ownerUid: record.firebase_uid, workOrderId: record.work_order_id,
+            revision: jobRevision, changedAt: now, audienceMemberId: record.assignee_member_id }),
+        ]);
+        record.job_revision = jobRevision;
+      }
+      return json({ ok: true, ...(await publicPayload(record, requirements)) });
+    }
     let form: FormData;
     try { form = await request.formData(); }
     catch { return json({ ok: false, error: "The selected photo could not be read." }, 400); }
@@ -191,10 +245,14 @@ export async function DELETE(request: Request, context: RouteContext) {
   try {
     const { record, requirements } = await authorisedRequest(context);
     const mediaId = cleanAdminText(new URL(request.url).searchParams.get("id"), 180);
-    const media = await getD1().prepare(`SELECT id, object_key FROM trade_crm_job_media
+    const media = await getD1().prepare(`SELECT id, object_key, photo_requirement_id FROM trade_crm_job_media
       WHERE id = ? AND firebase_uid = ? AND work_order_id = ? AND photo_request_id = ? AND source = 'customer_request'`)
-      .bind(mediaId, record.firebase_uid, record.work_order_id, record.id).first<{ id: string; object_key: string }>();
+      .bind(mediaId, record.firebase_uid, record.work_order_id, record.id).first<{ id: string; object_key: string; photo_requirement_id: string }>();
     if (!media) return json({ ok: false, error: "Requested photo not found." }, 404);
+    const reviewed = await getD1().prepare(`SELECT 1 reviewed FROM trade_crm_photo_requirement_reviews
+      WHERE photo_request_id = ? AND photo_requirement_id = ? LIMIT 1`)
+      .bind(record.id, media.photo_requirement_id).first();
+    if (reviewed) return json({ ok: false, error: "This photo is part of the review history and cannot be removed. Add a replacement instead." }, 409);
     await bucket().delete(media.object_key);
     const now = new Date().toISOString();
     const jobRevision = nextJobRevision(record.job_revision);
