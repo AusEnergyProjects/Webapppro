@@ -9,13 +9,17 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0050_versioned_trade_quotes.sql");
 const optionsMigration = read("../drizzle/0066_optioned_trade_quotes.sql");
+const sharingMigration = read("../drizzle/0067_secure_quote_sharing.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
+const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
 const installerUi = read("../src/components/TradeQuotePanel.tsx");
 const customerUi = read("../src/components/CustomerTradeQuotes.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const dashboard = read("../src/components/CustomerDashboard.tsx");
 const styles = read("../src/app/globals.css");
+const linkUi = read("../src/components/QuoteLinkReview.tsx");
+const commercial = read("../src/lib/trade-commercial-reference.ts");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -66,6 +70,23 @@ test("optioned quotes add immutable choices and exact selection evidence", () =>
   assert.deepEqual({ subtotal: selected.subtotalCents, tax: selected.taxCents, total: selected.totalCents }, { subtotal: 45_000, tax: 4_500, total: 49_500 });
 });
 
+test("secure quote sharing is revocable, expiring and commercially provider neutral", () => {
+  for (const table of ["trade_crm_quote_links", "trade_crm_quote_events", "trade_crm_quote_questions", "trade_crm_quote_deliveries"]) {
+    assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
+    assert.match(sharingMigration, new RegExp("CREATE TABLE `" + table + "`"));
+  }
+  for (const evidence of ["token_hash", "encrypted_token", "token_issue", "signer_name", "commercial_reference", "currency"]) assert.match(sharingMigration, new RegExp(evidence));
+  for (const provider of ["xero", "myob", "quickbooks", "stripe", "square"]) assert.match(commercial, new RegExp(provider));
+  assert.match(commercial, /currency: "AUD"/);
+  assert.match(commercial, /subtotalCents: Math\.trunc/);
+  assert.match(linkRoute, /calculateQuoteSelection/);
+  assert.match(linkRoute, /providerNeutralCommercialRecord/);
+  assert.match(linkRoute, /token_hash = '', encrypted_token = ''/);
+  assert.match(installerRoute, /TLINK_SMS_SENDER_APPROVED !== "true"/);
+  assert.match(installerRoute, /status = 'expired', token_hash = '', encrypted_token = ''/);
+  assert.match(customerRoute, /account-decision:/);
+});
+
 test("installer quote actions preserve direct-customer ownership and immutable issued versions", () => {
   for (const boundary of ["requireInstallerTeamAccess", "canDispatch", "sameOrigin", "d.customer_source = 'trade_owned'", "w.firebase_uid = ?"]) assert.match(installerRoute, new RegExp(boundary));
   assert.match(installerRoute, /action === "save_draft"/);
@@ -91,8 +112,8 @@ test("customer decisions require verified matching identity and retain exact acc
 
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
-  for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute]]) {
+  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
     for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `${label} SQL should compile: ${sql.slice(0, 70)}`);
@@ -100,7 +121,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Customer acceptance email", "Create next draft", "Issue for customer review", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Customer quote email", "Create next draft", "Issue for customer review", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
   for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));
   assert.match(crm, /<TradeQuotePanel/);
@@ -108,8 +129,11 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(dashboard, /href="\/account\/quotes"/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
+  for (const copy of ["Print or save PDF", "Ask the trade business", "Type your name to sign", "Calculated and checked again by the server", "Accept for"]) assert.match(linkUi, new RegExp(copy));
+  for (const copy of ["One secure quote link", "Copy link", "Email quote", "Replace link", "Revoke link", "Quote activity"]) assert.match(installerUi, new RegExp(copy));
+  assert.match(styles, /@media print/);
 });
 
 test("direct quote copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${installerRoute}\n${customerRoute}\n${installerUi}\n${customerUi}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${installerRoute}\n${customerRoute}\n${linkRoute}\n${installerUi}\n${customerUi}\n${linkUi}`, /[\u2013\u2014]/);
 });

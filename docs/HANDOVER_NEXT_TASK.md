@@ -60,46 +60,50 @@ P6-3C adds one-action standard or Essential, Recommended and Complete quote crea
 
 Migration `0066_optioned_trade_quotes.sql` adds immutable choice definitions, option-line associations and exact customer selection evidence. Customer subtotal, GST and total update immediately and are recalculated on the server before acceptance. The verified acceptance records chosen option IDs, selection summary, integer totals and the exact consent statement. Internal cost and margin are limited to owners, managers and coordinators and are omitted from customer payloads.
 
+P6-3D adds one secure no-account quote link per issued revision, immediate manual copy, deliberate email, replacement, revocation, automatic expiry, a branded phone-first review and print view, bounded customer questions, typed signature and one office activity timeline. The same server calculation validates customer choices and exact totals at acceptance, and every terminal decision clears the stored hash and encrypted recoverable secret.
+
+Migration `0067_secure_quote_sharing.sql` adds quote links, privacy-safe events, questions and consent-aware delivery records plus exact signer, link issue, AUD commercial reference and actor evidence. The provider-neutral acceptance record uses stable references and integer cents for future Xero, MYOB, QuickBooks, Stripe and Square adapters. QuickBooks OAuth connection compatibility is present; its invoice export remains gated until the next adapter milestone.
+
 ## Next milestone contract
 
-### P6-3D batch: effortless quote sharing, questions and signature
+### P6-3E batch: accepted quote to deposit and accounting handoff
 
-Outcome: a trade can issue one polished, branded quote link that a customer can open without creating an account, review on any phone, ask a question, sign and accept, while the office sees one authoritative status timeline.
+Outcome: an accepted quote becomes one clear office handoff that can request a provider-hosted deposit and prepare an accounting draft without re-entering the customer, scope, reference or total.
 
 ### Five linked foundation items
 
-1. Issue a revocable, expiring, hashed secure link for the exact immutable quote revision, with manual copy available immediately and no customer account requirement.
-2. Render a polished business-branded phone-first quote and automatic print or PDF view from the same authoritative sections, packages, options, totals and terms, with no document-template setup.
-3. Add deliberate email delivery through the existing consent-aware provider controls, plus SMS only when the approved Australian sender gate is active, with idempotent delivery and masked-recipient preview.
-4. Let the authorised link holder ask a bounded quote question, choose options, type a signature and accept or decline while recording the exact revision, total, consent, signer evidence and event time.
-5. Give the office one status timeline for issued, delivered, viewed, questioned, accepted, declined, expired, revoked and superseded states, with one-action clone and revise from an immutable version.
+1. Materialise one immutable accepted-scope handoff from the recorded quote choices, AUD integer-cent totals and stable commercial reference.
+2. Let the office set a simple percentage or fixed deposit requirement with an immediate plain-language amount preview and safe defaults.
+3. Create an idempotent provider-hosted deposit request through the connected Stripe or Square adapter, with no card data handled by TLink.
+4. Prepare one provider-neutral accounting draft and complete the missing QuickBooks adapter alongside the existing Xero and MYOB boundaries, without emailing or approving an invoice automatically.
+5. Show acceptance, deposit request, verified payment and accounting-draft state in one job timeline with one recovery action for a disconnected provider.
 
 ### In scope
 
-- Existing immutable quote versions, choice calculations, direct-customer contacts, protected credential key, consent-aware delivery controls and provider callbacks.
-- One secure customer link per current issued revision, with replacement and revocation invalidating future access.
-- Automatic business branding from the existing installer profile, with accessible browser, print and 390 px layouts from one source.
-- Privacy-safe quote events and questions that never expose customer contact or the secure token in operational payloads.
+- Existing immutable acceptance evidence, provider-neutral commercial references, direct-customer ownership, integration credentials and verified Stripe or Square callback boundaries.
+- One deposit request and one accounting draft per accepted commercial reference, with explicit retry and reconciliation rather than duplicate creation.
+- Xero, MYOB and QuickBooks accounting adapters plus Stripe and Square payment adapters behind the same narrow internal contracts.
+- Progressive disclosure: the installer sees the next useful action, amount and provider status without accounting setup language in the ordinary job flow.
 
 ### Explicitly out of scope
 
-- Deposits, payment processing, purchasing, inventory reservation, invoicing, scheduling, job materialisation or field consumption.
-- Open public quote URLs, reusable tokens, customer contact exposure in events, or SMS before the Australian sender gate is approved.
-- A bespoke drag-and-drop document-template designer or duplicated PDF-only commercial calculations.
-- Replacing the price book, packets, quote choice model, revision immutability or existing provider callback boundaries.
+- Automatic invoice approval or sending, card-data collection, accounting-ledger ownership, refunds, partial allocations or payout operations.
+- Purchasing, inventory reservation, scheduling, field work, asset creation or full accepted-quote job materialisation.
+- Provider-specific totals, references or duplicate calculations outside the authoritative accepted record.
+- Enabling a provider without real credentials, verified callbacks and a safe disconnected or failed state.
 
 ### Acceptance criteria
 
-- A trade can issue, copy and deliberately email a professional quote without configuring a template or asking the customer to create an account.
-- The secure link exposes only the exact quote and business/customer display context needed for review, expires, can be revoked and never stores its plaintext secret.
-- Browser and print or PDF views use the same server-calculated choices and totals, with no independent calculation path.
-- A customer question and signed decision appear in one office timeline and cannot alter the issued revision.
-- Email delivery is idempotent, SMS remains impossible while its approval flag is false, and delivery payloads contain no raw secure link or customer contact.
-- The customer review, question and signature flow works at 390 px without document-level horizontal overflow.
+- An accepted quote exposes one next action and can create at most one live deposit request and one accounting draft per provider.
+- Stripe and Square requests stay provider hosted and only authenticated provider evidence can mark a deposit paid.
+- Xero, MYOB and QuickBooks receive the same stable reference, AUD integer-cent totals and direct-customer scope; none becomes TLink's source of truth.
+- A disconnected provider does not block the accepted quote or hide its evidence, and reconnect or retry is explicit.
+- The job timeline distinguishes requested, provider-confirmed, failed and reconciled financial states without exposing secrets or raw customer contact.
+- The primary office flow works at 390 px without document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- A secure-link design would permit token reuse after replacement, revocation, expiry, acceptance or supersession.
-- PDF output would require separate quote calculation or editable issued data.
-- The slice expands into deposits, payments, purchasing, inventory, invoicing, scheduling or job creation.
+- A provider requires browser-return success to be treated as payment truth.
+- An adapter would recalculate totals, mutate accepted scope or require provider IDs to become authoritative TLink IDs.
+- The slice expands into automatic invoice sending, refunds, purchasing, inventory, scheduling or full job materialisation.

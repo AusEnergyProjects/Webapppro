@@ -34,7 +34,7 @@ async function tokenExchange(provider: string, code: string, redirectUri: string
   } else {
     const body = new URLSearchParams({ client_id: setting.clientId, client_secret: setting.clientSecret, code, grant_type: "authorization_code", redirect_uri: redirectUri });
     const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
-    if (provider === "xero") {
+    if (provider === "xero" || provider === "quickbooks") {
       body.delete("client_id"); body.delete("client_secret");
       headers.Authorization = `Basic ${btoa(`${setting.clientId}:${setting.clientSecret}`)}`;
     }
@@ -60,6 +60,11 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
     const user = token.user && typeof token.user === "object" ? token.user as Record<string, unknown> : {};
     if (!businessId) throw new Error("ACCOUNT_LOOKUP_FAILED");
     return { id: businessId, label: cleanAdminText(user.username, 180) || "MYOB business" };
+  }
+  if (provider === "quickbooks") {
+    const realmId = cleanAdminText(requestUrl.searchParams.get("realmId"), 180);
+    if (!realmId) throw new Error("ACCOUNT_LOOKUP_FAILED");
+    return { id: realmId, label: `QuickBooks company ${realmId.slice(-6)}` };
   }
   if (provider === "stripe") {
     const accountId = cleanAdminText(token.stripe_user_id, 180);

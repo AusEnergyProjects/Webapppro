@@ -3,7 +3,7 @@ import { getD1 } from "../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 
-export const INTEGRATION_PROVIDERS = ["xero", "myob", "stripe", "square"] as const;
+export const INTEGRATION_PROVIDERS = ["xero", "myob", "quickbooks", "stripe", "square"] as const;
 export type IntegrationProvider = typeof INTEGRATION_PROVIDERS[number];
 
 type ProviderSetting = {
@@ -23,6 +23,8 @@ type IntegrationEnvironment = {
   XERO_CLIENT_SECRET?: string;
   MYOB_CLIENT_ID?: string;
   MYOB_CLIENT_SECRET?: string;
+  QUICKBOOKS_CLIENT_ID?: string;
+  QUICKBOOKS_CLIENT_SECRET?: string;
   STRIPE_CONNECT_CLIENT_ID?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_REFERRAL_SECRET_KEY?: string;
@@ -53,6 +55,11 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     clientSecret: values.MYOB_CLIENT_SECRET || "", authorizeUrl: "https://secure.myob.com/oauth2/account/authorize",
     tokenUrl: "https://secure.myob.com/oauth2/v1/authorize",
     scopes: ["sme-company-settings", "sme-sales", "sme-contacts-customer", "sme-general-ledger"],
+  };
+  if (provider === "quickbooks") return {
+    provider, label: "QuickBooks", purpose: "Accounting and invoice sync", clientId: values.QUICKBOOKS_CLIENT_ID || "",
+    clientSecret: values.QUICKBOOKS_CLIENT_SECRET || "", authorizeUrl: "https://appcenter.intuit.com/connect/oauth2",
+    tokenUrl: "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", scopes: ["com.intuit.quickbooks.accounting"],
   };
   if (provider === "stripe") return {
     provider, label: "Stripe", purpose: "Secure customer payment requests", clientId: values.STRIPE_CONNECT_CLIENT_ID || "",

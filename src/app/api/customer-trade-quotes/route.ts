@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { calculateQuoteSelection, type QuoteChoiceTotals } from "@/lib/trade-quote-options";
+import { providerNeutralCommercialRecord } from "@/lib/trade-commercial-reference";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -110,19 +111,26 @@ export async function POST(request: Request) {
     const consentStatement = decision === "accepted"
       ? `I accept quote ${version.quote_number} version ${version.version_number} for AUD ${(selection.totalCents / 100).toFixed(2)}${selection.selectionSummary ? ` with ${selection.selectionSummary}` : ""}, subject to its recorded terms.`
       : `I decline quote ${version.quote_number} version ${version.version_number}.`;
+    const commercial = providerNeutralCommercialRecord({ quoteNumber: String(version.quote_number), versionNumber: Number(version.version_number), subtotalCents: selection.subtotalCents, taxCents: selection.taxCents, totalCents: selection.totalCents, selectedChoiceIds: selection.selectedIds });
     await db.batch([
       db.prepare(`INSERT INTO trade_crm_quote_acceptances
         (id, quote_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, customer_firebase_uid, actor_email,
          actor_email_verified, actor_auth_time, actor_sign_in_provider, decision, consent_statement, selected_choice_ids_json,
-         selected_subtotal_cents, selected_tax_cents, selected_total_cents, selection_summary, decided_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+         selected_subtotal_cents, selected_tax_cents, selected_total_cents, selection_summary, actor_type, commercial_reference, currency, decided_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified_account', ?, 'AUD', ?, ?)`)
         .bind(crypto.randomUUID(), version.quote_id, version.id, version.work_order_id, version.firebase_uid, version.crm_customer_id,
           identity.uid, identity.email, identity.authTime, identity.signInProvider, decision, consentStatement, JSON.stringify(selection.selectedIds),
-          selection.subtotalCents, selection.taxCents, selection.totalCents, selection.selectionSummary, now, now),
+          selection.subtotalCents, selection.taxCents, selection.totalCents, selection.selectionSummary, commercial.reference, now, now),
       db.prepare(`UPDATE trade_crm_quote_versions SET status = ?, updated_at = ? WHERE id = ? AND status = 'issued'`).bind(decision, now, version.id),
       db.prepare(`UPDATE trade_crm_quotes SET status = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(decision, now, version.quote_id, version.firebase_uid),
       db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = ?, updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(selection.totalCents || version.total_cents, decision, now, version.work_order_id, version.firebase_uid),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), version.work_order_id, version.firebase_uid, `quote_${decision}`, `Quote version ${version.version_number} ${decision} by the verified customer account.`, now),
+      db.prepare(`UPDATE trade_crm_quote_links SET status = ?, token_hash = '', encrypted_token = '', updated_at = ? WHERE quote_version_id = ? AND firebase_uid = ? AND status = 'active'`)
+        .bind(decision, now, version.id, version.firebase_uid),
+      db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
+        SELECT ?, link.id, link.quote_id, link.quote_version_id, link.work_order_id, link.firebase_uid, ?, 'verified_account', ?, ?, ?
+        FROM trade_crm_quote_links link WHERE link.quote_version_id = ? AND link.firebase_uid = ?`)
+        .bind(crypto.randomUUID(), decision, `Quote ${decision} by the verified customer account.`, `account-decision:${version.id}`, now, version.id, version.firebase_uid),
     ]);
     return adminJson({ ok: true, quotes: await customerQuotes(identity) });
   } catch (error) { return errorResponse(error); }

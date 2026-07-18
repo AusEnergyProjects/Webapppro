@@ -46,7 +46,7 @@ test("all business connections are installer-only, paid, same-origin and owner s
   assert.match(integrations, /sameOrigin\(request\)/);
   assert.match(integrations, /WHERE firebase_uid = \?/);
   assert.match(payments, /sameOrigin\(request\)/);
-  assert.match(providerLayer, /\["xero", "myob", "stripe", "square"\]/);
+  assert.match(providerLayer, /\["xero", "myob", "quickbooks", "stripe", "square"\]/);
 });
 
 test("OAuth credentials are encrypted and state is one-time, hashed and short-lived", () => {
@@ -61,11 +61,15 @@ test("OAuth credentials are encrypted and state is one-time, hashed and short-li
   assert.doesNotMatch(`${cryptoLayer}\n${providerLayer}\n${integrations}\n${callback}`, /sk_live_|sq0csp-|client_secret\s*:\s*["'][^"']{8}/);
 });
 
-test("Xero, MYOB, Stripe and Square use their real OAuth endpoints", () => {
+test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints", () => {
   assert.match(providerLayer, /login\.xero\.com\/identity\/connect\/authorize/);
   assert.match(providerLayer, /identity\.xero\.com\/connect\/token/);
   assert.match(providerLayer, /secure\.myob\.com\/oauth2\/account\/authorize/);
   assert.match(providerLayer, /secure\.myob\.com\/oauth2\/v1\/authorize/);
+  assert.match(providerLayer, /appcenter\.intuit\.com\/connect\/oauth2/);
+  assert.match(providerLayer, /oauth\.platform\.intuit\.com\/oauth2\/v1\/tokens\/bearer/);
+  assert.match(providerLayer, /com\.intuit\.quickbooks\.accounting/);
+  assert.match(callback, /realmId/);
   assert.match(providerLayer, /connect\.stripe\.com\/oauth\/authorize/);
   assert.match(providerLayer, /connect\.stripe\.com\/oauth\/token/);
   assert.match(providerLayer, /connect\.squareup\.com\/oauth2\/authorize/);
@@ -113,7 +117,7 @@ test("installer CRM exposes progressive integrations, field and payment workflow
   assert.match(crm, /TradeIntegrationCentre/);
   assert.match(crm, /TradeFieldWorkPanel/);
   assert.match(crm, /TradePaymentPanel/);
-  for (const label of ["Xero", "MYOB", "Stripe", "Square"]) assert.match(integrationUi, new RegExp(label));
+  for (const label of ["Xero", "MYOB", "QuickBooks", "Stripe", "Square"]) assert.match(integrationUi, new RegExp(label));
   assert.match(integrationUi, /never asks for or stores the provider password/);
   assert.doesNotMatch(`${providerLayer}\n${integrationUi}\n${crm}`, /GOOGLE_MAPS_API_KEY|Google property tools|TradePropertyView/);
 });

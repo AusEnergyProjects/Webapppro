@@ -4765,6 +4765,25 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-history article { align-items: center; border-top: 1px solid #e4ece8; display: flex; gap: 10px; justify-content: space-between; padding: 10px 0; }
 .trade-quote-history article div { display: grid; gap: 3px; }
 .trade-quote-history span, .trade-quote-history small { color: var(--color-aea-muted); }
+.trade-quote-share, .trade-quote-questions { background: #fff; border: 1px solid #cfe0d9; border-radius: 12px; display: grid; gap: 12px; padding: 14px; }
+.trade-quote-share > header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.trade-quote-share > header span, .trade-quote-questions > span { color: var(--color-aea-green); font-size: .62rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.trade-quote-share h5, .trade-quote-questions h5 { color: var(--color-aea-green-dark); font-size: 1rem; margin: 3px 0; }
+.trade-quote-share p { color: var(--color-aea-muted); margin: 0; }
+.trade-quote-share-link { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto auto; }
+.trade-quote-share-link input, .trade-quote-questions textarea { border: 1px solid #bcd1c8; border-radius: 8px; min-width: 0; padding: 9px; }
+.trade-quote-share-link button, .trade-quote-share-link a, .trade-quote-share-actions button, .trade-quote-questions button { align-items: center; background: #fff; border: 1px solid #16825f; border-radius: 8px; color: #0d674d; cursor: pointer; display: inline-flex; font-size: .68rem; font-weight: 850; justify-content: center; min-height: 40px; padding: 8px 11px; text-decoration: none; }
+.trade-quote-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trade-quote-delivery-confirm { align-items: start; display: flex; gap: 8px; line-height: 1.45; }
+.trade-quote-delivery-confirm input { height: 18px; margin-top: 2px; width: 18px; }
+.trade-quote-share small, .trade-quote-questions small { color: var(--color-aea-muted); }
+.trade-quote-questions article { align-items: start; background: #f4f8f6; border-radius: 9px; display: flex; gap: 10px; justify-content: space-between; padding: 11px; }
+.trade-quote-questions article > div { display: grid; gap: 4px; }
+.trade-quote-questions article p { margin: 5px 0 0; }
+.trade-quote-timeline summary { color: var(--color-aea-green-dark); cursor: pointer; font-weight: 850; }
+.trade-quote-timeline article { align-items: start; border-top: 1px solid #dce7e2; display: grid; gap: 6px; grid-template-columns: 110px 1fr auto; padding: 9px 0; }
+.trade-quote-timeline article strong { text-transform: capitalize; }
+.trade-quote-timeline article small { color: var(--color-aea-muted); }
 
 .customer-trade-quotes { display: grid; gap: 20px; }
 .customer-trade-quotes > header { align-items: flex-start; display: flex; gap: 18px; justify-content: space-between; }
@@ -4871,6 +4890,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .trade-quote-panel > header, .trade-quote-choice-builder > header, .customer-trade-quotes > header, .customer-trade-quote-list > article > header, .customer-appointment-changes > header, .customer-preferred-windows > header, .customer-reschedule-history article > header { flex-direction: column; }
   .customer-reschedule-form, .customer-preferred-windows fieldset, .customer-reschedule-history dl { grid-template-columns: 1fr; }
   .trade-quote-history article { align-items: flex-start; flex-direction: column; }
+  .trade-quote-share-link, .trade-quote-timeline article { grid-template-columns: 1fr; }
+  .trade-quote-share > header, .trade-quote-questions article { flex-direction: column; }
   .customer-quote-choice-group > div, .customer-quote-choice-group.addons > div { grid-template-columns: 1fr; }
   .trade-quote-internal { grid-template-columns: 1fr; }
   .trade-quote-internal > small { grid-column: auto; }
@@ -4882,6 +4903,75 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 }
 
 .customer-property-context-grid { margin-top: 18px; }
+
+.quote-link-shell { background: #edf5f1; color: #123f35; min-height: 100vh; padding: 28px 16px 60px; }
+.quote-link-document { background: #fff; border: 1px solid #cfe0d9; border-radius: 18px; box-shadow: 0 18px 55px rgba(10, 60, 46, .1); display: grid; gap: 22px; margin: 0 auto; max-width: 980px; overflow: hidden; padding: 28px; }
+.quote-link-document > header { align-items: flex-start; border-bottom: 1px solid #dce8e3; display: flex; gap: 18px; justify-content: space-between; padding-bottom: 20px; }
+.quote-link-document > header span, .quote-link-block > span, .quote-link-total > span, .quote-link-terms > span, .quote-link-question > span, .quote-link-signature > span { color: #11805f; font-size: .68rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.quote-link-document h1 { font-size: clamp(1.7rem, 4vw, 2.7rem); margin: 4px 0; }
+.quote-link-document h2 { font-size: 1.3rem; margin: 5px 0 12px; }
+.quote-link-document p { line-height: 1.55; }
+.quote-print-button, .quote-link-question button, .quote-link-signature button { background: #fff; border: 1px solid #0f6e54; border-radius: 9px; color: #0b5a45; cursor: pointer; font-weight: 850; min-height: 44px; padding: 10px 14px; }
+.quote-link-summary { background: #f3f8f5; border-radius: 12px; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; }
+.quote-link-summary div { display: grid; gap: 3px; }
+.quote-link-summary span { color: #587269; font-size: .64rem; font-weight: 850; text-transform: uppercase; }
+.quote-link-summary small { color: #587269; }
+.quote-link-block, .quote-link-terms, .quote-link-question, .quote-link-signature { border: 1px solid #d6e3de; border-radius: 13px; padding: 17px; }
+.quote-link-sections { display: grid; gap: 12px; }
+.quote-link-sections section { display: grid; gap: 8px; }
+.quote-link-sections h4 { border-bottom: 1px solid #e0eae6; margin: 0; padding-bottom: 6px; }
+.quote-link-sections section > div { align-items: start; display: flex; gap: 12px; justify-content: space-between; }
+.quote-link-sections section > div > span { display: grid; gap: 3px; }
+.quote-link-sections small { color: #60776f; }
+.quote-link-choices { border: 0; display: grid; gap: 10px; margin: 0; padding: 0; }
+.quote-link-choices legend { font-size: 1.25rem; font-weight: 900; }
+.quote-link-choices > p { color: #60776f; margin: 0; }
+.quote-link-choices > div { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.quote-link-choices > div > label { border: 1px solid #ccdcd5; border-radius: 13px; cursor: pointer; display: grid; gap: 12px; min-width: 0; padding: 14px; }
+.quote-link-choices > div > label.selected { background: #eef8f3; border-color: #11805f; box-shadow: inset 0 0 0 1px #11805f; }
+.quote-link-choices > div > label.recommended { border-top: 5px solid #11805f; }
+.quote-link-choices label > span { display: grid; gap: 5px; }
+.quote-link-choices label em { color: #11805f; font-size: .65rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
+.quote-link-choices label small { color: #60776f; line-height: 1.45; }
+.quote-link-choices.addons > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.quote-link-choices .quote-link-sections { font-size: .78rem; }
+.quote-link-total { background: #073f31; border-radius: 14px; color: #fff; display: grid; gap: 10px; padding: 20px; }
+.quote-link-total > span, .quote-link-total small { color: #bfe5d8; }
+.quote-link-total > strong { font-size: clamp(2rem, 7vw, 3.6rem); }
+.quote-link-total dl { display: flex; gap: 24px; margin: 0; }
+.quote-link-total dl div { display: grid; gap: 2px; }
+.quote-link-total dd { font-weight: 850; margin: 0; }
+.quote-link-question, .quote-link-signature { display: grid; gap: 10px; }
+.quote-link-question article { background: #f3f8f5; border-radius: 9px; padding: 12px; }
+.quote-link-question article p { margin: 4px 0 10px; }
+.quote-link-question label, .quote-link-signature label { display: grid; gap: 5px; font-weight: 800; }
+.quote-link-question textarea, .quote-link-signature input { border: 1px solid #bcd1c8; border-radius: 9px; font: inherit; padding: 11px; width: 100%; }
+.quote-link-consent { align-items: start; display: flex !important; font-weight: 500 !important; line-height: 1.5; }
+.quote-link-consent input { flex: 0 0 auto; height: 20px; margin-top: 2px; width: 20px; }
+.quote-link-signature > div { display: flex; flex-wrap: wrap; gap: 9px; }
+.quote-link-signature button.primary { background: #0c7658; color: #fff; }
+.quote-link-signature button:disabled, .quote-link-question button:disabled { cursor: not-allowed; opacity: .5; }
+.quote-link-message { background: #fff5cf; border-radius: 8px; margin: 0; padding: 10px; }
+.quote-link-loading, .quote-link-finished { background: #fff; border-radius: 16px; margin: 12vh auto 0; max-width: 620px; padding: 28px; text-align: center; }
+@media (max-width: 720px) {
+  .quote-link-shell { padding: 0; }
+  .quote-link-document { border: 0; border-radius: 0; box-shadow: none; padding: 18px 14px 42px; }
+  .quote-link-document > header { flex-direction: column; }
+  .quote-link-summary, .quote-link-choices > div, .quote-link-choices.addons > div { grid-template-columns: 1fr; }
+  .quote-print-button { width: 100%; }
+  .quote-link-signature > div { display: grid; }
+  .quote-link-total dl { justify-content: space-between; }
+}
+@media print {
+  body { background: #fff !important; }
+  .quote-link-shell { background: #fff; padding: 0; }
+  .quote-link-document { border: 0; box-shadow: none; max-width: none; padding: 0; }
+  .quote-print-button, .quote-link-question, .quote-link-signature, .quote-link-message { display: none !important; }
+  .quote-link-choices > div { grid-template-columns: 1fr; }
+  .quote-link-choices > div > label:not(.selected) { display: none; }
+  .quote-link-total { background: #fff; border: 2px solid #073f31; color: #073f31; }
+  .quote-link-total > span, .quote-link-total small { color: #315f53; }
+}
 .customer-project-evidence-picker { background: #f2f8f5; border: 1px solid #c7ddd3; border-radius: 14px; display: grid; gap: 14px; margin-top: 24px; padding: 16px; }
 .customer-project-evidence-picker > header, .dashboard-customer-evidence > header, .installer-arrival-windows > header { align-items: flex-start; display: flex; gap: 14px; justify-content: space-between; }
 .customer-project-evidence-picker > header span, .dashboard-customer-evidence > header span, .installer-arrival-windows > header span { color: var(--color-aea-green); font-size: .62rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }

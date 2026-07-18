@@ -1503,6 +1503,12 @@ export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances
   selectedTaxCents: integer("selected_tax_cents").notNull().default(0),
   selectedTotalCents: integer("selected_total_cents").notNull().default(0),
   selectionSummary: text("selection_summary").notNull().default(""),
+  signerName: text("signer_name").notNull().default(""),
+  actorType: text("actor_type").notNull().default("verified_account"),
+  quoteLinkId: text("quote_link_id").notNull().default(""),
+  tokenIssue: integer("token_issue").notNull().default(0),
+  commercialReference: text("commercial_reference").notNull().default(""),
+  currency: text("currency").notNull().default("AUD"),
   decidedAt: text("decided_at").notNull(),
   createdAt: text("created_at").notNull(),
 }, (table) => [
@@ -1510,6 +1516,34 @@ export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances
   index("trade_crm_quote_acceptances_owner_idx").on(table.firebaseUid, table.workOrderId, table.decidedAt),
   index("trade_crm_quote_acceptances_customer_idx").on(table.customerFirebaseUid, table.decidedAt),
 ]);
+
+export const tradeCrmQuoteLinks = sqliteTable("trade_crm_quote_links", {
+  id: text("id").primaryKey(), quoteId: text("quote_id").notNull(), quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(), firebaseUid: text("firebase_uid").notNull(), crmCustomerId: text("crm_customer_id").notNull(),
+  tokenHash: text("token_hash").notNull(), encryptedToken: text("encrypted_token").notNull().default(""), tokenIssue: integer("token_issue").notNull().default(1),
+  status: text("status").notNull().default("active"), expiresAt: text("expires_at").notNull(), revokedAt: text("revoked_at").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("trade_crm_quote_links_version_idx").on(table.quoteVersionId), index("trade_crm_quote_links_owner_idx").on(table.firebaseUid, table.workOrderId, table.updatedAt), index("trade_crm_quote_links_expiry_idx").on(table.status, table.expiresAt)]);
+
+export const tradeCrmQuoteEvents = sqliteTable("trade_crm_quote_events", {
+  id: text("id").primaryKey(), quoteLinkId: text("quote_link_id").notNull().default(""), quoteId: text("quote_id").notNull(), quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(), firebaseUid: text("firebase_uid").notNull(), eventType: text("event_type").notNull(), actorType: text("actor_type").notNull().default("system"),
+  summary: text("summary").notNull().default(""), evidenceKey: text("evidence_key").notNull(), occurredAt: text("occurred_at").notNull(),
+}, (table) => [uniqueIndex("trade_crm_quote_events_evidence_idx").on(table.evidenceKey), index("trade_crm_quote_events_version_idx").on(table.quoteVersionId, table.occurredAt), index("trade_crm_quote_events_owner_idx").on(table.firebaseUid, table.workOrderId, table.occurredAt)]);
+
+export const tradeCrmQuoteQuestions = sqliteTable("trade_crm_quote_questions", {
+  id: text("id").primaryKey(), quoteLinkId: text("quote_link_id").notNull(), quoteId: text("quote_id").notNull(), quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(), firebaseUid: text("firebase_uid").notNull(), question: text("question").notNull(), answer: text("answer").notNull().default(""),
+  status: text("status").notNull().default("open"), askedAt: text("asked_at").notNull(), answeredAt: text("answered_at").notNull().default(""), answeredByUid: text("answered_by_uid").notNull().default(""),
+}, (table) => [index("trade_crm_quote_questions_version_idx").on(table.quoteVersionId, table.askedAt), index("trade_crm_quote_questions_owner_idx").on(table.firebaseUid, table.status, table.askedAt)]);
+
+export const tradeCrmQuoteDeliveries = sqliteTable("trade_crm_quote_deliveries", {
+  id: text("id").primaryKey(), quoteLinkId: text("quote_link_id").notNull(), quoteVersionId: text("quote_version_id").notNull(), workOrderId: text("work_order_id").notNull(), firebaseUid: text("firebase_uid").notNull(), crmCustomerId: text("crm_customer_id").notNull(),
+  channel: text("channel").notNull(), provider: text("provider").notNull(), status: text("status").notNull().default("queued"), recipientPreview: text("recipient_preview").notNull().default(""),
+  consentBasis: text("consent_basis").notNull().default(""), idempotencyKey: text("idempotency_key").notNull(), providerMessageId: text("provider_message_id").notNull().default(""), providerStatus: text("provider_status").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0), lastError: text("last_error").notNull().default(""), sentAt: text("sent_at").notNull().default(""), deliveredAt: text("delivered_at").notNull().default(""),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("trade_crm_quote_deliveries_idempotency_idx").on(table.idempotencyKey), index("trade_crm_quote_deliveries_version_idx").on(table.quoteVersionId, table.createdAt)]);
 
 export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   id: text("id").primaryKey(),

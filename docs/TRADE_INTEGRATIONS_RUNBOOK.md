@@ -51,6 +51,19 @@ Xero exports remain drafts so the installer can check account coding and tax tre
 
 The MYOB income account is selected for each first export. This avoids guessing how the installer has structured its chart of accounts.
 
+## QuickBooks accounting
+
+1. Register the production QuickBooks Online OAuth application and allow:
+
+   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/quickbooks`
+
+2. Store the client ID as `QUICKBOOKS_CLIENT_ID` and client secret as `QUICKBOOKS_CLIENT_SECRET`.
+3. Confirm the app requests `com.intuit.quickbooks.accounting` and returns a company `realmId` to the callback.
+4. Connect a test company from an installer account and confirm the encrypted connection is isolated to that trade owner.
+5. Do not enable invoice export until the QuickBooks adapter maps the same provider-neutral AUD reference and integer-cent totals already used by Xero and MYOB.
+
+QuickBooks connection compatibility is available in the integration centre. Invoice export remains deliberately gated until its adapter and reconciliation tests are complete.
+
 ## Square
 
 1. Create the production OAuth application and register:
@@ -75,6 +88,6 @@ After changing any runtime value, deploy a saved Sites version so the new enviro
 - Webhooks reject unsigned requests.
 - The installer integration centre shows only providers with complete server configuration as ready.
 - A provider-signed test payment updates one direct-customer job once and creates one payment audit event.
-- Xero and MYOB reject AEA protected jobs before any provider request is made.
+- Xero, MYOB and QuickBooks reject AEA protected jobs before any provider request is made.
 - One direct-customer job creates at most one accounting invoice record.
 - Accounting refresh never reduces a payment already verified by Stripe or Square.

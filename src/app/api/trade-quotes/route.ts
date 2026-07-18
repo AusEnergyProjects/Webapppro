@@ -5,6 +5,9 @@ import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
 import { jobPacketsForQuote, resolveJobPacketQuoteLines } from "@/lib/trade-job-packet-server";
 import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { newQuoteLinkSecret, hashQuoteLinkSecret, protectQuoteLinkSecret, quoteReviewPath, recoverQuoteLinkSecret } from "@/lib/trade-quote-links";
+import { maskPhotoRequestEmail } from "@/lib/trade-photo-request-delivery";
+import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
 
 export const runtime = "edge";
 
@@ -69,7 +72,7 @@ function itemPayload(item: Row, includeInternal: boolean) {
   return payload;
 }
 
-async function quotePayload(ownerUid: string, workOrderId: string, includeInternal = true) {
+async function quotePayload(ownerUid: string, workOrderId: string, includeInternal = true, origin = "") {
   const db = getD1();
   const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, ownerUid).first<Row>();
   if (!quote) return null;
@@ -79,9 +82,36 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
   const items = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE firebase_uid = ? AND quote_version_id IN (${placeholders}) ORDER BY quote_version_id, position`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
   const choices = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_choices WHERE firebase_uid = ? AND quote_version_id IN (${placeholders}) ORDER BY quote_version_id, position`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
   const acceptances = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_acceptances WHERE firebase_uid = ? AND quote_version_id IN (${placeholders})`).bind(ownerUid, ...versionIds).all<Row>() : { results: [] as Row[] };
+  const currentVersion = versions.results.find((row) => Number(row.version_number) === Number(quote.current_version_number));
+  let link = currentVersion ? await db.prepare("SELECT * FROM trade_crm_quote_links WHERE quote_version_id = ? AND firebase_uid = ?").bind(currentVersion.id, ownerUid).first<Row>() : null;
+  if (link && link.status === "active" && String(link.expires_at) <= new Date().toISOString()) {
+    const expiredAt = new Date().toISOString();
+    await db.batch([
+      db.prepare("UPDATE trade_crm_quote_links SET status = 'expired', token_hash = '', encrypted_token = '', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'active'")
+        .bind(expiredAt, link.id, ownerUid),
+      db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'expired', 'system', 'Secure quote link expired.', ?, ?)`)
+        .bind(crypto.randomUUID(), link.id, link.quote_id, link.quote_version_id, link.work_order_id, ownerUid, `expired:${link.id}:${link.token_issue}`, expiredAt),
+    ]);
+    link = { ...link, status: "expired", token_hash: "", encrypted_token: "", updated_at: expiredAt };
+  }
+  const [events, questions, deliveries] = currentVersion ? await Promise.all([
+    db.prepare("SELECT event_type, actor_type, summary, occurred_at FROM trade_crm_quote_events WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY occurred_at DESC LIMIT 100").bind(currentVersion.id, ownerUid).all<Row>(),
+    db.prepare("SELECT id, question, answer, status, asked_at, answered_at FROM trade_crm_quote_questions WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY asked_at").bind(currentVersion.id, ownerUid).all<Row>(),
+    db.prepare("SELECT id, channel, provider, status, recipient_preview, attempts, provider_status, last_error, sent_at, delivered_at, created_at FROM trade_crm_quote_deliveries WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY created_at DESC").bind(currentVersion.id, ownerUid).all<Row>(),
+  ]) : [{ results: [] as Row[] }, { results: [] as Row[] }, { results: [] as Row[] }];
+  let shareUrl = "";
+  if (link && link.status === "active" && link.token_hash && origin) {
+    try { shareUrl = `${origin}${quoteReviewPath(String(link.id), await recoverQuoteLinkSecret(String(link.encrypted_token), String(link.id), Number(link.token_issue), String(link.token_hash)))}`; } catch { shareUrl = ""; }
+  }
   return {
     id: String(quote.id), workOrderId: String(quote.work_order_id), customerId: String(quote.crm_customer_id), serviceSiteId: String(quote.service_site_id),
     quoteNumber: String(quote.quote_number), currentVersionNumber: Number(quote.current_version_number), status: String(quote.status),
+    link: link ? { id: String(link.id), status: String(link.status), expiresAt: String(link.expires_at), tokenIssue: Number(link.token_issue), shareUrl,
+      recipientPreview: maskPhotoRequestEmail(String(currentVersion?.acceptance_email || "")) } : null,
+    timeline: events.results.map((event) => ({ type: String(event.event_type), actorType: String(event.actor_type), summary: String(event.summary), occurredAt: String(event.occurred_at) })),
+    questions: questions.results.map((question) => ({ id: String(question.id), question: String(question.question), answer: String(question.answer || ""), status: String(question.status), askedAt: String(question.asked_at), answeredAt: String(question.answered_at || "") })),
+    deliveries: deliveries.results.map((delivery) => ({ id: String(delivery.id), channel: String(delivery.channel), provider: String(delivery.provider), status: String(delivery.status), recipientPreview: String(delivery.recipient_preview), attempts: Number(delivery.attempts), providerStatus: String(delivery.provider_status || ""), lastError: String(delivery.last_error || ""), sentAt: String(delivery.sent_at || ""), deliveredAt: String(delivery.delivered_at || ""), createdAt: String(delivery.created_at) })),
     versions: versions.results.map((version) => {
       const versionItems = items.results.filter((item) => item.quote_version_id === version.id);
       const versionChoices = choices.results.filter((choice) => choice.quote_version_id === version.id);
@@ -101,7 +131,8 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
           sellCentsExGst: versionItems.reduce((sum, item) => sum + Number(item.subtotal_cents), 0),
           marginCentsExGst: versionItems.reduce((sum, item) => sum + Number(item.subtotal_cents), 0) - internalCostCents } } : {}),
         acceptance: acceptance ? { decision: String(acceptance.decision), actorEmail: String(acceptance.actor_email), decidedAt: String(acceptance.decided_at),
-          consentStatement: String(acceptance.consent_statement), selectionSummary: String(acceptance.selection_summary || ""), selectedTotalCents: Number(acceptance.selected_total_cents || 0) } : null,
+          actorType: String(acceptance.actor_type || "verified_account"), signerName: String(acceptance.signer_name || ""), consentStatement: String(acceptance.consent_statement),
+          selectionSummary: String(acceptance.selection_summary || ""), selectedTotalCents: Number(acceptance.selected_total_cents || 0) } : null,
       };
     }),
   };
@@ -151,7 +182,7 @@ export async function GET(request: Request) {
     return adminJson({ ok: true, access: { role: access.role, canViewInternal: true }, job: { workNumber: job.work_number, title: job.title,
       customerNumber: job.customer_number, customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" "), siteLabel: job.site_label,
       siteSummary: [job.address_line_1, job.suburb, job.address_state, job.postcode].filter(Boolean).join(", ") }, authorisedEmails: emails,
-      priceBookItems: await priceBookItemsForQuote(access.ownerUid), jobPackets: await jobPacketsForQuote(access.ownerUid), quote: await quotePayload(access.ownerUid, workOrderId) });
+      priceBookItems: await priceBookItemsForQuote(access.ownerUid), jobPackets: await jobPacketsForQuote(access.ownerUid), quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -190,7 +221,13 @@ export async function POST(request: Request) {
           statements.push(db.prepare(`DELETE FROM trade_crm_quote_choices WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, access.ownerUid));
         } else {
           versionNumber += 1; versionId = crypto.randomUUID();
-          if (current.status === "issued") statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, current.id, access.ownerUid));
+          if (current.status === "issued") {
+            statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, current.id, access.ownerUid));
+            statements.push(db.prepare("UPDATE trade_crm_quote_links SET status = 'superseded', token_hash = '', encrypted_token = '', updated_at = ? WHERE quote_version_id = ? AND firebase_uid = ? AND status = 'active'").bind(now, current.id, access.ownerUid));
+            statements.push(db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
+              SELECT ?, link.id, link.quote_id, link.quote_version_id, link.work_order_id, link.firebase_uid, 'superseded', 'office', 'A new quote draft superseded this secure link.', ?, ? FROM trade_crm_quote_links link WHERE link.quote_version_id = ? AND link.firebase_uid = ?`)
+              .bind(crypto.randomUUID(), `superseded:${current.id}`, now, current.id, access.ownerUid));
+          }
           statements.push(db.prepare(`INSERT INTO trade_crm_quote_versions (id, quote_id, firebase_uid, version_number, status, acceptance_email, subtotal_cents, tax_cents, total_cents, terms, valid_until, consent_statement, issued_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '', '', ?, ?)`).bind(versionId, quoteId, access.ownerUid, versionNumber, customerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents, terms, validUntil, now, now));
           statements.push(db.prepare(`UPDATE trade_crm_quotes SET current_version_number = ?, status = 'draft', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(versionNumber, job.crm_customer_id, job.service_site_id, now, quoteId, access.ownerUid));
@@ -206,7 +243,7 @@ export async function POST(request: Request) {
       const displayTotal = choiceDefaultTotal(base, choices);
       statements.push(db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(displayTotal, now, workOrderId, access.ownerUid));
       await db.batch(statements);
-      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId) });
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
     }
     if (action === "issue_quote") {
       const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, access.ownerUid).first<Row>();
@@ -220,14 +257,83 @@ export async function POST(request: Request) {
       const itemCount = await db.prepare(`SELECT COUNT(*) count FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(version.id, access.ownerUid).first<Row>();
       if (!Number(itemCount?.count)) return adminJson({ ok: false, error: "Add at least one quote line before issuing." }, 400);
       const consentStatement = `I accept quote ${quote.quote_number} version ${version.version_number}, including my recorded choices and final server-calculated total, subject to its recorded terms.`;
+      const linkId = crypto.randomUUID(); const secret = newQuoteLinkSecret(); const tokenIssue = 1;
+      const validExpiry = version.valid_until ? new Date(`${version.valid_until}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000);
+      const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
       await db.batch([
         db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, quote.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`).bind(consentStatement, now, now, version.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_quotes SET status = 'issued', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(job.crm_customer_id, job.service_site_id, now, quote.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_job_details SET quote_status = 'sent', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(now, workOrderId, access.ownerUid),
-        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'quote_issued', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${quote.quote_number} version ${version.version_number} issued for authenticated customer review.`, now),
+        db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'quote_issued', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${quote.quote_number} version ${version.version_number} issued with secure customer review.`, now),
+        db.prepare(`INSERT INTO trade_crm_quote_links (id, quote_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, token_hash, encrypted_token, token_issue, status, expires_at, revoked_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, '', ?, ?)`)
+          .bind(linkId, quote.id, version.id, workOrderId, access.ownerUid, job.crm_customer_id, await hashQuoteLinkSecret(secret), await protectQuoteLinkSecret(linkId, tokenIssue, secret), tokenIssue, expiresAt, now, now),
+        db.prepare(`INSERT INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'issued', 'office', 'Secure quote link issued.', ?, ?)`)
+          .bind(crypto.randomUUID(), linkId, quote.id, version.id, workOrderId, access.ownerUid, `issued:${version.id}`, now),
       ]);
-      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId) });
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+    }
+    if (["replace_link", "revoke_link", "send_quote", "answer_question"].includes(action)) {
+      const quote = await db.prepare("SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?").bind(workOrderId, access.ownerUid).first<Row>();
+      if (!quote) throw new Error("QUOTE_NOT_FOUND");
+      const version = await db.prepare("SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND status = 'issued'").bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>();
+      if (!version) throw new Error("IMMUTABLE_VERSION");
+      const link = await db.prepare("SELECT * FROM trade_crm_quote_links WHERE quote_version_id = ? AND firebase_uid = ?").bind(version.id, access.ownerUid).first<Row>();
+      if (!link) throw new Error("QUOTE_NOT_FOUND");
+      if (action === "revoke_link") {
+        await db.batch([
+          db.prepare("UPDATE trade_crm_quote_links SET status = 'revoked', token_hash = '', encrypted_token = '', revoked_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, now, link.id, access.ownerUid),
+          db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at) VALUES (?, ?, ?, ?, ?, ?, 'revoked', 'office', 'Secure quote link revoked.', ?, ?)`)
+            .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `revoked:${version.id}:${link.token_issue}`, now),
+        ]);
+      } else if (action === "replace_link") {
+        const secret = newQuoteLinkSecret(); const tokenIssue = Number(link.token_issue) + 1;
+        const validExpiry = version.valid_until ? new Date(`${version.valid_until}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000);
+        const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
+        await db.batch([
+          db.prepare("UPDATE trade_crm_quote_links SET token_hash = ?, encrypted_token = ?, token_issue = ?, status = 'active', expires_at = ?, revoked_at = '', updated_at = ? WHERE id = ? AND firebase_uid = ?")
+            .bind(await hashQuoteLinkSecret(secret), await protectQuoteLinkSecret(String(link.id), tokenIssue, secret), tokenIssue, expiresAt, now, link.id, access.ownerUid),
+          db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'replaced', updated_at = ? WHERE quote_link_id = ? AND status IN ('queued','sending','failed')").bind(now, link.id),
+          db.prepare(`INSERT INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at) VALUES (?, ?, ?, ?, ?, ?, 'replaced', 'office', 'Secure quote link replaced.', ?, ?)`)
+            .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `replaced:${version.id}:${tokenIssue}`, now),
+        ]);
+      } else if (action === "answer_question") {
+        const questionId = cleanAdminText(body.questionId, 180); const answer = cleanAdminText(body.answer, 1000); if (!questionId || answer.length < 2) return adminJson({ ok: false, error: "Enter a clear response." }, 400);
+        const result = await db.prepare("UPDATE trade_crm_quote_questions SET answer = ?, status = 'answered', answered_at = ?, answered_by_uid = ? WHERE id = ? AND quote_version_id = ? AND firebase_uid = ? AND status = 'open'")
+          .bind(answer, now, access.actorUid, questionId, version.id, access.ownerUid).run(); if (Number(result.meta.changes || 0) !== 1) return adminJson({ ok: false, error: "That question is no longer awaiting a response." }, 409);
+        await db.prepare(`INSERT INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at) VALUES (?, ?, ?, ?, ?, ?, 'question_answered', 'office', 'Trade office answered the customer question.', ?, ?)`)
+          .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `answer:${questionId}`, now).run();
+      } else {
+        const channel = cleanAdminText(body.channel, 20) || "email";
+        if (channel === "sms") {
+          if (process.env.TLINK_SMS_SENDER_APPROVED !== "true") return adminJson({ ok: false, error: "Quote SMS stays unavailable until the approved sender gate is enabled." }, 409);
+          return adminJson({ ok: false, error: "Quote SMS delivery is not enabled for this release." }, 409);
+        }
+        if (channel !== "email") return adminJson({ ok: false, error: "Choose email delivery or copy the secure link." }, 400);
+        if (body.consentConfirmed !== true) return adminJson({ ok: false, error: "Confirm that this customer asked to receive the current quote by email." }, 400);
+        if (link.status !== "active" || !link.token_hash) return adminJson({ ok: false, error: "Replace the secure link before sending it." }, 409);
+        const providers = serviceReminderProviderConfiguration(); if (!providers.email.configured || !providers.email.callbacks) return adminJson({ ok: false, error: "The authenticated email provider is not ready." }, 503);
+        const priorOptOut = await db.prepare("SELECT 1 stopped FROM trade_crm_quote_deliveries WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email' AND status = 'opted_out' LIMIT 1").bind(access.ownerUid, job.crm_customer_id).first<Row>();
+        if (priorOptOut) return adminJson({ ok: false, error: "This customer has opted out of quote email delivery." }, 409);
+        const idempotencyKey = `quote:${version.id}:${link.token_issue}:email:initial`; const existing = await db.prepare("SELECT id FROM trade_crm_quote_deliveries WHERE idempotency_key = ?").bind(idempotencyKey).first<Row>();
+        if (!existing) {
+          const secret = await recoverQuoteLinkSecret(String(link.encrypted_token), String(link.id), Number(link.token_issue), String(link.token_hash)); const shareUrl = `${new URL(request.url).origin}${quoteReviewPath(String(link.id), secret)}`; const email = String(version.acceptance_email || ""); const deliveryId = crypto.randomUUID();
+          await db.prepare(`INSERT INTO trade_crm_quote_deliveries (id, quote_link_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, channel, provider, status, recipient_preview, consent_basis, idempotency_key, provider_message_id, provider_status, attempts, last_error, sent_at, delivered_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'email', 'resend', 'sending', ?, 'installer_confirmed_current_quote', ?, '', '', 1, '', '', '', ?, ?)`)
+            .bind(deliveryId, link.id, version.id, workOrderId, access.ownerUid, job.crm_customer_id, maskPhotoRequestEmail(email), idempotencyKey, now, now).run();
+          try {
+            const sent = await sendServiceReminderProviderMessage({ channel: "email", recipient: email, subject: `Quote ${quote.quote_number} ready for review`, body: `Your quote is ready to review, ask questions, sign or decline:\n\n${shareUrl}\n\nThis private link expires ${String(link.expires_at).slice(0, 10)}.`, idempotencyKey, callbackUrl: `${new URL(request.url).origin}/api/service-reminder-provider-events/resend`, messageType: "trade_quote" });
+            await db.batch([
+              db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'sent', provider_message_id = ?, provider_status = ?, sent_at = ?, updated_at = ? WHERE id = ?").bind(sent.providerMessageId, sent.providerStatus, now, now, deliveryId),
+              db.prepare(`INSERT INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at) VALUES (?, ?, ?, ?, ?, ?, 'sent', 'office', 'Secure quote email sent.', ?, ?)`)
+                .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `sent:${idempotencyKey}`, now),
+            ]);
+          } catch (error) { await db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?").bind(error instanceof Error ? error.message.slice(0, 180) : "Provider send failed.", now, deliveryId).run(); throw error; }
+        }
+      }
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
     }
     return adminJson({ ok: false, error: "Unsupported quote action." }, 400);
   } catch (error) { return errorResponse(error); }
