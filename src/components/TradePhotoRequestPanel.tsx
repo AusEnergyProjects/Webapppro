@@ -13,6 +13,7 @@ type RequestRecord = {
   expiresAt: string;
   lastSharedAt: string;
   linkActive: boolean;
+  tokenIssue: number;
   uploadCounts: Record<string, number>;
   sourceTemplate: null | { id: string; versionId: string; version: number; name: string; serviceCategory: string; requirements: PhotoRequirement[] };
   sourceTemplateEdited: boolean;
@@ -20,11 +21,15 @@ type RequestRecord = {
   templateMissingFeedback: boolean;
 };
 type TemplateOption = { id: string; versionId: string; version: number; name: string; serviceCategory: string; requirements: PhotoRequirement[] };
+type DeliveryChannel = { channel: "email" | "sms"; recipientPreview: string; available: boolean; reason: string; provider: string; configured: boolean; consentBasis: string };
+type DeliveryRecord = { id: string; channel: "email" | "sms"; provider: string; intent: string; status: string; eligibilityReason: string; attempts: number; providerStatus: string; lastError: string; queuedAt: string; sentAt: string; deliveredAt: string; failedAt: string; updatedAt: string };
+type DeliveryOverview = { channels: DeliveryChannel[]; deliveries: DeliveryRecord[]; reminderAvailable: boolean; linkDeliverable: boolean };
 type Result = {
   ok?: boolean;
   request?: RequestRecord | null;
   defaults?: PhotoRequirement[];
   templates?: TemplateOption[];
+  delivery?: DeliveryOverview;
   shareUrl?: string;
   error?: string;
 };
@@ -38,6 +43,8 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
   const [templateFeedback, setTemplateFeedback] = useState<PhotoTemplateFeedback>({});
   const [templateMissingFeedback, setTemplateMissingFeedback] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [delivery, setDelivery] = useState<DeliveryOverview>({ channels: [], deliveries: [], reminderAvailable: false, linkDeliverable: false });
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -50,6 +57,7 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
     setSelectedTemplateVersionId(result.request?.sourceTemplate?.versionId || "");
     setTemplateFeedback(result.request?.templateFeedback || {});
     setTemplateMissingFeedback(Boolean(result.request?.templateMissingFeedback));
+    setDelivery(result.delivery || { channels: [], deliveries: [], reminderAvailable: false, linkDeliverable: false });
     if (result.shareUrl) setShareUrl(result.shareUrl);
   }, []);
 
@@ -124,6 +132,25 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
     finally { setBusy(""); }
   }
 
+  async function deliver(channel: "email" | "sms", deliveryIntent: "initial" | "resend" | "expiry_reminder", deliveryId = "") {
+    const actionName = deliveryId ? "retry_delivery" : "send_link";
+    setBusy(`${actionName}:${channel}:${deliveryId || deliveryIntent}`);
+    setStatus(deliveryId ? "Rechecking the current link and delivery controls..." : "Sending the current secure link...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-photo-requests", { method: "POST", headers: {
+        "Content-Type": "application/json", Authorization: `Bearer ${token}`,
+      }, body: JSON.stringify({ action: actionName, workOrderId, channel, deliveryIntent, deliveryId, consentConfirmed }) });
+      const result = await response.json().catch(() => ({})) as Result;
+      if (!response.ok || !result.ok) throw new Error(result.error || "The secure link could not be delivered.");
+      apply(result); setConsentConfirmed(false);
+      setStatus(deliveryId ? "Delivery retry recorded against the current secure link."
+        : deliveryIntent === "expiry_reminder" ? "Expiry reminder accepted for delivery."
+        : deliveryIntent === "resend" ? "Secure link resend accepted for delivery." : "Secure link accepted for delivery.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The secure link could not be delivered."); }
+    finally { setBusy(""); }
+  }
+
   async function copyLink() {
     try { await navigator.clipboard.writeText(shareUrl); setStatus("Secure customer link copied."); }
     catch { setStatus("Copy was blocked by this browser. Select the link and copy it manually."); }
@@ -140,6 +167,7 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
   if (loading) return <div className={styles.state}><strong>Opening customer photo requests</strong><span>Loading the editable request...</span></div>;
 
   const totalUploads = Object.values(record?.uploadCounts || {}).reduce((sum, count) => sum + count, 0);
+  const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   return <section className={styles.panel} aria-labelledby="trade-photo-request-title">
     <header className={styles.heading}><div><span>Request info</span><h4 id="trade-photo-request-title">Customer photo request</h4><p>Start with service guidance, then edit the exact photos this job needs. The secure link places accepted uploads into this job proof.</p></div><div><strong>{totalUploads}</strong><span>customer photos</span></div></header>
     <div className={styles.boundary}><strong>Direct customer only</strong><span>The link contains an opaque capability token, expires after 30 days and never includes the customer name, contact details or address.</span></div>
@@ -164,6 +192,7 @@ export function TradePhotoRequestPanel({ user, workOrderId }: { user: User; work
     })}><option value="">No feedback</option><option value="useful">Useful</option><option value="unclear">Unclear</option><option value="unnecessary">Not needed</option></select></label>)}</div><label className={styles.missing}><input type="checkbox" checked={templateMissingFeedback} onChange={(event) => setTemplateMissingFeedback(event.target.checked)} /><span>The template was missing a photo requirement for this type of work.</span></label><button type="button" disabled={Boolean(busy)} onClick={() => void action("save_feedback")}>{busy === "save_feedback" ? "Saving..." : "Save template feedback"}</button></section>}
     <div className={styles.editorActions}><button type="button" className={styles.secondary} disabled={requirements.length >= 12 || Boolean(busy)} onClick={addRequirement}>Add photo requirement</button><button type="button" disabled={Boolean(busy)} onClick={() => void action("save_request")}>{busy === "save_request" ? "Saving..." : record ? "Save requirement changes" : "Create request and link"}</button></div>
     {record && <section className={styles.linkCard}><div><span>{record.linkActive ? "Active secure link" : record.status === "revoked" ? "Link revoked" : "Link expired"}</span><strong>{record.linkActive ? `Available until ${new Date(record.expiresAt).toLocaleDateString("en-AU")}` : "Create a replacement before sending"}</strong><small>Requirement revision {record.revision}. Customer uploads remain attached if the request wording changes.</small></div><button type="button" disabled={Boolean(busy)} onClick={() => void action("issue_link")}>{busy === "issue_link" ? "Creating..." : record.linkActive ? "Replace secure link" : "Create secure link"}</button>{record.linkActive && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void revoke()}>{busy === "revoke" ? "Revoking..." : "Revoke link"}</button>}</section>}
+    {record && <section className={styles.delivery}><header><div><span>Send request info</span><strong>Preview the permitted destination</strong><p>The provider receives the current secure link only after you confirm this customer requested the operational message.</p></div><small>Requirement revision {record.revision} | Link issue {record.tokenIssue || "legacy"}</small></header>{!delivery.linkDeliverable && <div className={styles.deliveryNotice}><strong>One link replacement required</strong><span>This active link predates protected direct delivery. Replace it once, then send the new current link.</span></div>}<label className={styles.consent}><input type="checkbox" checked={consentConfirmed} onChange={(event) => setConsentConfirmed(event.target.checked)} /><span>I confirm this customer asked to receive this job photo request through the destination shown below.</span></label><div className={styles.channels}>{delivery.channels.map((channel) => { const prior = delivery.deliveries.some((item) => item.channel === channel.channel && ["sent", "delivered"].includes(item.status)); return <article key={channel.channel} className={channel.available ? styles.ready : styles.held}><header><div><span>{channel.channel.toUpperCase()}</span><strong>{channel.recipientPreview || "No eligible destination"}</strong></div><small>{channel.available ? `${readable(channel.consentBasis)} | ${channel.provider} ready` : channel.reason}</small></header><div><button type="button" disabled={!channel.available || !delivery.linkDeliverable || !consentConfirmed || Boolean(busy)} onClick={() => void deliver(channel.channel, "initial")}>Send by {channel.channel === "email" ? "email" : "SMS"}</button><button type="button" disabled={!prior || !channel.available || !delivery.linkDeliverable || !consentConfirmed || Boolean(busy)} onClick={() => void deliver(channel.channel, "resend")}>Resend link</button>{delivery.reminderAvailable && <button type="button" disabled={!channel.available || !delivery.linkDeliverable || !consentConfirmed || Boolean(busy)} onClick={() => void deliver(channel.channel, "expiry_reminder")}>Send expiry reminder</button>}</div></article>; })}</div><section className={styles.history}><header><strong>Delivery history</strong><small>No customer contact details or link secrets are stored in this view.</small></header>{delivery.deliveries.map((item) => <article key={item.id}><div><strong>{item.channel.toUpperCase()} | {readable(item.intent)}</strong><span>{readable(item.status)} | {item.providerStatus || item.eligibilityReason || item.lastError || item.provider}</span><small>{new Date(item.updatedAt).toLocaleString("en-AU")} | {item.attempts} of 3 attempts</small></div>{["failed", "waiting_for_channel", "waiting_for_sender", "waiting_for_limit"].includes(item.status) && item.attempts < 3 && <button type="button" disabled={Boolean(busy)} onClick={() => void deliver(item.channel, "initial", item.id)}>Retry</button>}</article>)}{!delivery.deliveries.length && <p>No secure-link deliveries have been recorded.</p>}</section></section>}
     {shareUrl && <section className={styles.share}><label><span>Secure link, visible until this page reloads</span><input readOnly value={shareUrl} onFocus={(event) => event.currentTarget.select()} /></label><button type="button" onClick={() => void copyLink()}>Copy link</button><button type="button" onClick={() => void shareLink()}>Share link</button></section>}
     {status && <p className={styles.status} role="status">{status}</p>}
   </section>;

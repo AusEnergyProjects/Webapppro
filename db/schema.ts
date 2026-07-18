@@ -1643,6 +1643,8 @@ export const tradeCrmPhotoRequests = sqliteTable("trade_crm_photo_requests", {
   firebaseUid: text("firebase_uid").notNull(),
   crmCustomerId: text("crm_customer_id").notNull(),
   tokenHash: text("token_hash").notNull(),
+  encryptedToken: text("encrypted_token").notNull().default(""),
+  tokenIssue: integer("token_issue").notNull().default(0),
   status: text("status").notNull().default("active"),
   requirements: text("requirements").notNull().default("[]"),
   revision: integer("revision").notNull().default(1),
@@ -1710,6 +1712,56 @@ export const tradeCrmPhotoRequestEvents = sqliteTable("trade_crm_photo_request_e
 }, (table) => [
   index("trade_crm_photo_request_events_request_idx").on(table.photoRequestId, table.createdAt),
   index("trade_crm_photo_request_events_job_idx").on(table.firebaseUid, table.workOrderId, table.createdAt),
+]);
+
+export const tradeCrmPhotoRequestDeliveries = sqliteTable("trade_crm_photo_request_deliveries", {
+  id: text("id").primaryKey(),
+  photoRequestId: text("photo_request_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  customerUid: text("customer_uid").notNull().default(""),
+  channel: text("channel").notNull(),
+  provider: text("provider").notNull(),
+  requestRevision: integer("request_revision").notNull(),
+  tokenIssue: integer("token_issue").notNull(),
+  intent: text("intent").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  consentBasis: text("consent_basis").notNull(),
+  consentConfirmedAt: text("consent_confirmed_at").notNull(),
+  status: text("status").notNull().default("queued"),
+  eligibilityReason: text("eligibility_reason").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  queuedAt: text("queued_at").notNull(),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_request_deliveries_idempotency_idx").on(table.idempotencyKey),
+  uniqueIndex("trade_crm_photo_request_deliveries_provider_message_idx").on(table.provider, table.providerMessageId),
+  index("trade_crm_photo_request_deliveries_request_idx").on(table.photoRequestId, table.createdAt),
+  index("trade_crm_photo_request_deliveries_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+  index("trade_crm_photo_request_deliveries_customer_channel_idx").on(table.firebaseUid, table.crmCustomerId, table.channel, table.createdAt),
+]);
+
+export const tradeCrmPhotoRequestDeliveryEvents = sqliteTable("trade_crm_photo_request_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_photo_request_delivery_events_provider_idx").on(table.providerEventKey),
+  index("trade_crm_photo_request_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
 ]);
 
 export const tradeCrmSignoffs = sqliteTable("trade_crm_signoffs", {

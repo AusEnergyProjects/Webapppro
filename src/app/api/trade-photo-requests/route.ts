@@ -2,6 +2,8 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
+import { photoRequestDeliveryOverview, retryPhotoRequestDelivery, sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 import {
   defaultPhotoRequirements,
   hashPhotoRequestSecret,
@@ -21,6 +23,8 @@ type PhotoRequestRecord = {
   firebase_uid: string;
   crm_customer_id: string;
   token_hash: string;
+  encrypted_token: string;
+  token_issue: number;
   status: string;
   requirements: string;
   revision: number;
@@ -72,6 +76,16 @@ function responseForError(error: unknown) {
   if (code === "PHOTO_REQUEST_CHANGED") return adminJson({ ok: false, error: "This request changed in another session. Reload before saving again." }, 409);
   if (code === "PHOTO_TEMPLATE_NOT_AVAILABLE") return adminJson({ ok: false, error: "That published photo template is no longer available. Choose another template or use the service defaults." }, 409);
   if (code === "PHOTO_TEMPLATE_REQUIRED") return adminJson({ ok: false, error: "This request was not created from a business photo template." }, 409);
+  if (code === "CONSENT_CONFIRMATION_REQUIRED") return adminJson({ ok: false, error: "Confirm that this customer asked to receive this job photo request through the previewed channel." }, 400);
+  if (code === "waiting_for_sender") return adminJson({ ok: false, error: "SMS stays off until the TLink Australian sender is approved." }, 409);
+  if (code === "waiting_for_channel") return adminJson({ ok: false, error: "This provider channel and its authenticated callbacks are not active." }, 409);
+  if (code === "waiting_for_limit") return adminJson({ ok: false, error: "This channel has reached its daily safety limit." }, 429);
+  if (code === "opted_out" || code === "skipped") return adminJson({ ok: false, error: "This customer or channel does not currently pass the delivery consent checks." }, 409);
+  if (code === "stopped" || code === "PHOTO_REQUEST_LINK_STALE") return adminJson({ ok: false, error: "This request link is no longer current. Create a replacement before sending." }, 409);
+  if (code === "PHOTO_REQUEST_REMINDER_NOT_DUE") return adminJson({ ok: false, error: "The expiry reminder becomes available during the final seven days." }, 409);
+  if (code === "PHOTO_REQUEST_RESEND_LIMIT") return adminJson({ ok: false, error: "This link has reached its two deliberate resends for this channel." }, 409);
+  if (code === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This delivery cannot be retried." }, 409);
+  if (code === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Photo request delivery not found." }, 404);
   return adminJson({ ok: false, error: "The customer photo request could not be completed." }, 500);
 }
 
@@ -132,13 +146,14 @@ async function publishedTemplateOptions(ownerUid: string) {
 async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "") {
   const record = await getD1().prepare(`SELECT * FROM trade_crm_photo_requests WHERE work_order_id = ? AND firebase_uid = ?`)
     .bind(job.id, access.ownerUid).first<PhotoRequestRecord>();
-  const [media, templates, sourceVersion] = await Promise.all([
+  const [media, templates, sourceVersion, delivery] = await Promise.all([
     record ? getD1().prepare(`SELECT photo_requirement_id, COUNT(*) count
       FROM trade_crm_job_media WHERE firebase_uid = ? AND work_order_id = ? AND photo_request_id = ?
       GROUP BY photo_requirement_id`)
       .bind(access.ownerUid, job.id, record.id).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     publishedTemplateOptions(access.ownerUid),
     record?.source_template_version_id ? templateVersion(access.ownerUid, record.source_template_version_id) : Promise.resolve(null),
+    record ? photoRequestDeliveryOverview(record.id, access.ownerUid) : Promise.resolve({ channels: [], deliveries: [], reminderAvailable: false, linkDeliverable: false }),
   ]);
   const sourceRequirements = sourceVersion ? storedRequirements(sourceVersion.requirements) : [];
   let templateFeedback = {};
@@ -153,6 +168,7 @@ async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "")
       expiresAt: record.expires_at,
       lastSharedAt: record.last_shared_at,
       linkActive: record.status === "active" && record.expires_at > new Date().toISOString(),
+      tokenIssue: Number(record.token_issue),
       uploadCounts: Object.fromEntries(media.results.map((row) => [String(row.photo_requirement_id), Number(row.count)])),
       sourceTemplate: sourceVersion ? { id: sourceVersion.template_id, versionId: sourceVersion.id,
         version: Number(sourceVersion.version), name: sourceVersion.name, serviceCategory: sourceVersion.service_category,
@@ -164,6 +180,7 @@ async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "")
     defaults: defaultPhotoRequirements(job.service_category),
     templates,
     job: { id: job.id, workNumber: job.work_number, title: job.title, serviceCategory: job.service_category },
+    delivery,
     shareUrl,
   };
 }
@@ -223,14 +240,15 @@ export async function POST(request: Request) {
         const sourceRequirements = sourceVersion ? storedRequirements(sourceVersion.requirements) : [];
         const sourceEdited = sourceVersion ? !photoRequirementsEqual(sourceRequirements, requirements) : false;
         const tokenHash = await hashPhotoRequestSecret(secret);
+        const encryptedToken = await encryptProtectedPayload({ requestId, secret, tokenIssue: 1 });
         const expiresAt = photoRequestExpiry(new Date(now));
         await db.batch([
           db.prepare(`INSERT INTO trade_crm_photo_requests
-            (id, work_order_id, firebase_uid, crm_customer_id, token_hash, status, requirements, revision,
+            (id, work_order_id, firebase_uid, crm_customer_id, token_hash, encrypted_token, token_issue, status, requirements, revision,
              expires_at, last_shared_at, source_template_id, source_template_version_id, source_template_version,
              source_template_edited, template_feedback, template_missing_feedback, created_by_uid, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'active', ?, 1, ?, ?, ?, ?, ?, ?, '{}', 0, ?, ?, ?)`)
-            .bind(requestId, workOrderId, access.ownerUid, job.crm_customer_id, tokenHash, JSON.stringify(requirements), expiresAt, now,
+            VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, 1, ?, ?, ?, ?, ?, ?, '{}', 0, ?, ?, ?)`)
+            .bind(requestId, workOrderId, access.ownerUid, job.crm_customer_id, tokenHash, encryptedToken, JSON.stringify(requirements), expiresAt, now,
               sourceVersion?.template_id || "", sourceVersion?.id || "", Number(sourceVersion?.version || 0), sourceEdited ? 1 : 0,
               access.actorUid, now, now),
           eventStatement(db, { requestId, workOrderId, ownerUid: access.ownerUid, actorUid: access.actorUid, eventType: "request_created", revision: 1, now }),
@@ -258,13 +276,39 @@ export async function POST(request: Request) {
       if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
       const secret = newPhotoRequestSecret();
       const tokenHash = await hashPhotoRequestSecret(secret);
+      const tokenIssue = Number(current.token_issue || 0) + 1;
+      const encryptedToken = await encryptProtectedPayload({ requestId: current.id, secret, tokenIssue });
       const expiresAt = photoRequestExpiry(new Date(now));
       await db.batch([
-        db.prepare(`UPDATE trade_crm_photo_requests SET token_hash = ?, status = 'active', expires_at = ?, last_shared_at = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ?`).bind(tokenHash, expiresAt, now, now, current.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_photo_requests SET token_hash = ?, encrypted_token = ?, token_issue = ?, status = 'active',
+          expires_at = ?, last_shared_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+          .bind(tokenHash, encryptedToken, tokenIssue, expiresAt, now, now, current.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'replaced',
+          eligibility_reason = 'A newer secure link replaced this delivery.', updated_at = ?
+          WHERE photo_request_id = ? AND token_issue < ? AND status IN ('queued', 'sending', 'failed', 'waiting_for_channel', 'waiting_for_sender', 'waiting_for_limit')`)
+          .bind(now, current.id, tokenIssue),
         eventStatement(db, { requestId: current.id, workOrderId, ownerUid: access.ownerUid, actorUid: access.actorUid, eventType: "link_issued", revision: Number(current.revision), now }),
       ]);
       shareUrl = `${new URL(request.url).origin}/job-information/${current.id}.${secret}`;
+    } else if (action === "send_link") {
+      if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
+      const channel = cleanAdminText(body.channel, 10);
+      const requestedIntent = cleanAdminText(body.deliveryIntent, 30) || "initial";
+      if (channel !== "email" && channel !== "sms") return adminJson({ ok: false, error: "Choose email or SMS." }, 400);
+      if (!["initial", "resend", "expiry_reminder"].includes(requestedIntent)) return adminJson({ ok: false, error: "Choose a valid delivery action." }, 400);
+      await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
+        channel, requestedIntent: requestedIntent as "initial" | "resend" | "expiry_reminder",
+        consentConfirmed: body.consentConfirmed === true, origin: new URL(request.url).origin });
+    } else if (action === "retry_delivery") {
+      if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
+      const deliveryId = cleanAdminText(body.deliveryId, 180);
+      const owned = await db.prepare("SELECT id FROM trade_crm_photo_request_deliveries WHERE id = ? AND photo_request_id = ? AND firebase_uid = ?")
+        .bind(deliveryId, current.id, access.ownerUid).first();
+      if (!owned) throw new Error("DELIVERY_NOT_FOUND");
+      const result = await retryPhotoRequestDelivery(deliveryId, new URL(request.url).origin);
+      if (!result.ok && ["DELIVERY_NOT_FOUND", "DELIVERY_NOT_RETRYABLE", "PHOTO_REQUEST_LINK_STALE"].includes(String(result.error))) {
+        throw new Error(String(result.error));
+      }
     } else {
       return adminJson({ ok: false, error: "Unsupported photo request action." }, 400);
     }
@@ -286,8 +330,11 @@ export async function DELETE(request: Request) {
     const now = new Date().toISOString();
     const jobRevision = nextJobRevision(job.revision);
     await db.batch([
-      db.prepare(`UPDATE trade_crm_photo_requests SET status = 'revoked', token_hash = '', updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+      db.prepare(`UPDATE trade_crm_photo_requests SET status = 'revoked', token_hash = '', encrypted_token = '', updated_at = ? WHERE id = ? AND firebase_uid = ?`)
         .bind(now, current.id, access.ownerUid),
+      db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'revoked', eligibility_reason = 'The secure link was revoked.', updated_at = ?
+        WHERE photo_request_id = ? AND status IN ('queued', 'sending', 'failed', 'waiting_for_channel', 'waiting_for_sender', 'waiting_for_limit')`)
+        .bind(now, current.id),
       eventStatement(db, { requestId: current.id, workOrderId, ownerUid: access.ownerUid, actorUid: access.actorUid, eventType: "request_revoked", revision: Number(current.revision), now }),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'customer_photo_request_revoked', 'Customer photo request link revoked.', ?)`)

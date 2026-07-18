@@ -25,13 +25,13 @@ async function encryptionKey() {
   return crypto.subtle.importKey("raw", keyBytes as BufferSource, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-export async function encryptIntegrationCredentials(value: Record<string, unknown>) {
+export async function encryptProtectedPayload(value: Record<string, unknown>) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(), encoder.encode(JSON.stringify(value)));
   return `v1.${toBase64Url(iv)}.${toBase64Url(new Uint8Array(encrypted))}`;
 }
 
-export async function decryptIntegrationCredentials(value: string) {
+export async function decryptProtectedPayload(value: string) {
   const [version, ivValue, encryptedValue] = value.split(".");
   if (version !== "v1" || !ivValue || !encryptedValue) throw new Error("INTEGRATION_CREDENTIALS_INVALID");
   try {
@@ -43,6 +43,9 @@ export async function decryptIntegrationCredentials(value: string) {
     return JSON.parse(decoder.decode(decrypted)) as Record<string, unknown>;
   } catch { throw new Error("INTEGRATION_CREDENTIALS_INVALID"); }
 }
+
+export const encryptIntegrationCredentials = encryptProtectedPayload;
+export const decryptIntegrationCredentials = decryptProtectedPayload;
 
 export async function integrationStateHash(value: string) {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));

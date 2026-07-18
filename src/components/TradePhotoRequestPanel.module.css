@@ -55,6 +55,38 @@
 .feedback > button { background: #e8f3ef; border: 0; border-radius: 8px; color: #0a745c; cursor: pointer; font-size: .7rem; font-weight: 850; margin-top: 10px; padding: 9px 11px; }
 .feedback > button:disabled { cursor: not-allowed; opacity: .5; }
 .state { color: var(--color-aea-muted); display: grid; font-size: .78rem; gap: 4px; padding: 16px 0; }
+.delivery { background: #f8fbfa; border: 1px solid var(--color-aea-line); border-radius: 12px; display: grid; gap: 12px; margin-top: 14px; padding: 14px; }
+.delivery > header { align-items: start; display: flex; gap: 14px; justify-content: space-between; }
+.delivery > header > div { display: grid; gap: 4px; }
+.delivery > header span { color: var(--color-aea-green); font-size: .68rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.delivery > header strong { color: var(--color-aea-ink); font-size: .84rem; }
+.delivery > header p, .delivery > header small { color: var(--color-aea-muted); font-size: .68rem; line-height: 1.45; margin: 0; }
+.delivery > header small { flex: 0 0 auto; }
+.deliveryNotice { background: #fff5d9; border: 1px solid #ecd28d; border-radius: 9px; display: grid; gap: 3px; padding: 10px 12px; }
+.deliveryNotice strong { color: #75530b; font-size: .72rem; }
+.deliveryNotice span { color: #755f2e; font-size: .68rem; line-height: 1.4; }
+.consent { align-items: start; background: #eaf6f2; border-radius: 9px; color: #315f55; display: flex; font-size: .72rem; gap: 8px; line-height: 1.45; padding: 10px 12px; }
+.consent input { margin-top: 2px; }
+.channels { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.channels > article { border: 1px solid var(--color-aea-line); border-radius: 10px; display: grid; gap: 10px; min-width: 0; padding: 12px; }
+.channels > article.ready { background: #eff9f5; }
+.channels > article.held { background: #f6f7f6; }
+.channels article > header { display: grid; gap: 5px; min-width: 0; }
+.channels article > header > div { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; min-width: 0; }
+.channels article > header span { color: var(--color-aea-green); font-size: .68rem; font-weight: 850; }
+.channels article > header strong { color: var(--color-aea-ink); font-size: .76rem; overflow-wrap: anywhere; }
+.channels article > header small { color: var(--color-aea-muted); font-size: .65rem; line-height: 1.4; }
+.channels article > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.channels button, .history button { background: var(--action-primary); border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-size: .68rem; font-weight: 820; padding: 8px 10px; }
+.channels button:disabled, .history button:disabled { cursor: not-allowed; opacity: .45; }
+.history { border-top: 1px solid var(--color-aea-line); display: grid; gap: 8px; padding-top: 12px; }
+.history > header { align-items: baseline; display: flex; gap: 12px; justify-content: space-between; }
+.history > header strong { color: var(--color-aea-ink); font-size: .75rem; }
+.history > header small, .history > p { color: var(--color-aea-muted); font-size: .65rem; margin: 0; }
+.history > article { align-items: center; background: #fff; border: 1px solid var(--color-aea-line); border-radius: 9px; display: flex; gap: 10px; justify-content: space-between; min-width: 0; padding: 10px; }
+.history > article > div { display: grid; gap: 2px; min-width: 0; }
+.history > article strong { color: var(--color-aea-ink); font-size: .7rem; }
+.history > article span, .history > article small { color: var(--color-aea-muted); font-size: .65rem; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .heading { flex-direction: column; }
   .heading > div:last-child { align-items: baseline; display: flex; gap: 7px; }
@@ -64,6 +96,10 @@
   .feedback header { flex-direction: column; }
   .feedback header small { text-align: left; }
   .feedback > div { grid-template-columns: 1fr; }
+  .delivery > header, .history > header { flex-direction: column; }
+  .channels { grid-template-columns: 1fr; }
+  .channels button, .history button { width: 100%; }
+  .history > article { align-items: stretch; flex-direction: column; }
 }
 @media (max-width: 420px) {
   .feedback > div label { grid-template-columns: 1fr; }

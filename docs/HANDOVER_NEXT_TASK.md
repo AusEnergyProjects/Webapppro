@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 18 July 2026
-Implementation baseline: `0fbdd62d05acf54a8e284e051b47a3c2e79ed06b` on `codex/sites-custom-domain-migration`, published as Sites version 154 before the P6-2O batch.
+Implementation baseline: `17c82f062ef83f6c2be52012b87d4752a6619f89` on `codex/sites-custom-domain-migration`, published as Sites version 155 before the P6-2P batch.
 
 ## Current delivery summary
 
@@ -32,58 +32,59 @@ P6-2N completes the direct-customer photo request loop. An authorised installer 
 
 The customer link exposes no name, address or contact details. It guides phone capture through clarity, relevance and private-information checks before every upload. Accepted JPEG, PNG and WebP files keep the existing signature checks, metadata stripping, size limits and private R2 storage, and appear in the exact job's field proof with the requirement, request revision, checklist version and acknowledgement time. The customer can remove a mistaken upload while the request remains active.
 
-## Completed milestone
+## Completed milestones
 
 P6-2O adds an owner-scoped photo-template library with draft, published and archived states. Owners, managers and coordinators can create, duplicate, revise and publish requirements with useful and avoid examples. Published versions are insert-only, archived templates cannot seed new requests, and the safe service defaults remain available.
 
-Each direct-job request stores its complete editable requirements plus source template and immutable version. Later template publication or archival does not rewrite the job snapshot or customer link. The business library reports selections, job edits, requested and completed requirements and controlled useful, unclear, unnecessary or missing feedback. Queries contain no customer identity, address, contact details or image-derived content.
+P6-2P adds deliberate direct-customer photo-request delivery. The job workspace previews a masked email or verified mobile before sending, requires an explicit current-request confirmation and keeps manual copy and share available. A manual CRM customer can receive an operational email after the office user confirms the customer asked for it. SMS additionally requires the matching active customer account, current project-update consent, verified primary mobile, active provider callbacks and the approved Australian sender flag.
 
-## Live-trade gate before the next implementation batch
+Current link secrets are encrypted at rest with the existing protected credential key while their hashes remain the capability verifier. Each replacement increments a token issue and invalidates unfinished deliveries for older issues. Initial sends, two resends and one final-seven-day expiry reminder are independently idempotent by request revision, token issue, intent and channel. Failed sends are atomically claimed and capped at three attempts.
 
-Use P6-2N and P6-2O with participating trades to confirm the requested photo wording, useful and avoid examples, typical requirement count and whether customers understand the existing manual share flow. Record changes through the versioned template library rather than altering issued requests. Do not add image analysis or customer free-text feedback.
+Authenticated Resend and Twilio callbacks now update the photo-request delivery ledger and propagate customer opt-outs. The administrator delivery workspace exposes only channel, intent, status, provider result, attempt count and timestamps. It contains no customer contact, secure link, capability token or image data. Existing links issued before this migration remain valid for manual sharing but must be replaced once before protected provider delivery because their plaintext secret was deliberately never retained.
+
+Live-trade wording validation remains deferred until trades are onboarded, as authorised on 18 July 2026. This does not block implementation or signed-in responsive release inspection.
 
 ## Next milestone contract
 
-### P6-2P batch: consent-aware photo-request link delivery
+### P6-2Q batch: customer completion, proof review and targeted retake
 
-Outcome: an authorised installer office user can send, monitor and safely resend a job photo-request link through the customer's permitted channel without exposing the capability token in administrator reporting.
+Outcome: a customer can clearly finish a photo request, and the installer can review each requirement, accept useful proof or request a bounded retake without losing the original evidence or sending a new broad request.
 
-### Five linked delivery items
+### Five linked review items
 
-1. Add an explicit email or SMS channel choice and recipient preview before sending the current active photo-request link.
-2. Create idempotent, privacy-safe delivery records with provider message references, timestamps and authenticated receipt updates.
-3. Add bounded resend and expiring-link reminder controls that always use the current token and stop after revocation, replacement, completion or opt-out.
-4. Apply the existing customer channel consent, verified-mobile, channel opt-out, provider availability, daily-limit and SMS sender-approval checks.
-5. Extend administrator delivery health with aggregate photo-request delivery outcomes and bounded retry controls without showing customer contact details or link secrets.
+1. Add a customer completion action that checks every required requirement has at least one current upload and records the request revision and checklist acknowledgement.
+2. Add installer review states for each requested requirement: pending, accepted, retake requested or not needed, while preserving every original upload and audit event.
+3. Add bounded reason codes and safe prewritten guidance for retakes, with no image analysis and no unrestricted customer or administrator notes.
+4. Reopen only the affected requirement through the current secure link and reuse P6-2P for one targeted follow-up per review revision.
+5. Add job-level proof readiness and privacy-safe aggregate review outcomes to the field record and template reporting without exposing image content or customer identity.
 
 ### In scope
 
-- Reuse the existing Resend, Twilio, consent, opt-out, callback, delivery-claim and administrator health boundaries.
-- Require a current active P6-2N request and direct customer owned by the installer business.
-- Keep manual copy and share available when a provider channel is unavailable.
-- Keep SMS suppressed while the `TLink` Australian sender remains unapproved.
+- The exact direct job, current P6-2N request, P6-2O requirement snapshot and P6-2P delivery controls.
+- Owner, manager and coordinator review, plus read-only field visibility of review state.
+- Additive review and completion records with immutable events.
+- Existing private R2 evidence and signature, metadata and authorisation controls.
 
 ### Explicitly out of scope
 
-- Marketing messages, recurring campaigns or unbounded automated reminders.
-- New customer contact fields, consent models or provider accounts.
-- Template editing, image scoring or photo-content analysis.
-- Marketplace customer evidence, appointment delivery, dispatch or live tracking.
+- AI or automated image scoring, OCR, face detection or photo-content classification.
+- Customer free-text messaging, marketing campaigns or recurring reminders.
+- Deleting rejected evidence, editing original uploads or changing published templates from a job review.
+- Marketplace evidence, quoting, scheduling, dispatch, invoicing or live tracking.
 
 ### Acceptance criteria
 
-- Only an owner, manager or coordinator can send or retry a photo-request link.
-- Delivery is suppressed unless the exact customer and channel pass existing consent and provider checks.
-- Idempotency prevents duplicate sends for the same request revision, token issue and delivery intent.
-- Revoked, expired or replaced links cannot be sent or retried from stale delivery records.
-- Provider callbacks update delivery health without accepting unauthenticated events.
-- Administrator payloads contain no contact details, capability tokens or customer images.
-- Desktop and 390 px send and delivery-history controls have no document-level horizontal overflow.
+- Customer completion fails with a clear requirement list until every required item has an upload.
+- Only the current active capability can complete or answer a targeted retake.
+- Only an owner, manager or coordinator can accept, waive or request a retake.
+- Review history is immutable and original evidence remains available to authorised job users.
+- A targeted follow-up is idempotent for the request revision, review revision and current token issue.
+- Field and administrator payloads expose no customer contact, capability token or image-derived content.
+- Desktop and 390 px customer completion and installer review have no document-level horizontal overflow.
 - `npm run validate` passes on the exact release commit.
 
 ### Stop and escalate if
 
-- Live-trade testing shows the request or template workflow must change before delivery automation.
-- A provider requires a new paid service, credential or unapproved Australian sender.
-- The work would create a second consent source of truth or expose link secrets in logs, events or admin payloads.
-- The slice expands into marketing automation or protected marketplace evidence.
+- Review would require image analysis, customer free text or a new provider.
+- A retake flow would rotate the current link unexpectedly or remove original evidence.
+- The slice expands into quoting, appointment messaging, protected marketplace evidence or general chat.

@@ -38,6 +38,9 @@ export async function POST(request: Request) {
         db.prepare(`UPDATE appointment_notification_deliveries SET status = 'opted_out', provider_status = 'twilio_stop', failed_at = ?, updated_at = ?
           WHERE recipient_uid = ? AND audience = 'customer' AND channel = 'sms'
             AND status IN ('queued', 'failed', 'waiting_for_channel', 'waiting_for_sender', 'waiting_for_limit')`).bind(now, now, contact.customer_uid),
+        db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'opted_out', provider_status = 'twilio_stop', failed_at = ?, updated_at = ?
+          WHERE customer_uid = ? AND channel = 'sms'
+            AND status IN ('queued', 'sent', 'failed', 'waiting_for_channel', 'waiting_for_sender', 'waiting_for_limit')`).bind(now, now, contact.customer_uid),
       ]);
     }
     return new Response("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>", { headers: { "Content-Type": "text/xml" } });
@@ -48,10 +51,13 @@ export async function POST(request: Request) {
     .bind(messageSid).first<Record<string, unknown>>();
   const appointmentDelivery = serviceDelivery ? null : await db.prepare(`SELECT id, status FROM appointment_notification_deliveries
     WHERE provider = 'twilio' AND provider_message_id = ?`).bind(messageSid).first<Record<string, unknown>>();
-  const delivery = serviceDelivery || appointmentDelivery;
+  const photoDelivery = serviceDelivery || appointmentDelivery ? null : await db.prepare(`SELECT id, status FROM trade_crm_photo_request_deliveries
+    WHERE provider = 'twilio' AND provider_message_id = ?`).bind(messageSid).first<Record<string, unknown>>();
+  const delivery = serviceDelivery || appointmentDelivery || photoDelivery;
   if (!delivery) return new Response(null, { status: 204 });
   const key = `twilio:${await eventKey(`${messageSid}|${providerStatus}|${parameters.get("ErrorCode") || ""}`)}`;
-  const replayTable = serviceDelivery ? "service_reminder_delivery_events" : "appointment_notification_delivery_events";
+  const replayTable = serviceDelivery ? "service_reminder_delivery_events" : appointmentDelivery
+    ? "appointment_notification_delivery_events" : "trade_crm_photo_request_delivery_events";
   if (await db.prepare(`SELECT id FROM ${replayTable} WHERE provider_event_key = ?`).bind(key).first()) return new Response(null, { status: 204 });
   const nextStatus = (rank[status] || 0) >= (rank[String(delivery.status)] || 0) ? status : String(delivery.status);
   await db.batch(serviceDelivery ? [
@@ -62,12 +68,23 @@ export async function POST(request: Request) {
     db.prepare(`UPDATE service_reminder_deliveries SET status = ?, provider_status = ?, delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
       failed_at = CASE WHEN ? = 'failed' THEN ? ELSE failed_at END, last_error = CASE WHEN ? = 'failed' THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
       .bind(nextStatus, providerStatus, nextStatus, now, nextStatus, now, nextStatus, String(parameters.get("ErrorCode") || "").slice(0, 120), now, delivery.id),
-  ] : [
+  ] : appointmentDelivery ? [
     db.prepare(`INSERT OR IGNORE INTO appointment_notification_delivery_events
       (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
       VALUES (?, ?, ?, 'twilio_status', ?, 'Authenticated Twilio appointment delivery status received.', ?, ?)`)
       .bind(crypto.randomUUID(), delivery.id, key, providerStatus, now, now),
     db.prepare(`UPDATE appointment_notification_deliveries SET status = ?, provider_status = ?,
+      delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
+      failed_at = CASE WHEN ? = 'failed' THEN ? ELSE failed_at END,
+      last_error = CASE WHEN ? = 'failed' THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
+      .bind(nextStatus, providerStatus, nextStatus, now, nextStatus, now, nextStatus,
+        String(parameters.get("ErrorCode") || "").slice(0, 120), now, delivery.id),
+  ] : [
+    db.prepare(`INSERT OR IGNORE INTO trade_crm_photo_request_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      VALUES (?, ?, ?, 'twilio_status', ?, 'Authenticated Twilio photo request delivery status received.', ?, ?)`)
+      .bind(crypto.randomUUID(), delivery.id, key, providerStatus, now, now),
+    db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = ?, provider_status = ?,
       delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
       failed_at = CASE WHEN ? = 'failed' THEN ? ELSE failed_at END,
       last_error = CASE WHEN ? = 'failed' THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)

@@ -25,10 +25,14 @@ export async function POST(request: Request) {
   const appointmentDelivery = serviceDelivery ? null : await db.prepare(`SELECT id, recipient_uid customer_uid, audience, status
     FROM appointment_notification_deliveries WHERE provider = 'resend' AND provider_message_id = ?`)
     .bind(providerMessageId).first<Record<string, unknown>>();
-  const delivery = serviceDelivery || appointmentDelivery;
+  const photoDelivery = serviceDelivery || appointmentDelivery ? null : await db.prepare(`SELECT id, customer_uid, crm_customer_id, firebase_uid, status
+    FROM trade_crm_photo_request_deliveries WHERE provider = 'resend' AND provider_message_id = ?`)
+    .bind(providerMessageId).first<Record<string, unknown>>();
+  const delivery = serviceDelivery || appointmentDelivery || photoDelivery;
   if (!delivery) return Response.json({ ok: true, ignored: true });
   const providerEventKey = `resend:${eventId}`;
-  const replayTable = serviceDelivery ? "service_reminder_delivery_events" : "appointment_notification_delivery_events";
+  const replayTable = serviceDelivery ? "service_reminder_delivery_events" : appointmentDelivery
+    ? "appointment_notification_delivery_events" : "trade_crm_photo_request_delivery_events";
   if (await db.prepare(`SELECT id FROM ${replayTable} WHERE provider_event_key = ?`).bind(providerEventKey).first()) return Response.json({ ok: true, replay: true });
   const now = new Date().toISOString(); const terminal = ["bounced", "failed", "opted_out"].includes(status);
   const statements = serviceDelivery ? [
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
     db.prepare(`UPDATE service_reminder_deliveries SET status = ?, provider_status = ?, delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
       failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END, last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
       .bind(status, eventType, status, now, terminal ? 1 : 0, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
-  ] : [
+  ] : appointmentDelivery ? [
     db.prepare(`INSERT OR IGNORE INTO appointment_notification_delivery_events
       (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
       VALUES (?, ?, ?, ?, ?, 'Authenticated Resend appointment delivery event received.', ?, ?)`)
@@ -47,9 +51,19 @@ export async function POST(request: Request) {
     db.prepare(`UPDATE appointment_notification_deliveries SET status = ?, provider_status = ?, delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
       failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END, last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
       .bind(status, eventType, status, now, terminal ? 1 : 0, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
+  ] : [
+    db.prepare(`INSERT OR IGNORE INTO trade_crm_photo_request_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'Authenticated Resend photo request delivery event received.', ?, ?)`)
+      .bind(crypto.randomUUID(), delivery.id, providerEventKey, eventType, status, String(event.created_at || now), now),
+    db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = ?, provider_status = ?,
+      delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
+      failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END,
+      last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
+      .bind(status, eventType, status, now, terminal ? 1 : 0, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
   ];
   if (["email.bounced", "email.suppressed", "email.complained"].includes(eventType)) {
-    if (serviceDelivery || appointmentDelivery?.audience === "customer") statements.push(
+    if ((serviceDelivery || appointmentDelivery?.audience === "customer" || photoDelivery) && delivery.customer_uid) statements.push(
       db.prepare(`INSERT INTO customer_service_reminder_opt_outs (id, customer_uid, channel, source, provider_reference, opted_out_at, created_at)
         VALUES (?, ?, 'email', ?, ?, ?, ?) ON CONFLICT(customer_uid, channel) DO UPDATE SET source = excluded.source,
         provider_reference = excluded.provider_reference, opted_out_at = excluded.opted_out_at`)
@@ -59,7 +73,15 @@ export async function POST(request: Request) {
       db.prepare(`UPDATE appointment_notification_deliveries SET status = 'opted_out', provider_status = ?, failed_at = ?, updated_at = ?
         WHERE recipient_uid = ? AND audience = 'customer' AND channel = 'email' AND status IN ('queued', 'failed', 'waiting_for_channel')`)
         .bind(eventType, now, now, delivery.customer_uid),
+      db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'opted_out', provider_status = ?, failed_at = ?, updated_at = ?
+        WHERE customer_uid = ? AND channel = 'email'
+          AND status IN ('queued', 'failed', 'waiting_for_channel', 'waiting_for_limit')`)
+        .bind(eventType, now, now, delivery.customer_uid),
     );
+    if (photoDelivery) statements.push(db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'opted_out',
+      provider_status = ?, failed_at = ?, updated_at = ? WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email'
+        AND status IN ('queued', 'sent', 'failed', 'waiting_for_channel', 'waiting_for_limit')`)
+      .bind(eventType, now, now, photoDelivery.firebase_uid, photoDelivery.crm_customer_id));
     if (serviceDelivery) statements.push(db.prepare(`UPDATE customer_asset_lifecycle_preferences SET email_enabled = 0, updated_at = ?
       WHERE customer_uid = ? AND asset_id = ?`).bind(now, delivery.customer_uid, delivery.asset_id));
   }

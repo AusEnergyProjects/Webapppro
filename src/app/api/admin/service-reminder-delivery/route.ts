@@ -2,12 +2,13 @@ import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
 import { retryAppointmentNotificationDelivery } from "@/lib/appointment-notification-server";
+import { retryPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 
 export const runtime = "edge";
 
 async function payload() {
   const db = getD1(); const providers = serviceReminderProviderConfiguration();
-  const [settings, counts, failures, appointmentCounts, appointmentDeliveries] = await Promise.all([
+  const [settings, counts, failures, appointmentCounts, appointmentDeliveries, photoRequestCounts, photoRequestDeliveries] = await Promise.all([
     db.prepare(`SELECT channel, provider, enabled, sender_label, daily_limit, revision, updated_at
       FROM service_reminder_channel_settings ORDER BY channel`).all<Record<string, unknown>>(),
     db.prepare(`SELECT channel, status, COUNT(*) total FROM service_reminder_deliveries GROUP BY channel, status`).all<Record<string, unknown>>(),
@@ -21,6 +22,10 @@ async function payload() {
       FROM appointment_notification_deliveries delivery
       JOIN appointment_notification_events event ON event.id = delivery.event_id
       ORDER BY delivery.updated_at DESC LIMIT 50`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT channel, status, COUNT(*) total FROM trade_crm_photo_request_deliveries
+      GROUP BY channel, status ORDER BY channel, status`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, channel, provider, intent, status, eligibility_reason, attempts, provider_status, last_error, updated_at
+      FROM trade_crm_photo_request_deliveries ORDER BY updated_at DESC LIMIT 50`).all<Record<string, unknown>>(),
   ]);
   return {
     settings: settings.results.map((row) => ({ channel: String(row.channel), provider: String(row.provider), enabled: Boolean(row.enabled),
@@ -36,6 +41,10 @@ async function payload() {
       audience: String(row.audience), channel: String(row.channel), provider: String(row.provider), status: String(row.status),
       eligibilityReason: String(row.eligibility_reason), attempts: Number(row.attempts), providerStatus: String(row.provider_status),
       lastError: String(row.last_error), updatedAt: String(row.updated_at) })),
+    photoRequestCounts: photoRequestCounts.results.map((row) => ({ channel: String(row.channel), status: String(row.status), total: Number(row.total) })),
+    photoRequestDeliveries: photoRequestDeliveries.results.map((row) => ({ id: String(row.id), channel: String(row.channel),
+      provider: String(row.provider), intent: String(row.intent), status: String(row.status), eligibilityReason: String(row.eligibility_reason),
+      attempts: Number(row.attempts), providerStatus: String(row.provider_status), lastError: String(row.last_error), updatedAt: String(row.updated_at) })),
     smsSenderApproved: String(process.env.TLINK_SMS_SENDER_APPROVED || "").toLowerCase() === "true",
   };
 }
@@ -73,13 +82,18 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const admin = await requireAdminIdentity(request, ["owner", "admin"]); const body = await request.json() as Record<string, unknown>;
-    if (cleanAdminText(body.action, 40) !== "retry_appointment_delivery") return adminJson({ ok: false, error: "Unsupported delivery action." }, 400);
-    const deliveryId = cleanAdminText(body.deliveryId, 180); if (!deliveryId) return adminJson({ ok: false, error: "Choose an appointment delivery." }, 400);
-    const result = await retryAppointmentNotificationDelivery(deliveryId, new URL(request.url).origin);
-    if (!result.ok && result.error === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This appointment delivery cannot be retried." }, 409);
-    if (!result.ok && result.error === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Appointment delivery not found." }, 404);
-    await writeAdminAudit(admin, "appointment_notification.delivery_retry", "appointment_notification_delivery", deliveryId,
-      "Retried an appointment notification through current consent and channel controls.", { deliveryId, result: result.ok ? "sent" : String(result.error || "held") });
+    const action = cleanAdminText(body.action, 40);
+    if (action !== "retry_appointment_delivery" && action !== "retry_photo_request_delivery") return adminJson({ ok: false, error: "Unsupported delivery action." }, 400);
+    const deliveryId = cleanAdminText(body.deliveryId, 180); if (!deliveryId) return adminJson({ ok: false, error: "Choose a delivery." }, 400);
+    const photoRequest = action === "retry_photo_request_delivery";
+    const result = photoRequest ? await retryPhotoRequestDelivery(deliveryId, new URL(request.url).origin)
+      : await retryAppointmentNotificationDelivery(deliveryId, new URL(request.url).origin);
+    if (!result.ok && result.error === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This delivery cannot be retried." }, 409);
+    if (!result.ok && result.error === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Delivery not found." }, 404);
+    await writeAdminAudit(admin, photoRequest ? "photo_request.delivery_retry" : "appointment_notification.delivery_retry",
+      photoRequest ? "trade_crm_photo_request_delivery" : "appointment_notification_delivery", deliveryId,
+      `Retried a ${photoRequest ? "photo request" : "appointment notification"} through current consent and channel controls.`,
+      { deliveryId, result: result.ok ? "sent" : String(result.error || "held") });
     return adminJson({ ok: true, ...(await payload()) });
   } catch (error) { return error instanceof SyntaxError ? adminJson({ ok: false, error: "Invalid appointment delivery request." }, 400) : adminError(error); }
 }
