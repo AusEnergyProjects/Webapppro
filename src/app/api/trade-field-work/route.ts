@@ -212,17 +212,19 @@ export async function GET(request: Request) {
     const access = await requireInstallerTeamAccess(request, false);
     const url = new URL(request.url);
     const downloadId = cleanAdminText(url.searchParams.get("download"), 180);
-    if (downloadId) {
+    const previewId = cleanAdminText(url.searchParams.get("preview"), 180);
+    const mediaId = previewId || downloadId;
+    if (mediaId) {
       const record = await getD1().prepare(`SELECT m.object_key, m.file_name, m.content_type, m.work_order_id FROM trade_crm_job_media m
         JOIN trade_work_orders w ON w.id = m.work_order_id
         WHERE m.id = ? AND m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
-        .bind(downloadId, access.ownerUid, access.ownerUid).first<{ object_key: string; file_name: string; content_type: string; work_order_id: string }>();
+        .bind(mediaId, access.ownerUid, access.ownerUid).first<{ object_key: string; file_name: string; content_type: string; work_order_id: string }>();
       if (!record) return adminJson({ ok: false, error: "Job file not found." }, 404);
       await assignedJob(access, record.work_order_id);
       const object = await bucket().get(record.object_key);
       if (!object) return adminJson({ ok: false, error: "Stored job file not found." }, 404);
       return new Response(object.body, { headers: { "Cache-Control": "private, no-store",
-        "Content-Disposition": `attachment; filename="${safeName(record.file_name)}"`,
+        "Content-Disposition": `${previewId ? "inline" : "attachment"}; filename="${safeName(record.file_name)}"`,
         "Content-Type": object.httpMetadata?.contentType || record.content_type, "X-Content-Type-Options": "nosniff" } });
     }
     const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);

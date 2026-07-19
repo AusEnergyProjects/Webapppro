@@ -32,6 +32,9 @@ function cleanDate(value: unknown) {
 
 async function invoiceRow(ownerUid: string, clause: "id" | "work_order_id", value: string) {
   return getD1().prepare(`SELECT q.*,
+      COALESCE((SELECT customer.email FROM trade_crm_customers customer
+        WHERE customer.id = q.crm_customer_id AND customer.firebase_uid = q.firebase_uid
+          AND customer.record_status = 'active'), '') delivery_email,
       COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
         WHERE credit.invoice_id = q.id AND credit.status = 'issued'), 0) credited_cents,
       COALESCE((SELECT SUM(allocation.amount_cents) FROM trade_crm_invoice_payment_allocations allocation
@@ -66,6 +69,7 @@ function payload(row: Row, credits: Row[] = [], revisions: Row[] = []) {
     id: String(row.id), workOrderId: String(row.work_order_id), invoiceNumber: String(row.invoice_number),
     lines, subtotalCents: Number(row.subtotal_cents), taxCents: Number(row.tax_cents), totalCents: Number(row.total_cents),
     dueAt: String(row.due_at), status: String(row.status), deliveryStatus: String(row.delivery_status),
+    deliveryEmail: String(row.delivery_email || ""),
     attempts: Number(row.attempts), sentAt: String(row.sent_at), createdAt: String(row.created_at), revision: Number(row.revision || 1),
     creditedCents: balance.creditedCents, paidCents: balance.paidCents, netCents: balance.netCents, outstandingCents: balance.outstandingCents,
     canCorrect: row.status === "draft" && row.delivery_status !== "sent" && !Boolean(row.payment_activity) && !Boolean(row.accounting_activity),

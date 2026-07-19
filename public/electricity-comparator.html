@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Electricity Plan Comparator | Australian Energy Assessments</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&family=Lato:wght@400;700;900&display=swap');
   :root{
     /* rich green palette */
     --ink:#0b3d2e; --ink-soft:#14532d; --amber:#17a35d; --amber-dark:#0e7a44; --amber-soft:#e7f6ec;
@@ -13,14 +12,14 @@
     --red:#b03a2e; --chip:#edf7f0; --good:#15803d;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{font-family:'Lato','Inter',system-ui,Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.5;}
-  h1,h2,h3{font-family:'Arvo',Georgia,serif;}
+  body{font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); line-height:1.5;}
+  h1,h2,h3{font-family:Arial,Helvetica,sans-serif;}
   .wrap{max-width:1060px; margin:0 auto; padding:24px 16px 60px;}
   .brandbar{display:inline-flex; align-items:center; gap:12px; text-decoration:none; margin-bottom:16px;}
   .brandmark{display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:11px; background:linear-gradient(135deg,#0b3d2e,#186a3b); box-shadow:0 3px 8px rgba(11,61,46,.25);}
   .brandmark img{width:30px; height:30px; display:block;}
   .brandtext{display:flex; flex-direction:column; line-height:1.15;}
-  .brandname{font-family:'Arvo',serif; font-weight:700; font-size:1.05rem; color:var(--ink);}
+  .brandname{font-family:Arial,Helvetica,sans-serif; font-weight:700; font-size:1.05rem; color:var(--ink);}
   .brandtag{font-size:.72rem; color:var(--muted); font-weight:600;}
   .brandbar:hover .brandname{text-decoration:underline;}
   .legacy-site-header{align-items:center;display:flex;justify-content:space-between;gap:16px;margin-bottom:16px}.legacy-site-header .brandbar{margin-bottom:0}.legacy-account{align-items:center;background:#0b3d2e;border-radius:999px;color:#fff;display:inline-flex;font-size:.82rem;font-weight:800;min-height:44px;padding:0 16px;text-decoration:none;white-space:nowrap}.legacy-account:hover{background:#07503a}@media(max-width:560px){.legacy-site-header .brandtag{display:none}.legacy-account{padding:0 13px}}
@@ -167,7 +166,7 @@
   .modal-ov{position:fixed; inset:0; background:rgba(11,61,46,.55); display:none; align-items:center; justify-content:center; padding:20px; z-index:50;}
   .modal-ov.show{display:flex;}
   .modal{background:#fff; border-radius:14px; max-width:520px; width:100%; padding:26px; box-shadow:0 18px 50px rgba(0,0,0,.3); max-height:85vh; overflow:auto;}
-  .modal h3{font-family:'Arvo',serif; color:var(--ink); margin-bottom:10px; font-size:1.15rem;}
+  .modal h3{font-family:Arial,Helvetica,sans-serif; color:var(--ink); margin-bottom:10px; font-size:1.15rem;}
   .modal p, .modal li{font-size:.9rem; color:var(--text); line-height:1.55;}
   .modal ul{margin:10px 0 12px 18px;} .modal li{margin-bottom:7px;}
   .modal .mclose{margin-top:14px; background:var(--amber); color:#fff; border:none; border-radius:9px; padding:9px 20px; font-weight:800; cursor:pointer;}
@@ -176,7 +175,7 @@
   .audithead{display:flex; justify-content:space-between; gap:14px; align-items:flex-start; margin-bottom:14px;}
   .audithead .auditprice{font-size:1.35rem; font-weight:900; color:var(--ink); white-space:nowrap;}
   .auditsection{margin-top:16px; padding-top:14px; border-top:1px solid var(--line);}
-  .auditsection h4{font-family:'Arvo',serif; color:var(--ink); font-size:.95rem; margin-bottom:7px;}
+  .auditsection h4{font-family:Arial,Helvetica,sans-serif; color:var(--ink); font-size:.95rem; margin-bottom:7px;}
   .auditsection .auditnote{font-size:.76rem; color:var(--muted); margin-bottom:8px;}
   .audittablewrap{overflow-x:auto;}
   .audittable{width:100%; border-collapse:collapse; font-size:.76rem;}

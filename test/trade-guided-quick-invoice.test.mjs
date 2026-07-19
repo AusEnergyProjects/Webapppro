@@ -39,7 +39,8 @@ test("guided setup has an optional sixth invoice step with recoverable delivery"
   assert.match(form, /<TradeQuickInvoiceStep/);
   assert.match(invoiceStep, /Skip for now/);
   assert.match(invoiceStep, /Send a quick invoice/);
-  assert.match(invoiceStep, /Schedule, request info and send invoice/);
+  assert.match(invoiceStep, /Preview invoice and finish/);
+  assert.match(invoiceStep, /Confirm and send/);
   assert.match(invoiceStep, /Included when you send/);
   assert.match(invoiceStep, /effectiveLines/);
   assert.match(invoiceStep, /provider\.status === "connected"/);

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -24,6 +26,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
   const [online, setOnline] = useState(true);
+  const [preview, setPreview] = useState<{ item: Media; url: string } | null>(null);
   const actionId = useRef("");
 
   const load = useCallback(async () => {
@@ -50,6 +53,15 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
     update(); window.addEventListener("online", update); window.addEventListener("offline", update);
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
   }, []);
+
+  useEffect(() => {
+    if (!preview) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setPreview(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); URL.revokeObjectURL(preview.url); };
+  }, [preview]);
 
   const totalMinutes = useMemo(() => (data.timeEntries || []).reduce((sum, item) => sum + item.durationMinutes, 0), [data.timeEntries]);
 
@@ -106,14 +118,13 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
     finally { setBusy(""); }
   }
 
-  async function download(id: string, fileName: string) {
-    setBusy(`download:${id}`); setStatus(`Opening ${fileName}...`);
+  async function openPreview(item: Media) {
+    setBusy(`preview:${item.id}`); setStatus(`Opening ${item.fileName}...`);
     try {
       const token = await user.getIdToken();
-      const response = await fetch(`/api/trade-field-work?download=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(`/api/trade-field-work?preview=${encodeURIComponent(item.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       if (!response.ok) { const result = await response.json().catch(() => ({})) as Result; throw new Error(result.error || "The file could not be opened."); }
-      const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = fileName; anchor.click(); URL.revokeObjectURL(url); setStatus("File ready.");
+      setPreview({ item, url: URL.createObjectURL(await response.blob()) }); setStatus("");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The file could not be opened."); }
     finally { setBusy(""); }
   }
@@ -146,7 +157,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
           <label className="wide"><span>Caption</span><input name="caption" maxLength={300} placeholder="Switchboard before upgrade" /></label>
           <button disabled={busy === "upload"}>{busy === "upload" ? "Uploading..." : "Add file"}</button>
         </form>
-        {(data.media || []).length > 0 && <ol className="crm-field-records">{(data.media || []).map((item) => <li key={item.id}><div><strong>{item.caption || item.fileName}</strong><span>{item.source === "customer_request" ? "Customer requested photo" : item.category.replaceAll("_", " ")} | {Math.max(1, Math.round(item.sizeBytes / 1024))} KB</span>{item.source === "customer_request" && <small>Customer self-review confirmed | request revision {item.requestRevision}</small>}</div><button type="button" disabled={busy === `download:${item.id}`} onClick={() => void download(item.id, item.fileName)}>Open</button></li>)}</ol>}
+        {(data.media || []).length > 0 && <ol className="crm-field-records">{(data.media || []).map((item) => <li key={item.id}><div><strong>{item.caption || item.fileName}</strong><span>{item.source === "customer_request" ? "Customer requested photo" : item.category.replaceAll("_", " ")} | {Math.max(1, Math.round(item.sizeBytes / 1024))} KB</span>{item.source === "customer_request" && <small>Customer self-review confirmed | request revision {item.requestRevision}</small>}</div><button type="button" disabled={busy === `preview:${item.id}`} onClick={() => void openPreview(item)}>{busy === `preview:${item.id}` ? "Opening..." : "Preview"}</button></li>)}</ol>}
       </section>
       <section className="crm-field-card wide"><header><div><span>Digital sign-off</span><h4>Create a timestamped acknowledgement</h4><p>This is an operational record. Your business remains responsible for deciding when a formal contract or regulated certificate is required.</p></div></header>
         <form className="crm-field-form signoff" onSubmit={(event) => void jsonAction(event, "add_signoff", "Digital sign-off recorded.")}>
@@ -159,5 +170,14 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
       </section>
     </div>
     {status && status !== "Saved" && status !== "Syncing" && <p className="crm-inline-status" role="status">{status}</p>}
+    {preview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreview(null); }}>
+      <section className="crm-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="field-preview-title">
+        <header><div><span>Job file preview</span><strong id="field-preview-title">{preview.item.caption || preview.item.fileName}</strong><small>{preview.item.fileName} | {Math.max(1, Math.round(preview.item.sizeBytes / 1024))} KB</small></div><button type="button" onClick={() => setPreview(null)} aria-label="Close file preview">Close</button></header>
+        <div className="crm-preview-content">{preview.item.contentType === "application/pdf"
+          ? <iframe title={preview.item.caption || preview.item.fileName} src={preview.url} />
+          : <img src={preview.url} alt={preview.item.caption || "Job evidence preview"} />}</div>
+        <footer><a href={preview.url} download={preview.item.fileName}>Download file</a><button type="button" className="btn" onClick={() => setPreview(null)}>Done</button></footer>
+      </section>
+    </div>}
   </div>;
 }

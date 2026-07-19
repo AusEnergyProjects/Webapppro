@@ -16,6 +16,7 @@ import { TradeInvoiceWorkspace } from "./TradeInvoiceWorkspace";
 import { TradeServiceFollowUpWorkspace } from "./TradeServiceFollowUpWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
+import { TradeJobNotifications } from "./TradeJobNotifications";
 import {
   FEATURE_DEFINITIONS,
   type FeatureGrant,
@@ -535,6 +536,10 @@ export function DirectTradeDashboard() {
                 setWorkspace(target.workspace);
               }}
             />
+            {!isSupplier && <TradeJobNotifications user={user} onNavigate={(target) => {
+              setCommandTarget(target);
+              setWorkspace(target.workspace);
+            }} />}
             <div className="dashboard-account-actions">
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>

@@ -633,6 +633,17 @@ export const tradeInstalledAssets = sqliteTable("trade_installed_assets", {
   index("trade_installed_assets_review_idx").on(table.firebaseUid, table.reviewStatus, table.updatedAt),
 ]);
 
+export const tradeJobNotificationReads = sqliteTable("trade_job_notification_reads", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  notificationKey: text("notification_key").notNull(),
+  readByUid: text("read_by_uid").notNull(),
+  readAt: text("read_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_job_notification_reads_actor_key_idx").on(table.firebaseUid, table.readByUid, table.notificationKey),
+  index("trade_job_notification_reads_actor_time_idx").on(table.firebaseUid, table.readByUid, table.readAt),
+]);
+
 export const tradeTeamWorkingHours = sqliteTable("trade_team_working_hours", {
   id: text("id").primaryKey(),
   ownerUid: text("owner_uid").notNull(),

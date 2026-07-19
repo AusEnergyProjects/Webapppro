@@ -24,6 +24,7 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
   const [consent, setConsent] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -51,6 +52,14 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [active, mode, refresh]);
+  useEffect(() => {
+    if (!previewOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setPreviewOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); };
+  }, [previewOpen]);
 
   const pendingLines = useMemo(() => {
     const next: DraftLine[] = [];
@@ -121,6 +130,17 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
     {message && <div className="crm-wizard-message" role="status">{message}</div>}
     <div className="crm-final-summary"><strong>Ready to schedule</strong><span>{customerName}</span><small>{mode === "send" ? "The job, appointment, evidence request and quick invoice are saved together." : "The job, appointment and secure evidence request are saved together."}</small></div>
     {mode === "send" && !canSend && <div className="crm-wizard-message" role="status">{!effectiveLines.length ? "Choose or enter at least one fee." : !deliveryEmail ? "Add a customer email before sending." : !consent ? "Confirm the customer asked to receive this invoice." : "Check the invoice details."}</div>}
-    <div className="crm-wizard-actions"><button type="button" onClick={onBack}>Back</button><button type="submit" className="btn" disabled={busy || !canSend}>{busy ? "Scheduling and sending..." : mode === "send" ? "Schedule, request info and send invoice" : "Schedule and request info"}</button></div>
+    <div className="crm-wizard-actions"><button type="button" onClick={onBack}>Back</button>{mode === "send"
+      ? <button type="button" className="btn" disabled={busy || !canSend} onClick={() => setPreviewOpen(true)}>Preview invoice and finish</button>
+      : <button type="submit" className="btn" disabled={busy}>{busy ? "Scheduling..." : "Schedule and request info"}</button>}</div>
+    {previewOpen && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreviewOpen(false); }}>
+      <section className="crm-invoice-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="new-invoice-preview-title">
+        <header><div><span>Check before sending</span><strong id="new-invoice-preview-title">Invoice preview</strong><small>Customer: {customerName}</small></div><button type="button" onClick={() => setPreviewOpen(false)} aria-label="Close invoice preview">Close</button></header>
+        <div className="crm-invoice-preview-lines">{effectiveLines.map((line) => <div key={line.clientId}><span><strong>{line.description}</strong><small>{line.taxCode === "gst" ? "GST added" : "GST-free"}</small></span><b>{money(line.unitPriceCentsExGst)}</b></div>)}</div>
+        <dl><div><dt>Subtotal</dt><dd>{money(totals.subtotal)}</dd></div><div><dt>GST</dt><dd>{money(totals.tax)}</dd></div><div className="total"><dt>Total</dt><dd>{money(totals.total)}</dd></div><div><dt>Payment due</dt><dd>{dueDays === "0" ? "Today" : `In ${dueDays} days`}</dd></div></dl>
+        <p>This invoice will be emailed to <strong>{deliveryEmail}</strong> with the appointment and photo request.</p>
+        <footer><button type="button" onClick={() => setPreviewOpen(false)}>Go back and edit</button><button type="submit" className="btn" disabled={busy}>{busy ? "Scheduling and sending..." : "Confirm and send"}</button></footer>
+      </section>
+    </div>}
   </section>;
 }
