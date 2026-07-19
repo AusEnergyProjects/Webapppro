@@ -4,18 +4,24 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
+import { PHOTO_RETAKE_REASONS, type PhotoRequirementReview, type PhotoRetakeReason } from "@/lib/photo-request-review";
 
 type TimeEntry = { id: string; staffLabel: string; workDate: string; durationMinutes: number; notes: string; createdAt: string };
 type Media = { id: string; category: string; fileName: string; contentType: string; sizeBytes: number; caption: string; source: string; photoRequirementId: string; requestRevision: number; checklistVersion: string; customerAcknowledgedAt: string; createdAt: string };
 type Signoff = { id: string; signerRole: string; signerName: string; confirmationText: string; method: string; signedAt: string };
 type ProofReview = { proofReady: boolean; counts: { total: number; required: number; supplied: number; accepted: number; retakeRequested: number; notNeeded: number; pending: number };
-  completion: null | { current: boolean; evidenceCurrent: boolean; completedAt: string }; reviews: Array<{ requirementId: string; label: string; status: string; guidance: string; retakeAnswered: boolean }> };
+  completion: null | { current: boolean; evidenceCurrent: boolean; completedAt: string }; uploadCounts: Record<string, number>; reviews: PhotoRequirementReview[] };
 type FieldBlocker = { key: string; label: string; target: string };
 type FieldJob = { id: string; workNumber: string; title: string; status: string; customerName: string; serviceSite: string; scheduledStart: string; scheduledEnd: string;
   primaryAction: null | { action: string; label: string }; actionUnavailableReason: string; phone: string; address: string; directionsUrl: string;
   checklist: Array<{ key: string; label: string; complete: boolean; count: number; target: string }>; blockers: FieldBlocker[];
   completion: { ready: boolean; invoiceReady: boolean; handoverReady: boolean } };
-type Result = { ok?: boolean; protectedJob?: boolean; timeEntries?: TimeEntry[]; media?: Media[]; signoffs?: Signoff[]; proofReview?: ProofReview | null; fieldJob?: FieldJob | null; blockers?: FieldBlocker[]; error?: string };
+type Result = { ok?: boolean; protectedJob?: boolean; canReviewPhotoRequest?: boolean; photoRequestRevision?: number; timeEntries?: TimeEntry[]; media?: Media[]; signoffs?: Signoff[]; proofReview?: ProofReview | null; fieldJob?: FieldJob | null; blockers?: FieldBlocker[]; error?: string };
+type DeliveryChannel = { channel: "email" | "sms"; recipientPreview: string; available: boolean; reason: string };
+type PhotoRequestResult = { ok?: boolean; error?: string; request?: { proof?: ProofReview | null } | null;
+  delivery?: { channels: DeliveryChannel[]; linkDeliverable: boolean } };
+type RetakeDialog = { review: PhotoRequirementReview; reasonCode: PhotoRetakeReason | ""; channel: "email" | "sms" | "";
+  channels: DeliveryChannel[]; linkDeliverable: boolean; consentConfirmed: boolean };
 
 const day = () => new Date().toISOString().slice(0, 10);
 const timeLabel = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? `${minutes % 60}m` : ""}`.trim() : `${minutes}m`;
@@ -27,6 +33,7 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
   const [status, setStatus] = useState("");
   const [online, setOnline] = useState(true);
   const [preview, setPreview] = useState<{ item: Media; url: string } | null>(null);
+  const [retakeDialog, setRetakeDialog] = useState<RetakeDialog | null>(null);
   const actionId = useRef("");
 
   const load = useCallback(async () => {
@@ -62,6 +69,13 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
     window.addEventListener("keydown", closeOnEscape);
     return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); URL.revokeObjectURL(preview.url); };
   }, [preview]);
+
+  useEffect(() => {
+    if (!retakeDialog) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) setRetakeDialog(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [retakeDialog, busy]);
 
   const totalMinutes = useMemo(() => (data.timeEntries || []).reduce((sum, item) => sum + item.durationMinutes, 0), [data.timeEntries]);
 
@@ -129,6 +143,77 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
     finally { setBusy(""); }
   }
 
+  async function photoRequestAction(body: Record<string, unknown>) {
+    const token = await user.getIdToken();
+    const response = await fetch("/api/trade-photo-requests", { method: "POST", headers: {
+      "Content-Type": "application/json", Authorization: `Bearer ${token}`,
+    }, body: JSON.stringify({ workOrderId, ...body }) });
+    const result = await response.json().catch(() => ({})) as PhotoRequestResult;
+    if (!response.ok || !result.ok) throw new Error(result.error || "The customer photo review could not be saved.");
+    return result;
+  }
+
+  async function refreshAfterReview() {
+    await load();
+    await onChanged?.().catch(() => undefined);
+  }
+
+  async function approveRequirement(review: PhotoRequirementReview) {
+    setBusy(`approve:${review.requirementId}`); setStatus("Saving the photo approval...");
+    try {
+      await photoRequestAction({ action: "review_requirement", requirementId: review.requirementId,
+        reviewStatus: "accepted", expectedRevision: data.photoRequestRevision || 0 });
+      await refreshAfterReview(); setStatus("Photo requirement approved.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The photo approval could not be saved."); }
+    finally { setBusy(""); }
+  }
+
+  async function openRetake(review: PhotoRequirementReview) {
+    setBusy(`retake-open:${review.requirementId}`); setStatus("Checking the available customer delivery...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/trade-photo-requests?workOrderId=${encodeURIComponent(workOrderId)}`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({})) as PhotoRequestResult;
+      if (!response.ok || !result.ok) throw new Error(result.error || "Customer delivery could not be checked.");
+      const channels = result.delivery?.channels || [];
+      const preferred = channels.find((item) => item.channel === "email" && item.available)
+        || channels.find((item) => item.available);
+      setRetakeDialog({ review, reasonCode: review.reasonCode || "", channel: preferred?.channel || "",
+        channels, linkDeliverable: Boolean(result.delivery?.linkDeliverable), consentConfirmed: false });
+      setStatus("");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Customer delivery could not be checked."); }
+    finally { setBusy(""); }
+  }
+
+  async function requestRetake() {
+    if (!retakeDialog?.reasonCode || !retakeDialog.channel || !retakeDialog.consentConfirmed) return;
+    const { review, reasonCode, channel } = retakeDialog;
+    let reviewSaved = false;
+    setBusy(`retake-send:${review.requirementId}`); setStatus("Saving the retake and preparing the customer message...");
+    try {
+      const reviewed = await photoRequestAction({ action: "review_requirement", requirementId: review.requirementId,
+        reviewStatus: "retake_requested", reasonCode, expectedRevision: data.photoRequestRevision || 0 });
+      reviewSaved = true;
+      const currentReview = reviewed.request?.proof?.reviews.find((item) => item.requirementId === review.requirementId);
+      if (!currentReview || currentReview.status !== "retake_requested" || !currentReview.reviewRevision) {
+        throw new Error("The saved retake revision could not be confirmed.");
+      }
+      await photoRequestAction({ action: "send_retake", requirementId: review.requirementId,
+        reviewRevision: currentReview.reviewRevision, channel, consentConfirmed: true });
+      setStatus(`Retake request accepted for delivery by ${channel === "email" ? "email" : "SMS"}.`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Customer delivery was not accepted.";
+      setStatus(reviewSaved
+        ? `Retake saved, but the customer message was not accepted for delivery. ${reason} Open Customer photo request below to retry.`
+        : reason);
+    } finally {
+      if (reviewSaved) await refreshAfterReview().catch(() => undefined);
+      setRetakeDialog(null); setBusy("");
+    }
+  }
+
   if (loading) return <div className="crm-empty"><strong>Opening field tools</strong><span>Loading time, files and sign-offs...</span></div>;
 
   return <div className="crm-field-work">
@@ -138,7 +223,12 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
       <span>{isProtected ? "Record work, time and site evidence without names, contact details or a precise address. Customer sign-off stays with AEA." : "This job belongs to your business, so the customer may complete a recorded sign-off."}</span>
     </div>
     <section className="crm-field-summary"><article><span>Time recorded</span><strong>{timeLabel(totalMinutes)}</strong></article><article><span>Job files</span><strong>{(data.media || []).length}</strong></article><article><span>Sign-offs</span><strong>{(data.signoffs || []).length}</strong></article></section>
-    {data.proofReview && <section className={`crm-photo-proof-readiness ${data.proofReview.proofReady ? "ready" : "pending"}`}><header><div><span>Customer photo proof</span><h4>{data.proofReview.proofReady ? "Ready for field use" : data.proofReview.completion?.evidenceCurrent ? "Installer review in progress" : "Waiting for customer completion"}</h4></div><strong>{data.proofReview.counts.accepted} accepted | {data.proofReview.counts.retakeRequested} retake | {data.proofReview.counts.pending} pending</strong></header><ul>{data.proofReview.reviews.map((review) => <li key={review.requirementId}><span>{review.label}</span><strong>{review.status.replaceAll("_", " ")}</strong>{review.status === "retake_requested" && <small>{review.retakeAnswered ? "Replacement added" : "Replacement outstanding"}</small>}</li>)}</ul></section>}
+    {data.proofReview && <section className={`crm-photo-proof-readiness ${data.proofReview.proofReady ? "ready" : "pending"}`}><header><div><span>Customer photo proof</span><h4>{data.proofReview.proofReady ? "Ready for field use" : data.proofReview.completion?.evidenceCurrent ? "Installer review in progress" : "Waiting for customer completion"}</h4></div><strong>{data.proofReview.counts.accepted} accepted | {data.proofReview.counts.retakeRequested} retake | {data.proofReview.counts.pending} pending</strong></header><ul>{data.proofReview.reviews.map((review) => {
+      const actionable = Boolean(data.canReviewPhotoRequest && data.proofReview?.completion?.evidenceCurrent
+        && data.proofReview.uploadCounts[review.requirementId]
+        && (review.status === "pending" || (review.status === "retake_requested" && review.retakeAnswered)));
+      return <li key={review.requirementId}><span>{review.label}</span><strong>{review.status.replaceAll("_", " ")}</strong><div className="crm-photo-proof-actions">{review.status === "retake_requested" && <small>{review.retakeAnswered ? "Replacement added" : "Replacement outstanding"}</small>}{actionable && <><button type="button" className="approve" disabled={Boolean(busy)} onClick={() => void approveRequirement(review)}>Approve</button><button type="button" className="retake" disabled={Boolean(busy)} onClick={() => void openRetake(review)}>Retake</button></>}</div></li>;
+    })}</ul></section>}
     <div className="crm-field-grid" id="field-evidence">
       <section className="crm-field-card"><header><div><span>Technician time</span><h4>Log work completed</h4></div></header>
         <form className="crm-field-form" onSubmit={(event) => void jsonAction(event, "add_time", "Technician time added.")}>
@@ -177,6 +267,17 @@ export function TradeFieldWorkPanel({ user, workOrderId, isProtected, onNavigate
           ? <iframe title={preview.item.caption || preview.item.fileName} src={preview.url} />
           : <img src={preview.url} alt={preview.item.caption || "Job evidence preview"} />}</div>
         <footer><a href={preview.url} download={preview.item.fileName}>Download file</a><button type="button" className="btn" onClick={() => setPreview(null)}>Done</button></footer>
+      </section>
+    </div>}
+    {retakeDialog && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setRetakeDialog(null); }}>
+      <section className="crm-invoice-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="field-retake-title">
+        <header><div><span>Customer photo review</span><strong id="field-retake-title">Request a retake of {retakeDialog.review.label}</strong><small>The original evidence stays attached to the job.</small></div><button type="button" disabled={Boolean(busy)} onClick={() => setRetakeDialog(null)} aria-label="Close retake request">Close</button></header>
+        <div className="crm-invoice-preview-lines crm-retake-review-dialog">
+          <div><span><strong>Reason</strong><small>Choose fixed guidance so private job details are not added to the message.</small></span><select aria-label="Retake reason" value={retakeDialog.reasonCode} disabled={Boolean(busy)} onChange={(event) => setRetakeDialog((current) => current ? { ...current, reasonCode: event.target.value as PhotoRetakeReason } : current)}><option value="">Choose a reason</option>{Object.entries(PHOTO_RETAKE_REASONS).map(([value, guidance]) => <option value={value} key={value}>{guidance}</option>)}</select></div>
+          <div><span><strong>Send to</strong><small>{retakeDialog.linkDeliverable ? "The current secure link will be reused." : "Replace the secure link in Customer photo request before sending."}</small></span><select aria-label="Retake delivery channel" value={retakeDialog.channel} disabled={Boolean(busy)} onChange={(event) => setRetakeDialog((current) => current ? { ...current, channel: event.target.value as "email" | "sms" } : current)}><option value="">No eligible delivery channel</option>{retakeDialog.channels.filter((item) => item.available).map((item) => <option value={item.channel} key={item.channel}>{item.channel === "email" ? "Email" : "SMS"} | {item.recipientPreview}</option>)}</select></div>
+          <div><label><input type="checkbox" checked={retakeDialog.consentConfirmed} disabled={Boolean(busy)} onChange={(event) => setRetakeDialog((current) => current ? { ...current, consentConfirmed: event.target.checked } : current)} /> I confirm this customer asked to receive this job photo request through the destination shown above.</label></div>
+        </div>
+        <footer><button type="button" disabled={Boolean(busy)} onClick={() => setRetakeDialog(null)}>Cancel</button><button type="button" className="btn" disabled={Boolean(busy) || !retakeDialog.reasonCode || !retakeDialog.channel || !retakeDialog.linkDeliverable || !retakeDialog.consentConfirmed} onClick={() => void requestRetake()}>{busy ? "Sending..." : "Save retake and send"}</button></footer>
       </section>
     </div>}
   </div>;

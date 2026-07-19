@@ -221,6 +221,11 @@
 .crm-photo-proof-readiness li { align-items: center; background: rgba(255,255,255,.7); border-radius: 8px; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto auto; padding: 8px 10px; }
 .crm-photo-proof-readiness li span { color: #315b51; font-size: .68rem; }
 .crm-photo-proof-readiness li strong, .crm-photo-proof-readiness li small { color: #5d716c; font-size: .63rem; text-transform: capitalize; }
+.crm-photo-proof-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.crm-photo-proof-actions button { background: #fff; border: 1px solid #9fc8b9; border-radius: 7px; color: #17684f; cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 34px; padding: 7px 10px; }
+.crm-photo-proof-actions button.approve { background: #168b66; border-color: #168b66; color: #fff; }
+.crm-photo-proof-actions button.retake { border-color: #d7a957; color: #795316; }
+.crm-photo-proof-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .crm-field-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-field-card { border: 1px solid #dbe5e1; border-radius: 13px; padding: 16px; }
 .crm-field-card.wide { grid-column: 1 / -1; }
@@ -4035,6 +4040,10 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-shell .dashboard-workspace-nav button b { color: #32d1a5; font-size: .52rem; grid-row: 1 / span 2; }
 .trade-portal-shell .dashboard-workspace-nav button span { font-size: .7rem; }
 .trade-portal-shell .dashboard-workspace-nav button small { color: #789c9b; font-size: .55rem; line-height: 1.25; }
+.trade-portal-shell .dashboard-workspace-shortcuts { display: grid; gap: 3px; margin: -2px 4px 5px 38px; }
+.trade-portal-shell .dashboard-workspace-shortcuts button { border-radius: 7px; display: block; padding: 7px 9px; text-align: left; }
+.trade-portal-shell .dashboard-workspace-shortcuts button span { color: #9dc0bb; font-size: .59rem; font-weight: 800; }
+.trade-portal-shell .dashboard-workspace-shortcuts button:hover span, .trade-portal-shell .dashboard-workspace-shortcuts button:focus-visible span { color: #fff; }
 .dashboard-rail-note { background: #0a2332; border: 1px solid #1a3b49; border-radius: 12px; margin-top: auto; padding: 13px; }
 .dashboard-rail-note strong { color: #54d8b0; display: block; font-size: .59rem; }
 .dashboard-rail-note p { color: #7fa29f; font-size: .54rem; line-height: 1.5; margin-top: 6px; }
@@ -4164,6 +4173,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .trade-portal-intro h1 { font-size: 2rem; }
   .trade-portal-shell > .dashboard-workspace-nav { display: flex; flex-direction: row; max-width: 100vw; min-height: auto; overflow-x: auto; overflow-y: hidden; padding: 8px 12px; position: sticky; top: 0; width: 100%; z-index: 30; }
   .trade-portal-shell .dashboard-workspace-nav button { flex: 0 0 150px; padding: 10px; }
+  .trade-portal-shell .dashboard-workspace-shortcuts { display: flex; flex: 0 0 auto; gap: 4px; margin: 0; }
+  .trade-portal-shell .dashboard-workspace-shortcuts button { flex: 0 0 auto; padding: 10px 12px; }
   .dashboard-rail-note { display: none; }
   .trade-portal-shell > :not(.dashboard-hero):not(.dashboard-workspace-nav):not(.trade-portal-intro) { margin-left: 14px; margin-right: 14px; }
   .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
@@ -4406,6 +4417,10 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-invoice-preview-lines span { display: grid; gap: 2px; }
 .crm-invoice-preview-lines strong, .crm-invoice-preview-lines b { color: #173f38; font-size: .64rem; }
 .crm-invoice-preview-lines small { color: #71837f; font-size: .52rem; }
+.crm-retake-review-dialog > div { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .8fr); }
+.crm-retake-review-dialog select { background: #fff; border: 1px solid #aacbc0; border-radius: 8px; color: #173f38; font: inherit; font-size: .61rem; min-height: 42px; padding: 8px 10px; width: 100%; }
+.crm-retake-review-dialog label { align-items: flex-start; color: #315b51; display: flex; font-size: .58rem; font-weight: 750; gap: 8px; line-height: 1.45; }
+.crm-retake-review-dialog label input { flex: 0 0 auto; margin-top: 2px; }
 .crm-invoice-preview-dialog > dl { margin: 0 16px 8px auto; min-width: min(280px, calc(100% - 32px)); padding: 8px 0; }
 .crm-invoice-preview-dialog > dl div { display: flex; font-size: .61rem; justify-content: space-between; padding: 3px 0; }
 .crm-invoice-preview-dialog > dl .total { border-top: 1px solid #9fb9b0; font-size: .76rem; margin-top: 4px; padding-top: 8px; }
@@ -4428,6 +4443,7 @@ body input[type="number"]::-webkit-outer-spin-button {
   .crm-preview-content { min-height: 260px; }
   .crm-preview-dialog > footer, .crm-invoice-preview-dialog > footer { align-items: stretch; flex-direction: column-reverse; }
   .crm-preview-dialog > footer a, .crm-preview-dialog > footer button, .crm-invoice-preview-dialog > footer button { text-align: center; width: 100%; }
+  .crm-retake-review-dialog > div { grid-template-columns: 1fr; }
 }
 .admin-job-directory { display: grid; gap: 16px; }
 .admin-job-directory > header span, .admin-job-search > span { color: #16805f; font-size: .6rem; font-weight: 900; text-transform: uppercase; }
@@ -5179,6 +5195,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-price-book label span, .trade-quote-packets label span { color: var(--color-aea-green-dark); font-size: .7rem; font-weight: 900; }
 .trade-quote-price-book select, .trade-quote-packets select { background: white; border: 1px solid #a9cfc0; border-radius: 8px; min-height: 42px; padding: 9px; width: 100%; }
 .trade-quote-price-book small, .trade-quote-packets small { color: var(--color-aea-muted); line-height: 1.45; }
+.trade-quote-price-book > div { display: grid; gap: 7px; }
+.trade-quote-price-book > div button { background: var(--color-aea-green-dark); border: 1px solid var(--color-aea-green-dark); border-radius: 8px; color: #fff; cursor: pointer; font-size: .66rem; font-weight: 850; min-height: 40px; padding: 8px 11px; width: max-content; }
+.trade-quote-line :is(input[readonly], select:disabled) { background: #edf3f0; color: #48645c; opacity: 1; }
 .quote-status { background: #e8f3ee; border-radius: 20px; color: var(--color-aea-green-dark); font-size: .68rem; padding: 6px 10px; text-transform: uppercase; }
 .quote-status.accepted { background: #dff2e4; color: #1f6537; }
 .quote-status.declined, .quote-status.superseded { background: #f2eded; color: #795454; }

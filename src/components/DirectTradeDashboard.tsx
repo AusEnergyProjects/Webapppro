@@ -599,7 +599,16 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="TLink installer account"
               >
-                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => setWorkspace("work")}><b aria-hidden="true">01</b><span>Work</span><small>Today, jobs and customers</small></button>
+                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => {
+                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
+                  setWorkspace("work");
+                }}><b aria-hidden="true">01</b><span>Work</span><small>Today and next actions</small></button>
+                <div className="dashboard-workspace-shortcuts" aria-label="Work shortcuts">
+                  {([['jobs', 'Jobs'], ['customers', 'Customers'], ['pricebook', 'Price book']] as const).map(([view, label]) => <button type="button" key={view} onClick={() => {
+                    setCommandTarget({ workspace: "work", kind: "crm-view", id: view, query: "", nonce: Date.now() });
+                    setWorkspace("work");
+                  }}><span>{label}</span></button>)}
+                </div>
                 <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => setWorkspace("schedule")}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
                 <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>

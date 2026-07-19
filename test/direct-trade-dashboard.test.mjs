@@ -119,6 +119,10 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   assert.match(styles, /grid-template-columns: 244px minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 780px\)/);
   assert.match(styles, /dashboard-workspace-nav button\.active/);
+  assert.match(dashboard, /dashboard-workspace-shortcuts/);
+  for (const shortcut of ["Jobs", "Customers", "Price book"]) assert.match(dashboard, new RegExp(`'${shortcut}'`));
+  assert.match(dashboard, /kind: "crm-view"/);
+  assert.match(styles, /dashboard-workspace-shortcuts/);
 });
 
 test("TLink has a consistent trade platform identity and installable app icon", () => {

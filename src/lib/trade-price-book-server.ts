@@ -7,6 +7,7 @@ export type PriceBookQuoteItem = {
   id: string;
   itemCode: string;
   name: string;
+  description: string;
   itemType: PriceBookItemType;
   lineType: "product" | "labour" | "adjustment";
   unitLabel: string;
@@ -23,6 +24,7 @@ function quoteItem(row: Row): PriceBookQuoteItem {
     id: String(row.id),
     itemCode: String(row.item_code),
     name: String(row.name),
+    description: String(row.description || ""),
     itemType,
     lineType: priceBookQuoteLineType(itemType),
     unitLabel: String(row.unit_label),
@@ -35,7 +37,7 @@ function quoteItem(row: Row): PriceBookQuoteItem {
 }
 
 export async function priceBookItemsForQuote(ownerUid: string) {
-  const rows = await getD1().prepare(`SELECT id, item_code, name, item_type, unit_label, supplier_cost_cents_ex_gst,
+  const rows = await getD1().prepare(`SELECT id, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
       sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
     ORDER BY name COLLATE NOCASE, item_code LIMIT 500`).bind(ownerUid).all<Row>();
@@ -46,7 +48,7 @@ export async function resolvePriceBookQuoteLines(ownerUid: string, rawLines: unk
   if (!Array.isArray(rawLines)) return { lines: rawLines, references: [] as (PriceBookQuoteItem | null)[] };
   const ids = [...new Set(rawLines.map((line) => line && typeof line === "object" ? String((line as Row).priceBookItemId || "") : "").filter(Boolean))];
   if (!ids.length) return { lines: rawLines, references: rawLines.map(() => null) };
-  const rows = await getD1().prepare(`SELECT id, item_code, name, item_type, unit_label, supplier_cost_cents_ex_gst,
+  const rows = await getD1().prepare(`SELECT id, item_code, name, description, item_type, unit_label, supplier_cost_cents_ex_gst,
       sell_price_cents_ex_gst, tax_code, markup_basis_points, margin_basis_points
     FROM trade_price_book_items WHERE firebase_uid = ? AND record_status = 'active'
       AND id IN (${ids.map(() => "?").join(",")})`).bind(ownerUid, ...ids).all<Row>();
@@ -63,7 +65,7 @@ export async function resolvePriceBookQuoteLines(ownerUid: string, rawLines: unk
     return {
       ...(line as Row),
       lineType: reference.lineType,
-      description: reference.name,
+      description: reference.description || reference.name,
       unitPrice: (reference.sellPriceCentsExGst / 100).toFixed(2),
       taxCode: reference.taxCode,
     };

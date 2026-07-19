@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
@@ -53,8 +53,9 @@ function fieldError(error: unknown) {
   return adminJson({ ok: false, error: "The field-work record could not be completed." }, 500);
 }
 
-async function payload(firebaseUid: string, workOrderId: string) {
+async function payload(access: TeamAccess, workOrderId: string) {
   const db = getD1();
+  const firebaseUid = access.ownerUid;
   const [time, media, signoffs] = await Promise.all([
     db.prepare(`SELECT id, staff_label, work_date, duration_minutes, notes, created_at
       FROM trade_crm_time_entries WHERE firebase_uid = ? AND work_order_id = ? ORDER BY work_date DESC, created_at DESC`)
@@ -131,6 +132,8 @@ async function payload(firebaseUid: string, workOrderId: string) {
       { key: "issues", label: "Open issues or blockers", complete: !counts.issues, count: counts.issues, target: "notes" },
     ], blockers, completion: { ready: blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
   return {
+    canReviewPhotoRequest: canDispatch(access),
+    photoRequestRevision: request && request.status !== "revoked" ? Number(request.revision) : 0,
     timeEntries: time.results.map((row) => ({ id: row.id, staffLabel: row.staff_label, workDate: row.work_date,
       durationMinutes: Number(row.duration_minutes), notes: row.notes, createdAt: row.created_at })),
     media: media.results.map((row) => ({ id: row.id, category: row.category, fileName: row.file_name,
@@ -154,7 +157,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     .bind(access.ownerUid, clientActionId).first<Record<string, unknown>>();
   if (receipt) {
     if (receipt.action_type !== actionType || receipt.entity_id !== workOrderId) return adminJson({ ok: false, error: "This field action reference was already used for different work." }, 409);
-    return adminJson({ ok: true, duplicate: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision), ...(await payload(access.ownerUid, workOrderId)) });
+    return adminJson({ ok: true, duplicate: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision), ...(await payload(access, workOrderId)) });
   }
   const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
     AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
@@ -163,7 +166,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
   if (!appointment) return adminJson({ ok: false, error: "Schedule this job before starting field work." }, 409);
   if (appointment.status !== transition.from) return adminJson({ ok: false, error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` }, 409);
   if (action === "finish") {
-    const current = await payload(access.ownerUid, workOrderId);
+    const current = await payload(access, workOrderId);
     const blockers = (current.fieldJob as { blockers?: Array<{ key: string; label: string; target: string }> } | null)?.blockers || [];
     if (blockers.length) return adminJson({ ok: false, error: "Finish the required job items before completing this work.", blockers }, 409);
   }
@@ -203,7 +206,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
   ]);
   if (!results[0]?.meta.changes) throw new Error("FIELD_TRANSITION_CONFLICT");
   await db.batch(jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now, audienceMemberId: String(job.assignee_member_id || "") }));
-  return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision, ...(await payload(access.ownerUid, workOrderId)) });
+  return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision, ...(await payload(access, workOrderId)) });
 }
 
 export async function GET(request: Request) {
@@ -230,7 +233,7 @@ export async function GET(request: Request) {
     const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     const job = await assignedJob(access, workOrderId);
     return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision),
-      ...(await payload(access.ownerUid, workOrderId)) });
+      ...(await payload(access, workOrderId)) });
   } catch (error) { return fieldError(error); }
 }
 
@@ -270,7 +273,7 @@ async function upload(request: Request, access: TeamAccess) {
         audienceMemberId: job.assignee_member_id }),
     ]);
   } catch (error) { await store.delete(objectKey); throw error; }
-  return adminJson({ ok: true, revision, ...(await payload(access.ownerUid, workOrderId)) }, 201);
+  return adminJson({ ok: true, revision, ...(await payload(access, workOrderId)) }, 201);
 }
 
 export async function POST(request: Request) {
@@ -322,7 +325,7 @@ export async function POST(request: Request) {
         audienceMemberId: job.assignee_member_id }),
     ]);
     return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision,
-      ...(await payload(access.ownerUid, workOrderId)) }, 201);
+      ...(await payload(access, workOrderId)) }, 201);
   } catch (error) { return fieldError(error); }
 }
 
@@ -346,6 +349,6 @@ export async function DELETE(request: Request) {
       ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId: record.work_order_id,
         revision, changedAt: now, audienceMemberId: job.assignee_member_id }),
     ]);
-    return adminJson({ ok: true, revision, ...(await payload(access.ownerUid, record.work_order_id)) });
+    return adminJson({ ok: true, revision, ...(await payload(access, record.work_order_id)) });
   } catch (error) { return fieldError(error); }
 }

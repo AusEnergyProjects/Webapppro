@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 
 export type TLinkCommandTarget = {
   workspace: "work" | "products" | "orders";
-  kind: "job" | "customer" | "product" | "order" | "team" | "new-job" | "new-customer";
+  kind: "job" | "customer" | "product" | "order" | "team" | "new-job" | "new-customer" | "crm-view";
   id: string;
   query: string;
   nonce: number;

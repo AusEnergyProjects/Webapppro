@@ -65,15 +65,15 @@ Release result: Sites version 182 from implementation commits `1f96c09feb8f988dc
 
 Release result: Sites version 183 from implementation commit `dddedb71ca9af3b3274f4276504cb68cd73d3307`, deployment `appgdep_6a5ca8e07ea4819194a59a66edc8c2bb`. Live signed-in QA showed two unread customer-upload events for `TLJ-00000804`, and all three protected customer files opened through the new Preview action; the first image rendered inside the job modal with Download file retained as an optional action. The production account has no invoice draft, so invoice-preview behavior was covered by the focused component and route contracts without creating or sending a production invoice. The live comparison page used the local Arial font stack for its brand and sampled headings at 2560 px without document-level horizontal overflow. No notification was marked read and no production record was mutated during QA.
 
-## Active milestone contract: one job communication timeline
+## Active milestone contract: fast evidence-to-quote workflow
 
-- User outcome: an office user can see appointment, evidence-request and invoice email state in one job timeline, understand whether each message is pending, accepted, delivered or failed, and deliberately retry an eligible failure without searching separate workspaces.
-- Owning workflow: existing appointment, photo-request and invoice delivery ledgers; job workspace; administrator delivery health; feature-local tests.
-- In scope: one privacy-safe owner-scoped read model, consistent status language, last attempt and failure reason, provider-ready warning before the final action, and bounded retry through existing delivery commands.
-- Out of scope: a new provider, SMS sender approval, message editing, marketing campaigns, provider-specific financial documents, customer contact disclosure, or automatic retry without an office action.
-- Acceptance: a final action never says sent unless the provider accepted the message; delivered is shown only after an authenticated callback; the job timeline stores no recipient address or secure-link secret; repeated retry cannot duplicate a successful intent; desktop and phone layouts remain usable without document-level overflow.
-- Validation: focused delivery-ledger and retry tests, complete release gate, signed-in failure and accepted-send QA using non-sensitive status data, canonical health and worker-error checks.
-- Stop condition: a new outbound provider, unapproved SMS sender, direct mailbox access, or a second communication source of truth requires a separate decision.
+- User outcome: an office user can clear each pending customer photo requirement, send a safe retake request when needed, and build a quote from the business's saved prices without hunting through secondary menus or retyping standard work.
+- Owning workflow: field-work customer proof review, current photo-request delivery ledger, owner-scoped price book, direct quote builder, installer left navigation and feature-local tests and styles.
+- In scope: surface the existing revisioned requirement-level Approve and Retake actions in Field work; require one fixed safe reason before a retake; deliver the targeted retake through the current authorised customer channel; expose Jobs, Customers and Price book as compact Work shortcuts in the left rail; place the saved-item chooser before manual quote lines; retain editable quantity and immutable quote snapshots.
+- Out of scope: misleading per-file approval when several uploads satisfy one requirement, a second review or pricing source, new email or SMS providers, automatic customer contact without the existing consent and delivery checks, supplier catalogue imports, a new accounting adapter, or a broad visual redesign copied from another CRM.
+- Acceptance: only an owner, manager or coordinator can review proof; each decision remains append only and revision bound; a retake uses the current secure link and cannot duplicate a successful delivery; technicians retain read-only proof status; active price-book items supply type, description, unit price and GST while quantity remains editable; quote save resolves current owner-scoped prices server side; all primary paths remain keyboard, touch and phone usable without document-level overflow.
+- Validation: focused photo-review, price-book, quote and navigation tests; TypeScript and ESLint; complete `npm.cmd run validate`; clean migration replay; signed-in desktop and phone interaction QA; canonical health and worker-error checks.
+- Stop condition: exact per-file decisions, new customer disclosure, provider credentials, a separate commercial source of truth, or a cross-product navigation redesign requires a separate milestone.
 
 ## Current delivery summary
 

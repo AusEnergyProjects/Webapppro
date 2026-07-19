@@ -19,6 +19,7 @@ const deliveryServer = read("../src/lib/photo-request-delivery-server.ts");
 const customerUi = read("../src/components/JobInformationUpload.tsx");
 const installerUi = read("../src/components/TradePhotoRequestPanel.tsx");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
+const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
 const templateRoute = read("../src/app/api/trade-photo-templates/route.ts");
 
 test("retake reasons are bounded and evidence completion keys are deterministic", async () => {
@@ -92,12 +93,29 @@ test("targeted follow-up reuses the current link and is idempotent by review and
 
 test("field and template reporting expose privacy-safe review aggregates", () => {
   assert.match(fieldRoute, /proofReview/);
+  assert.match(fieldRoute, /canReviewPhotoRequest: canDispatch\(access\)/);
+  assert.match(fieldRoute, /photoRequestRevision/);
   assert.match(templateRoute, /reviewCounts/);
   assert.match(templateRoute, /acceptedCount/);
   const reviewHelper = read("../src/lib/photo-request-review-server.ts");
   assert.doesNotMatch(reviewHelper, /customer_email|customer_phone|token_hash|encrypted_token|object_key|image_url/);
 });
 
+test("field work gives permitted office roles a bounded approve or retake path", () => {
+  assert.match(fieldUi, /data\.canReviewPhotoRequest/);
+  assert.match(fieldUi, />Approve</);
+  assert.match(fieldUi, />Retake</);
+  assert.match(fieldUi, /PHOTO_RETAKE_REASONS/);
+  assert.match(fieldUi, /action: "review_requirement"/);
+  assert.match(fieldUi, /expectedRevision: data\.photoRequestRevision/);
+  assert.match(fieldUi, /action: "send_retake"/);
+  assert.match(fieldUi, /reviewRevision: currentReview\.reviewRevision/);
+  assert.match(fieldUi, /channel === "email" && item\.available/);
+  assert.match(fieldUi, /consentConfirmed: true/);
+  assert.match(fieldUi, /Retake saved, but the customer message was not accepted for delivery/);
+  assert.doesNotMatch(fieldUi, /reviewNote|customerMessage|freeText/);
+});
+
 test("photo review sources avoid prohibited dash characters", () => {
-  assert.doesNotMatch(`${customerRoute}\n${installerRoute}\n${customerUi}\n${installerUi}\n${fieldRoute}\n${templateRoute}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${customerRoute}\n${installerRoute}\n${customerUi}\n${installerUi}\n${fieldRoute}\n${fieldUi}\n${templateRoute}`, /[\u2013\u2014]/);
 });

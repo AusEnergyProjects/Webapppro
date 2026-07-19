@@ -101,10 +101,19 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteRoute, /price\?\.marginBasisPoints/);
   assert.match(quoteServer, /record_status = 'active'/);
   assert.match(quoteServer, /PRICE_BOOK_ITEM_UNAVAILABLE/);
+  assert.match(quoteServer, /description: reference\.description \|\| reference\.name/);
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
-  assert.match(quoteUi, /Quick add to included work/);
-  assert.match(quoteUi, /snapshot current prices when the draft is saved/);
-  assert.match(quoteUi, /Common job item" : "Saved item"\}, current price applied on save/);
+  assert.match(quoteUi, /description: item\.description \|\| item\.name/);
+  assert.match(quoteUi, /Add a saved item/);
+  assert.match(quoteUi, /No saved items yet/);
+  assert.match(quoteUi, /Open Price book/);
+  assert.doesNotMatch(quoteUi, /priceBookItems\.length > 0 && <div className="trade-quote-price-book"/);
+  assert.match(quoteUi, /const linked = Boolean\(line\.priceBookItemId\)/);
+  assert.match(quoteUi, /disabled=\{linked\}/);
+  assert.match(quoteUi, /readOnly=\{linked\}/);
+  assert.match(quoteUi, /Change the quantity or customer section here/);
+  assert.equal((crm.match(/onOpenPriceBook=\{\(\) => setView\("pricebook"\)\}/g) || []).length, 2);
+  assert.match(crm, /navigationTarget\.kind === "crm-view"/);
 });
 
 test("the trade workspace prioritises quick setup and progressive disclosure", () => {
