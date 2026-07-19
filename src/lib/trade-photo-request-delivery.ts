@@ -1,4 +1,5 @@
 import type { ReminderChannel } from "@/lib/service-reminder-delivery";
+import { customerAppointmentCalendar } from "./customer-appointment-calendar.ts";
 
 export const PHOTO_REQUEST_RESEND_LIMIT = 2;
 export const PHOTO_REQUEST_REMINDER_DAYS = 7;
@@ -44,6 +45,7 @@ export function photoRequestDeliveryDraft(input: {
   retakeGuidance?: string;
   appointmentStartsAt?: string;
   appointmentEndsAt?: string;
+  appointmentTimeZone?: string;
 }) {
   const reminder = input.intent === "expiry_reminder";
   const retake = input.intent === "retake_followup";
@@ -53,10 +55,18 @@ export function photoRequestDeliveryDraft(input: {
     ? `${input.businessName} is reminding you that the secure photo request for job ${input.workNumber} expires on ${new Date(input.expiresAt).toLocaleDateString("en-AU")}.`
     : retake ? `${input.businessName} has requested another photo of ${input.requirementLabel || "one job item"} for job ${input.workNumber}. ${input.retakeGuidance || "Open the request for safe capture guidance."}`
     : `${input.businessName} has requested photos for job ${input.workNumber}.`;
-  const appointment = input.intent === "initial" ? appointmentWindow(input.appointmentStartsAt, input.appointmentEndsAt) : "";
+  const appointment = !reminder && !retake ? appointmentWindow(input.appointmentStartsAt, input.appointmentEndsAt) : "";
+  const calendar = appointment ? customerAppointmentCalendar({
+    workNumber: input.workNumber,
+    businessName: input.businessName,
+    startsAt: input.appointmentStartsAt || "",
+    endsAt: input.appointmentEndsAt || "",
+    timeZone: input.appointmentTimeZone || "Australia/Sydney",
+  }) : null;
   return {
     subject: subject.slice(0, 160),
-    body: `${lead}${appointment ? `\n\nAppointment: ${appointment}` : ""}\n\nOpen the secure request: ${input.shareUrl}\n\nThe link does not show your name, contact details or address. Only add photos requested for this job.`.slice(0, 1200),
+    body: `${lead}${appointment ? `\n\nAppointment: ${appointment}` : ""}${calendar ? `\nAdd to Google Calendar: ${calendar.googleUrl}` : ""}\n\nOpen the secure request: ${input.shareUrl}\n\nThe link does not show your name, contact details or address. Only add photos requested for this job.`.slice(0, 2000),
+    calendar,
   };
 }
 

@@ -199,7 +199,8 @@ test("customer devices can choose files or capture a new property photo", () => 
   );
   assert.match(customerUi, /capture="environment"/);
   assert.match(customerUi, /prepareEvidenceUpload/);
-  assert.match(customerPhotoUpload, /maximumDimension = 2400/);
+  assert.match(customerPhotoUpload, /MAX_PREPARED_CUSTOMER_PHOTO_BYTES = 640 \* 1024/);
+  assert.match(customerPhotoUpload, /maximumDimension = 1920/);
   assert.match(
     customerUi,
     /shared with each\s+verified installer\s+allocated to this enquiry/,

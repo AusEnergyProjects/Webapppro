@@ -11,6 +11,7 @@ import {
 } from "@/lib/trade-photo-request-delivery";
 import { hashPhotoRequestSecret, normalisePhotoRequirements, type PhotoRequirement } from "@/lib/trade-photo-requests";
 import { photoRetakeGuidance } from "@/lib/photo-request-review";
+import { australianAppointmentTimeZone, textAttachment } from "@/lib/customer-appointment-calendar";
 import {
   normalizeAustralianMobile,
   sendServiceReminderProviderMessage,
@@ -42,6 +43,7 @@ type DeliveryContext = Row & {
   business_name: string;
   appointment_starts_at: string;
   appointment_ends_at: string;
+  appointment_state: string;
 };
 
 type CustomerAccount = Row & {
@@ -81,7 +83,7 @@ function smsSenderApproved() {
 async function deliveryContext(requestId: string, ownerUid = "") {
   return getD1().prepare(`SELECT r.*, w.stage work_status, w.record_status work_record_status, w.work_number,
       c.email customer_email, c.phone customer_phone, c.record_status customer_record_status,
-      trade.business_name,
+      trade.business_name, COALESCE(site.address_state, trade.address_state, 'NSW') appointment_state,
       COALESCE((SELECT appointment.starts_at FROM trade_crm_appointments appointment
         WHERE appointment.work_order_id = w.id AND appointment.firebase_uid = w.firebase_uid
           AND appointment.status = 'scheduled' ORDER BY appointment.starts_at LIMIT 1), '') appointment_starts_at,
@@ -92,6 +94,7 @@ async function deliveryContext(requestId: string, ownerUid = "") {
     JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
     JOIN trade_crm_job_details details ON details.work_order_id = w.id AND details.firebase_uid = w.firebase_uid
       AND details.crm_customer_id = r.crm_customer_id AND details.customer_source = 'trade_owned'
+    LEFT JOIN trade_crm_service_sites site ON site.id = details.service_site_id AND site.firebase_uid = details.firebase_uid
     JOIN trade_crm_customers c ON c.id = r.crm_customer_id AND c.firebase_uid = r.firebase_uid
     JOIN trade_accounts trade ON trade.firebase_uid = r.firebase_uid
     WHERE r.id = ? AND (? = '' OR r.firebase_uid = ?) LIMIT 1`)
@@ -286,9 +289,15 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
     const draft = photoRequestDeliveryDraft({ intent: String(delivery.intent) as PhotoRequestDeliveryIntent,
       businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at,
       requirementLabel: retakeLabel, retakeGuidance, appointmentStartsAt: context.appointment_starts_at,
-      appointmentEndsAt: context.appointment_ends_at });
+      appointmentEndsAt: context.appointment_ends_at, appointmentTimeZone: australianAppointmentTimeZone(context.appointment_state) });
+    const attachments = channel === "email" && draft.calendar ? [textAttachment(
+      draft.calendar.filename,
+      draft.calendar.ics,
+      "text/calendar; charset=utf-8; method=PUBLISH",
+    )] : undefined;
     const result = await sendServiceReminderProviderMessage({ channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
       idempotencyKey: String(delivery.idempotency_key), messageType: "photo_request_link",
+      attachments,
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString() });
     await db.batch([
       db.prepare(`UPDATE trade_crm_photo_request_deliveries SET status = 'sent', attempts = ?, provider = ?, provider_message_id = ?,

@@ -5,6 +5,7 @@ import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-e
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
+import { australianAppointmentTimeZone, customerAppointmentCalendar } from "@/lib/customer-appointment-calendar";
 import {
   hashPhotoRequestSecret,
   normalisePhotoRequirements,
@@ -15,8 +16,8 @@ import {
 
 export const runtime = "edge";
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_REQUEST_FILES = 24;
+const MAX_FILE_BYTES = 650 * 1024;
+const MAX_REQUEST_FILES = 36;
 const MAX_REQUIREMENT_FILES = 3;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -41,6 +42,9 @@ type PublicRequestRecord = {
   job_revision: number;
   assignee_member_id: string;
   business_name: string;
+  appointment_starts_at: string;
+  appointment_ends_at: string;
+  appointment_state: string;
 };
 
 function json(body: object, status = 200) {
@@ -67,11 +71,19 @@ async function authorisedRequest(context: RouteContext) {
   if (!parsed) throw new Error("REQUEST_NOT_FOUND");
   const record = await getD1().prepare(`SELECT r.id, r.work_order_id, r.firebase_uid, r.token_hash, r.status,
       r.requirements, r.revision, r.expires_at, w.work_number, w.title, w.service_category,
-      w.revision job_revision, w.assignee_member_id, a.business_name
+      w.revision job_revision, w.assignee_member_id, a.business_name,
+      COALESCE((SELECT appointment.starts_at FROM trade_crm_appointments appointment
+        WHERE appointment.work_order_id = w.id AND appointment.firebase_uid = w.firebase_uid
+          AND appointment.status = 'scheduled' ORDER BY appointment.starts_at LIMIT 1), '') appointment_starts_at,
+      COALESCE((SELECT appointment.ends_at FROM trade_crm_appointments appointment
+        WHERE appointment.work_order_id = w.id AND appointment.firebase_uid = w.firebase_uid
+          AND appointment.status = 'scheduled' ORDER BY appointment.starts_at LIMIT 1), '') appointment_ends_at,
+      COALESCE(site.address_state, a.address_state, 'NSW') appointment_state
     FROM trade_crm_photo_requests r
     JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       AND d.crm_customer_id = r.crm_customer_id AND d.customer_source = 'trade_owned'
+    LEFT JOIN trade_crm_service_sites site ON site.id = d.service_site_id AND site.firebase_uid = d.firebase_uid
     JOIN trade_accounts a ON a.firebase_uid = r.firebase_uid
     WHERE r.id = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND w.source_type <> 'opportunity'
       AND a.partner_type = 'installer' AND a.account_status = 'active'`)
@@ -92,12 +104,17 @@ async function publicPayload(record: PublicRequestRecord, requirements: PhotoReq
     .bind(record.firebase_uid, record.work_order_id, record.id).all<Record<string, unknown>>(),
   photoRequestProofOverview({ ownerUid: record.firebase_uid, workOrderId: record.work_order_id, requestId: record.id,
     requestRevision: Number(record.revision), requirements })]);
+  const timeZone = australianAppointmentTimeZone(record.appointment_state);
+  const calendar = customerAppointmentCalendar({ workNumber: record.work_number, businessName: record.business_name,
+    startsAt: record.appointment_starts_at, endsAt: record.appointment_ends_at, timeZone });
   return {
     businessName: record.business_name,
     job: { workNumber: record.work_number, title: record.title, serviceCategory: record.service_category },
     request: { revision: Number(record.revision), expiresAt: record.expires_at, checklistVersion: PHOTO_REQUEST_CHECKLIST_VERSION,
       requirements, completion: proof.completion, reviews: proof.reviews, outstandingRequirementIds: proof.outstandingRequirementIds,
       proofReady: proof.proofReady },
+    appointment: calendar ? { startsAt: record.appointment_starts_at, endsAt: record.appointment_ends_at, timeZone,
+      googleCalendarUrl: calendar.googleUrl } : null,
     uploads: rows.results.map((row) => ({
       id: row.id,
       requirementId: row.photo_requirement_id,
@@ -186,7 +203,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!requirement) return json({ ok: false, error: "Choose one of the requested photo categories." }, 400);
     if (!(file instanceof File) || !file.name) return json({ ok: false, error: "Choose or take a photo." }, 400);
     if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a JPEG, PNG or WebP photo. Phone photos are converted to JPEG before sending." }, 400);
-    if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "Each photo must be no larger than 8 MB." }, 400);
+    if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "This photo is still too large to send. Choose it again so TLink can prepare a smaller copy." }, 413);
     if (form.get("checklistVersion") !== PHOTO_REQUEST_CHECKLIST_VERSION
       || form.get("confirmClarity") !== "true"
       || form.get("confirmRelevance") !== "true"
@@ -197,7 +214,7 @@ export async function POST(request: Request, context: RouteContext) {
       SUM(CASE WHEN photo_requirement_id = ? THEN 1 ELSE 0 END) requirement_total
       FROM trade_crm_job_media WHERE firebase_uid = ? AND work_order_id = ? AND photo_request_id = ? AND source = 'customer_request'`)
       .bind(requirementId, record.firebase_uid, record.work_order_id, record.id).first<{ total: number; requirement_total: number }>();
-    if (Number(counts?.total || 0) >= MAX_REQUEST_FILES) return json({ ok: false, error: "This request already has its maximum of 24 photos." }, 409);
+    if (Number(counts?.total || 0) >= MAX_REQUEST_FILES) return json({ ok: false, error: "This request already has its maximum of 36 photos." }, 409);
     if (Number(counts?.requirement_total || 0) >= MAX_REQUIREMENT_FILES) return json({ ok: false, error: "This photo requirement already has its maximum of 3 photos." }, 409);
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (!hasAllowedSignature(bytes, file.type, false)) return json({ ok: false, error: "The selected file contents do not match a supported photo type." }, 400);

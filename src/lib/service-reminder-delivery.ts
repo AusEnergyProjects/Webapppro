@@ -15,6 +15,7 @@ export type ReminderProviderMessage = {
   idempotencyKey: string;
   callbackUrl: string;
   messageType?: string;
+  attachments?: Array<{ filename: string; content: string; contentType: string }>;
 };
 
 const textEncoder = new TextEncoder();
@@ -89,6 +90,11 @@ export async function sendServiceReminderProviderMessage(
         subject: input.subject,
         text: input.body,
         reply_to: values.RESEND_REPLY_TO || undefined,
+        attachments: input.attachments?.map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content,
+          content_type: attachment.contentType,
+        })),
         tags: [{ name: "message_type", value: String(input.messageType || "service_reminder").replace(/[^a-z0-9_]/gi, "_").slice(0, 40) }],
       }),
       cache: "no-store",

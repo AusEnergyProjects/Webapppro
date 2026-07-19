@@ -47,13 +47,16 @@ test("delivery idempotency is stable for one follow-up channel and content revis
   assert.notEqual(one, await serviceReminderIdempotencyKey("follow-up", "email", 5));
 });
 
-test("Resend requests use provider idempotency without exposing credentials in the payload", async () => {
+test("Resend requests use provider idempotency and optional calendar attachments without exposing credentials", async () => {
   let captured;
-  const result = await sendServiceReminderProviderMessage({ channel: "email", recipient: "customer@example.com", subject: "Service due", body: "Review your service reminder.", idempotencyKey: "key-1", callbackUrl: "https://example.com/callback" }, {
+  const result = await sendServiceReminderProviderMessage({ channel: "email", recipient: "customer@example.com", subject: "Service due", body: "Review your service reminder.", idempotencyKey: "key-1", callbackUrl: "https://example.com/callback",
+    attachments: [{ filename: "appointment.ics", content: "QkVHSU46VkNBTEVOREFS", contentType: "text/calendar" }] }, {
     runtime: { RESEND_API_KEY: "re_secret", RESEND_FROM_EMAIL: "AEA <service@example.com>" },
     fetchImpl: async (url, init) => { captured = { url, init }; return Response.json({ id: "email-1" }); },
   });
   assert.equal(result.providerMessageId, "email-1"); assert.equal(captured.init.headers["Idempotency-Key"], "key-1");
+  const payload = JSON.parse(String(captured.init.body));
+  assert.deepEqual(payload.attachments, [{ filename: "appointment.ics", content: "QkVHSU46VkNBTEVOREFS", content_type: "text/calendar" }]);
   assert.doesNotMatch(String(captured.init.body), /re_secret/);
 });
 

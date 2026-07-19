@@ -42,15 +42,15 @@ This release also closes the immediate guided-flow failures around that ledger. 
 
 Release result: Sites version 180 from implementation commit `c75d555c669a9fecbf5dd639488675346cb01c23`, deployment `appgdep_6a5c1c06195c8191a2a941766c595420`. Complete validation passed. Signed-in desktop and 390 px QA confirmed the click-select time dialog, valid quarter-hour state, selectable weeks, internal schedule scrolling and the enabled final quick-invoice action from an entered `$100.00` fee without clicking Add. The production Resend email channel was enabled after the delivery health view confirmed credentials and callbacks were ready. The affected job `TLJ-00000804` then recorded an initial photo-request email as `Sent | sent` and the UI reported that the secure link was accepted for delivery. No QA job, appointment, quick invoice, credit, refund or provider transaction was created.
 
-## Active milestone contract: one job communication timeline
+## Active milestone contract: customer appointment preparation
 
-- User outcome: an office user can see appointment, evidence-request and invoice email state in one job timeline, understand whether each message is pending, accepted, delivered or failed, and deliberately retry an eligible failure without searching separate workspaces.
-- Owning workflow: existing appointment, photo-request and invoice delivery ledgers; job workspace; administrator delivery health; feature-local tests.
-- In scope: one privacy-safe owner-scoped read model, consistent status language, last attempt and failure reason, provider-ready warning before the final action, and bounded retry through existing delivery commands.
-- Out of scope: a new provider, SMS sender approval, message editing, marketing campaigns, provider-specific financial documents, customer contact disclosure, or automatic retry without an office action.
-- Acceptance: a final action never says sent unless the provider accepted the message; delivered is shown only after an authenticated callback; the job timeline stores no recipient address or secure-link secret; repeated retry cannot duplicate a successful intent; desktop and phone layouts remain usable without document-level overflow.
-- Validation: focused delivery-ledger and retry tests, complete release gate, signed-in failure and accepted-send QA using non-sensitive status data, canonical health and worker-error checks.
-- Stop condition: a new outbound provider, unapproved SMS sender, direct mailbox access, or a second communication source of truth requires a separate decision.
+- User outcome: a customer can select up to three photos for each requested section, send the whole prepared set once, and add the confirmed appointment to Google Calendar without confusing duplicate actions or failed phone uploads.
+- Owning workflow: `JobInformationUpload`, customer photo preparation, the capability-token upload route, R2 evidence storage, photo-request email delivery and feature-local styles and tests.
+- In scope: client compression below the deployed request limit, multi-select and staged batch upload, three-file section limits, one final upload-and-finish action, precise partial-failure recovery, an appointment summary, a standard calendar attachment and a one-tap Google Calendar link.
+- Out of scope: direct access to a customer Google account, background calendar insertion without customer permission, new storage vendors, unrestricted document types, SMS sender approval, image analysis, or changes to installer calendar mirrors.
+- Acceptance: a normal Android camera photo is reduced below the edge request limit before upload; each section accepts no more than three safe images; every staged file is visibly accounted for; completed uploads are not repeated after a partial failure; server signature, metadata removal, owner scope and capability checks remain authoritative; calendar details use the appointment time and do not expose the service address; the phone layout has no document-level overflow.
+- Validation: photo-preparation and route contract tests, calendar-link and invitation tests, complete `npm.cmd run validate`, clean migration replay, Android-sized interaction QA, canonical health and worker-error checks.
+- Stop condition: larger original documents, video, direct-to-R2 resumable upload, Google account write access or a new customer-data disclosure requires a separate milestone.
 
 ## Current delivery summary
 

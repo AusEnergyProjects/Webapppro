@@ -110,8 +110,13 @@ test("installer and customer interfaces expose the complete request and proof fl
   assert.match(requestUi, /Revoke link/);
   assert.match(requestUi, /navigator\.share/);
   assert.match(customerPage, /robots: \{ index: false/);
-  for (const copy of ["Private photo self-review", "Clear", "Relevant", "Privacy checked", "Add to installer job"]) assert.match(customerUi, new RegExp(copy));
-  assert.match(customerUi, /capture="environment"/);
+  for (const copy of ["Private photo self-review", "Clear", "Relevant", "Privacy checked", "Add another photo", "Upload photos and notify installer", "Add to Google Calendar"]) assert.match(customerUi, new RegExp(copy));
+  assert.match(customerUi, /multiple/);
+  assert.match(customerUi, /3 photos/);
+  assert.match(publicRoute, /MAX_FILE_BYTES = 650 \* 1024/);
+  assert.match(publicRoute, /MAX_REQUEST_FILES = 36/);
+  assert.match(publicRoute, /MAX_REQUIREMENT_FILES = 3/);
+  assert.match(customerUi, /response\.status === 413/);
   assert.match(fieldRoute, /photo_requirement_id/);
   assert.match(fieldUi, /Customer requested photo/);
   assert.match(fieldUi, /Customer self-review confirmed/);

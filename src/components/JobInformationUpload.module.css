@@ -2,7 +2,7 @@
 .header { align-items: center; background: #03232d; color: #d8fff1; display: flex; justify-content: space-between; margin: 0 -18px 28px; padding: 18px clamp(18px, 5vw, 72px); }
 .header a { color: #fff; font-size: 1.2rem; font-weight: 850; text-decoration: none; }
 .header span { color: #83ddbf; font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.hero, .privacy, .review, .requirements, .status, .footer, .state { margin-left: auto; margin-right: auto; max-width: 920px; }
+.hero, .appointment, .privacy, .review, .requirements, .status, .footer, .state { margin-left: auto; margin-right: auto; max-width: 920px; }
 .hero { padding: 22px 0 12px; }
 .hero > span, .review > div > span, .state > span { color: #0b8b68; font-size: .76rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .hero h1, .state h1 { font-family: Georgia, serif; font-size: clamp(2rem, 6vw, 4.6rem); font-weight: 500; letter-spacing: -.045em; line-height: 1; margin: 10px 0 12px; }
@@ -10,7 +10,12 @@
 .hero > div { align-items: baseline; display: flex; gap: 10px; margin-top: 22px; }
 .hero > div strong { font-size: 1.5rem; }
 .hero > div span { color: #5f7777; }
-.privacy, .review, .requirement, .completion, .state { background: #fff; border: 1px solid #cfe0da; border-radius: 18px; box-shadow: 0 12px 32px rgba(9, 62, 55, .06); }
+.appointment, .privacy, .review, .requirement, .completion, .state { background: #fff; border: 1px solid #cfe0da; border-radius: 18px; box-shadow: 0 12px 32px rgba(9, 62, 55, .06); }
+.appointment { align-items: center; display: flex; gap: 18px; justify-content: space-between; margin-top: 18px; padding: 20px 22px; }
+.appointment span { color: #0b8b68; font-size: .72rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.appointment h2 { font-family: Georgia, serif; font-size: 1.25rem; font-weight: 500; margin: 4px 0; }
+.appointment p { color: #597171; font-size: .84rem; margin: 0; }
+.appointment a { background: #10ad7c; border-radius: 10px; color: #fff; flex: 0 0 auto; font-weight: 850; padding: 12px 14px; text-decoration: none; }
 .privacy { margin-top: 18px; padding: 20px 22px; }
 .privacy strong { display: block; font-size: 1.02rem; }
 .privacy p, .review p, .requirement > p, .state p { color: #597171; line-height: 1.55; margin: 7px 0 0; }
@@ -39,12 +44,12 @@
 .uploads li span { display: grid; gap: 3px; }
 .uploads small { color: #627878; }
 .uploads button { background: transparent; border: 1px solid #dbaaaa; border-radius: 8px; color: #8a3030; cursor: pointer; padding: 8px 10px; }
-.capture { align-items: center; border-top: 1px solid #dce8e4; display: grid; gap: 10px; grid-template-columns: 1fr auto; padding-top: 16px; }
+.pending li { background: #f1faf6; border-color: #a9d7c7; }
+.capture { align-items: center; border-top: 1px solid #dce8e4; display: grid; gap: 10px; padding-top: 16px; }
 .capture label { background: #e8f7f1; border: 1px solid #8bcdb6; border-radius: 10px; cursor: pointer; font-weight: 800; overflow: hidden; padding: 12px 14px; position: relative; }
 .capture label input { inset: 0; opacity: 0; position: absolute; width: 100%; }
-.capture small { color: #607777; grid-column: 1 / -1; overflow-wrap: anywhere; }
-.capture button { background: #10ad7c; border: 0; border-radius: 10px; color: #fff; cursor: pointer; font-weight: 850; padding: 13px 16px; }
-.capture button:disabled { cursor: not-allowed; opacity: .45; }
+.capture small { color: #607777; overflow-wrap: anywhere; }
+.limit { background: #edf7f3; border-radius: 10px; color: #087d60; padding: 12px 14px; }
 .completion { display: grid; gap: 14px; margin-left: auto; margin-right: auto; margin-top: 18px; max-width: 920px; padding: 22px; }
 .completion > div > span { color: #0b8b68; font-size: .72rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .completion h2 { font-family: Georgia, serif; font-weight: 500; margin: 5px 0; }
@@ -63,10 +68,10 @@
   .header { align-items: flex-start; flex-direction: column; gap: 5px; margin-left: -12px; margin-right: -12px; }
   .hero h1 { font-size: 2.5rem; }
   .examples { grid-template-columns: 1fr; }
+  .appointment { align-items: stretch; flex-direction: column; }
+  .appointment a { text-align: center; }
   .requirement, .review, .completion { padding: 17px; }
   .requirement > header { align-items: start; grid-template-columns: auto 1fr; }
   .requirement header > strong { grid-column: 2; }
-  .capture { grid-template-columns: 1fr; }
-  .capture button { width: 100%; }
   .footer { flex-direction: column; gap: 8px; }
 }
