@@ -52,10 +52,19 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
     return () => window.removeEventListener("focus", onFocus);
   }, [active, mode, refresh]);
 
-  const totals = useMemo(() => lines.reduce((total, line) => {
+  const pendingLines = useMemo(() => {
+    const next: DraftLine[] = [];
+    const item = items.find((candidate) => candidate.id === selectedItemId);
+    if (item) next.push({ clientId: `pending-price-${item.id}`, priceBookItemId: item.id, description: item.name, unitPriceCentsExGst: item.sellPriceCentsExGst, taxCode: item.taxCode });
+    const amount = cents(customAmount);
+    if (customDescription.trim() && amount > 0) next.push({ clientId: "pending-custom", priceBookItemId: "", description: customDescription.trim().slice(0, 180), unitPriceCentsExGst: amount, taxCode: customTaxCode });
+    return next;
+  }, [customAmount, customDescription, customTaxCode, items, selectedItemId]);
+  const effectiveLines = useMemo(() => [...lines, ...pendingLines], [lines, pendingLines]);
+  const totals = useMemo(() => effectiveLines.reduce((total, line) => {
     const tax = line.taxCode === "gst" ? Math.round(line.unitPriceCentsExGst / 10) : 0;
     return { subtotal: total.subtotal + line.unitPriceCentsExGst, tax: total.tax + tax, total: total.total + line.unitPriceCentsExGst + tax };
-  }, { subtotal: 0, tax: 0, total: 0 }), [lines]);
+  }, { subtotal: 0, tax: 0, total: 0 }), [effectiveLines]);
   const connected = providers.filter((provider) => provider.status === "connected");
   const configured = providers.filter((provider) => provider.configured && provider.status !== "connected");
 
@@ -88,8 +97,8 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
     } catch (error) { popup?.close(); setMessage(error instanceof Error ? error.message : `${provider.label} could not be opened.`); }
   }
 
-  const submittedLines = lines.map((line) => ({ priceBookItemId: line.priceBookItemId, description: line.description, unitPriceCentsExGst: line.unitPriceCentsExGst, taxCode: line.taxCode }));
-  const canSend = mode === "skip" || (lines.length > 0 && totals.total > 0 && consent && Boolean(deliveryEmail));
+  const submittedLines = effectiveLines.map((line) => ({ priceBookItemId: line.priceBookItemId, description: line.description, unitPriceCentsExGst: line.unitPriceCentsExGst, taxCode: line.taxCode }));
+  const canSend = mode === "skip" || (effectiveLines.length > 0 && totals.total > 0 && consent && Boolean(deliveryEmail));
   return <section data-step="6" hidden={!active} className="crm-wizard-panel">
     <input type="hidden" name="invoiceMode" value={mode} />
     <input type="hidden" name="quickInvoiceLines" value={JSON.stringify(submittedLines)} />
@@ -105,12 +114,13 @@ export function TradeQuickInvoiceStep({ user, active, busy, customerName, delive
         <section><header><strong>Saved fixed fee</strong><small>Prices come from your active price book.</small></header><div><select aria-label="Saved fixed fee" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}><option value="">{loading ? "Loading saved fees..." : items.length ? "Choose a saved fee" : "No saved fees yet"}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)}{item.taxCode === "gst" ? " + GST" : " GST-free"}</option>)}</select><button type="button" onClick={addSavedItem}>Add</button></div></section>
         <section><header><strong>Custom fixed fee</strong><small>Enter the amount before GST.</small></header><div className="custom"><input aria-label="Custom fee description" maxLength={180} placeholder="Call-out fee" value={customDescription} onChange={(event) => setCustomDescription(event.target.value)} /><input aria-label="Custom fee amount before GST" type="number" min="0.01" max="100000" step="0.01" placeholder="0.00" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} /><select aria-label="Custom fee GST" value={customTaxCode} onChange={(event) => setCustomTaxCode(event.target.value as "gst" | "none")}><option value="gst">Add GST</option><option value="none">GST-free</option></select><button type="button" onClick={addCustomFee}>Add</button></div></section>
       </div>
-      {lines.length > 0 && <div className="crm-quick-invoice-draft"><div className="head"><span>Invoice line</span><span>Amount</span></div>{lines.map((line) => <div key={line.clientId}><span><strong>{line.description}</strong><small>{line.taxCode === "gst" ? "GST added" : "GST-free"}</small></span><b>{money(line.unitPriceCentsExGst)}</b><button type="button" aria-label={`Remove ${line.description}`} onClick={() => setLines((current) => current.filter((item) => item.clientId !== line.clientId))}>Remove</button></div>)}<dl><div><dt>Subtotal</dt><dd>{money(totals.subtotal)}</dd></div><div><dt>GST</dt><dd>{money(totals.tax)}</dd></div><div className="total"><dt>Total</dt><dd>{money(totals.total)}</dd></div></dl></div>}
+      {effectiveLines.length > 0 && <div className="crm-quick-invoice-draft"><div className="head"><span>Invoice line</span><span>Amount</span></div>{effectiveLines.map((line) => <div key={line.clientId}><span><strong>{line.description}</strong><small>{line.clientId.startsWith("pending-") ? "Included when you send" : line.taxCode === "gst" ? "GST added" : "GST-free"}</small></span><b>{money(line.unitPriceCentsExGst)}</b>{line.clientId.startsWith("pending-") ? <span /> : <button type="button" aria-label={`Remove ${line.description}`} onClick={() => setLines((current) => current.filter((item) => item.clientId !== line.clientId))}>Remove</button>}</div>)}<dl><div><dt>Subtotal</dt><dd>{money(totals.subtotal)}</dd></div><div><dt>GST</dt><dd>{money(totals.tax)}</dd></div><div className="total"><dt>Total</dt><dd>{money(totals.total)}</dd></div></dl></div>}
       <div className="crm-form-grid crm-quick-invoice-options"><label><span>Payment due</span><select value={dueDays} onChange={(event) => setDueDays(event.target.value)}><option value="0">Today</option><option value="7">In 7 days</option><option value="14">In 14 days</option><option value="30">In 30 days</option></select></label><label className="crm-consent-confirm"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span><strong>Send invoice by email to {deliveryEmail || "this customer"}</strong><small>I confirm the customer asked to receive this invoice.</small></span></label></div>
       {connected.length > 0 ? <div className="crm-connected-provider-note"><strong>Connected</strong><span>{connected.map((provider) => provider.label).join(", ")}. Connection prompts stay hidden while a financial provider is connected.</span></div> : <details className="crm-invoice-connect-prompt"><summary>Connect accounting or payments, optional</summary><p>TLink can send this invoice without a connection. Connect a service now if you also want it available in your invoice workspace.</p>{configured.length > 0 ? <div>{configured.map((provider) => <button type="button" key={provider.provider} onClick={() => void connect(provider)}>Connect {provider.label}</button>)}</div> : <small>Provider connections are not enabled for this workspace yet. You can still send the TLink invoice.</small>}</details>}
     </>}
     {message && <div className="crm-wizard-message" role="status">{message}</div>}
     <div className="crm-final-summary"><strong>Ready to schedule</strong><span>{customerName}</span><small>{mode === "send" ? "The job, appointment, evidence request and quick invoice are saved together." : "The job, appointment and secure evidence request are saved together."}</small></div>
+    {mode === "send" && !canSend && <div className="crm-wizard-message" role="status">{!effectiveLines.length ? "Choose or enter at least one fee." : !deliveryEmail ? "Add a customer email before sending." : !consent ? "Confirm the customer asked to receive this invoice." : "Check the invoice details."}</div>}
     <div className="crm-wizard-actions"><button type="button" onClick={onBack}>Back</button><button type="submit" className="btn" disabled={busy || !canSend}>{busy ? "Scheduling and sending..." : mode === "send" ? "Schedule, request info and send invoice" : "Schedule and request info"}</button></div>
   </section>;
 }

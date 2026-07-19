@@ -29,6 +29,7 @@ function accountingError(error: unknown) {
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. AEA protected customer details cannot be sent to an accounting provider." }, 403);
   if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before preparing its accounting draft." }, 409);
   if (code === "QUICK_INVOICE_REQUIRED") return adminJson({ ok: false, error: "Create the TLink quick invoice before preparing its accounting draft." }, 409);
+  if (code === "QUICK_INVOICE_CREDITED") return adminJson({ ok: false, error: "This TLink invoice has a credit. Keep it in TLink until provider credit-note export is added." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this accounting provider in Integrations first." }, 409);
   if (code === "INTEGRATION_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect MYOB in Integrations once so it can access customers, invoices and your income account list." }, 409);
   if (code === "MYOB_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the MYOB income account that should receive this sale." }, 400);
@@ -77,7 +78,9 @@ async function directJob(firebaseUid: string, workOrderId: string, source: Invoi
       h.id commercial_handoff_id, h.commercial_reference, h.scope_snapshot_json, h.subtotal_cents accepted_subtotal_cents,
       h.tax_cents accepted_tax_cents, h.total_cents accepted_total_cents, h.accepted_at,
       q.id quick_invoice_id, q.invoice_number, q.line_items_json, q.subtotal_cents quick_subtotal_cents,
-      q.tax_cents quick_tax_cents, q.total_cents quick_total_cents, q.due_at quick_due_at
+      q.tax_cents quick_tax_cents, q.total_cents quick_total_cents, q.due_at quick_due_at,
+      COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
+        WHERE credit.invoice_id = q.id AND credit.status = 'issued'), 0) quick_credited_cents
     FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
@@ -91,6 +94,7 @@ async function directJob(firebaseUid: string, workOrderId: string, source: Invoi
   }
   if (source === "quick_invoice") {
     if (!row.quick_invoice_id || Number(row.quick_total_cents || 0) <= 0) throw new Error("QUICK_INVOICE_REQUIRED");
+    if (Number(row.quick_credited_cents || 0) > 0) throw new Error("QUICK_INVOICE_CREDITED");
     let lines: Row[];
     try { lines = JSON.parse(String(row.line_items_json || "[]")) as Row[]; }
     catch { throw new Error("QUICK_INVOICE_REQUIRED"); }

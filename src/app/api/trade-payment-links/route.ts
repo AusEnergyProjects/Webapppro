@@ -66,8 +66,14 @@ export async function POST(request: Request) {
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!job || job.source_type !== "internal" || job.customer_source !== "trade_owned") throw new Error("DIRECT_CUSTOMER_REQUIRED");
     const source = purpose === "invoice"
-      ? await db.prepare(`SELECT id, invoice_number commercial_reference, total_cents amount_cents
-          FROM trade_crm_quick_invoices WHERE firebase_uid = ? AND work_order_id = ? LIMIT 1`)
+      ? await db.prepare(`SELECT id, invoice_number commercial_reference,
+          total_cents
+            - COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
+              WHERE credit.invoice_id = trade_crm_quick_invoices.id AND credit.status = 'issued'), 0)
+            - COALESCE((SELECT SUM(allocation.amount_cents) FROM trade_crm_invoice_payment_allocations allocation
+              WHERE allocation.invoice_id = trade_crm_quick_invoices.id), 0) amount_cents
+          FROM trade_crm_quick_invoices WHERE firebase_uid = ? AND work_order_id = ?
+            AND status IN ('issued', 'part_credited') LIMIT 1`)
         .bind(identity.uid, workOrderId).first<Record<string, unknown>>()
       : await db.prepare(`SELECT id, commercial_reference, deposit_amount_cents amount_cents, total_cents
           FROM trade_crm_commercial_handovers

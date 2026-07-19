@@ -88,6 +88,7 @@ function responseForError(error: unknown) {
   if (code === "PHOTO_REQUEST_RESEND_LIMIT") return adminJson({ ok: false, error: "This link has reached its two deliberate resends for this channel." }, 409);
   if (code === "DELIVERY_NOT_RETRYABLE") return adminJson({ ok: false, error: "This delivery cannot be retried." }, 409);
   if (code === "DELIVERY_NOT_FOUND") return adminJson({ ok: false, error: "Photo request delivery not found." }, 404);
+  if (code === "PHOTO_REQUEST_DELIVERY_FAILED") return adminJson({ ok: false, error: "The request is saved, but the email provider did not accept it. Try again." }, 502);
   if (code === "PHOTO_REVIEW_REQUIRED") return adminJson({ ok: false, error: "The customer must finish the current photo set before review." }, 409);
   if (code === "PHOTO_REQUIREMENT_NOT_FOUND") return adminJson({ ok: false, error: "That photo requirement is no longer current." }, 409);
   if (code === "PHOTO_REVIEW_UPLOAD_REQUIRED") return adminJson({ ok: false, error: "A photo must be present before it can be accepted or sent back for a retake." }, 409);
@@ -303,9 +304,10 @@ export async function POST(request: Request) {
       const requestedIntent = cleanAdminText(body.deliveryIntent, 30) || "initial";
       if (channel !== "email" && channel !== "sms") return adminJson({ ok: false, error: "Choose email or SMS." }, 400);
       if (!["initial", "resend", "expiry_reminder"].includes(requestedIntent)) return adminJson({ ok: false, error: "Choose a valid delivery action." }, 400);
-      await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
+      const delivery = await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
         channel, requestedIntent: requestedIntent as "initial" | "resend" | "expiry_reminder",
         consentConfirmed: body.consentConfirmed === true, origin: new URL(request.url).origin });
+      if (!delivery.ok) throw new Error(String("error" in delivery ? delivery.error : "PHOTO_REQUEST_DELIVERY_FAILED"));
     } else if (action === "review_requirement") {
       if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
       const expectedRevision = Number(body.expectedRevision || 0);
@@ -354,10 +356,11 @@ export async function POST(request: Request) {
       if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
       const channel = cleanAdminText(body.channel, 10);
       if (channel !== "email" && channel !== "sms") return adminJson({ ok: false, error: "Choose email or SMS." }, 400);
-      await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
+      const delivery = await sendPhotoRequestDelivery({ requestId: current.id, ownerUid: access.ownerUid, actorUid: access.actorUid,
         channel, requestedIntent: "retake_followup", reviewRevision: Number(body.reviewRevision || 0),
         photoRequirementId: cleanAdminText(body.requirementId, 80), consentConfirmed: body.consentConfirmed === true,
         origin: new URL(request.url).origin });
+      if (!delivery.ok) throw new Error(String("error" in delivery ? delivery.error : "PHOTO_REQUEST_DELIVERY_FAILED"));
     } else if (action === "retry_delivery") {
       if (!current) throw new Error("PHOTO_REQUEST_NOT_FOUND");
       const deliveryId = cleanAdminText(body.deliveryId, 180);

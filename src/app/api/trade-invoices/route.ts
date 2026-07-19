@@ -24,6 +24,10 @@ export async function GET(request: Request) {
         h.commercial_reference, h.total_cents accepted_total_cents, h.accepted_at,
         a.provider, a.status accounting_status, a.external_number, a.external_url, a.last_error,
         q.invoice_number quick_invoice_number, q.total_cents quick_total_cents, q.status quick_invoice_status,
+        COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
+          WHERE credit.invoice_id = q.id AND credit.status = 'issued'), 0) quick_credited_cents,
+        COALESCE((SELECT SUM(allocation.amount_cents) FROM trade_crm_invoice_payment_allocations allocation
+          WHERE allocation.invoice_id = q.id), 0) quick_paid_cents,
         q.delivery_status quick_delivery_status, q.sent_at quick_sent_at, q.last_error quick_last_error
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -44,13 +48,18 @@ export async function GET(request: Request) {
       const customerName = protectedJob
         ? "AEA protected customer"
         : String(row.business_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "Customer not linked");
-      const totalCents = Number(row.quick_total_cents || row.accepted_total_cents || row.invoiced_value_cents || 0);
-      const paidCents = Number(row.paid_value_cents || 0);
+      const quickInvoice = Boolean(row.quick_invoice_number);
+      const totalCents = quickInvoice
+        ? Math.max(0, Number(row.quick_total_cents || 0) - Number(row.quick_credited_cents || 0))
+        : Number(row.accepted_total_cents || row.invoiced_value_cents || 0);
+      const paidCents = quickInvoice ? Number(row.quick_paid_cents || 0) : Number(row.paid_value_cents || 0);
       const accountingStatus = String(row.accounting_status || "");
       const quickDeliveryStatus = String(row.quick_delivery_status || "");
       const status = accountingStatus === "error" || quickDeliveryStatus === "failed" ? "attention"
         : paidCents >= totalCents && totalCents > 0 ? "paid"
-          : accountingStatus || (totalCents > 0 ? "ready" : "not_ready");
+          : row.quick_invoice_status === "part_credited" ? "part_credited"
+            : row.quick_invoice_status === "credited" ? "credited"
+              : accountingStatus || (totalCents > 0 ? "ready" : "not_ready");
       return {
         id: row.id, workNumber: row.work_number, title: row.title, customerName, protectedJob,
         stage: row.stage, status, invoiceStatus: row.invoice_status || "not_started",

@@ -1008,6 +1008,12 @@ export async function POST(request: Request) {
               .bind(quickInvoiceId, workOrderId, identity.uid, customerId, quickInvoiceReference,
                 JSON.stringify(quickInvoice.lines), quickInvoice.subtotalCents, quickInvoice.taxCents, quickInvoice.totalCents,
                 quickInvoiceDueAt, now, identity.uid, now, now),
+            db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
+              (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents, tax_cents, total_cents,
+               due_at, change_reason, created_by_uid, created_at)
+              VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, 'Initial invoice snapshot', ?, ?)`)
+              .bind(crypto.randomUUID(), quickInvoiceId, identity.uid, JSON.stringify(quickInvoice.lines), quickInvoice.subtotalCents,
+                quickInvoice.taxCents, quickInvoice.totalCents, quickInvoiceDueAt, identity.uid, now),
             db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
               VALUES (?, ?, ?, 'quick_invoice_created', ?, ?)`)
               .bind(crypto.randomUUID(), workOrderId, identity.uid, `${quickInvoiceReference} created with the guided job.`, now),
@@ -1021,14 +1027,16 @@ export async function POST(request: Request) {
       let invoiceDeliveryError = "";
       if (guided) {
         try {
-          await sendPhotoRequestDelivery({ requestId: photoRequestId, ownerUid: identity.uid, actorUid: identity.uid,
+          const delivery = await sendPhotoRequestDelivery({ requestId: photoRequestId, ownerUid: identity.uid, actorUid: identity.uid,
             channel: "email", requestedIntent: "initial", consentConfirmed: true, origin: new URL(request.url).origin });
+          if (!delivery.ok) throw new Error(String("error" in delivery ? delivery.error : "PHOTO_REQUEST_DELIVERY_FAILED"));
           requestSent = true;
         } catch (error) {
           const code = error instanceof Error ? error.message : "";
           deliveryError = code === "waiting_for_channel"
             ? "The job and appointment were saved, but the email provider is not active. Send the request from the job once email is available."
-            : "The job and appointment were saved, but the information request email could not be sent. Retry it from the job.";
+            : code === "waiting_for_limit" ? "The job and appointment were saved, but the daily email limit was reached. Retry the information request from the job."
+              : "The job and appointment were saved, but the information request email could not be sent. Retry it from the job.";
         }
         if (quickInvoice) {
           try {

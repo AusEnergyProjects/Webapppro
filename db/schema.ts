@@ -2147,10 +2147,66 @@ export const tradeCrmQuickInvoices = sqliteTable("trade_crm_quick_invoices", {
   createdByUid: text("created_by_uid").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+  revision: integer("revision").notNull().default(1),
 }, (table) => [
   uniqueIndex("trade_crm_quick_invoices_owner_job_idx").on(table.firebaseUid, table.workOrderId),
   uniqueIndex("trade_crm_quick_invoices_number_idx").on(table.invoiceNumber),
   index("trade_crm_quick_invoices_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
+]);
+
+export const tradeCrmQuickInvoiceRevisions = sqliteTable("trade_crm_quick_invoice_revisions", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  revision: integer("revision").notNull(),
+  lineItemsJson: text("line_items_json").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  taxCents: integer("tax_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  dueAt: text("due_at").notNull(),
+  changeReason: text("change_reason").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quick_invoice_revisions_invoice_revision_idx").on(table.invoiceId, table.revision),
+  index("trade_crm_quick_invoice_revisions_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
+export const tradeCrmQuickInvoiceCredits = sqliteTable("trade_crm_quick_invoice_credits", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  creditNumber: text("credit_number").notNull(),
+  description: text("description").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  taxCents: integer("tax_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  status: text("status").notNull().default("issued"),
+  reason: text("reason").notNull(),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_quick_invoice_credits_number_idx").on(table.creditNumber),
+  index("trade_crm_quick_invoice_credits_invoice_idx").on(table.invoiceId, table.createdAt),
+  index("trade_crm_quick_invoice_credits_owner_idx").on(table.firebaseUid, table.createdAt),
+]);
+
+export const tradeCrmInvoicePaymentAllocations = sqliteTable("trade_crm_invoice_payment_allocations", {
+  id: text("id").primaryKey(),
+  invoiceId: text("invoice_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  paymentLinkId: text("payment_link_id").notNull(),
+  provider: text("provider").notNull(),
+  providerPaymentId: text("provider_payment_id").notNull().default(""),
+  amountCents: integer("amount_cents").notNull(),
+  allocatedAt: text("allocated_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_invoice_payment_allocations_link_idx").on(table.paymentLinkId),
+  index("trade_crm_invoice_payment_allocations_invoice_idx").on(table.invoiceId, table.allocatedAt),
+  index("trade_crm_invoice_payment_allocations_owner_idx").on(table.firebaseUid, table.allocatedAt),
 ]);
 
 export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {

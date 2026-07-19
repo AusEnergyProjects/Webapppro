@@ -35,4 +35,6 @@ test("the root layout installs one delegated picker for current and future date 
   assert.match(picker, />Apply<\/button>/);
   assert.match(picker, /event\.key === "Escape"/);
   assert.match(picker, /event\.key === "ArrowLeft"/);
+  assert.match(picker, /<select aria-label="Appointment time"/);
+  assert.match(picker, /timeOptions\(active\.input\.step/);
 });

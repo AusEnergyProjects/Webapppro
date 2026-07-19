@@ -87,7 +87,7 @@ test("schedule payloads preserve customer privacy boundaries", () => {
 });
 
 test("the installer dashboard exposes the complete low-friction week scheduling workflow", () => {
-  for (const copy of ["Plan the week", "Add to schedule", "Conflicts only", "Set working hours and time off", "Drag an appointment to another day", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+  for (const copy of ["Plan the week", "View week containing", "Add to schedule", "Conflicts only", "Set working hours and time off", "up or down", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
   assert.match(ui, /draggable=\{!busy\}/);
   assert.match(ui, /min=\{minimumStart\}/);
   assert.match(route, /member_uid === ownerUid/);

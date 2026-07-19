@@ -40,6 +40,8 @@ test("guided setup has an optional sixth invoice step with recoverable delivery"
   assert.match(invoiceStep, /Skip for now/);
   assert.match(invoiceStep, /Send a quick invoice/);
   assert.match(invoiceStep, /Schedule, request info and send invoice/);
+  assert.match(invoiceStep, /Included when you send/);
+  assert.match(invoiceStep, /effectiveLines/);
   assert.match(invoiceStep, /provider\.status === "connected"/);
   assert.match(crmRoute, /resolveQuickInvoiceDraft/);
   assert.match(crmRoute, /INSERT INTO trade_crm_quick_invoices/);
@@ -68,7 +70,7 @@ test("quick invoice reuses authoritative totals in connected accounting and paym
   assert.match(invoicePanel, /invoiceSource="quick_invoice"/);
 
   assert.match(paymentRoute, /purpose === "invoice"/);
-  assert.match(paymentRoute, /invoice_number commercial_reference, total_cents amount_cents/);
+  assert.match(paymentRoute, /invoice_number commercial_reference,[\s\S]*trade_crm_quick_invoice_credits[\s\S]*amount_cents/);
   assert.match(paymentRoute, /const idempotencyKey = `\$\{purpose\}-\$\{String\(source\.id\)\}`/);
   assert.match(paymentPanel, /purpose\?: "deposit" \| "invoice"/);
   assert.match(invoicePanel, /purpose="invoice"/);
@@ -78,5 +80,6 @@ test("verified full invoice payments reconcile without changing quote deposit st
   assert.match(reconciliation, /link\.purpose === "deposit" && link\.commercial_handoff_id/);
   assert.match(reconciliation, /link\.purpose === "invoice"/);
   assert.match(reconciliation, /UPDATE trade_crm_quick_invoices SET status = 'paid'/);
+  assert.match(reconciliation, /trade_crm_invoice_payment_allocations/);
   assert.match(reconciliation, /reportedAmount !== Number\(link\.amount_cents\)/);
 });

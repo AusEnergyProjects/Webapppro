@@ -33,6 +33,22 @@ function timePart(value: string): string {
   return /^\d{2}:\d{2}$/.test(valueTime) ? valueTime : "09:00";
 }
 
+function timeOptions(stepValue: string) {
+  const stepSeconds = Number(stepValue);
+  const stepMinutes = Number.isFinite(stepSeconds) && stepSeconds >= 60 ? Math.max(1, Math.round(stepSeconds / 60)) : 15;
+  return Array.from({ length: Math.ceil(24 * 60 / stepMinutes) }, (_, index) => {
+    const minutes = index * stepMinutes;
+    return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }).filter((value) => value < "24:00");
+}
+
+function timeLabel(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  const suffix = hours >= 12 ? "pm" : "am";
+  const hour = hours % 12 || 12;
+  return `${hour}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
 function setNativeInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   setter?.call(input, value);
@@ -213,6 +229,7 @@ export function SiteDatePicker() {
   const selectedEnd = isRange ? draftRangeEnd : draftDate;
   const canApply = isRange ? Boolean(draftRangeStart && draftRangeEnd) : Boolean(draftDate && (active.kind !== "datetime-local" || draftTime));
   const required = isRange ? Boolean(active.rangeStartInput?.required || active.rangeEndInput?.required) : active.input.required;
+  const availableTimes = active.kind === "datetime-local" ? timeOptions(active.input.step || "900") : [];
 
   return createPortal(
     <div
@@ -223,6 +240,7 @@ export function SiteDatePicker() {
       style={{ left: position.left, top: position.top }}
       onKeyDown={(event) => {
         if (event.key === "Escape") { event.preventDefault(); close(); }
+        if (event.target instanceof HTMLSelectElement) return;
         if (event.key === "ArrowLeft") { event.preventDefault(); moveSelection(-1); }
         if (event.key === "ArrowRight") { event.preventDefault(); moveSelection(1); }
         if (event.key === "ArrowUp") { event.preventDefault(); moveSelection(-7); }
@@ -260,7 +278,7 @@ export function SiteDatePicker() {
           >{day.day}</button>;
         })}
       </div>
-      {!isRange && active.kind === "datetime-local" && <label className="site-date-time"><span>Time</span><input type="time" step={active.input.step || "60"} value={draftTime} onChange={(event) => setDraftTime(event.target.value)} /></label>}
+      {!isRange && active.kind === "datetime-local" && <label className="site-date-time"><span>Time</span><select aria-label="Appointment time" value={draftTime} onChange={(event) => setDraftTime(event.target.value)}>{availableTimes.map((value) => <option key={value} value={value}>{timeLabel(value)}</option>)}</select></label>}
       <div className="site-date-actions">
         {!required && <button type="button" className="site-date-clear" onClick={clear}>Clear</button>}
         <button type="button" className="site-date-apply" disabled={!canApply} onClick={apply}>Apply</button>

@@ -48,6 +48,8 @@ test("guided setup attaches duplicates and creates appointment plus evidence req
   assert.match(crm, /INSERT INTO trade_crm_appointments/);
   assert.match(crm, /INSERT INTO trade_crm_photo_requests/);
   assert.match(crm, /sendPhotoRequestDelivery/);
+  assert.match(crm, /if \(!delivery\.ok\)/);
+  assert.match(workspace, /appointment and photo request email was accepted for delivery/);
   assert.match(crm, /appointmentTitle = `\$\{displayName\} \$\{SERVICE_LABELS\[serviceCategory\]\}`/);
   assert.match(form, /"Evidence", "Invoice"/);
 });

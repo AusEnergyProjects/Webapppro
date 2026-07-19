@@ -19,6 +19,7 @@ const statusLabels: Record<string, string> = {
   ready: "Ready to prepare", draft: "Draft", issued: "Awaiting payment", part_paid: "Part paid",
   paid: "Paid", overdue: "Overdue", attention: "Needs attention", not_ready: "Job still underway",
   exporting: "Preparing export", void: "Void",
+  part_credited: "Part credited", credited: "Credited",
 };
 
 export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJob: (workOrderId: string) => void }) {
@@ -72,8 +73,8 @@ export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJ
         onDoubleClick={() => onOpenJob(item.id)} onKeyDown={(event) => { if (event.key === "Enter") onOpenJob(item.id); }}>
         <div><span>{item.workNumber}</span><strong>{item.title}</strong><small>{item.customerName}</small></div>
         <div><span>Invoice</span><strong>{item.externalNumber || item.commercialReference || "Not created"}</strong><small>{item.provider ? `${item.provider.toUpperCase()} | ${statusLabels[item.status] || item.status}` : statusLabels[item.status] || item.status}</small></div>
-        <div><span>Total</span><strong>{item.totalCents ? money(item.totalCents) : "Not ready"}</strong><small>{item.outstandingCents ? `${money(item.outstandingCents)} outstanding` : item.paidCents ? "Paid in full" : "No balance yet"}</small></div>
-        <button type="button" onClick={() => onOpenJob(item.id)}>{item.totalCents ? "Open invoice" : "Open job"}</button>
+        <div><span>Total</span><strong>{item.externalNumber || item.commercialReference ? money(item.totalCents) : "Not ready"}</strong><small>{item.outstandingCents ? `${money(item.outstandingCents)} outstanding` : item.status === "credited" ? "Credited in full" : item.paidCents ? "Paid in full" : "No balance yet"}</small></div>
+        <button type="button" onClick={() => onOpenJob(item.id)}>{item.externalNumber || item.commercialReference ? "Open invoice" : "Open job"}</button>
       </article>) : <div className="crm-empty"><strong>No invoices in this view</strong><span>Try All, or finish an accepted job to prepare its invoice.</span></div>}
     </div>
     {status && <p className="crm-inline-status" role="status">{status}</p>}

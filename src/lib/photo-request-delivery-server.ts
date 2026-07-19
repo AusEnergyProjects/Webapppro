@@ -40,6 +40,8 @@ type DeliveryContext = Row & {
   customer_phone: string;
   customer_record_status: string;
   business_name: string;
+  appointment_starts_at: string;
+  appointment_ends_at: string;
 };
 
 type CustomerAccount = Row & {
@@ -79,7 +81,13 @@ function smsSenderApproved() {
 async function deliveryContext(requestId: string, ownerUid = "") {
   return getD1().prepare(`SELECT r.*, w.stage work_status, w.record_status work_record_status, w.work_number,
       c.email customer_email, c.phone customer_phone, c.record_status customer_record_status,
-      trade.business_name
+      trade.business_name,
+      COALESCE((SELECT appointment.starts_at FROM trade_crm_appointments appointment
+        WHERE appointment.work_order_id = w.id AND appointment.firebase_uid = w.firebase_uid
+          AND appointment.status = 'scheduled' ORDER BY appointment.starts_at LIMIT 1), '') appointment_starts_at,
+      COALESCE((SELECT appointment.ends_at FROM trade_crm_appointments appointment
+        WHERE appointment.work_order_id = w.id AND appointment.firebase_uid = w.firebase_uid
+          AND appointment.status = 'scheduled' ORDER BY appointment.starts_at LIMIT 1), '') appointment_ends_at
     FROM trade_crm_photo_requests r
     JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
     JOIN trade_crm_job_details details ON details.work_order_id = w.id AND details.firebase_uid = w.firebase_uid
@@ -277,7 +285,8 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
     const shareUrl = await currentShareUrl(context, origin);
     const draft = photoRequestDeliveryDraft({ intent: String(delivery.intent) as PhotoRequestDeliveryIntent,
       businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at,
-      requirementLabel: retakeLabel, retakeGuidance });
+      requirementLabel: retakeLabel, retakeGuidance, appointmentStartsAt: context.appointment_starts_at,
+      appointmentEndsAt: context.appointment_ends_at });
     const result = await sendServiceReminderProviderMessage({ channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
       idempotencyKey: String(delivery.idempotency_key), messageType: "photo_request_link",
       callbackUrl: new URL("/api/service-reminder-provider-events/twilio", origin).toString() });

@@ -42,6 +42,8 @@ export function photoRequestDeliveryDraft(input: {
   expiresAt: string;
   requirementLabel?: string;
   retakeGuidance?: string;
+  appointmentStartsAt?: string;
+  appointmentEndsAt?: string;
 }) {
   const reminder = input.intent === "expiry_reminder";
   const retake = input.intent === "retake_followup";
@@ -51,10 +53,25 @@ export function photoRequestDeliveryDraft(input: {
     ? `${input.businessName} is reminding you that the secure photo request for job ${input.workNumber} expires on ${new Date(input.expiresAt).toLocaleDateString("en-AU")}.`
     : retake ? `${input.businessName} has requested another photo of ${input.requirementLabel || "one job item"} for job ${input.workNumber}. ${input.retakeGuidance || "Open the request for safe capture guidance."}`
     : `${input.businessName} has requested photos for job ${input.workNumber}.`;
+  const appointment = input.intent === "initial" ? appointmentWindow(input.appointmentStartsAt, input.appointmentEndsAt) : "";
   return {
     subject: subject.slice(0, 160),
-    body: `${lead}\n\nOpen the secure request: ${input.shareUrl}\n\nThe link does not show your name, contact details or address. Only add photos requested for this job.`.slice(0, 1200),
+    body: `${lead}${appointment ? `\n\nAppointment: ${appointment}` : ""}\n\nOpen the secure request: ${input.shareUrl}\n\nThe link does not show your name, contact details or address. Only add photos requested for this job.`.slice(0, 1200),
   };
+}
+
+export function appointmentWindow(startsAt?: string, endsAt?: string) {
+  const match = String(startsAt || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return "";
+  const [, year, month, day, hour, minute] = match;
+  const start = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  const date = start.toLocaleDateString("en-AU", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const startTime = start.toLocaleTimeString("en-AU", { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
+  const endMatch = String(endsAt || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!endMatch) return `${date} at ${startTime}`;
+  const end = new Date(Date.UTC(Number(endMatch[1]), Number(endMatch[2]) - 1, Number(endMatch[3]), Number(endMatch[4]), Number(endMatch[5])));
+  const endTime = end.toLocaleTimeString("en-AU", { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
+  return `${date}, ${startTime} to ${endTime}`;
 }
 
 export function photoRequestReminderAvailable(expiresAt: string, now = new Date()) {

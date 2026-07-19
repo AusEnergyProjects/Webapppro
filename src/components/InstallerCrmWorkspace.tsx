@@ -549,10 +549,12 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       }
       await load(); setRefreshNonce((value) => value + 1);
       const deliveryWarnings = [result.deliveryError, result.invoiceDeliveryError].filter(Boolean).join(" ");
-      const sent = result.invoiceNumber
-        ? `${result.workNumber || "Job"} scheduled. The information request and ${result.invoiceNumber} were sent.`
-        : `${result.workNumber || "Job"} scheduled and the information request was sent.`;
-      setStatus(deliveryWarnings || sent);
+      const deliveryResults = [
+        `${result.workNumber || "Job"} scheduled.`,
+        result.requestSent ? "The appointment and photo request email was accepted for delivery." : "",
+        result.invoiceNumber && result.invoiceSent ? `${result.invoiceNumber} was accepted for delivery.` : "",
+      ].filter(Boolean).join(" ");
+      setStatus([deliveryResults, deliveryWarnings].filter(Boolean).join(" "));
       form.reset(); setCreating(""); setView("jobs");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The customer, service site and job were not created."); }
     finally { setBusy(""); }

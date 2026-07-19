@@ -31,6 +31,7 @@ type PaymentLinkRow = {
   status: string;
   business_name: string;
   work_number: string;
+  quick_invoice_id: string;
 };
 
 export type TradePaymentReconciliation = {
@@ -55,12 +56,14 @@ async function matchingPaymentLink(input: ReconciliationInput) {
   if (!identifier || !input.connectedAccountId) return undefined;
   const link = await db.prepare(`SELECT l.id, l.commercial_handoff_id, l.commercial_reference, l.purpose,
       l.work_order_id, l.firebase_uid, l.amount_cents, l.status,
-      a.business_name, w.work_number
+      a.business_name, w.work_number, COALESCE(q.id, '') quick_invoice_id
     FROM trade_crm_payment_links l
     JOIN trade_crm_integrations i ON i.firebase_uid = l.firebase_uid
       AND i.provider = l.provider AND i.status = 'connected'
     JOIN trade_accounts a ON a.firebase_uid = l.firebase_uid
     JOIN trade_work_orders w ON w.id = l.work_order_id AND w.firebase_uid = l.firebase_uid
+    LEFT JOIN trade_crm_quick_invoices q ON q.firebase_uid = l.firebase_uid AND q.work_order_id = l.work_order_id
+      AND q.invoice_number = l.commercial_reference AND l.purpose = 'invoice'
     WHERE l.provider = ? AND ${identifierColumn} = ? AND i.external_account_id = ?
     LIMIT 1`).bind(input.provider, identifier, cleanReference(input.connectedAccountId)).first<PaymentLinkRow>();
   if (link && input.workOrderReference && cleanReference(input.workOrderReference) !== link.work_order_id) return undefined;
@@ -161,10 +164,15 @@ export async function reconcileTradePayment(input: ReconciliationInput): Promise
     if (link.purpose === "deposit" && link.commercial_handoff_id) statements.push(
       db.prepare(`UPDATE trade_crm_commercial_handovers SET status = 'deposit_paid', updated_at = ?
         WHERE id = ? AND firebase_uid = ?`).bind(receivedAt, link.commercial_handoff_id, link.firebase_uid));
-    if (link.purpose === "invoice") statements.push(
+    if (link.purpose === "invoice" && link.quick_invoice_id) statements.push(
+      db.prepare(`INSERT OR IGNORE INTO trade_crm_invoice_payment_allocations
+        (id, invoice_id, work_order_id, firebase_uid, payment_link_id, provider, provider_payment_id,
+         amount_cents, allocated_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), link.quick_invoice_id, link.work_order_id, link.firebase_uid, link.id, input.provider,
+          providerPaymentId, reportedAmount, occurredAt, receivedAt),
       db.prepare(`UPDATE trade_crm_quick_invoices SET status = 'paid', updated_at = ?
-        WHERE firebase_uid = ? AND work_order_id = ? AND invoice_number = ?`)
-        .bind(receivedAt, link.firebase_uid, link.work_order_id, link.commercial_reference));
+        WHERE id = ? AND firebase_uid = ?`).bind(receivedAt, link.quick_invoice_id, link.firebase_uid));
     statements.push(
       db.prepare(`UPDATE trade_crm_job_details SET
         paid_value_cents = CASE WHEN invoiced_value_cents > 0
