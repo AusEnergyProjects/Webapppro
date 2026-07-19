@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 19 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published guided-dispatch reliability and invoice correction ledger on top of the quick-invoice provider handoff. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published customer-upload review alerts, protected file previews, invoice confirmation previews and comparison-page typography correction. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Completed milestone: guided quick invoice
 
@@ -53,6 +53,17 @@ Release result: Sites version 180 from implementation commit `c75d555c669a9fecbf
 - Stop condition: larger original documents, video, direct-to-R2 resumable upload, Google account write access or a new customer-data disclosure requires a separate milestone.
 
 Release result: Sites version 182 from implementation commits `1f96c09feb8f988dc9aabf2a40a125f7293086b3` and `e5934780a77151b5fcd53b23a9eaa42badb5faac`, deployment `appgdep_6a5c29873ce08191b009b5676db7d869`. Production logs confirmed the reported Android upload failed at the edge with HTTP 413 after the phone prepared requests of about 1.4 MB and 1.7 MB. Customer images are now prepared below 640 KB, staged visibly, limited to three per section and uploaded together through one final action with partial-failure recovery. The affected customer Gmail inbox received the corrected message and displayed a real 11:00 am to 1:00 pm invitation with Yes, Maybe and No controls, View on Google Calendar and the calendar attachment. Google required one first-time-sender trust action before it would add this and future invitations automatically; TLink does not bypass that private-account consent. Signed-in and 390 px live QA confirmed the customer page, Google handoff and no document-level horizontal overflow. No QA photo was uploaded. Complete validation, fresh D1 replay, production build, canonical health and worker-error checks passed.
+
+## Completed bounded follow-up: job review alerts and previews
+
+- User outcome: an installer sees completed customer photo requests in a familiar notification bell, can open each job photo or PDF in a protected inline preview, and must preview a quick invoice before deliberately sending it.
+- Owning workflow: customer photo-request completions, per-user notification read receipts, trade field-work evidence access, guided and saved quick invoices, comparison-page typography, feature-local styles and regression tests.
+- In scope: owner and assigned-technician notification scope, durable read state, deep links to the exact job Field work tab, inline image and PDF preview with optional download, invoice confirmation dialogs, and a system-font correction isolated to the electricity comparison page.
+- Out of scope: notification events not yet represented by an authoritative job ledger, browser push notifications, email notification digests, invoice creation without a customer email, and changes to the existing file-retention boundary.
+- Acceptance: customer upload completion produces an unread job alert; read state is user specific; protected files remain server authorised and open inline; invoice sending remains a deliberate second action after preview; the comparison heading renders consistently without a remote font dependency.
+- Validation: complete `npm.cmd run validate`, focused 12-test review and invoice suite after the final copy change, ESLint, diff checks, signed-in live notification and file-preview QA, and live comparison typography and overflow inspection.
+
+Release result: Sites version 183 from implementation commit `dddedb71ca9af3b3274f4276504cb68cd73d3307`, deployment `appgdep_6a5ca8e07ea4819194a59a66edc8c2bb`. Live signed-in QA showed two unread customer-upload events for `TLJ-00000804`, and all three protected customer files opened through the new Preview action; the first image rendered inside the job modal with Download file retained as an optional action. The production account has no invoice draft, so invoice-preview behavior was covered by the focused component and route contracts without creating or sending a production invoice. The live comparison page used the local Arial font stack for its brand and sampled headings at 2560 px without document-level horizontal overflow. No notification was marked read and no production record was mutated during QA.
 
 ## Active milestone contract: one job communication timeline
 
