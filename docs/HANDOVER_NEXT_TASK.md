@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 19 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published quick-invoice provider handoff on top of the guided quick-invoice workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published guided-dispatch reliability and invoice correction ledger on top of the quick-invoice provider handoff. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Completed milestone: guided quick invoice
 
@@ -28,7 +28,7 @@ Release result: Sites version 178 from implementation commit `4968a64d1f947d18da
 
 Release result: Sites version 179 from implementation commit `9200141d521bf3119d7e08fbeb36f82a3de2b05f`, deployment `appgdep_6a5c133b0a908191bd1e5d4b01d88943`. Saved quick invoices can deliberately create one exact draft in Xero, MYOB or QuickBooks, or one full-total Stripe or Square checkout, using the existing provider-neutral ledgers and idempotency boundaries. Provider-reported totals and TLink GST must match before state changes. Signed-in desktop and 390 px QA confirmed the current job and invoice workflows without document-level overflow. No production provider transaction was created because the account has no connected sandbox provider or disposable invoice.
 
-## Active milestone contract: invoice correction and credit ledger
+## Completed milestone: guided-dispatch reliability and invoice correction ledger
 
 - User outcome: an office user can correct an unissued invoice, or issue an auditable credit against an issued invoice, without overwriting the original financial record or losing the remaining balance.
 - Owning workflow: `trade_crm_quick_invoices`, accounting documents, payment links and verified payment reconciliation, invoice workspace and feature-local tests.
@@ -37,6 +37,20 @@ Release result: Sites version 179 from implementation commit `9200141d521bf3119d
 - Acceptance: an issued invoice is never overwritten; every correction or credit has a stable reference and reason; credits and verified payments cannot exceed the open balance; repeated commands and callbacks are idempotent; invoice subtotal, GST, paid, credited and outstanding cents reconcile exactly.
 - Validation: domain and route tests for revision, credit and allocation boundaries; complete release gate; clean migration replay; signed-in desktop and phone-width inspection without creating production credits or refunds.
 - Stop condition: external refund authority, a provider-specific credit API, a second currency or a second financial source of truth requires a separate milestone.
+
+This release also closes the immediate guided-flow failures around that ledger. A valid custom fee now participates in the final invoice action without a second Add click. Photo-request delivery results are checked before the guided flow claims that email was sent. Appointment email includes the scheduled window, time selection uses the shared click-select quarter-hour picker, and Schedule supports an explicit week date, previous and next week controls, internal two-axis scrolling and day-plus-time drag placement.
+
+Release result: Sites version 180 from implementation commit `c75d555c669a9fecbf5dd639488675346cb01c23`, deployment `appgdep_6a5c1c06195c8191a2a941766c595420`. Complete validation passed. Signed-in desktop and 390 px QA confirmed the click-select time dialog, valid quarter-hour state, selectable weeks, internal schedule scrolling and the enabled final quick-invoice action from an entered `$100.00` fee without clicking Add. The production Resend email channel was enabled after the delivery health view confirmed credentials and callbacks were ready. The affected job `TLJ-00000804` then recorded an initial photo-request email as `Sent | sent` and the UI reported that the secure link was accepted for delivery. No QA job, appointment, quick invoice, credit, refund or provider transaction was created.
+
+## Active milestone contract: one job communication timeline
+
+- User outcome: an office user can see appointment, evidence-request and invoice email state in one job timeline, understand whether each message is pending, accepted, delivered or failed, and deliberately retry an eligible failure without searching separate workspaces.
+- Owning workflow: existing appointment, photo-request and invoice delivery ledgers; job workspace; administrator delivery health; feature-local tests.
+- In scope: one privacy-safe owner-scoped read model, consistent status language, last attempt and failure reason, provider-ready warning before the final action, and bounded retry through existing delivery commands.
+- Out of scope: a new provider, SMS sender approval, message editing, marketing campaigns, provider-specific financial documents, customer contact disclosure, or automatic retry without an office action.
+- Acceptance: a final action never says sent unless the provider accepted the message; delivered is shown only after an authenticated callback; the job timeline stores no recipient address or secure-link secret; repeated retry cannot duplicate a successful intent; desktop and phone layouts remain usable without document-level overflow.
+- Validation: focused delivery-ledger and retry tests, complete release gate, signed-in failure and accepted-send QA using non-sensitive status data, canonical health and worker-error checks.
+- Stop condition: a new outbound provider, unapproved SMS sender, direct mailbox access, or a second communication source of truth requires a separate decision.
 
 ## Current delivery summary
 
