@@ -46,6 +46,8 @@ export function photoRequestDeliveryDraft(input: {
   appointmentStartsAt?: string;
   appointmentEndsAt?: string;
   appointmentTimeZone?: string;
+  calendarAttendeeEmail?: string;
+  calendarSequence?: number;
 }) {
   const reminder = input.intent === "expiry_reminder";
   const retake = input.intent === "retake_followup";
@@ -62,6 +64,9 @@ export function photoRequestDeliveryDraft(input: {
     startsAt: input.appointmentStartsAt || "",
     endsAt: input.appointmentEndsAt || "",
     timeZone: input.appointmentTimeZone || "Australia/Sydney",
+    attendeeEmail: input.calendarAttendeeEmail,
+    organizerEmail: "service@reminders.ausenergyassessments.com",
+    sequence: input.calendarSequence,
   }) : null;
   return {
     subject: subject.slice(0, 160),

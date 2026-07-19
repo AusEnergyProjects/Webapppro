@@ -24,6 +24,15 @@ test("customer appointments create a timezone-aware Google link and private cale
   assert.match(calendar.ics, /DTSTART;TZID=Australia\/Melbourne:20260720T110000/);
   assert.match(calendar.ics, /TLink job reference TLJ-00000804/);
   assert.doesNotMatch(calendar.ics, /address|street/i);
+  assert.match(calendar.ics, /METHOD:PUBLISH/);
+  const invitation = customerAppointmentCalendar({ workNumber: "TLJ-00000804", businessName: "Australian Energy Assessments",
+    startsAt: "2026-07-20T11:00", endsAt: "2026-07-20T13:00", timeZone: "Australia/Melbourne",
+    attendeeEmail: "customer@example.com", organizerEmail: "service@reminders.ausenergyassessments.com", sequence: 1 });
+  assert.equal(invitation.method, "REQUEST");
+  assert.match(invitation.ics, /METHOD:REQUEST/);
+  assert.match(invitation.ics, /ATTENDEE;CN=Customer;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:customer@example\.com/);
+  assert.match(invitation.ics, /ORGANIZER;CN=Australian Energy Assessments:mailto:service@reminders\.ausenergyassessments\.com/);
+  assert.match(invitation.ics, /SEQUENCE:1/);
   const attachment = textAttachment(calendar.filename, calendar.ics, "text/calendar");
   assert.match(Buffer.from(attachment.content, "base64").toString("utf8"), /BEGIN:VCALENDAR/);
 });
@@ -32,7 +41,8 @@ test("the secure customer page and email expose the same bounded calendar handof
   assert.match(publicRoute, /customerAppointmentCalendar/);
   assert.match(publicRoute, /googleCalendarUrl/);
   assert.match(customerUi, /Add to Google Calendar/);
-  assert.match(deliveryServer, /text\/calendar; charset=utf-8; method=PUBLISH/);
+  assert.match(deliveryServer, /text\/calendar; charset=utf-8; method=\$\{draft\.calendar\.method\}/);
+  assert.match(deliveryServer, /calendarAttendeeEmail/);
   assert.match(deliveryServer, /attachments/);
   assert.doesNotMatch(`${publicRoute}\n${customerUi}\n${deliveryServer}`, /[\u2013\u2014]/);
 });

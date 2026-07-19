@@ -48,8 +48,11 @@ test("recipient previews and message copy are bounded", () => {
   assert.match(draft.calendar.ics, /BEGIN:VCALENDAR/);
   const resendDraft = photoRequestDeliveryDraft({ intent: "resend_1", businessName: "Example Trade", workNumber: "JOB-100",
     shareUrl: "https://example.test/job-information/request.secret", expiresAt: "2026-08-17T00:00:00.000Z",
-    appointmentStartsAt: "2026-07-20T10:15", appointmentEndsAt: "2026-07-20T12:15" });
-  assert.match(resendDraft.calendar.ics, /BEGIN:VCALENDAR/);
+    appointmentStartsAt: "2026-07-20T10:15", appointmentEndsAt: "2026-07-20T12:15",
+    calendarAttendeeEmail: "customer@example.com", calendarSequence: 1 });
+  assert.match(resendDraft.calendar.ics, /METHOD:REQUEST/);
+  assert.match(resendDraft.calendar.ics, /ATTENDEE;CN=Customer;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:customer@example\.com/);
+  assert.match(resendDraft.calendar.ics, /SEQUENCE:1/);
   assert.equal(appointmentWindow("2026-07-20T10:15", "2026-07-20T12:15"), "Monday 20 July 2026, 10:15 am to 12:15 pm");
   assert.doesNotMatch(draft.body, /\S+@\S+|\+614\d{8}/i);
   assert.equal(photoRequestReminderAvailable("2026-07-25T00:00:00.000Z", new Date("2026-07-18T00:00:00.000Z")), true);

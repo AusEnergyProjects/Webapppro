@@ -289,11 +289,13 @@ async function dispatchPhotoRequestDelivery(deliveryId: string, origin: string, 
     const draft = photoRequestDeliveryDraft({ intent: String(delivery.intent) as PhotoRequestDeliveryIntent,
       businessName: context.business_name, workNumber: context.work_number, shareUrl, expiresAt: context.expires_at,
       requirementLabel: retakeLabel, retakeGuidance, appointmentStartsAt: context.appointment_starts_at,
-      appointmentEndsAt: context.appointment_ends_at, appointmentTimeZone: australianAppointmentTimeZone(context.appointment_state) });
+      appointmentEndsAt: context.appointment_ends_at, appointmentTimeZone: australianAppointmentTimeZone(context.appointment_state),
+      calendarAttendeeEmail: channel === "email" ? ready.destination : "",
+      calendarSequence: delivery.intent === "resend_2" ? 2 : delivery.intent === "resend_1" ? 1 : 0 });
     const attachments = channel === "email" && draft.calendar ? [textAttachment(
       draft.calendar.filename,
       draft.calendar.ics,
-      "text/calendar; charset=utf-8; method=PUBLISH",
+      `text/calendar; charset=utf-8; method=${draft.calendar.method}`,
     )] : undefined;
     const result = await sendServiceReminderProviderMessage({ channel, recipient: ready.destination, subject: draft.subject, body: draft.body,
       idempotencyKey: String(delivery.idempotency_key), messageType: "photo_request_link",

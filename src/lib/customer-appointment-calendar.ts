@@ -24,6 +24,11 @@ function escapeIcs(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
+function calendarEmail(value: unknown) {
+  const email = bounded(value, 254).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
 export function australianAppointmentTimeZone(state: unknown) {
   return STATE_TIME_ZONES[String(state || "").trim().toUpperCase()] || STATE_TIME_ZONES.NSW;
 }
@@ -34,6 +39,9 @@ export function customerAppointmentCalendar(input: {
   startsAt: string;
   endsAt: string;
   timeZone: string;
+  attendeeEmail?: string;
+  organizerEmail?: string;
+  sequence?: number;
 }) {
   const startsAt = calendarStamp(input.startsAt);
   const endsAt = calendarStamp(input.endsAt);
@@ -43,6 +51,11 @@ export function customerAppointmentCalendar(input: {
   const timeZone = Object.values(STATE_TIME_ZONES).includes(input.timeZone) ? input.timeZone : STATE_TIME_ZONES.NSW;
   const title = `${businessName} appointment`;
   const details = `Appointment with ${businessName}. TLink job reference ${workNumber}.`;
+  const attendeeEmail = calendarEmail(input.attendeeEmail);
+  const organizerEmail = calendarEmail(input.organizerEmail);
+  const invitation = Boolean(attendeeEmail && organizerEmail);
+  const method = invitation ? "REQUEST" : "PUBLISH";
+  const sequence = Math.max(0, Math.min(99, Math.trunc(Number(input.sequence) || 0)));
   const google = new URL("https://calendar.google.com/calendar/render");
   google.searchParams.set("action", "TEMPLATE");
   google.searchParams.set("text", title);
@@ -55,7 +68,7 @@ export function customerAppointmentCalendar(input: {
     "VERSION:2.0",
     "PRODID:-//TLink//Customer Appointment//EN",
     "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
+    `METHOD:${method}`,
     "BEGIN:VEVENT",
     `UID:${uid}@tlink.ausenergyassessments.com`,
     `DTSTAMP:${startsAt}Z`,
@@ -63,6 +76,11 @@ export function customerAppointmentCalendar(input: {
     `DTEND;TZID=${timeZone}:${endsAt}`,
     `SUMMARY:${escapeIcs(title)}`,
     `DESCRIPTION:${escapeIcs(details)}`,
+    ...(invitation ? [
+      `ORGANIZER;CN=${escapeIcs(businessName)}:mailto:${organizerEmail}`,
+      `ATTENDEE;CN=Customer;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:${attendeeEmail}`,
+      `SEQUENCE:${sequence}`,
+    ] : []),
     "STATUS:CONFIRMED",
     "TRANSP:OPAQUE",
     "END:VEVENT",
@@ -73,6 +91,7 @@ export function customerAppointmentCalendar(input: {
     googleUrl: google.toString(),
     filename: `${workNumber.replace(/[^a-z0-9-]/gi, "-") || "tlink"}-appointment.ics`,
     ics,
+    method,
   };
 }
 
