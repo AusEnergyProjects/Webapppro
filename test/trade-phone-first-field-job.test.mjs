@@ -14,6 +14,7 @@ const quickInvoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const fieldPanel = read("../src/components/TradeFieldWorkPanel.tsx");
 const menu = read("../src/components/AccessibleMenu.tsx");
+const styles = read("../src/app/globals.css");
 const mobile = read("../mobile/src/app/job/[id].tsx");
 const mobileTypes = read("../mobile/src/lib/types.ts");
 const migration = read("../drizzle/0073_phone_first_field_job.sql");
@@ -132,6 +133,13 @@ test("shared menus dismiss outside, on selection and Escape without leaking list
   assert.match(workspace, /<AccessibleMenu className="crm-more-nav"/);
   assert.match(workspace, /<AccessibleMenu className="crm-job-more"/);
   assert.match(workspace, /close\(\)/);
+});
+
+test("mobile quick create stays interactive above the CRM navigation", () => {
+  assert.match(styles, /\.crm-hero \{[^}]*position: relative;[^}]*z-index: 30;/);
+  assert.match(styles, /\.crm-quick-create \{[^}]*position: relative;[^}]*z-index: 1;/);
+  assert.match(styles, /\.crm-nav \{[^}]*position: relative;[^}]*z-index: 20;/);
+  assert.match(styles, /\.crm-quick-create > div \{[^}]*position: absolute;[^}]*z-index: 10;/);
 });
 
 test("new field workflow copy avoids prohibited dash characters", () => {
