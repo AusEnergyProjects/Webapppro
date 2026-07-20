@@ -14,6 +14,8 @@ Implementation baseline: the current `codex/sites-custom-domain-migration` workt
 - Validation: focused schedule, CRM summary and dashboard contract tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and 390 px drag, dialog, chart and overflow inspection; canonical health and worker-error checks.
 - Stop condition: an infinite or virtualised calendar, two-way external calendar authority, new commercial entities, provider credentials, cross-tenant reporting or a second operational data source requires a separate milestone.
 
+Release result: Sites version 195 from implementation commit `e830abb0e3cb8cd189b8d26795010f867b9625b3`, deployment `appgdep_6a5e2583216c8191995fcedb921b4d15`. Complete validation passed twice on the exact implementation state. Signed-in desktop and phone-width QA confirmed the eight-week planner, customer-first appointment cards, secondary global job reference, bounded appointment dialog, authoritative dashboard metrics and charts, and no document-level overflow. No appointment, job, customer, quote, invoice or notification state was changed during QA. The canonical health route returned HTTP 200. The Sites error filter contained only the notification request cancelled when the QA tab was released, with no application exception or 5xx. Production environment revision 18 was retained.
+
 ## Completed milestone: guided quick invoice
 
 - User outcome: the create-job buttons work without browser validation overlays, and the guided flow can optionally prepare and send a fixed-fee invoice with the appointment and photo request.
