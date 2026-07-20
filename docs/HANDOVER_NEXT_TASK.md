@@ -1,8 +1,8 @@
 # Next task handover
 
 Status: active rolling handover
-Prepared: 19 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published customer-upload review alerts, protected file previews, invoice confirmation previews and comparison-page typography correction. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Prepared: 20 July 2026
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published in-place evidence review and direct quote preview-and-send workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Completed milestone: guided quick invoice
 
@@ -78,6 +78,18 @@ Release result: Sites version 183 from implementation commit `dddedb71ca9af3b327
 Release result: Sites version 184 from implementation commit `0365fb8bd0f20ef35689f10f3350ce3072b49416`, deployment `appgdep_6a5cb6c1ef58819191a40c7378e0d260`. Field work now puts Approve and Retake beside each supplied customer-photo requirement for owners, managers and coordinators. Retake preserves the original evidence, requires fixed privacy-safe guidance, reuses the current secure link and records the revision-bound delivery through the existing consent-aware channel. Quick quotes place the business's saved price-book items before manual lines, keep only quantity and customer section editable, and resolve the current owner-scoped description, type, unit price and GST again on save. Compact Jobs, Customers and Price book shortcuts now sit under Work in the left rail.
 
 Signed-in live QA used `TLJ-00000804` without changing its review state or sending a customer message. Two requirements with supplied evidence showed Approve and Retake, while the unsupplied requirement remained non-actionable. The retake preview showed the masked current email, fixed reasons, consent confirmation and a disabled final action until all safeguards are complete. The empty production price book showed a clear Open Price book handoff from Quote and a usable quick-start item editor. Desktop and 390 px QA found no document-level overflow; the retake dialog rendered as a bounded phone bottom sheet. Complete `npm.cmd run validate`, the fresh D1 replay through migration 0077, the production build, canonical HTTP 200 health and zero recent Sites worker errors passed. The only browser console entries were Chrome extension message-channel closures with no application stack. Production environment revision 14 was retained.
+
+## Completed bounded follow-up: uninterrupted evidence and quote actions
+
+- User outcome: approving or requesting a retake no longer throws the reviewer back to Overview, and a finished quote can be previewed and sent without a mandatory draft detour.
+- Owning workflow: installer CRM job-detail lifetime, Field work photo review, direct quote builder, existing quote issue and delivery routes, feature-local styles and regression tests.
+- In scope: preserve the selected job tab across authoritative data refreshes; keep draft saving optional; preview recipient, itemised scope, GST, total and terms before one deliberate send action; reuse the existing immutable quote, secure-link, consent and delivery ledgers; report partial completion truthfully if issue or email delivery fails.
+- Out of scope: approving production evidence during QA, automatic customer email without consent, a new quote or delivery source of truth, provider changes, schema changes or an unrelated job-workspace redesign.
+- Acceptance: Field work remains active after a review refresh; each remaining proof decision stays immediately reachable; preview performs no server mutation; Confirm and send is disabled until consent; the final action saves, issues and emails in order; a delivery failure leaves the issued secure link recoverable and never reports success; desktop and phone layouts have no document-level overflow.
+- Validation: focused photo-review, job-review and quote tests; TypeScript; ESLint; diff check; complete `npm.cmd run validate`; clean migration replay; production build; signed-in desktop and 390 px live inspection; canonical health check.
+- Stop condition: combining the server commands into one transaction, changing customer-email consent or replacing immutable issued revisions requires a separate milestone.
+
+Release result: Sites version 185 from implementation commit `0f4f0cf7698a830d73b107d9b5b3c2915033062c`, deployment `appgdep_6a5d67145e0881919a8d19209871ecc7`. Job detail refreshes no longer remount the focused workspace. Save draft remains available but is not mandatory: Preview and send opens a non-mutating confirmation, then reuses the existing save, issue and email actions. Partial failures remain explicit and recoverable. Signed-in QA on `TLJ-00000804` confirmed the authorised contact, exact line totals and terms in the desktop and 390 px preview without approving proof, creating a quote revision or sending customer email. Complete validation, fresh D1 replay, production build and canonical HTTP 200 health passed. Production environment revision 14 was retained.
 
 ## Current delivery summary
 
