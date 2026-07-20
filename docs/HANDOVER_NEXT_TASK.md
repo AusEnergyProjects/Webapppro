@@ -1,10 +1,10 @@
 # Next task handover
 
 Status: active rolling handover
-Prepared: 20 July 2026
+Prepared: 21 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published in-place evidence review and direct quote preview-and-send workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
-## Active milestone contract: operational indexes and dispatch clarity
+## Completed milestone contract: operational indexes and dispatch clarity
 
 - User outcome: an office user opens one obvious dispatch calendar, sees today's work immediately, searches compact customer and job indexes without triggering long editors, and reaches every business workspace without a hidden More menu.
 - Owning workflow: installer workspace navigation, owner-scoped customer and job index reads, the main trade dispatch calendar, future public job-reference allocation, feature-local styles and regression tests.
@@ -13,6 +13,8 @@ Implementation baseline: the current `codex/sites-custom-domain-migration` workt
 - Acceptance: today's column and appointments are unmistakable without horizontal hunting; both Schedule entry points render the real dispatch board; Customers and Jobs remain compact after row selection and expose keyboard-accessible focused links; filters cover the operational lookup fields named above; protected records remain redacted; future job references do not reveal sequence volume and remain globally unique; every former More destination is visible; stale index/detail requests cannot replace newer state; desktop and phone layouts have no document-level overflow.
 - Validation: focused navigation, customer/job index, scheduling and job-reference tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and phone-width interaction, overflow and loading inspection; canonical health and worker-error checks.
 - Stop condition: changing existing public references, adding a second customer/job source, virtualising unbounded datasets, new provider credentials, or redesigning unrelated product areas requires a separate milestone.
+
+Release result: Sites version 196 from implementation commit `3b206e5dac836fcf343144495dd36e166cf21f46`, deployment `appgdep_6a5eab70a03481919dff44aa07f926dd`. Both Schedule entry points now render the same eight-week dispatch calendar with a prominent Today summary, today column and current-time marker. Jobs and Customers are compact owner-scoped indexes with operational columns, filters and deliberate focused-record links; the former More destinations are visible in the primary CRM navigation. Future jobs receive opaque collision-free `TLJ-X???????` references while all existing public references remain unchanged. Stale reads are cancelled and heavy workspaces load only when opened. Complete validation passed on the exact implementation state, including TypeScript, ESLint, 33 integration tests, 682 full-suite tests, clean replay of all 79 production migrations and a production build. Signed-in desktop and phone-width QA confirmed both Schedule routes, Jobs, Customers and focused job navigation without changing production records or causing document-level overflow. The canonical health route returned HTTP 200 and the browser console was clean. The Sites error filter contained only two notification polls cancelled during QA navigation, with no application exception or 5xx. Production environment revision 18 was retained.
 
 ## Completed milestone contract: rolling dispatch and action dashboard
 
@@ -227,8 +229,8 @@ The same batch moves next action, description and tags into one Notes owner; rep
 
 ## Next five logical steps
 
-1. **Drag-in dispatch tray:** make unscheduled customer jobs draggable directly from a compact backlog tray onto a person and time, using the saved duration and assignee defaults while preserving conflict and revision checks.
-2. **Common jobs in guided intake:** let a trade choose an existing Common job during New job so duration, crew, checklist and quote lines are snapshotted once without re-entry or a second template source.
-3. **One fast commercial builder:** give Quote and Invoice the same first choice of saved item, Common job or custom line, then keep preview and send in the current screen with exact GST and immutable issued versions.
-4. **Phone action rail:** add a compact persistent mobile rail for My day, Schedule, New, Jobs and More, and remove the remaining duplicate nested schedule path so core work stays one tap away.
-5. **Authoritative business trends:** add date-filtered revenue, outstanding cash, labour utilisation and realised margin only from issued invoices, verified payments, recorded time and material actuals, with explicit metric definitions and zero-safe views.
+1. **Saved index views:** let each user save table column visibility, order and named one-click filter presets for their regular job and customer searches.
+2. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
+3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the eight-week board remains authoritative.
+4. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
+5. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
