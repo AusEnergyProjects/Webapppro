@@ -139,6 +139,13 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(styles, /@media print/);
 });
 
+test("customer quote questions are visible and actionable before quote editing", () => {
+  assert.match(installerUi, /question needs/);
+  assert.match(installerUi, />Answer<\/button>/);
+  assert.ok(installerUi.indexOf('id="quote-questions"') < installerUi.indexOf('className="trade-quote-price-book"'));
+  assert.match(styles, /\.trade-quote-questions\.needs-attention/);
+});
+
 test("direct quote copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(`${installerRoute}\n${customerRoute}\n${linkRoute}\n${installerUi}\n${customerUi}\n${linkUi}`, /[\u2013\u2014]/);
 });

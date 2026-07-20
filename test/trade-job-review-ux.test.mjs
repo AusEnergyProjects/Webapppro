@@ -28,14 +28,23 @@ test("job notification read receipts are owner scoped and durable", () => {
   assert.match(schema, /tradeJobNotificationReads/);
 });
 
-test("customer photo completion powers an unread installer review queue", () => {
+test("customer and field activity powers one unread installer review queue", () => {
   assert.match(route, /trade_crm_photo_request_completions/);
+  for (const source of ["trade_crm_quote_questions", "trade_crm_quote_acceptances", "trade_crm_quote_events", "trade_crm_appointment_reschedule_events", "trade_crm_payment_events", "trade_work_order_events", "trade_crm_signoffs"]) {
+    assert.match(route, new RegExp(source));
+  }
   assert.match(route, /trade_job_notification_reads/);
   assert.match(route, /customer-photos-ready:/);
+  assert.match(route, /quote-question:/);
+  assert.match(route, /quote-decision:/);
+  assert.match(route, /Quote accepted/);
+  assert.match(route, /Customer payment received/);
+  assert.match(route, /Field job completed/);
   assert.match(route, /requireInstallerTeamAccess/);
-  assert.match(notifications, /60_000/);
+  assert.match(route, /current\.items\.some\(\(item\) => item\.id === notificationKey\)/);
+  assert.match(notifications, /30_000/);
   assert.match(notifications, /unread job updates/);
-  assert.match(notifications, /jobTab: "field"/);
+  assert.match(notifications, /jobTab: item\.targetTab/);
   assert.match(dashboard, /<TradeJobNotifications/);
 });
 

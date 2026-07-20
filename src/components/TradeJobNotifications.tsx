@@ -11,6 +11,8 @@ type JobNotification = {
   title: string;
   summary: string;
   createdAt: string;
+  targetTab: "schedule" | "quote" | "field" | "invoice";
+  source: "customer" | "field";
   read: boolean;
 };
 
@@ -39,7 +41,7 @@ export function TradeJobNotifications({ user, onNavigate }: { user: User; onNavi
 
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
-    const interval = window.setInterval(() => void load(true), 60_000);
+    const interval = window.setInterval(() => void load(true), 30_000);
     const onFocus = () => void load(true);
     window.addEventListener("focus", onFocus);
     return () => { window.clearTimeout(initial); window.clearInterval(interval); window.removeEventListener("focus", onFocus); };
@@ -69,7 +71,7 @@ export function TradeJobNotifications({ user, onNavigate }: { user: User; onNavi
     }
     setOpen(false);
     navigationNonce.current += 1;
-    onNavigate({ workspace: "work", kind: "job", id: item.workOrderId, query: item.workNumber, nonce: navigationNonce.current, jobTab: "field" });
+    onNavigate({ workspace: "work", kind: "job", id: item.workOrderId, query: item.workNumber, nonce: navigationNonce.current, jobTab: item.targetTab });
   }
 
   return <div className="tlink-job-notifications">
@@ -83,10 +85,10 @@ export function TradeJobNotifications({ user, onNavigate }: { user: User; onNavi
         <header><div><span>Review queue</span><strong id="job-update-title">Job updates</strong></div><button type="button" onClick={() => setOpen(false)} aria-label="Close job updates">Close</button></header>
         <div className="tlink-notification-list">
           {status && <p role="status">{status}</p>}
-          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>Completed customer photo requests will appear here when they are ready to review.</span></div>}
+          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>Customer decisions, questions, uploads, schedule requests and field-team progress will appear here.</span></div>}
           {items.map((item) => <button type="button" key={item.id} className={item.read ? "read" : "unread"} onClick={() => void openJob(item)}>
             <span className="tlink-notification-dot" aria-hidden="true" />
-            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
+            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "customer" ? "Customer" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
           </button>)}
         </div>
       </section>
