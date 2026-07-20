@@ -19,6 +19,7 @@ const routes = [
   "/assessments",
   "/case-studies",
   "/platform",
+  "/privacy",
   "/direct-trade",
   "/direct-trade/partners",
   "/direct-trade/membership",

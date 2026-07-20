@@ -36,7 +36,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | Independent energy assessments | 1300 241 149</p></footer>;
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | <a href="/privacy">Privacy</a> | Independent energy assessments | 1300 241 149</p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {
