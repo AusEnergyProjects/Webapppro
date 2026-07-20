@@ -4,8 +4,8 @@ import { decryptIntegrationCredentials, integrationStateHash, newIntegrationStat
 import {
   INTEGRATION_PROVIDERS,
   integrationCallbackUri,
-  integrationEnvironment,
   isIntegrationProvider,
+  providerConfigured,
   providerSetting,
   requireInstallerOperations,
   type IntegrationProvider,
@@ -23,15 +23,13 @@ function integrationError(error: unknown) {
   return adminJson({ ok: false, error: "The integration request could not be completed." }, 500);
 }
 
-function providerReadiness(provider: IntegrationProvider, request: Request, connected?: Record<string, unknown>) {
+function providerReadiness(provider: IntegrationProvider, connected?: Record<string, unknown>) {
   const setting = providerSetting(provider);
-  const encryptionReady = Boolean(integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY);
   return {
     provider,
     label: setting.label,
     purpose: setting.purpose,
-    configured: Boolean(setting.clientId && setting.clientSecret && encryptionReady),
-    callbackUrl: integrationCallbackUri(request, provider),
+    configured: providerConfigured(provider),
     status: connected?.status === "connected" ? "connected" : "not_connected",
     accountLabel: connected?.external_account_label || "",
     connectedAt: connected?.created_at || "",
@@ -56,7 +54,7 @@ export async function GET(request: Request) {
     const connectedByProvider = Object.fromEntries(connections.results.map((row) => [String(row.provider), row]));
     return adminJson({
       ok: true,
-      providers: INTEGRATION_PROVIDERS.map((provider) => providerReadiness(provider, request, connectedByProvider[provider])),
+      providers: INTEGRATION_PROVIDERS.map((provider) => providerReadiness(provider, connectedByProvider[provider])),
       paymentLinks: links.results.map((row) => ({
         id: row.id, workOrderId: row.work_order_id, commercialReference: row.commercial_reference, purpose: row.purpose,
         provider: row.provider, externalId: row.external_id,
@@ -78,8 +76,8 @@ export async function POST(request: Request) {
     const providerValue = cleanAdminText(body.provider, 40).toLowerCase();
     if (!isIntegrationProvider(providerValue)) return adminJson({ ok: false, error: "Choose a supported provider." }, 400);
     const setting = providerSetting(providerValue);
-    if (!setting.clientId || !setting.clientSecret || !integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY) {
-      return adminJson({ ok: false, error: `${setting.label} needs administrator setup before installers can connect it.` }, 503);
+    if (!providerConfigured(providerValue)) {
+      return adminJson({ ok: false, error: `TLink is still preparing the secure ${setting.label} connection.` }, 503);
     }
     const now = new Date();
     const state = newIntegrationState();

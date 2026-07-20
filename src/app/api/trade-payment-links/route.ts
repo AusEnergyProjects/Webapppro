@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { decryptIntegrationCredentials, encryptIntegrationCredentials } from "@/lib/trade-integration-crypto";
-import { providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
+import { providerConfigured, providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
 
 export const runtime = "edge";
 
@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     catch { return adminJson({ ok: false, error: "Invalid payment request." }, 400); }
     const provider = cleanAdminText(body.provider, 20).toLowerCase();
     if (provider !== "stripe" && provider !== "square") return adminJson({ ok: false, error: "Choose Stripe or Square." }, 400);
+    if (!providerConfigured(provider)) throw new Error("INTEGRATION_REQUIRED");
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const purpose = cleanAdminText(body.purpose, 20).toLowerCase() === "invoice" ? "invoice" : "deposit";
     const db = getD1();

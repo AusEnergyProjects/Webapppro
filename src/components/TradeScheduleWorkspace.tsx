@@ -12,6 +12,12 @@ import {
   moveAppointmentToDate,
   nextAppointmentSlot,
 } from "@/lib/trade-schedule";
+import {
+  clearIntegrationReturnFromAddress,
+  integrationProviderLabel,
+  isCalendarIntegration,
+  readIntegrationReturn,
+} from "@/lib/trade-integration-return";
 
 type Member = { id: string; displayName: string; role: string; status: string; isOwner: boolean };
 type WorkingHours = { id?: string; teamMemberId: string; weekday: number; startMinute: number; endMinute: number; isAvailable: boolean };
@@ -98,7 +104,37 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined }: { 
       const calendarResult = await calendarResponse.json().catch(() => ({})) as CalendarResult;
       if (!scheduleResponse.ok || !result.ok) throw new Error(result.error || "The schedule could not be loaded.");
       setData(result); setHoursMember((current) => current || result.members?.[0]?.id || ""); setEdits({}); setDecisionNotes({});
-      if (calendarResponse.ok && calendarResult.ok) setCalendars(calendarResult.providers || []);
+      const returned = readIntegrationReturn(window.location.search);
+      const calendarReturn = returned && isCalendarIntegration(returned.provider) ? returned : null;
+      if (calendarResponse.ok && calendarResult.ok) {
+        const nextCalendars = calendarResult.providers || [];
+        setCalendars(nextCalendars);
+        if (calendarReturn) {
+          const label = integrationProviderLabel(calendarReturn.provider);
+          if (calendarReturn.status === "cancelled") setStatus(`${label} connection cancelled. Nothing was changed.`);
+          else if (calendarReturn.status === "failed") setStatus(`${label} could not be connected. Try again or contact TLink support.`);
+          else if (!nextCalendars.some((provider) => provider.provider === calendarReturn.provider && provider.status === "connected")) {
+            setStatus(`${label} returned to TLink, but the connection could not be verified. Try connecting again.`);
+          } else {
+            const firstSyncResponse = await fetch("/api/trade-calendar-sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ weekStart }),
+            });
+            const firstSyncResult = await firstSyncResponse.json().catch(() => ({})) as CalendarResult;
+            if (firstSyncResponse.ok && firstSyncResult.ok) {
+              setCalendars(firstSyncResult.providers || nextCalendars);
+              setStatus(firstSyncResult.failed
+                ? `${label} connected. ${firstSyncResult.synced || 0} calendar items synced and ${firstSyncResult.failed} need another try.`
+                : `${label} connected. ${firstSyncResult.synced || 0} calendar items are up to date.`);
+            } else setStatus(`${label} connected. TLink is saved, but the first calendar sync needs another try.`);
+          }
+          clearIntegrationReturnFromAddress();
+        }
+      } else if (calendarReturn) {
+        const label = integrationProviderLabel(calendarReturn.provider);
+        setStatus(`${label} returned to TLink, but the connection could not be checked. Refresh and try again.`);
+      }
     } catch (error) { setStatus(error instanceof Error ? error.message : "The schedule could not be loaded."); }
     finally { setLoading(false); }
   }, [user, weekStart]);
@@ -198,7 +234,7 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined }: { 
   if (loading) return <section className="dashboard-panel schedule-workspace"><div className="crm-empty"><strong>Building the team week</strong><span>Loading appointments, availability and capacity.</span></div></section>;
   return <section className="dashboard-panel schedule-workspace">
     <header className="schedule-heading"><div><span>Plan the week</span><h2>See the week at a glance</h2><p>Choose any week, then drag an appointment across days or up and down to change its start time.</p></div><div className="schedule-week-nav"><button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>Previous</button><button type="button" onClick={() => setWeekStart(monday())}>This week</button><label><span>View week containing</span><input type="date" value={weekStart} onChange={(event) => { if (event.target.value) setWeekStart(monday(new Date(`${event.target.value}T12:00:00`))); }} /></label><strong>{weekStart} to {addDays(weekStart, 6)}</strong><button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next</button></div></header>
-    <details className="schedule-calendar-links"><summary><span>Calendar apps</span><strong>Google Calendar and Outlook</strong></summary><div><p>TLink stays authoritative. Connected calendars receive this week&apos;s job blocks and never control the TLink schedule.</p>{calendars.map((provider) => <article key={provider.provider}><div><strong>{provider.label}</strong><span>{provider.status === "connected" ? provider.lastError ? "Connected, last sync needs attention" : "Connected" : provider.configured ? "Ready to connect" : "Administrator setup needed"}</span></div><button type="button" disabled={!provider.configured || provider.status === "connected" || Boolean(busy)} onClick={() => void connectCalendar(provider)}>{provider.status === "connected" ? "Connected" : `Connect ${provider.label}`}</button></article>)}<button className="primary" type="button" disabled={!calendars.some((item) => item.status === "connected") || Boolean(busy)} onClick={() => void syncCalendars()}>{busy === "calendar-sync" ? "Syncing..." : "Sync this week"}</button></div></details>
+    <details className="schedule-calendar-links"><summary><span>Calendar apps</span><strong>Google Calendar and Outlook</strong></summary><div><p>TLink stays authoritative. Connected calendars receive this week&apos;s job blocks and never control the TLink schedule.</p>{calendars.map((provider) => <article key={provider.provider}><div><strong>{provider.label}</strong><span>{provider.status === "connected" ? provider.lastError ? "Connected, last sync needs attention" : "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</span></div><button type="button" disabled={!provider.configured || provider.status === "connected" || Boolean(busy)} onClick={() => void connectCalendar(provider)}>{provider.status === "connected" ? "Connected" : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button></article>)}<button className="primary" type="button" disabled={!calendars.some((item) => item.status === "connected") || Boolean(busy)} onClick={() => void syncCalendars()}>{busy === "calendar-sync" ? "Syncing..." : "Sync this week"}</button></div></details>
     <div className="schedule-filters"><label><span>Person</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">Everyone</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label><label><span>Job</span><input value={jobFilter} placeholder="Number or title" onChange={(event) => setJobFilter(event.target.value)} /></label><label><span>Service</span><select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="">All services</option>{services.map((service) => <option key={service}>{readable(service)}</option>)}</select></label><label><span>Site</span><select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">All sites</option>{sites.map((site) => <option key={site}>{site}</option>)}</select></label><label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All schedule states</option><option value="scheduled">Scheduled</option><option value="conflict">Conflicts</option><option value="awaiting">Awaiting appointment</option><option value="unassigned">Unassigned</option></select></label><label className="schedule-check"><input type="checkbox" checked={conflictOnly} onChange={(event) => setConflictOnly(event.target.checked)} /><span>Conflicts only</span></label></div>
     <section className="schedule-capacity"><header><strong>This week</strong><span>{unassignedCount} jobs waiting | {appointments.filter((item) => item.conflicts).length} conflicts</span></header><div>{capacity.map(({ member, available, booked, percent }) => <article key={member.id}><span><i className={`schedule-person-dot ${colourFor(member.id)}`} />{memberLabel(member)}<small>{member.isOwner ? "Owner" : readable(member.role)}</small></span><strong>{Math.round(booked / 60)}h booked of {Math.round(available / 60)}h</strong><div><i style={{ width: `${percent}%` }} /></div></article>)}</div></section>
     {(data.rescheduleRequests || []).length > 0 && <details className="schedule-reschedule-queue"><summary><span>Customer requests</span><strong>Review before changing the schedule | {data.rescheduleRequests?.length}</strong></summary><div>{data.rescheduleRequests?.map((request) => {

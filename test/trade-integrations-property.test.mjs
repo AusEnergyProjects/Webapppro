@@ -13,6 +13,9 @@ const cryptoLayer = read("../src/lib/trade-integration-crypto.ts");
 const providerLayer = read("../src/lib/trade-integrations-server.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const integrationUi = read("../src/components/TradeIntegrationCentre.tsx");
+const integrationReturn = read("../src/lib/trade-integration-return.ts");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const schedule = read("../src/components/TradeScheduleWorkspace.tsx");
 const paymentUi = read("../src/components/TradePaymentPanel.tsx");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
@@ -73,8 +76,41 @@ test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints",
   assert.match(providerLayer, /connect\.stripe\.com\/oauth\/authorize/);
   assert.match(providerLayer, /connect\.stripe\.com\/oauth\/token/);
   assert.match(providerLayer, /connect\.squareup\.com\/oauth2\/authorize/);
+  assert.match(providerLayer, /accounting\.invoices/);
+  assert.doesNotMatch(providerLayer, /accounting\.transactions/);
   assert.match(callback, /api\.xero\.com\/connections/);
   assert.match(callback, /\/v2\/locations/);
+});
+
+test("provider readiness requires matching platform and payment reconciliation credentials", () => {
+  assert.match(providerLayer, /STRIPE_CONNECT_SECRET_KEY/);
+  assert.match(providerLayer, /STRIPE_CONNECT_WEBHOOK_SECRET/);
+  assert.match(providerLayer, /SQUARE_WEBHOOK_SIGNATURE_KEY/);
+  assert.match(providerLayer, /SQUARE_WEBHOOK_NOTIFICATION_URL/);
+  assert.match(providerLayer, /providerConfigured/);
+  assert.doesNotMatch(providerLayer, /STRIPE_REFERRAL_SECRET_KEY/);
+  assert.match(integrations, /providerConfigured\(providerValue\)/);
+  assert.match(payments, /providerConfigured\(provider\)/);
+});
+
+test("installer connection returns are validated, routed and confirmed", () => {
+  assert.match(integrationReturn, /INTEGRATION_RETURN_PROVIDERS/);
+  assert.match(integrationReturn, /status !== "connected" && status !== "cancelled" && status !== "failed"/);
+  assert.match(dashboard, /readIntegrationReturn\(window\.location\.search\)/);
+  assert.match(dashboard, /id: "integrations"/);
+  assert.match(crm, /navigationTarget\.id === "integrations"/);
+  assert.match(integrationUi, /connection could not be verified/);
+  assert.match(integrationUi, /clearIntegrationReturnFromAddress/);
+  assert.match(schedule, /firstSyncResponse/);
+  assert.match(schedule, /first calendar sync needs another try/);
+});
+
+test("installer UI hides central application credentials and exposes truthful states", () => {
+  assert.doesNotMatch(integrations, /callbackUrl:/);
+  assert.doesNotMatch(integrationUi, /Administrator setup|callbackUrl|client credentials|Sites/);
+  assert.match(integrationUi, /Available to connect/);
+  assert.match(integrationUi, /TLink setup in progress/);
+  assert.match(integrationUi, /disabled=\{Boolean\(busy\)/);
 });
 
 test("online payment links are direct-customer only and provider hosted", () => {

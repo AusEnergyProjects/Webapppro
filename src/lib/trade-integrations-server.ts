@@ -26,11 +26,13 @@ type IntegrationEnvironment = {
   QUICKBOOKS_CLIENT_ID?: string;
   QUICKBOOKS_CLIENT_SECRET?: string;
   STRIPE_CONNECT_CLIENT_ID?: string;
-  STRIPE_SECRET_KEY?: string;
-  STRIPE_REFERRAL_SECRET_KEY?: string;
+  STRIPE_CONNECT_SECRET_KEY?: string;
+  STRIPE_CONNECT_WEBHOOK_SECRET?: string;
   SQUARE_APPLICATION_ID?: string;
   SQUARE_APPLICATION_SECRET?: string;
   SQUARE_ENVIRONMENT?: string;
+  SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
+  SQUARE_WEBHOOK_NOTIFICATION_URL?: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
   MICROSOFT_CALENDAR_CLIENT_ID?: string;
@@ -52,7 +54,7 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     provider, label: "Xero", purpose: "Accounting and invoice sync", clientId: values.XERO_CLIENT_ID || "",
     clientSecret: values.XERO_CLIENT_SECRET || "", authorizeUrl: "https://login.xero.com/identity/connect/authorize",
     tokenUrl: "https://identity.xero.com/connect/token",
-    scopes: ["openid", "profile", "email", "offline_access", "accounting.transactions", "accounting.contacts"],
+    scopes: ["openid", "profile", "email", "offline_access", "accounting.invoices", "accounting.contacts"],
   };
   if (provider === "myob") return {
     provider, label: "MYOB", purpose: "Accounting and invoice sync", clientId: values.MYOB_CLIENT_ID || "",
@@ -67,7 +69,7 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
   };
   if (provider === "stripe") return {
     provider, label: "Stripe", purpose: "Secure customer payment requests", clientId: values.STRIPE_CONNECT_CLIENT_ID || "",
-    clientSecret: values.STRIPE_SECRET_KEY || values.STRIPE_REFERRAL_SECRET_KEY || "", authorizeUrl: "https://connect.stripe.com/oauth/authorize",
+    clientSecret: values.STRIPE_CONNECT_SECRET_KEY || "", authorizeUrl: "https://connect.stripe.com/oauth/authorize",
     tokenUrl: "https://connect.stripe.com/oauth/token", scopes: ["read_write"],
   };
   if (provider === "square") return {
@@ -90,6 +92,16 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scopes: ["openid", "profile", "email", "offline_access", "User.Read", "Calendars.ReadWrite"],
   };
+}
+
+export function providerConfigured(provider: IntegrationProvider) {
+  const values = integrationEnvironment();
+  const setting = providerSetting(provider);
+  const baseReady = Boolean(setting.clientId && setting.clientSecret && values.CRM_INTEGRATION_ENCRYPTION_KEY);
+  if (!baseReady) return false;
+  if (provider === "stripe") return Boolean(values.STRIPE_CONNECT_WEBHOOK_SECRET);
+  if (provider === "square") return Boolean(values.SQUARE_WEBHOOK_SIGNATURE_KEY && values.SQUARE_WEBHOOK_NOTIFICATION_URL);
+  return true;
 }
 
 export async function requireInstallerOperations(request: Request) {

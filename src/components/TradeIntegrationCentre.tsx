@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
+import {
+  clearIntegrationReturnFromAddress,
+  integrationProviderLabel,
+  isCalendarIntegration,
+  readIntegrationReturn,
+  type IntegrationReturnProvider,
+} from "@/lib/trade-integration-return";
 
 type Provider = {
-  provider: "xero" | "myob" | "quickbooks" | "stripe" | "square" | "google_calendar" | "microsoft_calendar";
+  provider: IntegrationReturnProvider;
   label: string;
   purpose: string;
   configured: boolean;
-  callbackUrl: string;
   status: "connected" | "not_connected";
   accountLabel: string;
   connectedAt: string;
@@ -39,13 +45,26 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
     const response = await fetch("/api/trade-integrations", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as IntegrationResult;
     if (!response.ok) throw new Error(result.error || "Integrations could not be loaded.");
-    setProviders(result.providers || []);
+    const nextProviders = result.providers || [];
+    setProviders(nextProviders);
+    return nextProviders;
   }, [user]);
 
   useEffect(() => {
     let active = true;
     const frame = window.requestAnimationFrame(() => {
-      void load().catch((error) => active && setStatus(error instanceof Error ? error.message : "Integrations could not be loaded."))
+      void load().then((nextProviders) => {
+        if (!active) return;
+        const returned = readIntegrationReturn(window.location.search);
+        if (!returned || isCalendarIntegration(returned.provider)) return;
+        const label = integrationProviderLabel(returned.provider);
+        if (returned.status === "cancelled") setStatus(`${label} connection cancelled. Nothing was changed.`);
+        else if (returned.status === "failed") setStatus(`${label} could not be connected. Try again or contact TLink support.`);
+        else if (nextProviders.some((provider) => provider.provider === returned.provider && provider.status === "connected")) {
+          setStatus(`${label} is connected to this TLink business.`);
+        } else setStatus(`${label} returned to TLink, but the connection could not be verified. Try connecting again.`);
+        clearIntegrationReturnFromAddress();
+      }).catch((error) => active && setStatus(error instanceof Error ? error.message : "Integrations could not be loaded."))
         .finally(() => active && setLoading(false));
     });
     return () => { active = false; window.cancelAnimationFrame(frame); };
@@ -84,18 +103,18 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
   }
 
   return <div className="crm-integrations">
-    <div className="crm-page-heading"><div><span>Connected business services</span><h3>Integrations</h3><p>Connect your own accounts through each provider&apos;s secure sign-in. AEA never asks for or stores the provider password.</p></div></div>
+    <div className="crm-page-heading"><div><span>Connected business services</span><h3>Integrations</h3><p>Each installer business connects its own accounts through the provider&apos;s secure sign-in. TLink never asks for or stores the provider password.</p></div></div>
+    {status && <p className="crm-inline-status" role="status">{status}</p>}
     {loading ? <section className="crm-loading"><span /><div><strong>Checking business connections</strong><p>Loading provider readiness...</p></div></section> : <>
       <section className="crm-integration-grid">
         {providers.map((provider) => <article key={provider.provider} className={provider.status === "connected" ? "connected" : ""}>
-          <header><div className={`crm-provider-mark ${provider.provider}`}>{provider.label.slice(0, 1)}</div><div><span>{provider.purpose}</span><h4>{provider.label}</h4></div><strong>{provider.status === "connected" ? "Connected" : provider.configured ? "Ready" : "Setup needed"}</strong></header>
+          <header><div className={`crm-provider-mark ${provider.provider}`}>{provider.label.slice(0, 1)}</div><div><span>{provider.purpose}</span><h4>{provider.label}</h4></div><strong>{provider.status === "connected" ? "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</strong></header>
           <p>{providerNotes[provider.provider]}</p>
           {provider.status === "connected" && <div className="crm-connected-account"><span>Authorised account</span><strong>{provider.accountLabel || `${provider.label} business`}</strong><small>Tokens are encrypted and isolated to this installer account.</small></div>}
-          {!provider.configured && <details><summary>Administrator setup</summary><p>Register the AEA integration with {provider.label}, add the client credentials to Sites, and allow this exact callback URL:</p><code>{provider.callbackUrl}</code></details>}
-          <button type="button" disabled={busy === provider.provider || (!provider.configured && provider.status !== "connected")} onClick={() => provider.status === "connected" ? void disconnect(provider) : void connect(provider)}>{busy === provider.provider ? "Working..." : provider.status === "connected" ? `Disconnect ${provider.label}` : `Connect ${provider.label}`}</button>
+          {!provider.configured && provider.status !== "connected" && <p className="crm-integration-setup-note">TLink is completing the secure provider registration. Once available, press Connect and sign in to your own {provider.label} account.</p>}
+          <button type="button" disabled={Boolean(busy) || (!provider.configured && provider.status !== "connected")} onClick={() => provider.status === "connected" ? void disconnect(provider) : void connect(provider)}>{busy === provider.provider ? "Working..." : provider.status === "connected" ? `Disconnect ${provider.label}` : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button>
         </article>)}
       </section>
     </>}
-    {status && <p className="crm-inline-status" role="status">{status}</p>}
   </div>;
 }

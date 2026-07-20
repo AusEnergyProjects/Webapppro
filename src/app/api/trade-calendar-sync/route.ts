@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, sameOrigin } from "@/lib/admin-server";
 import { decryptIntegrationCredentials, encryptIntegrationCredentials } from "@/lib/trade-integration-crypto";
-import { integrationCallbackUri, integrationEnvironment, providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
+import { providerConfigured, providerSetting, requireInstallerOperations } from "@/lib/trade-integrations-server";
 import { addCalendarDays, normaliseWeekStart } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
@@ -27,19 +27,14 @@ function calendarError(error: unknown) {
   return adminJson({ ok: false, error: "Calendar sync could not be completed." }, 500);
 }
 
-function configured(provider: CalendarProvider) {
-  const setting = providerSetting(provider);
-  return Boolean(setting.clientId && setting.clientSecret && integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY);
-}
-
-async function providerRows(ownerUid: string, request: Request) {
+async function providerRows(ownerUid: string) {
   const result = await getD1().prepare(`SELECT provider, status, external_account_label, last_sync_at, last_error
     FROM trade_crm_integrations WHERE firebase_uid = ? AND provider IN ('google_calendar', 'microsoft_calendar')`)
     .bind(ownerUid).all<Row>();
   const byProvider = Object.fromEntries(result.results.map((row) => [String(row.provider), row]));
   return CALENDAR_PROVIDERS.map((provider) => {
     const setting = providerSetting(provider); const row = byProvider[provider];
-    return { provider, label: setting.label, configured: configured(provider), callbackUrl: integrationCallbackUri(request, provider),
+    return { provider, label: setting.label, configured: providerConfigured(provider),
       status: row?.status === "connected" ? "connected" : "not_connected", accountLabel: row?.external_account_label || "",
       lastSyncAt: row?.last_sync_at || "", lastError: row?.last_error || "" };
   });
@@ -145,7 +140,7 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const identity = await requireInstallerOperations(request);
-    return adminJson({ ok: true, providers: await providerRows(identity.uid, request) });
+    return adminJson({ ok: true, providers: await providerRows(identity.uid) });
   } catch (error) { return calendarError(error); }
 }
 
@@ -181,6 +176,6 @@ export async function POST(request: Request) {
           .bind(message, new Date().toISOString(), connection.id, identity.uid).run();
       }
     }
-    return adminJson({ ok: true, synced, failed, providers: await providerRows(identity.uid, request) });
+    return adminJson({ ok: true, synced, failed, providers: await providerRows(identity.uid) });
   } catch (error) { return calendarError(error); }
 }

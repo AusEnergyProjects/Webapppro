@@ -13,7 +13,7 @@ Use the SaaS platform model where each installer is the merchant and collects pa
    `https://compare.ausenergyassessments.com/api/trade-integrations/callback/stripe`
 
 4. Add the live client ID as `STRIPE_CONNECT_CLIENT_ID`.
-5. Keep the live platform secret in `STRIPE_SECRET_KEY` or the existing `STRIPE_REFERRAL_SECRET_KEY`.
+5. Keep the matching live platform secret in `STRIPE_CONNECT_SECRET_KEY`. Do not reuse the separate membership or referral account key.
 6. Create a production Connect event destination for events on connected accounts at:
 
    `https://compare.ausenergyassessments.com/api/stripe/webhook`
@@ -30,7 +30,7 @@ The existing account webhook remains responsible for AEA membership billing. Its
    `https://compare.ausenergyassessments.com/api/trade-integrations/callback/xero`
 
 2. Store the client ID as `XERO_CLIENT_ID` and client secret as `XERO_CLIENT_SECRET`.
-3. Confirm the app is approved for `offline_access`, `accounting.transactions` and `accounting.contacts`.
+3. Confirm the app is approved for `offline_access`, `accounting.invoices` and `accounting.contacts`.
 4. Connect a test organisation from an installer account.
 5. Export a direct-customer job and confirm a draft invoice is created. The platform must not email the customer.
 6. Approve and pay the test invoice in Xero, then use Refresh status in the installer CRM. Confirm the invoice total and paid amount update once.

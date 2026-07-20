@@ -17,6 +17,7 @@ import { TradeServiceFollowUpWorkspace } from "./TradeServiceFollowUpWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
+import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
 import {
   FEATURE_DEFINITIONS,
   type FeatureGrant,
@@ -215,6 +216,20 @@ export function DirectTradeDashboard() {
   const [leadStateFilter, setLeadStateFilter] = useState("");
   const [workspace, setWorkspace] = useState<DashboardWorkspace>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "work");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const returned = readIntegrationReturn(window.location.search);
+      if (!returned) return;
+      if (isCalendarIntegration(returned.provider)) {
+        setWorkspace("schedule");
+        return;
+      }
+      setWorkspace("work");
+      setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(
     () =>

@@ -430,6 +430,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       } else if (navigationTarget.kind === "crm-view" && (
         navigationTarget.id === "jobs" || navigationTarget.id === "customers"
         || navigationTarget.id === "pricebook" || navigationTarget.id === "today"
+        || navigationTarget.id === "integrations"
       )) {
         setCreating("");
         setFocusedJobId("");

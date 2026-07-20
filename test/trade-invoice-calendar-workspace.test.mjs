@@ -60,6 +60,11 @@ test("calendar mirroring is provider-neutral, revision mapped and privacy safe",
   assert.match(calendarRoute, /protectedJob \? ""/);
   assert.match(schedule, /TLink is saved\. Calendar sync needs another try/);
   assert.match(schedule, /TLink stays authoritative/);
+  assert.match(schedule, /Available to connect/);
+  assert.match(schedule, /TLink setup in progress/);
+  assert.match(schedule, /firstSyncResponse/);
+  assert.doesNotMatch(schedule, /Administrator setup needed/);
+  assert.doesNotMatch(calendarRoute, /callbackUrl/);
 });
 
 test("new invoice and calendar sources avoid prohibited dash characters", () => {
