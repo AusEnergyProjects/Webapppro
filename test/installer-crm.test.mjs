@@ -10,6 +10,7 @@ const route = read("../src/app/api/trade-crm/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const customerAssets = read("../src/components/CustomerAssetOwnershipCentre.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
 const numberer = read("../src/lib/trade-job-number-server.ts");
@@ -157,6 +158,36 @@ test("installer dashboard, schedule and reports use compact server-owned read mo
   assert.match(crm, /mode: "schedule"/);
   assert.match(crm, /trade-crm\?mode=reports/);
   assert.match(crm, /schedulePagination/);
+});
+
+test("My day exposes owner scoped local workload and direct action charts", () => {
+  assert.match(route, /australiaLocalDateTime\(identity\.addressState\)\.slice\(0, 10\)/);
+  assert.match(route, /Array\.from\(\{ length: 4 \}/);
+  assert.match(route, /weekEnd: addSummaryDays\(weekStart, 6\)/);
+  assert.match(route, /a\.status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
+  assert.match(route, /NOT EXISTS \(SELECT 1 FROM trade_crm_appointments/);
+  assert.match(route, /w\.stage NOT IN \('completed', 'cancelled'\) GROUP BY w\.stage/);
+  assert.match(route, /if \(!Number\.isFinite\(start\) \|\| !Number\.isFinite\(end\) \|\| end <= start\) return 60/);
+  assert.match(route, /Math\.max\(15, Math\.min\(480/);
+  assert.match(route, /todayVisits:/);
+  assert.match(route, /awaitingSchedule:/);
+  assert.match(route, /workStages:/);
+  for (const label of ["Today visits", "Awaiting schedule", "Overdue tasks", "Waiting jobs", "Booked work", "Work status", "New job", "Common jobs", "Invoices"]) {
+    assert.match(crm, new RegExp(label));
+  }
+  assert.match(crm, /className="crm-dashboard-chart crm-workload-chart"/);
+  assert.match(crm, /className="crm-dashboard-chart crm-work-status-chart"/);
+  assert.match(crm, /className="crm-chart-row"/);
+  assert.match(crm, /aria-label=\{`Open schedule for/);
+  assert.match(crm, /openJobsForStage\(item\.stage\)/);
+  assert.match(crm, /setPriceBookView\("packets"\); setView\("pricebook"\)/);
+  assert.match(crm, /initialView=\{priceBookView\}/);
+  assert.match(crm, /key=\{priceBookView\}/);
+  assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
+  assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
+  assert.match(dashboard, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
+  assert.match(dashboard, /initialWeekStart=\{scheduleWeekStart\}/);
+  assert.match(dashboard, /onOpenInvoices=\{\(\) => setWorkspace\("invoices"\)\}/);
 });
 
 test("CRM writes no longer return the full customer and job workspace", () => {

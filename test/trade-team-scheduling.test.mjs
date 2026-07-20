@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { addCalendarDays, appointmentDurationMinutes, appointmentEndsAt, assertFutureAppointment, defaultWorkingWindow, durationLabel, insideWorkingWindow, moveAppointmentToDate, normaliseAppointmentDuration, normaliseWeekStart, rangesOverlap } from "../src/lib/trade-schedule.ts";
+import { addCalendarDays, appointmentDurationMinutes, appointmentEndsAt, assertFutureAppointment, defaultWorkingWindow, durationLabel, insideWorkingWindow, moveAppointmentToDate, normaliseAppointmentDuration, normaliseScheduleRangeWeeks, normaliseWeekStart, rangesOverlap, scheduleAppointmentLanes } from "../src/lib/trade-schedule.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -38,8 +38,25 @@ test("week and capacity calculations are deterministic", () => {
   assert.equal(appointmentEndsAt("2026-07-19T09:00", 30), "2026-07-19T09:30");
   assert.equal(appointmentDurationMinutes("2026-07-19T09:00", "2026-07-19T17:00"), 480);
   assert.equal(durationLabel(75), "1h 15m");
+  assert.equal(normaliseScheduleRangeWeeks(undefined), 1);
+  assert.equal(normaliseScheduleRangeWeeks("8"), 8);
+  assert.throws(() => normaliseScheduleRangeWeeks(0), /INVALID_SCHEDULE_RANGE/);
+  assert.throws(() => normaliseScheduleRangeWeeks(9), /INVALID_SCHEDULE_RANGE/);
   assert.throws(() => normaliseAppointmentDuration(10), /INVALID_DURATION/);
   assert.throws(() => normaliseAppointmentDuration(495), /INVALID_DURATION/);
+});
+
+test("overlapping appointments receive separate visible lanes", () => {
+  const layout = scheduleAppointmentLanes([
+    { id: "a", startsAt: "2026-07-20T09:00", endsAt: "2026-07-20T10:30" },
+    { id: "b", startsAt: "2026-07-20T09:15", endsAt: "2026-07-20T10:00" },
+    { id: "c", startsAt: "2026-07-20T10:00", endsAt: "2026-07-20T11:00" },
+    { id: "d", startsAt: "2026-07-20T11:00", endsAt: "" },
+  ]);
+  assert.deepEqual(layout.get("a"), { lane: 0, laneCount: 2 });
+  assert.deepEqual(layout.get("b"), { lane: 1, laneCount: 2 });
+  assert.deepEqual(layout.get("c"), { lane: 1, laneCount: 2 });
+  assert.deepEqual(layout.get("d"), { lane: 0, laneCount: 1 });
 });
 
 test("the additive migration extends existing team and appointment sources", () => {
@@ -82,18 +99,46 @@ test("owners and dispatch roles receive server-enforced conflict and revision ch
 
 test("schedule payloads preserve customer privacy boundaries", () => {
   assert.match(route, /protectedJob =\s*row\.source_type === "opportunity" \|\|\s*row\.customer_source === "platform_private"/);
+  assert.match(route, /LEFT JOIN trade_crm_customers c ON c\.id = d\.crm_customer_id AND c\.firebase_uid = w\.firebase_uid AND c\.record_status = 'active'/);
+  assert.match(route, /protectedJob \? "AEA protected customer"/);
   assert.match(route, /protectedJob\s*\?\s*row\.site_area \|\| "Protected service region"/);
-  assert.doesNotMatch(route, /c\.email|c\.phone|c\.first_name|c\.last_name|address_line_1/);
+  assert.match(route, /customer_business_name/);
+  assert.match(route, /customer_first_name, row\.customer_last_name/);
+  assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1/);
 });
 
-test("the installer dashboard exposes the complete low-friction week scheduling workflow", () => {
-  for (const copy of ["Plan the week", "View week containing", "Add to schedule", "Conflicts only", "Set working hours and time off", "up or down", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+test("the installer dashboard exposes a rolling low-friction scheduling workflow", () => {
+  for (const copy of ["Scroll across the schedule", "Eight weeks stay together", "View week containing", "Earlier", "Later", "Today", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
   assert.match(ui, /draggable=\{!busy\}/);
+  assert.match(ui, /const SCHEDULE_RANGE_WEEKS = 8/);
+  assert.match(ui, /const SCHEDULE_RANGE_DAYS = SCHEDULE_RANGE_WEEKS \* 7/);
+  assert.match(ui, /appointmentsByDate = useMemo/);
+  assert.match(ui, /scheduleAppointmentLanes\(dayAppointments\)/);
+  assert.match(ui, /new AbortController\(\)/);
+  assert.match(ui, /schedule-dialog-status/);
+  assert.match(ui, /ref=\{timetableScrollRef\} className="schedule-timetable-scroll" onScroll=\{handleScheduleScroll\}/);
+  assert.match(ui, /autoScrollDuringDrag\(event\.clientX, event\.clientY\)/);
+  assert.match(ui, /initialWeekStart\?: string/);
   assert.match(ui, /min=\{minimumStart\}/);
   assert.match(route, /member_uid === ownerUid/);
+  assert.match(route, /normaliseScheduleRangeWeeks\(search\.get\("rangeWeeks"\), 1\)/);
+  assert.match(route, /schedulePayload\(access\.ownerUid, rangeStart, rangeWeeks\)/);
+  assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, syncAppointmentId\)/);
   assert.match(dashboard, /workspace === "schedule"/); assert.match(dashboard, /<TradeScheduleWorkspace/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);
   assert.match(teamPortal, /data\.access\.canDispatch && <TradeScheduleWorkspace/);
+});
+
+test("appointment cards prioritise field-use context and open an accessible editor", () => {
+  assert.match(ui, /<strong>\{item\.customerDisplayName\}<\/strong><small>\{item\.assigneeLabel \|\| "Unassigned"\}<\/small><em>\{item\.suburbLabel\}<\/em><span>\{formatTime\(item\.startsAt\)\}/);
+  assert.doesNotMatch(ui, /<strong>\{item\.workNumber\}<\/strong>/);
+  assert.match(ui, /role="button" aria-label=\{`View appointment for \$\{cardLabel\}`\}/);
+  assert.match(ui, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
+  assert.match(ui, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(ui, /event\.key === "Escape"/);
+  assert.match(ui, /selectedTriggerRef\.current\?\.focus\(\)/);
+  assert.match(ui, /type="date" min=\{minimumStart\.slice\(0, 10\)\}/);
+  assert.match(ui, /"Save appointment"/);
 });
 
 test("new scheduling and authority copy avoids prohibited dash characters", () => {

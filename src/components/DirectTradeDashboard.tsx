@@ -215,6 +215,7 @@ export function DirectTradeDashboard() {
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
   const [workspace, setWorkspace] = useState<DashboardWorkspace>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "work");
+  const [scheduleWeekStart, setScheduleWeekStart] = useState("");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
 
   useEffect(() => {
@@ -624,7 +625,7 @@ export function DirectTradeDashboard() {
                     setWorkspace("work");
                   }}><span>{label}</span></button>)}
                 </div>
-                <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => setWorkspace("schedule")}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
+                <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => { setScheduleWeekStart(""); setWorkspace("schedule"); }}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
                 <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
@@ -641,9 +642,11 @@ export function DirectTradeDashboard() {
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
                 navigationTarget={commandTarget}
+                onOpenSchedule={(weekStart) => { setScheduleWeekStart(weekStart || ""); setWorkspace("schedule"); }}
+                onOpenInvoices={() => setWorkspace("invoices")}
               />}
 
-              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} onOpenJob={(workOrderId) => {
+              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} initialWeekStart={scheduleWeekStart} onOpenJob={(workOrderId) => {
                 setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "summary", nonce: Date.now() });
                 setWorkspace("work");
               }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}

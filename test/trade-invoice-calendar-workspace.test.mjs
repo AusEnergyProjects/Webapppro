@@ -34,8 +34,10 @@ test("jobs expose focused double-click navigation with explicit touch and keyboa
   assert.match(crm, />Open job</);
   assert.match(crm, /crm-job-focus/);
   assert.match(crm, /initialTab=\{focusedJobTab\}/);
-  assert.match(schedule, /onDoubleClick=\{\(\) => onOpenJob\(item\.workOrderId\)\}/);
-  assert.match(schedule, /onKeyDown=\{\(event\) => \{ if \(event\.key === "Enter"\) onOpenJob/);
+  assert.match(schedule, /onDoubleClick=\{\(event\) => \{ event\.stopPropagation\(\); closeAppointment\(\); onOpenJob\(item\.workOrderId\); \}\}/);
+  assert.match(schedule, /event\.key === "Enter" \|\| event\.key === " "/);
+  assert.match(schedule, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
+  assert.match(schedule, />Open full job</);
 });
 
 test("appointment editing uses a bounded 15-minute duration instead of a finish field", () => {
@@ -59,7 +61,7 @@ test("calendar mirroring is provider-neutral, revision mapped and privacy safe",
   assert.match(calendarServer, /TLink protected job/);
   assert.match(calendarServer, /Customer identity and exact location are not shared/);
   assert.match(calendarServer, /protectedJob \? ""/);
-  assert.match(schedule, /TLink is saved\. Calendar sync needs another try/);
+  assert.match(schedule, /TLink is saved\. A connected calendar item needs another sync/);
   assert.match(schedule, /TLink stays authoritative/);
   assert.match(schedule, /Available to connect/);
   assert.match(schedule, /TLink setup in progress/);

@@ -2,9 +2,10 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
+import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
+import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 
 export const runtime = "edge";
 
@@ -25,7 +26,7 @@ function errorResponse(error: unknown) {
   if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
   if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
-  if (["INVALID_WEEK", "INVALID_TIME", "INVALID_HOURS", "INVALID_DURATION"].includes(code)) return adminJson({ ok: false, error: "Choose a valid week, start time and duration from 15 minutes to 8 hours." }, 400);
+  if (["INVALID_WEEK", "INVALID_SCHEDULE_RANGE", "INVALID_TIME", "INVALID_HOURS", "INVALID_DURATION"].includes(code)) return adminJson({ ok: false, error: "Choose a valid week, start time and duration from 15 minutes to 8 hours." }, 400);
   if (code === "INVALID_DECISION") return adminJson({ ok: false, error: "Choose accept, reject or propose an alternative." }, 400);
   return adminJson({ ok: false, error: "The team schedule request could not be completed." }, 500);
 }
@@ -50,28 +51,32 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
   if (unavailable) throw new Error("UNAVAILABLE_CONFLICT");
 }
 
-async function schedulePayload(ownerUid: string, weekStart: string) {
-  const db = getD1(); const weekEnd = addCalendarDays(weekStart, 7);
+async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks = 1) {
+  const db = getD1(); const rangeEnd = addCalendarDays(rangeStart, normaliseScheduleRangeWeeks(rangeWeeks) * 7);
   const [members, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
     db.prepare(`SELECT id, member_uid, display_name, role, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
       ORDER BY display_name, email`).bind(ownerUid).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, weekday, start_minute, end_minute, is_available FROM trade_team_working_hours
       WHERE owner_uid = ? ORDER BY team_member_id, weekday`).bind(ownerUid).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, starts_at, ends_at, reason FROM trade_team_unavailability
-      WHERE owner_uid = ? AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`).bind(ownerUid, `${weekEnd}T00:00`, `${weekStart}T00:00`).all<Record<string, unknown>>(),
+      WHERE owner_uid = ? AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`).bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.id, a.work_order_id, a.appointment_type, a.title, a.starts_at, a.ends_at, a.assignee_member_id,
         a.assignee_label, a.status, a.revision, w.work_number, w.service_category, w.site_area, w.source_type,
-        d.customer_source, s.site_label, s.suburb, s.address_state, s.postcode
+        d.customer_source, c.first_name customer_first_name, c.last_name customer_last_name,
+        c.business_name customer_business_name, s.site_label, s.suburb, s.address_state, s.postcode
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
       WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND a.starts_at < ?
         AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? ORDER BY a.starts_at, a.created_at`)
-      .bind(ownerUid, `${weekEnd}T00:00`, `${weekStart}T00:00`).all<Record<string, unknown>>(),
+      .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.priority, w.stage, w.revision, w.source_type,
         w.assignee_member_id, w.assignee_label,
-        d.customer_source, s.site_label, s.suburb, s.address_state, s.postcode
+        d.customer_source, c.first_name customer_first_name, c.last_name customer_last_name,
+        c.business_name customer_business_name, s.site_label, s.suburb, s.address_state, s.postcode
       FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND w.stage NOT IN ('completed', 'cancelled') AND NOT EXISTS (
@@ -99,14 +104,20 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
     const weekday = localDayAndMinute(String(row.starts_at)).weekday;
     const savedHours = workingHours.find((item) => item.teamMemberId === row.assignee_member_id && item.weekday === weekday);
     const workingWindow = savedHours || defaultWorkingWindow(weekday);
+    const customerDisplayName = protectedJob ? "AEA protected customer"
+      : row.customer_source === "trade_owned"
+        ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
+        : "No customer linked";
+    const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
     return { id: row.id, workOrderId: row.work_order_id, workNumber: row.work_number, title: row.title, appointmentType: row.appointment_type,
       startsAt: row.starts_at, endsAt: row.ends_at, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
-      status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category,
+      status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
       siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), protectedJob, conflicts,
       outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
-  return { weekStart, weekEnd, members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.member_uid === ownerUid })),
+  return { weekStart: rangeStart, weekEnd: rangeEnd, rangeStart, rangeEnd, rangeWeeks,
+    members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.member_uid === ownerUid })),
     workingHours,
     unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
     appointments, rescheduleRequests: rescheduleRows.results.map((row) => ({ id: row.id, appointmentId: row.appointment_id,
@@ -119,7 +130,13 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
       currentStartsAt: row.current_starts_at, currentEndsAt: row.current_ends_at,
       currentAssigneeMemberId: row.current_assignee_member_id, currentAssigneeLabel: row.current_assignee_label,
       appointmentRevision: Number(row.appointment_revision) })),
-    unassignedJobs: unassignedJobs.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private"; return { id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
+    unassignedJobs: unassignedJobs.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
+      const customerDisplayName = protectedJob ? "AEA protected customer"
+        : row.customer_source === "trade_owned"
+          ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
+          : "No customer linked";
+      const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
+      return { id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
       siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
       priority: row.priority, stage: row.stage, revision: Number(row.revision || 1), assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label }; }) };
@@ -128,8 +145,10 @@ async function schedulePayload(ownerUid: string, weekStart: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try { const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
-    const weekStart = normaliseWeekStart(new URL(request.url).searchParams.get("weekStart"));
-    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, weekStart)) });
+    const search = new URL(request.url).searchParams;
+    const rangeStart = normaliseWeekStart(search.get("rangeStart") || search.get("weekStart"));
+    const rangeWeeks = normaliseScheduleRangeWeeks(search.get("rangeWeeks"), 1);
+    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, rangeStart, rangeWeeks)) });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -138,10 +157,11 @@ export async function PATCH(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
-    const weekStart = normaliseWeekStart(body.weekStart);
+    const rangeStart = normaliseWeekStart(body.rangeStart || body.weekStart); const rangeWeeks = normaliseScheduleRangeWeeks(body.rangeWeeks, 1);
     const account = await db.prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?").bind(access.ownerUid).first<Record<string, unknown>>();
     const localNow = australiaLocalDateTime(String(account?.address_state || "NSW"));
     let notification: Parameters<typeof queueAppointmentNotifications>[0] | null = null;
+    let syncAppointmentId = "";
     if (action === "save_working_hours") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
       const weekday = Number(body.weekday); const startMinute = Number(body.startMinute); const endMinute = Number(body.endMinute); const isAvailable = Boolean(body.isAvailable);
@@ -268,6 +288,7 @@ export async function PATCH(request: Request) {
           ]);
           notification = { appointmentId: String(current.appointment_id), ownerUid: access.ownerUid,
             eventType: "appointment_changed", appointmentRevision, origin: new URL(request.url).origin, occurredAt: now };
+          syncAppointmentId = String(current.appointment_id);
         }
       }
     } else if (action === "schedule_appointment") {
@@ -295,6 +316,7 @@ export async function PATCH(request: Request) {
       notification = { appointmentId, ownerUid: access.ownerUid,
         eventType: current.assignee_member_id ? "appointment_changed" : "staff_assigned",
         appointmentRevision: revision, origin: new URL(request.url).origin, occurredAt: now };
+      syncAppointmentId = appointmentId;
     } else if (action === "schedule_job") {
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
@@ -303,10 +325,11 @@ export async function PATCH(request: Request) {
         AND partner_type = 'installer' AND record_status = 'active'`).bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
       if (!job) throw new Error("JOB_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
       await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt); const revision = nextJobRevision(job.revision);
+      const appointmentId = crypto.randomUUID();
       await db.batch([
         db.prepare(`INSERT INTO trade_crm_appointments (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id,
           assignee_label, status, notes, revision, created_at, updated_at) VALUES (?, ?, ?, 'work', ?, ?, ?, ?, ?, 'scheduled', '', 1, ?, ?)`)
-          .bind(crypto.randomUUID(), workOrderId, access.ownerUid, job.title, startsAt, endsAt, memberId, member.display_name, now, now),
+          .bind(appointmentId, workOrderId, access.ownerUid, job.title, startsAt, endsAt, memberId, member.display_name, now, now),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = 'scheduled', revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now, workOrderId, access.ownerUid),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
@@ -314,8 +337,14 @@ export async function PATCH(request: Request) {
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now, audienceMemberId: memberId,
           previousAudienceMemberId: String(job.assignee_member_id || "") }),
       ]);
+      syncAppointmentId = appointmentId;
     } else return adminJson({ ok: false, error: "Unsupported schedule action." }, 400);
     if (notification) await queueAppointmentNotifications(notification);
-    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, weekStart)) });
+    let calendarSync = { connected: 0, synced: 0, failed: 0 };
+    if (syncAppointmentId) {
+      try { calendarSync = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, syncAppointmentId); }
+      catch { calendarSync = { connected: 0, synced: 0, failed: 1 }; }
+    }
+    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, rangeStart, rangeWeeks)), calendarSync });
   } catch (error) { return errorResponse(error); }
 }

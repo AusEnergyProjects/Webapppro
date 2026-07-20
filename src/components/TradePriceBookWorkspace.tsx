@@ -31,8 +31,8 @@ const editDraft = (item: PriceBookItem): Draft => ({ name: item.name, descriptio
   taxCode: item.taxCode, expectedDurationMinutes: String(item.expectedDurationMinutes), requiredSkill: item.requiredSkill,
   supplierName: item.supplierName, supplierSku: item.supplierSku, supplierProductId: item.supplierProductId });
 
-export function TradePriceBookWorkspace({ user }: { user: User }) {
-  const [libraryView, setLibraryView] = useState<"items" | "packets">("items");
+export function TradePriceBookWorkspace({ user, initialView = "items" }: { user: User; initialView?: "items" | "packets" }) {
+  const [libraryView, setLibraryView] = useState<"items" | "packets">(initialView);
   const [items, setItems] = useState<PriceBookItem[]>([]); const [counts, setCounts] = useState({ total: 0, active: 0, archived: 0 });
   const [capabilities, setCapabilities] = useState<string[]>([]); const [catalogue, setCatalogue] = useState<CatalogueOption[]>([]);
   const [search, setSearch] = useState(""); const [status, setStatus] = useState("active"); const [loading, setLoading] = useState(true);

@@ -156,7 +156,7 @@ test("installer connection returns are validated, routed and confirmed", () => {
   assert.match(integrations, /newIntegrationState\(returnWeekStart\)/);
   assert.match(callback, /calendarIntegrationStateWeekStart\(state\)/);
   assert.match(callback, /integration_week_start/);
-  assert.match(schedule, /JSON\.stringify\(\{ provider: provider\.provider, weekStart \}\)/);
+  assert.match(schedule, /JSON\.stringify\(\{ provider: provider\.provider, weekStart: activeWeekStart \}\)/);
   assert.match(schedule, /returned\.weekStart \? returned\.weekStart : monday\(\)/);
 });
 

@@ -4,6 +4,16 @@ Status: active rolling handover
 Prepared: 20 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published in-place evidence review and direct quote preview-and-send workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
+## Completed milestone contract: rolling dispatch and action dashboard
+
+- User outcome: an office user can scan and move work across an eight-week continuous planner, identify each booking by customer, installer and suburb, open its useful detail in one click, and use My day to act on real schedule and work-status information without hunting through the CRM.
+- Owning workflow: the owner-scoped trade schedule read model and dispatch actions, installer CRM summary read model, My day workspace, feature-local styles, handover and regression tests.
+- In scope: one bounded eight-week planner window; horizontal and vertical drag with edge scrolling across every visible day; date selection that repositions the rolling window; customer-first appointment cards; a keyboard and touch-friendly appointment detail and edit dialog; protected-job redaction; source-backed four-week booking and current work-status charts; direct quick actions into existing jobs, schedule, customers, price book, common jobs and invoices.
+- Out of scope: a second calendar source of truth, two-way Google or Outlook edits, unbounded database queries, a new charting dependency, new job, quote, invoice, material or common-job records, provider work, schema changes, and copying another product's branding or navigation.
+- Acceptance: a booking can be dragged at least three weeks forward without changing pages; the server bounds every planner request to eight weeks; the card prioritises customer, assigned person and suburb while the global TLink job ID remains available in the dialog; direct-customer identity and location never appear for AEA protected work; dashboard charts use only authoritative owner-scoped records and remain useful at zero; every chart and quick action has a plain-text label and keyboard path; desktop and 390 px layouts have no document-level overflow.
+- Validation: focused schedule, CRM summary and dashboard contract tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and 390 px drag, dialog, chart and overflow inspection; canonical health and worker-error checks.
+- Stop condition: an infinite or virtualised calendar, two-way external calendar authority, new commercial entities, provider credentials, cross-tenant reporting or a second operational data source requires a separate milestone.
+
 ## Completed milestone: guided quick invoice
 
 - User outcome: the create-job buttons work without browser validation overlays, and the guided flow can optionally prepare and send a fixed-fee invoice with the appointment and photo request.
@@ -205,8 +215,8 @@ The same batch moves next action, description and tags into one Notes owner; rep
 
 ## Next five logical steps
 
-1. **Owner verification handoff:** complete Stripe photo-ID and selfie verification, the Intuit authorised-owner compliance questionnaire, Xero billing authorisation, the MYOB paid developer application and Microsoft account recovery; install each issued credential in Sites and run connect, reconnect, callback, accounting, payment and calendar tests without storing credentials in Git.
-2. **Integration health and retry centre:** turn safe OAuth callback stages, calendar mirror failures, accounting export errors and payment-review states into one owner-scoped queue with reconnect, retry and open-provider actions plus immutable resolution evidence.
-3. **Accepted-quote guided handoff:** combine the existing deposit or invoice choice, schedule readiness, accepted-scope checklist and customer evidence request into one progressive office action without duplicating commercial or job data.
-4. **P6-3K audited active-state correction:** let an owner, manager or coordinator undo only the immediately previous `en_route`, `arrived` or `in_progress` transition with a required reason, expected revision, immutable correction event and immediate field-device sync; never reopen completed work or rewrite history.
-5. **Operational My day queue:** rank overdue customer replies, stalled quotes, integration errors, unfinished field records and unpaid invoices by owner, assignee and due state so the dashboard becomes the daily exception list rather than a passive summary.
+1. **Drag-in dispatch tray:** make unscheduled customer jobs draggable directly from a compact backlog tray onto a person and time, using the saved duration and assignee defaults while preserving conflict and revision checks.
+2. **Common jobs in guided intake:** let a trade choose an existing Common job during New job so duration, crew, checklist and quote lines are snapshotted once without re-entry or a second template source.
+3. **One fast commercial builder:** give Quote and Invoice the same first choice of saved item, Common job or custom line, then keep preview and send in the current screen with exact GST and immutable issued versions.
+4. **Phone action rail:** add a compact persistent mobile rail for My day, Schedule, New, Jobs and More, and remove the remaining duplicate nested schedule path so core work stays one tap away.
+5. **Authoritative business trends:** add date-filtered revenue, outstanding cash, labour utilisation and realised margin only from issued invoices, verified payments, recorded time and material actuals, with explicit metric definitions and zero-safe views.

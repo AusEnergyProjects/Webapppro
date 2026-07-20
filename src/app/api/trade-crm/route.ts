@@ -116,6 +116,24 @@ function errorResponse(error: unknown) {
   return adminJson({ ok: false, error: "The private installer CRM request could not be completed." }, 500);
 }
 
+function addSummaryDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function summaryWeekStart(date: string) {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return addSummaryDays(date, -((day + 6) % 7));
+}
+
+function summaryBookedMinutes(startsAt: unknown, endsAt: unknown) {
+  const start = typeof startsAt === "string" ? Date.parse(`${startsAt}:00Z`) : Number.NaN;
+  const end = typeof endsAt === "string" && endsAt ? Date.parse(`${endsAt}:00Z`) : Number.NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 60;
+  return Math.max(15, Math.min(480, Math.round((end - start) / 900_000) * 15));
+}
+
 function cleanList(value: unknown, limit = 12) {
   const input = Array.isArray(value) ? value : String(value || "").split(",");
   return [...new Set(input.map((item) => cleanAdminText(item, 40).toLowerCase()).filter(Boolean))].slice(0, limit);
@@ -469,8 +487,11 @@ async function crmBootstrap(identity: CrmIdentity) {
 
 async function crmSummary(identity: CrmIdentity) {
   const db = getD1();
-  const today = new Date().toISOString().slice(0, 10);
-  const [jobMetrics, financialMetrics, visitCount, overdueCount, issueCount, appointments, overdueTasks, openIssues] = await Promise.all([
+  const today = australiaLocalDateTime(identity.addressState).slice(0, 10);
+  const chartStart = summaryWeekStart(today);
+  const weekStarts = Array.from({ length: 4 }, (_, index) => addSummaryDays(chartStart, index * 7));
+  const chartEnd = addSummaryDays(chartStart, 28);
+  const [jobMetrics, financialMetrics, visitCount, todayVisitCount, awaitingScheduleCount, overdueCount, issueCount, appointments, overdueTasks, openIssues, workloadAppointments, workStageRows] = await Promise.all([
     db.prepare(`SELECT
       SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) open_jobs,
       SUM(CASE WHEN stage = 'blocked' THEN 1 ELSE 0 END) waiting_jobs,
@@ -486,6 +507,17 @@ async function crmSummary(identity: CrmIdentity) {
       WHERE d.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`).bind(identity.uid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       WHERE a.firebase_uid = ? AND w.record_status = 'active' AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?`)
+      .bind(identity.uid, today).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) = ?`)
+      .bind(identity.uid, today).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) total FROM trade_work_orders w
+      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND w.stage NOT IN ('completed', 'cancelled')
+      AND NOT EXISTS (SELECT 1 FROM trade_crm_appointments a
+        WHERE a.firebase_uid = w.firebase_uid AND a.work_order_id = w.id
+        AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND SUBSTR(a.starts_at, 1, 10) >= ?)`)
       .bind(identity.uid, today).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) total FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id AND w.firebase_uid = t.firebase_uid
       WHERE t.firebase_uid = ? AND w.record_status = 'active' AND t.status = 'pending' AND t.due_at <> '' AND t.due_at < ?`)
@@ -505,15 +537,41 @@ async function crmSummary(identity: CrmIdentity) {
       FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
       WHERE n.firebase_uid = ? AND w.record_status = 'active' AND n.note_type = 'issue' AND n.issue_status = 'open'
       ORDER BY n.updated_at DESC LIMIT 4`).bind(identity.uid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT a.starts_at, a.ends_at
+      FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
+      WHERE a.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
+      AND SUBSTR(a.starts_at, 1, 10) >= ? AND SUBSTR(a.starts_at, 1, 10) < ?
+      ORDER BY a.starts_at`).bind(identity.uid, chartStart, chartEnd).all<Record<string, unknown>>(),
+    db.prepare(`SELECT w.stage, COUNT(*) total FROM trade_work_orders w
+      WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND w.stage NOT IN ('completed', 'cancelled') GROUP BY w.stage`)
+      .bind(identity.uid).all<Record<string, unknown>>(),
   ]);
+  const workload = weekStarts.map((weekStart) => ({
+    weekStart,
+    weekEnd: addSummaryDays(weekStart, 6),
+    visits: 0,
+    bookedMinutes: 0,
+  }));
+  for (const appointment of workloadAppointments.results) {
+    const appointmentDate = String(appointment.starts_at || "").slice(0, 10);
+    const bucket = workload.find((item) => appointmentDate >= item.weekStart && appointmentDate <= item.weekEnd);
+    if (!bucket) continue;
+    bucket.visits += 1;
+    bucket.bookedMinutes += summaryBookedMinutes(appointment.starts_at, appointment.ends_at);
+  }
   return {
     metrics: {
       openJobs: Number(jobMetrics?.open_jobs || 0), nextVisits: Number(visitCount?.total || 0),
+      todayVisits: Number(todayVisitCount?.total || 0), awaitingSchedule: Number(awaitingScheduleCount?.total || 0),
       overdueTasks: Number(overdueCount?.total || 0), openIssues: Number(issueCount?.total || 0),
       waitingJobs: Number(jobMetrics?.waiting_jobs || 0), completedJobs: Number(jobMetrics?.completed_jobs || 0),
       quotedCents: Number(financialMetrics?.quoted_cents || 0), invoicedCents: Number(financialMetrics?.invoiced_cents || 0),
       paidCents: Number(financialMetrics?.paid_cents || 0), outstandingCents: Number(financialMetrics?.outstanding_cents || 0),
     },
+    workload,
+    workStages: Object.fromEntries(workStageRows.results.map((row: Record<string, unknown>) => [String(row.stage), Number(row.total || 0)])),
     upcomingAppointments: appointments.results.map((row: Record<string, unknown>) => ({
       id: row.id, appointmentType: row.appointment_type, title: row.title, startsAt: row.starts_at,
       endsAt: row.ends_at, assigneeLabel: row.assignee_label, status: row.status, notes: row.notes, job: activityJob(row),

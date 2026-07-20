@@ -112,7 +112,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteUi, /disabled=\{linked\}/);
   assert.match(quoteUi, /readOnly=\{linked\}/);
   assert.match(quoteUi, /Change the quantity or customer section here/);
-  assert.equal((crm.match(/onOpenPriceBook=\{\(\) => setView\("pricebook"\)\}/g) || []).length, 2);
+  assert.equal((crm.match(/onOpenPriceBook=\{\(\) => \{ setPriceBookView\("items"\); setView\("pricebook"\); \}\}/g) || []).length, 2);
   assert.match(crm, /navigationTarget\.kind === "crm-view"/);
 });
 

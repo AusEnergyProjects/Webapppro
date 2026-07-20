@@ -70,10 +70,11 @@ type ActivityAppointment = Appointment & { job: ActivityJob };
 type ActivityTask = Task & { job: ActivityJob };
 type ActivityNote = Note & { job: ActivityJob };
 type CrmMetrics = {
-  openJobs: number; nextVisits: number; overdueTasks: number; openIssues: number; waitingJobs: number;
+  openJobs: number; nextVisits: number; todayVisits: number; awaitingSchedule: number; overdueTasks: number; openIssues: number; waitingJobs: number;
   completedJobs: number; quotedCents: number; invoicedCents: number; paidCents: number; outstandingCents: number;
 };
-type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
+type WorkloadBucket = { weekStart: string; weekEnd: string; visits: number; bookedMinutes: number };
+type CrmSummaryResult = { ok?: boolean; metrics?: CrmMetrics; workload?: WorkloadBucket[]; workStages?: Record<string, number>; upcomingAppointments?: ActivityAppointment[]; overdueTasks?: ActivityTask[]; openIssues?: ActivityNote[]; error?: string };
 type CrmScheduleResult = { ok?: boolean; items?: ActivityAppointment[]; pagination?: IndexPagination; error?: string };
 type CrmReportResult = { ok?: boolean; metrics?: CrmMetrics; pipeline?: Record<string, number>; error?: string };
 type View = "today" | "enquiries" | "jobs" | "schedule" | "customers" | "pricebook" | "assets" | "templates" | "reports" | "import" | "integrations" | "team";
@@ -108,12 +109,22 @@ const dateLabel = (value: string, includeTime = false) => value
   : "Not set";
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
 const cents = (value: FormDataEntryValue | null) => Math.round(Math.max(0, Number(value || 0)) * 100);
+const shortDateLabel = (value: string) => value
+  ? new Date(`${value}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" })
+  : "Not set";
+const bookedTimeLabel = (minutes: number) => {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainder = safeMinutes % 60;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+};
 
-export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { user: User; teamAccess: boolean; navigationTarget?: TLinkCommandTarget | null }) {
+export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOpenSchedule, onOpenInvoices }: { user: User; teamAccess: boolean; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onOpenInvoices?: () => void }) {
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [hasTeamAccess, setHasTeamAccess] = useState(teamAccess);
   const [view, setView] = useState<View>("today");
+  const [priceBookView, setPriceBookView] = useState<"items" | "packets">("items");
   const [creating, setCreating] = useState<"" | "job" | "customer">("");
   const [selectedJobId, setSelectedJobId] = useState("");
   const [focusedJobId, setFocusedJobId] = useState("");
@@ -491,13 +502,29 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     finally { setBusy(""); }
   }
 
-  const metrics: CrmMetrics = summary.metrics || { openJobs: 0, nextVisits: 0, overdueTasks: 0, openIssues: 0, waitingJobs: 0, completedJobs: 0, quotedCents: 0, invoicedCents: 0, paidCents: 0, outstandingCents: 0 };
+  const metrics: CrmMetrics = summary.metrics || { openJobs: 0, nextVisits: 0, todayVisits: 0, awaitingSchedule: 0, overdueTasks: 0, openIssues: 0, waitingJobs: 0, completedJobs: 0, quotedCents: 0, invoicedCents: 0, paidCents: 0, outstandingCents: 0 };
+  const workload: Array<WorkloadBucket & { fallbackLabel?: string }> = summary.workload?.length === 4 ? summary.workload : Array.from({ length: 4 }, (_, index) => ({ weekStart: "", weekEnd: "", visits: 0, bookedMinutes: 0, fallbackLabel: index === 0 ? "This week" : `Week ${index + 1}` }));
+  const workStages = (["backlog", "ready", "scheduled", "in_progress", "blocked"] as const).map((stage) => ({ stage, label: workStageLabels[stage], count: Number(summary.workStages?.[stage] || 0) }));
+  const workloadMax = Math.max(1, ...workload.map((item) => item.bookedMinutes));
+  const workStageMax = Math.max(1, ...workStages.map((item) => item.count));
   const upcomingAppointments = summary.upcomingAppointments || [];
   const overdueTasks = summary.overdueTasks || [];
   const openIssues = summary.openIssues || [];
   const reportMetrics = report.metrics || metrics;
   const pipelineCounts = report.pipeline || {};
   const pipelineTotal = Object.values(pipelineCounts).reduce((total, count) => total + count, 0);
+  function openVisualSchedule(weekStart?: string) {
+    if (onOpenSchedule) { onOpenSchedule(weekStart); return; }
+    setSchedulePage(1);
+    setView("schedule");
+  }
+  function openJobsForStage(stage: string) {
+    setCreating(""); setFocusedJobId(""); setJobFilter("active"); setJobStage(stage); setJobPage(1); setView("jobs");
+  }
+  function openOverdueWork() {
+    if (overdueTasks[0]) { openFocusedJob(overdueTasks[0].job.id); return; }
+    setCreating(""); setFocusedJobId(""); setJobFilter("active"); setJobStage(""); setJobPage(1); setView("jobs");
+  }
   async function updateListView(viewKey: "installer-jobs" | "installer-customers", method: "PATCH" | "DELETE") {
     setViewBusy(true);
     try {
@@ -590,18 +617,27 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       <div className="crm-primary-actions"><AccessibleMenu className="crm-quick-create" label="New">{(close) => <><button role="menuitem" type="button" onClick={() => { setView("jobs"); setCreating("job"); close(); }}>Job</button><button role="menuitem" type="button" onClick={() => { setView("customers"); setCreating("customer"); close(); }}>Customer</button></>}</AccessibleMenu></div>
     </header>
     <nav className="crm-nav" aria-label="Installer CRM">
-      {(["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "today" ? "My day" : item === "pricebook" ? "Price book" : item[0].toUpperCase() + item.slice(1)}</button>)}
+      {(["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets"] as View[]).map((item) => <button key={item} type="button" className={view === item ? "active" : ""} onClick={() => { if (item === "pricebook") setPriceBookView("items"); setView(item); }}>{item === "today" ? "My day" : item === "pricebook" ? "Price book" : item[0].toUpperCase() + item.slice(1)}</button>)}
       <AccessibleMenu className="crm-more-nav" active={["templates", "reports", "import", "integrations", "team"].includes(view)} label={["templates", "reports", "import", "integrations", "team"].includes(view) ? view[0].toUpperCase() + view.slice(1) : "More"}>{(close) => <>{(["templates", "reports", "import", "integrations", ...(hasTeamAccess ? ["team" as View] : [])] as View[]).map((item) => <button role="menuitem" key={item} type="button" className={view === item ? "active" : ""} onClick={() => { setView(item); close(); }}>{item === "import" ? "Import data" : item[0].toUpperCase() + item.slice(1)}</button>)}</>}</AccessibleMenu>
     </nav>
     <div className="crm-privacy-line"><strong>Clear privacy boundary</strong><span><b>AEA protected:</b> reference and region only</span><span><b>Your customer:</b> contacts your business already owns</span></div>
 
     {view === "today" && <div className="crm-view crm-today">
-      <section className="crm-metrics"><article><span>Open jobs</span><strong>{metrics.openJobs}</strong><small>Across every stage</small></article><article><span>Next visits</span><strong>{metrics.nextVisits}</strong><small>Scheduled from today</small></article><article className={metrics.overdueTasks ? "attention" : ""}><span>Overdue tasks</span><strong>{metrics.overdueTasks}</strong><small>Needs action</small></article><article className={metrics.outstandingCents ? "attention" : ""}><span>Outstanding</span><strong>{money(metrics.outstandingCents)}</strong><small>Invoice balance</small></article></section>
+      <section className="crm-metrics" aria-label="Workday shortcuts">
+        <article><button type="button" onClick={() => openVisualSchedule(workload[0]?.weekStart || undefined)} aria-label={`Open today's ${metrics.todayVisits} scheduled visits`}><span>Today visits</span><strong>{metrics.todayVisits}</strong><small>Appointments today</small></button></article>
+        <article className={metrics.awaitingSchedule ? "attention" : ""}><button type="button" onClick={() => openVisualSchedule()} aria-label={`Open schedule for ${metrics.awaitingSchedule} jobs awaiting a visit`}><span>Awaiting schedule</span><strong>{metrics.awaitingSchedule}</strong><small>Jobs without a future visit</small></button></article>
+        <article className={metrics.overdueTasks ? "attention" : ""}><button type="button" onClick={openOverdueWork} aria-label={`Open ${metrics.overdueTasks} overdue tasks`}><span>Overdue tasks</span><strong>{metrics.overdueTasks}</strong><small>Tasks needing action</small></button></article>
+        <article className={metrics.waitingJobs ? "attention" : ""}><button type="button" onClick={() => openJobsForStage("blocked")} aria-label={`Open ${metrics.waitingJobs} waiting jobs`}><span>Waiting jobs</span><strong>{metrics.waitingJobs}</strong><small>Jobs marked waiting</small></button></article>
+      </section>
+      <section className="crm-dashboard-insights" aria-label="Workload and work status">
+        <article className="crm-dashboard-chart crm-workload-chart"><header><div><span>Four week outlook</span><h3>Booked work</h3></div><small>Monday to Sunday</small></header><ol className="crm-chart-list">{workload.map((item, index) => { const weekLabel = item.weekStart ? `${shortDateLabel(item.weekStart)} to ${shortDateLabel(item.weekEnd)}` : item.fallbackLabel || `Week ${index + 1}`; const timeLabel = bookedTimeLabel(item.bookedMinutes); return <li key={item.weekStart || index}><button type="button" className="crm-chart-row" onClick={() => openVisualSchedule(item.weekStart || undefined)} aria-label={`Open schedule for ${weekLabel}. ${item.visits} visits and ${timeLabel} booked.`}><span className="crm-chart-label"><strong>{weekLabel}</strong><small>{item.visits} {item.visits === 1 ? "visit" : "visits"}</small></span><meter className="crm-chart-bar" min={0} max={workloadMax} value={item.bookedMinutes}>{item.bookedMinutes}</meter><span className="crm-chart-value">{timeLabel} booked</span></button></li>; })}</ol></article>
+        <article className="crm-dashboard-chart crm-work-status-chart"><header><div><span>Current jobs</span><h3>Work status</h3></div><small>{metrics.openJobs} open</small></header><ol className="crm-chart-list">{workStages.map((item) => <li key={item.stage}><button type="button" className="crm-chart-row" onClick={() => openJobsForStage(item.stage)} aria-label={`Open ${item.count} jobs with ${item.label} status`}><span className="crm-chart-label"><strong>{item.label}</strong><small>{item.count} {item.count === 1 ? "job" : "jobs"}</small></span><meter className="crm-chart-bar" min={0} max={workStageMax} value={item.count}>{item.count}</meter><span className="crm-chart-value">{item.count}</span></button></li>)}</ol></article>
+      </section>
       <div className="crm-today-grid">
-        <section className="crm-card"><header><div><span>Next up</span><h3>Schedule</h3></div><button type="button" onClick={() => setView("schedule")}>Open schedule</button></header>{upcomingAppointments.length ? <ol className="crm-agenda">{upcomingAppointments.slice(0, 6).map((item) => <li key={item.id}><time>{dateLabel(item.startsAt, true)}</time><button type="button" onClick={() => { setSearch(item.job.workNumber); setJobPage(1); setSelectedJobId(item.job.id); setView("jobs"); }}><strong>{item.title}</strong><span>{item.job.workNumber} | {item.job.title}</span></button></li>)}</ol> : <div className="crm-empty"><strong>No upcoming visits</strong><span>Add an appointment from any job.</span></div>}</section>
+        <section className="crm-card"><header><div><span>Next up</span><h3>Schedule</h3></div><button type="button" onClick={() => openVisualSchedule()}>Open schedule</button></header>{upcomingAppointments.length ? <ol className="crm-agenda">{upcomingAppointments.slice(0, 6).map((item) => <li key={item.id}><time>{dateLabel(item.startsAt, true)}</time><button type="button" onClick={() => { setSearch(item.job.workNumber); setJobPage(1); setSelectedJobId(item.job.id); setView("jobs"); }}><strong>{item.title}</strong><span>{item.job.workNumber} | {item.job.title}</span></button></li>)}</ol> : <div className="crm-empty"><strong>No upcoming visits</strong><span>Add an appointment from any job.</span></div>}</section>
         <section className="crm-card"><header><div><span>Attention</span><h3>Things to clear</h3></div></header>{!overdueTasks.length && !openIssues.length ? <div className="crm-empty"><strong>You are up to date</strong><span>No overdue tasks or open issues.</span></div> : <ul className="crm-attention-list">{overdueTasks.slice(0, 4).map((item) => <li key={item.id}><span>Overdue task</span><button type="button" onClick={() => { setSearch(item.job.workNumber); setJobPage(1); setSelectedJobId(item.job.id); setView("jobs"); }}>{item.title}<small>{item.job.workNumber}</small></button></li>)}{openIssues.slice(0, 4).map((item) => <li key={item.id}><span>Open issue</span><button type="button" onClick={() => { setSearch(item.job.workNumber); setJobPage(1); setSelectedJobId(item.job.id); setView("jobs"); }}>{item.body}<small>{item.job.workNumber}</small></button></li>)}</ul>}</section>
       </div>
-      <div className="crm-today-action"><button type="button" onClick={() => { setView("jobs"); setCreating("job"); }}>Create a job</button><span>The job number is assigned automatically.</span></div>
+      <nav className="crm-today-actions" aria-label="Quick actions"><button type="button" className="primary" onClick={() => { setFocusedJobId(""); setView("jobs"); setCreating("job"); }}>New job</button><button type="button" onClick={() => openVisualSchedule()}>Schedule</button><button type="button" onClick={() => { setCreating(""); setView("customers"); }}>Customers</button><button type="button" onClick={() => { setPriceBookView("items"); setView("pricebook"); }}>Price book</button><button type="button" onClick={() => { setPriceBookView("packets"); setView("pricebook"); }}>Common jobs</button><button type="button" onClick={() => onOpenInvoices?.()} disabled={!onOpenInvoices}>Invoices</button></nav>
     </div>}
     {view === "enquiries" && <div className="crm-view"><TradeEnquiryInbox user={user} onConverted={async () => { setRefreshNonce((value) => value + 1); }} /></div>}
 
@@ -612,7 +648,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-focus">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={() => setFocusedJobId("")}>Back to jobs</button></div>
-      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={workOrderRequest} onOpenPriceBook={() => setView("pricebook")} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
+      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={workOrderRequest} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
     {view === "jobs" && creating !== "job" && !focusedJobId && <div className="crm-view">
@@ -632,7 +668,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       {jobLayout === "list" && selectedJobIds.length > 0 && <div className="crm-bulk-actions" role="region" aria-label="Selected job actions"><strong>{selectedJobIds.length} job{selectedJobIds.length === 1 ? "" : "s"} selected</strong><label><span>Set priority</span><select value={bulkPriority} onChange={(event) => setBulkPriority(event.target.value)}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><button type="button" disabled={busy === "bulk-job-priority"} onClick={() => void bulkRequest({ action: "bulk_set_job_priority", ids: selectedJobIds, priority: bulkPriority }, "bulk-job-priority", "Selected job priorities updated.")}>{busy === "bulk-job-priority" ? "Updating..." : "Apply priority"}</button><button type="button" className="secondary" onClick={() => setSelectedJobIds([])}>Clear</button></div>}
       {jobLayout === "list" ? <div className="crm-jobs-layout">
         <aside className="crm-job-list crm-record-table" aria-label="Job results"><div className="crm-record-columns crm-job-columns" aria-hidden="true"><span></span><span>Job ID</span><span>Customer</span><span>Activity</span><span>Job title</span><span>Location</span><span>Sales status</span><span>Work status</span><span>Scheduled</span><span>Value</span></div>{indexedJobs.length ? indexedJobs.map((job) => <article key={job.id} className={selectedJobId === job.id ? "active" : ""}><label className="crm-row-select"><input type="checkbox" checked={selectedJobIds.includes(job.id)} onChange={(event) => setSelectedJobIds((current) => event.target.checked ? [...current, job.id] : current.filter((id) => id !== job.id))} /><span className="sr-only">Select {job.workNumber}</span></label><button type="button" className="crm-row-open crm-job-row" onClick={() => setSelectedJobId(job.id)} onDoubleClick={() => openFocusedJob(job.id)}><b title={job.workNumber}>{job.workNumber}</b><span title={job.customerDisplayName || "No customer linked"}>{job.customerDisplayName || "No customer linked"}</span><span title={serviceLabels[job.serviceCategory] || job.serviceCategory}>{serviceLabels[job.serviceCategory] || job.serviceCategory}</span><strong title={job.title}>{job.title}</strong><span title={job.siteArea}>{job.siteArea || "Not set"}</span><em>{pipelineLabels[job.pipelineStage] || job.pipelineStage}</em><span>{workStageLabels[job.stage] || job.stage}</span><span>{job.scheduledStart ? dateLabel(job.scheduledStart) : "Not set"}</span><span>{money(job.quotedValueCents || job.estimatedValueCents)}</span></button><button type="button" className="crm-row-focus" onClick={() => openFocusedJob(job.id)}>Open job</button></article>) : <div className="crm-empty"><strong>{indexLoading ? "Loading jobs..." : "No matching jobs"}</strong><span>{indexLoading ? "Fetching this page securely." : "Try another search or filter."}</span></div>}</aside>
-        <main className="crm-job-detail">{selectedJobDetail?.id === selectedJobId ? <JobDetail key={selectedJobDetail.id} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} onCrm={crmRequest} onWorkOrder={workOrderRequest} onOpenPriceBook={() => setView("pricebook")} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>{selectedJobId ? "Loading job..." : "Select a job"}</strong><span>The job record will open here.</span></div>}</main>
+        <main className="crm-job-detail">{selectedJobDetail?.id === selectedJobId ? <JobDetail key={selectedJobDetail.id} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} onCrm={crmRequest} onWorkOrder={workOrderRequest} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>{selectedJobId ? "Loading job..." : "Select a job"}</strong><span>The job record will open here.</span></div>}</main>
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => { setSearch(job.workNumber); setJobPage(1); setSelectedJobId(job.id); setJobLayout("list"); }}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{job.customerDisplayName || "Internal"}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
 
@@ -682,7 +718,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       <div className="crm-report-grid"><section className="crm-card"><header><div><span>Sales flow</span><h3>Jobs by stage</h3></div></header><div className="crm-pipeline-report">{Object.entries(pipelineLabels).map(([stage, label]) => { const count = pipelineCounts[stage] || 0; return <div key={stage}><span>{label}</span><meter min="0" max={Math.max(1, pipelineTotal)} value={count} /><strong>{count}</strong></div>; })}</div></section><section className="crm-card"><header><div><span>Work health</span><h3>Operational checks</h3></div></header><dl className="crm-report-list"><div><dt>Open jobs</dt><dd>{reportMetrics.openJobs}</dd></div><div><dt>Jobs waiting</dt><dd>{reportMetrics.waitingJobs}</dd></div><div><dt>Open issues</dt><dd>{reportMetrics.openIssues}</dd></div><div><dt>Overdue tasks</dt><dd>{reportMetrics.overdueTasks}</dd></div><div><dt>Completed jobs</dt><dd>{reportMetrics.completedJobs}</dd></div></dl></section></div>
     </div>}
     {view === "import" && <div className="crm-view"><TradeDataImportWorkspace user={user} partnerType="installer" onImported={async () => { await load(); setRefreshNonce((value) => value + 1); }} /></div>}
-    {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace user={user} /></div>}
+    {view === "pricebook" && <div className="crm-view"><TradePriceBookWorkspace key={priceBookView} user={user} initialView={priceBookView} /></div>}
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     {view === "team" && hasTeamAccess && <div className="crm-view"><TradeTeamCentre user={user} /></div>}

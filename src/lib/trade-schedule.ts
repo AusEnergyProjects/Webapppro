@@ -6,9 +6,12 @@ const STATE_TIME_ZONES: Record<string, string> = {
 };
 
 export type WorkingWindow = { isAvailable: boolean; startMinute: number; endMinute: number };
+export type ScheduleLaneItem = { id: string; startsAt: string; endsAt: string };
+export type ScheduleLane = { lane: number; laneCount: number };
 export const APPOINTMENT_MIN_DURATION_MINUTES = 15;
 export const APPOINTMENT_MAX_DURATION_MINUTES = 8 * 60;
 export const APPOINTMENT_DURATION_STEP_MINUTES = 15;
+export const SCHEDULE_MAX_RANGE_WEEKS = 8;
 
 export function normaliseWeekStart(value: unknown) {
   const date = String(value || "");
@@ -16,6 +19,12 @@ export function normaliseWeekStart(value: unknown) {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.getUTCDay() !== 1 || parsed.toISOString().slice(0, 10) !== date) throw new Error("INVALID_WEEK");
   return date;
+}
+
+export function normaliseScheduleRangeWeeks(value: unknown, fallback = 1) {
+  const weeks = value === "" || value === undefined || value === null ? fallback : Number(value);
+  if (!Number.isInteger(weeks) || weeks < 1 || weeks > SCHEDULE_MAX_RANGE_WEEKS) throw new Error("INVALID_SCHEDULE_RANGE");
+  return weeks;
 }
 
 export function addCalendarDays(date: string, days: number) {
@@ -88,6 +97,36 @@ export function appointmentDurationMinutes(startsAt: string, endsAt: string, fal
     const stepped = Math.round(minutes / APPOINTMENT_DURATION_STEP_MINUTES) * APPOINTMENT_DURATION_STEP_MINUTES;
     return Math.min(APPOINTMENT_MAX_DURATION_MINUTES, Math.max(APPOINTMENT_MIN_DURATION_MINUTES, stepped));
   } catch { return normaliseAppointmentDuration(fallback); }
+}
+
+export function scheduleAppointmentLanes(items: ScheduleLaneItem[]) {
+  const layout = new Map<string, ScheduleLane>();
+  const ordered = items.map((item) => {
+    const start = Date.parse(`${normaliseLocalDateTime(item.startsAt)}:00Z`);
+    return { ...item, start, end: start + appointmentDurationMinutes(item.startsAt, item.endsAt) * 60_000 };
+  }).sort((a, b) => a.start - b.start || a.end - b.end || a.id.localeCompare(b.id));
+  let cluster: typeof ordered = [];
+  let clusterEnd = Number.NEGATIVE_INFINITY;
+  const placeCluster = () => {
+    const laneEnds: number[] = [];
+    const placements: Array<{ id: string; lane: number }> = [];
+    for (const item of cluster) {
+      let lane = laneEnds.findIndex((end) => end <= item.start);
+      if (lane < 0) { lane = laneEnds.length; laneEnds.push(item.end); }
+      else laneEnds[lane] = item.end;
+      placements.push({ id: item.id, lane });
+    }
+    const laneCount = Math.max(1, laneEnds.length);
+    for (const placement of placements) layout.set(placement.id, { lane: placement.lane, laneCount });
+  };
+  for (const item of ordered) {
+    if (cluster.length && item.start >= clusterEnd) {
+      placeCluster(); cluster = []; clusterEnd = Number.NEGATIVE_INFINITY;
+    }
+    cluster.push(item); clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  if (cluster.length) placeCluster();
+  return layout;
 }
 
 export function durationLabel(minutes: number) {
