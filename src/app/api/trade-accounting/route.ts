@@ -21,6 +21,8 @@ type MyobAccount = { id: string; code: string; name: string; taxCodeId: string; 
 type QuickBooksItem = { id: string; code: string; name: string; taxCode: string };
 type InvoiceSource = "accepted_quote" | "quick_invoice";
 
+const MYOB_DEFAULT_COMPANY_FILE_TOKEN = btoa("Administrator:");
+
 class AccountingProviderRequestError extends Error {
   readonly code = "PROVIDER_REQUEST_FAILED";
 
@@ -49,6 +51,7 @@ function accountingError(error: unknown) {
   if (code === "QUICK_INVOICE_CREDITED") return adminJson({ ok: false, error: "This TLink invoice has a credit. Keep it in TLink until provider credit-note export is added." }, 409);
   if (code === "INTEGRATION_REQUIRED") return adminJson({ ok: false, error: "Connect this accounting provider in Integrations first." }, 409);
   if (code === "INTEGRATION_RECONSENT_REQUIRED") return adminJson({ ok: false, error: "Reconnect MYOB in Integrations once so it can access customers, invoices and your income account list." }, 409);
+  if (code === "MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED") return adminJson({ ok: false, error: "The selected MYOB company file did not accept passwordless access. TLink does not collect company-file usernames or passwords, so password-protected files are not supported." }, 409);
   if (code === "MYOB_ACCOUNT_REQUIRED") return adminJson({ ok: false, error: "Choose the MYOB income account that should receive this sale." }, 400);
   if (code === "QUICKBOOKS_ITEM_REQUIRED") return adminJson({ ok: false, error: "Choose the QuickBooks product or service that should receive this sale." }, 400);
   if (code === "DOCUMENT_ALREADY_EXPORTED") return adminJson({ ok: false, error: "This job already has an accounting invoice. Refresh the existing invoice instead of exporting a duplicate." }, 409);
@@ -166,6 +169,7 @@ async function activeCredentials(provider: AccountingProvider, connection: Row) 
     access_token: refreshed.access_token,
     refresh_token: refreshed.refresh_token || credentials.refresh_token,
     token_type: refreshed.token_type || credentials.token_type || "bearer",
+    external_metadata: credentials.external_metadata,
   };
   const now = new Date().toISOString();
   const tokenExpiresAt = Number(refreshed.expires_in || 0) > 0
@@ -203,21 +207,41 @@ function myobCompanyBase(externalAccountId: unknown) {
   return url.toString().replace(/\/$/, "");
 }
 
+function myobCompanyFileAuthenticationRejected(response: Response, result: Row) {
+  const detail = JSON.stringify(result).toLowerCase();
+  if (detail.includes("invalid_token") || detail.includes("invalid token") || detail.includes("bearer token")) return false;
+  return response.status === 401 || (response.status === 403 && (
+    detail.includes("accessdenied") || detail.includes("access denied") || detail.includes("not authorised")
+  ));
+}
+
 async function myobFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {
-  const response = await fetch(`${myobCompanyBase(connection.external_account_id)}/${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${String(credentials.access_token || "")}`,
-      "x-myobapi-key": providerSetting("myob").clientId,
-      "x-myobapi-version": "v2",
-      Accept: "application/json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers || {}),
-    },
-  });
-  const result = await response.json().catch(() => ({})) as Row;
-  if (!response.ok) throw new Error("PROVIDER_REQUEST_FAILED");
-  return { response, result };
+  const request = async (companyFileToken = "") => {
+    const response = await fetch(`${myobCompanyBase(connection.external_account_id)}/${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${String(credentials.access_token || "")}`,
+        "x-myobapi-key": providerSetting("myob").clientId,
+        "x-myobapi-version": "v2",
+        Accept: "application/json",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers || {}),
+        ...(companyFileToken ? { "x-myobapi-cftoken": companyFileToken } : {}),
+      },
+    });
+    return { response, result: await response.json().catch(() => ({})) as Row };
+  };
+
+  const first = await request();
+  if (first.response.ok) return first;
+  if (!myobCompanyFileAuthenticationRejected(first.response, first.result)) throw new Error("PROVIDER_REQUEST_FAILED");
+
+  const fallback = await request(MYOB_DEFAULT_COMPANY_FILE_TOKEN);
+  if (fallback.response.ok) return fallback;
+  if (myobCompanyFileAuthenticationRejected(fallback.response, fallback.result)) {
+    throw new Error("MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED");
+  }
+  throw new Error("PROVIDER_REQUEST_FAILED");
 }
 
 async function quickBooksFetch(connection: Row, credentials: Row, path: string, init: RequestInit = {}) {

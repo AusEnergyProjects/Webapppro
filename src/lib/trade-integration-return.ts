@@ -1,3 +1,5 @@
+import { calendarIntegrationWeekStart } from "./trade-integration-state.ts";
+
 export const INTEGRATION_RETURN_PROVIDERS = [
   "xero",
   "myob",
@@ -14,6 +16,7 @@ export type IntegrationReturnStatus = "connected" | "cancelled" | "failed";
 export type IntegrationReturn = {
   provider: IntegrationReturnProvider;
   status: IntegrationReturnStatus;
+  weekStart?: string;
 };
 
 export function readIntegrationReturn(search: string): IntegrationReturn | null {
@@ -22,7 +25,12 @@ export function readIntegrationReturn(search: string): IntegrationReturn | null 
   const status = parameters.get("integration_status");
   if (!provider || !(INTEGRATION_RETURN_PROVIDERS as readonly string[]).includes(provider)) return null;
   if (status !== "connected" && status !== "cancelled" && status !== "failed") return null;
-  return { provider: provider as IntegrationReturnProvider, status };
+  const result: IntegrationReturn = { provider: provider as IntegrationReturnProvider, status };
+  if (isCalendarIntegration(result.provider)) {
+    const weekStart = calendarIntegrationWeekStart(parameters.get("integration_week_start"));
+    if (weekStart) result.weekStart = weekStart;
+  }
+  return result;
 }
 
 export function isCalendarIntegration(provider: IntegrationReturnProvider): provider is CalendarIntegrationProvider {
@@ -46,5 +54,6 @@ export function clearIntegrationReturnFromAddress() {
   const url = new URL(window.location.href);
   url.searchParams.delete("integration");
   url.searchParams.delete("integration_status");
+  url.searchParams.delete("integration_week_start");
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }

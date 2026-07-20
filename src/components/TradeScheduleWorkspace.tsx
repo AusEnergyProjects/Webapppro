@@ -76,12 +76,18 @@ function initialEdit(weekStart: string, localNow: string, memberId: string): Edi
   return { memberId, date, time, durationMinutes: 60 };
 }
 
+function initialScheduleWeekStart() {
+  if (typeof window === "undefined") return monday();
+  const returned = readIntegrationReturn(window.location.search);
+  return returned && isCalendarIntegration(returned.provider) && returned.weekStart ? returned.weekStart : monday();
+}
+
 function DurationControl({ id, value, onChange }: { id: string; value: number; onChange: (minutes: number) => void }) {
   return <label className="schedule-duration" htmlFor={id}><span>Duration <strong>{durationLabel(value)}</strong></span><input id={id} type="range" min={APPOINTMENT_MIN_DURATION_MINUTES} max={APPOINTMENT_MAX_DURATION_MINUTES} step="15" value={value} onChange={(event) => onChange(Number(event.target.value))} /><small>15 min</small><small>8 hours</small></label>;
 }
 
 export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined }: { user: User; onOpenJob?: (workOrderId: string) => void }) {
-  const [weekStart, setWeekStart] = useState(() => monday());
+  const [weekStart, setWeekStart] = useState(initialScheduleWeekStart);
   const [data, setData] = useState<ScheduleResult>({});
   const [calendars, setCalendars] = useState<CalendarConnection[]>([]);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
@@ -173,7 +179,7 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined }: { 
     setBusy(`connect:${provider.provider}`); setStatus(`Opening ${provider.label} secure authorisation...`);
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/trade-integrations", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ provider: provider.provider }) });
+      const response = await fetch("/api/trade-integrations", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ provider: provider.provider, weekStart }) });
       const result = await response.json().catch(() => ({})) as { authorizationUrl?: string; error?: string };
       if (!response.ok || !result.authorizationUrl) throw new Error(result.error || "The calendar connection could not be started.");
       window.location.assign(result.authorizationUrl);

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { calendarIntegrationState } from "@/lib/trade-integration-state";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -51,6 +52,6 @@ export async function integrationStateHash(value: string) {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
 }
 
-export function newIntegrationState() {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+export function newIntegrationState(weekStart = "") {
+  return calendarIntegrationState(toBase64Url(crypto.getRandomValues(new Uint8Array(32))), weekStart);
 }

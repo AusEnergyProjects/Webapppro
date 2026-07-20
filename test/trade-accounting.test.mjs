@@ -82,6 +82,19 @@ test("MYOB requests only the scopes required for invoice sync", () => {
   assert.match(providerSettings, /"sme-general-ledger"/);
 });
 
+test("MYOB supports SSO and the default passwordless AccountRight company file without collecting credentials", () => {
+  assert.equal(Buffer.from("Administrator:").toString("base64"), "QWRtaW5pc3RyYXRvcjo=");
+  assert.match(route, /const MYOB_DEFAULT_COMPANY_FILE_TOKEN = btoa\("Administrator:"\);/);
+  assert.match(route, /const first = await request\(\);/);
+  assert.match(route, /const fallback = await request\(MYOB_DEFAULT_COMPANY_FILE_TOKEN\);/);
+  assert.match(route, /companyFileToken \? \{ "x-myobapi-cftoken": companyFileToken \} : \{\}/);
+  assert.match(route, /response\.status === 401 \|\| \(response\.status === 403/);
+  assert.match(route, /detail\.includes\("accessdenied"\)/);
+  assert.match(route, /MYOB_COMPANY_FILE_PASSWORD_UNSUPPORTED/);
+  assert.match(route, /TLink does not collect company-file usernames or passwords/);
+  assert.doesNotMatch(route, /company_file_(?:username|password)/);
+});
+
 test("accounting storage and copy do not retain provider payloads or prohibited dash characters", () => {
   const documentBlock = schema.match(/tradeCrmAccountingDocuments[\s\S]*?\]\);/)?.[0] || "";
   const eventBlock = schema.match(/tradeCrmAccountingEvents[\s\S]*?\]\);/)?.[0] || "";

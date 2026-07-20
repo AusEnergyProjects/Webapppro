@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { decryptIntegrationCredentials, integrationStateHash, newIntegrationState } from "@/lib/trade-integration-crypto";
+import { decryptIntegrationCredentials, encryptIntegrationCredentials, integrationStateHash, newIntegrationState } from "@/lib/trade-integration-crypto";
 import {
   INTEGRATION_PROVIDERS,
   integrationCallbackUri,
@@ -10,6 +10,7 @@ import {
   requireInstallerOperations,
   type IntegrationProvider,
 } from "@/lib/trade-integrations-server";
+import { normaliseWeekStart } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
 
@@ -20,6 +21,7 @@ function integrationError(error: unknown) {
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Business integrations are available to installer accounts only." }, 403);
   if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using business integrations." }, 403);
+  if (code === "INVALID_WEEK") return adminJson({ ok: false, error: "Choose a valid schedule week." }, 400);
   return adminJson({ ok: false, error: "The integration request could not be completed." }, 500);
 }
 
@@ -80,7 +82,9 @@ export async function POST(request: Request) {
       return adminJson({ ok: false, error: `TLink is still preparing the secure ${setting.label} connection.` }, 503);
     }
     const now = new Date();
-    const state = newIntegrationState();
+    const calendarProvider = providerValue === "google_calendar" || providerValue === "microsoft_calendar";
+    const returnWeekStart = calendarProvider && body.weekStart ? normaliseWeekStart(body.weekStart) : "";
+    const state = newIntegrationState(returnWeekStart);
     const redirectUri = integrationCallbackUri(request, providerValue);
     const db = getD1();
     await db.batch([
@@ -104,16 +108,63 @@ export async function POST(request: Request) {
   } catch (error) { return integrationError(error); }
 }
 
+async function activeXeroRevocationCredentials(row: Record<string, unknown>, credentials: Record<string, unknown>) {
+  const expiresAt = Date.parse(String(row.token_expires_at || ""));
+  if (credentials.access_token && Number.isFinite(expiresAt) && expiresAt > Date.now() + 2 * 60 * 1000) return credentials;
+  if (!credentials.refresh_token) throw new Error("XERO_DISCONNECT_FAILED");
+  const setting = providerSetting("xero");
+  const response = await fetch(setting.tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${btoa(`${setting.clientId}:${setting.clientSecret}`)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: String(credentials.refresh_token) }),
+  });
+  const refreshed = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok || !refreshed.access_token) throw new Error("XERO_DISCONNECT_FAILED");
+  const next = {
+    ...credentials,
+    access_token: refreshed.access_token,
+    refresh_token: refreshed.refresh_token || credentials.refresh_token,
+    token_type: refreshed.token_type || credentials.token_type || "bearer",
+  };
+  const tokenExpiresAt = Number(refreshed.expires_in || 0) > 0
+    ? new Date(Date.now() + Number(refreshed.expires_in) * 1000).toISOString()
+    : "";
+  await getD1().prepare(`UPDATE trade_crm_integrations SET encrypted_credentials = ?, token_expires_at = ?,
+      last_error = '', updated_at = ? WHERE id = ? AND firebase_uid = ?`)
+    .bind(await encryptIntegrationCredentials(next),
+      tokenExpiresAt, new Date().toISOString(), row.id, row.firebase_uid).run();
+  return next;
+}
+
 async function bestEffortRevoke(provider: IntegrationProvider, row: Record<string, unknown>) {
   let credentials: Record<string, unknown>;
   try { credentials = await decryptIntegrationCredentials(String(row.encrypted_credentials || "")); }
-  catch { return; }
+  catch { return false; }
   const setting = providerSetting(provider);
   try {
-    if (provider === "xero" && row.external_account_id && credentials.access_token) {
-      await fetch(`https://api.xero.com/connections/${encodeURIComponent(String(row.external_account_id))}`, {
+    const externalMetadata = credentials.external_metadata && typeof credentials.external_metadata === "object"
+      ? credentials.external_metadata as Record<string, unknown>
+      : {};
+    if (provider === "xero") {
+      credentials = await activeXeroRevocationCredentials(row, credentials);
+      let xeroConnectionId = cleanAdminText(externalMetadata.connectionId, 180);
+      if (!xeroConnectionId) {
+        const connectionsResponse = await fetch("https://api.xero.com/connections", {
+          headers: { Authorization: `Bearer ${String(credentials.access_token)}`, Accept: "application/json" },
+        });
+        const connections = await connectionsResponse.json().catch(() => []) as Array<Record<string, unknown>>;
+        if (!connectionsResponse.ok) throw new Error("XERO_DISCONNECT_FAILED");
+        const matchingConnection = connections.find((connection) => cleanAdminText(connection.tenantId, 180) === cleanAdminText(row.external_account_id, 180));
+        xeroConnectionId = cleanAdminText(matchingConnection?.id, 180);
+      }
+      if (!xeroConnectionId) throw new Error("XERO_DISCONNECT_FAILED");
+      const response = await fetch(`https://api.xero.com/connections/${encodeURIComponent(xeroConnectionId)}`, {
         method: "DELETE", headers: { Authorization: `Bearer ${String(credentials.access_token)}` },
       });
+      if (!response.ok && response.status !== 404) throw new Error("XERO_DISCONNECT_FAILED");
     } else if (provider === "stripe" && row.external_account_id) {
       const body = new URLSearchParams({ client_id: setting.clientId, stripe_user_id: String(row.external_account_id) });
       await fetch("https://connect.stripe.com/oauth/deauthorize", {
@@ -126,7 +177,8 @@ async function bestEffortRevoke(provider: IntegrationProvider, row: Record<strin
         body: JSON.stringify({ client_id: setting.clientId, access_token: credentials.access_token }),
       });
     }
-  } catch { /* Local disconnect must still succeed if a provider is unavailable. */ }
+    return true;
+  } catch { return false; }
 }
 
 export async function PATCH(request: Request) {
@@ -141,7 +193,9 @@ export async function PATCH(request: Request) {
     const db = getD1();
     const row = await db.prepare(`SELECT * FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?`)
       .bind(identity.uid, providerValue).first<Record<string, unknown>>();
-    if (row) await bestEffortRevoke(providerValue, row);
+    if (row && !(await bestEffortRevoke(providerValue, row)) && providerValue === "xero") {
+      return adminJson({ ok: false, error: "Xero could not confirm the disconnect. The TLink connection was kept so you can try again safely." }, 502);
+    }
     await db.prepare("DELETE FROM trade_crm_integrations WHERE firebase_uid = ? AND provider = ?")
       .bind(identity.uid, providerValue).run();
     return adminJson({ ok: true });

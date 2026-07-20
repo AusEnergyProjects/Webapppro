@@ -2,12 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { calendarIntegrationState, calendarIntegrationStateWeekStart } from "../src/lib/trade-integration-state.ts";
+import { readIntegrationReturn } from "../src/lib/trade-integration-return.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0020_lying_stick.sql");
 const integrations = read("../src/app/api/trade-integrations/route.ts");
 const callback = read("../src/app/api/trade-integrations/callback/[provider]/route.ts");
+const accounting = read("../src/app/api/trade-accounting/route.ts");
 const payments = read("../src/app/api/trade-payment-links/route.ts");
 const cryptoLayer = read("../src/lib/trade-integration-crypto.ts");
 const providerLayer = read("../src/lib/trade-integrations-server.ts");
@@ -21,6 +24,21 @@ const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
 const fieldMigration = read("../drizzle/0023_petite_the_phantom.sql");
 const propertyRetirementMigration = read("../drizzle/0024_lethal_purifiers.sql");
+
+test("calendar OAuth preserves only a validated selected week", () => {
+  const nonce = "a".repeat(43);
+  const state = calendarIntegrationState(nonce, "2026-08-03");
+  assert.equal(state, `v1.2026-08-03.${nonce}`);
+  assert.equal(calendarIntegrationStateWeekStart(state), "2026-08-03");
+  assert.equal(calendarIntegrationStateWeekStart(`v1.2026-08-04.${nonce}`), "");
+  assert.throws(() => calendarIntegrationState(nonce, "2026-08-04"), /INVALID_WEEK/);
+  assert.deepEqual(readIntegrationReturn("?integration=google_calendar&integration_status=connected&integration_week_start=2026-08-03"), {
+    provider: "google_calendar", status: "connected", weekStart: "2026-08-03",
+  });
+  assert.deepEqual(readIntegrationReturn("?integration=microsoft_calendar&integration_status=connected&integration_week_start=2026-08-04"), {
+    provider: "microsoft_calendar", status: "connected",
+  });
+});
 
 test("integration, OAuth state and payment link records are durable and indexed", () => {
   for (const table of ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links"]) {
@@ -82,6 +100,24 @@ test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints",
   assert.match(callback, /\/v2\/locations/);
 });
 
+test("MYOB token exchange repeats the granted accounting scopes", () => {
+  assert.match(callback, /provider === "myob"\) body\.set\("scope", setting\.scopes\.join\(" "\)\)/);
+});
+
+test("Xero binds the tenant and disconnect identity to the current authentication event", () => {
+  assert.match(callback, /authentication_event_id/);
+  assert.match(callback, /connections\.find\(\(item\) => cleanAdminText\(item\.authEventId, 180\) === authenticationEventId\)/);
+  assert.match(callback, /externalMetadata: \{ tenantId, connectionId \}/);
+  assert.match(callback, /credentials\.external_metadata = account\.externalMetadata/);
+  assert.match(accounting, /external_metadata: credentials\.external_metadata/);
+  assert.match(integrations, /externalMetadata\.connectionId/);
+  assert.match(integrations, /activeXeroRevocationCredentials/);
+  assert.match(integrations, /matchingConnection\?\.id/);
+  assert.match(integrations, /The TLink connection was kept so you can try again safely/);
+  assert.match(integrations, /connections\/\$\{encodeURIComponent\(xeroConnectionId\)\}/);
+  assert.doesNotMatch(integrations, /connections\/\$\{encodeURIComponent\(String\(row\.external_account_id\)\)\}/);
+});
+
 test("provider readiness requires matching platform and payment reconciliation credentials", () => {
   assert.match(providerLayer, /STRIPE_CONNECT_SECRET_KEY/);
   assert.match(providerLayer, /STRIPE_CONNECT_WEBHOOK_SECRET/);
@@ -103,6 +139,11 @@ test("installer connection returns are validated, routed and confirmed", () => {
   assert.match(integrationUi, /clearIntegrationReturnFromAddress/);
   assert.match(schedule, /firstSyncResponse/);
   assert.match(schedule, /first calendar sync needs another try/);
+  assert.match(integrations, /newIntegrationState\(returnWeekStart\)/);
+  assert.match(callback, /calendarIntegrationStateWeekStart\(state\)/);
+  assert.match(callback, /integration_week_start/);
+  assert.match(schedule, /JSON\.stringify\(\{ provider: provider\.provider, weekStart \}\)/);
+  assert.match(schedule, /returned\.weekStart \? returned\.weekStart : monday\(\)/);
 });
 
 test("installer UI hides central application credentials and exposes truthful states", () => {
