@@ -28,6 +28,9 @@ test("customer evidence and shared navigation resolve to the public privacy rout
 
 test("the public integration route explains the TLink OAuth application purpose", () => {
   assert.match(integrations, /Connect your business tools to TLink/);
+  assert.match(integrations, /applicationName: "TLink"/);
+  assert.match(integrations, /siteName: "TLink"/);
+  assert.match(integrations, /canonical: "\/direct-trade\/integrations"/);
   assert.match(integrations, /calendar\.events permission/);
   assert.match(integrations, /does not read Gmail, contacts or unrelated calendar events/);
   assert.match(integrations, /provider&apos;s own website/);

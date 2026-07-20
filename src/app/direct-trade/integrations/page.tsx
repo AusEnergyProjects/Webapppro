@@ -5,8 +5,25 @@ import { TLinkHeader } from "@/components/TLinkChrome";
 
 export const metadata: Metadata = {
   title: "TLink business integrations",
+  applicationName: "TLink",
   description:
     "Connect TLink to Google Calendar, accounting and payment providers so trade businesses can schedule work, prepare invoices and reconcile payments from one workspace.",
+  alternates: {
+    canonical: "/direct-trade/integrations",
+  },
+  openGraph: {
+    title: "TLink business integrations",
+    description:
+      "Connect TLink to business calendars, accounting platforms and payment providers through secure provider sign-in.",
+    siteName: "TLink",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "TLink business integrations",
+    description:
+      "Connect TLink to business calendars, accounting platforms and payment providers through secure provider sign-in.",
+  },
 };
 
 const integrationPurposes = [
