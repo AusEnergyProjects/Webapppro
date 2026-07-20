@@ -91,6 +91,16 @@ Signed-in live QA used `TLJ-00000804` without changing its review state or sendi
 
 Release result: Sites version 185 from implementation commit `0f4f0cf7698a830d73b107d9b5b3c2915033062c`, deployment `appgdep_6a5d67145e0881919a8d19209871ecc7`. Job detail refreshes no longer remount the focused workspace. Save draft remains available but is not mandatory: Preview and send opens a non-mutating confirmation, then reuses the existing save, issue and email actions. Partial failures remain explicit and recoverable. Signed-in QA on `TLJ-00000804` confirmed the authorised contact, exact line totals and terms in the desktop and 390 px preview without approving proof, creating a quote revision or sending customer email. Complete validation, fresh D1 replay, production build and canonical HTTP 200 health passed. Production environment revision 14 was retained.
 
+## Completed bounded follow-up: central customer and field activity notifications
+
+- User outcome: the installer bell now exposes the customer and field-team actions that move work forward, including accepted or declined quotes, customer quote questions and opens, photo completions, appointment reschedule requests, payment outcomes, technician progress, completed tasks and forms, and customer or technician sign-offs.
+- Owning workflow: authoritative quote, photo-request, appointment, payment, work-order and sign-off ledgers; owner and assigned-technician job access; the existing per-user notification read-receipt boundary; installer job deep links and quote question review.
+- In scope: project existing append-only events into one review queue; distinguish Customer and Field team activity; deep-link each notification to Quote, Schedule, Field work or Invoice; retain unread state until the exact accessible event is opened; poll every 30 seconds and on focus; place unanswered customer quote questions immediately below the quote header with one Answer action.
+- Out of scope: a second mutable activity store, copying customer contact details into notification payloads, automatic replies, broad workflow assignment, external provider credentials or representing unconfigured integrations as connected.
+- Acceptance: the existing accepted quote and customer question appear retroactively without new customer action; field sign-off and photo events remain present; inaccessible jobs cannot be enumerated or marked read; notification targets open the correct job tab; desktop and 390 px layouts have no document-level overflow; the exact release commit passes the full validation gate.
+
+Release result: Sites version 186 from implementation commit `506198847fe44ee4f929cd78e429f18de0e1ad95`, deployment `appgdep_6a5d81214f7481919e006da26f5e81de`. Signed-in live QA showed four unread updates, including `Quote accepted`, `Customer asked a quote question`, `Customer opened quote` and `Technician sign-off recorded`. Job `TLJ-00000803` showed the unanswered `Does this work` question directly below the accepted quote header with its Answer action. Desktop and 390 px inspection found no document-level overflow. Focused tests, TypeScript, ESLint, diff checks and complete `npm.cmd run validate` passed; fresh D1 migration replay and the production build passed; canonical `/api/health` returned HTTP 200. The browser reported only Chrome extension message-channel closures with no application stack. Sites error filtering contained one client-cancelled notification poll during navigation and no application exception or 5xx. Production environment revision 14 was retained.
+
 ## Current delivery summary
 
 The installer Jobs API returns the expected owner-scoped job, and the signed-in list and detail workspace show that job. The remaining client race was corrected in `aa771460b190c7e744caca216bb4c8dde3087c77`: superseded Jobs and Customers index requests are aborted and cannot replace current filter results. A regression assertion protects the cancellation boundary.
@@ -173,35 +183,12 @@ P6-3J replaces the two-step customer matcher with one accessible search and crea
 
 The same batch moves next action, description and tags into one Notes owner; replaces custom New and More disclosures with one listener-safe accessible menu; and adds an audited, ordered and idempotent Start travel, Arrive, Start work and Finish flow to web and native field surfaces. Direct-customer Call and directions use the selected service-site contact boundary, while protected and internal work remains redacted. Finish reuses tasks, forms, requested proof, issues, accepted work-plan requirements and sync receipts as blockers, then exposes the existing invoice and handover paths. Migration `0073_phone_first_field_job.sql` adds building type and appointment transition timestamps and actor evidence.
 
-## Next milestone contract
+## Next five logical steps
 
-### P6-3K: audited correction of an active field state
+1. **Integration launch gate:** finish the owner-controlled Google, Microsoft, Xero, MYOB, QuickBooks, Stripe and Square application registrations; add the resulting OAuth credentials to Sites; then validate connect, reconnect, callback, calendar mirror, accounting draft, hosted payment and failure receipts provider by provider. Stop at the identity, business-verification, password or MFA boundary rather than fabricating credentials.
+2. **Actionable notification queue:** add Customer and Field team filters plus reply, resolve, assign and archive states so unanswered questions and schedule, evidence or payment exceptions can be cleared without hunting through jobs. Keep source events immutable and store only user-specific handling state.
+3. **Accepted-quote handoff:** turn an accepted quote into one guided office action for deposit or invoice, scheduling readiness and the accepted-scope work checklist, reusing the immutable commercial handoff rather than re-entering the job.
+4. **P6-3K audited active-state correction:** let an owner, manager or coordinator undo only the immediately previous `en_route`, `arrived` or `in_progress` transition with a required reason, expected revision, immutable correction event and immediate field-device sync; never reopen completed work or rewrite history.
+5. **Operational My day queue:** rank overdue customer replies, stalled quotes, integration errors, unfinished field records and unpaid invoices by owner, assignee and due state so the dashboard becomes the daily exception list rather than a passive summary.
 
-Outcome: an owner or dispatch coordinator can correct one accidental active field transition without database intervention, hiding the recovery control from the technician's normal one-action flow and preserving the original audit evidence.
-
-### In scope
-
-- One office-only correction action for `en_route`, `arrived` or `in_progress` appointments.
-- A required plain-language reason, expected appointment revision, authorised actor and immutable work-order event.
-- Clearing only the timestamp made invalid by the one-step correction while retaining prior transition evidence in the event history.
-- Immediate job-sync publication so assigned field devices receive the corrected authoritative state.
-
-### Explicitly out of scope
-
-- Reopening a successfully finished job, reversing invoice or handover preparation, or editing historical transition timestamps.
-- General appointment history editing, GPS tracking, route optimisation or a replacement state model.
-- Technician self-approval of corrections.
-
-### Acceptance criteria
-
-- Only an owner, manager or coordinator can correct the immediately previous active transition.
-- A stale revision, invalid target or repeated correction is rejected without changing the appointment or job.
-- The correction reason and actor are visible in the existing job history, and field sync receives the corrected revision.
-- The phone-first technician surface still presents one primary forward action and no competing recovery button.
-- `npm run validate` passes on the exact release commit.
-
-### Stop and escalate if
-
-- Correction would require mutating or deleting historical event evidence.
-- Reopening a completed job would invalidate an invoice, handover or customer-facing record.
-- The slice expands beyond one-step active-state recovery or creates a second appointment state source.
+Integration blocker, separate from the roadmap: production Sites revision 14 does not contain the required provider client IDs and secrets. The working adapters and OAuth callbacks are deployed, but every connection must stay truthfully at Administrator setup needed until the account owner completes each provider's external developer registration and identity or business-verification steps.
