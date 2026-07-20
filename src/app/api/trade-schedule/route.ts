@@ -2,7 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, rangesOverlap } from "@/lib/trade-schedule";
+import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, scheduleConflictIds } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
@@ -97,12 +97,16 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       ORDER BY r.requested_at LIMIT 100`).bind(ownerUid).all<Record<string, unknown>>(),
   ]);
   const workingHours = hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) }));
+  const conflictIds = scheduleConflictIds(appointmentRows.results.map((row) => ({
+    id: String(row.id), assigneeMemberId: row.assignee_member_id,
+    startsAt: String(row.starts_at), endsAt: String(row.ends_at || row.starts_at),
+  })));
+  const workingHoursByMemberAndDay = new Map(workingHours.map((item) => [`${item.teamMemberId}:${item.weekday}`, item]));
   const appointments = appointmentRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
-    const conflicts = appointmentRows.results.some((other) => other.id !== row.id && other.assignee_member_id && other.assignee_member_id === row.assignee_member_id
-      && rangesOverlap(String(row.starts_at), String(row.ends_at || row.starts_at), String(other.starts_at), String(other.ends_at || other.starts_at)));
+    const conflicts = conflictIds.has(String(row.id));
     const weekday = localDayAndMinute(String(row.starts_at)).weekday;
-    const savedHours = workingHours.find((item) => item.teamMemberId === row.assignee_member_id && item.weekday === weekday);
+    const savedHours = workingHoursByMemberAndDay.get(`${row.assignee_member_id}:${weekday}`);
     const workingWindow = savedHours || defaultWorkingWindow(weekday);
     const customerDisplayName = protectedJob ? "AEA protected customer"
       : row.customer_source === "trade_owned"

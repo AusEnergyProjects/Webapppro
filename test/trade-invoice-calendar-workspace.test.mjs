@@ -29,10 +29,11 @@ test("invoices are a main installer workspace over existing owner-scoped records
   assert.match(dashboard, /jobTab: "invoice"/);
 });
 
-test("jobs expose focused double-click navigation with explicit touch and keyboard actions", () => {
-  assert.match(crm, /onDoubleClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
-  assert.match(crm, />Open job</);
+test("jobs expose focused single-click navigation while schedule appointments retain explicit open actions", () => {
+  assert.match(crm, /className="crm-row-open crm-job-row" onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
+  assert.doesNotMatch(crm, /onDoubleClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.match(crm, /crm-job-focus/);
+  assert.match(crm, /Back to jobs/);
   assert.match(crm, /initialTab=\{focusedJobTab\}/);
   assert.match(schedule, /onDoubleClick=\{\(event\) => \{ event\.stopPropagation\(\); closeAppointment\(\); onOpenJob\(item\.workOrderId\); \}\}/);
   assert.match(schedule, /event\.key === "Enter" \|\| event\.key === " "/);

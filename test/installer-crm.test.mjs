@@ -67,7 +67,8 @@ test("direct customers have full addresses while global TLink job IDs are read o
   assert.match(route, /nextTlinkJobNumber/);
   assert.match(numberer, /ON CONFLICT\(firebase_uid, counter_key\) DO UPDATE/);
   assert.match(numberer, /last_value = last_value \+ 1/);
-  assert.match(numberer, /TLJ-[\s\S]*padStart\(8, "0"\)/);
+  assert.match(numberer, /return `TLJ-\$\{TLINK_OPAQUE_JOB_MARKER\}\$\{code\}`/);
+  assert.match(numberer, /formatTlinkJobNumber\(value\)/);
 });
 
 test("verified installers receive the complete progressive CRM", () => {
@@ -104,30 +105,81 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(crm, /Name A to Z/);
 });
 
-test("job and customer indexes cancel stale requests before they can replace current results", () => {
+test("saved preferences and job or customer reads cancel stale requests before they can replace current state", () => {
   assert.match(crm, /loadJobIndex = useCallback\(async \(signal: AbortSignal\)/);
   assert.match(crm, /loadCustomerIndex = useCallback\(async \(signal: AbortSignal\)/);
-  assert.equal((crm.match(/const controller = new AbortController\(\);/g) || []).length, 2);
+  assert.equal((crm.match(/const controller = new AbortController\(\);/g) || []).length, 5);
   assert.equal((crm.match(/signal\.aborted\) return;/g) || []).length, 2);
-  assert.equal((crm.match(/controller\.abort\(\); window\.clearTimeout\(timer\)/g) || []).length, 2);
+  assert.equal((crm.match(/controller\.abort\(\); if \(timer\) window\.clearTimeout\(timer\)/g) || []).length, 2);
   assert.match(crm, /loadJobIndex\(controller\.signal\)/);
   assert.match(crm, /loadCustomerIndex\(controller\.signal\)/);
+  assert.equal((crm.match(/signal: controller\.signal/g) || []).length, 3);
+  assert.equal((crm.match(/active && !controller\.signal\.aborted/g) || []).length, 3);
+  assert.equal((crm.match(/return \(\) => \{ active = false; controller\.abort\(\); \};/g) || []).length, 2);
+  assert.match(crm, /loadedRef\.current = true;\s+applied = true;/);
+  assert.match(crm, /return \(\) => \{ active = false; controller\.abort\(\); if \(!applied\) loadedRef\.current = false; \};/);
 });
 
 test("job and customer directories expose granular server filters and single-line data columns", () => {
-  for (const field of ["customer", "service", "pipeline", "stage", "location", "street", "phone", "postcode", "suburb", "state", "jobId"]) {
+  for (const field of ["customer", "service", "pipeline", "stage", "assignee", "location", "firstName", "lastName", "businessName", "email", "street", "phone", "postcode", "suburb", "state", "jobId"]) {
     assert.match(route, new RegExp(`searchParams\\.get\\("${field}"\\)`));
   }
-  assert.match(route, /GROUP_CONCAT\(DISTINCT w\.service_category\)/);
+  assert.match(route, /GROUP_CONCAT\(DISTINCT service_category\)/);
   assert.match(route, /latest_job_number/);
   assert.match(route, /latest_pipeline_stage/);
   assert.match(crm, /Detailed job filters/);
   assert.match(crm, /Detailed customer filters/);
+  assert.match(crm, /<span>First name<\/span>/);
+  assert.match(crm, /<span>Last name<\/span>/);
+  assert.match(crm, /<span>Business<\/span>/);
+  assert.match(crm, /<span>Email<\/span>/);
+  assert.match(crm, /<span>Installer<\/span>/);
   assert.match(crm, /Street address/);
   assert.match(crm, /Contact number/);
   assert.match(crm, /Completion status/);
   assert.match(crm, /crm-job-columns/);
   assert.match(crm, /crm-customer-columns/);
+  for (const column of ["Customer", "First name", "Last name", "Email", "Phone", "Suburb", "Postcode", "Jobs", "Latest job", "Status"]) {
+    assert.match(crm, new RegExp(`<span>${column}<\\/span>`));
+  }
+});
+
+test("the customer index aggregates owned job facts once without crossing the privacy boundary", () => {
+  assert.match(route, /WITH owned_jobs AS \(/);
+  assert.match(route, /ROW_NUMBER\(\) OVER \(PARTITION BY d\.crm_customer_id ORDER BY w\.updated_at DESC, w\.id DESC\) latest_rank/);
+  assert.match(route, /customer_job_summary AS \(/);
+  assert.match(route, /LEFT JOIN customer_job_summary js ON js\.crm_customer_id = c\.id/);
+  assert.match(route, /WHERE d\.firebase_uid = \? AND w\.record_status = 'active'/);
+  assert.match(route, /\.bind\(identity\.uid, \.\.\.rowBindings, pageSize \+ 1\)/);
+});
+
+test("job and customer directories open focused records without automatic or inline detail", () => {
+  assert.doesNotMatch(crm, /items\[0\]\?\.id/);
+  assert.doesNotMatch(crm, /\bsetSelectedJobId\(/);
+  assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
+  assert.match(crm, /crm-view crm-job-focus/);
+  assert.match(crm, /crm-view crm-customer-focus/);
+  assert.match(crm, /Back to jobs/);
+  assert.match(crm, /Back to customers/);
+
+  const jobDirectoryStart = crm.indexOf('{view === "jobs" && creating !== "job" && !focusedJobId');
+  const jobDirectoryEnd = crm.indexOf('{view === "schedule"', jobDirectoryStart);
+  assert.ok(jobDirectoryStart >= 0 && jobDirectoryEnd > jobDirectoryStart);
+  assert.doesNotMatch(crm.slice(jobDirectoryStart, jobDirectoryEnd), /<JobDetail/);
+
+  const customerDirectoryStart = crm.indexOf('{view === "customers" && creating !== "customer" && !selectedCustomerId');
+  const customerDirectoryEnd = crm.indexOf('{view === "templates"', customerDirectoryStart);
+  assert.ok(customerDirectoryStart >= 0 && customerDirectoryEnd > customerDirectoryStart);
+  assert.doesNotMatch(crm.slice(customerDirectoryStart, customerDirectoryEnd), /<CustomerDetail/);
+});
+
+test("all installer CRM destinations are visible in the primary navigation", () => {
+  assert.match(crm, /\["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"/);
+  assert.match(crm, /\.\.\.\(hasTeamAccess \? \["team" as View\] : \[\]\)/);
+  assert.doesNotMatch(crm, /crm-more-nav/);
+  assert.match(crm, /item === "import" \? "Import data"/);
+  assert.match(crm, /if \(item === "jobs"\) setFocusedJobId\(""\)/);
+  assert.match(crm, /if \(item === "customers"\) \{ setSelectedCustomerId\(""\); setSelectedCustomerDetail\(null\); \}/);
 });
 
 test("bulk CRM actions are bounded, owner scoped and protect active customer work", () => {
@@ -143,21 +195,51 @@ test("bulk CRM actions are bounded, owner scoped and protect active customer wor
   assert.match(crm, /Only customers with no active jobs can be archived/);
 });
 
-test("installer dashboard, schedule and reports use compact server-owned read models", () => {
-  for (const mode of ["bootstrap", "summary", "schedule", "reports"]) {
+test("installer dashboard and reports use compact server-owned read models", () => {
+  for (const mode of ["bootstrap", "summary", "reports"]) {
     assert.match(route, new RegExp(`mode === "${mode}"`));
   }
   assert.match(route, /async function crmBootstrap/);
   assert.match(route, /async function crmSummary/);
-  assert.match(route, /async function crmSchedule/);
   assert.match(route, /async function crmReports/);
   assert.match(route, /SUM\(CASE WHEN stage NOT IN/);
   assert.match(route, /GROUP BY COALESCE\(d\.pipeline_stage/);
   assert.match(crm, /trade-crm\?mode=bootstrap/);
   assert.match(crm, /trade-crm\?mode=summary/);
-  assert.match(crm, /mode: "schedule"/);
   assert.match(crm, /trade-crm\?mode=reports/);
-  assert.match(crm, /schedulePagination/);
+  for (const legacyState of ["CrmScheduleResult", "scheduleItems", "schedulePage", "schedulePagination", "scheduleCursors", 'mode: "schedule"']) {
+    assert.doesNotMatch(crm, new RegExp(legacyState));
+  }
+});
+
+test("both installer Schedule entry paths use the visual dispatch workspace", () => {
+  assert.match(crm, /const TradeScheduleWorkspace = dynamic\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
+  assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
+  assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
+  assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
+  assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
+  assert.match(dashboard, /workspace === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
+  assert.match(dashboard, /onOpenSchedule=\{\(weekStart\) => \{ setScheduleWeekStart\(weekStart \|\| ""\); setWorkspace\("schedule"\); \}\}/);
+});
+
+test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
+  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeScheduleWorkspace", "TradeInvoiceWorkspace", "TradeServiceFollowUpWorkspace"]) {
+    assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
+    assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
+  }
+  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradeTeamCentre", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel"]) {
+    assert.match(crm, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
+  }
+
+  const profileLoadStart = dashboard.indexOf("async function loadDashboard()");
+  const profileLoadEnd = dashboard.indexOf("}, [user]);", profileLoadStart);
+  assert.ok(profileLoadStart >= 0 && profileLoadEnd > profileLoadStart);
+  const profileLoad = dashboard.slice(profileLoadStart, profileLoadEnd);
+  assert.match(profileLoad, /fetch\("\/api\/trade-profile"/);
+  assert.match(profileLoad, /setProfile\(nextProfile\)/);
+  assert.match(profileLoad, /setLoading\(false\)/);
+  assert.doesNotMatch(profileLoad, /trade-opportunities/);
+  assert.match(dashboard.slice(profileLoadEnd), /if \(!user \|\| !profile[\s\S]*?fetch\("\/api\/trade-opportunities"/);
 });
 
 test("My day exposes owner scoped local workload and direct action charts", () => {

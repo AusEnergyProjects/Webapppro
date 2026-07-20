@@ -13,7 +13,12 @@ export type WorkspaceListPreferences = {
   service?: string;
   pipeline?: string;
   stage?: string;
+  assignee?: string;
   location?: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  email?: string;
   street?: string;
   phone?: string;
   postcode?: string;

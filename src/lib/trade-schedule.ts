@@ -8,6 +8,8 @@ const STATE_TIME_ZONES: Record<string, string> = {
 export type WorkingWindow = { isAvailable: boolean; startMinute: number; endMinute: number };
 export type ScheduleLaneItem = { id: string; startsAt: string; endsAt: string };
 export type ScheduleLane = { lane: number; laneCount: number };
+export type ScheduleConflictItem = ScheduleLaneItem & { assigneeMemberId?: unknown };
+export type ScheduleDisplayWindow = { startMinute: number; endMinute: number };
 export const APPOINTMENT_MIN_DURATION_MINUTES = 15;
 export const APPOINTMENT_MAX_DURATION_MINUTES = 8 * 60;
 export const APPOINTMENT_DURATION_STEP_MINUTES = 15;
@@ -127,6 +129,45 @@ export function scheduleAppointmentLanes(items: ScheduleLaneItem[]) {
   }
   if (cluster.length) placeCluster();
   return layout;
+}
+
+export function scheduleConflictIds(items: ScheduleConflictItem[]) {
+  const conflicts = new Set<string>();
+  const byAssignee = new Map<string, ScheduleConflictItem[]>();
+  for (const item of items) {
+    const assignee = String(item.assigneeMemberId || "");
+    if (!assignee) continue;
+    const current = byAssignee.get(assignee) || [];
+    current.push(item); byAssignee.set(assignee, current);
+  }
+  for (const assignedItems of byAssignee.values()) {
+    const ordered = [...assignedItems].sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.endsAt.localeCompare(b.endsAt) || a.id.localeCompare(b.id));
+    let cluster: ScheduleConflictItem[] = [];
+    let clusterEnd = "";
+    const closeCluster = () => {
+      if (cluster.length > 1) for (const item of cluster) conflicts.add(item.id);
+      cluster = []; clusterEnd = "";
+    };
+    for (const item of ordered) {
+      const end = item.endsAt || item.startsAt;
+      if (cluster.length && item.startsAt >= clusterEnd) closeCluster();
+      cluster.push(item); if (end > clusterEnd) clusterEnd = end;
+    }
+    closeCluster();
+  }
+  return conflicts;
+}
+
+export function scheduleDisplayWindow(items: ScheduleLaneItem[], defaultStartMinute = 7 * 60, defaultEndMinute = 19 * 60): ScheduleDisplayWindow {
+  let startMinute = defaultStartMinute;
+  let endMinute = defaultEndMinute;
+  for (const item of items) {
+    const start = localDayAndMinute(item.startsAt).minute;
+    const duration = appointmentDurationMinutes(item.startsAt, item.endsAt);
+    startMinute = Math.min(startMinute, Math.floor(Math.max(0, start - 30) / 60) * 60);
+    endMinute = Math.max(endMinute, Math.ceil(Math.min(24 * 60, start + duration + 30) / 60) * 60);
+  }
+  return { startMinute: Math.max(0, startMinute), endMinute: Math.min(24 * 60, endMinute) };
 }
 
 export function durationLabel(minutes: number) {

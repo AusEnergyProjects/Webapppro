@@ -136,10 +136,10 @@ test("TLink has a consistent trade platform identity and installable app icon", 
   assert.ok(fs.statSync(new URL("../public/tlink-icon-512.png", import.meta.url)).size > 50_000);
 });
 
-test("the mobile More menu opens above the CRM view instead of being clipped", () => {
-  assert.match(styles, /\.trade-portal-shell \.crm-nav \{ overflow: visible;/);
-  assert.match(styles, /\.trade-portal-shell \.crm-more-nav\[data-open\] \{ z-index: 25;/);
-  assert.match(styles, /max-width: calc\(100vw - 30px\)/);
+test("mobile CRM destinations stay visible in one horizontally scrollable navigation", () => {
+  assert.doesNotMatch(styles, /crm-more-nav/);
+  assert.match(styles, /\.trade-portal-shell \.crm-nav \{ display: flex; flex-wrap: nowrap;[^}]*overflow-x: auto;/);
+  assert.match(styles, /scroll-snap-type: x proximity/);
 });
 
 test("wholesaler work is progressive instead of one crowded catalogue page", () => {

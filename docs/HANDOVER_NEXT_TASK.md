@@ -4,6 +4,16 @@ Status: active rolling handover
 Prepared: 20 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published in-place evidence review and direct quote preview-and-send workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
+## Active milestone contract: operational indexes and dispatch clarity
+
+- User outcome: an office user opens one obvious dispatch calendar, sees today's work immediately, searches compact customer and job indexes without triggering long editors, and reaches every business workspace without a hidden More menu.
+- Owning workflow: installer workspace navigation, owner-scoped customer and job index reads, the main trade dispatch calendar, future public job-reference allocation, feature-local styles and regression tests.
+- In scope: route the inner Schedule destination to the same authoritative dispatch board as the main Schedule destination; emphasise and reveal today on load; keep the eight-week planner and cross-week movement; replace inline customer and job detail panels with row links that open a focused workspace only when deliberately requested; provide useful customer and job columns plus first name, last name, business name, email, phone, suburb, postcode, job reference and status filters; expose Templates, Reports, Import data, Integrations and Team as visible navigation destinations; issue opaque collision-safe references for future jobs while preserving every existing reference; cancel stale index requests and avoid loading heavy detail work until opened.
+- Out of scope: rewriting existing job references, replacing TLink's authoritative job/customer records, unbounded table queries, a new grid or calendar dependency, two-way external-calendar authority, paid-provider setup, a broad brand redesign, or changes to AEA protected-customer disclosure.
+- Acceptance: today's column and appointments are unmistakable without horizontal hunting; both Schedule entry points render the real dispatch board; Customers and Jobs remain compact after row selection and expose keyboard-accessible focused links; filters cover the operational lookup fields named above; protected records remain redacted; future job references do not reveal sequence volume and remain globally unique; every former More destination is visible; stale index/detail requests cannot replace newer state; desktop and phone layouts have no document-level overflow.
+- Validation: focused navigation, customer/job index, scheduling and job-reference tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and phone-width interaction, overflow and loading inspection; canonical health and worker-error checks.
+- Stop condition: changing existing public references, adding a second customer/job source, virtualising unbounded datasets, new provider credentials, or redesigning unrelated product areas requires a separate milestone.
+
 ## Completed milestone contract: rolling dispatch and action dashboard
 
 - User outcome: an office user can scan and move work across an eight-week continuous planner, identify each booking by customer, installer and suburb, open its useful detail in one click, and use My day to act on real schedule and work-status information without hunting through the CRM.

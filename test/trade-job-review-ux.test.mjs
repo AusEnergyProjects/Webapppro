@@ -60,7 +60,7 @@ test("private job files preview in place and retain an explicit download action"
 
 test("job data refreshes preserve the active job tab", () => {
   assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}`\}/);
-  assert.match(crm, /key=\{selectedJobDetail\.id\}/);
+  assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{refreshNonce\}`\}/);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{refreshNonce\}`\}/);
   assert.match(fieldPanel, /await refreshAfterReview\(\)/);

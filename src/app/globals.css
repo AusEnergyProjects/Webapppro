@@ -54,12 +54,6 @@
 .crm-nav { background: #f4f8f6; border-bottom: 1px solid var(--color-aea-line); display: flex; gap: 4px; overflow: visible; padding: 6px 24px 0; position: relative; z-index: 20; }
 .crm-nav button { background: transparent; border: 0; border-bottom: 3px solid transparent; color: #5f726d; cursor: pointer; font-size: .66rem; font-weight: 850; padding: 11px 14px 10px; white-space: nowrap; }
 .crm-nav button.active { border-bottom-color: #1c8a69; color: #126148; }
-.crm-more-nav { margin-left: auto; position: relative; }
-.crm-more-nav > button { background: transparent; border: 0; border-bottom: 3px solid transparent; color: #5f726d; cursor: pointer; font-size: .66rem; font-weight: 850; list-style: none; padding: 11px 14px 10px; white-space: nowrap; }
-.crm-more-nav > button.active { border-bottom-color: #1c8a69; color: #126148; }
-.crm-more-nav > div { background: #fff; border: 1px solid #d6e3de; border-radius: 10px; box-shadow: 0 14px 32px rgba(16,48,40,.18); display: grid; min-width: 170px; padding: 6px; position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; }
-.crm-more-nav > div button { border: 0; border-radius: 7px; padding: 9px 10px; text-align: left; }
-.crm-more-nav > div button.active { background: #eaf6f1; }
 .crm-template-layout { align-items: start; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(300px, .72fr); }
 .crm-template-create > header, .crm-template-library > header { border-bottom: 1px solid var(--color-aea-line); padding: 15px 17px; }
 .crm-template-create > header span, .crm-template-library > header span { color: #278064; display: block; font-size: .52rem; font-weight: 900; text-transform: uppercase; }
@@ -677,10 +671,6 @@
   .crm-nav { display: grid; gap: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; padding: 6px 8px; }
   .crm-nav button { border: 0; border-radius: 8px; font-size: .58rem; padding: 10px 4px; white-space: normal; }
   .crm-nav button.active { background: #e4f4ed; border: 0; }
-  .crm-more-nav { margin-left: 0; }
-  .crm-more-nav > button { border: 0; border-radius: 8px; font-size: .58rem; overflow: hidden; padding: 10px 4px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-  .crm-more-nav > button.active { background: #e4f4ed; border: 0; }
-  .crm-more-nav > div { right: 0; }
   .crm-privacy-line { align-items: flex-start; display: grid; gap: 5px; padding: 10px 18px; }
   .crm-privacy-line span + span { border-left: 0; padding-left: 0; }
   .crm-view { padding: 18px 14px 24px; }
@@ -4106,8 +4096,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-shell .crm-hero p { color: #667b75; font-size: .7rem; }
 .trade-portal-shell .crm-quick-create > button { background: #12a978; color: #fff; font-size: .65rem; padding: 10px 14px; }
 .trade-portal-shell .crm-nav { background: #fff; border-bottom-color: var(--trade-line); gap: 2px; padding: 5px 20px 0; }
-.trade-portal-shell .crm-nav button,
-.trade-portal-shell .crm-more-nav > button { font-size: .65rem; padding: 11px 13px 10px; }
+.trade-portal-shell .crm-nav button { font-size: .65rem; padding: 11px 13px 10px; }
 .trade-portal-shell .crm-privacy-line { background: #edf8f4; border-bottom-color: #cde5dc; font-size: .58rem; padding: 10px 25px; }
 .trade-portal-shell .crm-view { padding: 22px 25px 26px; }
 .trade-portal-shell .crm-metrics { gap: 12px; }
@@ -4213,8 +4202,6 @@ body input[type="number"]::-webkit-outer-spin-button {
   .trade-portal-shell .crm-hero { gap: 14px; padding: 20px 18px 17px; }
   .trade-portal-shell .crm-hero h2 { font-size: 1.3rem; }
   .trade-portal-shell .crm-nav { overflow: visible; padding-left: 10px; padding-right: 10px; position: relative; z-index: 12; }
-  .trade-portal-shell .crm-more-nav[data-open] { z-index: 25; }
-  .trade-portal-shell .crm-more-nav > div { max-width: calc(100vw - 30px); min-width: 210px; right: 0; top: calc(100% + 5px); }
   .trade-portal-shell .crm-view { padding: 17px 14px 20px; }
   .trade-portal-shell .crm-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trade-portal-shell .crm-jobs-layout,
@@ -5571,4 +5558,63 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 @media (max-width: 480px) {
   .installer-arrival-window-list fieldset { grid-template-columns: 1fr; }
   .customer-project-evidence-picker li, .customer-project-evidence-library article, .dashboard-customer-evidence article { align-items: stretch; flex-direction: column; }
+}
+
+/* Installer operations: keep destinations visible and directories compact. */
+.trade-portal-shell .crm-nav { align-items: flex-end; flex-wrap: wrap; overflow-x: auto; scrollbar-width: thin; }
+.trade-portal-shell .crm-nav button { flex: 0 0 auto; }
+.crm-customer-focus { margin: 0 auto; max-width: 1320px; }
+.crm-dispatch-view { background: #f8fbfa; }
+.crm-job-columns, .crm-job-list.crm-record-table > article {
+  gap: 10px;
+  grid-template-columns: 30px 180px 140px 135px 135px 120px 115px 115px 90px 115px;
+  min-width: 1280px;
+}
+.crm-record-table .crm-job-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 180px 140px 135px 135px 120px 115px 115px 90px 115px;
+}
+.crm-customer-columns, .crm-customer-list.crm-record-table > article {
+  gap: 10px;
+  grid-template-columns: 30px 180px 105px 105px 200px 120px 125px 75px 60px 115px 120px;
+  min-width: 1360px;
+}
+.crm-record-table .crm-customer-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 180px 105px 105px 200px 120px 125px 75px 60px 115px 120px;
+}
+.crm-record-table .crm-row-open:focus-visible { background: #eef8f4; outline: 3px solid #42a886; outline-offset: -3px; }
+
+/* Dispatch: make today and current time unmistakable before secondary settings. */
+.schedule-today-strip { background: linear-gradient(135deg, #e7f7f0, #f8fcfa); border: 1px solid #8ac9b1; border-left: 5px solid #0b9b6f; border-radius: 12px; display: grid; gap: 10px; padding: 13px 14px; }
+.schedule-today-strip > header { align-items: center; display: flex; gap: 16px; justify-content: space-between; }
+.schedule-today-strip > header div { display: grid; gap: 2px; }
+.schedule-today-strip > header span { color: #0b7a58; font-size: .56rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.schedule-today-strip > header strong { color: var(--color-aea-green-dark); font-size: .82rem; }
+.schedule-today-strip > header b { color: #0b7153; font-size: .62rem; }
+.schedule-today-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.schedule-today-list button { background: #fff; border: 1px solid #b7d9cc; border-radius: 9px; color: var(--color-aea-ink); cursor: pointer; display: grid; gap: 3px; min-height: 48px; padding: 9px 11px; text-align: left; }
+.schedule-today-list button:hover, .schedule-today-list button:focus-visible { border-color: #15956e; box-shadow: 0 3px 10px rgba(11, 102, 77, .12); }
+.schedule-today-list button strong { font-size: .66rem; }
+.schedule-today-list button span, .schedule-today-list p { color: var(--color-aea-muted); font-size: .57rem; margin: 0; }
+.schedule-today-button { background: #0b8f66 !important; border-color: #0b8f66 !important; color: #fff !important; }
+.schedule-filter-panel { background: #f4faf7; border: 1px solid #d1e4dc; border-radius: 11px; padding: 10px 12px; }
+.schedule-filter-panel > summary, .schedule-capacity > summary { align-items: center; color: var(--color-aea-green-dark); cursor: pointer; display: flex; font-size: .62rem; font-weight: 900; gap: 12px; justify-content: space-between; list-style-position: inside; }
+.schedule-filter-panel > summary strong, .schedule-capacity > summary strong { color: var(--color-aea-muted); font-size: .56rem; }
+.schedule-filter-panel[open] > .schedule-filters, .schedule-capacity[open] > div { margin-top: 11px; }
+.schedule-day-track.today { box-shadow: inset 0 0 0 2px rgba(11, 155, 111, .42); }
+.schedule-day-track.today > header { background: #dff4eb; box-shadow: inset 0 -3px #0b9b6f; }
+.schedule-day-track.today > header strong, .schedule-day-track.today > header span { color: #075a43; font-weight: 900; }
+.schedule-now-line { background: #e04432; height: 2px; left: 0; pointer-events: none; position: absolute; right: 0; z-index: 9; }
+.schedule-now-line::before { background: #e04432; border-radius: 50%; content: ""; height: 8px; left: -1px; position: absolute; top: -3px; width: 8px; }
+.schedule-now-line i { background: #e04432; border-radius: 5px; color: #fff; font-size: .46rem; font-style: normal; font-weight: 900; left: 6px; padding: 2px 5px; position: absolute; top: -9px; }
+.schedule-capacity { display: block; }
+
+@media (max-width: 780px) {
+  .trade-portal-shell .crm-nav { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; padding: 7px 10px; scroll-snap-type: x proximity; }
+  .trade-portal-shell .crm-nav button { flex: 0 0 auto; min-width: max-content; padding: 10px 12px; scroll-snap-align: start; white-space: nowrap; }
+  .schedule-today-list { grid-template-columns: 1fr; }
+  .schedule-today-strip > header, .schedule-filter-panel > summary, .schedule-capacity > summary { align-items: flex-start; flex-direction: column; gap: 4px; }
 }

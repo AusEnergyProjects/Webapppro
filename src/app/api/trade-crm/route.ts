@@ -270,6 +270,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     if (pipeline && PIPELINE_STAGES.has(pipeline)) { conditions.push("d.pipeline_stage = ?"); bindings.push(pipeline); }
     const stage = cleanAdminText(url.searchParams.get("stage"), 30);
     if (WORK_STAGES.has(stage)) { conditions.push("w.stage = ?"); bindings.push(stage); }
+    const assignee = cleanAdminText(url.searchParams.get("assignee"), 100).toLowerCase();
+    if (assignee) { conditions.push("LOWER(w.assignee_label) LIKE ?"); bindings.push(`%${assignee}%`); }
     const location = cleanAdminText(url.searchParams.get("location"), 100).toLowerCase();
     if (location) {
       conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(c.address_line_1, '') || ' ' || COALESCE(c.address_line_2, '') || ' ' || COALESCE(c.suburb, '') || ' ' || COALESCE(c.address_state, '') || ' ' || COALESCE(c.postcode, '')) LIKE ?`);
@@ -316,6 +318,18 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         AND ss.record_status = 'active' AND LOWER(ss.suburb || ' ' || ss.postcode) LIKE ?))`);
     bindings.push(identity.uid, ftsPrefixQuery(search), `%${search}%`, `%${search}%`);
   }
+  const firstName = cleanAdminText(url.searchParams.get("firstName"), 100).toLowerCase();
+  if (firstName) { conditions.push("LOWER(c.first_name) LIKE ?"); bindings.push(`%${firstName}%`); }
+  const lastName = cleanAdminText(url.searchParams.get("lastName"), 100).toLowerCase();
+  if (lastName) { conditions.push("LOWER(c.last_name) LIKE ?"); bindings.push(`%${lastName}%`); }
+  const businessName = cleanAdminText(url.searchParams.get("businessName"), 140).toLowerCase();
+  if (businessName) { conditions.push("LOWER(c.business_name) LIKE ?"); bindings.push(`%${businessName}%`); }
+  const email = cleanAdminText(url.searchParams.get("email"), 180).toLowerCase();
+  if (email) {
+    conditions.push(`(LOWER(c.email) LIKE ? OR EXISTS (SELECT 1 FROM trade_crm_customer_contacts ec
+      WHERE ec.customer_id = c.id AND ec.firebase_uid = c.firebase_uid AND ec.record_status = 'active' AND LOWER(ec.email) LIKE ?))`);
+    bindings.push(`%${email}%`, `%${email}%`);
+  }
   const street = cleanAdminText(url.searchParams.get("street"), 120).toLowerCase();
   if (street) { conditions.push("LOWER(c.address_line_1 || ' ' || c.address_line_2) LIKE ?"); bindings.push(`%${street}%`); }
   const phone = cleanAdminText(url.searchParams.get("phone"), 50).toLowerCase();
@@ -355,20 +369,26 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   const rowWhere = rowConditions.join(" AND ");
   const [countRow, rows] = await Promise.all([
     includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
-    db.prepare(`SELECT c.*,
-      CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END sort_name,
-      (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
-        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') job_count,
-      (SELECT COUNT(*) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
-        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' AND w.stage NOT IN ('completed', 'cancelled')) active_job_count
-      , (SELECT GROUP_CONCAT(DISTINCT w.service_category) FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
-        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active') activities
-      , (SELECT w.work_number FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
-        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_job_number
-      , (SELECT d.pipeline_stage FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id
-        WHERE d.crm_customer_id = c.id AND d.firebase_uid = c.firebase_uid AND w.record_status = 'active' ORDER BY w.updated_at DESC LIMIT 1) latest_pipeline_stage
-      FROM trade_crm_customers c WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
-      .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
+    db.prepare(`WITH owned_jobs AS (
+      SELECT d.crm_customer_id, w.service_category, w.work_number, d.pipeline_stage, w.stage, w.updated_at,
+        ROW_NUMBER() OVER (PARTITION BY d.crm_customer_id ORDER BY w.updated_at DESC, w.id DESC) latest_rank
+      FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
+      WHERE d.firebase_uid = ? AND w.record_status = 'active'
+    ), customer_job_summary AS (
+      SELECT crm_customer_id, COUNT(*) job_count,
+        SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) active_job_count,
+        GROUP_CONCAT(DISTINCT service_category) activities,
+        MAX(CASE WHEN latest_rank = 1 THEN work_number ELSE '' END) latest_job_number,
+        MAX(CASE WHEN latest_rank = 1 THEN pipeline_stage ELSE '' END) latest_pipeline_stage
+      FROM owned_jobs GROUP BY crm_customer_id
+    )
+      SELECT c.*, CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END sort_name,
+        COALESCE(js.job_count, 0) job_count, COALESCE(js.active_job_count, 0) active_job_count,
+        COALESCE(js.activities, '') activities, COALESCE(js.latest_job_number, '') latest_job_number,
+        COALESCE(js.latest_pipeline_stage, '') latest_pipeline_stage
+      FROM trade_crm_customers c LEFT JOIN customer_job_summary js ON js.crm_customer_id = c.id
+      WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+      .bind(identity.uid, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
   ]);
   const total = countRow ? Number(countRow.total || 0) : undefined;
   const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);

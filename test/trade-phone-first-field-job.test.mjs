@@ -152,7 +152,8 @@ test("shared menus dismiss outside, on selection and Escape without leaking list
   assert.match(menu, /triggerRef\.current\?\.focus/);
   assert.match(menu, /removeEventListener/);
   assert.match(workspace, /<AccessibleMenu className="crm-quick-create"/);
-  assert.match(workspace, /<AccessibleMenu className="crm-more-nav"/);
+  assert.doesNotMatch(workspace, /<AccessibleMenu className="crm-more-nav"/);
+  assert.match(workspace, /"templates", "reports", "import", "integrations"/);
   assert.match(workspace, /<AccessibleMenu className="crm-job-more"/);
   assert.match(workspace, /close\(\)/);
 });

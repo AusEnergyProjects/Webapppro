@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { addCalendarDays, appointmentDurationMinutes, appointmentEndsAt, assertFutureAppointment, defaultWorkingWindow, durationLabel, insideWorkingWindow, moveAppointmentToDate, normaliseAppointmentDuration, normaliseScheduleRangeWeeks, normaliseWeekStart, rangesOverlap, scheduleAppointmentLanes } from "../src/lib/trade-schedule.ts";
+import { addCalendarDays, appointmentDurationMinutes, appointmentEndsAt, assertFutureAppointment, defaultWorkingWindow, durationLabel, insideWorkingWindow, moveAppointmentToDate, normaliseAppointmentDuration, normaliseScheduleRangeWeeks, normaliseWeekStart, rangesOverlap, scheduleAppointmentLanes, scheduleConflictIds, scheduleDisplayWindow } from "../src/lib/trade-schedule.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -59,6 +59,20 @@ test("overlapping appointments receive separate visible lanes", () => {
   assert.deepEqual(layout.get("d"), { lane: 0, laneCount: 1 });
 });
 
+test("the rolling schedule derives conflicts and a compact visible workday", () => {
+  assert.deepEqual([...scheduleConflictIds([
+    { id: "a", assigneeMemberId: "one", startsAt: "2026-07-20T09:00", endsAt: "2026-07-20T10:30" },
+    { id: "b", assigneeMemberId: "one", startsAt: "2026-07-20T09:15", endsAt: "2026-07-20T10:00" },
+    { id: "c", assigneeMemberId: "one", startsAt: "2026-07-20T11:00", endsAt: "2026-07-20T12:00" },
+    { id: "d", assigneeMemberId: "two", startsAt: "2026-07-20T09:15", endsAt: "2026-07-20T10:00" },
+  ])].sort(), ["a", "b"]);
+  assert.deepEqual(scheduleDisplayWindow([]), { startMinute: 420, endMinute: 1140 });
+  assert.deepEqual(scheduleDisplayWindow([
+    { id: "early", startsAt: "2026-07-20T05:30", endsAt: "2026-07-20T06:30" },
+    { id: "late", startsAt: "2026-07-20T19:15", endsAt: "2026-07-20T21:15" },
+  ]), { startMinute: 300, endMinute: 1320 });
+});
+
 test("the additive migration extends existing team and appointment sources", () => {
   for (const table of ["trade_team_working_hours", "trade_team_unavailability"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
@@ -108,7 +122,7 @@ test("schedule payloads preserve customer privacy boundaries", () => {
 });
 
 test("the installer dashboard exposes a rolling low-friction scheduling workflow", () => {
-  for (const copy of ["Scroll across the schedule", "Eight weeks stay together", "View week containing", "Earlier", "Later", "Today", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
+  for (const copy of ["Today first, eight weeks together", "View week containing", "Earlier", "Later", "Today", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
   assert.match(ui, /draggable=\{!busy\}/);
   assert.match(ui, /const SCHEDULE_RANGE_WEEKS = 8/);
   assert.match(ui, /const SCHEDULE_RANGE_DAYS = SCHEDULE_RANGE_WEEKS \* 7/);
@@ -119,6 +133,18 @@ test("the installer dashboard exposes a rolling low-friction scheduling workflow
   assert.match(ui, /ref=\{timetableScrollRef\} className="schedule-timetable-scroll" onScroll=\{handleScheduleScroll\}/);
   assert.match(ui, /autoScrollDuringDrag\(event\.clientX, event\.clientY\)/);
   assert.match(ui, /initialWeekStart\?: string/);
+  assert.match(ui, /data\.rangeStart !== rangeStart/);
+  assert.match(ui, /className="schedule-today-strip"/);
+  assert.match(ui, /const todayInRange = todayDate >= displayRangeStart/);
+  assert.match(ui, /if \(body\.action === "schedule_appointment"\) closeAppointment\(\);/);
+  assert.match(ui, /Load today's work/);
+  assert.match(ui, /Outside this view/);
+  assert.match(ui, /aria-current=\{dayIsToday \? "date" : undefined\}/);
+  assert.match(ui, /className="schedule-now-line"/);
+  assert.match(ui, /scheduleDisplayWindow\(visibleAppointments\)/);
+  assert.match(ui, /Math\.floor\(\(focusX - SCHEDULE_TIME_RAIL_WIDTH\) \/ SCHEDULE_DAY_WIDTH\)/);
+  assert.doesNotMatch(ui, /focusX - SCHEDULE_TIME_RAIL_WIDTH \+ SCHEDULE_DAY_WIDTH \/ 2/);
+  assert.match(route, /scheduleConflictIds\(/);
   assert.match(ui, /min=\{minimumStart\}/);
   assert.match(route, /member_uid === ownerUid/);
   assert.match(route, /normaliseScheduleRangeWeeks\(search\.get\("rangeWeeks"\), 1\)/);

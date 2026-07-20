@@ -74,7 +74,8 @@ test("the synthetic trade walkthrough covers enquiry, order, partial supply, com
 
 test("the refined CRM uses progressive navigation and a focused visual board", () => {
   assert.match(crm, /crm-quick-create/);
-  assert.match(crm, /crm-more-nav/);
+  assert.doesNotMatch(crm, /crm-more-nav/);
+  assert.match(crm, /"templates", "reports", "import", "integrations"/);
   assert.match(crm, /crm-pipeline-board/);
   assert.match(crm, /crm-layout-toggle/);
   assert.match(crm, /setPipelineFocus\(""\); setJobLayout\("board"\)/);

@@ -198,7 +198,7 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
     <input type="hidden" name="serviceSiteMode" value={customerMode === "new" || newSite ? "new" : "existing"} /><input type="hidden" name="serviceSiteId" value={newSite ? "" : serviceSiteId} />
     <input type="hidden" name="assigneeMemberId" value={effectiveAssigneeMemberId} /><input type="hidden" name="evidenceRequirements" value={JSON.stringify(selectedRequirements)} /><input type="hidden" name="deliveryConsent" value={deliveryConsent ? "true" : "false"} />
 
-    <div className="crm-system-id-note"><span>TLink job ID</span><strong>Assigned automatically</strong><small>One global ID is shown to you and TLink support, such as TLJ-00000124.</small></div>
+    <div className="crm-system-id-note"><span>TLink job ID</span><strong>Assigned automatically</strong><small>One private global reference is shown to you and TLink support, such as TLJ-X3KHTUEF.</small></div>
     <ol className="crm-wizard-steps" aria-label="Create and schedule job">{steps.map((label, index) => <li key={label} className={step === index + 1 ? "active" : step > index + 1 ? "complete" : ""}><span>{index + 1}</span>{label}</li>)}</ol>
     {message && <div className="crm-wizard-message" role="status">{message}</div>}
 

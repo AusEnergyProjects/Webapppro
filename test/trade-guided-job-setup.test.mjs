@@ -16,11 +16,14 @@ const recurring = read("../src/lib/trade-recurring-jobs-server.ts");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0074_global_tlink_job_numbers.sql");
 const adminJobs = read("../src/app/api/admin/jobs/route.ts");
+const adminDirectory = read("../src/components/AdminJobDirectory.tsx");
 const address = read("../src/app/api/trade-address-suggestions/route.ts");
 
 test("new jobs use one globally sequenced TLink ID across every creation path", () => {
   assert.match(numbers, /__tlink_global__/);
-  assert.match(numbers, /return `TLJ-\$\{String\(value\)\.padStart\(8, "0"\)\}`/);
+  assert.match(numbers, /formatTlinkJobNumber\(value\)/);
+  assert.match(numbers, /TLINK_JOB_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"/);
+  assert.match(numbers, /Every operation is a permutation over 32 bits/);
   assert.match(crm, /nextTlinkJobNumber\(db, now\)/);
   assert.match(workOrders, /prefix === "JOB"[\s\S]*nextTlinkJobNumber\(db, now\)/);
   assert.match(recurring, /nextTlinkJobNumber\(db, now\)/);
@@ -33,6 +36,9 @@ test("new jobs use one globally sequenced TLink ID across every creation path", 
 
 test("admin and installer expose and search the same job ID", () => {
   assert.match(form, /TLink job ID/);
+  assert.match(form, /TLJ-X3KHTUEF/);
+  assert.match(adminDirectory, /TLJ-X3KHTUEF/);
+  assert.doesNotMatch(`${form}\n${adminDirectory}`, /TLJ-00000124/);
   assert.match(workspace, /This same ID is used by your team and TLink support/);
   assert.match(adminJobs, /LOWER\(w\.work_number\) LIKE/);
   assert.match(adminJobs, /LOWER\(w\.id\) LIKE/);

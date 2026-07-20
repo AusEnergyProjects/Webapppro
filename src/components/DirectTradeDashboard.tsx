@@ -1,19 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter } from "./ComparatorChrome";
-import { SupplierCatalogueWorkspace } from "./SupplierCatalogueWorkspace";
-import { InstallerProductMarketplace } from "./InstallerProductMarketplace";
-import { InstallerPlatformQuote } from "./InstallerPlatformQuote";
-import { InstallerArrivalWindows } from "./InstallerArrivalWindows";
 import { TradeBusinessHub } from "./TradeBusinessHub";
-import { TradePurchasingWorkspace } from "./TradePurchasingWorkspace";
-import { TradeDataImportWorkspace } from "./TradeDataImportWorkspace";
-import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
-import { TradeInvoiceWorkspace } from "./TradeInvoiceWorkspace";
-import { TradeServiceFollowUpWorkspace } from "./TradeServiceFollowUpWorkspace";
 import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
@@ -23,6 +15,16 @@ import {
   type FeatureGrant,
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
+
+const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
+const InstallerProductMarketplace = dynamic(() => import("./InstallerProductMarketplace").then((module) => module.InstallerProductMarketplace));
+const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").then((module) => module.InstallerPlatformQuote));
+const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
+const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
+const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
+const TradeScheduleWorkspace = dynamic(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
+const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
+const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 
 type DashboardProfile = {
   businessName: string;
@@ -275,23 +277,7 @@ export function DirectTradeDashboard() {
               nextProfile.serviceBasePostcode || nextProfile.postcode,
             );
             setServiceRadiusKm(Number(nextProfile.serviceRadiusKm || 50));
-            if (
-              nextProfile.partnerType !== "supplier" &&
-              nextProfile.entitlements?.features?.installer_leads
-            ) {
-              const opportunityResponse = await fetch(
-                "/api/trade-opportunities",
-                {
-                  headers: { Authorization: `Bearer ${token}` },
-                  cache: "no-store",
-                },
-              );
-              const opportunityResult = await opportunityResponse
-                .json()
-                .catch(() => ({}));
-              if (opportunityResponse.ok && !cancelled)
-                setOpportunities(opportunityResult.opportunities || []);
-            } else if (!cancelled) setOpportunities([]);
+            if (nextProfile.partnerType === "supplier" || !nextProfile.entitlements?.features?.installer_leads) setOpportunities([]);
           }
         }
       } catch (loadError) {
@@ -310,6 +296,22 @@ export function DirectTradeDashboard() {
       cancelled = true;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads) return;
+    const controller = new AbortController();
+    let active = true;
+    void user.getIdToken().then((token) => fetch("/api/trade-opportunities", {
+      headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
+    })).then(async (response) => {
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
+      if (active) setOpportunities(result.opportunities || []);
+    }).catch((loadError) => {
+      if (active && !controller.signal.aborted) setOpportunityStatus(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
+    });
+    return () => { active = false; controller.abort(); };
+  }, [profile, user]);
 
   const isSupplier = profile?.partnerType === "supplier";
   const hasLeadAccess = Boolean(profile?.entitlements?.features?.installer_leads);
