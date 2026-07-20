@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const privacy = read("../src/app/privacy/page.tsx");
+const integrations = read("../src/app/direct-trade/integrations/page.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const upload = read("../src/components/JobInformationUpload.tsx");
 const sitemap = read("../src/app/sitemap.ts");
@@ -23,4 +24,12 @@ test("customer evidence and shared navigation resolve to the public privacy rout
   assert.match(upload, /href="\/privacy"/);
   assert.match(chrome, /href="\/privacy">Privacy/);
   assert.match(sitemap, /"\/privacy"/);
+});
+
+test("the public integration route explains the TLink OAuth application purpose", () => {
+  assert.match(integrations, /Connect your business tools to TLink/);
+  assert.match(integrations, /calendar\.events permission/);
+  assert.match(integrations, /does not read Gmail, contacts or unrelated calendar events/);
+  assert.match(integrations, /provider&apos;s own website/);
+  assert.match(sitemap, /"\/direct-trade\/integrations"/);
 });
