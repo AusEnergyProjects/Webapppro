@@ -7,6 +7,7 @@ import {
   accountingReference,
   accountingStatus,
   centsFromProvider,
+  quickBooksFailureDetail,
 } from "../src/lib/trade-accounting.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -86,4 +87,14 @@ test("accounting storage and copy do not retain provider payloads or prohibited 
   const eventBlock = schema.match(/tradeCrmAccountingEvents[\s\S]*?\]\);/)?.[0] || "";
   assert.doesNotMatch(`${documentBlock}${eventBlock}`, /raw_payload|access_token|refresh_token/);
   assert.doesNotMatch(route, /[\u2013\u2014]/);
+});
+
+test("QuickBooks failures retain bounded support identifiers without storing provider payloads", () => {
+  assert.equal(
+    quickBooksFailureDetail(400, "trace-123/unsafe", { Fault: { Error: [{ code: "6240", type: "ValidationFault", Detail: "Customer private data" }] } }),
+    "provider=quickbooks; status=400; intuit_tid=trace-123unsafe; code=6240; type=ValidationFault",
+  );
+  assert.equal(quickBooksFailureDetail(999, "", null), "provider=quickbooks; status=0");
+  assert.match(route, /response\.headers\.get\("intuit_tid"\)/);
+  assert.match(route, /accountingErrorDetail\(error\)/);
 });

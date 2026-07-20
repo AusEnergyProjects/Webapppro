@@ -1,5 +1,29 @@
 export type AccountingProvider = "xero" | "myob" | "quickbooks";
 
+type ProviderPayload = Record<string, unknown>;
+
+function diagnosticToken(value: unknown, limit: number) {
+  return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, limit);
+}
+
+export function quickBooksFailureDetail(status: number, intuitTid: unknown, payload: unknown) {
+  const body = payload && typeof payload === "object" ? payload as ProviderPayload : {};
+  const fault = body.Fault && typeof body.Fault === "object" ? body.Fault as ProviderPayload : {};
+  const errors = Array.isArray(fault.Error) ? fault.Error : [];
+  const first = errors[0] && typeof errors[0] === "object" ? errors[0] as ProviderPayload : {};
+  const fields = [
+    "provider=quickbooks",
+    `status=${Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0}`,
+  ];
+  const trace = diagnosticToken(intuitTid, 120);
+  const code = diagnosticToken(first.code, 40);
+  const type = diagnosticToken(first.type, 80);
+  if (trace) fields.push(`intuit_tid=${trace}`);
+  if (code) fields.push(`code=${code}`);
+  if (type) fields.push(`type=${type}`);
+  return fields.join("; ");
+}
+
 export function isAccountingProvider(value: string): value is AccountingProvider {
   return value === "xero" || value === "myob" || value === "quickbooks";
 }

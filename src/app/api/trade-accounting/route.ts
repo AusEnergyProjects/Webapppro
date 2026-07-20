@@ -7,6 +7,7 @@ import {
   accountingStatus,
   centsFromProvider,
   isAccountingProvider,
+  quickBooksFailureDetail,
   type AccountingProvider,
 } from "@/lib/trade-accounting";
 import { decryptIntegrationCredentials, encryptIntegrationCredentials } from "@/lib/trade-integration-crypto";
@@ -20,8 +21,24 @@ type MyobAccount = { id: string; code: string; name: string; taxCodeId: string; 
 type QuickBooksItem = { id: string; code: string; name: string; taxCode: string };
 type InvoiceSource = "accepted_quote" | "quick_invoice";
 
+class AccountingProviderRequestError extends Error {
+  readonly code = "PROVIDER_REQUEST_FAILED";
+
+  constructor(readonly diagnostic: string) {
+    super("PROVIDER_REQUEST_FAILED");
+  }
+}
+
+function accountingErrorCode(error: unknown) {
+  return error instanceof AccountingProviderRequestError ? error.code : error instanceof Error ? error.message : "";
+}
+
+function accountingErrorDetail(error: unknown) {
+  return error instanceof AccountingProviderRequestError ? error.diagnostic : error instanceof Error ? error.message : "PROVIDER_REQUEST_FAILED";
+}
+
 function accountingError(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = accountingErrorCode(error);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) {
     return adminJson({ ok: false, error: "Accounting export is not available to this account." }, 403);
@@ -209,7 +226,9 @@ async function quickBooksFetch(connection: Row, credentials: Row, path: string, 
   const response = await fetch(`https://quickbooks.api.intuit.com/v3/company/${encodeURIComponent(realmId)}/${path}`,
     { ...init, headers: { Authorization: `Bearer ${String(credentials.access_token || "")}`, Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
   const result = await response.json().catch(() => ({})) as Row;
-  if (!response.ok) throw new Error("PROVIDER_REQUEST_FAILED");
+  if (!response.ok) {
+    throw new AccountingProviderRequestError(quickBooksFailureDetail(response.status, response.headers.get("intuit_tid"), result));
+  }
   return { response, result };
 }
 
@@ -502,7 +521,7 @@ async function exportInvoice(firebaseUid: string, provider: AccountingProvider, 
     await addEvent(document, "export", status, providerStatus, totalCents, paidCents);
     return document;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "PROVIDER_REQUEST_FAILED";
+    const message = accountingErrorDetail(error);
     const failedAt = new Date().toISOString();
     if (document) {
       await db.prepare(`UPDATE trade_crm_accounting_documents SET status = 'error', last_error = ?, updated_at = ? WHERE id = ?`)
@@ -562,7 +581,7 @@ async function refreshInvoice(firebaseUid: string, job: Row) {
     await addEvent(updated, "refresh", status, providerStatus, amountCents, providerPaidCents);
     return updated;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "PROVIDER_REQUEST_FAILED";
+    const message = accountingErrorDetail(error);
     const now = new Date().toISOString();
     await getD1().prepare(`UPDATE trade_crm_accounting_documents SET last_error = ?, updated_at = ? WHERE id = ?`)
       .bind(message, now, document.id).run();
