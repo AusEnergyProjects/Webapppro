@@ -13,6 +13,7 @@ const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldPanel = read("../src/components/TradeFieldWorkPanel.tsx");
 const invoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const invoicePanel = read("../src/components/TradeQuickInvoicePanel.tsx");
+const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const comparator = read("../public/electricity-comparator.html");
 const comparePage = read("../src/app/compare/page.tsx");
 const globalStyles = read("../src/app/globals.css");
@@ -46,6 +47,14 @@ test("private job files preview in place and retain an explicit download action"
   assert.match(fieldPanel, /application\/pdf/);
   assert.match(fieldPanel, /download=\{preview\.item\.fileName\}/);
   assert.doesNotMatch(fieldPanel, />Open<\/button>/);
+});
+
+test("job data refreshes preserve the active job tab", () => {
+  assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}`\}/);
+  assert.match(crm, /key=\{selectedJobDetail\.id\}/);
+  assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{refreshNonce\}`\}/);
+  assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{refreshNonce\}`\}/);
+  assert.match(fieldPanel, /await refreshAfterReview\(\)/);
 });
 
 test("both quick invoice send paths require a visible preview confirmation", () => {

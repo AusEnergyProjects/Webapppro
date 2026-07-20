@@ -121,7 +121,11 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Customer quote email", "Create next draft", "Issue for customer review", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Customer quote email", "Save as next draft", "Preview and send", "Confirm and send quote", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
+  assert.match(installerUi, /async function sendPreviewedQuote\(\)[\s\S]*?action: "save_draft"[\s\S]*?action: "issue_quote"[\s\S]*?action: "send_quote"/);
+  assert.match(installerUi, /consentConfirmed: true/);
+  assert.match(installerUi, /Quote issued, but the email was not sent/);
+  assert.doesNotMatch(installerUi, /Issue for customer review/);
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
   for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));
   assert.match(crm, /<TradeQuotePanel/);
@@ -129,6 +133,7 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(dashboard, /href="\/account\/quotes"/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
+  assert.match(styles, /\.trade-quote-send-preview/);
   for (const copy of ["Print or save PDF", "Ask the trade business", "Type your name to sign", "Calculated and checked again by the server", "Accept for"]) assert.match(linkUi, new RegExp(copy));
   for (const copy of ["One secure quote link", "Copy link", "Email quote", "Replace link", "Revoke link", "Quote activity"]) assert.match(installerUi, new RegExp(copy));
   assert.match(styles, /@media print/);
