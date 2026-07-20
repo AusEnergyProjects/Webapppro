@@ -2268,6 +2268,9 @@ export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
   paidAmountCents: integer("paid_amount_cents").notNull().default(0),
   checkoutUrl: text("checkout_url").notNull(),
   status: text("status").notNull().default("open"),
+  attemptNumber: integer("attempt_number").notNull().default(1),
+  supersededById: text("superseded_by_id").notNull().default(""),
+  supersededAt: text("superseded_at").notNull().default(""),
   paidAt: text("paid_at").notNull().default(""),
   failureCode: text("failure_code").notNull().default(""),
   lastEventId: text("last_event_id").notNull().default(""),
@@ -2277,7 +2280,10 @@ export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_payment_links_idempotency_idx").on(table.idempotencyKey),
-  uniqueIndex("trade_crm_payment_links_commercial_provider_idx").on(table.firebaseUid, table.commercialReference, table.purpose),
+  uniqueIndex("trade_crm_payment_links_commercial_attempt_idx").on(table.firebaseUid, table.commercialReference, table.purpose, table.attemptNumber),
+  uniqueIndex("trade_crm_payment_links_collectible_idx").on(table.firebaseUid, table.commercialReference, table.purpose)
+    .where(sql`${table.status} IN ('creating','open','processing','paid')`),
+  index("trade_crm_payment_links_commercial_status_idx").on(table.firebaseUid, table.commercialReference, table.purpose, table.status),
   index("trade_crm_payment_links_owner_idx").on(table.firebaseUid, table.updatedAt),
   index("trade_crm_payment_links_work_order_idx").on(table.workOrderId, table.updatedAt),
   index("trade_crm_payment_links_provider_order_idx").on(table.provider, table.providerOrderId),

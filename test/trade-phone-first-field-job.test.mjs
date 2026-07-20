@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
+const calendarSync = read("../src/lib/trade-calendar-sync-server.ts");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const addressRoute = read("../src/app/api/trade-address-suggestions/route.ts");
@@ -64,6 +65,27 @@ test("guided intake removes manual titles and carries scheduling into the same f
   assert.match(`${newJob}\n${quickInvoiceStep}`, /Schedule and request info/);
   assert.match(crmRoute, /action === "create_scheduled_job"/);
   assert.match(crmRoute, /moneyValue\(body\.estimatedValueCents\)/);
+});
+
+test("guided creation mirrors its saved appointment to every connected calendar", () => {
+  assert.match(crmRoute, /syncCreatedAppointmentToConnectedCalendars\(identity\.uid, appointmentId\)/);
+  assert.match(crmRoute, /await db\.batch[\s\S]*syncCreatedAppointmentToConnectedCalendars/);
+  assert.match(crmRoute, /catch \{[\s\S]*calendarFailed = 1/);
+  const photoDelivery = crmRoute.indexOf("await sendPhotoRequestDelivery");
+  const invoiceDelivery = crmRoute.indexOf("await sendQuickInvoiceDelivery");
+  const calendarDelivery = crmRoute.indexOf("await syncCreatedAppointmentToConnectedCalendars");
+  assert.ok(photoDelivery > 0 && photoDelivery < calendarDelivery, "photo-request delivery must finish before calendar network sync");
+  assert.ok(invoiceDelivery > 0 && invoiceDelivery < calendarDelivery, "invoice delivery must finish before calendar network sync");
+  assert.match(calendarSync, /provider IN \('google_calendar', 'microsoft_calendar'\) AND status = 'connected'/);
+  assert.match(calendarSync, /a\.firebase_uid = \? AND a\.id = \? AND a\.status = 'scheduled'/);
+  assert.match(calendarSync, /syncCalendarConnections\(ownerUid, connections\.results, \[appointment\]\)/);
+  assert.match(calendarSync, /appointment_revision/);
+  assert.match(calendarSync, /CALENDAR_PROVIDER_TIMEOUT_MS = 4_000/);
+  assert.match(calendarSync, /signal: AbortSignal\.timeout\(CALENDAR_PROVIDER_TIMEOUT_MS\)/);
+  assert.match(workspace, /calendarSynced\?: number; calendarFailed\?: number/);
+  assert.match(workspace, /created and scheduled in TLink/);
+  assert.match(workspace, /Open Schedule and retry calendar sync/);
+  assert.match(workspace, /workspace=schedule/);
 });
 
 test("optional summary notes have one editable owner in the Notes tab", () => {

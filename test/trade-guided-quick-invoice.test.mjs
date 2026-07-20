@@ -72,7 +72,9 @@ test("quick invoice reuses authoritative totals in connected accounting and paym
 
   assert.match(paymentRoute, /purpose === "invoice"/);
   assert.match(paymentRoute, /invoice_number commercial_reference,[\s\S]*trade_crm_quick_invoice_credits[\s\S]*amount_cents/);
-  assert.match(paymentRoute, /const idempotencyKey = `\$\{purpose\}-\$\{String\(source\.id\)\}`/);
+  assert.match(paymentRoute, /status, attempt_number, idempotency_key, created_at, updated_at/);
+  assert.match(paymentRoute, /`tlink-\$\{id\}`/);
+  assert.match(paymentRoute, /const idempotencyKey = String\(claimed\.idempotency_key\)/);
   assert.match(paymentPanel, /purpose\?: "deposit" \| "invoice"/);
   assert.match(invoicePanel, /purpose="invoice"/);
 });

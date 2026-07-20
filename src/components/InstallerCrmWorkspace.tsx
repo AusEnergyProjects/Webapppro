@@ -61,7 +61,7 @@ type Job = {
 };
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamMembers?: TeamMember[]; teamAccess?: boolean; error?: string };
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
-type CreateJobResult = { ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string; requestSent?: boolean; deliveryError?: string; invoiceNumber?: string; invoiceSent?: boolean; invoiceDeliveryError?: string; duplicateCandidates?: DuplicateCandidate[]; error?: string };
+type CreateJobResult = { ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string; requestSent?: boolean; deliveryError?: string; invoiceNumber?: string; invoiceSent?: boolean; invoiceDeliveryError?: string; calendarSynced?: number; calendarFailed?: number; duplicateCandidates?: DuplicateCandidate[]; error?: string };
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; contacts?: CustomerContact[]; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
@@ -557,10 +557,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
       }
       await load(); setRefreshNonce((value) => value + 1);
       const deliveryWarnings = [result.deliveryError, result.invoiceDeliveryError].filter(Boolean).join(" ");
+      const calendarFailed = Number(result.calendarFailed || 0);
+      const calendarSynced = Number(result.calendarSynced || 0);
       const deliveryResults = [
-        `${result.workNumber || "Job"} scheduled.`,
+        `${result.workNumber || "Job"} created and scheduled in TLink.`,
         result.requestSent ? "The appointment and photo request email was accepted for delivery." : "",
         result.invoiceNumber && result.invoiceSent ? `${result.invoiceNumber} was accepted for delivery.` : "",
+        calendarSynced ? `${calendarSynced} connected calendar ${calendarSynced === 1 ? "item" : "items"} updated.` : "",
+        calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
       ].filter(Boolean).join(" ");
       setStatus([deliveryResults, deliveryWarnings].filter(Boolean).join(" "));
       form.reset(); setCreating(""); setView("jobs");
@@ -682,7 +686,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget }: { 
     {view === "assets" && <div className="crm-view"><TradeAssetWorkspace user={user} /></div>}
     {view === "integrations" && <div className="crm-view"><TradeIntegrationCentre user={user} /></div>}
     {view === "team" && hasTeamAccess && <div className="crm-view"><TradeTeamCentre user={user} /></div>}
-    {status && <p className="crm-status" role="status">{status}</p>}
+    {status && <p className="crm-status" role="status">{status}{status.includes("Calendar sync needs another try.") && <> <a href="/direct-trade/dashboard?workspace=schedule">Open Schedule and retry calendar sync</a>.</>}</p>}
   </section>;
 }
 

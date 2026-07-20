@@ -14,6 +14,7 @@ import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
 import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 import { quickInvoiceNumber, resolveQuickInvoiceDraft, sendQuickInvoiceDelivery, type QuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
 import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
+import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 
 export const runtime = "edge";
 
@@ -1050,9 +1051,20 @@ export async function POST(request: Request) {
           }
         }
       }
+      let calendarSynced = 0;
+      let calendarFailed = 0;
+      if (guided) {
+        try {
+          const calendarResult = await syncCreatedAppointmentToConnectedCalendars(identity.uid, appointmentId);
+          calendarSynced = calendarResult.synced;
+          calendarFailed = calendarResult.failed;
+        } catch {
+          calendarFailed = 1;
+        }
+      }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
         appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,
-        invoiceSent, invoiceDeliveryError }, 201);
+        invoiceSent, invoiceDeliveryError, calendarSynced, calendarFailed }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);

@@ -82,6 +82,20 @@ test("OAuth credentials are encrypted and state is one-time, hashed and short-li
   assert.doesNotMatch(`${cryptoLayer}\n${providerLayer}\n${integrations}\n${callback}`, /sk_live_|sq0csp-|client_secret\s*:\s*["'][^"']{8}/);
 });
 
+test("OAuth callback failures emit only bounded operational diagnostics", () => {
+  assert.match(callback, /callbackFailureDetails\(provider, error\)/);
+  assert.match(callback, /stage: error\.stage/);
+  assert.match(callback, /failure: error\.message/);
+  assert.match(callback, /providerCode: error\.providerCode/);
+  assert.match(callback, /responseStatus: error\.responseStatus/);
+  assert.match(callback, /TOKEN_EXCHANGE_REJECTED/);
+  assert.match(callback, /ACCOUNT_LOOKUP_FAILED/);
+  assert.match(callback, /AUTHORIZATION_REJECTED/);
+  assert.match(callback, /\[result\.error, result\.error_code, result\.code, nested\.code, nested\.category\]/);
+  assert.doesNotMatch(callback, /error_description|error_uri|nested\.detail/);
+  assert.doesNotMatch(callback, /console\.error\([^;]*(?:url\.searchParams|request\.url|\btoken\b|\bpayload\b|\bdecoded\b)/i);
+});
+
 test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints", () => {
   assert.match(providerLayer, /login\.xero\.com\/identity\/connect\/authorize/);
   assert.match(providerLayer, /identity\.xero\.com\/connect\/token/);
