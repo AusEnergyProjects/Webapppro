@@ -4,6 +4,18 @@ Status: active rolling handover
 Prepared: 21 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published saved job and customer index views. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
+## Current milestone contract: owner database console
+
+- User outcome: the authenticated business owner can inspect the live Sites database and deliberately add or delete one application row without Cloudflare dashboard access or AI assistance.
+- Owning workflow: the existing TLink admin portal, Firebase-backed owner authorization, the Sites `DB` binding, admin audit log, feature-local styles and focused regression tests.
+- In scope: list application tables from the live database; inspect schema, row count and bounded pages; add one row through typed column inputs; delete one row by its complete primary key; require exact typed confirmation for every mutation; record each successful mutation in the existing admin audit log; keep migration, search-index, access-control, audit and immutable-ledger tables read-only.
+- Out of scope: raw SQL, bulk imports or deletes, schema changes, migration execution, arbitrary joins, database export or restore, cross-environment switching, bypassing foreign keys, editing existing rows, exposing the binding outside the authenticated application, or replacing Sites as the database owner.
+- Acceptance: both navigation and the API are owner only; identifiers come only from the live table catalogue; reads are bounded; values are validated from SQLite column metadata; BLOB input is unavailable; inserts and deletes are atomic with their audit record; tables without a complete primary key cannot be deleted through the console; protected tables explain why they are read-only; desktop and phone layouts retain keyboard access and avoid document-level overflow.
+- Validation: focused database-console and admin-operations tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean replay of every production migration; production build; signed-in live owner inspection without changing production rows; canonical health and worker-error checks.
+- Stop condition: raw SQL, multi-row mutation, table editing policy changes, export or restore, a new authentication boundary, production data mutation during QA or schema administration requires a separate explicitly approved milestone.
+
+Implementation status: in progress.
+
 ## Completed milestone contract: saved job and customer index views
 
 - User outcome: each signed-in trade user can keep several named job or customer searches, restore one in a single click, and decide which useful columns appear and in what order without rebuilding the same office view every day.

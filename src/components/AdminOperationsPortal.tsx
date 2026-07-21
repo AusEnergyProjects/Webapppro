@@ -32,6 +32,7 @@ import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
 import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
 import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
 import { AdminJobDirectory } from "@/components/AdminJobDirectory";
+import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -155,7 +156,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "database" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -786,12 +787,20 @@ export function AdminOperationsPortal() {
             <span>15</span>Field pilot
           </button>
           {session.role === "owner" && (
-            <button
-              className={tab === "access" ? "active" : ""}
-              onClick={() => setTab("access")}
-            >
-              <span>16</span>Access & audit
-            </button>
+            <>
+              <button
+                className={tab === "database" ? "active" : ""}
+                onClick={() => setTab("database")}
+              >
+                <span>16</span>Database
+              </button>
+              <button
+                className={tab === "access" ? "active" : ""}
+                onClick={() => setTab("access")}
+              >
+                <span>17</span>Access & audit
+              </button>
+            </>
           )}
           <aside>
             <strong>Privacy boundary</strong>
@@ -1093,6 +1102,8 @@ export function AdminOperationsPortal() {
               </section>
             </>
           )}
+
+          {tab === "database" && session.role === "owner" && <AdminDatabaseWorkspace api={api} setStatus={setStatus} />}
 
           {tab === "access" && session.role === "owner" && (
             <>

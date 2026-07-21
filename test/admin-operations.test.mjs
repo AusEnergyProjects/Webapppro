@@ -23,6 +23,7 @@ const recoveryRoute = read("../src/app/api/admin/recovery/route.ts");
 const firebaseServer = read("../src/lib/firebase-server.ts");
 const productRoute = read("../src/app/api/admin/products/route.ts");
 const referralsRoute = read("../src/app/api/admin/referrals/route.ts");
+const databaseRoute = read("../src/app/api/admin/database/route.ts");
 const partnerOpportunities = read(
   "../src/app/api/trade-opportunities/route.ts",
 );
@@ -31,6 +32,7 @@ const opportunityWorkspace = read("../src/components/AdminOpportunityWorkspace.t
 const catalogueWorkspace = read("../src/components/AdminCatalogueWorkspace.tsx");
 const accountWorkspace = read("../src/components/AdminAccountWorkspace.tsx");
 const enquiryWorkspace = read("../src/components/AdminProductEnquiryWorkspace.tsx");
+const databaseWorkspace = read("../src/components/AdminDatabaseWorkspace.tsx");
 const sharedWorkspace = read("../src/components/admin-workspace.ts");
 const portalPage = read("../src/app/operations/control-centre/page.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
@@ -51,6 +53,7 @@ test("operations portal is unlisted and every administrator API has server-side 
     ecosystemHealthRoute,
     productRoute,
     referralsRoute,
+    databaseRoute,
   ]) {
     assert.match(route, /sameOrigin\(request\)/);
     assert.match(route, /requireAdminIdentity\(request/);
@@ -82,6 +85,7 @@ test("administration is least privilege and protects the final owner", () => {
   assert.match(adminsRoute, /At least one active owner account is required/);
   assert.match(adminsRoute, /cannot suspend or demote your own owner account/);
   assert.match(adminsRoute, /pending:\$\{id\}/);
+  assert.match(databaseRoute, /requireAdminIdentity\(request, \["owner"\]\)/);
 });
 
 test("owner identity recovery is explicit, recent, password based and audited", () => {
@@ -188,6 +192,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(portal, /Referral rewards and eligibility/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
+  assert.match(portal, /<span>16<\/span>Database/);
+  assert.match(databaseWorkspace, /Live database console/);
   assert.match(portal, /sendPasswordResetEmail/);
   assert.match(portal, /Forgot password\?/);
   assert.match(portal, /href="#operations-inbox"/);

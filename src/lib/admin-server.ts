@@ -71,7 +71,8 @@ export async function requireAdminIdentity(request: Request, allowedRoles: reado
   };
 }
 
-export async function writeAdminAudit(
+export function adminAuditStatement(
+  db: D1Database,
   admin: Pick<AdminIdentity, "uid">,
   action: string,
   entityType: string,
@@ -79,7 +80,7 @@ export async function writeAdminAudit(
   summary: string,
   metadata: Record<string, unknown> = {},
 ) {
-  await getD1().prepare(`
+  return db.prepare(`
     INSERT INTO admin_audit_log (id, admin_uid, action, entity_type, entity_id, summary, metadata, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
@@ -91,7 +92,18 @@ export async function writeAdminAudit(
     summary.slice(0, 500),
     JSON.stringify(metadata).slice(0, 4000),
     new Date().toISOString(),
-  ).run();
+  );
+}
+
+export async function writeAdminAudit(
+  admin: Pick<AdminIdentity, "uid">,
+  action: string,
+  entityType: string,
+  entityId: string,
+  summary: string,
+  metadata: Record<string, unknown> = {},
+) {
+  await adminAuditStatement(getD1(), admin, action, entityType, entityId, summary, metadata).run();
 }
 
 export function cleanAdminText(value: unknown, maximum: number) {
