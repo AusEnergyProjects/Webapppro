@@ -2,9 +2,9 @@
 
 Status: active rolling handover
 Prepared: 21 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published saved job and customer index views. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published owner database console. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
-## Current milestone contract: owner database console
+## Completed milestone contract: owner database console
 
 - User outcome: the authenticated business owner can inspect the live Sites database and deliberately add or delete one application row without Cloudflare dashboard access or AI assistance.
 - Owning workflow: the existing TLink admin portal, Firebase-backed owner authorization, the Sites `DB` binding, admin audit log, feature-local styles and focused regression tests.
@@ -14,7 +14,9 @@ Implementation baseline: the current `codex/sites-custom-domain-migration` workt
 - Validation: focused database-console and admin-operations tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean replay of every production migration; production build; signed-in live owner inspection without changing production rows; canonical health and worker-error checks.
 - Stop condition: raw SQL, multi-row mutation, table editing policy changes, export or restore, a new authentication boundary, production data mutation during QA or schema administration requires a separate explicitly approved milestone.
 
-Implementation status: in progress.
+Implementation result: the Operations control centre now has an owner-only Database workspace backed by the live Sites `DB` binding. It browses 145 ordinary application tables with live SQLite schema, exact row counts and bounded 25, 50 or 100 row pages while excluding SQLite, Sites, migration, virtual and shadow internals. Protected tokens, hashes, credentials and object keys are redacted; BLOB values expose size only; and long values are clipped at bounded cell and row limits. Mutation is default-deny: only `workspace_list_views`, `trade_team_working_hours` and `trade_team_unavailability` can add or delete one row. IDs and standard timestamps are server generated, table-specific validation and reference checks remain authoritative, every mutation requires owner authentication from the previous 15 minutes plus exact typed confirmation, and the row change and privacy-safe audit entry execute atomically. Raw SQL, updates, DDL and bulk changes are not exposed. Focused regression coverage includes the executable insert and delete statement paths, identifier validation, redaction, bounds, generated-field protection, domain checks, atomic auditing and owner-only route and navigation behavior. Complete validation passed with 25 focused tests, TypeScript, ESLint, 33 integration tests, 697 passing full-suite tests with two intentional skips, clean replay of all 79 production migrations and a production build.
+
+Release result: Sites version 199 from implementation commit `4a5cd19dda6f86896cfc751f5a42aa07f9b4eff5`, deployment `appgdep_6a5f78c0b3cc81919214c0deb5a3a8f3`. Signed-in production QA confirmed the owner-only Database navigation, all 145 application tables, real bounded row browsing, two live integration rows with four protected credential cells redacted, and the `workspace_list_views` add form with its final action disabled until exact confirmation. All three approved writable tables were empty, so deletion remained covered by executable tests rather than creating a production row for QA. Desktop and 390 px inspection found no document-level overflow. No production row was created, deleted or otherwise changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty and production environment revision 18 was retained.
 
 ## Completed milestone contract: saved job and customer index views
 
@@ -267,8 +269,8 @@ The same batch moves next action, description and tags into one Notes owner; rep
 
 ## Next five logical steps
 
-1. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
-2. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
-3. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
-4. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
-5. **Office action centre:** turn customer questions, quote decisions, photo reviews, failed sends and field completions into one filterable, assignable queue with direct record actions.
+1. **Recoverable owner data export:** provide a bounded, encrypted owner snapshot download and a documented restore verification drill before considering any wider database write registry.
+2. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
+3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
+4. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
+5. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
