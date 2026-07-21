@@ -1,18 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TouchEvent as ReactTouchEvent } from "react";
 import type { User } from "firebase/auth";
 import {
   APPOINTMENT_MAX_DURATION_MINUTES,
   APPOINTMENT_MIN_DURATION_MINUTES,
+  adjacentScheduleWeek,
   appointmentDurationMinutes,
   appointmentEndsAt,
   browserLocalDateTime,
   durationLabel,
+  mergeDraggedScheduleAppointment,
   moveAppointmentToDate,
   nextAppointmentSlot,
+  scheduleDragEdgeDirection,
   scheduleAppointmentLanes,
   scheduleDisplayWindow,
+  scheduleRangeContainsWeek,
+  scheduleWeekDays,
+  scheduleWeekSwipeDirection,
 } from "@/lib/trade-schedule";
 import {
   clearIntegrationReturnFromAddress,
@@ -43,12 +50,10 @@ const shortDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const APPOINTMENT_PICKER_START_MINUTE = 6 * 60;
 const APPOINTMENT_PICKER_END_MINUTE = 22 * 60;
 const GRID_QUARTER_HEIGHT = 16;
-const SCHEDULE_RANGE_WEEKS = 8;
-const SCHEDULE_RANGE_DAYS = SCHEDULE_RANGE_WEEKS * 7;
-const SCHEDULE_LEADING_WEEKS = 2;
-const SCHEDULE_DAY_WIDTH = 145;
-const SCHEDULE_TIME_RAIL_WIDTH = 68;
+const SCHEDULE_BUFFER_WEEKS = 3;
+const SCHEDULE_BUFFER_LEADING_WEEKS = 1;
 const SCHEDULE_EDGE_SCROLL_PX = 30;
+const SCHEDULE_EDGE_HOVER_MS = 600;
 const memberColours = ["green", "teal", "blue", "amber", "purple", "coral"];
 const timeChoices = Array.from({ length: (APPOINTMENT_PICKER_END_MINUTE - APPOINTMENT_PICKER_START_MINUTE) / 15 }, (_, index) => {
   const minutes = APPOINTMENT_PICKER_START_MINUTE + index * 15;
@@ -107,10 +112,10 @@ function DurationControl({ id, value, onChange }: { id: string; value: number; o
 export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, initialWeekStart }: { user: User; onOpenJob?: (workOrderId: string) => void; initialWeekStart?: string }) {
   const [initialTarget] = useState(() => initialScheduleWeekStart(initialWeekStart));
   const [initialFocusDate] = useState(() => initialScheduleFocusDate(initialWeekStart));
-  const [rangeStart, setRangeStart] = useState(() => addDays(initialTarget, -SCHEDULE_LEADING_WEEKS * 7));
+  const [rangeStart, setRangeStart] = useState(() => addDays(initialTarget, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
   const [activeWeekStart, setActiveWeekStart] = useState(initialTarget);
   const [data, setData] = useState<ScheduleResult>({});
-  const [scrollRequestVersion, setScrollRequestVersion] = useState(0);
+  const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const [calendars, setCalendars] = useState<CalendarConnection[]>([]);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
   const [memberFilter, setMemberFilter] = useState(""); const [jobFilter, setJobFilter] = useState(""); const [serviceFilter, setServiceFilter] = useState(""); const [siteFilter, setSiteFilter] = useState(""); const [statusFilter, setStatusFilter] = useState(""); const [conflictOnly, setConflictOnly] = useState(false);
@@ -118,6 +123,7 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   const [edits, setEdits] = useState<Record<string, Edit>>({}); const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState(""); const [dropTarget, setDropTarget] = useState(""); const [dropMinute, setDropMinute] = useState(7 * 60);
+  const [dragEdgeDirection, setDragEdgeDirection] = useState<-1 | 0 | 1>(0);
   const [browserNow, setBrowserNow] = useState(() => browserLocalDateTime());
   const minimumStart = useMemo(() => nextAppointmentSlot(new Date(`${browserNow}:00`), 0), [browserNow]);
   const todayDate = browserNow.slice(0, 10);
@@ -125,9 +131,15 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   const timetableScrollRef = useRef<HTMLDivElement>(null);
   const appointmentDialogRef = useRef<HTMLElement>(null);
   const selectedTriggerRef = useRef<HTMLElement | null>(null);
-  const pendingScrollDateRef = useRef(initialFocusDate);
-  const pendingScrollAlignmentRef = useRef<"start" | "center">(initialFocusDate === todayDate ? "center" : "start");
-  const rollingTimerRef = useRef<number | null>(null);
+  const pendingFocusDateRef = useRef(initialFocusDate);
+  const dragEdgeTimerRef = useRef<number | null>(null);
+  const dragEdgeLockRef = useRef<-1 | 0 | 1>(0);
+  const draggedAppointmentRef = useRef<Appointment | null>(null);
+  const dragDropCommittedRef = useRef(false);
+  const pendingDragScrollPositionRef = useRef<{ minute: number; left: number } | null>(null);
+  const pendingWeekStartRef = useRef("");
+  const loadedRangeStartRef = useRef("");
+  const weekSwipeStartRef = useRef<{ x: number; y: number; startedOnAppointment: boolean; atStartBoundary: boolean; atEndBoundary: boolean } | null>(null);
   const suppressCardClickRef = useRef(false);
   const lastInitialWeekStartRef = useRef(initialWeekStart);
   const displayRangeStart = data.rangeStart || rangeStart;
@@ -136,12 +148,29 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
     setLoading(true);
     try {
       const token = await user.getIdToken();
-      const scheduleResponse = await fetch(`/api/trade-schedule?rangeStart=${rangeStart}&rangeWeeks=${SCHEDULE_RANGE_WEEKS}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
+      const scheduleResponse = await fetch(`/api/trade-schedule?rangeStart=${rangeStart}&rangeWeeks=${SCHEDULE_BUFFER_WEEKS}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
       const result = await scheduleResponse.json().catch(() => ({})) as ScheduleResult;
       if (signal?.aborted) return;
       if (!scheduleResponse.ok || !result.ok) throw new Error(result.error || "The schedule could not be loaded.");
+      const loadedRangeStart = result.rangeStart || rangeStart;
+      loadedRangeStartRef.current = loadedRangeStart;
       setData(result); setHoursMember((current) => current || result.members?.[0]?.id || ""); setEdits({}); setDecisionNotes({});
-    } catch (error) { if (!signal?.aborted) setStatus(error instanceof Error ? error.message : "The schedule could not be loaded."); }
+      const pendingWeekStart = pendingWeekStartRef.current;
+      if (pendingWeekStart && scheduleRangeContainsWeek(loadedRangeStart, result.rangeWeeks || SCHEDULE_BUFFER_WEEKS, pendingWeekStart)) {
+        pendingWeekStartRef.current = "";
+        setActiveWeekStart(pendingWeekStart);
+      }
+    } catch (error) {
+      if (!signal?.aborted) {
+        const failedPendingNavigation = Boolean(pendingWeekStartRef.current);
+        pendingWeekStartRef.current = "";
+        if (failedPendingNavigation) {
+          pendingFocusDateRef.current = "";
+          if (loadedRangeStartRef.current && loadedRangeStartRef.current !== rangeStart) setRangeStart(loadedRangeStartRef.current);
+        }
+        setStatus(error instanceof Error ? error.message : "The schedule could not be loaded.");
+      }
+    }
     finally { if (!signal?.aborted) setLoading(false); }
   }, [rangeStart, user]);
 
@@ -150,6 +179,9 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
     const frame = window.requestAnimationFrame(() => void load(controller.signal));
     return () => { controller.abort(); window.cancelAnimationFrame(frame); };
   }, [load]);
+  useEffect(() => {
+    if (data.rangeStart) loadedRangeStartRef.current = data.rangeStart;
+  }, [data.rangeStart]);
   useEffect(() => {
     const timer = window.setInterval(() => setBrowserNow(browserLocalDateTime()), 60_000);
     return () => window.clearInterval(timer);
@@ -207,11 +239,16 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   }, [hoursMember, data.workingHours]);
   useEffect(() => {
     if (!initialWeekStart || lastInitialWeekStartRef.current === initialWeekStart) return;
-    lastInitialWeekStartRef.current = initialWeekStart;
     const target = initialScheduleWeekStart(initialWeekStart);
-    pendingScrollDateRef.current = initialWeekStart; pendingScrollAlignmentRef.current = "center"; setScrollRequestVersion((current) => current + 1); setActiveWeekStart(target);
-    setRangeStart(addDays(target, -SCHEDULE_LEADING_WEEKS * 7));
-  }, [initialWeekStart]);
+    const frame = window.requestAnimationFrame(() => {
+      lastInitialWeekStartRef.current = initialWeekStart;
+      pendingFocusDateRef.current = initialWeekStart; setFocusRequestVersion((current) => current + 1);
+      if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, target)) setActiveWeekStart(target);
+      else pendingWeekStartRef.current = target;
+      setRangeStart(addDays(target, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayRangeStart, initialWeekStart]);
   useEffect(() => {
     if (!selectedAppointmentId) return;
     const previousOverflow = document.body.style.overflow;
@@ -232,23 +269,25 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
       window.requestAnimationFrame(() => selectedTriggerRef.current?.focus());
     };
   }, [selectedAppointmentId]);
-  useEffect(() => () => { if (rollingTimerRef.current !== null) window.clearTimeout(rollingTimerRef.current); }, []);
-
-  async function update(body: Record<string, unknown>, key: string, success: string) {
+  useEffect(() => () => { if (dragEdgeTimerRef.current !== null) window.clearTimeout(dragEdgeTimerRef.current); }, []);
+  async function update(body: Record<string, unknown>, key: string, success: string, responseWeekStart = activeWeekStart) {
     setBusy(key); setStatus("");
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/trade-schedule", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...body, rangeStart: displayRangeStart, rangeWeeks: SCHEDULE_RANGE_WEEKS }) });
+      const responseRangeStart = addDays(responseWeekStart, -SCHEDULE_BUFFER_LEADING_WEEKS * 7);
+      const response = await fetch("/api/trade-schedule", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...body, rangeStart: responseRangeStart, rangeWeeks: SCHEDULE_BUFFER_WEEKS }) });
       const result = await response.json().catch(() => ({})) as ScheduleResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "The schedule change could not be saved.");
-      setData(result); setEdits({}); setDecisionNotes({});
+      const loadedRangeStart = result.rangeStart || responseRangeStart;
+      setData(result); setRangeStart(loadedRangeStart); setActiveWeekStart(responseWeekStart); setEdits({}); setDecisionNotes({});
       if (body.action === "schedule_appointment") closeAppointment();
       const changesAppointment = ["schedule_appointment", "schedule_job"].includes(String(body.action))
         || (body.action === "review_reschedule_request" && body.decision === "accepted");
       if (changesAppointment && result.calendarSync?.failed) setStatus(`${success} TLink is saved. A connected calendar item needs another sync.`);
       else if (changesAppointment && result.calendarSync?.synced) setStatus(`${success} Connected calendars are up to date.`);
       else setStatus(success);
-    } catch (error) { setStatus(error instanceof Error ? error.message : "The schedule change could not be saved."); }
+      return true;
+    } catch (error) { setStatus(error instanceof Error ? error.message : "The schedule change could not be saved."); return false; }
     finally { setBusy(""); }
   }
 
@@ -285,7 +324,8 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   const visibleAppointments = useMemo(() => appointments.filter((item) => (!memberFilter || item.assigneeMemberId === memberFilter) && (!jobQuery || `${item.workNumber} ${item.title} ${item.customerDisplayName} ${item.suburbLabel}`.toLowerCase().includes(jobQuery)) && (!serviceFilter || item.serviceCategory === serviceFilter) && (!siteFilter || item.siteLabel === siteFilter) && (!conflictOnly || item.conflicts) && !["awaiting", "unassigned"].includes(statusFilter) && (statusFilter !== "conflict" || item.conflicts)), [appointments, conflictOnly, jobQuery, memberFilter, serviceFilter, siteFilter, statusFilter]);
   const visibleJobs = useMemo(() => (data.unassignedJobs || []).filter((item) => (!memberFilter || item.assigneeMemberId === memberFilter) && (!jobQuery || `${item.workNumber} ${item.title} ${item.customerDisplayName} ${item.suburbLabel}`.toLowerCase().includes(jobQuery)) && (!serviceFilter || item.serviceCategory === serviceFilter) && (!siteFilter || item.siteLabel === siteFilter) && !["scheduled", "conflict"].includes(statusFilter) && (statusFilter !== "unassigned" || !item.assigneeMemberId)), [data.unassignedJobs, jobQuery, memberFilter, serviceFilter, siteFilter, statusFilter]);
   const unassignedCount = visibleJobs.filter((item) => !item.assigneeMemberId).length;
-  const days = useMemo(() => Array.from({ length: SCHEDULE_RANGE_DAYS }, (_, index) => addDays(displayRangeStart, index)), [displayRangeStart]);
+  const bufferedWeekStarts = useMemo(() => Array.from({ length: SCHEDULE_BUFFER_WEEKS }, (_, index) => addDays(displayRangeStart, index * 7)), [displayRangeStart]);
+  const activeWeekIndex = Math.max(0, Math.min(SCHEDULE_BUFFER_WEEKS - 1, Math.round(calendarDayDistance(displayRangeStart, activeWeekStart) / 7)));
   const appointmentsByDate = useMemo(() => {
     const grouped = new Map<string, Appointment[]>();
     for (const appointment of visibleAppointments) {
@@ -294,17 +334,31 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
     }
     return grouped;
   }, [visibleAppointments]);
-  const todayInRange = todayDate >= displayRangeStart && todayDate < addDays(displayRangeStart, SCHEDULE_RANGE_DAYS);
+  const todayInRange = todayDate >= activeWeekStart && todayDate < addDays(activeWeekStart, 7);
   const todayAppointments = useMemo(() => appointments.filter((item) => item.startsAt.slice(0, 10) === todayDate)
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.customerDisplayName.localeCompare(b.customerDisplayName)), [appointments, todayDate]);
-  const gridWindow = useMemo(() => scheduleDisplayWindow(visibleAppointments), [visibleAppointments]);
+  const activeWeekAppointments = useMemo(() => visibleAppointments.filter((item) => item.startsAt.slice(0, 10) >= activeWeekStart && item.startsAt.slice(0, 10) < addDays(activeWeekStart, 7)), [activeWeekStart, visibleAppointments]);
+  const gridWindow = useMemo(() => scheduleDisplayWindow(activeWeekAppointments), [activeWeekAppointments]);
   const gridStartMinute = gridWindow.startMinute;
   const gridEndMinute = gridWindow.endMinute;
   const gridHeight = ((gridEndMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT;
   const timeLabels = useMemo(() => Array.from({ length: (gridEndMinute - gridStartMinute) / 60 + 1 }, (_, index) => gridStartMinute + index * 60), [gridEndMinute, gridStartMinute]);
-  const activeWeekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(activeWeekStart, index)), [activeWeekStart]);
+  const activeWeekDays = useMemo(() => scheduleWeekDays(activeWeekStart), [activeWeekStart]);
   const ownerMemberId = members.find((member) => member.isOwner)?.id || members[0]?.id || "";
   const selectedAppointment = appointments.find((item) => item.id === selectedAppointmentId);
+
+  useEffect(() => {
+    const position = pendingDragScrollPositionRef.current;
+    if (!position) return;
+    const frame = window.requestAnimationFrame(() => {
+      const container = timetableScrollRef.current;
+      if (!container) return;
+      container.scrollTop = Math.max(0, ((position.minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT);
+      container.scrollLeft = position.left;
+      pendingDragScrollPositionRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeWeekStart, gridStartMinute]);
 
   const workingHoursByMemberAndDay = useMemo(() => new Map((data.workingHours || []).map((row) => [`${row.teamMemberId}:${row.weekday}`, row])), [data.workingHours]);
   function hoursFor(memberId: string, weekday: number) { return workingHoursByMemberAndDay.get(`${memberId}:${weekday}`) || { ...defaultHours(weekday), teamMemberId: memberId }; }
@@ -316,75 +370,100 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   });
   function colourFor(memberId: string) { const index = Math.max(0, members.findIndex((member) => member.id === memberId)); return memberColours[index % memberColours.length]; }
 
-  const scrollToDate = useCallback((targetDate: string, behavior: ScrollBehavior = "smooth", alignment: "start" | "center" = "start", focusMinute?: number) => {
+  const focusScheduleTime = useCallback((targetDate: string, behavior: ScrollBehavior = "smooth") => {
     const container = timetableScrollRef.current;
     if (!container) return;
-    const dayOffset = calendarDayDistance(displayRangeStart, targetDate);
-    const dateLeft = SCHEDULE_TIME_RAIL_WIDTH + dayOffset * SCHEDULE_DAY_WIDTH;
-    const left = alignment === "center" ? dateLeft - Math.max(0, (container.clientWidth - SCHEDULE_DAY_WIDTH) / 2) : dateLeft - SCHEDULE_TIME_RAIL_WIDTH;
-    const top = focusMinute === undefined ? container.scrollTop : Math.max(0, ((Math.max(gridStartMinute, focusMinute) - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT - 42);
-    container.scrollTo({ left: Math.max(0, left), top, behavior });
-  }, [displayRangeStart, gridStartMinute]);
+    const firstAppointmentMinute = appointments.filter((item) => item.startsAt.slice(0, 10) === targetDate)
+      .reduce((earliest, item) => Math.min(earliest, minuteValue(item.startsAt.slice(11, 16))), Number.POSITIVE_INFINITY);
+    const focusMinute = Number.isFinite(firstAppointmentMinute) ? firstAppointmentMinute - 30 : targetDate === todayDate ? nowMinute - 60 : 9 * 60;
+    const top = Math.max(0, ((Math.max(gridStartMinute, focusMinute) - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT - 42);
+    container.scrollTo({ top, behavior });
+  }, [appointments, gridStartMinute, nowMinute, todayDate]);
 
   useEffect(() => {
-    const target = pendingScrollDateRef.current;
+    const target = pendingFocusDateRef.current;
     if (!data.rangeStart || data.rangeStart !== rangeStart || !target) return;
-    const alignment = pendingScrollAlignmentRef.current;
-    pendingScrollDateRef.current = "";
-    const frame = window.requestAnimationFrame(() => {
-      const firstAppointmentMinute = appointments.filter((item) => item.startsAt.slice(0, 10) === target)
-        .reduce((earliest, item) => Math.min(earliest, minuteValue(item.startsAt.slice(11, 16))), Number.POSITIVE_INFINITY);
-      const focusMinute = Number.isFinite(firstAppointmentMinute) ? firstAppointmentMinute - 30 : target === todayDate ? nowMinute - 60 : 9 * 60;
-      scrollToDate(target, "auto", alignment, focusMinute);
-    });
+    pendingFocusDateRef.current = "";
+    const frame = window.requestAnimationFrame(() => focusScheduleTime(target, "auto"));
     return () => window.cancelAnimationFrame(frame);
-  }, [appointments, data.rangeStart, nowMinute, rangeStart, scrollRequestVersion, scrollToDate, todayDate]);
+  }, [data.rangeStart, focusRequestVersion, focusScheduleTime, rangeStart]);
 
-  function goToWeek(value: string) {
+  function goToWeek(value: string, preserveBuffer = false) {
     const targetWeek = monday(new Date(`${value}T12:00:00`));
-    setActiveWeekStart(targetWeek);
-    const displayRangeEnd = addDays(displayRangeStart, SCHEDULE_RANGE_DAYS);
-    if (targetWeek < displayRangeStart || addDays(targetWeek, 7) > displayRangeEnd) {
-      pendingScrollDateRef.current = targetWeek; pendingScrollAlignmentRef.current = "start";
-      setRangeStart(addDays(targetWeek, -SCHEDULE_LEADING_WEEKS * 7));
-      return;
+    if (preserveBuffer && !scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, targetWeek)) return false;
+    if (preserveBuffer) {
+      const container = timetableScrollRef.current;
+      pendingDragScrollPositionRef.current = {
+        minute: gridStartMinute + ((container?.scrollTop || 0) / GRID_QUARTER_HEIGHT) * 15,
+        left: container?.scrollLeft || 0,
+      };
+      setActiveWeekStart(targetWeek);
+      return true;
     }
-    window.requestAnimationFrame(() => scrollToDate(targetWeek));
+    pendingFocusDateRef.current = targetWeek;
+    setFocusRequestVersion((current) => current + 1);
+    if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, targetWeek)) {
+      pendingWeekStartRef.current = "";
+      setActiveWeekStart(targetWeek);
+    } else pendingWeekStartRef.current = targetWeek;
+    setRangeStart(addDays(targetWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+    return true;
   }
 
   function goToToday() {
     const todayWeek = monday(new Date(`${todayDate}T12:00:00`));
-    setActiveWeekStart(todayWeek);
-    const displayRangeEnd = addDays(displayRangeStart, SCHEDULE_RANGE_DAYS);
-    const firstAppointmentMinute = todayAppointments.length ? minuteValue(todayAppointments[0].startsAt.slice(11, 16)) - 30 : nowMinute - 60;
-    if (todayDate < displayRangeStart || todayDate >= displayRangeEnd) {
-      pendingScrollDateRef.current = todayDate; pendingScrollAlignmentRef.current = "center";
-      setRangeStart(addDays(todayWeek, -SCHEDULE_LEADING_WEEKS * 7));
-      return;
-    }
-    window.requestAnimationFrame(() => scrollToDate(todayDate, "smooth", "center", firstAppointmentMinute));
+    pendingFocusDateRef.current = todayDate;
+    setFocusRequestVersion((current) => current + 1);
+    if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, todayWeek)) {
+      pendingWeekStartRef.current = "";
+      setActiveWeekStart(todayWeek);
+    } else pendingWeekStartRef.current = todayWeek;
+    setRangeStart(addDays(todayWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
   }
 
-  function rollScheduleWindow(targetWeek: string) {
-    const nextRangeStart = addDays(targetWeek, -SCHEDULE_LEADING_WEEKS * 7);
-    if (nextRangeStart === rangeStart) return;
-    pendingScrollDateRef.current = targetWeek; pendingScrollAlignmentRef.current = "start";
-    setRangeStart(nextRangeStart);
-  }
-
-  function handleScheduleScroll() {
+  function startWeekSwipe(event: ReactTouchEvent<HTMLElement>) {
+    const touch = event.touches[0];
+    if (!touch) return;
     const container = timetableScrollRef.current;
-    if (!container) return;
-    const focusX = container.scrollLeft + Math.max(SCHEDULE_TIME_RAIL_WIDTH, container.clientWidth / 2);
-    const dayOffset = Math.max(0, Math.min(SCHEDULE_RANGE_DAYS - 1, Math.floor((focusX - SCHEDULE_TIME_RAIL_WIDTH) / SCHEDULE_DAY_WIDTH)));
-    const nextActiveWeek = monday(new Date(`${addDays(displayRangeStart, dayOffset)}T12:00:00`));
-    if (nextActiveWeek !== activeWeekStart) setActiveWeekStart(nextActiveWeek);
-    if (draggingId || loading || displayRangeStart !== rangeStart) return;
-    const nearStart = container.scrollLeft < SCHEDULE_DAY_WIDTH * 2;
-    const nearEnd = container.scrollLeft + container.clientWidth > container.scrollWidth - SCHEDULE_DAY_WIDTH * 2;
-    if (!nearStart && !nearEnd) return;
-    if (rollingTimerRef.current !== null) window.clearTimeout(rollingTimerRef.current);
-    rollingTimerRef.current = window.setTimeout(() => rollScheduleWindow(nextActiveWeek), 180);
+    weekSwipeStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      startedOnAppointment: Boolean((event.target as HTMLElement).closest("[data-schedule-appointment]")),
+      atStartBoundary: !container || container.scrollLeft <= 2,
+      atEndBoundary: !container || container.scrollLeft + container.clientWidth >= container.scrollWidth - 2,
+    };
+  }
+
+  function finishWeekSwipe(event: ReactTouchEvent<HTMLElement>, requireBoundary = false) {
+    const start = weekSwipeStartRef.current; const touch = event.changedTouches[0];
+    weekSwipeStartRef.current = null;
+    if (!start || !touch || loading) return;
+    const direction = scheduleWeekSwipeDirection({ deltaX: touch.clientX - start.x, deltaY: touch.clientY - start.y, startedOnAppointment: start.startedOnAppointment, dragActive: Boolean(draggingId), requireBoundary, atStartBoundary: start.atStartBoundary, atEndBoundary: start.atEndBoundary });
+    if (direction) goToWeek(adjacentScheduleWeek(activeWeekStart, direction));
+  }
+
+  function clearDragEdge(resetLock = false) {
+    if (dragEdgeTimerRef.current !== null) window.clearTimeout(dragEdgeTimerRef.current);
+    dragEdgeTimerRef.current = null;
+    setDragEdgeDirection(0);
+    if (resetLock) dragEdgeLockRef.current = 0;
+  }
+
+  function scheduleDragEdge(clientX: number) {
+    const container = timetableScrollRef.current;
+    if (!container || !draggedAppointmentRef.current) return;
+    const bounds = container.getBoundingClientRect();
+    const direction = scheduleDragEdgeDirection(clientX, bounds.left, bounds.right, true);
+    const atScrollableEdge = direction < 0 ? container.scrollLeft <= 2 : direction > 0 ? container.scrollLeft + container.clientWidth >= container.scrollWidth - 2 : false;
+    if (!direction || !atScrollableEdge) { clearDragEdge(true); return; }
+    if (dragEdgeLockRef.current === direction || dragEdgeTimerRef.current !== null) return;
+    const targetWeek = adjacentScheduleWeek(activeWeekStart, direction);
+    if (!scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, targetWeek)) return;
+    setDragEdgeDirection(direction);
+    dragEdgeTimerRef.current = window.setTimeout(() => {
+      dragEdgeTimerRef.current = null; dragEdgeLockRef.current = direction; setDragEdgeDirection(0); setDropTarget("");
+      goToWeek(targetWeek, true);
+    }, SCHEDULE_EDGE_HOVER_MS);
   }
 
   function autoScrollDuringDrag(clientX: number, clientY: number) {
@@ -394,6 +473,7 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
     const left = clientX < bounds.left + edge ? -SCHEDULE_EDGE_SCROLL_PX : clientX > bounds.right - edge ? SCHEDULE_EDGE_SCROLL_PX : 0;
     const top = clientY < bounds.top + edge ? -SCHEDULE_EDGE_SCROLL_PX : clientY > bounds.bottom - edge ? SCHEDULE_EDGE_SCROLL_PX : 0;
     if (left || top) container.scrollBy({ left, top });
+    scheduleDragEdge(clientX);
   }
 
   function openAppointment(appointmentId: string, trigger: HTMLElement) {
@@ -413,59 +493,75 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
   async function moveAppointment(appointment: Appointment, targetDate: string, targetMinute: number) {
     if (targetDate < minimumStart.slice(0, 10)) { setStatus("Appointments cannot be moved into the past."); return; }
     const edit = edits[appointment.id] || editFromRange(appointment.assigneeMemberId, appointment.startsAt, appointment.endsAt);
+    const sourceWeek = monday(new Date(`${appointment.startsAt.slice(0, 10)}T12:00:00`));
+    const targetWeek = monday(new Date(`${targetDate}T12:00:00`));
     try {
       const targetStart = `${appointment.startsAt.slice(0, 10)}T${minuteLabel(targetMinute)}`;
       const moved = moveAppointmentToDate(targetStart, appointmentEndsAt(targetStart, edit.durationMinutes), targetDate, minimumStart);
-      await update({ action: "schedule_appointment", appointmentId: appointment.id, expectedRevision: appointment.revision,
-        memberId: edit.memberId, startsAt: moved.startsAt, durationMinutes: edit.durationMinutes }, `appointment:${appointment.id}`, `${appointment.workNumber} moved to ${formatTime(moved.startsAt)} on ${targetDate}.`);
-    } catch (error) { setStatus(error instanceof Error && error.message === "PAST_APPOINTMENT" ? "There is no future time left in that day. Choose another day." : "That appointment could not be moved."); }
-    finally { setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); }
+      const saved = await update({ action: "schedule_appointment", appointmentId: appointment.id, expectedRevision: appointment.revision,
+        memberId: edit.memberId, startsAt: moved.startsAt, durationMinutes: edit.durationMinutes }, `appointment:${appointment.id}`, `${appointment.workNumber} moved to ${formatTime(moved.startsAt)} on ${targetDate}.`, targetWeek);
+      if (!saved) {
+        setData((current) => ({ ...current, appointments: mergeDraggedScheduleAppointment(current.appointments || [], appointment) }));
+        setActiveWeekStart(sourceWeek); setRangeStart(addDays(sourceWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+      }
+    } catch (error) {
+      setData((current) => ({ ...current, appointments: mergeDraggedScheduleAppointment(current.appointments || [], appointment) }));
+      setActiveWeekStart(sourceWeek); setRangeStart(addDays(sourceWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+      setStatus(error instanceof Error && error.message === "PAST_APPOINTMENT" ? "There is no future time left in that day. Choose another day." : "That appointment could not be moved.");
+    }
+    finally { clearDragEdge(true); draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); }
   }
 
   if (loading && !data.ok) return <section className="dashboard-panel schedule-workspace"><div className="crm-empty"><strong>Building the team schedule</strong><span>Loading appointments, availability and capacity.</span></div></section>;
   return <section className="dashboard-panel schedule-workspace" aria-busy={loading}>
-    <header className="schedule-heading"><div><span>Dispatch calendar</span><h2>Today first, eight weeks together</h2><p>Drag work across dates and times. Tap an appointment for details or to make a precise change.</p></div><div className="schedule-week-nav"><button type="button" onClick={() => goToWeek(addDays(activeWeekStart, -7))}>Earlier</button><button className="schedule-today-button" type="button" onClick={goToToday}>Today</button><label><span>View week containing</span><input type="date" value={activeWeekStart} onChange={(event) => { if (event.target.value) goToWeek(event.target.value); }} /></label><strong>{activeWeekStart} to {addDays(activeWeekStart, 6)}</strong><button type="button" onClick={() => goToWeek(addDays(activeWeekStart, 7))}>Later</button></div></header>
-    <section className="schedule-today-strip" aria-labelledby="schedule-today-title"><header><div><span>Today</span><strong id="schedule-today-title">{formatDay(todayDate)}</strong></div><b>{todayInRange ? `${todayAppointments.length} ${todayAppointments.length === 1 ? "appointment" : "appointments"}` : "Outside this view"}</b></header><div className="schedule-today-list">{todayInRange ? <>{todayAppointments.map((item) => <button type="button" key={item.id} onClick={(event) => { goToToday(); openAppointment(item.id, event.currentTarget); }}><strong>{formatTime(item.startsAt)} | {item.customerDisplayName}</strong><span>{item.assigneeLabel || "Unassigned"} | {item.suburbLabel}</span></button>)}{!todayAppointments.length && <p>No appointments today. Use the waiting jobs section below to add work.</p>}</> : <button type="button" onClick={goToToday}><strong>{"Load today's work"}</strong><span>The current eight-week view does not include today.</span></button>}</div></section>
+    <header className="schedule-heading"><div><span>Dispatch calendar</span><h2>One clear week at a time</h2><p>See the week, move work quickly and open any appointment for precise details.</p></div><div className="schedule-week-nav"><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, -1))}>Previous week</button><button className="schedule-today-button" type="button" disabled={loading} onClick={goToToday}>Today</button><label><span>Go to week</span><input type="date" value={activeWeekStart} disabled={loading} onChange={(event) => { if (event.target.value) goToWeek(event.target.value); }} /></label><strong className="schedule-week-range" onTouchStart={startWeekSwipe} onTouchEnd={finishWeekSwipe}>{formatDay(activeWeekStart)} to {formatDay(addDays(activeWeekStart, 6))}<small>Swipe to change week</small></strong><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, 1))}>Next week</button></div></header>
+    <section className="schedule-today-strip" aria-labelledby="schedule-today-title"><header><div><span>Today</span><strong id="schedule-today-title">{formatDay(todayDate)}</strong></div><b>{todayInRange ? `${todayAppointments.length} ${todayAppointments.length === 1 ? "appointment" : "appointments"}` : "Outside this week"}</b></header><div className="schedule-today-list">{todayInRange ? <>{todayAppointments.map((item) => <button type="button" key={item.id} onClick={(event) => { goToToday(); openAppointment(item.id, event.currentTarget); }}><strong>{formatTime(item.startsAt)} | {item.customerDisplayName}</strong><span>{item.assigneeLabel || "Unassigned"} | {item.suburbLabel}</span></button>)}{!todayAppointments.length && <p>No appointments today. Use the waiting jobs section below to add work.</p>}</> : <button type="button" onClick={goToToday}><strong>{"Load today's work"}</strong><span>Open the current week and jump straight to today.</span></button>}</div></section>
     <details className="schedule-filter-panel"><summary><span>Schedule filters</span><strong>{memberFilter || jobFilter || serviceFilter || siteFilter || statusFilter || conflictOnly ? "Filters active" : "Everyone and all work"}</strong></summary><div className="schedule-filters"><label><span>Person</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">Everyone</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label><label><span>Job or customer</span><input value={jobFilter} placeholder="Customer, suburb or reference" onChange={(event) => setJobFilter(event.target.value)} /></label><label><span>Service</span><select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="">All services</option>{services.map((service) => <option key={service}>{readable(service)}</option>)}</select></label><label><span>Site</span><select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">All sites</option>{sites.map((site) => <option key={site}>{site}</option>)}</select></label><label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All schedule states</option><option value="scheduled">Scheduled</option><option value="conflict">Conflicts</option><option value="awaiting">Awaiting appointment</option><option value="unassigned">Unassigned</option></select></label><label className="schedule-check"><input type="checkbox" checked={conflictOnly} onChange={(event) => setConflictOnly(event.target.checked)} /><span>Conflicts only</span></label></div></details>
     {(data.rescheduleRequests || []).length > 0 && <details className="schedule-reschedule-queue"><summary><span>Customer requests</span><strong>Review before changing the schedule | {data.rescheduleRequests?.length}</strong></summary><div>{data.rescheduleRequests?.map((request) => {
       const preferred = request.preferredWindows[0]; const baseStart = request.proposedStartsAt || preferred?.startsAt || request.currentStartsAt; const baseEnd = request.proposedEndsAt || preferred?.endsAt || request.currentEndsAt;
       const edit = edits[request.id] || editFromRange(request.proposedAssigneeMemberId || request.currentAssigneeMemberId, baseStart, baseEnd); const startsAt = editStart(edit); const invalidTime = startsAt <= minimumStart;
       return <article key={request.id}><header><div><span>{request.workNumber} | {readable(request.status)}</span><strong>{request.title}</strong><small>Current: {request.currentStartsAt} | {durationLabel(appointmentDurationMinutes(request.currentStartsAt, request.currentEndsAt))}</small></div></header><p><strong>Reason</strong>{request.reason}</p>{request.accessNotes && <p><strong>Access notes</strong>{request.accessNotes}</p>}<div className="schedule-request-decision"><select aria-label={`Assigned staff for request ${request.workNumber}`} value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select><input type="datetime-local" min={minimumStart} step="900" aria-label={`Reviewed start for ${request.workNumber}`} value={startsAt} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, date: event.target.value.slice(0, 10), time: event.target.value.slice(11, 16) } }))} /><DurationControl id={`request-duration-${request.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [request.id]: { ...edit, durationMinutes } }))} /><input maxLength={500} value={decisionNotes[request.id] || ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Optional customer-facing response" /></div><div className="schedule-request-actions"><button type="button" disabled={busy === `reject:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "rejected", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "" }, `reject:${request.id}`, `${request.workNumber} request rejected without changing the schedule.`)}>Reject</button><button type="button" disabled={!edit.memberId || invalidTime || busy === `alternative:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "alternative_proposed", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `alternative:${request.id}`, `${request.workNumber} alternative proposed without changing the schedule.`)}>Propose alternative</button><button className="primary" type="button" disabled={!edit.memberId || invalidTime || busy === `accept:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "accepted", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `accept:${request.id}`, `${request.workNumber} appointment change accepted.`)}>Accept and reschedule</button></div></article>;
     })}</div></details>}
-    <p className="schedule-drag-note">Drag on desktop across any loaded date. Tap or press Enter to view and edit. The calendar rolls as you scroll.</p>
-    <div ref={timetableScrollRef} className="schedule-timetable-scroll" onScroll={handleScheduleScroll} onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
-      <div className="schedule-timetable" style={{ gridTemplateColumns: `${SCHEDULE_TIME_RAIL_WIDTH}px repeat(${days.length}, ${SCHEDULE_DAY_WIDTH}px)`, minWidth: `${SCHEDULE_TIME_RAIL_WIDTH + days.length * SCHEDULE_DAY_WIDTH}px` }}>
+    <p className="schedule-drag-note">Drag within this week. Hold at the left or right edge to open the adjacent week. Tap or press Enter for exact details.</p>
+    <div className="schedule-week-viewport" onTouchStart={startWeekSwipe} onTouchEnd={(event) => finishWeekSwipe(event, true)} onTouchCancel={() => { weekSwipeStartRef.current = null; }} onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
+      {draggingId && <><span className={`schedule-drag-edge previous${dragEdgeDirection === -1 ? " active" : ""}`}>Hold for previous week</span><span className={`schedule-drag-edge next${dragEdgeDirection === 1 ? " active" : ""}`}>Hold for next week</span></>}
+      <div className="schedule-week-pages" style={{ transform: `translateX(-${activeWeekIndex * 100}%)` }}>
+      {bufferedWeekStarts.map((bufferedWeekStart) => {
+        const days = scheduleWeekDays(bufferedWeekStart);
+        const pageIsActive = bufferedWeekStart === activeWeekStart;
+        return <section key={bufferedWeekStart} className="schedule-week-page" aria-hidden={!pageIsActive}>
+        <div ref={pageIsActive ? timetableScrollRef : undefined} className="schedule-timetable-scroll" onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
+        <div className="schedule-timetable">
         <div className="schedule-time-rail" style={{ background: "#fff", left: 0, position: "sticky", zIndex: 20 }}><div className="schedule-time-heading">Time</div><div className="schedule-time-track" style={{ height: `${gridHeight}px` }}>{timeLabels.map((minute) => <span key={minute} style={{ top: `${((minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`2000-01-01T${minuteLabel(minute)}`)}</span>)}</div></div>
         {days.map((date) => {
           const dayIsPast = date < minimumStart.slice(0, 10);
           const dayIsToday = date === todayDate;
           const dayAppointments = appointmentsByDate.get(date) || [];
           const appointmentLanes = scheduleAppointmentLanes(dayAppointments);
-          const startsWeek = new Date(`${date}T00:00:00Z`).getUTCDay() === 1 && date !== displayRangeStart;
-          return <section key={date} aria-label={`${dayIsToday ? "Today, " : ""}${formatDay(date)}`} className={`schedule-day-track${dropTarget === date ? " drop-target" : ""}${dayIsPast ? " past" : ""}${dayIsToday ? " today" : ""}`} style={startsWeek ? { borderLeft: "2px solid #9fc8ba" } : undefined}>
+          return <section key={date} aria-label={`${dayIsToday ? "Today, " : ""}${formatDay(date)}`} className={`schedule-day-track${dropTarget === date ? " drop-target" : ""}${dayIsPast ? " past" : ""}${dayIsToday ? " today" : ""}`}>
             <header aria-current={dayIsToday ? "date" : undefined}><strong>{dayIsToday ? "Today" : shortDays[new Date(`${date}T00:00:00Z`).getUTCDay()]}</strong><span>{date.slice(5)}</span></header>
             <div className="schedule-day-grid" style={{ height: `${gridHeight}px` }}
               onDragOver={(event) => {
-                const appointment = appointmentsById.get(draggingId);
+                const appointment = draggedAppointmentRef.current || appointmentsById.get(draggingId);
                 if (!dayIsPast && appointment) {
                   event.preventDefault(); autoScrollDuringDrag(event.clientX, event.clientY); setDropTarget(date);
                   setDropMinute(minuteFromPointer(event.currentTarget, event.clientY, appointmentDurationMinutes(appointment.startsAt, appointment.endsAt)));
                 }
               }}
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(""); }}
-              onDrop={(event) => { event.preventDefault(); const appointment = appointmentsById.get(draggingId || event.dataTransfer.getData("text/plain")); if (appointment) void moveAppointment(appointment, date, minuteFromPointer(event.currentTarget, event.clientY, appointmentDurationMinutes(appointment.startsAt, appointment.endsAt))); }}>
+              onDrop={(event) => { event.preventDefault(); clearDragEdge(); const appointment = draggedAppointmentRef.current || appointmentsById.get(draggingId || event.dataTransfer.getData("text/plain")); if (appointment) { dragDropCommittedRef.current = true; void moveAppointment(appointment, date, minuteFromPointer(event.currentTarget, event.clientY, appointmentDurationMinutes(appointment.startsAt, appointment.endsAt))); } }}>
               {dayIsToday && nowMinute >= gridStartMinute && nowMinute <= gridEndMinute && <span className="schedule-now-line" style={{ top: `${((nowMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}><i>Now</i></span>}
               {dropTarget === date && <span className="schedule-drop-guide" style={{ top: `${((dropMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`${date}T${minuteLabel(dropMinute)}`)}</span>}
               {dayAppointments.map((item) => {
                 const startMinute = minuteValue(item.startsAt.slice(11, 16)); const duration = appointmentDurationMinutes(item.startsAt, item.endsAt); const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT); const height = Math.max(62, (duration / 15) * GRID_QUARTER_HEIGHT);
                 const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
                 const cardLabel = `${item.customerDisplayName}, ${item.assigneeLabel || "Unassigned"}, ${item.suburbLabel}, ${formatTime(item.startsAt)}`;
-                return <article key={item.id} draggable={!busy} tabIndex={0} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block ${colourFor(item.assigneeMemberId)}${item.conflicts ? " conflict" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}
+                return <article key={item.id} data-schedule-appointment draggable={!busy && !loading} tabIndex={pageIsActive ? 0 : -1} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block ${colourFor(item.assigneeMemberId)}${item.conflicts ? " conflict" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}
                   onClick={(event) => openAppointment(item.id, event.currentTarget)}
                   onDoubleClick={(event) => { event.stopPropagation(); closeAppointment(); onOpenJob(item.workOrderId); }}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAppointment(item.id, event.currentTarget); } }}
-                  onDragStart={(event) => { suppressCardClickRef.current = true; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setDraggingId(item.id); setDropMinute(startMinute); }}
-                  onDragEnd={() => { setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); window.setTimeout(() => { suppressCardClickRef.current = false; }, 0); }}>
+                  onDragStart={(event) => { suppressCardClickRef.current = true; draggedAppointmentRef.current = item; dragDropCommittedRef.current = false; dragEdgeLockRef.current = 0; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setDraggingId(item.id); setDropMinute(startMinute); }}
+                  onDragEnd={() => { const dragged = draggedAppointmentRef.current; clearDragEdge(true); if (dragged && !dragDropCommittedRef.current) { const sourceWeek = monday(new Date(`${dragged.startsAt.slice(0, 10)}T12:00:00`)); setActiveWeekStart(sourceWeek); if (!scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, sourceWeek)) setRangeStart(addDays(sourceWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7)); } draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); window.setTimeout(() => { suppressCardClickRef.current = false; }, 0); }}>
                   <strong>{item.customerDisplayName}</strong><small>{item.assigneeLabel || "Unassigned"}</small><em>{item.suburbLabel}</em><span>{formatTime(item.startsAt)} | {durationLabel(duration)}</span>{item.outsideWorkingHours && <b>Outside hours</b>}{item.conflicts && <b>Conflict</b>}
                 </article>;
               })}
@@ -473,6 +569,10 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
             </div>
           </section>;
         })}
+      </div>
+      </div>
+      </section>;
+      })}
       </div>
     </div>
     {selectedAppointment && (() => {

@@ -10,6 +10,16 @@ export type ScheduleLaneItem = { id: string; startsAt: string; endsAt: string };
 export type ScheduleLane = { lane: number; laneCount: number };
 export type ScheduleConflictItem = ScheduleLaneItem & { assigneeMemberId?: unknown };
 export type ScheduleDisplayWindow = { startMinute: number; endMinute: number };
+export type ScheduleWeekSwipeInput = {
+  deltaX: number;
+  deltaY: number;
+  startedOnAppointment?: boolean;
+  dragActive?: boolean;
+  requireBoundary?: boolean;
+  atStartBoundary?: boolean;
+  atEndBoundary?: boolean;
+  threshold?: number;
+};
 export const APPOINTMENT_MIN_DURATION_MINUTES = 15;
 export const APPOINTMENT_MAX_DURATION_MINUTES = 8 * 60;
 export const APPOINTMENT_DURATION_STEP_MINUTES = 15;
@@ -33,6 +43,50 @@ export function addCalendarDays(date: string, days: number) {
   const parsed = new Date(`${date}T00:00:00Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
+}
+
+export function scheduleWeekDays(weekStart: string) {
+  const start = normaliseWeekStart(weekStart);
+  return Array.from({ length: 7 }, (_, index) => addCalendarDays(start, index));
+}
+
+export function adjacentScheduleWeek(weekStart: string, direction: -1 | 1) {
+  return addCalendarDays(normaliseWeekStart(weekStart), direction * 7);
+}
+
+export function scheduleRangeContainsWeek(rangeStart: string, rangeWeeks: number, weekStart: string) {
+  const start = normaliseWeekStart(rangeStart);
+  const target = normaliseWeekStart(weekStart);
+  const weeks = normaliseScheduleRangeWeeks(rangeWeeks);
+  return target >= start && addCalendarDays(target, 7) <= addCalendarDays(start, weeks * 7);
+}
+
+export function scheduleWeekSwipeDirection({
+  deltaX,
+  deltaY,
+  startedOnAppointment = false,
+  dragActive = false,
+  requireBoundary = false,
+  atStartBoundary = false,
+  atEndBoundary = false,
+  threshold = 64,
+}: ScheduleWeekSwipeInput): -1 | 0 | 1 {
+  if (startedOnAppointment || dragActive || Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return 0;
+  const direction = deltaX < 0 ? 1 : -1;
+  if (requireBoundary && (direction === 1 ? !atEndBoundary : !atStartBoundary)) return 0;
+  return direction;
+}
+
+export function scheduleDragEdgeDirection(clientX: number, left: number, right: number, dragActive: boolean, threshold = 72): -1 | 0 | 1 {
+  if (!dragActive || right <= left) return 0;
+  if (clientX <= left + threshold) return -1;
+  if (clientX >= right - threshold) return 1;
+  return 0;
+}
+
+export function mergeDraggedScheduleAppointment<T extends { id: string }>(appointments: T[], dragged: T | null) {
+  if (!dragged || appointments.some((appointment) => appointment.id === dragged.id)) return appointments;
+  return [...appointments, dragged];
 }
 
 export function normaliseLocalDateTime(value: unknown) {
