@@ -2,7 +2,19 @@
 
 Status: active rolling handover
 Prepared: 21 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published in-place evidence review and direct quote preview-and-send workflow. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published stable weekly dispatch navigation hotfix. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+
+## Completed bounded follow-up: stable weekly dispatch navigation
+
+- User outcome: an office user sees one clear Monday-to-Sunday week, can move backward or forward deliberately, can swipe between weeks on a phone, and can drag a booking to the adjacent week without the booking disappearing.
+- Owning workflow: the existing owner-scoped trade schedule read model, `TradeScheduleWorkspace`, pure schedule navigation helpers, feature-local styles and regression tests.
+- In scope: replace the automatic eight-week scroll-range rotation with explicit Previous week, Today, Next week and Go to week controls; retain a three-week internal buffer so a native drag source stays mounted; open the adjacent week after a 600 ms drag-edge hold; preserve the clock-time viewport during that transition; restore the authoritative source appointment and week after a failed move; allow direct header swipe plus boundary-gated timetable swipe on phones; continue to prioritise customer, assigned person, suburb and time on cards.
+- Out of scope: a second calendar source of truth, two-way provider authority, changing a production appointment during QA, a new calendar dependency, new records, schema changes or unrelated navigation redesign.
+- Acceptance: ordinary horizontal or vertical scrolling never changes the loaded week; each explicit control or accepted swipe changes exactly seven days; a drag-edge transition does not GET, PATCH or unmount the source appointment; a successful drop uses one existing revision-guarded PATCH and its authoritative response; a conflict or network failure restores the original appointment; direct-customer identity remains owner scoped and protected work remains redacted.
+- Validation: 29 focused schedule, rescheduling and calendar-mirror tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean replay of all 79 production migrations; production build; signed-in desktop week navigation, card-retention, appointment-preview and overflow inspection; canonical health and worker-error checks.
+- Stop condition: long-distance rescheduling UI, a dedicated phone agenda, two-way external calendar edits, a new calendar engine or production-record mutation requires a separate milestone.
+
+Release result: Sites version 197 from implementation commit `91fec624c3b01609f0f8eab476b18941a3f5478f`, deployment `appgdep_6a5eb9c2304c819186d592042b2b69f1`. The scheduler now presents one stable week while keeping the previous and next weeks mounted internally for safe edge-drag transitions. Complete validation passed with 29 focused tests, TypeScript, ESLint, 33 integration tests, 684 full-suite tests with no failures, clean replay of all 79 production migrations and a production build. Signed-in live QA moved from 20-26 July to 27 July-2 August and back, with the current-week appointment count returning from two to zero to two; the appointment preview opened without leaving Schedule and the page fit the desktop viewport. No production appointment or other record was changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty, and production environment revision 18 was retained.
 
 ## Completed milestone contract: operational indexes and dispatch clarity
 
@@ -231,6 +243,6 @@ The same batch moves next action, description and tags into one Notes owner; rep
 
 1. **Saved index views:** let each user save table column visibility, order and named one-click filter presets for their regular job and customer searches.
 2. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
-3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the eight-week board remains authoritative.
+3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
 4. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
 5. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
