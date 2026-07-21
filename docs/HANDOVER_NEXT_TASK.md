@@ -2,7 +2,7 @@
 
 Status: active rolling handover
 Prepared: 21 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published stable weekly dispatch navigation hotfix. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published saved job and customer index views. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
 ## Completed milestone contract: saved job and customer index views
 
@@ -15,6 +15,8 @@ Implementation baseline: the current `codex/sites-custom-domain-migration` workt
 - Stop condition: shared team views, scheduled exports, adding new index query fields, replacing the CRM list engine or changing customer privacy requires a separate milestone.
 
 Implementation result: Jobs and Customers now support up to 12 owner-scoped named views each, using the existing durable list-view table with index-specific scopes and case-normalised unique names. A saved view captures current filters, sorting, page size and column order. Applying one clears selection, resets paging and discards stale keyset cursors. Both directories expose the shared accessible column manager and formula-safe visible-page CSV export, and their headers, rows and exports use the same selected order. The server rejects empty names, duplicate names, unsupported columns, zero-column layouts, over-limit creation and cross-owner preset mutation. Focused regression tests cover uniqueness, tenant/index isolation, cursor reset and both index tools. Complete validation passed with TypeScript, ESLint, 33 integration tests, 686 passing full-suite tests with two intentional skips, all 79 production migrations replayed cleanly and a production build.
+
+Release result: Sites version 198 from implementation commit `f05995b5834316ae65a6e82a37b7519d965fa24f`, deployment `appgdep_6a5ec07753d48191b96efde0d9ce8f8b`. Signed-in production QA confirmed the Saved view, Save current view, Columns and visible-page CSV controls on both Jobs and Customers, all five live job rows, all three live customer rows, nine job columns and ten customer columns. Desktop and phone-width inspection found no document-level overflow, and no preset, default, record or export was created or changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty and production environment revision 18 was retained. The browser reported only Chrome extension message-channel closures with no application stack.
 
 ## Completed bounded follow-up: stable weekly dispatch navigation
 
