@@ -137,10 +137,13 @@ test("job and customer directories expose granular server filters and single-lin
   assert.match(crm, /Street address/);
   assert.match(crm, /Contact number/);
   assert.match(crm, /Completion status/);
-  assert.match(crm, /crm-job-columns/);
-  assert.match(crm, /crm-customer-columns/);
+  assert.match(crm, /jobIndexColumns/);
+  assert.match(crm, /customerIndexColumns/);
+  assert.match(crm, /crm-record-data-row/);
+  assert.match(crm, /jobColumns\.map/);
+  assert.match(crm, /customerColumns\.map/);
   for (const column of ["Customer", "First name", "Last name", "Email", "Phone", "Suburb", "Postcode", "Jobs", "Latest job", "Status"]) {
-    assert.match(crm, new RegExp(`<span>${column}<\\/span>`));
+    assert.match(crm, new RegExp(`label: "${column}"`));
   }
 });
 

@@ -24,6 +24,7 @@ const adminAccountUi = read("../src/components/AdminAccountWorkspace.tsx");
 const adminOpportunityUi = read("../src/components/AdminOpportunityWorkspace.tsx");
 const adminCatalogueUi = read("../src/components/AdminCatalogueWorkspace.tsx");
 const tableTools = read("../src/components/WorkspaceTableTools.tsx");
+const savedViewsUi = read("../src/components/WorkspaceSavedViews.tsx");
 
 test("role scoped list views are durable and unique per workspace", () => {
   assert.match(schema, /sqliteTable\("workspace_list_views"/);
@@ -54,6 +55,41 @@ test("saved views enforce trade and operations account boundaries", () => {
   assert.match(shared, /"admin-products"/);
   assert.match(directoryUi, /fixedType/);
   assert.match(directoryUi, /effectiveType/);
+});
+
+test("named trade views stay owner and index scoped with a bounded server contract", () => {
+  assert.match(shared, /NAMED_LIST_VIEW_LIMIT = 12/);
+  assert.match(shared, /namedScope\(ownerScope, viewKey\)/);
+  assert.match(shared, /WHERE id = \? AND owner_uid = \? AND owner_scope = \?/);
+  assert.match(shared, /SAVED_VIEW_LIMIT/);
+  assert.match(tradeRoute, /export async function POST/);
+  assert.match(tradeRoute, /presetId\(request\)/);
+  assert.match(tradeRoute, /readNamedListViews/);
+  assert.match(tradeRoute, /A saved view with that name already exists/);
+
+  const database = new DatabaseSync(":memory:");
+  for (const statement of migration.split("--> statement-breakpoint")) if (statement.trim()) database.exec(statement);
+  const insert = database.prepare(`INSERT INTO workspace_list_views (id, owner_uid, owner_scope, view_key, preferences, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)`);
+  insert.run("one", "owner-a", "trade:named:installer-jobs", "northside", "{}", "2026-07-21T00:00:00.000Z");
+  assert.throws(() => insert.run("two", "owner-a", "trade:named:installer-jobs", "northside", "{}", "2026-07-21T00:00:01.000Z"), /UNIQUE constraint failed/);
+  assert.doesNotThrow(() => insert.run("three", "owner-b", "trade:named:installer-jobs", "northside", "{}", "2026-07-21T00:00:02.000Z"));
+  assert.doesNotThrow(() => insert.run("four", "owner-a", "trade:named:installer-customers", "northside", "{}", "2026-07-21T00:00:03.000Z"));
+  database.close();
+});
+
+test("installer indexes apply named views, movable columns and matching visible exports", () => {
+  assert.match(crmUi, /WorkspaceSavedViews/);
+  assert.match(crmUi, /WorkspaceTableTools/);
+  assert.match(crmUi, /downloadWorkspaceCsv\("tlink-jobs\.csv"/);
+  assert.match(crmUi, /downloadWorkspaceCsv\("tlink-customers\.csv"/);
+  assert.match(crmUi, /jobCursors\.current = \[""\]; jobTotalReady\.current = false/);
+  assert.match(crmUi, /customerCursors\.current = \[""\]; customerTotalReady\.current = false/);
+  assert.match(shared, /"installer-jobs": \["customer", "service", "assignee"/);
+  assert.match(shared, /"installer-customers": \["customer", "firstName", "lastName"/);
+  assert.match(savedViewsUi, /Save current view/);
+  assert.match(savedViewsUi, /Update view/);
+  assert.match(savedViewsUi, /Delete/);
 });
 
 test("high volume catalogue, order and account indexes use server paging", () => {

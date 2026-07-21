@@ -30,7 +30,7 @@ test("invoices are a main installer workspace over existing owner-scoped records
 });
 
 test("jobs expose focused single-click navigation while schedule appointments retain explicit open actions", () => {
-  assert.match(crm, /className="crm-row-open crm-job-row" onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
+  assert.match(crm, /className="crm-row-open crm-record-data-row"[^>]*onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.doesNotMatch(crm, /onDoubleClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.match(crm, /crm-job-focus/);
   assert.match(crm, /Back to jobs/);

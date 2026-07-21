@@ -4,6 +4,18 @@ Status: active rolling handover
 Prepared: 21 July 2026
 Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published stable weekly dispatch navigation hotfix. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
 
+## Completed milestone contract: saved job and customer index views
+
+- User outcome: each signed-in trade user can keep several named job or customer searches, restore one in a single click, and decide which useful columns appear and in what order without rebuilding the same office view every day.
+- Owning workflow: installer Jobs and Customers indexes, existing owner-scoped list-view storage and route, shared table tools, feature-local CRM styles and focused regression tests.
+- In scope: add owner-scoped named presets for the existing job and customer filters, sorting, row count and visible-column order; retain the existing default view; apply, create, rename and delete named presets deliberately; expose the shared column manager and visible-page CSV export on both indexes; render only the chosen columns while retaining accessible row-opening and bulk-selection controls; keep server paging and every existing filter authoritative.
+- Out of scope: admin or supplier saved-view redesign, cross-user shared views, new search fields, background exports, unbounded queries, record editing in the index, a new table-grid dependency or changes to AEA protected-record disclosure.
+- Acceptance: named presets are unique per signed-in user and index; names and payloads are bounded and server validated; a preset cannot access another user or unsupported index; default and named views survive sign-out; applying a preset resets paging and stale cursors; at least one data column remains visible; displayed headers, rows and CSV follow the same chosen order; desktop and phone layouts preserve keyboard access and avoid document-level overflow.
+- Validation: focused list-view and installer CRM tests, TypeScript, ESLint, complete `npm.cmd run validate`, clean replay of every production migration, production build, signed-in desktop and phone-width Jobs and Customers interaction plus overflow inspection, canonical health and worker-error checks.
+- Stop condition: shared team views, scheduled exports, adding new index query fields, replacing the CRM list engine or changing customer privacy requires a separate milestone.
+
+Implementation result: Jobs and Customers now support up to 12 owner-scoped named views each, using the existing durable list-view table with index-specific scopes and case-normalised unique names. A saved view captures current filters, sorting, page size and column order. Applying one clears selection, resets paging and discards stale keyset cursors. Both directories expose the shared accessible column manager and formula-safe visible-page CSV export, and their headers, rows and exports use the same selected order. The server rejects empty names, duplicate names, unsupported columns, zero-column layouts, over-limit creation and cross-owner preset mutation. Focused regression tests cover uniqueness, tenant/index isolation, cursor reset and both index tools. Complete validation passed with TypeScript, ESLint, 33 integration tests, 686 passing full-suite tests with two intentional skips, all 79 production migrations replayed cleanly and a production build.
+
 ## Completed bounded follow-up: stable weekly dispatch navigation
 
 - User outcome: an office user sees one clear Monday-to-Sunday week, can move backward or forward deliberately, can swipe between weeks on a phone, and can drag a booking to the adjacent week without the booking disappearing.
@@ -241,8 +253,8 @@ The same batch moves next action, description and tags into one Notes owner; rep
 
 ## Next five logical steps
 
-1. **Saved index views:** let each user save table column visibility, order and named one-click filter presets for their regular job and customer searches.
-2. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
-3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
-4. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
-5. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
+1. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
+2. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
+3. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
+4. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
+5. **Office action centre:** turn customer questions, quote decisions, photo reviews, failed sends and field completions into one filterable, assignable queue with direct record actions.

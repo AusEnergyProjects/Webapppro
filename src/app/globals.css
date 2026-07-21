@@ -5598,6 +5598,37 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 }
 .crm-record-table .crm-row-open:focus-visible { background: #eef8f4; outline: 3px solid #42a886; outline-offset: -3px; }
 
+/* Saved directory views reuse the authoritative owner-scoped list settings. */
+.crm-index-view-tools { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin: 10px 0 12px; }
+.crm-index-view-tools .workspace-table-actionbar { margin: 0; }
+.workspace-saved-views { align-items: end; display: flex; flex-wrap: wrap; gap: 8px; }
+.workspace-saved-views > label, .workspace-saved-views form label { color: var(--color-aea-ink); display: grid; font-size: .56rem; font-weight: 850; gap: 4px; text-transform: uppercase; }
+.workspace-saved-views select, .workspace-saved-views input { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: var(--color-aea-text); font: inherit; min-height: 36px; padding: 7px 9px; }
+.workspace-saved-views select { min-width: 190px; }
+.workspace-saved-views details { position: relative; }
+.workspace-saved-views summary, .workspace-saved-views button { background: #fff; border: 1px solid #a9c9bd; border-radius: 8px; color: #17664e; cursor: pointer; font-size: .6rem; font-weight: 850; list-style: none; min-height: 36px; padding: 8px 11px; }
+.workspace-saved-views summary::-webkit-details-marker { display: none; }
+.workspace-saved-views details[open] summary { background: #eaf8f2; }
+.workspace-saved-views form { align-items: end; background: #fff; border: 1px solid #b9d4ca; border-radius: 12px; box-shadow: 0 18px 44px rgba(3, 42, 48, .16); display: grid; gap: 8px; grid-template-columns: minmax(190px, 1fr) auto auto; left: 0; min-width: 390px; padding: 12px; position: absolute; top: 42px; z-index: 31; }
+.workspace-saved-views button.danger { border-color: #d9a7a2; color: #8b342c; }
+.workspace-saved-views button:disabled { cursor: not-allowed; opacity: .45; }
+.crm-dynamic-columns { gap: 10px; }
+.crm-record-data-row { align-items: center; display: grid; gap: 10px; }
+.crm-record-table .crm-row-open.crm-record-data-row { display: grid; }
+.crm-record-table .crm-index-cell { color: var(--color-aea-muted); display: block; font-size: .63rem; font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-record-table .crm-index-cell > * { color: inherit; display: block; font: inherit; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-record-table .crm-index-cell strong { color: var(--color-aea-ink); font-weight: 850; }
+.crm-record-table .crm-index-cell b { color: var(--color-aea-green-dark); font-weight: 850; }
+.crm-record-table .crm-index-cell em { background: #e6f5ee; border-radius: 999px; color: #176348; justify-self: start; padding: 4px 7px; }
+
+@media (max-width: 650px) {
+  .crm-index-view-tools { display: grid; grid-template-columns: 1fr; }
+  .workspace-saved-views, .workspace-saved-views > label, .workspace-saved-views details, .workspace-saved-views summary { width: 100%; }
+  .workspace-saved-views form { grid-template-columns: 1fr; min-width: min(88vw, 390px); }
+  .workspace-saved-views select { width: 100%; }
+  .crm-index-view-tools .workspace-table-actionbar { justify-content: stretch; }
+}
+
 /* Dispatch: make today and current time unmistakable before secondary settings. */
 .schedule-today-strip { background: linear-gradient(135deg, #e7f7f0, #f8fcfa); border: 1px solid #8ac9b1; border-left: 5px solid #0b9b6f; border-radius: 12px; display: grid; gap: 10px; padding: 13px 14px; }
 .schedule-today-strip > header { align-items: center; display: flex; gap: 16px; justify-content: space-between; }

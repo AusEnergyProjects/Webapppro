@@ -29,7 +29,12 @@ type ListViewDefaults = {
   service?: string;
   pipeline?: string;
   stage?: string;
+  assignee?: string;
   location?: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  email?: string;
   street?: string;
   phone?: string;
   postcode?: string;
@@ -50,6 +55,8 @@ type ListViewDefaults = {
 };
 
 const columnsByView: Record<string, string[]> = {
+  "installer-jobs": ["customer", "service", "assignee", "suburb", "pipeline", "stage", "scheduled", "value", "reference"],
+  "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "latestJob", "status"],
   "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
   "admin-accounts": ["account", "type", "status", "updated"],
   "admin-customers": ["account", "type", "status", "updated"],
@@ -112,7 +119,12 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     service: cleanAdminText(raw.service, 40),
     pipeline: cleanAdminText(raw.pipeline, 40),
     stage: cleanAdminText(raw.stage, 40),
+    assignee: cleanAdminText(raw.assignee, 100),
     location: cleanAdminText(raw.location, 100),
+    firstName: cleanAdminText(raw.firstName, 100),
+    lastName: cleanAdminText(raw.lastName, 100),
+    businessName: cleanAdminText(raw.businessName, 160),
+    email: cleanAdminText(raw.email, 160),
     street: cleanAdminText(raw.street, 120),
     phone: cleanAdminText(raw.phone, 50),
     postcode: cleanAdminText(raw.postcode, 12),
@@ -129,11 +141,12 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     verification: cleanAdminText(raw.verification, 30),
     review: cleanAdminText(raw.review, 30),
     listing: cleanAdminText(raw.listing, 30),
-    columns: columnsByView[viewKey]
-      ? Array.isArray(raw.columns)
+    columns: columnsByView[viewKey] ? (() => {
+      const columns = Array.isArray(raw.columns)
         ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)
-        : [...columnsByView[viewKey]]
-      : undefined,
+        : [];
+      return columns.length ? columns : [...columnsByView[viewKey]];
+    })() : undefined,
   };
 }
 
@@ -163,4 +176,67 @@ export async function deleteListView(ownerUid: string, ownerScope: string, viewK
     WHERE owner_uid = ? AND owner_scope = ? AND view_key = ?`)
     .bind(ownerUid, ownerScope, viewKey).run();
   return defaultListView(viewKey);
+}
+
+export type NamedListView = {
+  id: string;
+  name: string;
+  preferences: ReturnType<typeof cleanListView>;
+  updatedAt: string;
+};
+
+const NAMED_LIST_VIEW_LIMIT = 12;
+const namedScope = (ownerScope: string, viewKey: string) => `${ownerScope}:named:${viewKey}`;
+const normaliseName = (value: unknown) => cleanAdminText(value, 60).trim().toLocaleLowerCase("en-AU");
+
+function parseNamedListView(viewKey: string, row: Record<string, unknown>): NamedListView | null {
+  let parsed: Record<string, unknown> = {};
+  try { parsed = JSON.parse(String(row.preferences || "{}")) as Record<string, unknown>; } catch { return null; }
+  const name = cleanAdminText(parsed.name, 60).trim();
+  if (!name) return null;
+  return {
+    id: String(row.id || ""),
+    name,
+    preferences: cleanListView(viewKey, (parsed.preferences || {}) as Record<string, unknown>),
+    updatedAt: String(row.updated_at || ""),
+  };
+}
+
+export async function readNamedListViews(ownerUid: string, ownerScope: string, viewKey: string) {
+  const rows = await getD1().prepare(`SELECT id, preferences, updated_at FROM workspace_list_views
+    WHERE owner_uid = ? AND owner_scope = ? ORDER BY updated_at DESC LIMIT ?`)
+    .bind(ownerUid, namedScope(ownerScope, viewKey), NAMED_LIST_VIEW_LIMIT).all<Record<string, unknown>>();
+  return (rows.results || []).map((row) => parseNamedListView(viewKey, row)).filter((row): row is NamedListView => Boolean(row));
+}
+
+export async function saveNamedListView(ownerUid: string, ownerScope: string, viewKey: string, raw: Record<string, unknown>, presetId = "") {
+  const name = cleanAdminText(raw.name, 60).trim();
+  const key = normaliseName(name);
+  if (!name || !key) throw new Error("SAVED_VIEW_NAME_REQUIRED");
+  const preferences = cleanListView(viewKey, (raw.preferences || {}) as Record<string, unknown>);
+  const scope = namedScope(ownerScope, viewKey);
+  const now = new Date().toISOString();
+  if (presetId) {
+    const result = await getD1().prepare(`UPDATE workspace_list_views SET view_key = ?, preferences = ?, updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND owner_scope = ?`)
+      .bind(key, JSON.stringify({ name, preferences }), now, presetId, ownerUid, scope).run();
+    if (!result.meta.changes) throw new Error("SAVED_VIEW_NOT_FOUND");
+    return { id: presetId, name, preferences, updatedAt: now } satisfies NamedListView;
+  }
+  const id = crypto.randomUUID();
+  const result = await getD1().prepare(`INSERT INTO workspace_list_views
+    (id, owner_uid, owner_scope, view_key, preferences, updated_at)
+    SELECT ?, ?, ?, ?, ?, ? WHERE (
+      SELECT COUNT(*) FROM workspace_list_views WHERE owner_uid = ? AND owner_scope = ?
+    ) < ?`)
+    .bind(id, ownerUid, scope, key, JSON.stringify({ name, preferences }), now, ownerUid, scope, NAMED_LIST_VIEW_LIMIT).run();
+  if (!result.meta.changes) throw new Error("SAVED_VIEW_LIMIT");
+  return { id, name, preferences, updatedAt: now } satisfies NamedListView;
+}
+
+export async function deleteNamedListView(ownerUid: string, ownerScope: string, viewKey: string, presetId: string) {
+  const result = await getD1().prepare(`DELETE FROM workspace_list_views
+    WHERE id = ? AND owner_uid = ? AND owner_scope = ?`)
+    .bind(presetId, ownerUid, namedScope(ownerScope, viewKey)).run();
+  if (!result.meta.changes) throw new Error("SAVED_VIEW_NOT_FOUND");
 }
