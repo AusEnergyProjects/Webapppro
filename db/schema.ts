@@ -2259,6 +2259,7 @@ export const customerProjects = sqliteTable("customer_projects", {
   budgetRange: text("budget_range").notNull().default("not_set"),
   propertyContext: text("property_context").notNull().default("{}"),
   privateNotes: text("private_notes").notNull().default(""),
+  advisorProfile: text("advisor_profile").notNull().default("{}"),
   planSnapshot: text("plan_snapshot").notNull().default("{}"),
   completedPlanItems: text("completed_plan_items").notNull().default("[]"),
   status: text("status").notNull().default("draft"),

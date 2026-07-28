@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pinExpandedNotification } from "@/components/admin-notification-inbox-state";
 
 type AdminNotificationActivity = {
   id: string;
@@ -138,8 +139,11 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
   const [dueDraft, setDueDraft] = useState("");
   const [assigneeDraft, setAssigneeDraft] = useState("");
   const [priorityDraft, setPriorityDraft] = useState<AdminNotification["priority"]>("normal");
+  const [expandedVisibleIndex, setExpandedVisibleIndex] = useState(0);
   const seen = useRef(new Set<string>());
   const initialised = useRef(false);
+  const expandedIdRef = useRef("");
+  const expandedCard = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async (background = false) => {
     try {
@@ -181,14 +185,56 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  function resetExpandedCase() {
+    expandedIdRef.current = "";
+    setExpandedId("");
+    setExpandedVisibleIndex(0);
+    setCaseNote("");
+    setResolutionNote("");
+    setDueDraft("");
+    setAssigneeDraft("");
+    setPriorityDraft("normal");
+  }
+
   function setQueue(value: string) {
+    resetExpandedCase();
     setQueueState(value);
     window.localStorage.setItem("aea-admin-inbox-queue", value);
   }
 
+  function changeSearch(value: string) {
+    resetExpandedCase();
+    setSearch(value);
+  }
+
+  function changeCategory(value: string) {
+    resetExpandedCase();
+    setCategory(value);
+  }
+
+  function changePriority(value: string) {
+    resetExpandedCase();
+    setPriority(value);
+  }
+
+  function changeNotificationStatus(value: string) {
+    resetExpandedCase();
+    setNotificationStatus(value);
+  }
+
+  function changeAssignedFilter(value: string) {
+    resetExpandedCase();
+    setAssignedFilter(value);
+  }
+
+  function changeActionOnly(value: boolean) {
+    resetExpandedCase();
+    setActionOnly(value);
+  }
+
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return notifications.filter((item) => {
+    const filtered = notifications.filter((item) => {
       const matchesQueue = queue === "all"
         || queue === "mine" && item.assignedToUid === currentAdminUid && item.status !== "resolved"
         || queue === "unassigned" && !item.assignedToUid && item.requiresAction && item.status !== "resolved"
@@ -203,13 +249,33 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         && (!assignedFilter || (assignedFilter === "unassigned" ? !item.assignedToUid : item.assignedToUid === assignedFilter))
         && (!actionOnly || item.requiresAction && item.status !== "resolved");
     });
-  }, [actionOnly, assignedFilter, category, currentAdminUid, notificationStatus, notifications, priority, queue, search]);
+    return pinExpandedNotification(
+      filtered,
+      notifications,
+      expandedId,
+      expandedVisibleIndex,
+    );
+  }, [actionOnly, assignedFilter, category, currentAdminUid, expandedId, expandedVisibleIndex, notificationStatus, notifications, priority, queue, search]);
 
   async function update(action: string, id = "", payload: Record<string, unknown> = {}) {
+    const expandedTop = id && id === expandedIdRef.current
+      ? expandedCard.current?.getBoundingClientRect().top
+      : undefined;
     setStatus("Updating operations case...");
     try {
       await api("/api/admin/notifications", { method: "PATCH", body: JSON.stringify({ action, id, ...payload }) });
       await load(true);
+      if (expandedTop !== undefined) {
+        window.requestAnimationFrame(() => {
+          if (expandedIdRef.current !== id) return;
+          const nextTop = expandedCard.current?.getBoundingClientRect().top;
+          if (nextTop === undefined) return;
+          const movement = nextTop - expandedTop;
+          if (Math.abs(movement) > 1) {
+            window.scrollBy({ top: movement, behavior: "auto" });
+          }
+        });
+      }
       setStatus(action === "resolve" ? "Case resolved and added to the audit history." : "Operations case updated and audited.");
       return true;
     } catch (error) {
@@ -220,9 +286,14 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
 
   function manageCase(item: AdminNotification) {
     if (expandedId === item.id) {
-      setExpandedId("");
+      resetExpandedCase();
       return;
     }
+    setExpandedVisibleIndex(Math.max(
+      0,
+      visible.findIndex((candidate) => candidate.id === item.id),
+    ));
+    expandedIdRef.current = item.id;
     setExpandedId(item.id);
     setCaseNote("");
     setResolutionNote("");
@@ -248,8 +319,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
       return;
     }
     if (await update("resolve", item.id, { note: resolutionNote || "Reviewed in the operations portal." })) {
-      setResolutionNote("");
-      setExpandedId("");
+      resetExpandedCase();
     }
   }
 
@@ -323,34 +393,38 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         <article className={queue === "resolved" ? "active" : ""}><button type="button" onClick={() => setQueue("resolved")}><span>Resolved</span><strong>{counts.resolved || 0}</strong><small>Completed with an audit trail</small></button></article>
       </section>
       <form className="admin-filterbar admin-notification-filter" onSubmit={submitFilters}>
-        <input aria-label="Search notifications" placeholder="Search title, event or record ID" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <select aria-label="Notification category" value={category} onChange={(event) => setCategory(event.target.value)}>
+        <input aria-label="Search notifications" placeholder="Search title, event or record ID" value={search} onChange={(event) => changeSearch(event.target.value)} />
+        <select aria-label="Notification category" value={category} onChange={(event) => changeCategory(event.target.value)}>
           <option value="">All categories</option>
           {["approval", "customer", "trade", "response", "catalogue", "security", "platform"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
         </select>
-        <select aria-label="Notification priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
+        <select aria-label="Notification priority" value={priority} onChange={(event) => changePriority(event.target.value)}>
           <option value="">All priorities</option>
           {["urgent", "high", "normal", "low"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
         </select>
-        <select aria-label="Notification status" value={notificationStatus} onChange={(event) => setNotificationStatus(event.target.value)}>
+        <select aria-label="Notification status" value={notificationStatus} onChange={(event) => changeNotificationStatus(event.target.value)}>
           <option value="">All states</option>
           <option value="open">Unread</option>
           <option value="read">Read</option>
           <option value="resolved">Resolved</option>
         </select>
-        <select aria-label="Case assignee" value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
+        <select aria-label="Case assignee" value={assignedFilter} onChange={(event) => changeAssignedFilter(event.target.value)}>
           <option value="">All assignees</option>
           <option value="unassigned">Unassigned</option>
           {assignees.map((item) => <option key={item.uid} value={item.uid}>{item.name}</option>)}
         </select>
-        <label className="admin-check-filter"><input type="checkbox" checked={actionOnly} onChange={(event) => setActionOnly(event.target.checked)} />Action required only</label>
+        <label className="admin-check-filter"><input type="checkbox" checked={actionOnly} onChange={(event) => changeActionOnly(event.target.checked)} />Action required only</label>
         <button type="submit">Apply filters</button>
         {counts.unread > 0 && <button type="button" className="secondary" onClick={() => void update("mark_all_read")}>Mark all read</button>}
       </form>
       <div className="admin-queue-summary"><strong>{readable(queue)} queue</strong><span>{visible.length} matching cases</span><button type="button" onClick={() => setQueue("all")}>Clear saved queue</button></div>
       <section className="admin-notification-list" aria-label="Operations notifications">
         {visible.length ? visible.map((item) => (
-          <article key={item.id} className={`admin-notification-card priority-${item.priority} status-${item.status} sla-${item.slaState}`}>
+          <article
+            key={item.id}
+            ref={expandedId === item.id ? expandedCard : undefined}
+            className={`admin-notification-card priority-${item.priority} status-${item.status} sla-${item.slaState}`}
+          >
             <div className="admin-notification-marker" aria-hidden="true" />
             <div className="admin-notification-body">
               <div className="admin-notification-meta">

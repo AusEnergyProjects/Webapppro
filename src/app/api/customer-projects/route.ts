@@ -16,6 +16,7 @@ import {
   CUSTOMER_NOTICE_VERSION,
   MAX_CUSTOMER_PROJECTS,
   MAX_OPEN_CUSTOMER_OPPORTUNITIES,
+  normalizeCustomerAdvisorProfile,
   normalizeCustomerProject,
   parseStoredJson,
   reconcileCompletedPlanItems,
@@ -71,6 +72,9 @@ function projectShape(
     : row.goal
       ? [String(row.goal)]
       : ["lower-bills"];
+  const storedPropertyContext = buildInstallerPropertyContext(
+    parseStoredJson(row.property_context, {}),
+  );
   return {
     id: row.id,
     title: row.title,
@@ -88,10 +92,17 @@ function projectShape(
     projectStage: row.project_stage,
     timing: row.timing,
     budgetRange: row.budget_range,
-    propertyContext: buildInstallerPropertyContext(
-      parseStoredJson(row.property_context, {}),
-    ),
+    propertyContext: storedPropertyContext,
     privateNotes: row.private_notes,
+    advisorProfile: normalizeCustomerAdvisorProfile(
+      parseStoredJson(row.advisor_profile, {}),
+      {
+        postcode: row.postcode,
+        addressState: row.address_state,
+        householdSituation: row.household_situation,
+        approvalContext: storedPropertyContext.approvalContext,
+      },
+    ),
     planSnapshot: parseStoredJson(row.plan_snapshot, {}),
     completedPlanItems: parseStoredJson(row.completed_plan_items, []),
     status,
@@ -343,13 +354,13 @@ export async function POST(request: Request) {
   await db.prepare(`INSERT INTO customer_projects
     (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
      goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-     property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
+      property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
     .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
       project.propertyType, project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace,
       JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
       project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
-      JSON.stringify(project.planSnapshot), Number(account.is_synthetic || 0), now, now).run();
+      JSON.stringify(project.advisorProfile), JSON.stringify(project.planSnapshot), Number(account.is_synthetic || 0), now, now).run();
   return json({ ok: true, id, projects: await projectsForOwner(user.uid) }, 201);
 }
 
@@ -386,13 +397,13 @@ export async function PATCH(request: Request) {
     await db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
       property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
       priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
-      completed_plan_items = ?, updated_at = ?
+      advisor_profile = ?, completed_plan_items = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
       .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
         project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace, JSON.stringify(project.existingFeatures),
         JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
         project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
-        JSON.stringify(project.planSnapshot), JSON.stringify(completedPlanItems), now, id, user.uid).run();
+        JSON.stringify(project.planSnapshot), JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems), now, id, user.uid).run();
   } else if (action === "submit") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
@@ -427,6 +438,17 @@ export async function PATCH(request: Request) {
       householdSituation: current.household_situation,
       propertyType: current.property_type,
       addressState: current.address_state,
+      advisorProfile: normalizeCustomerAdvisorProfile(
+        parseStoredJson(current.advisor_profile, {}),
+        {
+          postcode: current.postcode,
+          addressState: current.address_state,
+          householdSituation: current.household_situation,
+          approvalContext: buildInstallerPropertyContext(
+            parseStoredJson(current.property_context, {}),
+          ).approvalContext,
+        },
+      ),
     };
     const readiness = submissionReadiness(stored);
     if (!readiness.ok) return json({ ok: false, error: readiness.error }, 400);
@@ -633,10 +655,10 @@ export async function PATCH(request: Request) {
     await db.prepare(`INSERT INTO customer_projects
       (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
        goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-       property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+       property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
       SELECT ?, firebase_uid, substr(title || ' copy', 1, 120), home_nickname, postcode, address_state, property_type,
        household_situation, goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing,
-       budget_range, property_context, private_notes, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
+       budget_range, property_context, private_notes, advisor_profile, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
       FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
       .bind(duplicateId, now, now, id, user.uid).run();
     return json({ ok: true, id: duplicateId, projects: await projectsForOwner(user.uid) }, 201);

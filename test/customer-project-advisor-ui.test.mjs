@@ -32,6 +32,66 @@ test("advisor intake supports multiple goals, tenure, budget and detailed home f
   assert.match(dashboard, /priorities: \[\]/);
 });
 
+test("advisor evidence labels remain explicit and never claim uploaded files were verified", () => {
+  assert.match(dashboard, /How well is each important home fact supported\?/);
+  assert.match(dashboard, /Record the source, not a confidence score/);
+  assert.match(
+    dashboard,
+    /does not mean a file is linked[\s\S]{0,80}verified the fact/,
+  );
+  assert.match(dashboard, /not proof that a[\s\S]{0,80}file is attached/);
+  assert.match(dashboard, /customerAdvisorOptions\.evidenceSources/);
+  assert.match(dashboard, /updateFactEvidence\(/);
+  assert.doesNotMatch(dashboard, /Automatically verified|Evidence verified/);
+});
+
+test("postcode planning and room comfort stay bounded and planning only", () => {
+  assert.match(dashboard, /derivePlanningClimateProfile\(/);
+  assert.match(dashboard, /Broad postcode planning guide/);
+  assert.match(dashboard, /planningClimate\.disclaimer/);
+  assert.match(dashboard, /Room-by-room comfort profile/);
+  assert.match(
+    dashboard,
+    /Private room names[\s\S]{0,60}not\s+sent to installers/,
+  );
+  assert.match(dashboard, /rooms\.length >= 12/);
+  assert.match(dashboard, /customerAdvisorOptions\.comfortConcerns/);
+  assert.match(dashboard, /customerAdvisorOptions\.usePeriods/);
+  assert.match(dashboard, /maxLength=\{60\}/);
+  assert.match(dashboard, /if \(affectsAdvice && planEdited\) setPlanInputsChanged\(true\)/);
+  assert.match(projectPreparationGuide, /not a NatHERS climate zone/);
+});
+
+test("permission checklist is generated from the editable plan and exported without private location data", () => {
+  assert.match(dashboard, /Property permission checklist/);
+  assert.match(dashboard, /Build from current plan/);
+  assert.match(
+    dashboard,
+    /classification: previous\?\.classification \|\| "not-sure" as const/,
+  );
+  assert.match(dashboard, /title: item\.title/);
+  assert.match(dashboard, /previous\?\.classification/);
+  assert.doesNotMatch(dashboard, /return existing\.get\(id\) \|\|/);
+  assert.match(dashboard, /PermissionPackSectionKey/);
+  assert.match(dashboard, /Review what the download will contain/);
+  assert.match(dashboard, /optional approval note stays in this signed-in project/);
+  assert.match(
+    dashboard,
+    /replaced by a private-note reminder in the download/,
+  );
+  assert.match(dashboard, /planItems: visiblePlanItems/);
+  assert.match(dashboard, /permissionPackPreview\.sections\.map/);
+  assert.match(dashboard, /Download permission checklist/);
+  assert.match(dashboard, /property-permission-checklist\.txt/);
+  assert.match(dashboard, /createCustomerPermissionPack\(/);
+  assert.doesNotMatch(
+    dashboard.match(/function permissionPackText[\s\S]*?function downloadPermissionPack/)?.[0] || "",
+    /postcode|privateNotes|addressLine/,
+  );
+  assert.match(projectPreparationGuide, /planning checklist, not legal or/);
+  assert.match(projectPreparationGuide, /id="evidence-first"/);
+});
+
 test("the customer can reorder, remove and add private plan steps", () => {
   assert.match(dashboard, /draggable/);
   assert.match(dashboard, /onDrop=\{\(\) => dropPlanItem\(item\.id\)\}/);

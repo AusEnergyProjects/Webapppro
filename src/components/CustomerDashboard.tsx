@@ -19,8 +19,12 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_LEGACY_PLAN_VERSIONS,
+  CUSTOMER_ADVISOR_PROFILE_VERSION,
+  createCustomerPermissionPack,
   createCustomerProjectPlan,
+  customerAdvisorOptions as rawCustomerAdvisorOptions,
   customerProjectOptions as rawCustomerProjectOptions,
+  derivePlanningClimateProfile,
   platformQuoteOptions as rawPlatformQuoteOptions,
   preserveEditedPlanItems,
 } from "@/lib/customer-projects.mjs";
@@ -39,6 +43,69 @@ type DashboardView =
   | "quotes"
   | "appointments";
 type Option = [string, string];
+type EvidenceSource =
+  | "unknown"
+  | "customer-reported"
+  | "photo-supported"
+  | "document-supported";
+type PermissionClassification =
+  | "portable"
+  | "permission-needed"
+  | "fixed-or-shared"
+  | "not-sure";
+type PermissionPackSectionKey =
+  | "portable"
+  | "owner-agent"
+  | "strata-shared"
+  | "licensed-site-checks"
+  | "evidence-questions";
+type PlanningClimateProfile = {
+  basis: "postcode-state-planning";
+  code:
+    | "hot-humid"
+    | "hot-dry"
+    | "warm-humid"
+    | "temperate-dry"
+    | "temperate-mixed"
+    | "cool-temperate";
+  label: string;
+  summary: string;
+  priorities: string[];
+  notNatHERSAssessment: true;
+  disclaimer: string;
+};
+type CustomerAdvisorProfile = {
+  version?: string;
+  factEvidence: Array<{ factKey: string; source: EvidenceSource }>;
+  rooms: Array<{
+    id: string;
+    name: string;
+    roomType: string;
+    concerns: string[];
+    usePeriods: string[];
+  }>;
+  permissionItems: Array<{
+    id: string;
+    title: string;
+    classification: PermissionClassification;
+    note: string;
+  }>;
+  climate?: PlanningClimateProfile;
+};
+type CustomerPermissionPack = {
+  version: string;
+  title: string;
+  context: {
+    householdSituation: "owner" | "renter" | "";
+    approvalContext: "none" | "strata" | "not_sure";
+  };
+  sections: Array<{
+    classification: PermissionPackSectionKey;
+    label: string;
+    items: Array<{ id: string; title: string; note: string }>;
+  }>;
+  disclaimer: string;
+};
 
 const customerProjectOptions = rawCustomerProjectOptions as {
   goals: Option[];
@@ -59,6 +126,14 @@ const customerProjectOptions = rawCustomerProjectOptions as {
   roofTypes: Option[];
   switchboards: Option[];
   accessConstraints: Option[];
+};
+const customerAdvisorOptions = rawCustomerAdvisorOptions as {
+  factKeys: Option[];
+  evidenceSources: Option[];
+  roomTypes: Option[];
+  comfortConcerns: Option[];
+  usePeriods: Option[];
+  permissionClasses: Option[];
 };
 const homeFeatureGroups = [
   {
@@ -248,6 +323,7 @@ type CustomerProject = {
     accessConstraints: string[];
   };
   privateNotes: string;
+  advisorProfile: CustomerAdvisorProfile;
   planSnapshot: {
     version?: string;
     title?: string;
@@ -303,6 +379,7 @@ type ProjectDraft = Pick<
   | "budgetRange"
   | "propertyContext"
   | "privateNotes"
+  | "advisorProfile"
   | "planSnapshot"
 >;
 type PendingProjectEvidence = { id: string; file: File; category: string };
@@ -325,6 +402,44 @@ const fileSize = (bytes: number) =>
   bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
     : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function permissionPackText(pack: CustomerPermissionPack) {
+  return [
+    pack.title,
+    "",
+    `Household situation: ${pack.context.householdSituation || "Not recorded"}`,
+    `Approval context: ${pack.context.approvalContext.replaceAll("_", " ")}`,
+    "",
+    ...pack.sections.flatMap((section) => [
+      section.label,
+      ...(section.items.length
+        ? section.items.map((item) =>
+            `- ${item.title}${item.note ? ` | ${item.note}` : ""}`,
+          )
+        : ["- No items listed"]),
+      "",
+    ]),
+    pack.disclaimer,
+    "",
+  ].join("\r\n");
+}
+function downloadPermissionPack(
+  profile: CustomerAdvisorProfile,
+  context: {
+    householdSituation: string;
+    approvalContext: string;
+    planItems: CustomerPlanItem[];
+  },
+) {
+  const pack = createCustomerPermissionPack(profile, context) as CustomerPermissionPack;
+  const url = URL.createObjectURL(
+    new Blob([permissionPackText(pack)], { type: "text/plain;charset=utf-8" }),
+  );
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = "property-permission-checklist.txt";
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 async function prepareEvidenceUpload(item: PendingProjectEvidence) {
   const quotingPhotoCategories = new Set([
     "property-photo",
@@ -377,6 +492,15 @@ function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
       switchboard: "",
       approvalContext: "none",
       accessConstraints: [],
+    },
+    advisorProfile: {
+      version: CUSTOMER_ADVISOR_PROFILE_VERSION,
+      factEvidence: customerAdvisorOptions.factKeys.map(([factKey]) => ({
+        factKey,
+        source: "unknown",
+      })),
+      rooms: [],
+      permissionItems: [],
     },
     privateNotes: "",
     planSnapshot: {},
@@ -704,6 +828,14 @@ function ProjectEditor({
   >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
     useState(evidenceSharingConsent);
+  const planningClimate = useMemo(
+    () =>
+      derivePlanningClimateProfile(
+        draft.postcode,
+        draft.addressState,
+      ) as PlanningClimateProfile | null,
+    [draft.addressState, draft.postcode],
+  );
   const advisorPlan = useMemo(
     () =>
       createCustomerProjectPlan({
@@ -714,6 +846,12 @@ function ProjectEditor({
         approvalContext: draft.propertyContext.approvalContext,
         existingFeatures: draft.existingFeatures,
         budgetRange: draft.budgetRange,
+        postcode: draft.postcode,
+        addressState: draft.addressState,
+        advisorProfile: {
+          ...draft.advisorProfile,
+          climate: planningClimate || undefined,
+        },
       }),
     [
       draft.goals,
@@ -723,6 +861,10 @@ function ProjectEditor({
       draft.propertyContext.approvalContext,
       draft.existingFeatures,
       draft.budgetRange,
+      draft.postcode,
+      draft.addressState,
+      draft.advisorProfile,
+      planningClimate,
     ],
   );
   const [planItems, setPlanItems] = useState<CustomerPlanItem[]>(() => {
@@ -734,6 +876,9 @@ function ProjectEditor({
       approvalContext: initial.propertyContext.approvalContext,
       existingFeatures: initial.existingFeatures,
       budgetRange: initial.budgetRange,
+      postcode: initial.postcode,
+      addressState: initial.addressState,
+      advisorProfile: initial.advisorProfile,
       planSnapshot: initial.planSnapshot,
     });
     return prepared.items as CustomerPlanItem[];
@@ -762,10 +907,23 @@ function ProjectEditor({
   const visiblePlanItems = planEdited
     ? planItems
     : (advisorPlan.items as CustomerPlanItem[]);
+  const permissionPackPreview = createCustomerPermissionPack(
+    draft.advisorProfile,
+    {
+      householdSituation: draft.householdSituation,
+      approvalContext: draft.propertyContext.approvalContext,
+      planItems: visiblePlanItems,
+    },
+  ) as CustomerPermissionPack;
 
   const draftWithPlan = (): ProjectDraft => ({
     ...draft,
     goal: draft.goals[0] || "",
+    advisorProfile: {
+      ...draft.advisorProfile,
+      version: CUSTOMER_ADVISOR_PROFILE_VERSION,
+      climate: planningClimate || undefined,
+    },
     planSnapshot: {
       version: advisorPlan.version,
       title: advisorPlan.title,
@@ -789,6 +947,8 @@ function ProjectEditor({
       key === "goals" ||
       key === "goal" ||
       key === "pace" ||
+      key === "postcode" ||
+      key === "addressState" ||
       key === "householdSituation" ||
       key === "existingFeatures" ||
       key === "budgetRange"
@@ -869,6 +1029,115 @@ function ProjectEditor({
             (item) => item !== value,
           )
         : [...draft.propertyContext.accessConstraints, value],
+    );
+  const updateAdvisorProfile = (
+    update: (profile: CustomerAdvisorProfile) => CustomerAdvisorProfile,
+    affectsAdvice = true,
+  ) => {
+    setDraft((current) => ({
+      ...current,
+      advisorProfile: update(current.advisorProfile),
+    }));
+    if (affectsAdvice && planEdited) setPlanInputsChanged(true);
+    if (affectsAdvice) invalidateStepsFrom(2);
+    setDirty(true);
+    setStatus("");
+    setValidationError("");
+  };
+  const updateFactEvidence = (factKey: string, source: EvidenceSource) =>
+    updateAdvisorProfile((profile) => ({
+      ...profile,
+      factEvidence: customerAdvisorOptions.factKeys.map(([knownFactKey]) => ({
+        factKey: knownFactKey,
+        source: knownFactKey === factKey
+          ? source
+          : profile.factEvidence.find((item) => item.factKey === knownFactKey)?.source
+            || "unknown",
+      })),
+    }));
+  const addRoom = () => {
+    if (draft.advisorProfile.rooms.length >= 12) {
+      setValidationError("Up to 12 rooms can be included in one comfort profile.");
+      return;
+    }
+    updateAdvisorProfile((profile) => ({
+      ...profile,
+      rooms: [
+        ...profile.rooms,
+        {
+          id: crypto.randomUUID(),
+          name: `Room ${profile.rooms.length + 1}`,
+          roomType: customerAdvisorOptions.roomTypes[0]?.[0] || "",
+          concerns: [],
+          usePeriods: [],
+        },
+      ],
+    }));
+  };
+  const updateRoom = (
+    id: string,
+    update: Partial<CustomerAdvisorProfile["rooms"][number]>,
+  ) =>
+    updateAdvisorProfile((profile) => ({
+      ...profile,
+      rooms: profile.rooms.map((room) =>
+        room.id === id ? { ...room, ...update } : room,
+      ),
+    }));
+  const toggleRoomValue = (
+    id: string,
+    key: "concerns" | "usePeriods",
+    value: string,
+  ) => {
+    const room = draft.advisorProfile.rooms.find((item) => item.id === id);
+    if (!room) return;
+    updateRoom(id, {
+      [key]: room[key].includes(value)
+        ? room[key].filter((item) => item !== value)
+        : [...room[key], value],
+    });
+  };
+  const removeRoom = (id: string) =>
+    updateAdvisorProfile((profile) => ({
+      ...profile,
+      rooms: profile.rooms.filter((room) => room.id !== id),
+    }));
+  const buildPermissionChecklist = () => {
+    const existing = new Map(
+      draft.advisorProfile.permissionItems.map((item) => [item.id, item]),
+    );
+    const permissionItems = visiblePlanItems.slice(0, 30).map((item) => {
+      const id = `plan-${item.id}`
+        .replace(/[^a-z0-9:_-]/gi, "-")
+        .slice(0, 80);
+      const previous = existing.get(id);
+      return {
+        id,
+        title: item.title,
+        classification: previous?.classification || "not-sure" as const,
+        note: previous?.note || "",
+      };
+    });
+    updateAdvisorProfile(
+      (profile) => ({ ...profile, permissionItems }),
+      false,
+    );
+    setStatus(
+      "Permission checklist built from the current plan. Each new item starts as Not sure until you confirm it.",
+    );
+  };
+  const updatePermissionItem = (
+    id: string,
+    update: Partial<CustomerAdvisorProfile["permissionItems"][number]>,
+  ) =>
+    updateAdvisorProfile(
+      (profile) => ({
+        ...profile,
+        permissionItems: profile.permissionItems.map((item) =>
+          item.id === id ? { ...item, ...update } : item,
+        ),
+      }),
+      false,
     );
   const addEvidence = (files: FileList | null) => {
     if (!files?.length) return;
@@ -1484,6 +1753,178 @@ function ProjectEditor({
                 </p>
               </div>
             </details>
+            <details className="customer-advisor-disclosure">
+              <summary>How well is each important home fact supported?</summary>
+              <div className="customer-evidence-confidence">
+                <div>
+                  <strong>Record the source, not a confidence score</strong>
+                  <p>
+                    Selecting photo or document means you have it available for
+                    review. It does not mean a file is linked here or that AEA or
+                    a trade has verified the fact. Leave anything uncertain as
+                    Not yet known.
+                  </p>
+                </div>
+                <div className="customer-evidence-confidence-grid">
+                  {customerAdvisorOptions.factKeys.map(([factKey, label]) => {
+                    const source =
+                      draft.advisorProfile.factEvidence.find(
+                        (item) => item.factKey === factKey,
+                      )?.source || "unknown";
+                    return (
+                      <label key={factKey}>
+                        <span>{label}</span>
+                        <select
+                          value={source}
+                          onChange={(event) =>
+                            updateFactEvidence(
+                              factKey,
+                              event.target.value as EvidenceSource,
+                            )
+                          }
+                        >
+                          {customerAdvisorOptions.evidenceSources.map(
+                            ([value, sourceLabel]) => (
+                              <option value={value} key={value}>
+                                {sourceLabel}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </details>
+            <section
+              className="customer-room-profile"
+              aria-labelledby="room-profile-title"
+            >
+              <header>
+                <div>
+                  <span>Optional detail</span>
+                  <h3 id="room-profile-title">Room-by-room comfort profile</h3>
+                  <p>
+                    Add only rooms where heat, cold, draughts, moisture or use
+                    patterns could change the advice. Private room names are not
+                    sent to installers.
+                  </p>
+                </div>
+                <button type="button" onClick={addRoom}>
+                  Add a room
+                </button>
+              </header>
+              {draft.advisorProfile.rooms.length > 0 ? (
+                <div className="customer-room-list">
+                  {draft.advisorProfile.rooms.map((room, roomIndex) => (
+                    <article key={room.id}>
+                      <header>
+                        <strong>Room {roomIndex + 1}</strong>
+                        <button type="button" onClick={() => removeRoom(room.id)}>
+                          Remove
+                        </button>
+                      </header>
+                      <div className="customer-room-basics">
+                        <label>
+                          <span>Private room label</span>
+                          <input
+                            value={room.name}
+                            maxLength={60}
+                            onChange={(event) =>
+                              updateRoom(room.id, {
+                                name: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          <span>Room type</span>
+                          <select
+                            value={room.roomType}
+                            onChange={(event) =>
+                              updateRoom(room.id, {
+                                roomType: event.target.value,
+                              })
+                            }
+                          >
+                            {customerAdvisorOptions.roomTypes.map(
+                              ([value, roomLabel]) => (
+                                <option value={value} key={value}>
+                                  {roomLabel}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </label>
+                      </div>
+                      <fieldset>
+                        <legend>What happens here?</legend>
+                        <div className="customer-room-options">
+                          {customerAdvisorOptions.comfortConcerns.map(
+                            ([value, concernLabel]) => (
+                              <label
+                                className={
+                                  room.concerns.includes(value) ? "selected" : ""
+                                }
+                                key={value}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={room.concerns.includes(value)}
+                                  onChange={() =>
+                                    toggleRoomValue(
+                                      room.id,
+                                      "concerns",
+                                      value,
+                                    )
+                                  }
+                                />
+                                <span>{concernLabel}</span>
+                              </label>
+                            ),
+                          )}
+                        </div>
+                      </fieldset>
+                      <fieldset>
+                        <legend>When does this room matter most?</legend>
+                        <div className="customer-room-options">
+                          {customerAdvisorOptions.usePeriods.map(
+                            ([value, periodLabel]) => (
+                              <label
+                                className={
+                                  room.usePeriods.includes(value)
+                                    ? "selected"
+                                    : ""
+                                }
+                                key={value}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={room.usePeriods.includes(value)}
+                                  onChange={() =>
+                                    toggleRoomValue(
+                                      room.id,
+                                      "usePeriods",
+                                      value,
+                                    )
+                                  }
+                                />
+                                <span>{periodLabel}</span>
+                              </label>
+                            ),
+                          )}
+                        </div>
+                      </fieldset>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="customer-room-empty">
+                  No rooms added. The advisor can still build a whole-home plan.
+                </p>
+              )}
+            </section>
             <div className="customer-budget-question">
               <div>
                 <span>Planning range</span>
@@ -1549,6 +1990,21 @@ function ProjectEditor({
               <h2>{advisorPlan.title}</h2>
               <p>{advisorPlan.summary}</p>
             </div>
+            {planningClimate && (
+              <aside className="customer-climate-profile">
+                <div>
+                  <span>Broad postcode planning guide</span>
+                  <h3>{planningClimate.label}</h3>
+                  <p>{planningClimate.summary}</p>
+                </div>
+                <ul>
+                  {planningClimate.priorities.map((priority) => (
+                    <li key={priority}>{priority}</li>
+                  ))}
+                </ul>
+                <small>{planningClimate.disclaimer}</small>
+              </aside>
+            )}
             {planInputsChanged && (
               <div className="customer-plan-change-warning" role="status">
                 <strong>Your edited plan is preserved</strong>
@@ -1711,6 +2167,125 @@ function ProjectEditor({
                 Add to plan
               </button>
             </div>
+            <section
+              className="customer-permission-pack"
+              aria-labelledby="permission-pack-title"
+            >
+              <header>
+                <div>
+                  <span>Renter and strata planning</span>
+                  <h3 id="permission-pack-title">Property permission checklist</h3>
+                  <p>
+                    Build a neutral review list from the plan. New items start as
+                    Not sure. Confirm the proposal with the owner, agent, strata
+                    or owners corporation before treating approval as complete.
+                  </p>
+                </div>
+                <button type="button" onClick={buildPermissionChecklist}>
+                  Build from current plan
+                </button>
+              </header>
+              {draft.advisorProfile.permissionItems.length > 0 ? (
+                <>
+                  <div className="customer-permission-items">
+                    {draft.advisorProfile.permissionItems.map((item) => (
+                      <article key={item.id}>
+                        <strong>{item.title}</strong>
+                        <label>
+                          <span>Permission class</span>
+                          <select
+                            value={item.classification}
+                            onChange={(event) =>
+                              updatePermissionItem(item.id, {
+                                classification: event.target
+                                  .value as PermissionClassification,
+                              })
+                            }
+                          >
+                            {customerAdvisorOptions.permissionClasses.map(
+                              ([value, classLabel]) => (
+                                <option value={value} key={value}>
+                                  {classLabel}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Private question or approval note, optional</span>
+                          <input
+                            value={item.note}
+                            maxLength={240}
+                            onChange={(event) =>
+                              updatePermissionItem(item.id, {
+                                note: event.target.value,
+                              })
+                            }
+                            placeholder="Saved in this project; not copied into the download"
+                          />
+                        </label>
+                      </article>
+                    ))}
+                  </div>
+                  <div
+                    className="customer-permission-preview"
+                    aria-label="Permission checklist preview"
+                  >
+                    <strong>Review what the download will contain</strong>
+                    <p>
+                      These five sections combine your tenure, approval context,
+                      current plan, evidence gaps and classifications. They flag
+                      questions and checks; they do not grant permission. Any
+                      optional approval note stays in this signed-in project and
+                      is replaced by a private-note reminder in the download.
+                    </p>
+                    <div>
+                      {permissionPackPreview.sections.map((section) => (
+                        <details key={section.classification}>
+                          <summary>
+                            {section.label}{" "}
+                            <span>{section.items.length}</span>
+                          </summary>
+                          {section.items.length > 0 ? (
+                            <ul>
+                              {section.items.map((item) => (
+                                <li key={item.id}>
+                                  <strong>{item.title}</strong>
+                                  {item.note && <span>{item.note}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No items listed.</p>
+                          )}
+                        </details>
+                      ))}
+                    </div>
+                    <small>{permissionPackPreview.disclaimer}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="customer-permission-download"
+                    onClick={() =>
+                      downloadPermissionPack(draftWithPlan().advisorProfile, {
+                        householdSituation: draft.householdSituation,
+                        approvalContext:
+                          draft.propertyContext.approvalContext,
+                        planItems: visiblePlanItems,
+                      })
+                    }
+                  >
+                    Download permission checklist
+                  </button>
+                </>
+              ) : (
+                <p className="customer-permission-empty">
+                  Build the checklist after reviewing the plan. The download
+                  excludes your project location, private plan wording and
+                  approval-note wording.
+                </p>
+              )}
+            </section>
             <div className="customer-guidance-note">
               <strong>Keep this plan even if you do not request prices</strong>
               <p>
@@ -2426,6 +3001,17 @@ function ProjectDetail({
     Record<string, Record<string, boolean>>
   >({});
   const planItems = project.planSnapshot.items || [];
+  const permissionPack = createCustomerPermissionPack(
+    project.advisorProfile,
+    {
+      householdSituation: project.householdSituation,
+      approvalContext: project.propertyContext.approvalContext,
+      planItems,
+    },
+  ) as CustomerPermissionPack;
+  const supportedFacts = project.advisorProfile.factEvidence.filter(
+    (item) => item.source !== "unknown",
+  );
   const progressSteps = [
     ["Scope saved", Boolean(project.submittedAt)],
     ["Eligible installers matched", project.progress.installerCount > 0],
@@ -2504,6 +3090,121 @@ function ProjectDetail({
               })}
             </ol>
           </section>
+          {project.advisorProfile.climate && (
+            <section className="customer-detail-panel customer-detail-climate">
+              <div className="customer-panel-heading">
+                <span>Broad postcode planning guide</span>
+                <h2>{project.advisorProfile.climate.label}</h2>
+                <p>{project.advisorProfile.climate.summary}</p>
+              </div>
+              <ul>
+                {project.advisorProfile.climate.priorities.map((priority) => (
+                  <li key={priority}>{priority}</li>
+                ))}
+              </ul>
+              <small>{project.advisorProfile.climate.disclaimer}</small>
+            </section>
+          )}
+          <section className="customer-detail-panel customer-detail-advisor-profile">
+            <div className="customer-panel-heading">
+              <span>Advice basis</span>
+              <h2>What the advisor knows and what is still uncertain</h2>
+              <p>
+                Evidence labels record what the household says is available.
+                Choosing photo or document is not proof that a file is attached,
+                linked to that fact or professionally reviewed.
+              </p>
+            </div>
+            <dl>
+              <div>
+                <dt>Facts with a recorded source</dt>
+                <dd>
+                  {supportedFacts.length} of{" "}
+                  {project.advisorProfile.factEvidence.length}
+                </dd>
+              </div>
+              <div>
+                <dt>Rooms profiled</dt>
+                <dd>{project.advisorProfile.rooms.length}</dd>
+              </div>
+              <div>
+                <dt>Permission items reviewed</dt>
+                <dd>{project.advisorProfile.permissionItems.length}</dd>
+              </div>
+            </dl>
+            {project.advisorProfile.rooms.length > 0 && (
+              <details>
+                <summary>Review private room comfort details</summary>
+                <ul>
+                  {project.advisorProfile.rooms.map((room) => (
+                    <li key={room.id}>
+                      <strong>{room.name}</strong>
+                      <span>
+                        {optionLabel(
+                          customerAdvisorOptions.roomTypes,
+                          room.roomType,
+                        )}
+                        {" | "}
+                        {room.concerns
+                          .map((item) =>
+                            optionLabel(
+                              customerAdvisorOptions.comfortConcerns,
+                              item,
+                            ),
+                          )
+                          .join(", ") || "No concern selected"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+          {project.advisorProfile.permissionItems.length > 0 && (
+            <section className="customer-detail-panel customer-detail-permission-pack">
+              <div className="customer-panel-heading">
+                <span>Permission planning</span>
+                <h2>{permissionPack.title}</h2>
+                <p>
+                  Portable, permission-dependent and fixed or shared-property
+                  items stay separate. This checklist is not a legal or strata
+                  approval determination.
+                </p>
+              </div>
+              <div>
+                {permissionPack.sections.map((section) => (
+                  <article key={section.classification}>
+                    <h3>{section.label}</h3>
+                    {section.items.length > 0 ? (
+                      <ul>
+                        {section.items.map((item) => (
+                          <li key={item.id}>
+                            <strong>{item.title}</strong>
+                            {item.note && <span>{item.note}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No items listed.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  downloadPermissionPack(project.advisorProfile, {
+                    householdSituation: project.householdSituation,
+                    approvalContext: project.propertyContext.approvalContext,
+                    planItems,
+                  })
+                }
+              >
+                Download permission checklist
+              </button>
+              <small>{permissionPack.disclaimer}</small>
+            </section>
+          )}
           {project.status !== "draft" && (
             <section className="customer-detail-panel">
               <div className="customer-panel-heading">
@@ -3907,6 +4608,17 @@ export function CustomerDashboard({
                       propertyContext: {
                         ...projectDefaults(account.profile).propertyContext,
                         ...(editing.propertyContext || {}),
+                      },
+                      advisorProfile: {
+                        ...projectDefaults(account.profile).advisorProfile,
+                        ...(editing.advisorProfile || {}),
+                        factEvidence:
+                          editing.advisorProfile?.factEvidence
+                          || projectDefaults(account.profile).advisorProfile
+                            .factEvidence,
+                        rooms: editing.advisorProfile?.rooms || [],
+                        permissionItems:
+                          editing.advisorProfile?.permissionItems || [],
                       },
                       privateNotes: editing.privateNotes,
                       planSnapshot: editing.planSnapshot,

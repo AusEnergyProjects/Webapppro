@@ -22,14 +22,51 @@ export default function ProjectPreparationGuidePage() {
       title="Know what each project step needs before you continue"
       introduction="Use these checks to decide what evidence, permission and scope is needed. The budget bands organise a plan; they are not market-price estimates, quotes or savings promises."
     >
-      <GuideSection
-        eyebrow="Start with evidence"
-        title="Prepare facts before choosing a product or provider"
-      >
-        <ul className="guide-checklist">
-          {evidenceFirst.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      </GuideSection>
+      <div id="evidence-first">
+        <GuideSection
+          eyebrow="Start with evidence"
+          title="Prepare facts before choosing a product or provider"
+        >
+          <ul className="guide-checklist">
+            {evidenceFirst.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+          <p>
+            Record whether each important fact is customer-reported, has a photo
+            available for review, has a document available for review or is still
+            unknown. This source label does not prove that a file is attached,
+            linked to that fact or verified by AEA or a trade.
+          </p>
+        </GuideSection>
+      </div>
+
+      <div id="climate-planning">
+        <GuideSection
+          eyebrow="Broad postcode planning"
+          title="Use climate context to order investigations, not to size equipment"
+        >
+          <p>
+            A broad postcode and state profile can help decide whether shade,
+            airflow, draughts, insulation or system checks should come first. It
+            is an approximate planning guide, not a NatHERS climate zone, home
+            energy rating, site assessment, savings estimate or equipment-size
+            calculation.
+          </p>
+        </GuideSection>
+      </div>
+
+      <div id="room-comfort">
+        <GuideSection
+          eyebrow="Room-by-room comfort"
+          title="Add only the rooms where time and symptoms change the advice"
+        >
+          <p>
+            Record controlled room types, when each room matters and whether it
+            is too hot, too cold, draughty, damp, glary, stuffy or uneven. A
+            private room nickname can help you recognise it later, but that name
+            does not enter the anonymised installer scope.
+          </p>
+        </GuideSection>
+      </div>
 
       <div id="urgent-replacement">
         <GuideSection
@@ -84,6 +121,12 @@ export default function ProjectPreparationGuidePage() {
               </p>
             </div>
           </div>
+          <p>
+            The project permission checklist separates portable actions,
+            permission requests, fixed or shared-property work and items that
+            still need confirmation. It is a planning checklist, not legal or
+            strata approval advice.
+          </p>
         </GuideSection>
       </div>
 

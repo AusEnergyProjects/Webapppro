@@ -1,12 +1,21 @@
 import { createHomeEnergyPlan } from "./home-energy-plan.mjs";
-import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "./australian-postcodes.mjs";
+import {
+  AUSTRALIAN_STATE_CODES,
+  canonicalAustralianState,
+  postcodeMatchesState,
+  residentialStateFromPostcode,
+} from "./australian-postcodes.mjs";
 
 export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-29-home-advisor";
-export const CUSTOMER_LEGACY_PLAN_VERSIONS = ["2026-07-15"];
+export const CUSTOMER_PLAN_VERSION = "2026-07-29-evidence-climate-advisor";
+export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
+  "2026-07-15",
+  "2026-07-29-home-advisor",
+];
+export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v1";
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
@@ -150,6 +159,60 @@ export const customerProjectOptions = {
   ],
 };
 
+export const customerAdvisorOptions = {
+  factKeys: [
+    ["glazing", "Window glazing"],
+    ["ceiling-insulation", "Ceiling or roof insulation"],
+    ["wall-insulation", "Wall insulation"],
+    ["floor-insulation", "Underfloor insulation"],
+    ["draughts", "Draught locations"],
+    ["heating-cooling", "Heating and cooling equipment"],
+    ["hot-water", "Hot water system"],
+    ["cooking", "Cooking equipment"],
+    ["roof", "Roof type and condition"],
+    ["switchboard", "Switchboard"],
+    ["solar", "Rooftop solar"],
+    ["battery", "Home battery"],
+  ],
+  evidenceSources: [
+    ["unknown", "Not known or not checked"],
+    ["customer-reported", "Customer reported"],
+    ["photo-supported", "Photo available for review"],
+    ["document-supported", "Document available for review"],
+  ],
+  roomTypes: [
+    ["living", "Living area"],
+    ["bedroom", "Bedroom"],
+    ["kitchen", "Kitchen"],
+    ["bathroom", "Bathroom"],
+    ["study", "Study or home office"],
+    ["laundry", "Laundry or utility room"],
+    ["other", "Other room"],
+  ],
+  comfortConcerns: [
+    ["too-hot", "Too hot"],
+    ["too-cold", "Too cold"],
+    ["draughty", "Draughty"],
+    ["condensation", "Condensation"],
+    ["damp-or-mould", "Damp or mould concern"],
+    ["stuffy", "Stuffy or poorly ventilated"],
+    ["glare", "Unwanted sun or glare"],
+  ],
+  usePeriods: [
+    ["morning", "Morning"],
+    ["daytime", "Daytime"],
+    ["evening", "Evening"],
+    ["overnight", "Overnight"],
+    ["varies", "Varies"],
+  ],
+  permissionClasses: [
+    ["portable", "Portable or removable"],
+    ["permission-needed", "Ask for written permission"],
+    ["fixed-or-shared", "Fixed or shared property"],
+    ["not-sure", "Not sure"],
+  ],
+};
+
 export const platformQuoteOptions = {
   quoteTypes: [
     ["indicative", "Indicative platform estimate"],
@@ -196,6 +259,12 @@ const floorAreas = new Set(customerProjectOptions.floorAreas.map(([value]) => va
 const roofTypes = new Set(customerProjectOptions.roofTypes.map(([value]) => value));
 const switchboards = new Set(customerProjectOptions.switchboards.map(([value]) => value));
 const accessConstraints = new Set(customerProjectOptions.accessConstraints.map(([value]) => value));
+const advisorFactKeys = new Set(customerAdvisorOptions.factKeys.map(([value]) => value));
+const evidenceSources = new Set(customerAdvisorOptions.evidenceSources.map(([value]) => value));
+const roomTypes = new Set(customerAdvisorOptions.roomTypes.map(([value]) => value));
+const comfortConcerns = new Set(customerAdvisorOptions.comfortConcerns.map(([value]) => value));
+const roomUsePeriods = new Set(customerAdvisorOptions.usePeriods.map(([value]) => value));
+const permissionClasses = new Set(customerAdvisorOptions.permissionClasses.map(([value]) => value));
 const quoteTypes = new Set(platformQuoteOptions.quoteTypes.map(([value]) => value));
 const quoteInclusions = new Set(platformQuoteOptions.inclusions.map(([value]) => value));
 const quoteStartWindows = new Set(platformQuoteOptions.startWindows.map(([value]) => value));
@@ -223,6 +292,444 @@ function normaliseServiceCategories(value) {
 function integer(value, minimum, maximum, fallback = 0) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+const planningClimateProfiles = {
+  "hot-humid": {
+    label: "Hot and humid planning profile",
+    summary: "Prioritise unwanted sun, air movement, moisture control and efficient cooling before adding capacity.",
+    priorities: [
+      "Control direct sun with suitable external shade",
+      "Use safe air movement and ventilation",
+      "Check moisture sources before sealing gaps",
+      "Size efficient cooling only after reducing heat gain",
+    ],
+  },
+  "hot-dry": {
+    label: "Hot and dry planning profile",
+    summary: "Prioritise solar heat control, insulation and controlled air leakage, then plan efficient heating and cooling for the remaining load.",
+    priorities: [
+      "Control direct sun and exposed glazing",
+      "Check ceiling, wall and floor insulation",
+      "Seal unwanted air leakage without blocking required ventilation",
+      "Use cooler outdoor conditions when they are suitable",
+    ],
+  },
+  "warm-humid": {
+    label: "Warm and humid planning profile",
+    summary: "Prioritise shade, air movement and moisture-safe ventilation before relying on additional mechanical cooling.",
+    priorities: [
+      "Map sun exposure and add suitable shade",
+      "Improve safe air movement in occupied rooms",
+      "Record condensation and damp before sealing gaps",
+      "Review efficient cooling after passive measures",
+    ],
+  },
+  "temperate-dry": {
+    label: "Temperate and dry planning profile",
+    summary: "Plan for hot days and cool periods by coordinating shade, insulation, draught control and efficient reverse-cycle equipment.",
+    priorities: [
+      "Map summer sun and winter heat loss",
+      "Check insulation coverage and condition",
+      "Seal unwanted draughts without blocking required ventilation",
+      "Match efficient heating and cooling to the remaining need",
+    ],
+  },
+  "temperate-mixed": {
+    label: "Mixed temperate planning profile",
+    summary: "Balance winter heat retention with summer heat control, using room observations to decide which constraint comes first.",
+    priorities: [
+      "Record which rooms are uncomfortable by season",
+      "Check draughts and insulation before equipment sizing",
+      "Match window coverings and shade to orientation",
+      "Review efficient heating and cooling for remaining gaps",
+    ],
+  },
+  "cool-temperate": {
+    label: "Cool temperate planning profile",
+    summary: "Prioritise safe draught control, insulation, window heat loss and efficient heating while continuing to manage moisture and summer sun.",
+    priorities: [
+      "Map draughts without blocking required ventilation",
+      "Check insulation coverage and electrical clearances",
+      "Reduce window heat loss with suitable coverings or glazing",
+      "Size efficient heating after improving the building shell",
+    ],
+  },
+};
+
+export function derivePlanningClimateProfile(postcodeValue, stateValue) {
+  const postcode = text(postcodeValue, 4);
+  const state = canonicalAustralianState(stateValue) || "";
+  const residentialState = residentialStateFromPostcode(postcode);
+  if (!state || !residentialState || !postcodeMatchesState(postcode, state)) return null;
+  const postcodeNumber = Number(postcode);
+  let code = "temperate-mixed";
+  if (state === "NT") {
+    code = postcodeNumber >= 800 && postcodeNumber <= 859 ? "hot-humid" : "hot-dry";
+  } else if (state === "QLD") {
+    code = postcodeNumber >= 4800 ? "hot-humid" : "warm-humid";
+  } else if (state === "WA") {
+    code = postcodeNumber >= 6700 ? "hot-dry" : "temperate-dry";
+  } else if (state === "SA") {
+    code = "temperate-dry";
+  } else if (state === "TAS" || state === "ACT") {
+    code = "cool-temperate";
+  } else if (state === "VIC") {
+    code = postcodeNumber >= 3500 && postcodeNumber <= 3599
+      ? "temperate-dry"
+      : "cool-temperate";
+  } else if (state === "NSW") {
+    if (postcodeNumber >= 2620 && postcodeNumber <= 2639) code = "cool-temperate";
+    else if (
+      (postcodeNumber >= 2640 && postcodeNumber <= 2739)
+      || (postcodeNumber >= 2800 && postcodeNumber <= 2899)
+    ) code = "temperate-dry";
+    else if (postcodeNumber >= 2300 && postcodeNumber <= 2499) code = "warm-humid";
+  }
+  const profile = planningClimateProfiles[code];
+  return {
+    basis: "postcode-state-planning",
+    code,
+    label: profile.label,
+    summary: profile.summary,
+    priorities: [...profile.priorities],
+    notNatHERSAssessment: true,
+    disclaimer: "This broad postcode and state result is an approximate planning profile, not a NatHERS climate zone, home energy rating or site assessment. It does not size equipment or predict savings.",
+  };
+}
+
+function boundedIdentifier(value, prefix, index) {
+  const supplied = text(value, 80).toLowerCase();
+  if (/^[a-z0-9][a-z0-9:_-]{0,79}$/.test(supplied)) return supplied;
+  return `${prefix}-${index + 1}`;
+}
+
+export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
+  const supplied = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const suppliedFacts = Array.isArray(supplied.factEvidence)
+    ? supplied.factEvidence.slice(0, 16)
+    : [];
+  const factSources = new Map();
+  for (const item of suppliedFacts) {
+    if (!item || typeof item !== "object" || !advisorFactKeys.has(item.factKey)) continue;
+    factSources.set(item.factKey, evidenceSources.has(item.source) ? item.source : "unknown");
+  }
+  const factEvidence = customerAdvisorOptions.factKeys.map(([factKey]) => ({
+    factKey,
+    source: factSources.get(factKey) || "unknown",
+  }));
+
+  const seenRoomIds = new Set();
+  const rooms = (Array.isArray(supplied.rooms) ? supplied.rooms : [])
+    .slice(0, 12)
+    .flatMap((item, index) => {
+      if (!item || typeof item !== "object") return [];
+      const name = text(item.name, 60);
+      if (!name) return [];
+      let id = boundedIdentifier(item.id, "room", index);
+      if (seenRoomIds.has(id)) id = `room-${index + 1}`;
+      if (seenRoomIds.has(id)) return [];
+      seenRoomIds.add(id);
+      return [{
+        id,
+        name,
+        roomType: roomTypes.has(item.roomType) ? item.roomType : "other",
+        concerns: list(item.concerns, comfortConcerns, 7),
+        usePeriods: list(item.usePeriods, roomUsePeriods, 5),
+      }];
+    });
+
+  const seenPermissionIds = new Set();
+  const permissionItems = (Array.isArray(supplied.permissionItems) ? supplied.permissionItems : [])
+    .slice(0, 30)
+    .flatMap((item, index) => {
+      if (!item || typeof item !== "object") return [];
+      const title = text(item.title, 160);
+      if (!title) return [];
+      let id = boundedIdentifier(item.id, "permission-item", index);
+      if (seenPermissionIds.has(id)) id = `permission-item-${index + 1}`;
+      if (seenPermissionIds.has(id)) return [];
+      seenPermissionIds.add(id);
+      return [{
+        id,
+        title,
+        classification: permissionClasses.has(item.classification)
+          ? item.classification
+          : "not-sure",
+        note: text(item.note, 300),
+      }];
+    });
+
+  const climate = derivePlanningClimateProfile(context.postcode, context.addressState);
+  return {
+    version: CUSTOMER_ADVISOR_PROFILE_VERSION,
+    factEvidence,
+    rooms,
+    permissionItems,
+    ...(climate ? { climate } : {}),
+  };
+}
+
+const permissionPackSectionOptions = [
+  ["portable", "Portable or reversible options"],
+  ["owner-agent", "Ask the owner or agent before proceeding"],
+  ["strata-shared", "Ask strata or owners corporation about shared property"],
+  ["licensed-site-checks", "Licensed trade or site checks"],
+  ["evidence-questions", "Evidence and questions to include"],
+];
+
+const permissionPlanRules = new Map([
+  ["renter-friendly-actions", {
+    section: "portable",
+    title: "Start with portable comfort measures",
+    note: "Check the lease and product instructions before using removable seals, coverings or portable appliances.",
+  }],
+  ["draught-proofing", {
+    section: "licensed-site-checks",
+    title: "Separate removable draught seals from fixed ventilation work",
+    note: "Confirm required ventilation, combustion safety and any fixed vent, chimney or duct work before proceeding.",
+  }],
+  ["insulation-review", {
+    section: "licensed-site-checks",
+    title: "Arrange an insulation and access check",
+    note: "Confirm coverage, moisture, electrical clearances and safe access before insulation work.",
+  }],
+  ["windows-glazing", {
+    section: "licensed-site-checks",
+    title: "Confirm the glazing scope and supporting structure",
+    note: "Check frames, openings, shade and site conditions before fixed glazing work is priced.",
+  }],
+  ["window-shading", {
+    section: "licensed-site-checks",
+    title: "Confirm the fixing and shared-property boundary for external shade",
+    note: "External blinds, awnings and shutters may affect the building exterior or common property.",
+  }],
+  ["heating", {
+    section: "licensed-site-checks",
+    title: "Arrange heating and cooling site checks",
+    note: "Confirm equipment sizing, electrical capacity, condensate, noise and outdoor unit location.",
+  }],
+  ["existing-reverse-cycle", {
+    section: "licensed-site-checks",
+    title: "Review the existing heating and cooling system",
+    note: "Confirm condition, controls, maintenance and any fixed changes before adding capacity.",
+  }],
+  ["hot-water", {
+    section: "licensed-site-checks",
+    title: "Arrange hot water site checks",
+    note: "Confirm electrical, plumbing, drainage, noise and location constraints before replacement.",
+  }],
+  ["existing-heat-pump-hot-water", {
+    section: "licensed-site-checks",
+    title: "Review the existing heat pump hot water system",
+    note: "Confirm condition, controls, drainage, noise and any fixed changes before proceeding.",
+  }],
+  ["cooking", {
+    section: "licensed-site-checks",
+    title: "Arrange cooking and electrical site checks",
+    note: "Confirm cookware, circuit capacity, ventilation and the safe isolation of existing equipment.",
+  }],
+  ["solar", {
+    section: "licensed-site-checks",
+    title: "Arrange roof, electrical and connection checks for solar",
+    note: "Confirm roof condition, shade, switchboard, network limits and safe access.",
+  }],
+  ["battery", {
+    section: "licensed-site-checks",
+    title: "Arrange electrical and location checks for a battery",
+    note: "Confirm clearances, access, protection, ventilation and connection requirements.",
+  }],
+  ["ev", {
+    section: "licensed-site-checks",
+    title: "Arrange electrical and parking-location checks for EV charging",
+    note: "Confirm supply capacity, cable route, parking rights and any shared-property impact.",
+  }],
+  ["assessment", {
+    section: "evidence-questions",
+    title: "Ask the assessor to separate observed facts from assumptions",
+    note: "Record which findings were observed, customer reported, photo supported, document supported or still unknown.",
+  }],
+  ["evidence-confidence", {
+    section: "evidence-questions",
+    title: "List the facts that could change the scope",
+    note: "Ask what evidence is still needed before safety, sizing or major-work decisions.",
+  }],
+  ["room-comfort-profile", {
+    section: "evidence-questions",
+    title: "Include the controlled room comfort concerns",
+    note: "Describe room types and concerns without including private room names or household routines.",
+  }],
+]);
+
+export function createCustomerPermissionPack(profile = {}, context = {}) {
+  const normalized = normalizeCustomerAdvisorProfile(profile, context);
+  const householdSituation = situations.has(context.householdSituation)
+    ? context.householdSituation
+    : "";
+  const approvalContext = approvalContexts.has(context.approvalContext)
+    ? context.approvalContext
+    : "none";
+  const sections = new Map(permissionPackSectionOptions.map(([key, sectionLabel]) => [
+    key,
+    { classification: key, label: sectionLabel, items: [] },
+  ]));
+  const seen = new Set();
+  const add = (sectionKey, item) => {
+    const section = sections.get(sectionKey);
+    if (!section || !item?.id || seen.has(`${sectionKey}:${item.id}`)) return;
+    section.items.push(item);
+    seen.add(`${sectionKey}:${item.id}`);
+  };
+
+  if (householdSituation === "renter") {
+    add("portable", {
+      id: "tenure-portable-first",
+      title: "Start with options that are portable or reversible",
+      note: "Confirm lease conditions and avoid fixed changes until written permission requirements are clear.",
+    });
+    add("owner-agent", {
+      id: "tenure-owner-agent",
+      title: "Ask the owner or agent about fixed changes",
+      note: "Request written permission for the described scope before booking fixed building, electrical, plumbing or external work.",
+    });
+  }
+  if (approvalContext === "strata") {
+    add("strata-shared", {
+      id: "approval-strata",
+      title: "Confirm the lot and common-property boundary",
+      note: "Ask strata or the owners corporation which written approvals, drawings or contractor details may be required.",
+    });
+  } else if (approvalContext === "not_sure") {
+    add("evidence-questions", {
+      id: "approval-not-sure",
+      title: "Confirm whether strata or common property applies",
+      note: "Check the title, lease or building manager information before treating external or shared areas as available for work.",
+    });
+  }
+
+  const planItems = Array.isArray(context.planItems)
+    ? context.planItems
+    : Array.isArray(context.planSnapshot?.items)
+      ? context.planSnapshot.items
+      : [];
+  const permissionOverrides = new Map(
+    normalized.permissionItems.map((item) => [item.id, item]),
+  );
+  const usedPermissionItems = new Set();
+  const permissionSectionFor = (classification) => (
+    classification === "permission-needed"
+      ? "owner-agent"
+      : classification === "fixed-or-shared"
+        ? approvalContext === "strata"
+          ? "strata-shared"
+          : "licensed-site-checks"
+        : classification === "not-sure"
+          ? "evidence-questions"
+          : "portable"
+  );
+  let customPlanItemCount = 0;
+  for (const planItem of planItems.slice(0, 40)) {
+    const planItemId = text(planItem?.id, 80);
+    if (planItemId.startsWith("custom")) {
+      customPlanItemCount += 1;
+      continue;
+    }
+    const rule = permissionPlanRules.get(planItemId);
+    if (!rule) continue;
+    const override = permissionOverrides.get(planItemId)
+      || permissionOverrides.get(`plan-${planItemId}`);
+    if (override && override.classification !== "not-sure") {
+      add(permissionSectionFor(override.classification), {
+        id: `customer-${override.id}`,
+        title: rule.title,
+        note: override.note
+          ? "Customer selected this classification and recorded a private project note. Review that note in the signed-in project before sharing this checklist; its wording is not copied here."
+          : "Customer selected this classification for review.",
+      });
+      usedPermissionItems.add(override.id);
+    }
+    if (
+      override?.classification === "not-sure"
+      && rule.section !== "evidence-questions"
+    ) {
+      add("evidence-questions", {
+        id: `confirm-${planItemId}`,
+        title: `Confirm how to classify ${rule.title.toLowerCase()}`,
+        note: override.note
+          ? "A private project note is recorded for this item. Review it in the signed-in project before sharing this checklist; its wording is not copied here."
+          : "Review the proposed scope with the relevant owner, strata contact or licensed trade before proceeding.",
+      });
+    }
+    if (override) usedPermissionItems.add(override.id);
+    add(rule.section, {
+      id: `plan-${planItemId}`,
+      title: rule.title,
+      note: rule.note,
+    });
+    if (
+      householdSituation === "renter"
+      && rule.section === "licensed-site-checks"
+    ) {
+      add("owner-agent", {
+        id: `owner-agent-${planItemId}`,
+        title: `Ask about ${rule.title.toLowerCase()}`,
+        note: "Confirm the proposed fixed scope in writing before proceeding.",
+      });
+    }
+    if (approvalContext === "strata" && rule.section === "licensed-site-checks") {
+      add("strata-shared", {
+        id: `strata-${planItemId}`,
+        title: `Confirm shared-property impacts for ${rule.title.toLowerCase()}`,
+        note: "Ask whether the work affects the exterior, services, structure or common property before proceeding.",
+      });
+    }
+  }
+  if (customPlanItemCount) {
+    add("evidence-questions", {
+      id: "custom-plan-items",
+      title: "Review the home-specific plan items",
+      note: `${customPlanItemCount} custom item${customPlanItemCount === 1 ? "" : "s"} need a separate permission and site-check decision. Their private wording is not copied into this checklist.`,
+    });
+  }
+
+  const unknownFactCount = normalized.factEvidence
+    .filter((item) => item.source === "unknown").length;
+  if (unknownFactCount) {
+    add("evidence-questions", {
+      id: "unknown-home-facts",
+      title: "List the important home facts that are still unknown",
+      note: `${unknownFactCount} tracked fact${unknownFactCount === 1 ? "" : "s"} remain unknown. Confirm the ones that could change safety, scope or approval needs.`,
+    });
+  }
+
+  let privatePermissionItemCount = 0;
+  for (const item of normalized.permissionItems) {
+    if (usedPermissionItems.has(item.id)) continue;
+    if (item.id.startsWith("plan-custom")) {
+      add("evidence-questions", {
+        id: "custom-permission-items",
+        title: "Review the home-specific permission questions",
+        note: "Private custom-plan wording is not copied into this checklist. Confirm its permission and site-check boundaries separately.",
+      });
+      continue;
+    }
+    privatePermissionItemCount += 1;
+    add(permissionSectionFor(item.classification), {
+      id: `customer-private-item-${privatePermissionItemCount}`,
+      title: "Review a home-specific permission item",
+      note: item.note
+        ? "Customer classification and a private project note are recorded for this item. Review them in the signed-in project before sharing this checklist; their wording is not copied here."
+        : "Customer classification is recorded for this item. Its private title is not copied into this checklist.",
+    });
+  }
+
+  return {
+    version: CUSTOMER_ADVISOR_PROFILE_VERSION,
+    title: "Property permission checklist",
+    context: { householdSituation, approvalContext },
+    sections: [...sections.values()],
+    disclaimer: "This planning checklist records questions and possible approval boundaries. It is not legal advice, does not grant or confirm permission, and does not replace owner, strata, licensed trade or site-specific advice.",
+  };
 }
 
 export function parseStoredJson(value, fallback) {
@@ -410,6 +917,58 @@ function normaliseGoals(raw) {
   return goals.has(raw.goal) ? [raw.goal] : [];
 }
 
+function roomComfortPlanning(rooms = []) {
+  const concernValues = [...new Set(rooms.flatMap((room) => room.concerns))];
+  const useValues = [...new Set(rooms.flatMap((room) => room.usePeriods))];
+  const concernLabels = concernValues.map((value) =>
+    label(customerAdvisorOptions.comfortConcerns, value));
+  const useLabels = useValues.map((value) =>
+    label(customerAdvisorOptions.usePeriods, value));
+  const daytimeHeat = rooms.some((room) =>
+    room.concerns.includes("too-hot")
+    && room.usePeriods.some((value) => ["morning", "daytime"].includes(value)));
+  const overnightCold = rooms.some((room) =>
+    room.concerns.includes("too-cold")
+    && room.usePeriods.includes("overnight"));
+  const moistureFirst = concernValues.some((value) =>
+    ["condensation", "damp-or-mould", "stuffy"].includes(value));
+  const observed = `Controlled observations: ${concernLabels.join(", ").toLowerCase() || "no concern selected"}. Use periods: ${useLabels.join(", ").toLowerCase() || "not selected"}.`;
+  if (daytimeHeat && !overnightCold) {
+    return {
+      daytimeHeat,
+      overnightCold,
+      moistureFirst,
+      title: "Prioritise daytime heat and sun in occupied rooms",
+      text: `${observed} Check direct sun, external shade, glazing exposure and safe air movement before adding cooling capacity.`,
+    };
+  }
+  if (overnightCold && !daytimeHeat) {
+    return {
+      daytimeHeat,
+      overnightCold,
+      moistureFirst,
+      title: "Prioritise overnight heat retention in occupied rooms",
+      text: `${observed} Check safe draught control, insulation and close-fitting window coverings before adding heating capacity.`,
+    };
+  }
+  if (moistureFirst) {
+    return {
+      daytimeHeat,
+      overnightCold,
+      moistureFirst,
+      title: "Resolve moisture and ventilation questions before sealing",
+      text: `${observed} Identify moisture sources and required ventilation before making the building shell more airtight.`,
+    };
+  }
+  return {
+    daytimeHeat,
+    overnightCold,
+    moistureFirst,
+    title: "Use controlled room comfort evidence",
+    text: `${observed} Address the most frequent occupied-room concern before sizing whole-home equipment.`,
+  };
+}
+
 function createAdvisorPlan({
   selectedGoals,
   pace,
@@ -417,6 +976,7 @@ function createAdvisorPlan({
   approvalContext,
   features,
   budgetRange,
+  advisorProfile,
 }) {
   const plannerFeatures = features.filter((item) => legacyPlannerFeatures.has(item));
   const plannerSituation = approvalContext === "strata" ? "strata" : situation;
@@ -458,6 +1018,42 @@ function createAdvisorPlan({
   const addContext = (item) => {
     if (item && !contextual.some((existing) => existing.id === item.id)) contextual.push(item);
   };
+  const unknownFactCount = advisorProfile.factEvidence
+    .filter((item) => item.source === "unknown").length;
+  const supportedFactCount = advisorProfile.factEvidence.length - unknownFactCount;
+  addContext({
+    id: "evidence-confidence",
+    stage: "Check what the advice relies on",
+    title: unknownFactCount
+      ? "Close the highest-impact evidence gaps"
+      : "Keep the evidence trail with the plan",
+    text: unknownFactCount
+      ? `${unknownFactCount} of ${advisorProfile.factEvidence.length} important home facts are still marked unknown. Start with the facts that could change scope or sequencing. A customer selection, photo or document is recorded as its source, not as professional validation.`
+      : `All ${supportedFactCount} tracked home facts have a customer-selected source. Keep photos and documents with the project, and use a qualified assessment where the result affects safety, sizing or major work.`,
+    href: "/guides/project-preparation#evidence-first",
+    action: "Review the evidence boundary",
+  });
+  if (advisorProfile.climate) {
+    addContext({
+      id: "climate-sequence",
+      stage: "Plan for local conditions",
+      title: advisorProfile.climate.label,
+      text: `${advisorProfile.climate.summary} ${advisorProfile.climate.disclaimer}`,
+      href: "/guides/project-preparation#climate-planning",
+      action: "Review the climate planning boundary",
+    });
+  }
+  const roomComfort = roomComfortPlanning(advisorProfile.rooms);
+  if (advisorProfile.rooms.length) {
+    addContext({
+      id: "room-comfort-profile",
+      stage: "Prioritise occupied rooms",
+      title: roomComfort.title,
+      text: roomComfort.text,
+      href: "/guides/project-preparation#room-comfort",
+      action: "Review room-by-room planning guidance",
+    });
+  }
   if (situation === "renter" || selectedGoals.includes("renter-friendly")) addContext(advisorRecommendations.renter);
   if (features.includes("condensation-moisture") || selectedGoals.includes("healthier-home")) addContext(advisorRecommendations.moisture);
   if (
@@ -484,7 +1080,71 @@ function createAdvisorPlan({
   if (budgetRange === "under_2k") addContext(advisorRecommendations.lowBudget);
   if (budgetRange === "2_10k") addContext(advisorRecommendations.mediumBudget);
   if (budgetRange === "10k_plus") addContext(advisorRecommendations.largerBudget);
-  const items = [urgent, authority, ...contextual, ...generated, support].filter(Boolean);
+  const climateOrder = roomComfort.daytimeHeat
+    ? [
+        "evidence-confidence",
+        "room-comfort-profile",
+        "climate-sequence",
+        "moisture-ventilation",
+        "window-shading",
+        "windows-glazing",
+        "draught-proofing",
+        "insulation-review",
+      ]
+    : roomComfort.overnightCold
+      ? [
+          "evidence-confidence",
+          "room-comfort-profile",
+          "moisture-ventilation",
+          "draught-proofing",
+          "insulation-review",
+          "windows-glazing",
+          "climate-sequence",
+          "window-shading",
+        ]
+      : ["hot-humid", "hot-dry", "warm-humid"].includes(
+        advisorProfile.climate?.code,
+      )
+    ? [
+        "evidence-confidence",
+        "climate-sequence",
+        "room-comfort-profile",
+        "moisture-ventilation",
+        "window-shading",
+        "windows-glazing",
+        "draught-proofing",
+        "insulation-review",
+      ]
+    : [
+        "evidence-confidence",
+        "climate-sequence",
+        "room-comfort-profile",
+        "moisture-ventilation",
+        "draught-proofing",
+        "insulation-review",
+        "windows-glazing",
+        "window-shading",
+      ];
+  const climateRank = new Map(climateOrder.map((id, index) => [id, index]));
+  const orderedContextual = contextual
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => (
+      (climateRank.get(left.item.id) ?? climateOrder.length + left.index)
+      - (climateRank.get(right.item.id) ?? climateOrder.length + right.index)
+    ))
+    .map(({ item }) => item);
+  const portableRenter = orderedContextual.find((item) =>
+    item.id === "renter-friendly-actions");
+  const remainingContextual = orderedContextual.filter((item) =>
+    item.id !== "renter-friendly-actions");
+  const items = [
+    urgent,
+    portableRenter,
+    authority,
+    ...remainingContextual,
+    ...generated,
+    support,
+  ].filter(Boolean);
   const title = selectedGoals.length > 1
     ? "Your priorities, ordered into one home energy plan"
     : selectedGoals[0] === "replace-now"
@@ -581,6 +1241,12 @@ function prepareCustomerProjectPlan(input = {}) {
       : "none";
   const features = list(input.features || input.existingFeatures, homeFeatures, 24);
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
+  const advisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
+    postcode: input.postcode,
+    addressState: input.addressState,
+    householdSituation: situation,
+    approvalContext,
+  });
   const generatedPlan = createAdvisorPlan({
     selectedGoals,
     pace,
@@ -588,9 +1254,10 @@ function prepareCustomerProjectPlan(input = {}) {
     approvalContext,
     features,
     budgetRange,
+    advisorProfile,
   });
   const snapshot = normalisePlanSnapshot(input.planSnapshot, generatedPlan);
-  return { ...snapshot, generatedPlan };
+  return { ...snapshot, generatedPlan, advisorProfile };
 }
 
 export function createCustomerProjectPlan(input = {}) {
@@ -609,7 +1276,12 @@ export function preserveEditedPlanItems(editedItems = [], currentItems = []) {
     .flatMap((item, index) => {
       if (!item || typeof item !== "object") return [];
       const currentItem = current.get(item.id);
-      if (currentItem && !seen.has(currentItem.id)) {
+      const derivedAdvisorItem = [
+        "evidence-confidence",
+        "climate-sequence",
+        "room-comfort-profile",
+      ].includes(item.id);
+      if (currentItem && !derivedAdvisorItem && !seen.has(currentItem.id)) {
         seen.add(currentItem.id);
         return [currentItem];
       }
@@ -638,6 +1310,8 @@ export function preserveEditedPlanItems(editedItems = [], currentItems = []) {
 export function normalizeCustomerProject(raw = {}) {
   const selectedGoals = normaliseGoals(raw);
   const pace = typeof raw.pace === "string" ? raw.pace : "staged";
+  const postcode = text(raw.postcode, 4);
+  const addressState = canonicalAustralianState(raw.addressState) || "";
   const householdSituation = situations.has(raw.householdSituation)
     ? raw.householdSituation
     : "";
@@ -658,6 +1332,9 @@ export function normalizeCustomerProject(raw = {}) {
     approvalContext: propertyContext.approvalContext,
     features: existingFeatures,
     budgetRange,
+    postcode,
+    addressState,
+    advisorProfile: raw.advisorProfile,
     planSnapshot: raw.planSnapshot,
   });
   if (!preparedPlan.ok) return { ok: false, error: preparedPlan.error };
@@ -665,8 +1342,8 @@ export function normalizeCustomerProject(raw = {}) {
   const normalized = {
     title: text(raw.title, 120),
     homeNickname: text(raw.homeNickname, 80) || "My home",
-    postcode: text(raw.postcode, 4),
-    addressState: canonicalAustralianState(raw.addressState) || "",
+    postcode,
+    addressState,
     propertyType: propertyTypes.has(raw.propertyType) ? raw.propertyType : "house",
     householdSituation,
     goal: selectedGoals[0] || "",
@@ -680,6 +1357,7 @@ export function normalizeCustomerProject(raw = {}) {
     budgetRange,
     propertyContext,
     privateNotes: typeof raw.privateNotes === "string" ? raw.privateNotes.trim().slice(0, 2000) : "",
+    advisorProfile: preparedPlan.advisorProfile,
     planSnapshot,
   };
   if (!normalized.title) return { ok: false, error: "Give this project a private name." };
@@ -736,6 +1414,30 @@ export function buildAnonymizedOpportunity(project, projectId) {
       ? "approval requirements are not confirmed"
       : "";
   const siteConsiderations = [approvalConstraint, constraints].filter(Boolean).join(", ");
+  const advisorProfile = normalizeCustomerAdvisorProfile(project.advisorProfile, {
+    postcode: project.postcode,
+    addressState: project.addressState,
+    householdSituation: project.householdSituation,
+    approvalContext: context.approvalContext,
+  });
+  const roomTypeLabels = [...new Set(advisorProfile.rooms.map((room) =>
+    label(customerAdvisorOptions.roomTypes, room.roomType),
+  ))];
+  const concernLabels = [...new Set(advisorProfile.rooms.flatMap((room) =>
+    room.concerns.map((concern) => label(customerAdvisorOptions.comfortConcerns, concern)),
+  ))];
+  const knownFactCount = advisorProfile.factEvidence
+    .filter((item) => item.source !== "unknown").length;
+  const unknownFactCount = advisorProfile.factEvidence.length - knownFactCount;
+  const advisorContext = [
+    advisorProfile.climate
+      ? `${advisorProfile.climate.label}, broad planning guide only and not a NatHERS assessment`
+      : "",
+    roomTypeLabels.length
+      ? `room types: ${roomTypeLabels.join(", ").toLowerCase()}${concernLabels.length ? `; reported concerns: ${concernLabels.join(", ").toLowerCase()}` : ""}`
+      : "",
+    `${knownFactCount} tracked facts have a customer-selected source and ${unknownFactCount} remain unknown; source status does not mean professional review`,
+  ].filter(Boolean).join(". ");
   const title = categoryLabels.length === 1 ? `${categoryLabels[0]} project` : "Multi-upgrade home project";
   return {
     title,
@@ -745,7 +1447,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     serviceCategories: installerCategories,
     priority: project.timing === "urgent" ? "urgent" : "standard",
     timing: project.timing,
-    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Priorities: ${prioritySummary}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
+    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Priorities: ${prioritySummary}. Advisor planning context: ${advisorContext}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
     sourceReference: `customer-project:${projectId}`,
   };
 }
