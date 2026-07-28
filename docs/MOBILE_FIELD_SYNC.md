@@ -59,7 +59,7 @@ If the object was assembled but the final database response was interrupted, a r
 - Apply server tombstones before showing the next screen.
 - Upload actions in order, but treat every response independently so one conflict does not block unrelated work.
 - Keep photos and documents in a separate encrypted upload queue and retain their stable client upload IDs until the server reports completion.
-- Refresh authentication before sync and stop processing immediately after account suspension, membership removal or sign-out.
+- Refresh authentication before sync and stop processing immediately after account suspension, team-access removal or sign-out.
 - On HTTP 403 device revocation, purge the encrypted local database, queued files, cached addresses and push token before returning to sign-in.
 - On HTTP 426, stop all sync and direct the user to the current app release without deleting queued work.
 - Never place tokens, customer details or field notes in diagnostics, push notification text or crash reports.

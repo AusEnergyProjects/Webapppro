@@ -1,9 +1,12 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { ftsPrefixQuery } from "@/lib/fts-search";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -103,32 +106,27 @@ function cursorValues(sort: MarketplaceSort, row: Record<string, unknown>) {
 }
 
 const eligibleSupplierSql = `p.listing_status = 'published' AND p.review_status = 'approved'
-  AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'`;
+  AND a.partner_type = 'supplier'
+  AND ${verifiedTradeAccountPredicate("a")}`;
 
 function integerParam(value: string | null, fallback: number, minimum: number, maximum: number) {
   const number = Number(value);
   return Number.isInteger(number) && number >= minimum && number <= maximum ? number : fallback;
 }
 
-async function installerAccount(firebaseUid: string) {
-  const account = await getD1().prepare(
-    "SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?",
-  ).bind(firebaseUid).first<Record<string, unknown>>();
-  if (!account || account.account_status !== "active") return { error: "An active business account is required." };
-  if (account.partner_type !== "installer") return { error: "The trade product marketplace is reserved for installer accounts." };
-  if (!await accountHasFeature(firebaseUid, "installer", account.billing_status, "installer_marketplace")) {
-    return { error: "Complete trade verification before opening the wholesale product marketplace." };
-  }
-  return { account };
-}
-
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  let identity;
-  try { identity = await requireFirebaseIdentity(request); }
-  catch { return adminJson({ ok: false, error: "Sign in to continue." }, 401); }
-  const access = await installerAccount(identity.uid);
-  if (access.error) return adminJson({ ok: false, error: access.error }, 403);
+  try {
+    await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  } catch (error) {
+    if (error instanceof TradeAccessError) {
+      return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+    }
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") {
+      return adminJson({ ok: false, error: "Sign in to continue." }, 401);
+    }
+    return adminJson({ ok: false, error: "The product marketplace could not be opened." }, 500);
+  }
 
   const url = new URL(request.url);
   const search = cleanAdminText(url.searchParams.get("search"), 100).toLowerCase();

@@ -17,7 +17,7 @@ function invoiceError(error: unknown) {
   if (code === "QUICK_INVOICE_DELIVERY_FAILED") return adminJson({ ok: false, error: "The invoice remains saved, but the email could not be sent. Try again." }, 502);
   if (code === "QUICK_INVOICE_CHANGED") return adminJson({ ok: false, error: "This invoice changed in another session. Reload it before saving." }, 409);
   if (code === "QUICK_INVOICE_ISSUED") return adminJson({ ok: false, error: "An issued invoice cannot be overwritten. Create a credit instead." }, 409);
-  if (code === "QUICK_INVOICE_EXTERNAL_ACTIVITY") return adminJson({ ok: false, error: "This invoice already has accounting or payment activity, so its original totals are locked." }, 409);
+  if (code === "QUICK_INVOICE_EXTERNAL_ACTIVITY") return adminJson({ ok: false, error: "This invoice already has accounting activity, so its original totals are locked." }, 409);
   if (code === "INVALID_INVOICE_CREDIT") return adminJson({ ok: false, error: "Add a credit description, reason and valid amount." }, 400);
   if (code === "INVOICE_BALANCE_EXCEEDED") return adminJson({ ok: false, error: "The credit cannot exceed the invoice balance still outstanding." }, 409);
   if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add one to eight valid invoice lines." }, 400);
@@ -37,10 +37,6 @@ async function invoiceRow(ownerUid: string, clause: "id" | "work_order_id", valu
           AND customer.record_status = 'active'), '') delivery_email,
       COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
         WHERE credit.invoice_id = q.id AND credit.status = 'issued'), 0) credited_cents,
-      COALESCE((SELECT SUM(allocation.amount_cents) FROM trade_crm_invoice_payment_allocations allocation
-        WHERE allocation.invoice_id = q.id), 0) paid_cents,
-      EXISTS(SELECT 1 FROM trade_crm_payment_links link WHERE link.firebase_uid = q.firebase_uid
-        AND link.commercial_reference = q.invoice_number AND link.purpose = 'invoice') payment_activity,
       EXISTS(SELECT 1 FROM trade_crm_accounting_documents document WHERE document.firebase_uid = q.firebase_uid
         AND document.work_order_id = q.work_order_id AND document.document_type = 'invoice') accounting_activity
     FROM trade_crm_quick_invoices q WHERE q.${clause} = ? AND q.firebase_uid = ?`)
@@ -64,7 +60,7 @@ function payload(row: Row, credits: Row[] = [], revisions: Row[] = []) {
   let lines: unknown[] = [];
   try { lines = JSON.parse(String(row.line_items_json || "[]")); }
   catch { lines = []; }
-  const balance = invoiceBalance({ totalCents: Number(row.total_cents), creditedCents: Number(row.credited_cents || 0), paidCents: Number(row.paid_cents || 0) });
+  const balance = invoiceBalance({ totalCents: Number(row.total_cents), creditedCents: Number(row.credited_cents || 0), paidCents: 0 });
   return {
     id: String(row.id), workOrderId: String(row.work_order_id), invoiceNumber: String(row.invoice_number),
     lines, subtotalCents: Number(row.subtotal_cents), taxCents: Number(row.tax_cents), totalCents: Number(row.total_cents),
@@ -72,9 +68,8 @@ function payload(row: Row, credits: Row[] = [], revisions: Row[] = []) {
     deliveryEmail: String(row.delivery_email || ""),
     attempts: Number(row.attempts), sentAt: String(row.sent_at), createdAt: String(row.created_at), revision: Number(row.revision || 1),
     creditedCents: balance.creditedCents, paidCents: balance.paidCents, netCents: balance.netCents, outstandingCents: balance.outstandingCents,
-    canCorrect: row.status === "draft" && row.delivery_status !== "sent" && !Boolean(row.payment_activity) && !Boolean(row.accounting_activity),
-    creditBlockedReason: Boolean(row.payment_activity) ? "A payment link already uses the current total."
-      : Boolean(row.accounting_activity) ? "A connected accounting draft already uses the current total." : "",
+    canCorrect: row.status === "draft" && row.delivery_status !== "sent" && !Boolean(row.accounting_activity),
+    creditBlockedReason: Boolean(row.accounting_activity) ? "A connected accounting draft already uses the current total." : "",
     credits: credits.map((credit) => ({ creditNumber: String(credit.credit_number), description: String(credit.description),
       subtotalCents: Number(credit.subtotal_cents), taxCents: Number(credit.tax_cents), totalCents: Number(credit.total_cents),
       reason: String(credit.reason), status: String(credit.status), createdAt: String(credit.created_at) })),
@@ -111,7 +106,7 @@ export async function POST(request: Request) {
       await sendQuickInvoiceDelivery({ invoiceId, ownerUid: identity.uid, actorUid: identity.uid, origin: new URL(request.url).origin });
     } else if (action === "correct_draft") {
       if (current.status !== "draft" || current.delivery_status === "sent") throw new Error("QUICK_INVOICE_ISSUED");
-      if (Boolean(current.payment_activity) || Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
+      if (Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
       if (Number(body.expectedRevision) !== Number(current.revision || 1)) throw new Error("QUICK_INVOICE_CHANGED");
       const draft = await resolveQuickInvoiceDraft(identity.uid, body.lines);
       const dueAt = cleanDate(body.dueAt);
@@ -144,7 +139,7 @@ export async function POST(request: Request) {
       if (!Number(results[0].meta.changes || 0)) throw new Error("QUICK_INVOICE_CHANGED");
     } else if (action === "issue_credit") {
       if (!['issued', 'part_credited'].includes(String(current.status))) throw new Error("QUICK_INVOICE_ISSUED");
-      if (Boolean(current.payment_activity) || Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
+      if (Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
       const description = cleanAdminText(body.description, 180);
       const reason = cleanAdminText(body.reason, 500);
       const taxCode = cleanAdminText(body.taxCode, 10) === "none" ? "none" : "gst";
@@ -159,8 +154,7 @@ export async function POST(request: Request) {
           SELECT ?, q.id, q.work_order_id, q.firebase_uid, ?, ?, ?, ?, ?, 'issued', ?, ?, ?
           FROM trade_crm_quick_invoices q WHERE q.id = ? AND q.firebase_uid = ?
             AND ? <= q.total_cents
-              - COALESCE((SELECT SUM(c.total_cents) FROM trade_crm_quick_invoice_credits c WHERE c.invoice_id = q.id AND c.status = 'issued'), 0)
-              - COALESCE((SELECT SUM(a.amount_cents) FROM trade_crm_invoice_payment_allocations a WHERE a.invoice_id = q.id), 0)`)
+              - COALESCE((SELECT SUM(c.total_cents) FROM trade_crm_quick_invoice_credits c WHERE c.invoice_id = q.id AND c.status = 'issued'), 0)`)
           .bind(creditId, creditNumber, description, totals.subtotalCents, totals.taxCents, totals.totalCents,
             reason, identity.uid, now, invoiceId, identity.uid, totals.totalCents),
         db.prepare(`UPDATE trade_crm_quick_invoices SET status = CASE

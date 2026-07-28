@@ -1,5 +1,6 @@
 import { getD1 } from "../../db";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const ADMIN_NOTIFICATION_CATEGORIES = [
   "approval",
@@ -7,7 +8,6 @@ export const ADMIN_NOTIFICATION_CATEGORIES = [
   "trade",
   "response",
   "catalogue",
-  "billing",
   "security",
   "platform",
   "account",
@@ -117,20 +117,19 @@ export async function resolveSystemAdminNotifications({
 
 export async function backfillActionableAdminNotifications() {
   const db = getD1();
-  const marker = await db.prepare("SELECT id FROM admin_notifications WHERE event_key = 'platform:notification-backfill:v1'").first();
+  const marker = await db.prepare("SELECT id FROM admin_notifications WHERE event_key = 'platform:notification-backfill:v2'").first();
   if (marker) return;
-  const [projects, evidence, products, referrals, quotes, responses] = await Promise.all([
+  const legacyMarker = await db.prepare("SELECT id FROM admin_notifications WHERE event_key = 'platform:notification-backfill:v1'").first();
+  const [projects, evidence, products, quotes, responses, accessReviews] = await Promise.all([
     db.prepare(`SELECT id, firebase_uid, title, opportunity_id, submitted_at, status
       FROM customer_projects WHERE status IN ('matching', 'quote_review') ORDER BY updated_at DESC LIMIT 100`).all<Record<string, unknown>>(),
     db.prepare(`SELECT d.id, d.firebase_uid, d.category, d.expiry_date, d.created_at, a.partner_type, a.business_name
       FROM verification_documents d JOIN trade_accounts a ON a.firebase_uid = d.firebase_uid
-      WHERE d.status = 'uploaded' AND a.verification_status != 'approved' ORDER BY d.created_at DESC LIMIT 100`).all<Record<string, unknown>>(),
+      WHERE d.status = 'uploaded' AND NOT (${verifiedTradeAccountPredicate("a")})
+      ORDER BY d.created_at DESC LIMIT 100`).all<Record<string, unknown>>(),
     db.prepare(`SELECT p.id, p.firebase_uid, p.brand, p.name, p.model_number, p.updated_at, a.business_name
       FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
       WHERE p.review_status = 'pending' AND p.listing_status = 'published' ORDER BY p.updated_at DESC LIMIT 100`).all<Record<string, unknown>>(),
-    db.prepare(`SELECT r.id, r.referred_uid, r.risk_reason, r.updated_at, a.business_name
-      FROM trade_referrals r JOIN trade_accounts a ON a.firebase_uid = r.referred_uid
-      WHERE r.status IN ('review_required', 'reward_failed') ORDER BY r.updated_at DESC LIMIT 100`).all<Record<string, unknown>>(),
     db.prepare(`SELECT q.id, q.opportunity_match_id, q.installer_uid, q.opportunity_id, q.project_id,
       q.total_cents_ex_gst, q.submitted_at, a.business_name
       FROM customer_project_quotes q LEFT JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
@@ -139,9 +138,14 @@ export async function backfillActionableAdminNotifications() {
       FROM trade_opportunity_matches m JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       WHERE m.status = 'interested' AND o.status = 'open' ORDER BY m.updated_at DESC LIMIT 100`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT a.firebase_uid, a.business_name, a.partner_type, a.abn, a.updated_at
+      FROM trade_accounts a
+      WHERE a.account_status = 'active' AND a.verification_status = 'approved'
+        AND NOT (${verifiedTradeAccountPredicate("a")})
+      ORDER BY a.updated_at DESC LIMIT 100`).all<Record<string, unknown>>(),
   ]);
   const statements = [
-    ...projects.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+    ...(legacyMarker ? [] : projects.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
       eventKey: `customer-enquiry:${row.id}`,
       eventType: "customer.enquiry_submitted",
       category: "customer",
@@ -155,8 +159,8 @@ export async function backfillActionableAdminNotifications() {
       requiresAction: true,
       metadata: { opportunityId: row.opportunity_id, status: row.status },
       occurredAt: String(row.submitted_at),
-    })),
-    ...evidence.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+    }))),
+    ...(legacyMarker ? [] : evidence.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
       eventKey: `verification-evidence:${row.id}`,
       eventType: "trade.verification_evidence_uploaded",
       category: "approval",
@@ -170,8 +174,8 @@ export async function backfillActionableAdminNotifications() {
       requiresAction: true,
       metadata: { category: row.category, expiryDate: row.expiry_date },
       occurredAt: String(row.created_at),
-    })),
-    ...products.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+    }))),
+    ...(legacyMarker ? [] : products.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
       eventKey: `supplier-product-review:${row.id}:${row.updated_at}`,
       eventType: "supplier.product_review_required",
       category: "catalogue",
@@ -185,23 +189,8 @@ export async function backfillActionableAdminNotifications() {
       requiresAction: true,
       metadata: { modelNumber: row.model_number },
       occurredAt: String(row.updated_at),
-    })),
-    ...referrals.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
-      eventKey: `referral-review:${row.id}`,
-      eventType: "trade.referral_review_required",
-      category: "approval",
-      priority: "high",
-      title: "Referral eligibility needs review",
-      summary: `${String(row.business_name).slice(0, 160)} has a referral eligibility or reward item requiring review.`,
-      entityType: "trade_referral",
-      entityId: String(row.id),
-      actorType: "system",
-      actorUid: String(row.referred_uid),
-      requiresAction: true,
-      metadata: { riskReason: row.risk_reason },
-      occurredAt: String(row.updated_at),
-    })),
-    ...quotes.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+    }))),
+    ...(legacyMarker ? [] : quotes.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
       eventKey: `installer-quote:${row.opportunity_match_id}:${row.submitted_at}`,
       eventType: "installer.quote_submitted",
       category: "response",
@@ -215,8 +204,8 @@ export async function backfillActionableAdminNotifications() {
       requiresAction: true,
       metadata: { opportunityId: row.opportunity_id, projectId: row.project_id, totalCentsExGst: row.total_cents_ex_gst },
       occurredAt: String(row.submitted_at),
-    })),
-    ...responses.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+    }))),
+    ...(legacyMarker ? [] : responses.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
       eventKey: `installer-response:${row.id}:interested`,
       eventType: "installer.lead_interested",
       category: "response",
@@ -230,6 +219,21 @@ export async function backfillActionableAdminNotifications() {
       requiresAction: true,
       metadata: { opportunityId: row.opportunity_id, status: "interested" },
       occurredAt: String(row.updated_at),
+    }))),
+    ...accessReviews.results.map((row: Record<string, unknown>) => adminNotificationStatement(db, {
+      eventKey: `trade-access-review-required:${row.firebase_uid}:${row.abn}`,
+      eventType: "trade.identity_review_required",
+      category: "approval",
+      priority: "high",
+      title: "Trade access review evidence required",
+      summary: `${String(row.business_name).slice(0, 160)} has an earlier approved status without the exact ABN review record now required. Access remains withheld until an authorised review is recorded.`,
+      entityType: "trade_account",
+      entityId: String(row.firebase_uid),
+      actorType: row.partner_type === "supplier" ? "supplier" : "installer",
+      actorUid: String(row.firebase_uid),
+      requiresAction: true,
+      metadata: { reason: "approved_status_without_exact_review" },
+      occurredAt: String(row.updated_at),
     })),
   ];
   for (let index = 0; index < statements.length; index += 50) {
@@ -240,9 +244,9 @@ export async function backfillActionableAdminNotifications() {
     (id, event_key, event_type, category, priority, title, summary, entity_type, entity_id,
      actor_type, actor_uid, requires_action, status, read_at, read_by_uid, resolved_at,
      resolved_by_uid, resolution_note, assigned_to_uid, assigned_at, due_at, metadata, created_at, updated_at)
-    VALUES (?, 'platform:notification-backfill:v1', 'platform.backfill_marker', 'platform', 'low',
-      'Notification history prepared', 'Existing actionable items were added to the operations inbox.',
-      'platform', 'notification-backfill-v1', 'system', '', 0, 'resolved', ?, 'system', ?, 'system',
+    VALUES (?, 'platform:notification-backfill:v2', 'platform.backfill_marker', 'platform', 'low',
+      'ABN access evidence reconciled', 'Existing actionable items and incomplete ABN access reviews were reconciled in the operations inbox.',
+      'platform', 'notification-backfill-v2', 'system', '', 0, 'resolved', ?, 'system', ?, 'system',
       'Automatic migration marker.', '', '', '', '{}', ?, ?)
     ON CONFLICT(event_key) DO NOTHING`).bind(crypto.randomUUID(), now, now, now, now).run();
   await dispatchAdminNotificationDeliveries();

@@ -59,13 +59,11 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("direct trade proposition presents the trade network and subscription model honestly", () => {
-  assert.match(guide, /Traditional upgrade channels can include sales, referral and administration businesses/);
+test("direct trade proposition presents the free verified operating model honestly", () => {
+  assert.match(guide, /Traditional upgrade channels can include sales and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /through an active trade network/i);
-  assert.match(guide, /Paid membership will support the service/);
-  assert.match(guide, /without adding a margin to household equipment, selling individual leads or auctioning placement/);
-  assert.doesNotMatch(guide, /Participating installers fund the service through a current subscription/);
+  assert.match(guide, /TLink gives approved trade businesses the core operating tools at A\$0/);
+  assert.match(guide, /Household details remain protected, individual leads are not sold and placement is not auctioned/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
 
@@ -74,8 +72,9 @@ test("direct trade marketplace includes reputable wholesalers", () => {
   assert.match(guide, /reputable suppliers (?:can|to) connect proven products with qualified trades and suitable households/i);
 });
 
-test("installer membership does not imply government accreditation", () => {
-  assert.match(guide, /verified membership in the Australian Energy Assessments program/);
+test("TLink approval does not imply government accreditation", () => {
+  assert.match(guide, /TLink approval is not a government accreditation/);
+  assert.match(guide, /submitted ABN and required business evidence passed the TLink review/);
   assert.match(guide, /does not replace a trade licence, government accreditation or scheme-specific installer approval/);
   assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);
@@ -157,7 +156,7 @@ test("public discovery metadata is complete and private operations stay excluded
   assert.match(robots, /\/operations\//);
   assert.match(robots, /\/api\//);
   assert.match(robots, /sitemap\.xml/);
-  assert.match(sitemap, /\/direct-trade\/membership/);
+  assert.match(sitemap, /\/direct-trade\/access/);
   assert.doesNotMatch(sitemap, /\/operations/);
   assert.match(manifest, /display: "standalone"/);
 });

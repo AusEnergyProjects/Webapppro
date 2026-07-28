@@ -22,7 +22,6 @@ const ecosystemHealthRoute = read(
 const recoveryRoute = read("../src/app/api/admin/recovery/route.ts");
 const firebaseServer = read("../src/lib/firebase-server.ts");
 const productRoute = read("../src/app/api/admin/products/route.ts");
-const referralsRoute = read("../src/app/api/admin/referrals/route.ts");
 const databaseRoute = read("../src/app/api/admin/database/route.ts");
 const partnerOpportunities = read(
   "../src/app/api/trade-opportunities/route.ts",
@@ -52,7 +51,6 @@ test("operations portal is unlisted and every administrator API has server-side 
     allocationRoute,
     ecosystemHealthRoute,
     productRoute,
-    referralsRoute,
     databaseRoute,
   ]) {
     assert.match(route, /sameOrigin\(request\)/);
@@ -79,7 +77,7 @@ test("administration is least privilege and protects the final owner", () => {
   assert.match(adminServer, /"owner", "admin", "reviewer", "support"/);
   assert.match(
     accountsRoute,
-    /Reviewers can update verification status and internal notes only/,
+    /Reviewers can record ABN verification decisions and internal notes only/,
   );
   assert.match(adminsRoute, /requireAdminIdentity\(request, \["owner"\]\)/);
   assert.match(adminsRoute, /At least one active owner account is required/);
@@ -116,12 +114,29 @@ test("owner identity recovery is explicit, recent, password based and audited", 
 test("moderation, evidence and matching actions have durable audit records", () => {
   assert.match(schema, /sqliteTable\("admin_audit_log"/);
   assert.match(schema, /sqliteTable\("trade_account_notes"/);
-  assert.match(accountsRoute, /writeAdminAudit/);
+  assert.match(accountsRoute, /adminAuditStatement/);
+  assert.match(accountsRoute, /await db\.batch\(statements\)/);
   assert.match(opportunitiesRoute, /writeAdminAudit/);
   assert.match(matchesRoute, /writeAdminAudit/);
   assert.match(evidenceRoute, /verification\.download/);
   assert.match(evidenceRoute, /Content-Disposition/);
   assert.doesNotMatch(evidenceRoute, /publicUrl|signedUrl/);
+});
+
+test("admin opportunity transitions and ecosystem readiness use the current ABN review ledger", () => {
+  assert.ok(
+    (matchesRoute.match(/verifiedTradeAccountPredicate\("a"\)/g) || []).length >= 2,
+    "both transition preflight and update must use the authoritative installer predicate",
+  );
+  assert.match(matchesRoute, /ACCESS_REQUIRED_MATCH_STATUSES/);
+  assert.match(matchesRoute, /"connected"/);
+  assert.match(matchesRoute, /installer_access_approved/);
+  assert.match(matchesRoute, /\? IN \('declined', 'closed'\)/);
+  assert.match(ecosystemHealthRoute, /verifiedTradeAccountPredicate\("a"\)/);
+  assert.doesNotMatch(
+    ecosystemHealthRoute,
+    /account_status = 'active' AND verification_status = 'approved'/,
+  );
 });
 
 test("opportunities remain privacy-safe and partner responses stay owner scoped", () => {
@@ -189,10 +204,11 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(catalogueWorkspace, /Minimum order/);
   assert.match(catalogueWorkspace, /Lead time/);
   assert.match(catalogueWorkspace, /Warranty/);
-  assert.match(portal, /Referral rewards and eligibility/);
+  assert.match(portal, /Business profiles/);
+  assert.match(portal, /ABN and evidence review required/);
   assert.match(portal, /Operations team/);
   assert.match(portal, /Recent administrator activity/);
-  assert.match(portal, /<span>16<\/span>Database/);
+  assert.match(portal, /<span>15<\/span>Database/);
   assert.match(databaseWorkspace, /Live database console/);
   assert.match(portal, /sendPasswordResetEmail/);
   assert.match(portal, /Forgot password\?/);
@@ -209,8 +225,8 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
 });
 
 test("the extracted account workspace preserves saved filters, cursors, moderation and privacy boundaries", () => {
-  assert.match(portal, /<AdminAccountWorkspace api=\{api\} role=\{session\.role\} setStatus=\{setStatus\} onCounts=\{setAccountListCounts\}/);
-  for (const parameter of ["search", "partnerType", "verification", "synthetic", "cursor", "total"]) {
+  assert.match(portal, /<AdminAccountWorkspace api=\{api\} role=\{session\.role\} setStatus=\{setStatus\} onCounts=\{\(\) => undefined\} target=\{partnerTarget\} verificationTarget=\{partnerVerificationTarget\}/);
+  for (const parameter of ["search", "partnerType", "verification", "cursor", "total"]) {
     assert.match(accountWorkspace, new RegExp(`params\\.set\\("${parameter}"`));
   }
   assert.match(accountWorkspace, /cursors\.current\[accountPage\] = next\.nextCursor/);
@@ -278,7 +294,7 @@ test("large opportunity sets use cursor pages with bounded allocation lookups", 
 test("the ecosystem walkthrough is read only, privacy safe and checks every platform role", () => {
   assert.match(ecosystemHealthRoute, /requireAdminIdentity\(request\)/);
   assert.match(ecosystemHealthRoute, /sameOrigin\(request\)/);
-  assert.match(ecosystemHealthRoute, /COALESCE\(is_synthetic, 0\) = 1/);
+  assert.match(ecosystemHealthRoute, /COALESCE\((?:a\.)?is_synthetic, 0\) = 1/);
   assert.match(ecosystemHealthRoute, /match_count >= 6/);
   assert.match(ecosystemHealthRoute, /listing_status = 'published'/);
   assert.match(ecosystemHealthRoute, /customer_project_quotes/);

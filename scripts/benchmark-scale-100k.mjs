@@ -42,14 +42,18 @@ database.exec(`
   CREATE TABLE trade_accounts (
     firebase_uid TEXT PRIMARY KEY,
     business_name TEXT NOT NULL,
+    abn TEXT NOT NULL,
     partner_type TEXT NOT NULL,
     account_status TEXT NOT NULL,
     verification_status TEXT NOT NULL,
-    billing_status TEXT NOT NULL,
+    verified_abn TEXT NOT NULL,
+    verification_review_id TEXT NOT NULL,
+    verification_reviewed_at TEXT NOT NULL,
+    verification_reviewed_by_uid TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
   CREATE INDEX trade_accounts_eligibility_idx ON trade_accounts
-    (partner_type, account_status, verification_status, billing_status, firebase_uid);
+    (partner_type, account_status, verification_status, verified_abn, firebase_uid);
   CREATE INDEX trade_accounts_admin_type_updated_idx ON trade_accounts
     (partner_type, updated_at, firebase_uid);
   CREATE INDEX trade_accounts_admin_status_updated_idx ON trade_accounts
@@ -58,6 +62,25 @@ database.exec(`
     (verification_status, updated_at, firebase_uid);
   CREATE INDEX trade_accounts_business_nocase_idx ON trade_accounts
     (business_name COLLATE NOCASE, firebase_uid);
+
+  CREATE TABLE trade_account_verification_reviews (
+    id TEXT PRIMARY KEY,
+    firebase_uid TEXT NOT NULL,
+    abn TEXT NOT NULL,
+    business_name TEXT NOT NULL,
+    partner_type TEXT NOT NULL,
+    legal_entity_name TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    review_method TEXT NOT NULL,
+    source_reference TEXT NOT NULL,
+    note TEXT NOT NULL,
+    reviewed_by_uid TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL
+  );
+  CREATE INDEX trade_account_verification_reviews_owner_idx ON trade_account_verification_reviews
+    (firebase_uid, reviewed_at);
+  CREATE INDEX trade_account_verification_reviews_reviewer_idx ON trade_account_verification_reviews
+    (reviewed_by_uid, reviewed_at);
 
   CREATE TABLE supplier_products (
     id TEXT PRIMARY KEY,
@@ -121,11 +144,33 @@ database.exec(`
   SELECT
     'account-' || printf('%06d', ${numberSql}),
     'Business ' || printf('%06d', ${numberSql}),
+    '51824753556',
     CASE WHEN ${numberSql} % 5 = 0 THEN 'supplier' ELSE 'installer' END,
     CASE WHEN ${numberSql} % 97 = 0 THEN 'suspended' ELSE 'active' END,
     CASE WHEN ${numberSql} % 29 = 0 THEN 'under_review' ELSE 'approved' END,
-    CASE WHEN ${numberSql} % 11 = 0 THEN 'trial' ELSE 'active' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN '' ELSE '51824753556' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN '' ELSE 'review-' || printf('%06d', ${numberSql}) END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN '' ELSE '2026-07-01T00:00:00.000Z' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN '' ELSE 'benchmark-reviewer' END,
     '2026-07-' || printf('%02d', (${numberSql} % 28) + 1) || 'T12:00:00.000Z'
+  FROM ${sourceSql};
+
+  INSERT INTO trade_account_verification_reviews
+  SELECT
+    'review-' || printf('%06d', ${numberSql}),
+    'account-' || printf('%06d', ${numberSql}),
+    '51824753556',
+    'Business ' || printf('%06d', ${numberSql}),
+    CASE WHEN ${numberSql} % 5 = 0 THEN 'supplier' ELSE 'installer' END,
+    'Business ' || printf('%06d', ${numberSql}),
+    CASE WHEN ${numberSql} % 29 = 0 THEN 'submitted' ELSE 'approved' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN 'profile_submission' ELSE 'official_abr_lookup' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN '' ELSE 'https://abr.business.gov.au/ABN/View?abn=51824753556' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN 'Awaiting authorised business review.' ELSE 'Benchmark authoritative business review.' END,
+    CASE WHEN ${numberSql} % 29 = 0 THEN 'benchmark-system' ELSE 'benchmark-reviewer' END,
+    CASE WHEN ${numberSql} % 29 = 0
+      THEN '2026-06-30T00:00:00.000Z'
+      ELSE '2026-07-01T00:00:00.000Z' END
   FROM ${sourceSql};
 
   INSERT INTO supplier_products
@@ -186,7 +231,39 @@ try { database.exec(`
 }
 const searchIndexMs = performance.now() - searchIndexStartedAt;
 
-const eligible = "p.listing_status = 'published' AND p.review_status = 'approved' AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved' AND a.billing_status IN ('trial', 'active')";
+const validAbn = `length(a.abn) = 11
+  AND a.abn NOT GLOB '*[^0-9]*'
+  AND (
+    ((CAST(substr(a.abn, 1, 1) AS INTEGER) - 1) * 10)
+    + (CAST(substr(a.abn, 2, 1) AS INTEGER) * 1)
+    + (CAST(substr(a.abn, 3, 1) AS INTEGER) * 3)
+    + (CAST(substr(a.abn, 4, 1) AS INTEGER) * 5)
+    + (CAST(substr(a.abn, 5, 1) AS INTEGER) * 7)
+    + (CAST(substr(a.abn, 6, 1) AS INTEGER) * 9)
+    + (CAST(substr(a.abn, 7, 1) AS INTEGER) * 11)
+    + (CAST(substr(a.abn, 8, 1) AS INTEGER) * 13)
+    + (CAST(substr(a.abn, 9, 1) AS INTEGER) * 15)
+    + (CAST(substr(a.abn, 10, 1) AS INTEGER) * 17)
+    + (CAST(substr(a.abn, 11, 1) AS INTEGER) * 19)
+  ) % 89 = 0`;
+const eligible = `p.listing_status = 'published' AND p.review_status = 'approved'
+  AND a.partner_type = 'supplier' AND a.account_status = 'active'
+  AND a.verification_status = 'approved' AND a.verified_abn = a.abn
+  AND a.verified_abn <> '' AND ${validAbn}
+  AND a.verification_review_id <> '' AND a.verification_reviewed_at <> ''
+  AND a.verification_reviewed_by_uid <> ''
+  AND EXISTS (
+    SELECT 1 FROM trade_account_verification_reviews verified_review
+    WHERE verified_review.id = a.verification_review_id
+      AND verified_review.firebase_uid = a.firebase_uid
+      AND verified_review.abn = a.verified_abn
+      AND verified_review.business_name = a.business_name
+      AND verified_review.partner_type = a.partner_type
+      AND verified_review.decision = 'approved'
+      AND verified_review.review_method = 'official_abr_lookup'
+      AND verified_review.reviewed_by_uid = a.verification_reviewed_by_uid
+      AND verified_review.reviewed_at = a.verification_reviewed_at
+  )`;
 const catalogueSelect = `SELECT p.id, p.name, p.brand, p.model_number
   FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
   WHERE ${eligible}`;
@@ -260,6 +337,7 @@ for (const [name, query] of Object.entries(queries)) {
 
 const counts = Object.fromEntries([
   ["accounts", "trade_accounts"],
+  ["verificationReviews", "trade_account_verification_reviews"],
   ["products", "supplier_products"],
   ["opportunities", "trade_opportunities"],
   ["customers", "trade_crm_customers"],

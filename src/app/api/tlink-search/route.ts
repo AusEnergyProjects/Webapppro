@@ -1,7 +1,11 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -16,6 +20,9 @@ const readable = (value: unknown) => String(value || "").replaceAll("_", " ").re
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeAccessError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
@@ -31,14 +38,10 @@ function matches(kind: SearchKind, selected: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await requireFirebaseIdentity(request);
+    const access = await requireVerifiedTradeAccess(request);
+    const identity = access.identity;
     const db = getD1();
-    const account = await db.prepare(`SELECT partner_type, account_status, billing_status
-      FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-    if (!account) throw new Error("PROFILE_REQUIRED");
-    if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-    const partnerType = String(account.partner_type);
-    if (!new Set(["installer", "supplier"]).has(partnerType)) throw new Error("TRADE_REQUIRED");
+    const partnerType = access.partnerType;
 
     const url = new URL(request.url);
     const rawQuery = cleanAdminText(url.searchParams.get("q"), 80).replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim();
@@ -46,7 +49,7 @@ export async function GET(request: Request) {
     if (!KINDS.has(selectedKind)) return adminJson({ ok: false, error: "Search category was not recognised." }, 400);
     if (rawQuery.length < 2) return adminJson({ ok: true, query: rawQuery, records: [], limit: RESULT_LIMIT });
 
-    const entitlements = await accountEntitlements(identity.uid, partnerType as "installer" | "supplier", account.billing_status);
+    const entitlements = await accountEntitlements(identity.uid, partnerType);
     const term = `%${rawQuery.toLowerCase()}%`;
     const searches: Array<Promise<SearchRecord[]>> = [];
 
@@ -82,7 +85,8 @@ export async function GET(request: Request) {
           p.stock_status, p.lead_time_days, a.business_name supplier_name
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
         WHERE p.listing_status = 'published' AND p.review_status = 'approved'
-          AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
+          AND a.partner_type = 'supplier'
+          AND ${verifiedTradeAccountPredicate("a")}
           AND LOWER(p.model_number || ' ' || p.brand || ' ' || p.name || ' ' || p.category || ' ' || a.business_name) LIKE ?
         ORDER BY CASE WHEN LOWER(p.model_number) = LOWER(?) THEN 0 ELSE 1 END,
           p.name COLLATE NOCASE, p.brand COLLATE NOCASE LIMIT ${KIND_LIMIT}`)

@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { normalisePriceBookInput } from "@/lib/trade-price-book";
 import { canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -10,7 +11,7 @@ type Row = Record<string, unknown>;
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED"].includes(code)) {
+  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) {
     return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
   }
   if (code === "PRICE_BOOK_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage the price book." }, 403);
@@ -45,7 +46,8 @@ async function catalogueReference(id: string) {
   if (!id) return null;
   const row = await getD1().prepare(`SELECT p.id, p.model_number, p.name, p.unit_price_cents_ex_gst, a.business_name
     FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-    WHERE p.id = ? AND p.listing_status = 'published' AND p.review_status = 'approved' AND a.account_status = 'active'`)
+    WHERE p.id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
+      AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'`)
     .bind(id).first<Row>();
   if (!row) throw new Error("CATALOGUE_ITEM_UNAVAILABLE");
   return row;
@@ -104,7 +106,8 @@ async function libraryPayload(ownerUid: string, url: URL) {
     capabilityOptions(ownerUid),
     db.prepare(`SELECT p.id, p.model_number, p.name, p.unit_price_cents_ex_gst, a.business_name
       FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-      WHERE p.listing_status = 'published' AND p.review_status = 'approved' AND a.account_status = 'active'
+      WHERE p.listing_status = 'published' AND p.review_status = 'approved'
+        AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
       ORDER BY p.updated_at DESC, p.name COLLATE NOCASE LIMIT 100`).all<Row>(),
   ]);
   return {
@@ -119,7 +122,7 @@ async function libraryPayload(ownerUid: string, url: URL) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false); requireManager(access); const url = new URL(request.url);
+    const access = await requireInstallerTeamAccess(request); requireManager(access); const url = new URL(request.url);
     const itemId = cleanAdminText(url.searchParams.get("itemId"), 180);
     if (itemId) {
       await ownedItem(access.ownerUid, itemId);
@@ -139,7 +142,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
     if (cleanAdminText(body.action, 30) !== "create") return adminJson({ ok: false, error: "Unsupported price-book action." }, 400);
     const db = getD1(); const count = await db.prepare("SELECT COUNT(*) count FROM trade_price_book_items WHERE firebase_uid = ?")
       .bind(access.ownerUid).first<Row>();
@@ -171,7 +174,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
     const action = cleanAdminText(body.action, 30); const itemId = cleanAdminText(body.itemId, 180);
     const existing = await ownedItem(access.ownerUid, itemId); const db = getD1(); const now = new Date().toISOString();
     if (action === "archive") {

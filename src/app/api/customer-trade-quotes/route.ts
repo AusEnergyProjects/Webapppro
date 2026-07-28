@@ -4,6 +4,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { calculateQuoteSelection, type QuoteChoiceTotals } from "@/lib/trade-quote-options";
 import { providerNeutralCommercialRecord } from "@/lib/trade-commercial-reference";
 import { acceptedScopeSnapshot, depositAmountCents } from "@/lib/trade-commercial-handoff";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -41,16 +42,19 @@ async function customerQuotes(identity: FirebaseIdentity) {
       w.work_number, w.title work_title, c.customer_number,
       CASE WHEN c.business_name != '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
       s.site_label, s.address_line_1, s.suburb, s.address_state, s.postcode,
-      a.decision, a.decided_at, a.selected_choice_ids_json, a.selected_subtotal_cents, a.selected_tax_cents,
-      a.selected_total_cents, a.selection_summary
+      acceptance.decision, acceptance.decided_at, acceptance.selected_choice_ids_json,
+      acceptance.selected_subtotal_cents, acceptance.selected_tax_cents,
+      acceptance.selected_total_cents, acceptance.selection_summary
     FROM trade_crm_quote_versions v JOIN trade_crm_quotes q ON q.id = v.quote_id AND q.firebase_uid = v.firebase_uid
     JOIN trade_work_orders w ON w.id = q.work_order_id AND w.firebase_uid = q.firebase_uid AND w.record_status = 'active'
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid AND d.customer_source = 'trade_owned'
       AND d.crm_customer_id = q.crm_customer_id AND d.service_site_id = q.service_site_id
     JOIN trade_crm_customers c ON c.id = q.crm_customer_id AND c.firebase_uid = q.firebase_uid AND c.record_status = 'active'
     JOIN trade_crm_service_sites s ON s.id = q.service_site_id AND s.customer_id = c.id AND s.firebase_uid = q.firebase_uid AND s.record_status = 'active'
-    LEFT JOIN trade_crm_quote_acceptances a ON a.quote_version_id = v.id
+    LEFT JOIN trade_crm_quote_acceptances acceptance ON acceptance.quote_version_id = v.id
+    LEFT JOIN trade_accounts trade ON trade.firebase_uid = v.firebase_uid AND trade.partner_type = 'installer'
     WHERE v.acceptance_email = ? AND v.issued_at != ''
+      AND (acceptance.id IS NOT NULL OR (${verifiedTradeAccountPredicate("trade")}))
     ORDER BY v.issued_at DESC, v.quote_id, v.version_number DESC LIMIT 100`).bind(identity.email).all<Row>();
   const versionIds = rows.results.map((row) => String(row.id)); const placeholders = versionIds.map(() => "?").join(",");
   const itemRows = versionIds.length ? await db.prepare(`SELECT * FROM trade_crm_quote_items WHERE quote_version_id IN (${placeholders}) ORDER BY quote_version_id, position`).bind(...versionIds).all<Row>() : { results: [] as Row[] };
@@ -98,6 +102,8 @@ export async function POST(request: Request) {
       JOIN trade_crm_quotes q ON q.id = v.quote_id AND q.firebase_uid = v.firebase_uid
       JOIN trade_crm_job_details d ON d.work_order_id = q.work_order_id AND d.firebase_uid = q.firebase_uid
         AND d.customer_source = 'trade_owned' AND d.crm_customer_id = q.crm_customer_id AND d.service_site_id = q.service_site_id
+      JOIN trade_accounts trade ON trade.firebase_uid = v.firebase_uid
+        AND trade.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("trade")}
       WHERE v.id = ? AND v.acceptance_email = ? AND v.status = 'issued' AND v.version_number = q.current_version_number`)
       .bind(versionId, identity.email).first<Row>();
     if (!version) throw new Error("QUOTE_NOT_FOUND");

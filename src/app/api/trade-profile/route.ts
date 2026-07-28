@@ -1,14 +1,18 @@
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
-import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
-import { createAdminNotification } from "@/lib/admin-notifications";
+import { adminNotificationStatement } from "@/lib/admin-notifications";
 import {
   resolveEntitlements,
-  type FeatureGrant,
   type PartnerType,
 } from "@/lib/direct-trade-entitlements";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
+import { isValidAbn, normalizeAbn } from "@/lib/trade-abn";
+import {
+  approvedAbnAccess,
+  approvedTradeReviewPredicate,
+  requireVerifiedTradeIdentity,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -40,7 +44,6 @@ type ProfilePayload = {
   capabilities?: unknown;
   summary?: unknown;
   consent?: unknown;
-  referralCode?: unknown;
 };
 
 function json(body: object, status = 200) {
@@ -49,12 +52,6 @@ function json(body: object, status = 200) {
 
 function cleanText(value: unknown, maximum: number) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
-}
-
-function isValidAbn(value: string) {
-  if (!/^\d{11}$/.test(value)) return false;
-  const weights = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
-  return value.split("").reduce((total, digit, index) => total + (Number(digit) - (index === 0 ? 1 : 0)) * weights[index], 0) % 89 === 0;
 }
 
 function cleanList(value: unknown, allowed: Set<string>) {
@@ -83,32 +80,37 @@ export async function GET(request: Request) {
 
   const db = getD1();
   const record = await db.prepare(`
-    SELECT business_name, abn, address_line_1, suburb, address_state, postcode,
-           contact_name, phone, partner_type, business_website,
-           service_states, capabilities, summary, account_status,
-           verification_status, plan_key, billing_status, availability_status,
-           service_base_postcode, service_radius_km,
-           email_opportunities, email_weekly_summary, settings_updated_at
-    FROM trade_accounts
-    WHERE firebase_uid = ?
+    SELECT account.business_name, account.abn, account.address_line_1,
+           account.suburb, account.address_state, account.postcode,
+           account.contact_name, account.phone, account.partner_type,
+           account.business_website, account.service_states, account.capabilities,
+           account.summary, account.account_status, account.verification_status,
+           account.verified_abn, account.verification_review_id,
+           account.verification_reviewed_at, account.verification_reviewed_by_uid,
+           account.availability_status, account.service_base_postcode,
+           account.service_radius_km, account.email_opportunities,
+           account.email_weekly_summary, account.settings_updated_at,
+           CASE WHEN ${approvedTradeReviewPredicate("account")}
+             THEN 1 ELSE 0 END approval_review_exists
+    FROM trade_accounts account
+    WHERE account.firebase_uid = ?
   `).bind(identity.uid).first<Record<string, unknown>>();
 
   if (!record) return json({ ok: true, profile: null });
-  const grantRows = await db.prepare(`SELECT feature_key, status, expires_at, note, updated_at
-    FROM trade_account_feature_grants WHERE firebase_uid = ? ORDER BY feature_key`)
-    .bind(identity.uid).all<Record<string, unknown>>();
-  const featureGrants = grantRows.results.map((grant: Record<string, unknown>) => ({
-    featureKey: grant.feature_key,
-    status: grant.status,
-    expiresAt: grant.expires_at,
-    note: grant.note,
-    updatedAt: grant.updated_at,
-  })) as FeatureGrant[];
+  const accessApproved = approvedAbnAccess({
+    abn: String(record.abn || ""),
+    partnerType: String(record.partner_type),
+    accountStatus: String(record.account_status),
+    verificationStatus: String(record.verification_status),
+    verifiedAbn: String(record.verified_abn || ""),
+    verificationReviewId: String(record.verification_review_id || ""),
+    verificationReviewedAt: String(record.verification_reviewed_at || ""),
+    verificationReviewedByUid: String(record.verification_reviewed_by_uid || ""),
+    approvalReviewExists: Boolean(record.approval_review_exists),
+  });
   const entitlements = resolveEntitlements(
     String(record.partner_type) as PartnerType,
-    record.billing_status,
-    featureGrants,
-    record.verification_status === "approved",
+    accessApproved && identity.emailVerified,
   );
   return json({
     ok: true,
@@ -128,15 +130,17 @@ export async function GET(request: Request) {
       summary: record.summary,
       accountStatus: record.account_status,
       verificationStatus: record.verification_status,
-      planKey: record.plan_key,
-      billingStatus: record.billing_status,
+      verifiedAbn: record.verified_abn,
+      verificationReviewId: record.verification_review_id,
+      verificationReviewedAt: record.verification_reviewed_at,
+      verificationReviewedByUid: record.verification_reviewed_by_uid,
+      accessApproved: accessApproved && identity.emailVerified,
       availabilityStatus: record.availability_status,
       serviceBasePostcode: record.service_base_postcode || record.postcode,
       serviceRadiusKm: Number(record.service_radius_km || 50),
       emailOpportunities: Boolean(record.email_opportunities),
       emailWeeklySummary: Boolean(record.email_weekly_summary),
       settingsUpdatedAt: record.settings_updated_at,
-      featureGrants,
       entitlements,
     },
   });
@@ -154,6 +158,15 @@ export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const identity = await identityOrResponse(request);
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
+  try {
+    await requireVerifiedTradeIdentity(identity);
+  } catch (error) {
+    return json({
+      ok: false,
+      code: error instanceof Error && "code" in error ? String(error.code) : "ABN_REVIEW_REQUIRED",
+      error: error instanceof Error ? error.message : "ABN review and approval are required.",
+    }, 403);
+  }
 
   let raw: SettingsPayload;
   try {
@@ -221,7 +234,7 @@ export async function POST(request: Request) {
   }
 
   const businessName = cleanText(raw.businessName, 160);
-  const abn = cleanText(raw.abn, 20).replace(/\D/g, "");
+  const abn = normalizeAbn(raw.abn);
   const addressLine1 = cleanText(raw.addressLine1, 180);
   const suburb = cleanText(raw.suburb, 100);
   const addressState = canonicalAustralianState(raw.addressState) || "";
@@ -236,7 +249,6 @@ export async function POST(request: Request) {
   const capabilities = cleanList(raw.capabilities, CAPABILITIES);
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
-  const referralCode = normalizeReferralCode(raw.referralCode);
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
   if (!isValidAbn(abn)) return json({ ok: false, error: "Enter a valid 11 digit Australian Business Number." }, 400);
@@ -254,16 +266,25 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const db = getD1();
   const existingAccount = await db.prepare(
-    "SELECT firebase_uid FROM trade_accounts WHERE firebase_uid = ?",
-  ).bind(identity.uid).first<{ firebase_uid: string }>();
-  await db.prepare(`
+    "SELECT firebase_uid, business_name, abn, partner_type FROM trade_accounts WHERE firebase_uid = ?",
+  ).bind(identity.uid).first<{ firebase_uid: string; business_name: string; abn: string; partner_type: string }>();
+  const materialIdentityChanged = Boolean(
+    existingAccount &&
+    (
+      normalizeAbn(existingAccount.abn) !== abn ||
+      existingAccount.business_name !== businessName ||
+      existingAccount.partner_type !== partnerType
+    ),
+  );
+  const profileStatement = db.prepare(`
     INSERT INTO trade_accounts (
       firebase_uid, email, business_name, abn, address_line_1, suburb, address_state,
       postcode, contact_name, phone, partner_type,
       business_website, service_states, capabilities, summary, account_status,
-      verification_status, plan_key, billing_status, consent_version,
+      verification_status, verified_abn, verification_review_id, verification_reviewed_at,
+      verification_reviewed_by_uid, consent_version,
       service_base_postcode, service_radius_km, consent_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'not_started', 'unselected', 'not_connected', ?, ?, 50, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'submitted', '', '', '', '', ?, ?, 50, ?, ?, ?)
     ON CONFLICT(firebase_uid) DO UPDATE SET
       email = excluded.email,
       business_name = excluded.business_name,
@@ -279,6 +300,31 @@ export async function POST(request: Request) {
       service_states = excluded.service_states,
       capabilities = excluded.capabilities,
       summary = excluded.summary,
+      verification_status = CASE
+        WHEN trade_accounts.abn = excluded.abn
+          AND trade_accounts.business_name = excluded.business_name
+          AND trade_accounts.partner_type = excluded.partner_type
+        THEN trade_accounts.verification_status ELSE 'submitted' END,
+      verified_abn = CASE
+        WHEN trade_accounts.abn = excluded.abn
+          AND trade_accounts.business_name = excluded.business_name
+          AND trade_accounts.partner_type = excluded.partner_type
+        THEN trade_accounts.verified_abn ELSE '' END,
+      verification_review_id = CASE
+        WHEN trade_accounts.abn = excluded.abn
+          AND trade_accounts.business_name = excluded.business_name
+          AND trade_accounts.partner_type = excluded.partner_type
+        THEN trade_accounts.verification_review_id ELSE '' END,
+      verification_reviewed_at = CASE
+        WHEN trade_accounts.abn = excluded.abn
+          AND trade_accounts.business_name = excluded.business_name
+          AND trade_accounts.partner_type = excluded.partner_type
+        THEN trade_accounts.verification_reviewed_at ELSE '' END,
+      verification_reviewed_by_uid = CASE
+        WHEN trade_accounts.abn = excluded.abn
+          AND trade_accounts.business_name = excluded.business_name
+          AND trade_accounts.partner_type = excluded.partner_type
+        THEN trade_accounts.verification_reviewed_by_uid ELSE '' END,
       consent_version = excluded.consent_version,
       consent_at = excluded.consent_at,
       updated_at = excluded.updated_at
@@ -303,10 +349,10 @@ export async function POST(request: Request) {
     now,
     now,
     now,
-  ).run();
-
+  );
+  const statements = [profileStatement];
   if (!existingAccount) {
-    await createAdminNotification({
+    statements.push(adminNotificationStatement(db, {
       eventKey: `trade-signup:${identity.uid}`,
       eventType: "trade.signup",
       category: "approval",
@@ -320,109 +366,57 @@ export async function POST(request: Request) {
       requiresAction: true,
       metadata: { partnerType, addressState, postcode },
       occurredAt: now,
-    });
+    }));
+  } else if (materialIdentityChanged) {
+    statements.push(adminNotificationStatement(db, {
+      eventKey: `trade-identity-review:${identity.uid}:${now}`,
+      eventType: "trade.identity_review_required",
+      category: "approval",
+      priority: "high",
+      title: `${businessName} requires a fresh ABN review`,
+      summary:
+        "The business changed its ABN, registered name or account type. Protected access remains blocked until a new official ABN review is recorded.",
+      entityType: "trade_account",
+      entityId: identity.uid,
+      actorType: partnerType,
+      actorUid: identity.uid,
+      requiresAction: true,
+      metadata: { partnerType, abn, addressState, postcode },
+      occurredAt: now,
+    }));
   }
+  await db.batch(statements);
 
-  let referral: { accepted: boolean; message: string } | null = null;
-  if (cleanText(raw.referralCode, 40)) {
-    if (existingAccount) {
-      referral = {
-        accepted: false,
-        message: "Referral rewards apply only when a new business profile is first created.",
-      };
-    } else if (!referralCode) {
-      referral = { accepted: false, message: "The referral code was not recognised." };
-    } else {
-      const codeOwner = await db.prepare(`
-        SELECT c.firebase_uid, c.status,
-          EXISTS(
-            SELECT 1 FROM stripe_memberships m
-            WHERE m.firebase_uid = c.firebase_uid
-              AND m.status IN ('active', 'active_cancels_at_period_end')
-          ) paying
-        FROM trade_referral_codes c
-        WHERE c.code = ?
-      `).bind(referralCode).first<{ firebase_uid: string; status: string; paying: number }>();
-      if (!codeOwner || codeOwner.status !== "active") {
-        referral = { accepted: false, message: "The referral link is no longer active." };
-      } else if (codeOwner.firebase_uid === identity.uid) {
-        referral = { accepted: false, message: "A business cannot refer its own account." };
-      } else if (!codeOwner.paying) {
-        referral = {
-          accepted: false,
-          message: "The referring membership must be active when the new profile is created.",
-        };
-      } else {
-        const duplicate = await db.prepare(`
-          SELECT firebase_uid FROM trade_accounts
-          WHERE firebase_uid <> ? AND LOWER(TRIM(business_name)) = LOWER(TRIM(?)) AND postcode = ?
-          LIMIT 1
-        `).bind(identity.uid, businessName, postcode).first<{ firebase_uid: string }>();
-        const referralStatus = duplicate ? "review_required" : "registered";
-        const riskReason = duplicate
-          ? "An existing business profile has the same business name and postcode."
-          : "";
-        const referralId = crypto.randomUUID();
-        const inserted = await db.prepare(`
-          INSERT INTO trade_referrals
-          (id, referral_code, referrer_uid, referred_uid, status, risk_reason,
-           referred_subscription_id, registered_at, first_paid_at, rewarded_at,
-           reviewed_by_uid, reviewed_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, '', ?, '', '', '', '', ?, ?)
-          ON CONFLICT(referred_uid) DO NOTHING
-        `).bind(
-          referralId,
-          referralCode,
-          codeOwner.firebase_uid,
-          identity.uid,
-          referralStatus,
-          riskReason,
-          now,
-          now,
-          now,
-        ).run();
-        if (inserted.meta.changes && referralStatus === "review_required") {
-          await createAdminNotification({
-            eventKey: `referral-review:${referralId}`,
-            eventType: "trade.referral_review_required",
-            category: "approval",
-            priority: "high",
-            title: "Referral eligibility needs review",
-            summary: `${businessName} matched an existing business name and postcode during referral registration.`,
-            entityType: "trade_referral",
-            entityId: referralId,
-            actorType: partnerType,
-            actorUid: identity.uid,
-            requiresAction: true,
-            metadata: { riskReason },
-            occurredAt: now,
-          });
-        }
-        referral = inserted.meta.changes
-          ? {
-              accepted: true,
-              message: duplicate
-                ? "Referral saved. Eligibility review is required before either free month is applied."
-                : "Referral saved. Both free months will be applied after the first membership payment clears.",
-            }
-          : {
-              accepted: false,
-              message: "This business account already has a referral recorded.",
-            };
-      }
-    }
-  }
-
+  const saved = await db.prepare(`SELECT account.account_status, account.verification_status,
+      account.verified_abn, account.verification_review_id,
+      account.verification_reviewed_at, account.verification_reviewed_by_uid,
+      CASE WHEN ${approvedTradeReviewPredicate("account")}
+        THEN 1 ELSE 0 END approval_review_exists
+      FROM trade_accounts account WHERE account.firebase_uid = ?`)
+    .bind(identity.uid).first<Record<string, unknown>>();
+  const accessApproved = approvedAbnAccess({
+    abn,
+    partnerType,
+    accountStatus: String(saved?.account_status || ""),
+    verificationStatus: String(saved?.verification_status || ""),
+    verifiedAbn: String(saved?.verified_abn || ""),
+    verificationReviewId: String(saved?.verification_review_id || ""),
+    verificationReviewedAt: String(saved?.verification_reviewed_at || ""),
+    verificationReviewedByUid: String(saved?.verification_reviewed_by_uid || ""),
+    approvalReviewExists: Boolean(saved?.approval_review_exists),
+  }) && identity.emailVerified;
   return json({
     ok: true,
     profile: {
       email: identity.email,
       emailVerified: identity.emailVerified,
-      accountStatus: "active",
-      verificationStatus: "not_started",
-      planKey: "unselected",
-      billingStatus: "not_connected",
+      accountStatus: saved?.account_status || "active",
+      verificationStatus: saved?.verification_status || "submitted",
+      verifiedAbn: saved?.verified_abn || "",
+      verificationReviewId: saved?.verification_review_id || "",
+      verificationReviewedAt: saved?.verification_reviewed_at || "",
+      verificationReviewedByUid: saved?.verification_reviewed_by_uid || "",
+      accessApproved,
     },
-    referral,
   });
 }

@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -51,9 +52,13 @@ async function payload() {
       LEFT JOIN admin_users a ON a.firebase_uid = p.owner_uid ORDER BY p.pilot_id, p.slot_number`).all<Record<string, unknown>>(),
     db.prepare(`SELECT s.*, COALESCE(a.display_name, a.email, '') facilitator_name FROM admin_usability_pilot_sessions s
       LEFT JOIN admin_users a ON a.firebase_uid = s.facilitator_uid ORDER BY s.scheduled_at DESC, s.created_at DESC`).all<Record<string, unknown>>(),
-    db.prepare(`SELECT firebase_uid, business_name, address_state, postcode, capabilities FROM trade_accounts
-      WHERE partner_type = 'installer' AND account_status = 'active' AND COALESCE(is_synthetic, 0) = 0
-      ORDER BY business_name LIMIT 500`).all<Record<string, unknown>>(),
+    db.prepare(`SELECT account.firebase_uid, account.business_name, account.address_state,
+        account.postcode, account.capabilities
+      FROM trade_accounts account
+      WHERE account.partner_type = 'installer'
+        AND ${verifiedTradeAccountPredicate("account")}
+        AND COALESCE(is_synthetic, 0) = 0
+      ORDER BY account.business_name LIMIT 500`).all<Record<string, unknown>>(),
     db.prepare("SELECT firebase_uid, email, display_name, role FROM admin_users WHERE status = 'active' ORDER BY display_name, email").all<Record<string, unknown>>(),
   ]);
   const mappedSessions = sessions.results.map(session);
@@ -82,7 +87,7 @@ function requestError(error: unknown) {
   if (code === "PARTICIPANT_NOT_FOUND") return adminJson({ ok: false, error: "Pilot participant not found." }, 404);
   if (code === "SLOT_TAKEN") return adminJson({ ok: false, error: "That pilot slot is already assigned." }, 409);
   if (code === "ACCOUNT_ALREADY_ADDED") return adminJson({ ok: false, error: "That installer is already in this pilot." }, 409);
-  if (code === "LIVE_INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Choose an active live installer account." }, 400);
+  if (code === "LIVE_INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Choose a live installer with an approved ABN review." }, 400);
   return adminError(error);
 }
 
@@ -110,8 +115,11 @@ export async function POST(request: Request) {
       const pilotRow = await db.prepare("SELECT id, target_participants FROM admin_usability_pilots WHERE id = ?").bind(pilotId).first<Record<string, unknown>>();
       if (!pilotRow) throw new Error("PILOT_NOT_FOUND");
       if (slotNumber < 1 || slotNumber > Number(pilotRow.target_participants || 5)) return adminJson({ ok: false, error: "Choose an open pilot slot." }, 400);
-      const account = await db.prepare(`SELECT firebase_uid, business_name, capabilities FROM trade_accounts WHERE firebase_uid = ?
-        AND partner_type = 'installer' AND account_status = 'active' AND COALESCE(is_synthetic, 0) = 0`).bind(firebaseUid).first<Record<string, unknown>>();
+      const account = await db.prepare(`SELECT account.firebase_uid, account.business_name, account.capabilities
+        FROM trade_accounts account WHERE account.firebase_uid = ?
+          AND account.partner_type = 'installer'
+          AND ${verifiedTradeAccountPredicate("account")}
+          AND COALESCE(is_synthetic, 0) = 0`).bind(firebaseUid).first<Record<string, unknown>>();
       if (!account) throw new Error("LIVE_INSTALLER_REQUIRED");
       const existing = await db.prepare("SELECT firebase_uid, slot_number FROM admin_usability_pilot_participants WHERE pilot_id = ? AND (firebase_uid = ? OR slot_number = ?)")
         .bind(pilotId, firebaseUid, slotNumber).first<Record<string, unknown>>();

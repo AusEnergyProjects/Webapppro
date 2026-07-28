@@ -5,11 +5,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { colours } from '@/lib/theme';
-import { AppProvider } from '@/providers/app-provider';
+import { AppProvider, useApp } from '@/providers/app-provider';
 
-export default function RootLayout() {
+function AppNavigation() {
+  const { access } = useApp();
   return (
-    <AppProvider>
+    <>
       <StatusBar style="light" />
       <Stack screenOptions={{
         headerStyle: { backgroundColor: colours.forest },
@@ -18,9 +19,19 @@ export default function RootLayout() {
         contentStyle: { backgroundColor: colours.cream },
       }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="job/[id]" options={{ title: 'Job details', headerBackTitle: 'Work' }} />
+        <Stack.Protected guard={access.status === 'approved'}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="job/[id]" options={{ title: 'Job details', headerBackTitle: 'Work' }} />
+        </Stack.Protected>
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppProvider>
+      <AppNavigation />
     </AppProvider>
   );
 }

@@ -1,7 +1,6 @@
 import { getD1 } from "../../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -88,19 +87,20 @@ function rowPreferences(row?: Record<string, unknown> | null) {
 
 async function authorisedInstaller(request: Request) {
   if (!sameOrigin(request)) return { response: adminJson({ ok: false, error: "Request origin was not accepted." }, 403) };
-  let identity;
-  try { identity = await requireFirebaseIdentity(request); }
-  catch { return { response: adminJson({ ok: false, error: "Sign in to continue." }, 401) }; }
-  const account = await getD1().prepare(
-    "SELECT partner_type, account_status, billing_status FROM trade_accounts WHERE firebase_uid = ?",
-  ).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account || account.account_status !== "active" || account.partner_type !== "installer") {
-    return { response: adminJson({ ok: false, error: "An active installer account is required." }, 403) };
+  try {
+    const access = await requireVerifiedTradeAccess(request, {
+      partnerTypes: ["installer"],
+    });
+    return { identity: access.identity };
+  } catch (error) {
+    if (error instanceof TradeAccessError) {
+      return { response: adminJson({ ok: false, code: error.code, error: error.message }, error.status) };
+    }
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") {
+      return { response: adminJson({ ok: false, error: "Sign in to continue." }, 401) };
+    }
+    return { response: adminJson({ ok: false, error: "Catalogue preferences could not be loaded." }, 500) };
   }
-  if (!await accountHasFeature(identity.uid, "installer", account.billing_status, "installer_marketplace")) {
-    return { response: adminJson({ ok: false, error: "Catalogue preferences require installer marketplace access." }, 403) };
-  }
-  return { identity };
 }
 
 export async function GET(request: Request) {

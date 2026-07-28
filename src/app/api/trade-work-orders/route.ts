@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber, nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
 import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/lib/trade-team-sync-server";
@@ -86,30 +86,26 @@ function offlineSyncStatements(
 }
 
 async function tradeIdentity(request: Request): Promise<TradeIdentity> {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid)
-    .first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  const partnerType = String(account.partner_type) === "supplier" ? "supplier" : "installer";
-  const entitlements = await accountEntitlements(identity.uid, partnerType, account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer", "supplier"] });
+  const partnerType = access.partnerType;
+  const entitlements = await accountEntitlements(access.identity.uid, partnerType);
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
   return {
-    uid: identity.uid,
+    uid: access.identity.uid,
     partnerType,
-    businessName: String(account.business_name || "Trade business"),
+    businessName: access.businessName || "Trade business",
     fullAccess: entitlements.features.business_operations,
     teamAccess: entitlements.features.team_access,
   };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the trade profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This trade account is not active." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before converting platform work." }, 403);
+  if (code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Business Hub is available to installer and wholesaler accounts." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before converting platform work." }, 403);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before assigning a crew." }, 403);
   if (code === "MEMBER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its active work-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);

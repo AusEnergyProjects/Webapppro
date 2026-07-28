@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
@@ -70,33 +70,30 @@ const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTe
 type CrmIdentity = { uid: string; email: string; memberId: string; businessName: string; addressState: string; teamAccess: boolean };
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name, address_state
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  const entitlements = await accountEntitlements(access.identity.uid, "installer");
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  const businessName = String(account.business_name || "Trade business");
-  const memberId = await ensureOwnerTeamMember(identity.uid, identity.email, businessName);
+  const account = await getD1().prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?")
+    .bind(access.identity.uid).first<Record<string, unknown>>();
+  const businessName = access.businessName || "Trade business";
+  const memberId = await ensureOwnerTeamMember(access.identity.uid, access.identity.email, businessName);
   return {
-    uid: identity.uid,
-    email: identity.email,
+    uid: access.identity.uid,
+    email: access.identity.email,
     memberId,
     businessName,
-    addressState: String(account.address_state || "NSW"),
+    addressState: String(account?.address_state || "NSW"),
     teamAccess: entitlements.features.team_access,
   };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
-  if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Customer CRM is available to installer accounts only." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using customer CRM, scheduling and financial tracking." }, 403);
+  if (code === "INSTALLER_ONLY" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Customer CRM is available to installer accounts only." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using customer CRM, scheduling and financial tracking." }, 403);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before assigning staff." }, 403);
   if (code === "CUSTOMER_NOT_FOUND") return adminJson({ ok: false, error: "Customer record not found." }, 404);
   if (code === "CONTACT_NOT_FOUND") return adminJson({ ok: false, error: "Customer contact not found." }, 404);

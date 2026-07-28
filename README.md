@@ -1,8 +1,10 @@
 # AEA Energy and TLink
 
-This repository contains four connected products: household energy planning, the TLink protected marketplace, the TLink trade operating platform, and the native field application. The comparison tools and consumer account remain under Australian Energy Assessments. Installer, wholesaler, admin and field operations use the TLink platform identity.
+This repository contains four connected products: household energy planning, the TLink protected marketplace, the free TLink trade operating platform, and the native field application. The comparison tools and consumer account remain under Australian Energy Assessments. Installer, supplier, administrator and field operations use the TLink platform identity.
 
-The canonical current implementation and release status is [docs/RELEASE_TRUTH.md](./docs/RELEASE_TRUTH.md). The implementation sequence is [ROADMAP.md](./ROADMAP.md). Historical architecture documents are retained for design context only.
+Start with the [complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md). It is the immutable evidence baseline. [Release truth](./docs/RELEASE_TRUTH.md) records the latest reconciled source and deployment identity, the [forward roadmap](./ROADMAP.md) owns approved sequence, and the [next-task handover](./docs/HANDOVER_NEXT_TASK.md) contains one executable milestone.
+
+TLink trade software costs A$0. A trade applicant must provide a checksum-valid ABN and remain pending until an authorised reviewer verifies the business against an authoritative source. Trade workspaces and APIs become available only after approval and according to role. Customer invoices and payment records never control product access.
 
 ## Getting Started
 
@@ -90,7 +92,7 @@ An `ok: true` response proves that the application reached the processor and rec
 
 ### API monitoring and alerts
 
-The Google Apps Script monitor checks the Sites runtime, electricity and gas plan services, and the privacy-safe lead delivery probe every hour. Lead failures, billing incidents and administrator access changes are also written to the durable operations inbox. The existing Google Workspace relay is the default off-screen alert channel, so no additional paid notification provider is required.
+The repository contains a Google Apps Script monitor designed to check the Sites runtime, electricity and gas plan services, and the privacy-safe lead delivery probe every hour when it is configured and scheduled. Current external schedule operation remains unverified. Lead failures and administrator access changes are written to the durable operations inbox. The Google Workspace relay is the configured default off-screen alert path in source; its current provider and delivery state must be verified operationally.
 
 The default Google Workspace path reuses `AEA_LEAD_WEBHOOK_URL` and `AEA_LEAD_WEBHOOK_TEST_TOKEN`. Store the same high-entropy token in Sites and the Apps Script project properties. Operations alerts are wrapped in a short-lived HMAC-signed envelope, verified by Apps Script, deduplicated by notification ID and delivered to the administrator Gmail inbox. Apps Script rejects expired, altered or unsigned alerts.
 
@@ -107,6 +109,6 @@ See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert be
 
 ## Release validation
 
-Run `npm run validate` before publishing. It performs the active web and worker typecheck, lint, runtime integration suite, full test suite, fresh Cloudflare D1 migration check and production build. `npm run test:coverage` is available for coverage analysis. Synthetic benchmark data is opt-in through `fixtures/synthetic` and is never part of the normal production migration path.
+Run `npm run validate` before publishing. It performs the active web and worker typecheck, lint, runtime integration suite, full test suite, fresh Cloudflare D1 migration check and production build. `npm run test:coverage` is available for coverage analysis. Isolated local scale benchmarking is never part of the normal identity, application or production migration path.
 
 The active deployment target is OpenAI Sites with Cloudflare D1 and R2 bindings. GitHub is the source record. Netlify and Vercel are not deployment targets for this repository.

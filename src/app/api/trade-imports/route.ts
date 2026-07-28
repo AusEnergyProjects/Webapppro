@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { reserveTlinkJobNumbers } from "@/lib/trade-job-number-server";
 import { IMPORT_DEFINITIONS, IMPORT_MAX_ROWS, validateImportCsv } from "@/lib/trade-data-imports.mjs";
@@ -21,29 +21,25 @@ const IMPORT_TYPES = new Set<ImportType>(["customers", "enquiries", "jobs", "pro
 const ROLLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function importIdentity(request: Request): Promise<ImportIdentity> {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  const partnerType = String(account.partner_type) as "installer" | "supplier";
-  if (!new Set(["installer", "supplier"]).has(partnerType)) throw new Error("ROLE_REQUIRED");
-  const entitlements = await accountEntitlements(identity.uid, partnerType, account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer", "supplier"] });
+  const partnerType = access.partnerType;
+  const entitlements = await accountEntitlements(access.identity.uid, partnerType);
   return {
-    uid: identity.uid,
+    uid: access.identity.uid,
     partnerType,
-    businessName: String(account.business_name || "Trade business"),
+    businessName: access.businessName || "Trade business",
     canOperate: Boolean(entitlements.features.business_operations),
     canBulkProducts: Boolean(entitlements.features.supplier_bulk_import),
   };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This business account is not active." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using guided data migration." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using guided data migration." }, 403);
+  if (code === "ROLE_REQUIRED" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Guided data migration is available to installer and wholesaler accounts." }, 403);
   if (code === "IMPORT_TYPE_ROLE") return adminJson({ ok: false, error: "Choose a data type available to this business account." }, 403);
   if (code === "IMPORT_TYPE_INVALID") return adminJson({ ok: false, error: "Choose enquiries, customers, historical jobs or wholesaler products." }, 400);
   if (code === "IMPORT_EMPTY") return adminJson({ ok: false, error: "The CSV needs a header row and at least one data row." }, 400);

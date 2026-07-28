@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -85,7 +86,7 @@ async function installerCanAccess(installerUid: string, record: EvidenceRecord) 
     WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused') AND a.partner_type = 'installer'
-      AND a.account_status = 'active' AND a.verification_status = 'approved' LIMIT 1`)
+      AND ${verifiedTradeAccountPredicate("a")} LIMIT 1`)
     .bind(record.project_id, record.customer_uid, installerUid).first();
   return Boolean(access);
 }

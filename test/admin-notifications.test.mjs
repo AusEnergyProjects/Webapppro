@@ -22,7 +22,6 @@ const productSelections = read("../src/app/api/product-selections/route.ts");
 const supplierEnquiries = read("../src/app/api/supplier-enquiries/route.ts");
 const adminAccounts = read("../src/app/api/admin/accounts/route.ts");
 const adminProducts = read("../src/app/api/admin/products/route.ts");
-const adminReferrals = read("../src/app/api/admin/referrals/route.ts");
 
 test("operations notifications are durable, deduplicated and action oriented", () => {
   assert.match(schema, /sqliteTable\("admin_notifications"/);
@@ -54,7 +53,6 @@ test("every primary signup, enquiry, approval and trade response boundary create
   assert.match(customerProjects, /eventType: "customer\.enquiry_submitted"/);
   assert.match(customerProjects, /requiresAction: true/);
   assert.match(tradeProfile, /eventType: "trade\.signup"/);
-  assert.match(tradeProfile, /trade\.referral_review_required/);
   assert.match(verification, /trade\.verification_evidence_uploaded/);
   assert.match(tradeOpportunities, /installer\.quote_submitted/);
   assert.match(tradeOpportunities, /installer\.lead_\$\{status\}/);
@@ -81,9 +79,11 @@ test("the notification API is filtered, role protected and auditable", () => {
   assert.match(notificationRoute, /action === "add_note"/);
   assert.match(notificationRoute, /Your operations role can only assign a case to yourself/);
   assert.match(notificationRoute, /WHERE l\.entity_type = 'admin_notification'/);
-  assert.match(adminAccounts, /event_type IN \('trade\.signup', 'trade\.verification_evidence_uploaded'\)/);
+  assert.match(
+    adminAccounts,
+    /event_type IN \(\s*'trade\.signup',\s*'trade\.identity_review_required',\s*'trade\.verification_evidence_uploaded'\s*\)/,
+  );
   assert.match(adminProducts, /Catalogue review: \$\{reviewStatus\}/);
-  assert.match(adminReferrals, /Referral decision: \$\{action\}/);
 });
 
 test("all account types are listed without unsafe account impersonation", () => {

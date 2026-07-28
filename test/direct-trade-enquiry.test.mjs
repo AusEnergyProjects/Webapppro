@@ -106,7 +106,7 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /Every photo and supporting document is shared with all\s+verified installers allocated to this enquiry/);
   assert.match(customerDashboard, /confirmContactRelease: true/);
   assert.match(customerDashboard, /Other\s+installers remain anonymised/);
-  assert.match(customerDashboard, /No paid tier, lead fee or feature paywall/);
+  assert.match(customerDashboard, /All household project tools are included at no cost/);
 });
 
 test("comparison handoffs prefill only controlled project planning choices", () => {

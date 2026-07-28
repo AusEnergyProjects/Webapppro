@@ -224,7 +224,7 @@ export default function DirectTradeStandardsPage() {
           <a className="btn ghost" href="/direct-trade/partners">
             Trade and supplier participation
           </a>
-          <a className="btn ghost" href="/direct-trade/membership">
+          <a className="btn ghost" href="/direct-trade/access">
             Free trade access
           </a>
         </div>

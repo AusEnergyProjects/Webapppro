@@ -15,8 +15,7 @@ const invoicePanel = read("../src/components/TradeQuickInvoicePanel.tsx");
 const accountingPanel = read("../src/components/TradeAccountingPanel.tsx");
 const paymentPanel = read("../src/components/TradePaymentPanel.tsx");
 const accountingRoute = read("../src/app/api/trade-accounting/route.ts");
-const paymentRoute = read("../src/app/api/trade-payment-links/route.ts");
-const reconciliation = read("../src/lib/trade-payment-reconciliation.ts");
+const paymentRouteUrl = new URL("../src/app/api/trade-payment-links/route.ts", import.meta.url);
 const migration = read("../drizzle/0075_guided_quick_invoices.sql");
 
 test("appointment minimums are stable quarter-hour values", () => {
@@ -61,7 +60,7 @@ test("quick invoice migration creates owner-scoped durable invoice records", () 
   assert.ok(indexes.includes("trade_crm_quick_invoices_number_idx"));
 });
 
-test("quick invoice reuses authoritative totals in connected accounting and payment providers", () => {
+test("quick invoice reuses authoritative totals in accounting while payment initiation stays disabled", () => {
   assert.match(accountingRoute, /q\.total_cents quick_total_cents/);
   assert.match(accountingRoute, /commercial_reference: row\.invoice_number/);
   assert.match(accountingRoute, /accepted_total_cents: row\.quick_total_cents/);
@@ -70,19 +69,13 @@ test("quick invoice reuses authoritative totals in connected accounting and paym
   assert.match(accountingPanel, /invoiceSource/);
   assert.match(invoicePanel, /invoiceSource="quick_invoice"/);
 
-  assert.match(paymentRoute, /purpose === "invoice"/);
-  assert.match(paymentRoute, /invoice_number commercial_reference,[\s\S]*trade_crm_quick_invoice_credits[\s\S]*amount_cents/);
-  assert.match(paymentRoute, /status, attempt_number, idempotency_key, created_at, updated_at/);
-  assert.match(paymentRoute, /`tlink-\$\{id\}`/);
-  assert.match(paymentRoute, /const idempotencyKey = String\(claimed\.idempotency_key\)/);
+  assert.equal(fs.existsSync(paymentRouteUrl), false);
   assert.match(paymentPanel, /purpose\?: "deposit" \| "invoice"/);
   assert.match(invoicePanel, /purpose="invoice"/);
 });
 
-test("verified full invoice payments reconcile without changing quote deposit state", () => {
-  assert.match(reconciliation, /link\.purpose === "deposit" && link\.commercial_handoff_id/);
-  assert.match(reconciliation, /link\.purpose === "invoice"/);
-  assert.match(reconciliation, /UPDATE trade_crm_quick_invoices SET status = 'paid'/);
-  assert.match(reconciliation, /trade_crm_invoice_payment_allocations/);
-  assert.match(reconciliation, /reportedAmount !== Number\(link\.amount_cents\)/);
+test("invoice payment processing is external and exposes no checkout control", () => {
+  assert.match(paymentPanel, /Payment processing is outside TLink/);
+  assert.match(paymentPanel, /Use your own approved process outside TLink/);
+  assert.doesNotMatch(paymentPanel, /checkoutUrl|Open checkout|Request with Stripe|Request with Square/);
 });

@@ -11,8 +11,6 @@ import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentr
 import { TradeJobNotifications } from "./TradeJobNotifications";
 import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
 import {
-  FEATURE_DEFINITIONS,
-  type FeatureGrant,
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
 
@@ -37,20 +35,15 @@ type DashboardProfile = {
   capabilities: string[];
   accountStatus: string;
   verificationStatus: string;
-  planKey: string;
-  billingStatus: string;
   availabilityStatus: "open" | "limited" | "paused";
   serviceBasePostcode: string;
   serviceRadiusKm: number;
   emailOpportunities: boolean;
   emailWeeklySummary: boolean;
-  featureGrants: FeatureGrant[];
   entitlements: {
-    paidMembership: boolean;
     verified: boolean;
     accessLabel: string;
     features: Record<FeatureKey, boolean>;
-    activeGrants: FeatureKey[];
   };
 };
 
@@ -144,17 +137,13 @@ const verifiedTradeFeatures = [
   "Catalogue, product selection and guided imports",
 ];
 
-function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
-  const role = profile.partnerType;
-  const available = FEATURE_DEFINITIONS.filter((feature) =>
-    feature.roles.includes(role),
-  );
+function TradeAccessPanel({ profile }: { profile: DashboardProfile }) {
   return (
-    <section className="dashboard-plan-access" aria-labelledby="plan-access-title">
-      <div className="dashboard-plan-summary">
+    <section className="dashboard-access-overview" aria-labelledby="trade-access-title">
+      <div className="dashboard-access-summary">
         <div>
           <span>Current access</span>
-          <h2 id="plan-access-title">{profile.entitlements.accessLabel}</h2>
+          <h2 id="trade-access-title">{profile.entitlements.accessLabel}</h2>
           <p>
             Core trade operations cost A$0. Verification, licensing, insurance
             and role permissions remain mandatory safety controls.
@@ -162,30 +151,18 @@ function PlanAccessPanel({ profile }: { profile: DashboardProfile }) {
         </div>
         <a href="/direct-trade/dashboard/verification">Open verification centre</a>
       </div>
-      <div className="dashboard-tier-grid">
+      <div className="dashboard-access-stage-grid">
         <article>
           <span>Before approval</span>
           <h3>Set up and verify</h3>
           <ul><li>Complete the business profile</li><li>Set service areas and capabilities</li><li>Provide the required verification evidence</li></ul>
-          <strong>No card or subscription is required.</strong>
+          <strong>No payment details are required.</strong>
         </article>
-        <article className="paid">
+        <article>
           <span>After approval</span>
           <h3>Verified trade workspace</h3>
           <ul>{verifiedTradeFeatures.map((item) => <li key={item}>{item}</li>)}</ul>
           <strong>Unlimited users, leads, jobs and quotes remain A$0.</strong>
-        </article>
-        <article>
-          <span>Permission controlled</span>
-          <h3>Specialist controls</h3>
-          <ul>
-            {available.filter((feature) => feature.tier === "admin").map((feature) => (
-              <li key={feature.key} className={profile.entitlements.features[feature.key] ? "enabled" : "locked"}>
-                {feature.label}
-              </li>
-            ))}
-          </ul>
-          <strong>Administrator grants never change marketplace ranking or lead priority.</strong>
         </article>
       </div>
     </section>
@@ -535,6 +512,23 @@ export function DirectTradeDashboard() {
             Complete business profile
           </a>
         </section>
+      ) : !profile.entitlements.verified ? (
+        <section className="dashboard-state-card">
+          <span>Application review required</span>
+          <h1>Trade access is locked until approval</h1>
+          <p>
+            Your profile is saved, but no trade workspace or operational data is
+            available until an authorised reviewer approves the current ABN and
+            required business evidence.
+          </p>
+          <div className="trade-signed-in-actions">
+            <a className="btn" href="/direct-trade/dashboard/verification">
+              Open application status
+            </a>
+            <a href="/direct-trade/partners">Update business profile</a>
+          </div>
+          <TradeAccessPanel profile={profile} />
+        </section>
       ) : (
         <div className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}>
           <header className="dashboard-hero">
@@ -591,7 +585,7 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
-              {workspace === "account" && <PlanAccessPanel profile={profile} />}
+              {workspace === "account" && <TradeAccessPanel profile={profile} />}
               {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="supplier"
@@ -604,7 +598,7 @@ export function DirectTradeDashboard() {
                 businessName={profile.businessName}
                 marketplaceVisible={hasSupplierVisibility}
                 canBulkImport={hasBulkImport}
-                hasAnalytics={Boolean(profile.entitlements.features.advanced_analytics)}
+                hasAnalytics={hasSupplierVisibility}
                 navigationTarget={commandTarget}
               />}
               {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use purchasing, fulfilment milestones and warranty claims.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
@@ -636,7 +630,7 @@ export function DirectTradeDashboard() {
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
-              {workspace === "account" && <PlanAccessPanel profile={profile} />}
+              {workspace === "account" && <TradeAccessPanel profile={profile} />}
 
               {workspace === "work" && <TradeBusinessHub
                 user={user}
@@ -738,12 +732,12 @@ export function DirectTradeDashboard() {
                     </p>
                   </div>
                   {!hasLeadAccess ? (
-                    <div className="dashboard-paywall-state">
+                    <div className="dashboard-access-locked">
                       <span>Verification required</span>
                       <h3>Opportunity delivery is switched off</h3>
                       <p>
                         Complete business verification to enter automatic and manual
-                        opportunity allocation. No card or subscription is required.
+                        opportunity allocation. No payment details are required.
                       </p>
                       <a href="/direct-trade/dashboard/verification">Open verification centre</a>
                     </div>
@@ -1001,7 +995,7 @@ export function DirectTradeDashboard() {
                       <small>
                         {profile.entitlements.verified
                           ? "Core trade operations are available at A$0"
-                          : "No card or subscription is required"}
+                          : "Approval is required before protected tools open"}
                       </small>
                     </li>
                     <li
@@ -1073,7 +1067,7 @@ export function DirectTradeDashboard() {
                       <span>
                         {hasLeadAccess
                           ? "No assignments have been made to this account yet."
-                          : "Free accounts are excluded from lead allocation."}
+                          : "Accounts awaiting approval are excluded from lead allocation."}
                       </span>
                     </article>
                   )}
@@ -1246,8 +1240,8 @@ export function DirectTradeDashboard() {
               {workspace === "products" && (hasMarketplaceAccess ? (
                 <InstallerProductMarketplace user={user} navigationTarget={commandTarget} />
               ) : (
-                <section className="dashboard-panel dashboard-paywall-panel">
-                  <div className="dashboard-paywall-state">
+                <section className="dashboard-panel dashboard-access-locked-panel">
+                  <div className="dashboard-access-locked">
                     <span>Verification required</span>
                     <h2>Wholesale product marketplace</h2>
                     <p>

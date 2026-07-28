@@ -10,7 +10,7 @@ const route = read("../src/app/api/trade-crm/route.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const platform = read("../src/app/platform/page.tsx");
-const membership = read("../src/app/direct-trade/membership/page.tsx");
+const access = read("../src/app/direct-trade/access/page.tsx");
 
 test("job templates are durable, owner scoped and uniquely named", () => {
   assert.match(schema, /sqliteTable\("trade_crm_job_templates"/);
@@ -41,10 +41,10 @@ test("public access copy makes free and verification boundaries explicit", () =>
   assert.match(platform, /Always free/);
   assert.match(platform, /Core trade operations cost A\$0 after verification/);
   assert.match(platform, /Wholesalers never receive household opportunities/);
-  assert.match(membership, /Run the core trade workflow for A\$0/);
-  assert.match(membership, /No new subscription is required for core access/);
+  assert.match(access, /Run the core trade workflow for A\$0/);
+  assert.match(access, /A valid ABN and the required business evidence must be supplied/);
 });
 
 test("new customer-facing copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${crm}\n${platform}\n${membership}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${crm}\n${platform}\n${access}`, /[\u2013\u2014]/);
 });

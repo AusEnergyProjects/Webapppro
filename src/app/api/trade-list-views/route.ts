@@ -1,21 +1,20 @@
-import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { deleteListView, deleteNamedListView, readListView, readNamedListViews, saveListView, saveNamedListView, TRADE_LIST_VIEWS } from "@/lib/workspace-list-views";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
 async function access(request: Request) {
   if (!sameOrigin(request)) return { response: adminJson({ ok: false, error: "Request origin was not accepted." }, 403) };
-  let identity;
-  try { identity = await requireFirebaseIdentity(request); }
-  catch { return { response: adminJson({ ok: false, error: "Sign in to continue." }, 401) }; }
-  const account = await getD1().prepare("SELECT account_status FROM trade_accounts WHERE firebase_uid = ?")
-    .bind(identity.uid).first<Record<string, unknown>>();
-  if (!account || account.account_status !== "active") {
-    return { response: adminJson({ ok: false, error: "An active business account is required." }, 403) };
+  try {
+    const verified = await requireVerifiedTradeAccess(request);
+    return { identity: verified.identity };
+  } catch (error) {
+    if (error instanceof TradeAccessError) {
+      return { response: adminJson({ ok: false, code: error.code, error: error.message }, error.status) };
+    }
+    return { response: adminJson({ ok: false, error: "Sign in to continue." }, 401) };
   }
-  return { identity };
 }
 
 function viewKey(request: Request) {

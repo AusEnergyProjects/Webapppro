@@ -71,7 +71,7 @@ test("the job-packet migration applies after the quote and price-book dependenci
 });
 
 test("packet management reuses authoritative owner-scoped business sources", () => {
-  for (const boundary of ["sameOrigin(request)", "requireInstallerTeamAccess(request, false)", "canDispatch(access)", "firebase_uid = ?"]) assert.ok(route.includes(boundary));
+  for (const boundary of ["sameOrigin(request)", "requireInstallerTeamAccess(request)", "canDispatch(access)", "firebase_uid = ?"]) assert.ok(route.includes(boundary));
   assert.match(route, /trade_price_book_items/);
   assert.match(route, /trade_crm_job_templates/);
   assert.match(route, /publishedTradeFormTemplatesFor/);

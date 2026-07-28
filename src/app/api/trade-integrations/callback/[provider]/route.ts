@@ -3,6 +3,7 @@ import { cleanAdminText } from "@/lib/admin-server";
 import { encryptIntegrationCredentials, integrationStateHash } from "@/lib/trade-integration-crypto";
 import { calendarIntegrationStateWeekStart } from "@/lib/trade-integration-state";
 import { isIntegrationProvider, providerSetting } from "@/lib/trade-integrations-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -66,29 +67,14 @@ function dashboardRedirect(request: Request, provider: string, status: "connecte
 async function tokenExchange(provider: string, code: string, redirectUri: string) {
   if (!isIntegrationProvider(provider)) throw new Error("PROVIDER_INVALID");
   const setting = providerSetting(provider);
-  let response: Response;
-  if (provider === "square") {
-    response = await fetch(setting.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Square-Version": "2026-05-20" },
-      body: JSON.stringify({ client_id: setting.clientId, client_secret: setting.clientSecret, code, grant_type: "authorization_code", redirect_uri: redirectUri }),
-    });
-  } else if (provider === "stripe") {
-    response = await fetch(setting.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_secret: setting.clientSecret, code, grant_type: "authorization_code" }),
-    });
-  } else {
-    const body = new URLSearchParams({ client_id: setting.clientId, client_secret: setting.clientSecret, code, grant_type: "authorization_code", redirect_uri: redirectUri });
-    const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
-    if (provider === "myob") body.set("scope", setting.scopes.join(" "));
-    if (provider === "xero" || provider === "quickbooks") {
-      body.delete("client_id"); body.delete("client_secret");
-      headers.Authorization = `Basic ${btoa(`${setting.clientId}:${setting.clientSecret}`)}`;
-    }
-    response = await fetch(setting.tokenUrl, { method: "POST", headers, body });
+  const body = new URLSearchParams({ client_id: setting.clientId, client_secret: setting.clientSecret, code, grant_type: "authorization_code", redirect_uri: redirectUri });
+  const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+  if (provider === "myob") body.set("scope", setting.scopes.join(" "));
+  if (provider === "xero" || provider === "quickbooks") {
+    body.delete("client_id"); body.delete("client_secret");
+    headers.Authorization = `Basic ${btoa(`${setting.clientId}:${setting.clientSecret}`)}`;
   }
+  const response = await fetch(setting.tokenUrl, { method: "POST", headers, body });
   const decoded = await response.json().catch(() => ({})) as unknown;
   const payload = decoded && typeof decoded === "object" && !Array.isArray(decoded)
     ? decoded as Record<string, unknown>
@@ -145,11 +131,6 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
     if (!realmId) throw new OAuthCallbackFailure("ACCOUNT_LOOKUP_FAILED", "account_lookup");
     return { id: realmId, label: `QuickBooks company ${realmId.slice(-6)}` };
   }
-  if (provider === "stripe") {
-    const accountId = cleanAdminText(token.stripe_user_id, 180);
-    if (!accountId) throw new OAuthCallbackFailure("ACCOUNT_LOOKUP_FAILED", "account_lookup");
-    return { id: accountId, label: `Stripe account ${accountId.slice(-6)}` };
-  }
   if (provider === "google_calendar") {
     const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     const decoded = await response.json().catch(() => ({})) as unknown;
@@ -168,20 +149,7 @@ async function connectionIdentity(provider: string, token: Record<string, unknow
     }
     return { id: String(result.id), label: cleanAdminText(result.mail || result.userPrincipalName || result.displayName, 180) || "Outlook Calendar" };
   }
-  const setting = providerSetting(provider);
-  const response = await fetch(setting.tokenUrl.replace("/oauth2/token", "/v2/locations"), {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json", "Square-Version": "2026-05-20" },
-  });
-  const decoded = await response.json().catch(() => ({})) as unknown;
-  const result = decoded && typeof decoded === "object" && !Array.isArray(decoded)
-    ? decoded as { locations?: Array<Record<string, unknown>> }
-    : {};
-  const location = result.locations?.find((item) => item.status === "ACTIVE") || result.locations?.[0];
-  const merchantId = cleanAdminText(token.merchant_id, 180);
-  if (!response.ok || !merchantId || !location?.id) {
-    throw new OAuthCallbackFailure("ACCOUNT_LOOKUP_FAILED", "account_lookup", providerErrorCode(decoded), response.status);
-  }
-  return { id: merchantId, label: cleanAdminText(location.name, 180) || "Square business", locationId: String(location.id) };
+  throw new OAuthCallbackFailure("ACCOUNT_LOOKUP_FAILED", "account_lookup");
 }
 
 export async function GET(request: Request, context: CallbackContext) {
@@ -221,31 +189,39 @@ export async function GET(request: Request, context: CallbackContext) {
       throw new OAuthCallbackFailure("AUTHORIZATION_REJECTED", "authorization", providerCode);
     }
     if (!code) throw new OAuthCallbackFailure("CODE_MISSING", "authorization");
+    const approvedAccount = await db.prepare(`SELECT account.firebase_uid
+      FROM trade_accounts account
+      WHERE account.firebase_uid = ? AND ${verifiedTradeAccountPredicate("account")}
+      LIMIT 1`).bind(stateRow.firebase_uid).first();
+    if (!approvedAccount) throw new OAuthCallbackFailure("TRADE_ACCESS_REVOKED", "authorization");
     const token = await tokenExchange(provider, code, String(stateRow.redirect_uri));
     const account = await connectionIdentity(provider, token, url);
-    const credentials: Record<string, unknown> = provider === "stripe"
-      ? { token_type: "stripe_account" }
-      : {
-          access_token: token.access_token,
-          refresh_token: token.refresh_token || "",
-          token_type: token.token_type || "bearer",
-        };
-    if ("locationId" in account) credentials.location_id = account.locationId;
+    const credentials: Record<string, unknown> = {
+      access_token: token.access_token,
+      refresh_token: token.refresh_token || "",
+      token_type: token.token_type || "bearer",
+    };
     if ("externalMetadata" in account) credentials.external_metadata = account.externalMetadata;
     const setting = providerSetting(provider);
-    const expiresAt = provider === "square"
-      ? cleanAdminText(token.expires_at, 60)
-      : Number(token.expires_in || 0) > 0 ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : "";
-    await db.prepare(`INSERT INTO trade_crm_integrations
+    const expiresAt = Number(token.expires_in || 0) > 0
+      ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString()
+      : "";
+    const attached = await db.prepare(`INSERT INTO trade_crm_integrations
       (id, firebase_uid, provider, status, external_account_id, external_account_label, encrypted_credentials,
        scopes, token_expires_at, last_sync_at, last_error, created_at, updated_at)
-      VALUES (?, ?, ?, 'connected', ?, ?, ?, ?, ?, '', '', ?, ?)
+      SELECT ?, approved_account.firebase_uid, ?, 'connected', ?, ?, ?, ?, ?, '', '', ?, ?
+      FROM trade_accounts approved_account
+      WHERE approved_account.firebase_uid = ? AND ${verifiedTradeAccountPredicate("approved_account")}
       ON CONFLICT(firebase_uid, provider) DO UPDATE SET status = 'connected',
         external_account_id = excluded.external_account_id, external_account_label = excluded.external_account_label,
         encrypted_credentials = excluded.encrypted_credentials, scopes = excluded.scopes,
         token_expires_at = excluded.token_expires_at, last_error = '', updated_at = excluded.updated_at`)
-      .bind(crypto.randomUUID(), stateRow.firebase_uid, provider, account.id, account.label,
-        await encryptIntegrationCredentials(credentials), JSON.stringify(setting.scopes), expiresAt, now, now).run();
+      .bind(crypto.randomUUID(), provider, account.id, account.label,
+        await encryptIntegrationCredentials(credentials), JSON.stringify(setting.scopes), expiresAt, now, now,
+        stateRow.firebase_uid).run();
+    if (Number(attached.meta.changes || 0) !== 1) {
+      throw new OAuthCallbackFailure("TRADE_ACCESS_REVOKED", "authorization");
+    }
     return dashboardRedirect(request, provider, "connected", returnWeekStart);
   } catch (error) {
     console.error("Trade integration OAuth callback failed", callbackFailureDetails(provider, error));

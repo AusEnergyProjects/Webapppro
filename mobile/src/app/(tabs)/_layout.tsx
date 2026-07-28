@@ -5,8 +5,8 @@ import { colours } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
 
 export default function FieldTabs() {
-  const { user, loading, sync } = useApp();
-  if (!loading && !user) return <Redirect href="/" />;
+  const { access, loading, sync } = useApp();
+  if (!loading && access.status !== 'approved') return <Redirect href="/" />;
   return (
     <Tabs screenOptions={{
       headerStyle: { backgroundColor: colours.forest },

@@ -6,6 +6,7 @@ import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-
 import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { australianAppointmentTimeZone, customerAppointmentCalendar } from "@/lib/customer-appointment-calendar";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   hashPhotoRequestSecret,
   normalisePhotoRequirements,
@@ -86,7 +87,7 @@ async function authorisedRequest(context: RouteContext) {
     LEFT JOIN trade_crm_service_sites site ON site.id = d.service_site_id AND site.firebase_uid = d.firebase_uid
     JOIN trade_accounts a ON a.firebase_uid = r.firebase_uid
     WHERE r.id = ? AND w.partner_type = 'installer' AND w.record_status = 'active' AND w.source_type <> 'opportunity'
-      AND a.partner_type = 'installer' AND a.account_status = 'active'`)
+      AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}`)
     .bind(parsed.requestId).first<PublicRequestRecord>();
   if (!record || !record.token_hash || record.token_hash !== await hashPhotoRequestSecret(parsed.secret)) throw new Error("REQUEST_NOT_FOUND");
   if (record.status !== "active") throw new Error("REQUEST_REVOKED");

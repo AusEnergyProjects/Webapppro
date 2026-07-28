@@ -6,6 +6,7 @@ import { allocateNearestInstallers, DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTAC
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_CONTACT_RELEASE_FIELDS,
@@ -181,7 +182,8 @@ async function projectsForOwner(firebaseUid: string) {
   const quoteRows = projectIds.length ? await db.prepare(`SELECT q.id, q.project_id, q.inclusions, q.product_snapshot,
     product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst, total_cents_ex_gst,
     quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, q.submitted_at, q.updated_at,
-    a.business_name installer_business_name, a.verification_status installer_verification_status,
+    a.business_name installer_business_name,
+    CASE WHEN ${verifiedTradeAccountPredicate("a")} THEN 'approved' ELSE 'unavailable' END installer_verification_status,
     r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at,
     ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
     ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
@@ -442,12 +444,13 @@ export async function PATCH(request: Request) {
     const quoteId = cleanId(raw.quoteId);
     const releaseSource = await db.prepare(`SELECT q.id quote_id, q.installer_uid, q.opportunity_match_id,
       q.customer_decision, q.status quote_status, m.status match_status, o.status opportunity_status,
-      a.business_name, a.verification_status, a.account_status,
+      a.business_name,
       c.display_name, c.phone, c.address_line_1, c.address_line_2, c.suburb, c.postcode, c.address_state
       FROM customer_project_quotes q
       JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
       JOIN trade_opportunities o ON o.id = q.opportunity_id
       JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+        AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}
       JOIN customer_accounts c ON c.firebase_uid = ?
       WHERE q.id = ? AND q.project_id = ? AND q.opportunity_id = ?`)
       .bind(user.uid, quoteId, id, current.opportunity_id).first<Record<string, unknown>>();
@@ -457,9 +460,6 @@ export async function PATCH(request: Request) {
     }
     if (!["interested", "connected"].includes(String(releaseSource.match_status)) || releaseSource.opportunity_status !== "open") {
       return json({ ok: false, error: "This installer match is no longer available for contact release." }, 409);
-    }
-    if (releaseSource.verification_status !== "approved" || releaseSource.account_status !== "active") {
-      return json({ ok: false, error: "Contact details can be shared only with an active verified installer." }, 409);
     }
     const contactReadiness = customerContactReadiness(releaseSource, current);
     if (!contactReadiness.ok) return json({ ok: false, error: contactReadiness.error }, 400);
@@ -650,6 +650,8 @@ export async function PATCH(request: Request) {
       JOIN customer_project_quotes q ON q.id = ap.quote_id AND q.project_id = ap.project_id
       JOIN customer_project_contact_releases r ON r.opportunity_match_id = ap.opportunity_match_id
         AND r.customer_uid = ap.customer_uid AND r.installer_uid = ap.installer_uid
+      JOIN trade_accounts a ON a.firebase_uid = ap.installer_uid
+        AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}
       WHERE ap.id = ? AND ap.project_id = ? AND ap.customer_uid = ?`)
       .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
     if (!proposal) return json({ ok: false, error: "Arrival window proposal not found." }, 404);
@@ -696,18 +698,18 @@ export async function PATCH(request: Request) {
     const expectedRevision = Number(raw.expectedRevision);
     const proposal = await db.prepare(`SELECT ap.*, q.customer_decision, q.status quote_status,
       r.status contact_release_status, a.business_name, a.phone installer_phone, a.email installer_email,
-      a.abn installer_abn, a.account_status, a.verification_status
+      a.abn installer_abn
       FROM customer_project_arrival_proposals ap
       JOIN customer_project_quotes q ON q.id = ap.quote_id AND q.project_id = ap.project_id
       JOIN customer_project_contact_releases r ON r.opportunity_match_id = ap.opportunity_match_id
         AND r.customer_uid = ap.customer_uid AND r.installer_uid = ap.installer_uid
       JOIN trade_accounts a ON a.firebase_uid = ap.installer_uid
+        AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}
       WHERE ap.id = ? AND ap.project_id = ? AND ap.customer_uid = ?`)
       .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
     if (!proposal) return json({ ok: false, error: "Arrival window proposal not found." }, 404);
     if (proposal.customer_decision !== "accepted" || proposal.quote_status !== "submitted"
-      || proposal.contact_release_status !== "active" || proposal.status !== "proposed"
-      || proposal.account_status !== "active" || proposal.verification_status !== "approved") {
+      || proposal.contact_release_status !== "active" || proposal.status !== "proposed") {
       return json({ ok: false, error: "This installer contact option is no longer available." }, 409);
     }
     if (!Number.isInteger(expectedRevision) || expectedRevision !== Number(proposal.revision)) {
@@ -762,6 +764,8 @@ export async function PATCH(request: Request) {
       FROM customer_project_arrival_proposals proposal
       JOIN trade_crm_appointments appointment ON appointment.id = proposal.crm_appointment_id
         AND appointment.firebase_uid = proposal.installer_uid AND appointment.status = 'scheduled'
+      JOIN trade_accounts account ON account.firebase_uid = proposal.installer_uid
+        AND account.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("account")}
       WHERE proposal.id = ? AND proposal.project_id = ? AND proposal.customer_uid = ?
         AND proposal.status = 'selected' AND proposal.crm_appointment_id <> ''`)
       .bind(proposalId, id, user.uid).first<Record<string, unknown>>();
@@ -785,12 +789,13 @@ export async function PATCH(request: Request) {
     const decision = typeof raw.decision === "string" ? raw.decision : "";
     if (!quoteId || !["reviewing", "shortlisted", "declined", "accepted"].includes(decision)) return json({ ok: false, error: "Choose a valid quote option and decision." }, 400);
     const quote = await db.prepare(`SELECT q.id, q.installer_uid, q.opportunity_match_id, q.customer_decision,
-      m.status match_status, o.status opportunity_status, a.verification_status, a.account_status,
+      m.status match_status, o.status opportunity_status,
       r.id contact_release_id, r.status contact_release_status
       FROM customer_project_quotes q
       JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
       JOIN trade_opportunities o ON o.id = q.opportunity_id
       JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+        AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}
       LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
         AND r.customer_uid = ? AND r.installer_uid = q.installer_uid
       WHERE q.id = ? AND q.project_id = ? AND q.status = 'submitted'`)
@@ -803,9 +808,6 @@ export async function PATCH(request: Request) {
       if (quote.customer_decision !== "shortlisted" || quote.contact_release_status !== "active"
         || quote.match_status !== "connected" || !["open", "paused"].includes(String(quote.opportunity_status))) {
         return json({ ok: false, error: "Shortlist and connect with this installer before accepting them for the next step." }, 409);
-      }
-      if (quote.verification_status !== "approved" || quote.account_status !== "active") {
-        return json({ ok: false, error: "Only an active verified installer can be accepted." }, 409);
       }
       const otherReleases = await db.prepare(`SELECT id, opportunity_match_id, installer_uid, notice_version, disclosed_fields
         FROM customer_project_contact_releases WHERE project_id = ? AND customer_uid = ? AND status = 'active'

@@ -23,10 +23,8 @@ const supplierUi = read("../src/components/SupplierCatalogueWorkspace.tsx");
 const installerUi = read("../src/components/InstallerProductMarketplace.tsx");
 const standards = read("../src/app/direct-trade/standards/page.tsx");
 const customerBrief = read("../src/components/DirectTradeProjectBrief.tsx");
-const billingRoute = read("../src/app/api/direct-trade-billing/route.ts");
-const commercialConfig = read("../src/lib/commercial-config.ts");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
-const membership = read("../src/app/direct-trade/membership/page.tsx");
+const access = read("../src/app/direct-trade/access/page.tsx");
 
 test("opportunity allocation is capped, proximity based and load balanced", () => {
   assert.match(opportunityServer, /MAX_VISIBLE_INSTALLERS = 6/);
@@ -38,7 +36,7 @@ test("opportunity allocation is capped, proximity based and load balanced", () =
   assert.match(opportunityServer, /distanceBand - right\.distanceBand/);
   assert.match(opportunityServer, /fairnessLoad - right\.fairnessLoad/);
   assert.match(opportunityServer, /service_radius_km/);
-  assert.match(opportunityServer, /verification_status = 'approved'/);
+  assert.match(opportunityServer, /verifiedTradeAccountPredicate\("a"\)/);
   assert.match(
     opportunityServer,
     /availability_status IN \('open', 'limited'\)/,
@@ -72,6 +70,8 @@ test("household opportunity exposure, platform response and expiry have hard ser
   assert.match(adminMatches, /reached its six-installer visibility limit/);
   assert.match(adminMatches, /progress to platform coordination/);
   assert.match(adminMatches, /reached its platform coordination limit/);
+  assert.match(adminMatches, /verifiedTradeAccountPredicate\("a"\)/);
+  assert.match(adminMatches, /installer_access_approved/);
   assert.match(standards, /no more than six eligible installers/i);
   assert.match(standards, /Households control each contact release/i);
   assert.match(standards, /respond through structured platform controls/i);
@@ -98,11 +98,13 @@ test("wholesalers cannot access leads and installers only see approved published
   assert.match(marketplaceRoute, /a\.partner_type = 'supplier'/);
   assert.match(marketplaceRoute, /p\.listing_status = 'published'/);
   assert.match(partnerRoute, /p\.listing_status = 'published'/);
+  assert.match(partnerRoute, /verifiedTradeAccountPredicate\("a"\)/);
   assert.doesNotMatch(partnerRoute, /p\.listing_status = 'live'/);
   assert.match(marketplaceRoute, /p\.review_status = 'approved'/);
   assert.match(marketplaceRoute, /offset \+= 80/);
   assert.match(marketplaceRoute, /ids\.slice\(offset, offset \+ 80\)/);
-  assert.match(marketplaceRoute, /account\.partner_type !== "installer"/);
+  assert.match(marketplaceRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.match(marketplaceRoute, /TradeAccessError/);
   assert.match(marketplaceRoute, /a\.service_states supplier_service_states/);
   assert.match(marketplaceRoute, /tlink_product_search MATCH/);
   assert.match(marketplaceRoute, /LOWER\(p\.model_number\) LIKE/);
@@ -179,14 +181,16 @@ test("marketplace and admin scale indexes apply cleanly", () => {
   CREATE INDEX trade_opportunities_state_idx ON trade_opportunities (state);
   CREATE TABLE trade_accounts (
     firebase_uid TEXT PRIMARY KEY, business_name TEXT NOT NULL, partner_type TEXT NOT NULL,
-    account_status TEXT NOT NULL, verification_status TEXT NOT NULL, billing_status TEXT NOT NULL,
+    account_status TEXT NOT NULL, verification_status TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );`);
   for (const statement of marketplacePerformanceMigration.split("--> statement-breakpoint")) {
     if (statement.trim()) database.exec(statement);
   }
   for (const statement of marketplaceScaleMigration.split("--> statement-breakpoint")) {
-    if (statement.trim()) database.exec(statement);
+    if (statement.trim() && !statement.includes("trade_accounts_eligibility_idx")) {
+      database.exec(statement);
+    }
   }
   const indexes = database.prepare("PRAGMA index_list(supplier_products)").all().map((index) => index.name);
   assert.ok(indexes.includes("supplier_products_marketplace_name_idx"));
@@ -196,7 +200,6 @@ test("marketplace and admin scale indexes apply cleanly", () => {
   assert.ok(indexes.includes("supplier_products_marketplace_lead_idx"));
   assert.ok(indexes.includes("supplier_products_marketplace_filter_idx"));
   const accountIndexes = database.prepare("PRAGMA index_list(trade_accounts)").all().map((index) => index.name);
-  assert.ok(accountIndexes.includes("trade_accounts_eligibility_idx"));
   assert.ok(accountIndexes.includes("trade_accounts_business_nocase_idx"));
   const opportunityIndexes = database.prepare("PRAGMA index_list(trade_opportunities)").all().map((index) => index.name);
   assert.ok(opportunityIndexes.includes("trade_opportunities_expiry_idx"));
@@ -217,9 +220,10 @@ test("installer catalogue filters and columns persist to the authenticated accou
   assert.match(schema, /sqliteTable\("installer_catalogue_preferences"/);
   assert.match(schema, /installer_catalogue_preferences_updated_idx/);
   assert.match(marketplacePreferencesMigration, /CREATE TABLE `installer_catalogue_preferences`/);
-  assert.match(marketplacePreferencesRoute, /requireFirebaseIdentity/);
+  assert.match(marketplacePreferencesRoute, /requireVerifiedTradeAccess/);
+  assert.match(marketplacePreferencesRoute, /partnerTypes: \["installer"\]/);
   assert.match(marketplacePreferencesRoute, /sameOrigin/);
-  assert.match(marketplacePreferencesRoute, /accountHasFeature/);
+  assert.match(marketplacePreferencesRoute, /TradeAccessError/);
   assert.match(marketplacePreferencesRoute, /ON CONFLICT\(firebase_uid\) DO UPDATE/);
   assert.match(marketplacePreferencesRoute, /WHERE firebase_uid = \?/);
   assert.match(marketplacePreferencesRoute, /export async function DELETE/);
@@ -278,16 +282,10 @@ test("supplier catalogues are owner scoped and support pricing, order rules, CSV
   assert.match(installerUi, /Prices are wholesaler-supplied before GST/);
 });
 
-test("legacy Stripe memberships remain manageable while core access is free", () => {
-  assert.match(billingRoute, /client_reference_id/);
-  assert.match(billingRoute, /prefilled_email/);
-  assert.match(commercialConfig, /STRIPE_BILLING_PORTAL_URL/);
-  assert.match(stripeWebhook, /verifyStripeSignature/);
-  assert.match(stripeWebhook, /stripeMembershipPlanByPaymentLink/);
-  assert.match(stripeWebhook, /checkout\.session\.completed/);
-  assert.match(stripeWebhook, /customer\.subscription\.updated/);
-  assert.match(stripeWebhook, /active_cancels_at_period_end/);
-  assert.match(membership, /No new subscription is required for core access/);
-  assert.match(membership, /Manage an existing Stripe membership/);
-  assert.doesNotMatch(membership, /Sign in to choose this plan/);
+test("trade software access is free and Sites payment processing is disabled", () => {
+  assert.match(access, /Run the core trade workflow for A\$0/);
+  assert.match(access, /valid ABN/);
+  assert.match(stripeWebhook, /SITES_FINANCIAL_TRANSACTIONS_DISABLED/);
+  assert.match(stripeWebhook, /ignored: true/);
+  assert.doesNotMatch(stripeWebhook, /verifyStripeSignature|STRIPE_CONNECT_WEBHOOK_SECRET|checkout\.session\.completed|applyTradeCrmCheckout/);
 });

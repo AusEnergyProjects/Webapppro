@@ -5,12 +5,21 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { ApiError, apiRequest } from '@/lib/api';
+import {
+  accessStateForServerError,
+  approvedAccess,
+  checkingAccess,
+  networkVerificationRequired,
+  signedOutAccess,
+  type FieldAccessState,
+} from '@/lib/access';
 import { firebaseAuth, firebaseSignOut } from '@/lib/auth';
 import { registerBackgroundSync, unregisterBackgroundSync } from '@/lib/background';
 import {
   addUpload,
   getJob,
   listJobs,
+  prepareLocalDataOwner,
   purgeLocalData,
   queueAction,
   queueCounts,
@@ -33,6 +42,7 @@ type UploadInput = {
 type AppValue = {
   user: User | null;
   loading: boolean;
+  access: FieldAccessState;
   jobs: FieldJob[];
   sync: SyncOutcome & { running: boolean; online: boolean };
   refreshLocal: () => Promise<void>;
@@ -59,6 +69,7 @@ const AppContext = createContext<AppValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [access, setAccess] = useState<FieldAccessState>(signedOutAccess);
   const [jobs, setJobs] = useState<FieldJob[]>([]);
   const [sync, setSync] = useState(emptySync);
 
@@ -68,13 +79,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSync((value) => ({ ...value, ...local }));
   }, []);
 
+  const handleAccessError = useCallback(async (error: unknown) => {
+    if (!(error instanceof ApiError) || ![401, 403, 404].includes(error.status)) return false;
+    if (error.status === 404) {
+      await purgeLocalData();
+      await forgetPushToken().catch(() => undefined);
+    }
+    const nextAccess = accessStateForServerError(error.status, error.code, error.message);
+    setAccess(nextAccess);
+    setJobs([]);
+    setSync((value) => ({
+      ...value,
+      running: false,
+      queuedActions: 0,
+      queuedUploads: 0,
+      conflicts: 0,
+      updateRequired: '',
+      message: nextAccess.message,
+    }));
+    return true;
+  }, []);
+
   const syncNow = useCallback(async () => {
-    if (!firebaseAuth.currentUser) return;
+    const currentUser = firebaseAuth.currentUser;
+    if (!currentUser) return;
+    await prepareLocalDataOwner(currentUser.uid);
     const network = await NetInfo.fetch();
     const online = network.isConnected !== false && network.isInternetReachable !== false;
     if (!online) {
       const local = await localSyncOutcome();
       setSync((value) => ({ ...value, ...local, online: false }));
+      setAccess((value) => value.status === 'approved' ? value : networkVerificationRequired);
       return;
     }
     setSync((value) => ({ ...value, running: true, online: true, message: 'Syncing secure field work...' }));
@@ -82,7 +117,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const result = await runSync();
       setSync((value) => ({ ...value, ...result, running: false, online: true }));
       setJobs(await listJobs());
+      setAccess(approvedAccess);
     } catch (error) {
+      if (await handleAccessError(error)) return;
       const message = error instanceof Error ? error.message : 'Sync paused. Saved work remains on this device.';
       const counts = await queueCounts().catch(() => ({ actions: 0, uploads: 0, conflicts: 0 }));
       setSync((value) => ({
@@ -94,25 +131,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         conflicts: counts.conflicts,
         message,
       }));
+      setAccess((value) => value.status === 'approved' ? value : networkVerificationRequired);
     }
-  }, []);
+  }, [handleAccessError]);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, async (nextUser) => {
     setUser(nextUser);
     if (!nextUser) {
       setJobs([]);
       setSync(emptySync);
+      setAccess(signedOutAccess);
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setJobs([]);
+    setAccess(checkingAccess);
     try {
-      await registerBackgroundSync();
-      await refreshLocal();
+      await registerBackgroundSync().catch(() => undefined);
       await syncNow();
     } finally {
       setLoading(false);
     }
-  }), [refreshLocal, syncNow]);
+  }), [syncNow]);
 
   useEffect(() => {
     const network = NetInfo.addEventListener((state) => {
@@ -134,10 +175,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pushToken: String(nextToken.data),
           pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
         }),
-      }).catch(() => undefined);
+      }).catch((error) => { void handleAccessError(error); });
     });
     return () => { network(); response.remove(); token.remove(); };
-  }, [syncNow]);
+  }, [handleAccessError, syncNow]);
 
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
     await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
@@ -181,6 +222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppValue>(() => ({
     user,
     loading,
+    access,
     jobs,
     sync,
     refreshLocal,
@@ -189,7 +231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveAction,
     saveUpload,
     signOut,
-  }), [user, loading, jobs, sync, refreshLocal, syncNow, saveAction, saveUpload, signOut]);
+  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveUpload, signOut]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

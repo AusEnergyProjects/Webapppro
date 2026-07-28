@@ -253,15 +253,15 @@ export function TradeHandoverCentre({
     if (event.currentTarget.open && !loaded && !loading && fullAccess) void load();
   }}>
     <summary>
-      <span><strong>Assets, warranties and handover</strong><small>{fullAccess ? pack ? statusLabel(pack.status) : "Build a verified completion record" : "Premium Business Hub feature"}</small></span>
+      <span><strong>Assets, warranties and handover</strong><small>{fullAccess ? pack ? statusLabel(pack.status) : "Build a verified completion record" : "Verification required"}</small></span>
       <b>{pack ? `${pack.assets.length} asset${pack.assets.length === 1 ? "" : "s"}` : "Open"}</b>
     </summary>
 
     {!fullAccess ? <div className="handover-locked">
-      <span>Premium operations</span>
+      <span>Verification required</span>
       <h4>Turn completed work into a durable customer asset record</h4>
-      <p>Paid Business Hub access, or an administrator feature grant, adds warranties, completion evidence, compliance checklists and reviewed customer handover packs.</p>
-      <a href="#membership">View membership access</a>
+      <p>Complete business verification to use warranties, completion evidence, compliance checklists and reviewed customer handover packs.</p>
+      <a href="/direct-trade/dashboard/verification">Open verification centre</a>
     </div> : loading ? <div className="handover-loading">Loading the protected handover workspace...</div> : !pack ? <div className="handover-start">
       <div><span>Start once, keep for the life of the job</span><h4>Create the installed asset and handover record</h4><p>The record contains product, warranty and completion evidence only. No customer name, email, phone or street address is stored here.</p></div>
       <button type="button" disabled={busy === "start"} onClick={() => void update("POST", { action: "initialize_pack" }, "start")}>{busy === "start" ? "Starting..." : "Start handover record"}</button>

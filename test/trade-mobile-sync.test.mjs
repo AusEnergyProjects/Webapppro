@@ -17,7 +17,6 @@ const teamRoute = read("../src/app/api/trade-team/route.ts");
 const workRoute = read("../src/app/api/trade-work-orders/route.ts");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
-const roadmap = read("../ROADMAP.md");
 const contract = read("../docs/MOBILE_FIELD_SYNC.md");
 
 test("offline revisions, action receipts and sync changes are durable and indexed", () => {
@@ -155,8 +154,7 @@ test("field media uploads are resumable, idempotent and assignment scoped", () =
   assert.match(mediaRoute, /jobSyncChangeStatements/);
 });
 
-test("the native field roadmap is explicit and keeps the web CRM authoritative", () => {
-  assert.match(roadmap, /Phase 5: native field platform and offline operation/);
+test("the native field contract keeps the web CRM authoritative", () => {
   assert.match(contract, /The installer web CRM is the system of record/);
   assert.match(contract, /iOS and Android/);
   assert.match(contract, /encrypted local database/);

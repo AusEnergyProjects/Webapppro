@@ -26,8 +26,6 @@ export async function GET(request: Request) {
         q.invoice_number quick_invoice_number, q.total_cents quick_total_cents, q.status quick_invoice_status,
         COALESCE((SELECT SUM(credit.total_cents) FROM trade_crm_quick_invoice_credits credit
           WHERE credit.invoice_id = q.id AND credit.status = 'issued'), 0) quick_credited_cents,
-        COALESCE((SELECT SUM(allocation.amount_cents) FROM trade_crm_invoice_payment_allocations allocation
-          WHERE allocation.invoice_id = q.id), 0) quick_paid_cents,
         q.delivery_status quick_delivery_status, q.sent_at quick_sent_at, q.last_error quick_last_error
       FROM trade_work_orders w
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -52,7 +50,7 @@ export async function GET(request: Request) {
       const totalCents = quickInvoice
         ? Math.max(0, Number(row.quick_total_cents || 0) - Number(row.quick_credited_cents || 0))
         : Number(row.accepted_total_cents || row.invoiced_value_cents || 0);
-      const paidCents = quickInvoice ? Number(row.quick_paid_cents || 0) : Number(row.paid_value_cents || 0);
+      const paidCents = quickInvoice ? 0 : Number(row.paid_value_cents || 0);
       const accountingStatus = String(row.accounting_status || "");
       const quickDeliveryStatus = String(row.quick_delivery_status || "");
       const status = accountingStatus === "error" || quickDeliveryStatus === "failed" ? "attention"

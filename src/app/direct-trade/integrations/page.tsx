@@ -7,14 +7,14 @@ export const metadata: Metadata = {
   title: "TLink business integrations",
   applicationName: "TLink",
   description:
-    "Connect TLink to Google Calendar, accounting and payment providers so trade businesses can schedule work, prepare invoices and reconcile payments from one workspace.",
+    "Connect TLink to calendars and accounting providers.",
   alternates: {
     canonical: "/direct-trade/integrations",
   },
   openGraph: {
     title: "TLink business integrations",
     description:
-      "Connect TLink to business calendars, accounting platforms and payment providers through secure provider sign-in.",
+      "Connect TLink to business calendars and accounting platforms through secure provider sign-in.",
     siteName: "TLink",
     type: "website",
   },
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "TLink business integrations",
     description:
-      "Connect TLink to business calendars, accounting platforms and payment providers through secure provider sign-in.",
+      "Connect TLink to business calendars and accounting platforms through secure provider sign-in.",
   },
 };
 
@@ -36,8 +36,8 @@ const integrationPurposes = [
     body: "An installer can connect Xero, MYOB or QuickBooks to create an accounting draft from an accepted TLink quote or invoice. The connected accounting system keeps its own final ledger and tax controls.",
   },
   {
-    title: "Customer payments",
-    body: "An installer can connect Stripe or Square to create a secure customer checkout link. Card details stay with the payment provider and do not enter TLink.",
+    title: "Payment boundary",
+    body: "TLink records invoice amounts and due dates but does not initiate or process customer payments. A trade business manages any payment outside TLink and records the outcome in its accounting system.",
   },
   {
     title: "Business-owned access",
@@ -47,17 +47,17 @@ const integrationPurposes = [
 
 export default function DirectTradeIntegrationsPage() {
   return (
-    <main className="wrap direct-trade-membership-page">
+    <main className="wrap trade-information-page">
       <TLinkHeader active="dashboard" />
-      <header className="membership-hero">
+      <header className="trade-information-hero">
         <div>
           <span>TLink connected services</span>
           <h1>Connect your business tools to TLink</h1>
           <p>
             TLink is a trade business workspace operated by Australian Energy
             Assessments. It helps installers manage their own customers, jobs,
-            appointments, quotes, invoices and payment requests without
-            re-entering the same information in each provider.
+            appointments, quotes and invoices without re-entering the same
+            information in each provider.
           </p>
           <div>
             <Link className="btn" href="/direct-trade/dashboard">
@@ -73,12 +73,13 @@ export default function DirectTradeIntegrationsPage() {
           <p>
             A connection starts only when an authorised installer presses
             Connect and approves access on the provider&apos;s own website.
+            Only calendar and accounting connections are offered.
           </p>
           <span>Disconnect at any time</span>
         </aside>
       </header>
 
-      <section className="membership-plan-section" aria-labelledby="integration-purpose-title">
+      <section className="trade-information-section" aria-labelledby="integration-purpose-title">
         <div className="guide-section-heading">
           <span>Application purpose</span>
           <h2 id="integration-purpose-title">What TLink integrations do</h2>
@@ -87,7 +88,7 @@ export default function DirectTradeIntegrationsPage() {
             business and keeps TLink as the operational source of truth.
           </p>
         </div>
-        <div className="membership-terms-grid">
+        <div className="trade-information-grid">
           {integrationPurposes.map((item) => (
             <article key={item.title}>
               <h3>{item.title}</h3>
@@ -97,7 +98,7 @@ export default function DirectTradeIntegrationsPage() {
         </div>
       </section>
 
-      <section className="membership-launch-boundary">
+      <section className="trade-information-boundary">
         <div>
           <span>Google Calendar access</span>
           <h2>One-way appointment mirroring</h2>

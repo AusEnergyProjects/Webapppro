@@ -42,19 +42,27 @@ test("the additive migration stores requests, immutable events and reconstructab
 
 test("customer rescheduling SQL compiles against the complete production migration chain", () => {
   const db = new DatabaseSync(":memory:");
-  const files = ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql",
+  const files = ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql",
+    "0011_even_reavers.sql", "0015_aromatic_black_knight.sql",
+    "0006_silky_wild_pack.sql", "0007_gifted_silhouette.sql", "0009_groovy_zaran.sql",
     "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql",
-    "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql"];
+    "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql",
+    "0055_appointment_rescheduling.sql", "0079_trade_abn_access_gate.sql"];
   for (const file of files) for (const statement of read(`../drizzle/${file}`).split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
   const join = customerRoute.match(/const authorisedCustomerJoin = `([\s\S]*?)`;/)?.[1];
   assert.ok(join);
-  const queries = [...customerRoute.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1].replace("${authorisedCustomerJoin}", join)).filter((sql) => !sql.includes("${"));
+  const queries = [...customerRoute.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]
+    .replace("${authorisedCustomerJoin}", join)
+    .replace(/\$\{verifiedTradeAccountPredicate\(\"[A-Za-z_][A-Za-z0-9_]*\"\)\}/g, "1 = 1"))
+    .filter((sql) => !sql.includes("${"));
   assert.ok(queries.length >= 7);
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `customer rescheduling SQL should compile: ${sql.slice(0, 90)}`);
 });
 
 test("only a verified active customer linked to the authoritative CRM email can create or view requests", () => {
   for (const boundary of ["requireFirebaseIdentity", "identity.emailVerified", "customer_accounts", "account_status = 'active'", "sameOrigin", "customer_firebase_uid = ?", "LOWER(c.email) = LOWER(?)", "trade_crm_customer_contacts", "d.customer_source = 'trade_owned'"]) assert.ok(customerRoute.includes(boundary), `missing customer boundary: ${boundary}`);
+  assert.match(customerRoute, /verifiedTradeAccountPredicate\("installer_access"\)/);
+  assert.match(customerRoute, /installer_access\.partner_type = 'installer'/);
   assert.match(customerRoute, /a\.status = 'scheduled' AND a\.starts_at > \?/);
   assert.match(customerRoute, /expectedAppointmentRevision/);
   assert.match(customerRoute, /DUPLICATE_REQUEST/);
@@ -62,7 +70,20 @@ test("only a verified active customer linked to the authoritative CRM email can 
   assert.doesNotMatch(customerRoute, /private_notes|hazard_notes|assigneeLabel:/);
 });
 
+test("historical requests remain visible without exposing a revoked installer's current schedule", () => {
+  assert.match(customerRoute, /LEFT JOIN trade_accounts current_installer/);
+  assert.match(customerRoute, /verifiedTradeAccountPredicate\("current_installer"\)/);
+  assert.match(customerRoute, /CASE WHEN current_installer\.firebase_uid IS NULL THEN '' ELSE a\.starts_at END current_starts_at/);
+  assert.match(customerRoute, /CASE WHEN current_installer\.firebase_uid IS NULL THEN '' ELSE a\.ends_at END current_ends_at/);
+  assert.match(customerRoute, /original_starts_at/);
+  assert.match(customerRoute, /original_ends_at/);
+});
+
 test("customer submission creates one review task and audit history without changing the appointment", () => {
+  assert.match(customerRoute, /FROM trade_accounts mutation_installer/);
+  assert.match(customerRoute, /verifiedTradeAccountPredicate\("mutation_installer"\)/);
+  assert.match(customerRoute, /Number\(mutationResults\[0\]\?\.meta\.changes \|\| 0\) !== 1/);
+  assert.ok((customerRoute.match(/FROM trade_crm_appointment_reschedule_requests request_guard/g) || []).length >= 4);
   assert.match(customerRoute, /INSERT INTO trade_crm_appointment_reschedule_requests/);
   assert.match(customerRoute, /INSERT INTO trade_work_order_tasks/);
   assert.match(customerRoute, /INSERT INTO trade_crm_appointment_reschedule_events/);

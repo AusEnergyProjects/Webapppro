@@ -1,27 +1,18 @@
 # Trade integration activation runbook
 
-This runbook covers the owner-only setup needed before installers can connect external services. Never put provider secrets in Git, D1 records, support tickets or customer notes. Store production values in Sites runtime secrets.
+This runbook covers owner-only setup for the external services that TLink may use while hosted on ChatGPT Sites. Never put provider secrets in Git, D1 records, support tickets or customer notes. Store production values only as protected Sites runtime secrets.
 
-## Stripe Connect
+## Sites financial-transaction restriction
 
-Use the SaaS platform model where each installer is the merchant and collects payment from its own direct customer. AEA does not receive or distribute the installer payment.
+TLink must not initiate, execute or facilitate a financial transaction while hosted on ChatGPT Sites. The deployed application therefore:
 
-1. Complete Stripe business and identity verification for the AEA platform account.
-2. Enable OAuth for Stripe Dashboard accounts.
-3. Register this redirect URI:
+- does not create or expose customer checkout links;
+- does not expose payment providers in the active integration model;
+- does not accept payment-provider OAuth callbacks;
+- accepts legacy payment webhooks with a bounded ignored response and makes no database mutation; and
+- stores no active checkout or payment-event model in current application source.
 
-   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/stripe`
-
-4. Add the live client ID as `STRIPE_CONNECT_CLIENT_ID`.
-5. Keep the matching live platform secret in `STRIPE_CONNECT_SECRET_KEY`. Do not reuse the separate membership or referral account key.
-6. Create a production Connect event destination for events on connected accounts at:
-
-   `https://compare.ausenergyassessments.com/api/stripe/webhook`
-
-7. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`.
-8. Store that destination signing secret as `STRIPE_CONNECT_WEBHOOK_SECRET`.
-
-The existing account webhook remains responsible for AEA membership billing. Its signing secret stays separate in `STRIPE_WEBHOOK_SECRET`.
+Invoice and provider-neutral accounting status remain operational business records. They do not grant, rank or expand free TLink access. Do not add payment-provider credentials or attempt payment-provider onboarding for the Sites deployment. Re-enablement requires an approved non-Sites host plus written legal and provider acceptance for the exact flow.
 
 ## Xero accounting
 
@@ -65,30 +56,16 @@ The MYOB income account is selected for each first export. This avoids guessing 
 
 QuickBooks invoice export is available only after the production OAuth application is configured and the installer connects a company. A disconnected provider leaves the accepted TLink handoff intact.
 
-## Square
-
-1. Create the production OAuth application and register:
-
-   `https://compare.ausenergyassessments.com/api/trade-integrations/callback/square`
-
-2. Store the application ID as `SQUARE_APPLICATION_ID` and the application secret as `SQUARE_APPLICATION_SECRET`.
-3. Keep `SQUARE_ENVIRONMENT` unset for production. Use `sandbox` only in an isolated non-production deployment.
-4. Create a webhook subscription for `payment.created` and `payment.updated` at:
-
-   `https://compare.ausenergyassessments.com/api/square/webhook`
-
-5. Store the webhook signature key as `SQUARE_WEBHOOK_SIGNATURE_KEY`.
-6. Store the exact notification URL above as `SQUARE_WEBHOOK_NOTIFICATION_URL` so signature verification cannot drift behind a proxy.
-
 ## Release checks
 
-After changing any runtime value, deploy a saved Sites version so the new environment revision is applied. Then confirm:
+After changing an approved runtime value, deploy a saved Sites version so the new environment revision is applied. Then confirm:
 
 - `/api/health` responds successfully.
 - Unauthenticated integration reads remain rejected.
-- Webhooks reject unsigned requests.
-- The installer integration centre shows only providers with complete server configuration as ready.
-- A provider-signed test payment updates one direct-customer job once and creates one payment audit event.
+- Payment providers are absent from the integration provider list, UI and callback return model.
+- The retired payment-link API route is absent.
+- Legacy Stripe and Square webhook requests return an ignored response and do not read or write D1.
+- After the contract migration, retired payment-provider connections, OAuth state, checkout, event and allocation tables are absent.
 - Xero, MYOB and QuickBooks reject AEA protected jobs before any provider request is made.
 - One direct-customer job creates at most one accounting invoice record.
-- Accounting refresh never reduces a payment already verified by Stripe or Square.
+- Accounting refresh never reduces a previously recorded paid amount.

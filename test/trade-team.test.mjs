@@ -14,7 +14,7 @@ const portal = read("../src/components/TradeTeamPortal.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 
-test("team membership, secure invitations and job assignments are durable", () => {
+test("team access, secure invitations and job assignments are durable", () => {
   for (const table of ["trade_team_members", "trade_team_invites"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
     assert.match(migration, new RegExp("CREATE TABLE `" + table + "`"));
@@ -68,7 +68,8 @@ test("owners manage people while dispatch and technician scopes are server enfor
   assert.match(route, /if \(!canManageTeam\(access\)\) throw new Error\("OWNER_REQUIRED"\)/);
   assert.match(route, /if \(!canDispatch\(access\)\) throw new Error\("DISPATCH_REQUIRED"\)/);
   assert.match(fieldRoute, /await assignedJob\(access,/);
-  assert.match(access, /entitlements\.features\.team_access/);
+  assert.match(access, /requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.match(access, /ownerAccount\.approvedAbnAccess/);
 });
 
 test("team job payloads preserve protected-customer boundaries", () => {

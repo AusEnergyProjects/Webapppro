@@ -9,7 +9,6 @@ const migration = read("../drizzle/0076_invoice_corrections_credits.sql");
 const quickInvoiceMigration = read("../drizzle/0075_guided_quick_invoices.sql");
 const route = read("../src/app/api/trade-quick-invoices/route.ts");
 const panel = read("../src/components/TradeQuickInvoicePanel.tsx");
-const reconciliation = read("../src/lib/trade-payment-reconciliation.ts");
 const apply = (db, sql) => { for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement); };
 
 test("invoice balances retain exact cents and reject over-allocation", () => {
@@ -41,15 +40,16 @@ test("invoice correction migration preserves the initial snapshot and creates bo
   }
 });
 
-test("draft correction, issued credit and provider allocation are explicit guarded actions", () => {
+test("draft correction and issued credit are explicit guarded actions", () => {
   assert.match(route, /action === "correct_draft"/);
   assert.match(route, /expectedRevision/);
   assert.match(route, /INSERT INTO trade_crm_quick_invoice_revisions/);
   assert.match(route, /action === "issue_credit"/);
   assert.match(route, /trade_crm_quick_invoice_credits/);
-  assert.match(route, /payment_activity/);
+  assert.doesNotMatch(route, /payment_activity|trade_crm_payment_links/);
+  assert.doesNotMatch(route, /trade_crm_invoice_payment_allocations/);
   assert.match(route, /accounting_activity/);
-  assert.match(reconciliation, /INSERT OR IGNORE INTO trade_crm_invoice_payment_allocations/);
+  assert.match(migration, /trade_crm_invoice_payment_allocations/);
   assert.match(panel, /Correct this draft before sending/);
   assert.match(panel, /Issue a credit/);
   assert.match(panel, /outstandingCents/);

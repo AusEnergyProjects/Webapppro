@@ -2,6 +2,7 @@ import { getD1 } from "../../db";
 import { parseJsonList } from "@/lib/admin-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const MAX_VISIBLE_INSTALLERS = 6;
 export const DEFAULT_CONNECTED_INSTALLERS = 3;
@@ -281,7 +282,7 @@ export async function allocateNearestInstallers(
     (SELECT COUNT(*) FROM trade_opportunity_matches am JOIN trade_opportunities ao ON ao.id = am.opportunity_id
       WHERE am.firebase_uid = a.firebase_uid AND am.status IN ('offered', 'viewed', 'interested', 'connected') AND ao.status = 'open') active_assignments
     FROM trade_accounts a
-    WHERE a.partner_type = 'installer' AND a.account_status = 'active' AND a.verification_status = 'approved'
+    WHERE ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
       AND COALESCE(a.is_synthetic, 0) = ?
       AND a.availability_status IN ('open', 'limited')`,
     )

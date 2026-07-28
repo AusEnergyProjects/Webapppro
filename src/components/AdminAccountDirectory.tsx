@@ -18,7 +18,7 @@ type DirectoryAccount = {
   postcode: string;
   accountStatus: string;
   verificationStatus: string;
-  planKey: string;
+  accessApproved: boolean;
   isSynthetic: boolean;
   createdAt: string;
   updatedAt: string;
@@ -390,7 +390,7 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
           {(selected?.accountType === "installer" || selected?.accountType === "supplier") && (
             <>
               <div className="admin-panel-heading"><span>{accountLabel(selected.accountType)} account</span><h2>{String(selected.account.name)}</h2><p>{String(selected.account.email)} · {String(selected.account.contactName)}</p></div>
-              <div className="admin-business-facts"><div><span>Account</span><strong>{readable(selected.account.accountStatus)}</strong></div><div><span>Verification</span><strong>{readable(selected.account.verificationStatus)}</strong></div><div><span>Membership</span><strong>{readable(selected.account.billingStatus)}</strong></div><div><span>Location</span><strong>{String(selected.account.addressState)} {String(selected.account.postcode)}</strong></div></div>
+              <div className="admin-business-facts"><div><span>Account</span><strong>{readable(selected.account.accountStatus)}</strong></div><div><span>Verification</span><strong>{readable(selected.account.verificationStatus)}</strong></div><div><span>TLink access</span><strong>{selected.account.accessApproved ? "Approved" : "Blocked pending ABN review"}</strong></div><div><span>ABN</span><strong>{String(selected.account.abn || "Not supplied")}</strong></div><div><span>Location</span><strong>{String(selected.account.addressState)} {String(selected.account.postcode)}</strong></div></div>
               <p>{String(selected.account.summary || "No business summary supplied.")}</p>
               <button type="button" onClick={() => onManageTrade(String(selected.account.firebaseUid))}>Open full partner controls</button>
             </>

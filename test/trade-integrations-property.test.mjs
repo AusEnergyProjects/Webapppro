@@ -11,7 +11,7 @@ const migration = read("../drizzle/0020_lying_stick.sql");
 const integrations = read("../src/app/api/trade-integrations/route.ts");
 const callback = read("../src/app/api/trade-integrations/callback/[provider]/route.ts");
 const accounting = read("../src/app/api/trade-accounting/route.ts");
-const payments = read("../src/app/api/trade-payment-links/route.ts");
+const paymentsUrl = new URL("../src/app/api/trade-payment-links/route.ts", import.meta.url);
 const cryptoLayer = read("../src/lib/trade-integration-crypto.ts");
 const providerLayer = read("../src/lib/trade-integrations-server.ts");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
@@ -40,18 +40,18 @@ test("calendar OAuth preserves only a validated selected week", () => {
   });
 });
 
-test("integration, OAuth state and payment link records are durable and indexed", () => {
-  for (const table of ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links"]) {
+test("integration and OAuth state records are durable and indexed", () => {
+  for (const table of ["trade_crm_integrations", "trade_crm_oauth_states"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
   }
   assert.match(schema, /trade_crm_integrations_owner_provider_idx/);
   assert.match(schema, /trade_crm_oauth_states_hash_idx/);
-  assert.match(schema, /trade_crm_payment_links_idempotency_idx/);
+  assert.doesNotMatch(schema, /trade_crm_payment_links/);
   assert.match(schema, /encryptedCredentials: text\("encrypted_credentials"\)/);
   assert.doesNotMatch(schema, /accessToken|refreshToken/);
 });
 
-test("the integrations migration applies cleanly to SQLite", () => {
+test("the historical integrations migration remains replayable", () => {
   const db = new DatabaseSync(":memory:");
   const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   for (const statement of statements) db.exec(statement);
@@ -59,15 +59,14 @@ test("the integrations migration applies cleanly to SQLite", () => {
   assert.deepEqual(tables, ["trade_crm_integrations", "trade_crm_oauth_states", "trade_crm_payment_links", "trade_crm_property_views"]);
 });
 
-test("all business and calendar connections are installer-only, paid, same-origin and owner scoped", () => {
+test("business and calendar connections require reviewed access", () => {
   assert.match(providerLayer, /requireInstallerOperations/);
-  assert.match(providerLayer, /account\.partner_type !== "installer"/);
-  assert.match(providerLayer, /account\.account_status !== "active"/);
-  assert.match(providerLayer, /entitlements\.features\.business_operations/);
+  assert.match(providerLayer, /requireVerifiedTradeAccess\(request/);
+  assert.match(providerLayer, /partnerTypes: \["installer"\]/);
   assert.match(integrations, /sameOrigin\(request\)/);
   assert.match(integrations, /WHERE firebase_uid = \?/);
-  assert.match(payments, /sameOrigin\(request\)/);
-  assert.match(providerLayer, /\["xero", "myob", "quickbooks", "stripe", "square", "google_calendar", "microsoft_calendar"\]/);
+  assert.equal(fs.existsSync(paymentsUrl), false);
+  assert.match(providerLayer, /\["xero", "myob", "quickbooks", "google_calendar", "microsoft_calendar"\]/);
 });
 
 test("OAuth credentials are encrypted and state is one-time, hashed and short-lived", () => {
@@ -96,7 +95,7 @@ test("OAuth callback failures emit only bounded operational diagnostics", () => 
   assert.doesNotMatch(callback, /console\.error\([^;]*(?:url\.searchParams|request\.url|\btoken\b|\bpayload\b|\bdecoded\b)/i);
 });
 
-test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints", () => {
+test("Xero, MYOB and QuickBooks use their real OAuth endpoints", () => {
   assert.match(providerLayer, /login\.xero\.com\/identity\/connect\/authorize/);
   assert.match(providerLayer, /identity\.xero\.com\/connect\/token/);
   assert.match(providerLayer, /secure\.myob\.com\/oauth2\/account\/authorize/);
@@ -105,13 +104,9 @@ test("Xero, MYOB, QuickBooks, Stripe and Square use their real OAuth endpoints",
   assert.match(providerLayer, /oauth\.platform\.intuit\.com\/oauth2\/v1\/tokens\/bearer/);
   assert.match(providerLayer, /com\.intuit\.quickbooks\.accounting/);
   assert.match(callback, /realmId/);
-  assert.match(providerLayer, /connect\.stripe\.com\/oauth\/authorize/);
-  assert.match(providerLayer, /connect\.stripe\.com\/oauth\/token/);
-  assert.match(providerLayer, /connect\.squareup\.com\/oauth2\/authorize/);
   assert.match(providerLayer, /accounting\.invoices/);
   assert.doesNotMatch(providerLayer, /accounting\.transactions/);
   assert.match(callback, /api\.xero\.com\/connections/);
-  assert.match(callback, /\/v2\/locations/);
 });
 
 test("MYOB token exchange repeats the granted accounting scopes", () => {
@@ -132,15 +127,11 @@ test("Xero binds the tenant and disconnect identity to the current authenticatio
   assert.doesNotMatch(integrations, /connections\/\$\{encodeURIComponent\(String\(row\.external_account_id\)\)\}/);
 });
 
-test("provider readiness requires matching platform and payment reconciliation credentials", () => {
-  assert.match(providerLayer, /STRIPE_CONNECT_SECRET_KEY/);
-  assert.match(providerLayer, /STRIPE_CONNECT_WEBHOOK_SECRET/);
-  assert.match(providerLayer, /SQUARE_WEBHOOK_SIGNATURE_KEY/);
-  assert.match(providerLayer, /SQUARE_WEBHOOK_NOTIFICATION_URL/);
+test("retired payment providers are absent from the active integration model", () => {
   assert.match(providerLayer, /providerConfigured/);
-  assert.doesNotMatch(providerLayer, /STRIPE_REFERRAL_SECRET_KEY/);
   assert.match(integrations, /providerConfigured\(providerValue\)/);
-  assert.match(payments, /providerConfigured\(provider\)/);
+  assert.doesNotMatch(`${providerLayer}\n${integrations}\n${callback}\n${integrationReturn}\n${integrationUi}`, /stripe|square/i);
+  assert.equal(fs.existsSync(paymentsUrl), false);
 });
 
 test("installer connection returns are validated, routed and confirmed", () => {
@@ -162,22 +153,17 @@ test("installer connection returns are validated, routed and confirmed", () => {
 
 test("installer UI hides central application credentials and exposes truthful states", () => {
   assert.doesNotMatch(integrations, /callbackUrl:/);
-  assert.doesNotMatch(integrationUi, /Administrator setup|callbackUrl|client credentials|Sites/);
+  assert.doesNotMatch(integrationUi, /Administrator setup|callbackUrl|client credentials/);
   assert.match(integrationUi, /Available to connect/);
   assert.match(integrationUi, /TLink setup in progress/);
+  assert.doesNotMatch(integrationUi, /Unavailable on ChatGPT Sites/);
   assert.match(integrationUi, /disabled=\{Boolean\(busy\)/);
 });
 
-test("online payment links are direct-customer only and provider hosted", () => {
-  assert.match(payments, /job\.source_type !== "internal" \|\| job\.customer_source !== "trade_owned"/);
-  assert.match(payments, /DIRECT_CUSTOMER_REQUIRED/);
-  assert.match(payments, /api\.stripe\.com\/v1\/checkout\/sessions/);
-  assert.match(payments, /"Stripe-Account"/);
-  assert.match(payments, /online-checkout\/payment-links/);
-  assert.match(payments, /Idempotency-Key/);
-  assert.match(payments, /idempotency_key/);
-  assert.match(paymentUi, /AEA protected payment path/);
-  assert.match(paymentUi, /Card data stays with the payment provider/);
+test("Sites exposes neither payment initiation nor checkout links", () => {
+  assert.equal(fs.existsSync(paymentsUrl), false);
+  assert.match(paymentUi, /Financial transactions are unavailable while TLink is hosted on ChatGPT Sites/);
+  assert.doesNotMatch(paymentUi, /checkoutUrl|Open checkout|Request with Stripe|Request with Square|<a\s/);
 });
 
 test("field records are owner or assigned-team scoped and protected customer sign-off stays with AEA", () => {
@@ -203,16 +189,18 @@ test("retired Google property storage is removed from the active schema", () => 
   assert.doesNotMatch(`${providerLayer}\n${integrations}\n${crm}\n${integrationUi}`, /GOOGLE_MAPS_API_KEY|trade-property-map|TradePropertyView/);
 });
 
-test("installer CRM exposes progressive integrations, field and payment workflows", () => {
+test("installer CRM exposes progressive integrations, field work and a read-only payment boundary", () => {
   for (const label of ["integrations", "Field work", "Quote", "Invoice"]) assert.match(crm, new RegExp(label));
   assert.match(crm, /TradeIntegrationCentre/);
   assert.match(crm, /TradeFieldWorkPanel/);
   assert.match(crm, /TradeCommercialHandoffPanel/);
-  for (const label of ["Xero", "MYOB", "QuickBooks", "Stripe", "Square"]) assert.match(integrationUi, new RegExp(label));
+  for (const label of ["Xero", "MYOB", "QuickBooks"]) assert.match(integrationUi, new RegExp(label));
+  assert.doesNotMatch(integrationUi, /Stripe|Square/);
+  assert.match(paymentUi, /Payment processing is outside TLink/);
   assert.match(integrationUi, /never asks for or stores the provider password/);
   assert.doesNotMatch(`${providerLayer}\n${integrationUi}\n${crm}`, /GOOGLE_MAPS_API_KEY|Google property tools|TradePropertyView/);
 });
 
 test("new integration and field copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${integrations}\n${callback}\n${payments}\n${crm}\n${integrationUi}\n${paymentUi}\n${fieldRoute}\n${fieldUi}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${integrations}\n${callback}\n${crm}\n${integrationUi}\n${paymentUi}\n${fieldRoute}\n${fieldUi}`, /[\u2013\u2014]/);
 });

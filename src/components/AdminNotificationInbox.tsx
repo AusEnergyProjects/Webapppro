@@ -326,7 +326,7 @@ export function AdminNotificationInbox({ api, role, onOpen, onCounts }: Props) {
         <input aria-label="Search notifications" placeholder="Search title, event or record ID" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="Notification category" value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">All categories</option>
-          {["approval", "customer", "trade", "response", "catalogue", "billing", "security", "platform"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
+          {["approval", "customer", "trade", "response", "catalogue", "security", "platform"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}
         </select>
         <select aria-label="Notification priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
           <option value="">All priorities</option>

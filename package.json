@@ -14,7 +14,6 @@
     "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test",
     "test:integration": "node --experimental-strip-types --test test/australian-postcodes.test.mjs test/direct-trade-matching.test.mjs test/gas-tariff-engine.test.mjs test/home-energy-plan.test.mjs test/release-integrity.test.mjs test/trade-payment-reconciliation.test.mjs",
     "db:check": "node scripts/check-migrations.mjs",
-    "synthetic:validate": "node scripts/validate-synthetic-population.mjs",
     "validate": "npm run typecheck && npm run lint && npm run test:integration && npm test && npm run db:check && npm run build",
     "db:generate": "drizzle-kit generate"
   },

@@ -1,276 +1,159 @@
 # Next task handover
 
-Status: active rolling handover
-Prepared: 21 July 2026
-Implementation baseline: the current `codex/sites-custom-domain-migration` worktree includes the published owner database console. Exact published release identity is recorded in `RELEASE_TRUTH.md`.
+Status: active milestone
+
+Prepared: 28 July 2026
+
+Milestone ID: `FREE-ACCESS-ABN-01`
+
+Audited baseline: `ff3c8efe3d5e501286d8e83e28086d6d4590be27`
+
+Deployed application before this milestone: Sites version 199 from `4a5cd19dda6f86896cfc751f5a42aa07f9b4eff5`
+
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns the approved sequence.
+
+## Milestone outcome
+
+Make TLink a single free trade operating system. A trade applicant supplies a checksum-valid ABN, remains pending while an authorised reviewer verifies the business against an authoritative source, and receives role-appropriate access only after approval.
+
+No payment, plan, seat, lead, job, quote, invoice or provider state may grant product access.
+
+## User outcomes
+
+- A legitimate trade applicant can submit one clear application without entering card details or choosing a commercial plan.
+- An applicant can see that review is pending without entering any trade workspace.
+- A reviewer can inspect the supplied ABN, record the authoritative result and deliberately approve, request information or reject the application.
+- An approved installer or supplier receives the correct free tools for its role.
+- Changing the ABN immediately returns the account to review.
+- Existing customer invoices and provider-neutral accounting records continue to represent work performed without affecting access.
+
+## In scope
+
+- Remove retired commercial-access routes, controls, copy and navigation.
+- Remove commercial access decisions from entitlements, APIs, pages and administration.
+- Use a staged expand, application and contract sequence to remove obsolete commercial account fields, tables and demo rows, based on the product owner's explicit statement that no real customer, trade or wholesaler accounts exist.
+- Remove the unsafe live-identity synthetic generator and its commercial-state fixture.
+- Keep isolated local scale benchmarking separate from identities and production data.
+- Preserve the existing 11-digit ABN checksum validation.
+- Save new applicants in a pending state.
+- Add an explicit authoritative ABN review record with outcome, reviewer and decision time.
+- Require active account status, approved review and correct role at every trade workspace and API.
+- Reset review and access after an ABN change.
+- Migrate existing trade accounts through an explicit reviewed rule with no commercial-state grandfathering.
+- Remove obsolete commercial administration fields, filters, summaries, alerts and database-console descriptions.
+- Update focused tests, current documentation and release integrity checks.
+
+## Out of scope
+
+- Activating any payment-provider path on Sites.
+- Handling payment-card data in TLink.
+- Provider onboarding or real customer transactions.
+- Rewriting applied migrations.
+- Changing household-account access.
+- Replacing the existing role, tenant, privacy, licence or insurance controls.
+- Deploying before the exact release commit passes validation.
+- Altering any file in the dated audit snapshot.
+
+## Required access state
+
+| State | Allowed |
+| --- | --- |
+| Authenticated, no trade application | Application start and account-safe help only |
+| Application submitted, ABN checksum valid, review pending | Application status and requested-evidence response only |
+| More information required | Application status and bounded correction/evidence response only |
+| Rejected, suspended or expired | Decision/status information and approved support path only |
+| Active account, approved ABN review, installer role | Installer tools authorised by role and tenant |
+| Active account, approved ABN review, supplier role | Supplier tools authorised by role and tenant |
+| ABN changed after approval | Immediate return to pending review; trade tools denied |
+
+## Data and audit requirements
+
+- Keep the submitted normalized ABN and the authoritative review outcome.
+- Record review status, source class, reviewer UID, reviewed time and a bounded reason or reference.
+- Do not copy unnecessary registry personal data into TLink.
+- Preserve an append-only decision event for approval, information request, rejection, reset and suspension.
+- Prevent duplicate active business identities under the approved duplicate-ABN policy.
+- Use additive migration `0079_trade_abn_access_gate.sql` to expand the access schema without breaking the previously deployed application, and preserve stable account identifiers.
+- Keep job invoice totals and provider-neutral accounting status separate from product access.
+
+## Implementation boundaries
+
+- `src/app/api/trade-profile/route.ts` owns application input and checksum validation.
+- Central server authorization owns the active, approved and role checks.
+- Trade pages and APIs consume the central authorization result rather than reimplementing commercial rules.
+- Administrator review uses one named domain action and writes the audit event atomically.
+- The later contract cleanup does not rewrite applied migrations or delete legitimate jobs, invoices, provider-neutral accounting or audit records.
+- Public and signed-in copy state only the free verified model.
+
+## Acceptance criteria
+
+- Invalid checksum ABNs fail before persistence.
+- Valid checksum alone never grants trade access.
+- A new application is pending by default.
+- Every trade workspace and API denies pending, rejected, suspended and expired accounts.
+- Approval requires an authorised reviewer and a complete review record.
+- An ABN update resets review and access atomically.
+- Installer and supplier permissions remain distinct.
+- Admin pages contain no trade plan, price or commercial-access controls.
+- Current operational source and documentation contain no retired trade charging model. Applied migration history, the immutable audit and Git history are historical evidence and are excluded.
+- Legitimate customer invoice and payment terminology remains intact.
+- No unsafe live-identity seed generator or commercial-state fixture remains.
+- Focused success, denial, transition, duplicate and migration tests pass.
+- Internal documentation links resolve.
+- `npm run validate` and `npm run build` pass on the exact release commit.
+- No deployment claim is made before exact Sites provenance and live verification are recorded.
 
-## Completed milestone contract: owner database console
+## Validation commands
 
-- User outcome: the authenticated business owner can inspect the live Sites database and deliberately add or delete one application row without Cloudflare dashboard access or AI assistance.
-- Owning workflow: the existing TLink admin portal, Firebase-backed owner authorization, the Sites `DB` binding, admin audit log, feature-local styles and focused regression tests.
-- In scope: list application tables from the live database; inspect schema, row count and bounded pages; add one row through typed column inputs; delete one row by its complete primary key; require exact typed confirmation for every mutation; record each successful mutation in the existing admin audit log; keep migration, search-index, access-control, audit and immutable-ledger tables read-only.
-- Out of scope: raw SQL, bulk imports or deletes, schema changes, migration execution, arbitrary joins, database export or restore, cross-environment switching, bypassing foreign keys, editing existing rows, exposing the binding outside the authenticated application, or replacing Sites as the database owner.
-- Acceptance: both navigation and the API are owner only; identifiers come only from the live table catalogue; reads are bounded; values are validated from SQLite column metadata; BLOB input is unavailable; inserts and deletes are atomic with their audit record; tables without a complete primary key cannot be deleted through the console; protected tables explain why they are read-only; desktop and phone layouts retain keyboard access and avoid document-level overflow.
-- Validation: focused database-console and admin-operations tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean replay of every production migration; production build; signed-in live owner inspection without changing production rows; canonical health and worker-error checks.
-- Stop condition: raw SQL, multi-row mutation, table editing policy changes, export or restore, a new authentication boundary, production data mutation during QA or schema administration requires a separate explicitly approved milestone.
+Run focused tests selected by the implementation owner, including:
 
-Implementation result: the Operations control centre now has an owner-only Database workspace backed by the live Sites `DB` binding. It browses 145 ordinary application tables with live SQLite schema, exact row counts and bounded 25, 50 or 100 row pages while excluding SQLite, Sites, migration, virtual and shadow internals. Protected tokens, hashes, credentials and object keys are redacted; BLOB values expose size only; and long values are clipped at bounded cell and row limits. Mutation is default-deny: only `workspace_list_views`, `trade_team_working_hours` and `trade_team_unavailability` can add or delete one row. IDs and standard timestamps are server generated, table-specific validation and reference checks remain authoritative, every mutation requires owner authentication from the previous 15 minutes plus exact typed confirmation, and the row change and privacy-safe audit entry execute atomically. Raw SQL, updates, DDL and bulk changes are not exposed. Focused regression coverage includes the executable insert and delete statement paths, identifier validation, redaction, bounds, generated-field protection, domain checks, atomic auditing and owner-only route and navigation behavior. Complete validation passed with 25 focused tests, TypeScript, ESLint, 33 integration tests, 697 passing full-suite tests with two intentional skips, clean replay of all 79 production migrations and a production build.
+```powershell
+npm.cmd test -- test/direct-trade-entitlements.test.mjs
+npm.cmd test -- test/direct-trade-dashboard.test.mjs
+npm.cmd test -- test/direct-trade-partners.test.mjs
+npm.cmd test -- test/customer-property-arrivals.test.mjs
+npm.cmd test -- test/admin-operations.test.mjs
+npm.cmd run db:check
+npm.cmd run audit:links
+npm.cmd run validate
+npm.cmd run build
+```
 
-Release result: Sites version 199 from implementation commit `4a5cd19dda6f86896cfc751f5a42aa07f9b4eff5`, deployment `appgdep_6a5f78c0b3cc81919214c0deb5a3a8f3`. Signed-in production QA confirmed the owner-only Database navigation, all 145 application tables, real bounded row browsing, two live integration rows with four protected credential cells redacted, and the `workspace_list_views` add form with its final action disabled until exact confirmation. All three approved writable tables were empty, so deletion remained covered by executable tests rather than creating a production row for QA. Desktop and 390 px inspection found no document-level overflow. No production row was created, deleted or otherwise changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty and production environment revision 18 was retained.
+The test runner may execute a wider set than the named files. Report the observed totals rather than assuming filtering behavior.
 
-## Completed milestone contract: saved job and customer index views
+## Current local implementation state
 
-- User outcome: each signed-in trade user can keep several named job or customer searches, restore one in a single click, and decide which useful columns appear and in what order without rebuilding the same office view every day.
-- Owning workflow: installer Jobs and Customers indexes, existing owner-scoped list-view storage and route, shared table tools, feature-local CRM styles and focused regression tests.
-- In scope: add owner-scoped named presets for the existing job and customer filters, sorting, row count and visible-column order; retain the existing default view; apply, create, rename and delete named presets deliberately; expose the shared column manager and visible-page CSV export on both indexes; render only the chosen columns while retaining accessible row-opening and bulk-selection controls; keep server paging and every existing filter authoritative.
-- Out of scope: admin or supplier saved-view redesign, cross-user shared views, new search fields, background exports, unbounded queries, record editing in the index, a new table-grid dependency or changes to AEA protected-record disclosure.
-- Acceptance: named presets are unique per signed-in user and index; names and payloads are bounded and server validated; a preset cannot access another user or unsupported index; default and named views survive sign-out; applying a preset resets paging and stale cursors; at least one data column remains visible; displayed headers, rows and CSV follow the same chosen order; desktop and phone layouts preserve keyboard access and avoid document-level overflow.
-- Validation: focused list-view and installer CRM tests, TypeScript, ESLint, complete `npm.cmd run validate`, clean replay of every production migration, production build, signed-in desktop and phone-width Jobs and Customers interaction plus overflow inspection, canonical health and worker-error checks.
-- Stop condition: shared team views, scheduled exports, adding new index query fields, replacing the CRM list engine or changing customer privacy requires a separate milestone.
+The compatibility expansion is live as Sites version 200 from pushed commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a`. It changes only `0079_trade_abn_access_gate.sql`, adds four reviewed-ABN projection fields, two indexes, the append-only review ledger and protective triggers, and leaves the version 199 runtime compatible. The reviewed-ABN application passes the complete local release gate and remains unreleased in the shared worktree until its exact commit is pushed and deployed.
 
-Implementation result: Jobs and Customers now support up to 12 owner-scoped named views each, using the existing durable list-view table with index-specific scopes and case-normalised unique names. A saved view captures current filters, sorting, page size and column order. Applying one clears selection, resets paging and discards stale keyset cursors. Both directories expose the shared accessible column manager and formula-safe visible-page CSV export, and their headers, rows and exports use the same selected order. The server rejects empty names, duplicate names, unsupported columns, zero-column layouts, over-limit creation and cross-owner preset mutation. Focused regression tests cover uniqueness, tenant/index isolation, cursor reset and both index tools. Complete validation passed with TypeScript, ESLint, 33 integration tests, 686 passing full-suite tests with two intentional skips, all 79 production migrations replayed cleanly and a production build.
+The last complete validation before the staged split was:
 
-Release result: Sites version 198 from implementation commit `f05995b5834316ae65a6e82a37b7519d965fa24f`, deployment `appgdep_6a5ec07753d48191b96efde0d9ce8f8b`. Signed-in production QA confirmed the Saved view, Save current view, Columns and visible-page CSV controls on both Jobs and Customers, all five live job rows, all three live customer rows, nine job columns and ten customer columns. Desktop and phone-width inspection found no document-level overflow, and no preset, default, record or export was created or changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty and production environment revision 18 was retained. The browser reported only Chrome extension message-channel closures with no application stack.
+- `npm.cmd run validate`: passed, including 35 integration tests, 717 full-suite tests with 715 passed and 2 intentionally skipped, all 80 migrations replayed, and the production build.
+- `npm.cmd --prefix mobile run typecheck`: passed.
+- `npm.cmd run benchmark:scale`: passed at 500,000 isolated in-memory rows with all guarded p95 values below 75 ms.
+- `npm.cmd run audit:links`: nonzero because 7 external provider or network probes failed or timed out; 170 of 177 destinations were reachable or accepted and 16 were classified separately as automation-blocked.
 
-## Completed bounded follow-up: stable weekly dispatch navigation
+The expansion commit passed `npm.cmd run validate`, including all 80 migrations and the production build. The shared application worktree now also passes the complete integrated `npm.cmd run validate` gate: type checking, warning-free lint, 29 integration tests, 718 full-suite tests with 716 passed and 2 intentionally skipped, all 80 migrations and the production build. Mobile type checking passes. The isolated 500,000-row benchmark passes all 75 ms p95 guards. The external link audit checked 169 destinations: 166 were reachable or accepted, 15 were separately classified as automation-blocked, and 3 failed or timed out.
 
-- User outcome: an office user sees one clear Monday-to-Sunday week, can move backward or forward deliberately, can swipe between weeks on a phone, and can drag a booking to the adjacent week without the booking disappearing.
-- Owning workflow: the existing owner-scoped trade schedule read model, `TradeScheduleWorkspace`, pure schedule navigation helpers, feature-local styles and regression tests.
-- In scope: replace the automatic eight-week scroll-range rotation with explicit Previous week, Today, Next week and Go to week controls; retain a three-week internal buffer so a native drag source stays mounted; open the adjacent week after a 600 ms drag-edge hold; preserve the clock-time viewport during that transition; restore the authoritative source appointment and week after a failed move; allow direct header swipe plus boundary-gated timetable swipe on phones; continue to prioritise customer, assigned person, suburb and time on cards.
-- Out of scope: a second calendar source of truth, two-way provider authority, changing a production appointment during QA, a new calendar dependency, new records, schema changes or unrelated navigation redesign.
-- Acceptance: ordinary horizontal or vertical scrolling never changes the loaded week; each explicit control or accepted swipe changes exactly seven days; a drag-edge transition does not GET, PATCH or unmount the source appointment; a successful drop uses one existing revision-guarded PATCH and its authoritative response; a conflict or network failure restores the original appointment; direct-customer identity remains owner scoped and protected work remains redacted.
-- Validation: 29 focused schedule, rescheduling and calendar-mirror tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean replay of all 79 production migrations; production build; signed-in desktop week navigation, card-retention, appointment-preview and overflow inspection; canonical health and worker-error checks.
-- Stop condition: long-distance rescheduling UI, a dedicated phone agenda, two-way external calendar edits, a new calendar engine or production-record mutation requires a separate milestone.
+The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Migration `0079_trade_abn_access_gate.sql` is intentionally additive: it performs no row deletion, column removal, table drop or provider cleanup. That explicit deletion authorisation is reserved for a separate contract migration after the reviewed-ABN application is live and verified. The contract must preserve jobs, invoices, provider-neutral accounting and audit records.
 
-Release result: Sites version 197 from implementation commit `91fec624c3b01609f0f8eab476b18941a3f5478f`, deployment `appgdep_6a5eb9c2304c819186d592042b2b69f1`. The scheduler now presents one stable week while keeping the previous and next weeks mounted internally for safe edge-drag transitions. Complete validation passed with 29 focused tests, TypeScript, ESLint, 33 integration tests, 684 full-suite tests with no failures, clean replay of all 79 production migrations and a production build. Signed-in live QA moved from 20-26 July to 27 July-2 August and back, with the current-week appointment count returning from two to zero to two; the appointment preview opened without leaving Schedule and the page fit the desktop viewport. No production appointment or other record was changed. The canonical `/api/health` route returned HTTP 200, the Sites worker error log was empty, and production environment revision 18 was retained.
+## Release and stop conditions
 
-## Completed milestone contract: operational indexes and dispatch clarity
+Stop if:
 
-- User outcome: an office user opens one obvious dispatch calendar, sees today's work immediately, searches compact customer and job indexes without triggering long editors, and reaches every business workspace without a hidden More menu.
-- Owning workflow: installer workspace navigation, owner-scoped customer and job index reads, the main trade dispatch calendar, future public job-reference allocation, feature-local styles and regression tests.
-- In scope: route the inner Schedule destination to the same authoritative dispatch board as the main Schedule destination; emphasise and reveal today on load; keep the eight-week planner and cross-week movement; replace inline customer and job detail panels with row links that open a focused workspace only when deliberately requested; provide useful customer and job columns plus first name, last name, business name, email, phone, suburb, postcode, job reference and status filters; expose Templates, Reports, Import data, Integrations and Team as visible navigation destinations; issue opaque collision-safe references for future jobs while preserving every existing reference; cancel stale index requests and avoid loading heavy detail work until opened.
-- Out of scope: rewriting existing job references, replacing TLink's authoritative job/customer records, unbounded table queries, a new grid or calendar dependency, two-way external-calendar authority, paid-provider setup, a broad brand redesign, or changes to AEA protected-customer disclosure.
-- Acceptance: today's column and appointments are unmistakable without horizontal hunting; both Schedule entry points render the real dispatch board; Customers and Jobs remain compact after row selection and expose keyboard-accessible focused links; filters cover the operational lookup fields named above; protected records remain redacted; future job references do not reveal sequence volume and remain globally unique; every former More destination is visible; stale index/detail requests cannot replace newer state; desktop and phone layouts have no document-level overflow.
-- Validation: focused navigation, customer/job index, scheduling and job-reference tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and phone-width interaction, overflow and loading inspection; canonical health and worker-error checks.
-- Stop condition: changing existing public references, adding a second customer/job source, virtualising unbounded datasets, new provider credentials, or redesigning unrelated product areas requires a separate milestone.
+- the authoritative ABN source or reviewer authority is unavailable;
+- a route cannot be brought under the central approved-account boundary without changing an unrelated domain;
+- live reconciliation shows that a contract-cleanup target contains legitimate customer, job, invoice, accounting or audit records;
+- a provider or production action requires owner identity, legal acceptance or card details;
+- complete validation fails;
+- the exact source, saved version and deployment cannot be reconciled;
+- the change would alter the immutable audit snapshot.
 
-Release result: Sites version 196 from implementation commit `3b206e5dac836fcf343144495dd36e166cf21f46`, deployment `appgdep_6a5eab70a03481919dff44aa07f926dd`. Both Schedule entry points now render the same eight-week dispatch calendar with a prominent Today summary, today column and current-time marker. Jobs and Customers are compact owner-scoped indexes with operational columns, filters and deliberate focused-record links; the former More destinations are visible in the primary CRM navigation. Future jobs receive opaque collision-free `TLJ-X???????` references while all existing public references remain unchanged. Stale reads are cancelled and heavy workspaces load only when opened. Complete validation passed on the exact implementation state, including TypeScript, ESLint, 33 integration tests, 682 full-suite tests, clean replay of all 79 production migrations and a production build. Signed-in desktop and phone-width QA confirmed both Schedule routes, Jobs, Customers and focused job navigation without changing production records or causing document-level overflow. The canonical health route returned HTTP 200 and the browser console was clean. The Sites error filter contained only two notification polls cancelled during QA navigation, with no application exception or 5xx. Production environment revision 18 was retained.
+Use three exact saved-version gates. First, the compatible expansion was pushed and deployed from `7ebcb1905d3c28245fbcfede55525e0cfee8df8a`; verify it before advancing. Second, validate, commit, push and deploy the reviewed-ABN application, then verify public health and the signed-in denial and approval boundaries. Third, reconcile the authorised demo-only targets, create a separate contract migration, validate, commit, push and deploy it. Stop if any source, migration, saved version, deployment or cleanup target cannot be reconciled. Record every identity and deviation in `RELEASE_TRUTH.md`.
 
-## Completed milestone contract: rolling dispatch and action dashboard
+## Next five logical product steps
 
-- User outcome: an office user can scan and move work across an eight-week continuous planner, identify each booking by customer, installer and suburb, open its useful detail in one click, and use My day to act on real schedule and work-status information without hunting through the CRM.
-- Owning workflow: the owner-scoped trade schedule read model and dispatch actions, installer CRM summary read model, My day workspace, feature-local styles, handover and regression tests.
-- In scope: one bounded eight-week planner window; horizontal and vertical drag with edge scrolling across every visible day; date selection that repositions the rolling window; customer-first appointment cards; a keyboard and touch-friendly appointment detail and edit dialog; protected-job redaction; source-backed four-week booking and current work-status charts; direct quick actions into existing jobs, schedule, customers, price book, common jobs and invoices.
-- Out of scope: a second calendar source of truth, two-way Google or Outlook edits, unbounded database queries, a new charting dependency, new job, quote, invoice, material or common-job records, provider work, schema changes, and copying another product's branding or navigation.
-- Acceptance: a booking can be dragged at least three weeks forward without changing pages; the server bounds every planner request to eight weeks; the card prioritises customer, assigned person and suburb while the global TLink job ID remains available in the dialog; direct-customer identity and location never appear for AEA protected work; dashboard charts use only authoritative owner-scoped records and remain useful at zero; every chart and quick action has a plain-text label and keyboard path; desktop and 390 px layouts have no document-level overflow.
-- Validation: focused schedule, CRM summary and dashboard contract tests; TypeScript; ESLint; complete `npm.cmd run validate`; clean D1 replay; production build; signed-in desktop and 390 px drag, dialog, chart and overflow inspection; canonical health and worker-error checks.
-- Stop condition: an infinite or virtualised calendar, two-way external calendar authority, new commercial entities, provider credentials, cross-tenant reporting or a second operational data source requires a separate milestone.
-
-Release result: Sites version 195 from implementation commit `e830abb0e3cb8cd189b8d26795010f867b9625b3`, deployment `appgdep_6a5e2583216c8191995fcedb921b4d15`. Complete validation passed twice on the exact implementation state. Signed-in desktop and phone-width QA confirmed the eight-week planner, customer-first appointment cards, secondary global job reference, bounded appointment dialog, authoritative dashboard metrics and charts, and no document-level overflow. No appointment, job, customer, quote, invoice or notification state was changed during QA. The canonical health route returned HTTP 200. The Sites error filter contained only the notification request cancelled when the QA tab was released, with no application exception or 5xx. Production environment revision 18 was retained.
-
-## Completed milestone: guided quick invoice
-
-- User outcome: the create-job buttons work without browser validation overlays, and the guided flow can optionally prepare and send a fixed-fee invoice with the appointment and photo request.
-- Owning workflow: `TradeNewJobForm`, installer CRM bootstrap and create action, existing price-book, invoice, accounting, payment and integration contracts, feature-local styles and regression tests.
-- In scope: quarter-hour appointment validation, inline error copy, optional sixth Invoice step, reusable fixed-fee price-book selection, a bounded custom invoice line, connected-provider-aware prompts, and one deliberate final action.
-- Out of scope: new provider adapters, automatic payment collection, accepted-quote changes, protected AEA customer invoicing, accounting-provider calculations, and broad invoice or price-book redesign.
-- Acceptance: no native black validation bubble for a normal quarter-hour time; invoice can be skipped; connected providers are not promoted again; selected invoice values use integer cents and authoritative saved items; the job, appointment, evidence request and optional invoice are owner scoped and idempotent; desktop and phone layouts have no document-level overflow.
-- Validation: focused guided-job and invoice contract tests, complete `npm.cmd run validate`, clean migration replay, signed-in desktop and 390 px interaction QA, canonical health and worker-error checks.
-- Stop condition: a new provider credential, a new payment or accounting adapter, customer card authorisation, or a second financial source of truth requires a separate milestone.
-
-Release result: Sites version 178 from implementation commit `4968a64d1f947d18da5e4417d6371f84b282082d`, deployment `appgdep_6a5bcee8a55c819187773e30657b9d76`. Full validation passed and signed-in desktop plus 390 px QA reached the enabled final invoice action without creating production work or sending customer email.
-
-## Completed milestone: quick-invoice provider handoff
-
-- User outcome: a quick invoice already saved in TLink can be deliberately handed to one connected accounting provider or paired with one connected payment link without re-entering its customer, lines or totals.
-- Owning workflow: `trade_crm_quick_invoices`, existing accounting and payment adapters, provider callbacks, invoice workspace and feature-local tests.
-- In scope: one provider-neutral export command, exact integer-cent and GST reconciliation, existing connection reuse, idempotent external references, visible provider status and recoverable retry.
-- Out of scope: automatic provider selection, automatic email or approval by an accounting provider, card handling in TLink, recurring billing, protected AEA customer invoicing and new provider credentials.
-- Acceptance: TLink remains authoritative; one deliberate action exports one invoice; repeated actions cannot duplicate it; provider totals must match TLink cents; callbacks remain authoritative for payment; provider failure cannot lose or mutate the TLink invoice.
-- Validation: accounting, payment-reconciliation and guided-invoice contract tests; TypeScript; ESLint; 29 integration tests; 635 passing full-suite tests with two intentional skips; clean D1 migration replay; production build; signed-in desktop and 390 px inspection; canonical health and worker-error checks.
-- Stop condition: missing sandbox access, provider scope expansion, customer payment authorisation or a provider-specific source of truth requires a separate decision.
-
-Release result: Sites version 179 from implementation commit `9200141d521bf3119d7e08fbeb36f82a3de2b05f`, deployment `appgdep_6a5c133b0a908191bd1e5d4b01d88943`. Saved quick invoices can deliberately create one exact draft in Xero, MYOB or QuickBooks, or one full-total Stripe or Square checkout, using the existing provider-neutral ledgers and idempotency boundaries. Provider-reported totals and TLink GST must match before state changes. Signed-in desktop and 390 px QA confirmed the current job and invoice workflows without document-level overflow. No production provider transaction was created because the account has no connected sandbox provider or disposable invoice.
-
-## Completed milestone: guided-dispatch reliability and invoice correction ledger
-
-- User outcome: an office user can correct an unissued invoice, or issue an auditable credit against an issued invoice, without overwriting the original financial record or losing the remaining balance.
-- Owning workflow: `trade_crm_quick_invoices`, accounting documents, payment links and verified payment reconciliation, invoice workspace and feature-local tests.
-- In scope: immutable issued-invoice revisions, provider-neutral credit snapshots, exact integer-cent and GST balance calculation, bounded payment allocation and a visible invoice history.
-- Out of scope: provider-specific credit export, card refunds, automatic collections, recurring billing, new providers, protected AEA customer invoicing and accounting-provider calculation authority.
-- Acceptance: an issued invoice is never overwritten; every correction or credit has a stable reference and reason; credits and verified payments cannot exceed the open balance; repeated commands and callbacks are idempotent; invoice subtotal, GST, paid, credited and outstanding cents reconcile exactly.
-- Validation: domain and route tests for revision, credit and allocation boundaries; complete release gate; clean migration replay; signed-in desktop and phone-width inspection without creating production credits or refunds.
-- Stop condition: external refund authority, a provider-specific credit API, a second currency or a second financial source of truth requires a separate milestone.
-
-This release also closes the immediate guided-flow failures around that ledger. A valid custom fee now participates in the final invoice action without a second Add click. Photo-request delivery results are checked before the guided flow claims that email was sent. Appointment email includes the scheduled window, time selection uses the shared click-select quarter-hour picker, and Schedule supports an explicit week date, previous and next week controls, internal two-axis scrolling and day-plus-time drag placement.
-
-Release result: Sites version 180 from implementation commit `c75d555c669a9fecbf5dd639488675346cb01c23`, deployment `appgdep_6a5c1c06195c8191a2a941766c595420`. Complete validation passed. Signed-in desktop and 390 px QA confirmed the click-select time dialog, valid quarter-hour state, selectable weeks, internal schedule scrolling and the enabled final quick-invoice action from an entered `$100.00` fee without clicking Add. The production Resend email channel was enabled after the delivery health view confirmed credentials and callbacks were ready. The affected job `TLJ-00000804` then recorded an initial photo-request email as `Sent | sent` and the UI reported that the secure link was accepted for delivery. No QA job, appointment, quick invoice, credit, refund or provider transaction was created.
-
-## Completed milestone: customer appointment preparation
-
-- User outcome: a customer can select up to three photos for each requested section, send the whole prepared set once, and add the confirmed appointment to Google Calendar without confusing duplicate actions or failed phone uploads.
-- Owning workflow: `JobInformationUpload`, customer photo preparation, the capability-token upload route, R2 evidence storage, photo-request email delivery and feature-local styles and tests.
-- In scope: client compression below the deployed request limit, multi-select and staged batch upload, three-file section limits, one final upload-and-finish action, precise partial-failure recovery, an appointment summary, a standard calendar attachment and a one-tap Google Calendar link.
-- Out of scope: direct access to a customer Google account, background calendar insertion without customer permission, new storage vendors, unrestricted document types, SMS sender approval, image analysis, or changes to installer calendar mirrors.
-- Acceptance: a normal Android camera photo is reduced below the edge request limit before upload; each section accepts no more than three safe images; every staged file is visibly accounted for; completed uploads are not repeated after a partial failure; server signature, metadata removal, owner scope and capability checks remain authoritative; calendar details use the appointment time and do not expose the service address; the phone layout has no document-level overflow.
-- Validation: photo-preparation and route contract tests, calendar-link and invitation tests, complete `npm.cmd run validate`, clean migration replay, Android-sized interaction QA, canonical health and worker-error checks.
-- Stop condition: larger original documents, video, direct-to-R2 resumable upload, Google account write access or a new customer-data disclosure requires a separate milestone.
-
-Release result: Sites version 182 from implementation commits `1f96c09feb8f988dc9aabf2a40a125f7293086b3` and `e5934780a77151b5fcd53b23a9eaa42badb5faac`, deployment `appgdep_6a5c29873ce08191b009b5676db7d869`. Production logs confirmed the reported Android upload failed at the edge with HTTP 413 after the phone prepared requests of about 1.4 MB and 1.7 MB. Customer images are now prepared below 640 KB, staged visibly, limited to three per section and uploaded together through one final action with partial-failure recovery. The affected customer Gmail inbox received the corrected message and displayed a real 11:00 am to 1:00 pm invitation with Yes, Maybe and No controls, View on Google Calendar and the calendar attachment. Google required one first-time-sender trust action before it would add this and future invitations automatically; TLink does not bypass that private-account consent. Signed-in and 390 px live QA confirmed the customer page, Google handoff and no document-level horizontal overflow. No QA photo was uploaded. Complete validation, fresh D1 replay, production build, canonical health and worker-error checks passed.
-
-## Completed bounded follow-up: job review alerts and previews
-
-- User outcome: an installer sees completed customer photo requests in a familiar notification bell, can open each job photo or PDF in a protected inline preview, and must preview a quick invoice before deliberately sending it.
-- Owning workflow: customer photo-request completions, per-user notification read receipts, trade field-work evidence access, guided and saved quick invoices, comparison-page typography, feature-local styles and regression tests.
-- In scope: owner and assigned-technician notification scope, durable read state, deep links to the exact job Field work tab, inline image and PDF preview with optional download, invoice confirmation dialogs, and a system-font correction isolated to the electricity comparison page.
-- Out of scope: notification events not yet represented by an authoritative job ledger, browser push notifications, email notification digests, invoice creation without a customer email, and changes to the existing file-retention boundary.
-- Acceptance: customer upload completion produces an unread job alert; read state is user specific; protected files remain server authorised and open inline; invoice sending remains a deliberate second action after preview; the comparison heading renders consistently without a remote font dependency.
-- Validation: complete `npm.cmd run validate`, focused 12-test review and invoice suite after the final copy change, ESLint, diff checks, signed-in live notification and file-preview QA, and live comparison typography and overflow inspection.
-
-Release result: Sites version 183 from implementation commit `dddedb71ca9af3b3274f4276504cb68cd73d3307`, deployment `appgdep_6a5ca8e07ea4819194a59a66edc8c2bb`. Live signed-in QA showed two unread customer-upload events for `TLJ-00000804`, and all three protected customer files opened through the new Preview action; the first image rendered inside the job modal with Download file retained as an optional action. The production account has no invoice draft, so invoice-preview behavior was covered by the focused component and route contracts without creating or sending a production invoice. The live comparison page used the local Arial font stack for its brand and sampled headings at 2560 px without document-level horizontal overflow. No notification was marked read and no production record was mutated during QA.
-
-## Completed milestone contract: fast evidence-to-quote workflow
-
-- User outcome: an office user can clear each pending customer photo requirement, send a safe retake request when needed, and build a quote from the business's saved prices without hunting through secondary menus or retyping standard work.
-- Owning workflow: field-work customer proof review, current photo-request delivery ledger, owner-scoped price book, direct quote builder, installer left navigation and feature-local tests and styles.
-- In scope: surface the existing revisioned requirement-level Approve and Retake actions in Field work; require one fixed safe reason before a retake; deliver the targeted retake through the current authorised customer channel; expose Jobs, Customers and Price book as compact Work shortcuts in the left rail; place the saved-item chooser before manual quote lines; retain editable quantity and immutable quote snapshots.
-- Out of scope: misleading per-file approval when several uploads satisfy one requirement, a second review or pricing source, new email or SMS providers, automatic customer contact without the existing consent and delivery checks, supplier catalogue imports, a new accounting adapter, or a broad visual redesign copied from another CRM.
-- Acceptance: only an owner, manager or coordinator can review proof; each decision remains append only and revision bound; a retake uses the current secure link and cannot duplicate a successful delivery; technicians retain read-only proof status; active price-book items supply type, description, unit price and GST while quantity remains editable; quote save resolves current owner-scoped prices server side; all primary paths remain keyboard, touch and phone usable without document-level overflow.
-- Validation: focused photo-review, price-book, quote and navigation tests; TypeScript and ESLint; complete `npm.cmd run validate`; clean migration replay; signed-in desktop and phone interaction QA; canonical health and worker-error checks.
-- Stop condition: exact per-file decisions, new customer disclosure, provider credentials, a separate commercial source of truth, or a cross-product navigation redesign requires a separate milestone.
-
-Release result: Sites version 184 from implementation commit `0365fb8bd0f20ef35689f10f3350ce3072b49416`, deployment `appgdep_6a5cb6c1ef58819191a40c7378e0d260`. Field work now puts Approve and Retake beside each supplied customer-photo requirement for owners, managers and coordinators. Retake preserves the original evidence, requires fixed privacy-safe guidance, reuses the current secure link and records the revision-bound delivery through the existing consent-aware channel. Quick quotes place the business's saved price-book items before manual lines, keep only quantity and customer section editable, and resolve the current owner-scoped description, type, unit price and GST again on save. Compact Jobs, Customers and Price book shortcuts now sit under Work in the left rail.
-
-Signed-in live QA used `TLJ-00000804` without changing its review state or sending a customer message. Two requirements with supplied evidence showed Approve and Retake, while the unsupplied requirement remained non-actionable. The retake preview showed the masked current email, fixed reasons, consent confirmation and a disabled final action until all safeguards are complete. The empty production price book showed a clear Open Price book handoff from Quote and a usable quick-start item editor. Desktop and 390 px QA found no document-level overflow; the retake dialog rendered as a bounded phone bottom sheet. Complete `npm.cmd run validate`, the fresh D1 replay through migration 0077, the production build, canonical HTTP 200 health and zero recent Sites worker errors passed. The only browser console entries were Chrome extension message-channel closures with no application stack. Production environment revision 14 was retained.
-
-## Completed bounded follow-up: uninterrupted evidence and quote actions
-
-- User outcome: approving or requesting a retake no longer throws the reviewer back to Overview, and a finished quote can be previewed and sent without a mandatory draft detour.
-- Owning workflow: installer CRM job-detail lifetime, Field work photo review, direct quote builder, existing quote issue and delivery routes, feature-local styles and regression tests.
-- In scope: preserve the selected job tab across authoritative data refreshes; keep draft saving optional; preview recipient, itemised scope, GST, total and terms before one deliberate send action; reuse the existing immutable quote, secure-link, consent and delivery ledgers; report partial completion truthfully if issue or email delivery fails.
-- Out of scope: approving production evidence during QA, automatic customer email without consent, a new quote or delivery source of truth, provider changes, schema changes or an unrelated job-workspace redesign.
-- Acceptance: Field work remains active after a review refresh; each remaining proof decision stays immediately reachable; preview performs no server mutation; Confirm and send is disabled until consent; the final action saves, issues and emails in order; a delivery failure leaves the issued secure link recoverable and never reports success; desktop and phone layouts have no document-level overflow.
-- Validation: focused photo-review, job-review and quote tests; TypeScript; ESLint; diff check; complete `npm.cmd run validate`; clean migration replay; production build; signed-in desktop and 390 px live inspection; canonical health check.
-- Stop condition: combining the server commands into one transaction, changing customer-email consent or replacing immutable issued revisions requires a separate milestone.
-
-Release result: Sites version 185 from implementation commit `0f4f0cf7698a830d73b107d9b5b3c2915033062c`, deployment `appgdep_6a5d67145e0881919a8d19209871ecc7`. Job detail refreshes no longer remount the focused workspace. Save draft remains available but is not mandatory: Preview and send opens a non-mutating confirmation, then reuses the existing save, issue and email actions. Partial failures remain explicit and recoverable. Signed-in QA on `TLJ-00000804` confirmed the authorised contact, exact line totals and terms in the desktop and 390 px preview without approving proof, creating a quote revision or sending customer email. Complete validation, fresh D1 replay, production build and canonical HTTP 200 health passed. Production environment revision 14 was retained.
-
-## Completed bounded follow-up: central customer and field activity notifications
-
-- User outcome: the installer bell now exposes the customer and field-team actions that move work forward, including accepted or declined quotes, customer quote questions and opens, photo completions, appointment reschedule requests, payment outcomes, technician progress, completed tasks and forms, and customer or technician sign-offs.
-- Owning workflow: authoritative quote, photo-request, appointment, payment, work-order and sign-off ledgers; owner and assigned-technician job access; the existing per-user notification read-receipt boundary; installer job deep links and quote question review.
-- In scope: project existing append-only events into one review queue; distinguish Customer and Field team activity; deep-link each notification to Quote, Schedule, Field work or Invoice; retain unread state until the exact accessible event is opened; poll every 30 seconds and on focus; place unanswered customer quote questions immediately below the quote header with one Answer action.
-- Out of scope: a second mutable activity store, copying customer contact details into notification payloads, automatic replies, broad workflow assignment, external provider credentials or representing unconfigured integrations as connected.
-- Acceptance: the existing accepted quote and customer question appear retroactively without new customer action; field sign-off and photo events remain present; inaccessible jobs cannot be enumerated or marked read; notification targets open the correct job tab; desktop and 390 px layouts have no document-level overflow; the exact release commit passes the full validation gate.
-
-Release result: Sites version 186 from implementation commit `506198847fe44ee4f929cd78e429f18de0e1ad95`, deployment `appgdep_6a5d81214f7481919e006da26f5e81de`. Signed-in live QA showed four unread updates, including `Quote accepted`, `Customer asked a quote question`, `Customer opened quote` and `Technician sign-off recorded`. Job `TLJ-00000803` showed the unanswered `Does this work` question directly below the accepted quote header with its Answer action. Desktop and 390 px inspection found no document-level overflow. Focused tests, TypeScript, ESLint, diff checks and complete `npm.cmd run validate` passed; fresh D1 migration replay and the production build passed; canonical `/api/health` returned HTTP 200. The browser reported only Chrome extension message-channel closures with no application stack. Sites error filtering contained one client-cancelled notification poll during navigation and no application exception or 5xx. Production environment revision 14 was retained.
-
-## Completed bounded follow-up: installer provider connection handoff
-
-- User outcome: each installer business has one clear place to connect its own accounting, payment and calendar accounts through the provider's secure sign-in, without seeing or supplying TLink's developer credentials.
-- Owning workflow: installer Integrations and Schedule workspaces, provider-neutral OAuth state and encrypted owner-scoped tokens, accounting and payment adapters, calendar mirror routes and feature-local tests.
-- In scope: tenant-safe provider readiness states; callback return routing and result messages; authoritative state refresh before claiming a connection; current Xero invoice scope; dedicated Stripe Connect credentials; payment callback-readiness gates; removal of callback URLs and administrator setup instructions from tenant payloads and UI.
-- Out of scope: fabricating provider credentials, bypassing provider passwords, MFA, KYC, production reviews or account-owner consent, and making an external provider TLink's source of truth.
-- Acceptance: one central TLink OAuth app can serve many owner-isolated installer connections; installers see only Connected, Available to connect or TLink setup in progress; unavailable buttons cannot start a broken flow; callback results reopen the correct workspace and clean the URL; the exact release commit passes the full validation gate.
-
-Release result: Sites version 187 from implementation commit `b29e28245c0090f730c779b2f094607284d9686b`, deployment `appgdep_6a5d8b4e01948191ba5d5a75df4f3441`. Signed-in production QA confirmed all seven provider cards, no administrator credential or callback instructions, the failed-callback result and URL cleanup, no application console errors, no recent Sites worker errors and canonical HTTP 200 health. Complete `npm.cmd run validate` passed, including typecheck, ESLint, integration and full suites, fresh D1 migration replay and production build. Automated contracts cover the narrow layout. Production environment revision 14 was retained. External provider registrations and credentials remain the launch gate, so every provider truthfully remains TLink setup in progress rather than exposing a broken Connect action.
-
-## Completed bounded follow-up: provider reliability and immediate calendar delivery
-
-- User outcome: a guided job immediately mirrors its exact appointment to every connected installer calendar, OAuth failures identify the safe operational stage without leaking credentials, and a failed Stripe or Square checkout can be closed and replaced without creating two collectible requests.
-- Owning workflow: guided job creation, the existing Google and Outlook calendar mappings, owner-scoped encrypted integration connections, provider OAuth callbacks, accepted-quote and quick-invoice payment requests, provider-authenticated reconciliation and the job payment panel.
-- In scope: reuse one calendar-mirroring implementation for guided and manual sync; keep TLink authoritative when an external calendar fails; record safe callback stages and bounded provider codes; persist sequential checkout attempts; resume interrupted provider creation with the same idempotency key; close a failed provider checkout before replacement; hold late or duplicate payment evidence for review; expose actionable retry state in the job.
-- Out of scope: representing an unverified provider as ready, entering identity or bank evidence for an account owner, accepting paid provider terms, inventing legal or security attestations, handling card details in TLink, or allowing an external provider to become the financial source of truth.
-- Acceptance: local job creation succeeds even if a calendar provider fails; protected appointments never expose customer identity or exact address; callback logs never contain authorisation codes, state, tokens, URLs or provider descriptions; one commercial reference has at most one creating, open, processing or paid attempt; late payment against a replaced attempt cannot mutate the job balance automatically; every provider create and webhook path remains owner scoped and idempotent.
-
-External provider truth at this handover: Google Calendar and Square are connected to the production TLink business. Google branding and data-scope verification remains under provider review, and Square still requires merchant identity and bank activation before it can process live cards. The Intuit application profile is complete, but production credentials remain locked behind an authorised-owner compliance questionnaire covering legal, sanctions and security facts. Stripe Connect setup is initialised but its live OAuth and payment launch is blocked by the account owner's photo-ID and selfie verification. Xero reached its recurring-billing checkout and requires an authorised payment method. MYOB requires a paid developer tier plus truthful personal, security and legal application answers. Outlook requires Microsoft account recovery or MFA before its production application can be registered. These are provider-side authority gates, not TLink code defects, and must not be bypassed or falsely attested.
-
-## Current delivery summary
-
-The installer Jobs API returns the expected owner-scoped job, and the signed-in list and detail workspace show that job. The remaining client race was corrected in `aa771460b190c7e744caca216bb4c8dde3087c77`: superseded Jobs and Customers index requests are aborted and cannot replace current filter results. A regression assertion protects the cancellation boundary.
-
-P6-2K makes customer trade requests useful for quoting before personal contact is released. The guided request now requires structured property context covering storeys, approximate age and floor area, roof, switchboard and normal access timing. Customers can add property photos, take a new photo through a supported phone or tablet camera, or attach PDF supporting documents.
-
-The privacy boundary is explicit and enforced server side. Every active verified installer allocated to the exact enquiry can view every customer-approved photo and document for quoting guidance while identity, contact details, exact location, private notes and usage data remain withheld. Every installer evidence download is authorised against the current match and recorded. Browser MIME claims are checked against the uploaded file signature. Supported phone photos are converted to bounded JPEGs in the browser, and the server strips JPEG, PNG or WebP metadata before storage. Installer downloads use neutral filenames.
-
-Customers must acknowledge the photo-sharing notice before submission. The consent receipt records notice version `2026-07-18-quoting-photos`. Customers can remove future evidence access, with clear notice that this cannot erase information an installer already viewed or saved.
-
-After a shortlisted installer receives a deliberate contact release, the customer can accept that installer for site assessment and scheduling preparation. Acceptance closes other matches and releases and permits only that installer to create a CRM job from the platform lead.
-
-Arrival windows are installer owned. Only the accepted installer can propose one to three non-overlapping future windows, each between 30 minutes and four hours and within 180 days. Future-time validation uses the property state's Australian timezone. The customer can select one current revision or choose a fourth direct-contact option. Direct contact reveals only the installer business name, contact number, email and ABN, snapshots the disclosure and creates an admin-visible audit notification.
-
-P6-2L materialises a customer-selected arrival window as an unassigned CRM appointment only when the exact accepted installer converts the matched lead to a CRM job. Dispatch assignment continues through the existing owner-scoped staff, availability, working-hours, overlap and revision checks. The verified customer can then acknowledge a bounded site-preparation checklist without seeing internal staff or job records.
-
-Migration `0058_trade_contact_arrival_handoff.sql` adds mandatory trade ABN storage, direct-contact disclosure snapshots, CRM job and appointment links and customer preparation acknowledgement state. New and updated trade profiles require a valid ABN, business name, business contact number and account email.
-
-The upgraded AEA Twilio account remains configured, but the `TLink` Australian sender registration still needs the genuine brand evidence that becomes available on Monday. SMS remains disabled until Twilio approves and provisions the sender.
-
-P6-2M adds one revision-bound operational notification event for each customer-arrival appointment creation, first staff assignment, authorised appointment change and customer preparation confirmation. Customer email requires active optional project updates, an active customer-account consent receipt and no channel opt-out. Installer email requires an active consenting trade account with operational email enabled. Customer SMS additionally requires a verified mobile, current channel consent, active provider callbacks and the explicit `TLINK_SMS_SENDER_APPROVED` release flag, which remains false by default.
-
-Each event creates idempotent audience and channel delivery records without storing recipient contact details in the admin payload. Provider sends are atomically claimed, daily-limit checked and capped at three attempts. Authenticated Resend and Twilio callbacks update both service-reminder and appointment delivery ledgers. The existing administrator delivery workspace now shows privacy-safe appointment delivery health and bounded retry controls.
-
-P6-2N completes the direct-customer photo request loop. An authorised installer office user can open a direct job, start from service-specific photo guidance, edit the exact requirements, issue or replace a 30-day secure link and revoke it when no longer needed. Only the link secret leaves the server; the database stores its hash.
-
-The customer link exposes no name, address or contact details. It guides phone capture through clarity, relevance and private-information checks before every upload. Accepted JPEG, PNG and WebP files keep the existing signature checks, metadata stripping, size limits and private R2 storage, and appear in the exact job's field proof with the requirement, request revision, checklist version and acknowledgement time. The customer can remove a mistaken upload while the request remains active.
-
-## Completed milestones
-
-P6-2O adds an owner-scoped photo-template library with draft, published and archived states. Owners, managers and coordinators can create, duplicate, revise and publish requirements with useful and avoid examples. Published versions are insert-only, archived templates cannot seed new requests, and the safe service defaults remain available.
-
-P6-2P adds deliberate direct-customer photo-request delivery. The job workspace previews a masked email or verified mobile before sending, requires an explicit current-request confirmation and keeps manual copy and share available. A manual CRM customer can receive an operational email after the office user confirms the customer asked for it. SMS additionally requires the matching active customer account, current project-update consent, verified primary mobile, active provider callbacks and the approved Australian sender flag.
-
-Current link secrets are encrypted at rest with the existing protected credential key while their hashes remain the capability verifier. Each replacement increments a token issue and invalidates unfinished deliveries for older issues. Initial sends, two resends and one final-seven-day expiry reminder are independently idempotent by request revision, token issue, intent and channel. Failed sends are atomically claimed and capped at three attempts.
-
-Authenticated Resend and Twilio callbacks now update the photo-request delivery ledger and propagate customer opt-outs. The administrator delivery workspace exposes only channel, intent, status, provider result, attempt count and timestamps. It contains no customer contact, secure link, capability token or image data. Existing links issued before this migration remain valid for manual sharing but must be replaced once before protected provider delivery because their plaintext secret was deliberately never retained.
-
-Live-trade wording validation remains deferred until trades are onboarded, as authorised on 18 July 2026. This does not block implementation or signed-in responsive release inspection.
-
-P6-2Q closes the direct-customer photo-proof review loop. Customers can explicitly finish a complete current request, while owners, managers and coordinators can accept, waive or request a bounded retake for each requirement. Completion and review revisions are append-only, reviewed originals cannot be removed, and a retake reopens only the affected requirement through the current secure link.
-
-Retake guidance uses fixed reason codes and one revision-bound targeted follow-up through the existing consent-aware delivery controls. Field work receives read-only proof readiness, and photo-template reporting receives only aggregate review outcomes. No customer contact, capability token, image analysis or image-derived content is added to those payloads.
-
-P6-3A establishes the authoritative owner-scoped price book. Owners, managers and coordinators receive a top-level workspace with quick-start labour, material and call-out presets; the default form requires only a name, type and sell price while cost, duration, capability and supplier detail remain optional. Active items support search, edit and archive without exposing internal commercial data to customer-facing quote payloads.
-
-Migration `0064_trade_price_book.sql` stores integer-cent supplier cost and sell price, deterministic basis-point markup and margin, immutable price-change revisions and optional references to existing business capabilities and approved supplier catalogue products. Direct-job quote drafts can select an active item and the server snapshots its current authoritative commercial fields into the immutable quote version. Existing issued versions remain unchanged.
-
-P6-3B adds a two-choice Items and Job packets library inside the existing Price book workspace, avoiding another navigation area for installers to learn. The first-run path sends an empty workspace back to add a reusable item, then asks only for packet name, service and saved items. Checklist, forms and suggested crew stay behind optional progressive disclosure.
-
-Migration `0065_trade_job_packets.sql` adds owner-scoped packet composition and quote-line packet revision references. Current price-book values drive deterministic cost, sell, margin, duration and required-capability summaries. Existing job-template tasks, published forms and active team members remain authoritative. A packet with an archived item is visibly blocked from quote application. Applying the same ready packet again replaces its previous draft lines rather than duplicating them, while issued quote revisions remain immutable.
-
-P6-3C adds one-action standard or Essential, Recommended and Complete quote creation from a ready job packet. The unchanged simple itemised path remains available. Office users can add customer-facing sections, optional extras and choose-one groups without enabling a feature flag or changing a document template.
-
-Migration `0066_optioned_trade_quotes.sql` adds immutable choice definitions, option-line associations and exact customer selection evidence. Customer subtotal, GST and total update immediately and are recalculated on the server before acceptance. The verified acceptance records chosen option IDs, selection summary, integer totals and the exact consent statement. Internal cost and margin are limited to owners, managers and coordinators and are omitted from customer payloads.
-
-P6-3D adds one secure no-account quote link per issued revision, immediate manual copy, deliberate email, replacement, revocation, automatic expiry, a branded phone-first review and print view, bounded customer questions, typed signature and one office activity timeline. The same server calculation validates customer choices and exact totals at acceptance, and every terminal decision clears the stored hash and encrypted recoverable secret.
-
-Migration `0067_secure_quote_sharing.sql` adds quote links, privacy-safe events, questions and consent-aware delivery records plus exact signer, link issue, AUD commercial reference and actor evidence. The provider-neutral acceptance record uses stable references and integer cents for future Xero, MYOB, QuickBooks, Stripe and Square adapters. QuickBooks OAuth connection compatibility is present; its invoice export remains gated until the next adapter milestone.
-
-P6-3E materialises every accepted quote as one immutable commercial handoff containing the selected scope, recorded terms, stable commercial reference and exact AUD subtotal, GST and total. Existing accepted quotes are materialised safely on first office access. The simple default is a 10 percent deposit, which can be changed to a percentage or fixed amount until a payment request exists.
-
-Stripe and Square create at most one provider-hosted deposit request for the handoff using a deterministic idempotency key. TLink never handles card data, browser return is not payment evidence and only the existing authenticated provider callbacks can mark the deposit paid. Xero, MYOB and QuickBooks reuse the same accepted total and scope. QuickBooks now lists the connected company products and services, creates an unsent invoice through Accounting API minor version 75 and verifies that the provider total still equals the accepted TLink cents. No adapter approves or emails an invoice automatically.
-
-Migration `0068_accepted_quote_handoff.sql` adds the immutable commercial handoff and binds deposit and accounting records to it. The office sees one progressive acceptance, deposit and accounting timeline with direct reconnect actions. Manual financial tracking remains available behind disclosure for work that does not use the accepted quote flow.
-
-P6-3F foundation converts an accepted direct-customer scope once into owner-scoped job phases and requirements, preserves the accepted sell and known cost baseline, and exposes one readiness checklist for scope, forms, technician, materials and deposit. The office can preassign an invited technician while access remains blocked until invitation acceptance. The job does not schedule, reserve stock or order materials automatically.
-
-Installer catalogue usability now includes obvious horizontal navigation, a pinned first column and header dropdowns with searchable include and exclude choices for wholesaler, brand and model code. Clicking a wholesaler opens a verified TLink profile with trade contacts, dispatch and warehouse locations, coverage and the approved product catalogue. Verified wholesalers maintain those locations from their existing overview.
-
-The scheduling follow-up removes the empty-owner trap. The signed-in installer owner is materialised once as the active Me resource, while any added person becomes assignable immediately without an account or invitation confirmation. Login access is optional and can be created later through a separate expiring secure link. The Schedule workspace defaults unassigned work to Me, presents one labelled dispatch row, collapses working-hours administration and uses a compact empty-week strip instead of seven tall blank columns.
-
-P6-3G snapshots exact packet tasks, form keys and versions, duration, required capabilities and crew size at quote issue. Accepted jobs use only that immutable execution metadata, while legacy manual quotes retain their lightweight fallback. Trades record normal labour and material results with one action, open detailed actuals only when work differs, see forecast cost and margin variance, follow phase progress and cannot complete until scope, forms, materials and requested proof are clear. Completion prepares invoice and handover work without changing the accepted customer scope or total.
-
-P6-3H removes premature installer purchasing from primary navigation and search while preserving the existing records, APIs and supplier-side fulfilment for later validation. Installer-facing Job packets are now Common jobs, with stored identifiers and immutable quote snapshots unchanged. The separate Invoice tab previews the exact accepted lines, subtotal, GST and total beside one progressive accounting-system action. The seven-day schedule blocks past starts on both trust boundaries, treats normal working hours as advice, preserves hard overlap and recorded-time-off checks and lets an office user drag an appointment to another visible day with immediate response-driven regrouping.
-
-P6-3I gives Invoices its own main destination over the existing accepted-scope and accounting sources, and opens invoice rows directly into the focused live job invoice. Job rows and timetable blocks support deliberate double-click and keyboard opening while keeping visible touch actions. Appointments now use one start plus a server-bounded 15-minute to eight-hour duration. Schedule is a time and team grid with stable person colours, drag-to-day movement and response-driven updates. Optional Google Calendar and Outlook connections mirror the authoritative TLink week through revision-mapped events; external failure never rolls back a local save, and protected appointments never disclose customer identity, contact or exact address.
-
-P6-3J replaces the two-step customer matcher with one accessible search and creates a direct customer, primary contact, structured service site and linked job in one D1 batch when no match exists. Duplicate checks reuse email, phone, business-number and exact service-address evidence. Existing customer sites remain authoritative. The initial form keeps only customer, site, editable title presets, work type, building type and priority; dates and value remain owned by Schedule and commercial records. Address suggestions are authenticated and provider neutral, with truthful manual fallback until an approved endpoint and credential are configured.
-
-The same batch moves next action, description and tags into one Notes owner; replaces custom New and More disclosures with one listener-safe accessible menu; and adds an audited, ordered and idempotent Start travel, Arrive, Start work and Finish flow to web and native field surfaces. Direct-customer Call and directions use the selected service-site contact boundary, while protected and internal work remains redacted. Finish reuses tasks, forms, requested proof, issues, accepted work-plan requirements and sync receipts as blockers, then exposes the existing invoice and handover paths. Migration `0073_phone_first_field_job.sql` adds building type and appointment transition timestamps and actor evidence.
-
-## Next five logical steps
-
-1. **Recoverable owner data export:** provide a bounded, encrypted owner snapshot download and a documented restore verification drill before considering any wider database write registry.
-2. **Fast record preview:** open a lightweight job or customer preview drawer from a row with call, email, directions, reschedule and Open record actions, without loading the full editor first.
-3. **Phone dispatch mode:** add a compact day and agenda view plus an explicit Move to date action for long-distance rescheduling while the weekly dispatch board remains authoritative.
-4. **Reusable common jobs:** combine labour, materials, duration, price and checklist defaults in one Common job and insert the same snapshot into guided intake, quotes and invoices.
-5. **Measured performance hardening:** capture real route and interaction timings, set query and bundle budgets, then add indexing, monitoring or list virtualisation only where production traces prove it is needed.
+1. **Withdraw the generic Database Console:** replace broad catalogue and generic mutation access only with justified least-privilege diagnostics and named domain repair actions.
+2. **Owner export and restore proof:** produce encrypted owner-held data and object exports and complete an isolated restore reconciliation.
+3. **Ownership and privileged-access baseline:** name accountable owners, establish two-human administration, MFA, recovery and route authorization evidence.
+4. **Owner-controlled platform foundation:** approve the target architecture and provision reproducible development, staging and production foundations.
+5. **Migration and core-workflow proof:** rehearse data migration and validate the selected customer, trade, field and provider journeys before cutover.

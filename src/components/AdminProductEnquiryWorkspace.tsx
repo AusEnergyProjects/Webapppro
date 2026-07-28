@@ -66,7 +66,7 @@ export function AdminProductEnquiryWorkspace({ api, setStatus, onSummary }: Admi
 
   const summary = summariseProductEnquiries(productEnquiries);
   return <>
-    <header className="admin-page-heading"><span>Trade supply workflow</span><h1>Installer product enquiries</h1><p>Monitor which paid installers are selecting approved products, whether wholesalers are responding and the indicative ex-GST value moving through the trade supply network.</p></header>
+    <header className="admin-page-heading"><span>Trade supply workflow</span><h1>Installer product enquiries</h1><p>Monitor which approved installers are selecting approved products, whether wholesalers are responding and the indicative ex-GST value moving through the trade supply network.</p></header>
     <section className="admin-metric-grid">
       <article><span>Total enquiries</span><strong>{summary.total}</strong><small>One enquiry per project list and wholesaler</small></article>
       <article><span>Awaiting response</span><strong>{summary.open}</strong><small>New or reviewed by the wholesaler</small></article>

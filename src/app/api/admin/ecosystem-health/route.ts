@@ -5,6 +5,7 @@ import {
   requireAdminIdentity,
   sameOrigin,
 } from "@/lib/admin-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -24,16 +25,16 @@ export async function GET(request: Request) {
     const [accounts, projects, opportunities, products, responses, quotes] =
       await Promise.all([
         db.prepare(`SELECT
-          SUM(CASE WHEN partner_type = 'installer' AND COALESCE(is_synthetic, 0) = 1 THEN 1 ELSE 0 END) installers,
-          SUM(CASE WHEN partner_type = 'supplier' AND COALESCE(is_synthetic, 0) = 1 THEN 1 ELSE 0 END) wholesalers,
-          SUM(CASE WHEN partner_type = 'installer' AND COALESCE(is_synthetic, 0) = 1
-            AND account_status = 'active' AND verification_status = 'approved' AND billing_status IN ('active', 'trial')
+          SUM(CASE WHEN a.partner_type = 'installer' AND COALESCE(a.is_synthetic, 0) = 1 THEN 1 ELSE 0 END) installers,
+          SUM(CASE WHEN a.partner_type = 'supplier' AND COALESCE(a.is_synthetic, 0) = 1 THEN 1 ELSE 0 END) wholesalers,
+          SUM(CASE WHEN a.partner_type = 'installer' AND COALESCE(a.is_synthetic, 0) = 1
+            AND ${verifiedTradeAccountPredicate("a")}
             THEN 1 ELSE 0 END) ready_installers,
-          SUM(CASE WHEN partner_type = 'supplier' AND COALESCE(is_synthetic, 0) = 1
-            AND account_status = 'active' AND verification_status = 'approved' AND billing_status IN ('active', 'trial')
+          SUM(CASE WHEN a.partner_type = 'supplier' AND COALESCE(a.is_synthetic, 0) = 1
+            AND ${verifiedTradeAccountPredicate("a")}
             THEN 1 ELSE 0 END) ready_wholesalers,
           (SELECT COUNT(*) FROM customer_accounts WHERE COALESCE(is_synthetic, 0) = 1) customers
-          FROM trade_accounts`).first<CountRow>(),
+          FROM trade_accounts a`).first<CountRow>(),
         db.prepare(`SELECT COUNT(*) total,
           SUM(CASE WHEN opportunity_id != '' THEN 1 ELSE 0 END) submitted
           FROM customer_projects WHERE COALESCE(is_synthetic, 0) = 1`).first<CountRow>(),

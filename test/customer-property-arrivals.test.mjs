@@ -160,7 +160,7 @@ test("project evidence is R2 backed with every upload shared to allocated verifi
     evidenceRoute,
     /m\.status IN \('offered', 'viewed', 'interested', 'connected'\)/,
   );
-  assert.match(evidenceRoute, /verification_status = 'approved'/);
+  assert.match(evidenceRoute, /verifiedTradeAccountPredicate\("a"\)/);
   assert.match(evidenceRoute, /client_upload_id/);
   assert.match(evidenceRoute, /hasAllowedSignature/);
   assert.match(evidenceRoute, /sanitiseQuotingPhoto/);

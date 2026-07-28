@@ -59,8 +59,8 @@ test("forms and recurring generation records are durable and uniqueness protecte
     VALUES ('2', 'plan', 'source', 'job-2', 'owner', '2026-08-01', 'later')`).run());
 });
 
-test("job forms enforce assignment scope, paid operations and privacy-safe evidence", () => {
-  assert.match(formsRoute, /requireInstallerTeamAccess\(request, false\)/);
+test("job forms enforce assignment scope, approved operations and privacy-safe evidence", () => {
+  assert.match(formsRoute, /requireInstallerTeamAccess\(request\)/);
   assert.match(formsRoute, /assignedJob\(access, workOrderId\)/);
   assert.match(formsRoute, /FULL_ACCESS_REQUIRED/);
   assert.match(formsRoute, /containsPrivateData\(answers\)/);

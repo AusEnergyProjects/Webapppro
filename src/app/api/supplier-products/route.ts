@@ -1,7 +1,9 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
-import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+} from "@/lib/trade-access-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
@@ -83,20 +85,19 @@ function integer(value: unknown, minimum: number, maximum: number) {
 }
 
 async function supplierIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1()
-    .prepare(
-      "SELECT partner_type, account_status, billing_status, business_name, COALESCE(is_synthetic, 0) is_synthetic FROM trade_accounts WHERE firebase_uid = ?",
-    )
-    .bind(identity.uid)
-    .first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return { ...identity, billingStatus: account.billing_status, businessName: String(account.business_name || "Wholesaler"), isSynthetic: Number(account.is_synthetic || 0) };
+  const access = await requireVerifiedTradeAccess(request, {
+    partnerTypes: ["supplier"],
+  });
+  return {
+    ...access.identity,
+    businessName: access.businessName || "Wholesaler",
+  };
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeAccessError) {
+    return json({ ok: false, code: error.code, error: error.message }, error.status);
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED")
     return json({ ok: false, error: "Sign in to continue." }, 401);
@@ -484,12 +485,6 @@ export async function POST(request: Request) {
       return json({ ok: false, error: "Invalid product details." }, 400);
     }
     if (Array.isArray(body.products)) {
-      if (!await accountHasFeature(identity.uid, "supplier", identity.billingStatus, "supplier_bulk_import")) {
-        return json(
-          { ok: false, error: "Complete trade verification before importing catalogue products." },
-          403,
-        );
-      }
       if (!body.products.length || body.products.length > 100) {
         return json(
           {
@@ -564,8 +559,8 @@ export async function POST(request: Request) {
         );
       }
       const now = new Date().toISOString();
-      const reviewStatus = identity.isSynthetic ? "approved" : "pending";
-      const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
+      const reviewStatus = "pending";
+      const reviewNote = "";
       await db.batch(
         rows.map((row) => {
           const values = row!;
@@ -603,7 +598,7 @@ export async function POST(request: Request) {
               values.listingStatus,
               reviewStatus,
               reviewNote,
-              identity.isSynthetic,
+              0,
               now,
               now,
             );
@@ -637,13 +632,13 @@ export async function POST(request: Request) {
         eventType: "supplier.catalogue_imported",
         category: "catalogue",
         priority: "high",
-        title: identity.isSynthetic ? "Synthetic catalogue import completed" : "Wholesaler catalogue import awaiting review",
-        summary: identity.isSynthetic ? `${identity.businessName} imported ${rows.length} synthetic products for the protected walkthrough.` : `${identity.businessName} imported ${rows.length} products. Published items require catalogue approval before installers can select them.`,
+        title: "Wholesaler catalogue import awaiting review",
+        summary: `${identity.businessName} imported ${rows.length} products. Published items require catalogue approval before installers can select them.`,
         entityType: "trade_account",
         entityId: identity.uid,
         actorType: "supplier",
         actorUid: identity.uid,
-        requiresAction: !identity.isSynthetic && rows.some((item) => item?.listingStatus === "published"),
+        requiresAction: rows.some((item) => item?.listingStatus === "published"),
         metadata: { productCount: rows.length },
         occurredAt: now,
       });
@@ -681,8 +676,8 @@ export async function POST(request: Request) {
         400,
       );
     const now = new Date().toISOString();
-    const reviewStatus = identity.isSynthetic ? "approved" : "pending";
-    const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
+    const reviewStatus = "pending";
+    const reviewNote = "";
     try {
       await getD1()
         .prepare(
@@ -711,7 +706,7 @@ export async function POST(request: Request) {
           values.listingStatus,
           reviewStatus,
           reviewNote,
-          identity.isSynthetic,
+          0,
           now,
           now,
         )
@@ -739,13 +734,13 @@ export async function POST(request: Request) {
       eventType: "supplier.product_created",
       category: "catalogue",
       priority: values.listingStatus === "published" ? "high" : "normal",
-      title: identity.isSynthetic ? "Synthetic catalogue product added" : "Wholesaler product awaiting review",
-      summary: identity.isSynthetic ? `${identity.businessName} added a synthetic product for the protected walkthrough.` : `${identity.businessName} added ${values.brand} ${values.name} to its catalogue.`,
+      title: "Wholesaler product awaiting review",
+      summary: `${identity.businessName} added ${values.brand} ${values.name} to its catalogue.`,
       entityType: "supplier_product",
       entityId: id,
       actorType: "supplier",
       actorUid: identity.uid,
-      requiresAction: !identity.isSynthetic && values.listingStatus === "published",
+      requiresAction: values.listingStatus === "published",
       metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
       occurredAt: now,
     });
@@ -778,8 +773,8 @@ export async function PATCH(request: Request) {
         400,
       );
     const now = new Date().toISOString();
-    const reviewStatus = identity.isSynthetic ? "approved" : "pending";
-    const reviewNote = identity.isSynthetic ? "Synthetic walkthrough auto-approval" : "";
+    const reviewStatus = "pending";
+    const reviewNote = "";
     try {
       const result = await getD1()
         .prepare(
@@ -837,12 +832,12 @@ export async function PATCH(request: Request) {
       category: "catalogue",
       priority: values.listingStatus === "published" ? "high" : "normal",
       title: "Wholesaler product changed",
-      summary: identity.isSynthetic ? `${identity.businessName} updated a synthetic walkthrough product.` : `${identity.businessName} updated ${values.brand} ${values.name}. The catalogue review was reset to pending.`,
+      summary: `${identity.businessName} updated ${values.brand} ${values.name}. The catalogue review was reset to pending.`,
       entityType: "supplier_product",
       entityId: id,
       actorType: "supplier",
       actorUid: identity.uid,
-      requiresAction: !identity.isSynthetic && values.listingStatus === "published",
+      requiresAction: values.listingStatus === "published",
       metadata: { modelNumber: values.modelNumber, listingStatus: values.listingStatus },
       occurredAt: now,
     });

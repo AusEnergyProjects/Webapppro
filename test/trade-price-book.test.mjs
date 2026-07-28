@@ -82,7 +82,7 @@ test("the price-book migration applies after the versioned quote dependencies", 
 
 test("price-book writes are office-role protected, owner scoped and append price history", () => {
   assert.match(route, /sameOrigin\(request\)/);
-  assert.match(route, /requireInstallerTeamAccess\(request, false\)/);
+  assert.match(route, /requireInstallerTeamAccess\(request\)/);
   assert.match(route, /canDispatch\(access\)/);
   assert.match(route, /firebase_uid = \?/);
   assert.match(route, /PRICE_BOOK_MANAGEMENT_REQUIRED/);
@@ -92,6 +92,7 @@ test("price-book writes are office-role protected, owner scoped and append price
   assert.match(route, /record_status = 'archived'/);
   assert.match(route, /capabilities FROM trade_accounts/);
   assert.match(route, /supplier_products p JOIN trade_accounts/);
+  assert.equal((route.match(/verifiedTradeAccountPredicate\("a"\)/g) || []).length, 2);
 });
 
 test("active price-book items become authoritative direct-quote snapshots", () => {

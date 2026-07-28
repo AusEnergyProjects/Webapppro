@@ -36,10 +36,12 @@ test("the CRM migration applies cleanly to SQLite", () => {
 
 test("CRM access is same-origin, installer-only, active, verification-gated and owner scoped", () => {
   assert.match(route, /sameOrigin\(request\)/);
-  assert.match(route, /requireFirebaseIdentity/);
-  assert.match(route, /account\.partner_type !== "installer"/);
-  assert.match(route, /account\.account_status !== "active"/);
+  assert.match(route, /requireVerifiedTradeAccess/);
+  assert.match(route, /partnerTypes: \["installer"\]/);
+  assert.match(route, /TradeAccessError/);
+  assert.match(route, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.match(route, /entitlements\.features\.business_operations/);
+  assert.doesNotMatch(route, /billing_status/);
   assert.match(route, /WHERE firebase_uid = \?/);
   assert.match(route, /WHERE id = \? AND firebase_uid = \?/);
   assert.match(route, /w\.firebase_uid = \?/);

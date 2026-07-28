@@ -18,10 +18,12 @@ test("catalogue exposes horizontal navigation and wholesaler profiles", () => {
   const route = read("src/app/api/product-marketplace/supplier/route.ts");
   assert.match(catalogue, /Scroll left/); assert.match(catalogue, /Scroll right/); assert.match(catalogue, /setProfileSupplierUid\(product\.supplierUid\)/);
   assert.match(profile, /Dispatch and warehouse locations/); assert.match(profile, /Approved product catalogue/);
-  assert.match(route, /trade_supplier_locations/); assert.match(route, /verification_status = 'approved'/);
+  assert.match(route, /trade_supplier_locations/);
+  assert.match(route, /verifiedTradeAccountPredicate\("supplier"\)/);
   const manager = read("src/components/SupplierLocationManager.tsx");
   const locations = read("src/app/api/supplier-locations/route.ts");
   assert.match(manager, /Dispatch and warehouse locations/); assert.match(manager, /Location saved to your installer-facing TLink profile/);
+  assert.match(locations, /requireVerifiedTradeAccess/); assert.match(locations, /partnerTypes: \["supplier"\]/);
   assert.match(locations, /head_office/); assert.match(locations, /warehouse/); assert.match(locations, /dispatch/); assert.match(locations, /showroom/);
 });
 

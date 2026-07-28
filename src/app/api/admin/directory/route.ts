@@ -13,6 +13,11 @@ import {
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
+import { normalizeAbn, officialAbnLookupUrl } from "@/lib/trade-abn";
+import {
+  approvedAbnAccess,
+  approvedTradeReviewPredicate,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -44,6 +49,20 @@ const DIRECTORY_SORTS: Record<string, DirectorySort> = {
 function directoryItem(row: Record<string, unknown>, revealCustomer: boolean) {
   const accountType = String(row.account_type);
   const customer = accountType === "customer";
+  const trade = accountType === "installer" || accountType === "supplier";
+  const accessApproved = trade
+      ? approvedAbnAccess({
+        abn: normalizeAbn(row.abn),
+        partnerType: accountType,
+        accountStatus: String(row.account_status),
+        verificationStatus: String(row.verification_status),
+        verifiedAbn: normalizeAbn(row.verified_abn),
+        verificationReviewId: String(row.verification_review_id || ""),
+        verificationReviewedAt: String(row.verification_reviewed_at || ""),
+        verificationReviewedByUid: String(row.verification_reviewed_by_uid || ""),
+        approvalReviewExists: Boolean(row.approval_review_exists),
+      })
+    : true;
   return {
     accountKey: `${accountType}:${row.firebase_uid}`,
     firebaseUid: row.firebase_uid,
@@ -55,7 +74,7 @@ function directoryItem(row: Record<string, unknown>, revealCustomer: boolean) {
     postcode: customer && !revealCustomer ? "" : row.postcode,
     accountStatus: row.account_status,
     verificationStatus: row.verification_status,
-    planKey: row.plan_key,
+    accessApproved,
     isSynthetic: Boolean(row.is_synthetic),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -165,9 +184,27 @@ export async function GET(request: Request) {
       if (requestedType === "installer" || requestedType === "supplier") {
         const account = await db.prepare(`SELECT firebase_uid, email, business_name, contact_name, phone, partner_type,
           business_website, address_line_1, suburb, address_state, postcode, service_states, capabilities, summary,
-          account_status, verification_status, plan_key, billing_status, availability_status, is_synthetic, created_at, updated_at
-          FROM trade_accounts WHERE firebase_uid = ? AND partner_type = ?`).bind(uid, requestedType).first<Record<string, unknown>>();
+          account.abn, account.account_status, account.verification_status,
+          account.verified_abn, account.verification_review_id,
+          account.verification_reviewed_at, account.verification_reviewed_by_uid,
+          account.availability_status, account.is_synthetic, account.created_at,
+          account.updated_at,
+          CASE WHEN ${approvedTradeReviewPredicate("account")}
+            THEN 1 ELSE 0 END approval_review_exists
+          FROM trade_accounts account
+          WHERE account.firebase_uid = ? AND account.partner_type = ?`).bind(uid, requestedType).first<Record<string, unknown>>();
         if (!account) return adminJson({ ok: false, error: "Business account not found." }, 404);
+        const accessApproved = approvedAbnAccess({
+          abn: normalizeAbn(account.abn),
+          partnerType: requestedType,
+          accountStatus: String(account.account_status),
+          verificationStatus: String(account.verification_status),
+          verifiedAbn: normalizeAbn(account.verified_abn),
+          verificationReviewId: String(account.verification_review_id || ""),
+          verificationReviewedAt: String(account.verification_reviewed_at || ""),
+          verificationReviewedByUid: String(account.verification_reviewed_by_uid || ""),
+          approvalReviewExists: Boolean(account.approval_review_exists),
+        });
         return adminJson({ ok: true, accountType: requestedType, canEdit: false, impersonationAllowed: false, account: {
           firebaseUid: account.firebase_uid,
           email: account.email,
@@ -182,10 +219,14 @@ export async function GET(request: Request) {
           serviceStates: parseJsonList(account.service_states),
           capabilities: parseJsonList(account.capabilities),
           summary: account.summary,
+          abn: normalizeAbn(account.abn),
           accountStatus: account.account_status,
           verificationStatus: account.verification_status,
-          planKey: account.plan_key,
-          billingStatus: account.billing_status,
+          verifiedAbn: normalizeAbn(account.verified_abn),
+          verificationReviewedAt: account.verification_reviewed_at,
+          verificationReviewedByUid: account.verification_reviewed_by_uid,
+          accessApproved,
+          officialAbnLookupUrl: officialAbnLookupUrl(account.abn),
           availabilityStatus: account.availability_status,
           isSynthetic: Boolean(account.is_synthetic),
           createdAt: account.created_at,
@@ -214,16 +255,27 @@ export async function GET(request: Request) {
     const cursorInput = cleanAdminText(url.searchParams.get("cursor"), 2000);
     const revealCustomer = ["owner", "admin", "support"].includes(admin.role);
     const union = `(SELECT firebase_uid, email, display_name name, 'Household profile' secondary, 'customer' account_type,
-        address_state, postcode, account_status, '' verification_status, 'always_free' plan_key, is_synthetic, created_at, updated_at
+        address_state, postcode, account_status, '' verification_status, '' abn, '' verified_abn,
+        '' verification_review_id, '' verification_reviewed_at, ''
+        verification_reviewed_by_uid, 0 approval_review_exists,
+        is_synthetic, created_at, updated_at
         FROM customer_accounts
       UNION ALL
       SELECT firebase_uid, email, business_name name, contact_name secondary, partner_type account_type,
-        address_state, postcode, account_status, verification_status, plan_key, is_synthetic, created_at, updated_at
-        FROM trade_accounts
+        account.address_state, account.postcode, account.account_status,
+        account.verification_status, account.abn, account.verified_abn,
+        account.verification_review_id, account.verification_reviewed_at,
+        account.verification_reviewed_by_uid,
+        CASE WHEN ${approvedTradeReviewPredicate("account")}
+          THEN 1 ELSE 0 END approval_review_exists,
+        account.is_synthetic, account.created_at, account.updated_at
+        FROM trade_accounts account
       UNION ALL
       SELECT id firebase_uid, email, COALESCE(NULLIF(display_name, ''), email) name, role secondary,
         'admin' account_type, '' address_state, '' postcode, status account_status, '' verification_status,
-        role plan_key, 0 is_synthetic, created_at, updated_at FROM admin_users)`;
+        '' abn, '' verified_abn, '' verification_review_id, ''
+        verification_reviewed_at, '' verification_reviewed_by_uid,
+        0 approval_review_exists, 0 is_synthetic, created_at, updated_at FROM admin_users)`;
     const conditions = ["1 = 1"];
     const bindings: unknown[] = [];
     if (type) { conditions.push("account_type = ?"); bindings.push(type); }

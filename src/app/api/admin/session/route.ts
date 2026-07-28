@@ -4,6 +4,7 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminError, adminJson, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 import { expireStaleOpportunities } from "@/lib/opportunity-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -29,11 +30,13 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM customer_projects WHERE status IN ('matching', 'quote_review')) submitted
         FROM customer_accounts`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
-        SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END) active,
-        SUM(CASE WHEN account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
-        SUM(CASE WHEN partner_type = 'installer' THEN 1 ELSE 0 END) installers,
-        SUM(CASE WHEN partner_type = 'supplier' THEN 1 ELSE 0 END) suppliers
-        FROM trade_accounts`).first<Record<string, number>>(),
+        SUM(CASE WHEN ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) active,
+        SUM(CASE WHEN account.account_status = 'suspended' THEN 1 ELSE 0 END) suspended,
+        SUM(CASE WHEN account.partner_type = 'installer'
+          AND ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) installers,
+        SUM(CASE WHEN account.partner_type = 'supplier'
+          AND ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) suppliers
+        FROM trade_accounts account`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) open,
         SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) draft
@@ -44,9 +47,12 @@ export async function GET(request: Request) {
         SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) connected
         FROM trade_opportunity_matches`).first<Record<string, number>>(),
       db.prepare(`SELECT
-        SUM(CASE WHEN verification_status IN ('submitted', 'under_review') THEN 1 ELSE 0 END) awaiting,
-        SUM(CASE WHEN verification_status = 'approved' THEN 1 ELSE 0 END) approved
-        FROM trade_accounts`).first<Record<string, number>>(),
+        SUM(CASE WHEN account.verification_status IN ('submitted', 'under_review', 'needs_information')
+          OR (account.verification_status = 'approved'
+            AND NOT (${verifiedTradeAccountPredicate("account")}))
+          THEN 1 ELSE 0 END) awaiting,
+        SUM(CASE WHEN ${verifiedTradeAccountPredicate("account")} THEN 1 ELSE 0 END) approved
+        FROM trade_accounts account`).first<Record<string, number>>(),
       db.prepare(`SELECT COUNT(*) total,
         SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) pending,
         SUM(CASE WHEN listing_status = 'published' AND review_status = 'approved' THEN 1 ELSE 0 END) live

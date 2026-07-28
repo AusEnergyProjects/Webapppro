@@ -20,18 +20,20 @@ test("project product lists and wholesaler enquiries are durable", () => {
   assert.match(schema, /supplier_product_enquiries_list_supplier_idx/);
   assert.match(selections, /unit_price_cents_ex_gst/);
   assert.match(selections, /ON CONFLICT\(list_id, product_id\) DO UPDATE/);
-  assert.match(selections, /SELECT DISTINCT supplier_uid/);
+  assert.match(selections, /new Set\(eligibleItems\.results\.map/);
 });
 
 test("installer selection enforces verification, ownership and wholesaler visibility", () => {
-  assert.match(selections, /requireFirebaseIdentity/);
-  assert.match(selections, /accountHasFeature/);
-  assert.match(selections, /installer_marketplace/);
+  assert.match(selections, /requireVerifiedTradeAccess/);
+  assert.match(selections, /partnerTypes: \["installer"\]/);
+  assert.match(selections, /TradeAccessError/);
   assert.match(selections, /firebase_uid = \? AND status = 'draft'/);
-  assert.match(selections, /a\.verification_status = 'approved'/);
+  assert.match(selections, /verifiedTradeAccountPredicate\("a"\)/);
   assert.doesNotMatch(selections, /fg\.feature_key = 'supplier_visibility'/);
   assert.match(selections, /p\.listing_status = 'published'/);
   assert.match(selections, /p\.review_status = 'approved'/);
+  assert.match(selections, /eligibleItems\.results\.length !== totalItems/);
+  assert.match(selections, /One or more selected products are no longer available/);
   assert.match(selections, /Quantity must start at/);
 });
 

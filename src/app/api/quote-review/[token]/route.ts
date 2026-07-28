@@ -4,6 +4,7 @@ import { calculateQuoteSelection, type QuoteChoiceTotals } from "@/lib/trade-quo
 import { providerNeutralCommercialRecord } from "@/lib/trade-commercial-reference";
 import { hashQuoteLinkSecret, splitQuoteLinkToken } from "@/lib/trade-quote-links";
 import { acceptedScopeSnapshot, depositAmountCents } from "@/lib/trade-commercial-handoff";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 type Context = { params: Promise<{ token: string }> };
@@ -33,6 +34,7 @@ async function authorisedLink(token: string) {
     JOIN trade_crm_customers customer ON customer.id = link.crm_customer_id AND customer.firebase_uid = link.firebase_uid AND customer.record_status = 'active'
     JOIN trade_crm_service_sites site ON site.id = quote.service_site_id AND site.customer_id = customer.id AND site.firebase_uid = link.firebase_uid AND site.record_status = 'active'
     JOIN trade_accounts trade ON trade.firebase_uid = link.firebase_uid
+      AND trade.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("trade")}
     WHERE link.id = ? LIMIT 1`).bind(linkId).first<Row>();
   if (!row || !row.token_hash || await hashQuoteLinkSecret(secret) !== row.token_hash) throw new Error("QUOTE_LINK_NOT_FOUND");
   const now = new Date().toISOString();

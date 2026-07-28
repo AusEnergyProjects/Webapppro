@@ -200,7 +200,7 @@ async function libraryPayload(ownerUid: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     requireManager(access);
     return adminJson({ ok: true, templates: await libraryPayload(access.ownerUid) });
   } catch (error) { return responseForError(error); }
@@ -209,7 +209,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     requireManager(access);
     const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 30);

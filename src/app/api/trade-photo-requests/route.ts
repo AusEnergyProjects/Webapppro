@@ -196,7 +196,7 @@ async function requestPayload(access: TeamAccess, job: DirectJob, shareUrl = "")
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     const job = await managedDirectJob(access, workOrderId);
     return adminJson({ ok: true, ...(await requestPayload(access, job)) });
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 30) || "save_request";
     const workOrderId = cleanAdminText(body.workOrderId, 180);
@@ -382,7 +382,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     const job = await managedDirectJob(access, workOrderId);
     const db = getD1();

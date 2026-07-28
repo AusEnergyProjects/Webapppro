@@ -11,7 +11,7 @@ const ACTIONS = new Set(["save_preparation", "prepare_reminder", "suppress", "co
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (["TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED", "ACCOUNT_INACTIVE", "INSTALLER_ONLY"].includes(code)) return adminJson({ ok: false, error: "This account does not have active installer follow-up access." }, 403);
+  if (["TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ACCOUNT_INACTIVE", "INSTALLER_ONLY"].includes(code)) return adminJson({ ok: false, error: "This account does not have active installer follow-up access." }, 403);
   if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can prepare service follow-ups." }, 403);
   if (code === "FOLLOW_UP_NOT_FOUND") return adminJson({ ok: false, error: "Service follow-up not found." }, 404);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active team member." }, 404);

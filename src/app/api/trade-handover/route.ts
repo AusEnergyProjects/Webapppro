@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { adminNotificationStatement } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import {
@@ -61,27 +61,22 @@ function dateValue(value: unknown) {
 }
 
 async function tradeIdentity(request: Request): Promise<TradeIdentity> {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_REQUIRED");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  const entitlements = await accountEntitlements(access.identity.uid, "installer");
   return {
-    uid: identity.uid,
-    businessName: String(account.business_name || "Installer"),
+    uid: access.identity.uid,
+    businessName: access.businessName || "Installer",
     fullAccess: entitlements.features.business_operations,
   };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
-  if (code === "INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Installed asset and customer handover tools are available to installer accounts." }, 403);
-  if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using assets, warranties and handover packs." }, 403);
+  if (code === "INSTALLER_REQUIRED" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Installed asset and customer handover tools are available to installer accounts." }, 403);
+  if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using assets, warranties and handover packs." }, 403);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "PACK_NOT_FOUND") return adminJson({ ok: false, error: "Start the asset and handover record first." }, 404);
   if (code === "PACK_LOCKED") return adminJson({ ok: false, error: "This handover is locked while it is under review or already published." }, 409);

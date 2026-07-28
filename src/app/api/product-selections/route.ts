@@ -1,8 +1,11 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { adminNotificationStatement } from "@/lib/admin-notifications";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -16,26 +19,24 @@ function integer(value: unknown, minimum: number, maximum: number) {
 }
 
 async function installerIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid)
-    .first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  if (!await accountHasFeature(identity.uid, "installer", account.billing_status, "installer_marketplace")) {
-    throw new Error("MARKETPLACE_REQUIRED");
-  }
-  return { ...identity, businessName: String(account.business_name || "Installer") };
+  const access = await requireVerifiedTradeAccess(request, {
+    partnerTypes: ["installer"],
+  });
+  return {
+    ...access.identity,
+    businessName: access.businessName || "Installer",
+  };
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeAccessError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "INSTALLER_REQUIRED") return adminJson({ ok: false, error: "Product selections are reserved for installer accounts." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
-  if (code === "MARKETPLACE_REQUIRED") return adminJson({ ok: false, error: "Product selection requires paid marketplace access." }, 403);
   return adminJson({ ok: false, error: "The product selection request could not be completed." }, 500);
 }
 
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
         db.prepare(`SELECT p.id, p.firebase_uid, p.unit_price_cents_ex_gst, p.min_order_qty, p.order_increment
           FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
           WHERE p.id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
-            AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'`).bind(productId).first<Record<string, unknown>>(),
+            AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'`).bind(productId).first<Record<string, unknown>>(),
       ]);
       if (!list) return adminJson({ ok: false, error: "Choose an editable draft product list." }, 404);
       if (!product) return adminJson({ ok: false, error: "This product is no longer available for selection." }, 409);
@@ -165,15 +166,29 @@ export async function POST(request: Request) {
       const list = await db.prepare("SELECT id FROM installer_product_lists WHERE id = ? AND firebase_uid = ? AND status = 'draft'")
         .bind(listId, identity.uid).first();
       if (!list) return adminJson({ ok: false, error: "Choose an editable draft product list." }, 404);
-      const suppliers = await db.prepare("SELECT DISTINCT supplier_uid FROM installer_product_list_items WHERE list_id = ?")
-        .bind(listId).all<Record<string, unknown>>();
-      if (!suppliers.results.length) return adminJson({ ok: false, error: "Add at least one product before sending an enquiry." }, 400);
+      const [itemCount, eligibleItems] = await Promise.all([
+        db.prepare("SELECT COUNT(*) count FROM installer_product_list_items WHERE list_id = ?")
+          .bind(listId).first<Record<string, unknown>>(),
+        db.prepare(`SELECT i.supplier_uid
+          FROM installer_product_list_items i
+          JOIN supplier_products p ON p.id = i.product_id AND p.firebase_uid = i.supplier_uid
+          JOIN trade_accounts a ON a.firebase_uid = i.supplier_uid
+          WHERE i.list_id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
+            AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
+          ORDER BY i.supplier_uid, i.id`).bind(listId).all<Record<string, unknown>>(),
+      ]);
+      const totalItems = Number(itemCount?.count || 0);
+      if (!totalItems) return adminJson({ ok: false, error: "Add at least one product before sending an enquiry." }, 400);
+      if (eligibleItems.results.length !== totalItems) {
+        return adminJson({ ok: false, error: "One or more selected products are no longer available from an approved wholesaler. Review the list before sending an enquiry." }, 409);
+      }
+      const suppliers = [...new Set(eligibleItems.results.map((item) => String(item.supplier_uid)))];
       await db.batch([
-        ...suppliers.results.map((supplier: Record<string, unknown>) => db.prepare(`INSERT INTO supplier_product_enquiries
+        ...suppliers.map((supplierUid) => db.prepare(`INSERT INTO supplier_product_enquiries
           (id, list_id, installer_uid, supplier_uid, status, message, supplier_note, created_at, updated_at)
           VALUES (?, ?, ?, ?, 'new', ?, '', ?, ?)
           ON CONFLICT(list_id, supplier_uid) DO NOTHING`)
-          .bind(crypto.randomUUID(), listId, identity.uid, supplier.supplier_uid, message, now, now)),
+          .bind(crypto.randomUUID(), listId, identity.uid, supplierUid, message, now, now)),
         db.prepare("UPDATE installer_product_lists SET status = 'submitted', submitted_at = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
           .bind(now, now, listId, identity.uid),
         adminNotificationStatement(db, {
@@ -182,13 +197,13 @@ export async function POST(request: Request) {
           category: "trade",
           priority: "normal",
           title: "Installer sent a product enquiry",
-          summary: `${identity.businessName} sent a saved product list to ${suppliers.results.length} wholesaler${suppliers.results.length === 1 ? "" : "s"}.`,
+          summary: `${identity.businessName} sent a saved product list to ${suppliers.length} wholesaler${suppliers.length === 1 ? "" : "s"}.`,
           entityType: "installer_product_list",
           entityId: listId,
           actorType: "installer",
           actorUid: identity.uid,
           requiresAction: false,
-          metadata: { supplierCount: suppliers.results.length },
+          metadata: { supplierCount: suppliers.length },
           occurredAt: now,
         }),
       ]);

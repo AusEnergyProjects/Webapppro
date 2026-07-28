@@ -4,8 +4,8 @@ import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import {
   applyChanges,
   getSetting,
+  prepareLocalDataOwner,
   purgeExpiredAddresses,
-  purgeLocalData,
   queueCounts,
   queuedActions,
   resolveAction,
@@ -72,13 +72,14 @@ async function fetchChanges() {
 }
 
 async function revokedSignOut() {
-  await purgeLocalData();
   await forgetPushToken();
   await firebaseSignOut();
 }
 
 async function performSync(): Promise<SyncOutcome> {
-  if (!firebaseAuth.currentUser) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
+  const currentUser = firebaseAuth.currentUser;
+  if (!currentUser) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
+  await prepareLocalDataOwner(currentUser.uid);
   try {
     await purgeExpiredAddresses();
     await registerDevice();

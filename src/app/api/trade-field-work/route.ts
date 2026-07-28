@@ -45,7 +45,7 @@ function fieldError(error: unknown) {
   if (code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using field tools." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to your team account." }, 403);
-  if (code === "TEAM_MEMBERSHIP_REQUIRED") return adminJson({ ok: false, error: "No active installer team membership was found." }, 404);
+  if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field tools require team access on the installer account." }, 403);
   if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Customer sign-off for an AEA protected job must stay in the AEA customer pathway." }, 403);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Job file storage is not available." }, 503);
@@ -212,7 +212,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const url = new URL(request.url);
     const downloadId = cleanAdminText(url.searchParams.get("download"), 180);
     const previewId = cleanAdminText(url.searchParams.get("preview"), 180);
@@ -279,7 +279,7 @@ async function upload(request: Request, access: TeamAccess) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     if ((request.headers.get("content-type") || "").includes("multipart/form-data")) return await upload(request, access);
     let body: Record<string, unknown>;
     try { body = await request.json() as Record<string, unknown>; }
@@ -332,7 +332,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const id = cleanAdminText(new URL(request.url).searchParams.get("id"), 180);
     const record = await getD1().prepare(`SELECT m.object_key, m.work_order_id FROM trade_crm_job_media m
       JOIN trade_work_orders w ON w.id = m.work_order_id

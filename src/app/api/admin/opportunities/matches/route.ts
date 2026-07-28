@@ -15,6 +15,7 @@ import {
 } from "@/lib/opportunity-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 const MATCH_STATUSES = new Set([
@@ -24,6 +25,12 @@ const MATCH_STATUSES = new Set([
   "declined",
   "connected",
   "closed",
+]);
+const ACCESS_REQUIRED_MATCH_STATUSES = new Set([
+  "offered",
+  "viewed",
+  "interested",
+  "connected",
 ]);
 
 export async function POST(request: Request) {
@@ -59,7 +66,7 @@ export async function POST(request: Request) {
       db
         .prepare(
           `SELECT firebase_uid, business_name, account_status, partner_type, verification_status, availability_status,
-        postcode, service_base_postcode, service_radius_km, service_states, capabilities, billing_status
+        postcode, service_base_postcode, service_radius_km, service_states, capabilities
         FROM trade_accounts WHERE firebase_uid = ?`,
         )
         .bind(firebaseUid)
@@ -91,9 +98,9 @@ export async function POST(request: Request) {
         },
         403,
       );
-    if (!await accountHasFeature(firebaseUid, "installer", account.billing_status, "installer_leads"))
+    if (!await accountHasFeature(firebaseUid, "installer", "installer_leads"))
       return adminJson(
-        { ok: false, error: "Free installer accounts cannot receive leads. Start membership or grant Opportunity leads first." },
+        { ok: false, error: "The installer needs an approved ABN review before receiving opportunities." },
         409,
       );
     if (
@@ -224,13 +231,30 @@ export async function PATCH(request: Request) {
     const db = getD1();
     const current = await db
       .prepare(
-        `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers
-      FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id WHERE m.id = ?`,
+        `SELECT m.status, m.firebase_uid, m.opportunity_id, o.status opportunity_status, o.maximum_connected_installers,
+        CASE WHEN ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
+          THEN 1 ELSE 0 END installer_access_approved
+      FROM trade_opportunity_matches m
+      JOIN trade_opportunities o ON o.id = m.opportunity_id
+      LEFT JOIN trade_accounts a ON a.firebase_uid = m.firebase_uid
+      WHERE m.id = ?`,
       )
       .bind(id)
       .first<Record<string, unknown>>();
     if (!current)
       return adminJson({ ok: false, error: "Assignment not found." }, 404);
+    if (
+      ACCESS_REQUIRED_MATCH_STATUSES.has(status) &&
+      Number(current.installer_access_approved || 0) !== 1
+    )
+      return adminJson(
+        {
+          ok: false,
+          error:
+            "The installer needs a current approved ABN review before this assignment can remain active.",
+        },
+        409,
+      );
     if (status === "connected") {
       if (
         current.status !== "interested" ||
@@ -266,12 +290,28 @@ export async function PATCH(request: Request) {
     const result = await db
       .prepare(
         `UPDATE trade_opportunity_matches SET status = ?, admin_note = ?,
-      connected_at = CASE WHEN ? = 'connected' THEN ? ELSE connected_at END, updated_at = ? WHERE id = ?`,
+      connected_at = CASE WHEN ? = 'connected' THEN ? ELSE connected_at END, updated_at = ?
+      WHERE id = ? AND (
+        ? IN ('declined', 'closed')
+        OR EXISTS (
+          SELECT 1 FROM trade_accounts a
+          WHERE a.firebase_uid = trade_opportunity_matches.firebase_uid
+            AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'installer'
+        )
+      )`,
       )
-      .bind(status, adminNote, status, now, now, id)
+      .bind(status, adminNote, status, now, now, id, status)
       .run();
     if (!result.meta.changes)
-      return adminJson({ ok: false, error: "Assignment not found." }, 404);
+      return adminJson(
+        {
+          ok: false,
+          error: ACCESS_REQUIRED_MATCH_STATUSES.has(status)
+            ? "The installer needs a current approved ABN review before this assignment can remain active."
+            : "Assignment not found.",
+        },
+        ACCESS_REQUIRED_MATCH_STATUSES.has(status) ? 409 : 404,
+      );
     await syncMarketplaceEnquiries(db, String(current.opportunity_id), String(current.firebase_uid));
     await writeAdminAudit(
       admin,

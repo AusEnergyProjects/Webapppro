@@ -1,7 +1,11 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirection } from "@/lib/keyset-pagination";
@@ -33,26 +37,21 @@ const PURCHASING_SORTS: Record<string, PurchasingSort> = {
 };
 
 async function purchasingIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  const partnerType = String(account.partner_type);
-  if (!new Set(["installer", "supplier"]).has(partnerType)) throw new Error("TRADE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  if (!await accountHasFeature(identity.uid, partnerType as "installer" | "supplier", account.billing_status, "business_operations")) {
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer", "supplier"] });
+  const partnerType = access.partnerType;
+  if (!await accountHasFeature(access.identity.uid, partnerType, "business_operations")) {
     throw new Error("OPERATIONS_REQUIRED");
   }
-  return { ...identity, partnerType, businessName: String(account.business_name || "Trade account") };
+  return { ...access.identity, partnerType, businessName: access.businessName || "Trade account" };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
-  if (code === "TRADE_REQUIRED") return adminJson({ ok: false, error: "Trade purchasing is reserved for installer and wholesaler accounts." }, 403);
+  if (code === "TRADE_REQUIRED" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Trade purchasing is reserved for installer and wholesaler accounts." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This business account is not active." }, 403);
-  if (code === "OPERATIONS_REQUIRED") return adminJson({ ok: false, error: "Purchase orders and warranty workflows require Business Hub access." }, 403);
+  if (code === "OPERATIONS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Purchase orders and warranty workflows require Business Hub access." }, 403);
   if (code === "INVALID_CURSOR") return adminJson({ ok: false, error: "This order page link has expired. Start again from the first page." }, 400);
   return adminJson({ ok: false, error: "The purchasing request could not be completed." }, 500);
 }
@@ -121,6 +120,7 @@ async function purchasingData(uid: string, partnerType: string, url?: URL) {
     JOIN trade_accounts a ON a.firebase_uid = e.supplier_uid
     LEFT JOIN trade_purchase_orders po ON po.enquiry_id = e.id
     WHERE e.installer_uid = ? AND e.status = 'responded' AND po.id IS NULL
+      AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
     ORDER BY e.updated_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>() : { results: [] };
   const total = countRow ? Number(countRow.total || 0) : undefined;
   const byOrder = (rows: Record<string, unknown>[]) => {
@@ -191,16 +191,32 @@ export async function POST(request: Request) {
       if (identity.partnerType !== "installer") return adminJson({ ok: false, error: "Only installers can submit purchase orders." }, 403);
       const enquiryId = cleanAdminText(body.enquiryId, 180);
       const enquiry = await db.prepare(`SELECT e.id, e.list_id, e.supplier_uid, e.status
-        FROM supplier_product_enquiries e LEFT JOIN trade_purchase_orders po ON po.enquiry_id = e.id
-        WHERE e.id = ? AND e.installer_uid = ? AND e.status = 'responded' AND po.id IS NULL`)
+        FROM supplier_product_enquiries e
+        JOIN installer_product_lists l ON l.id = e.list_id AND l.firebase_uid = e.installer_uid
+        JOIN trade_accounts a ON a.firebase_uid = e.supplier_uid
+        LEFT JOIN trade_purchase_orders po ON po.enquiry_id = e.id
+        WHERE e.id = ? AND e.installer_uid = ? AND e.status = 'responded' AND po.id IS NULL
+          AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'`)
         .bind(enquiryId, identity.uid).first<Record<string, unknown>>();
       if (!enquiry) return adminJson({ ok: false, error: "Choose a responded wholesaler enquiry without an existing purchase order." }, 409);
-      const lineItems = await db.prepare(`SELECT i.product_id, i.quantity, i.unit_price_cents_ex_gst,
-        p.model_number, p.brand, p.name, p.unit_label, p.warranty_years
-        FROM installer_product_list_items i JOIN supplier_products p ON p.id = i.product_id
-        WHERE i.list_id = ? AND i.supplier_uid = ? ORDER BY p.brand, p.name`)
-        .bind(enquiry.list_id, enquiry.supplier_uid).all<Record<string, unknown>>();
-      if (!lineItems.results.length) return adminJson({ ok: false, error: "The selected enquiry has no orderable items." }, 409);
+      const [expectedItems, lineItems] = await Promise.all([
+        db.prepare(`SELECT COUNT(*) count FROM installer_product_list_items
+          WHERE list_id = ? AND supplier_uid = ?`)
+          .bind(enquiry.list_id, enquiry.supplier_uid).first<Record<string, unknown>>(),
+        db.prepare(`SELECT i.product_id, i.quantity, i.unit_price_cents_ex_gst,
+          p.model_number, p.brand, p.name, p.unit_label, p.warranty_years
+          FROM installer_product_list_items i
+          JOIN supplier_products p ON p.id = i.product_id AND p.firebase_uid = i.supplier_uid
+          JOIN trade_accounts a ON a.firebase_uid = i.supplier_uid
+          WHERE i.list_id = ? AND i.supplier_uid = ?
+            AND p.listing_status = 'published' AND p.review_status = 'approved'
+            AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
+          ORDER BY p.brand, p.name`)
+          .bind(enquiry.list_id, enquiry.supplier_uid).all<Record<string, unknown>>(),
+      ]);
+      if (!lineItems.results.length || lineItems.results.length !== Number(expectedItems?.count || 0)) {
+        return adminJson({ ok: false, error: "One or more selected products are no longer orderable from an approved wholesaler." }, 409);
+      }
       const subtotal = lineItems.results.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price_cents_ex_gst), 0);
       const gst = Math.round(subtotal * 0.1);
       const orderId = crypto.randomUUID();

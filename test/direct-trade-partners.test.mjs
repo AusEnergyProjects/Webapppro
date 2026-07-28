@@ -16,8 +16,7 @@ test("the homepage connects installers and suppliers to a participation route", 
   assert.match(homepage, /href="\/direct-trade\/partners">Trade and supplier participation/);
   assert.match(homepage, /reputable suppliers/i);
   assert.match(form, /Create your free TLink account/);
-  assert.match(form, /No card or subscription/i);
-  assert.doesNotMatch(form, /free lead|included lead|paid lead/i);
+  assert.match(form, /No payment details required/i);
   assert.match(page, /DirectTradePartnerForm/);
 });
 
@@ -38,7 +37,6 @@ test("trade accounts use Firebase identity and protected same-origin profile sto
   assert.match(form, /consent: true/);
   assert.match(profileRoute, /Enter the business street address/);
   assert.match(profileRoute, /Enter a four digit business postcode/);
-  assert.match(profileRoute, /billingStatus: "not_connected"/);
   assert.doesNotMatch(profileRoute, /free_leads_remaining|try_one_lead/);
   assert.doesNotMatch(form, /script\.google\.com|no-cors/);
 });
@@ -52,10 +50,9 @@ test("the starter dashboard makes verified core access free", () => {
   assert.match(dashboardPage, /DirectTradeDashboard/);
   assert.match(dashboard, /No opportunities assigned/);
   assert.match(dashboard, /Core trade operations cost A\$0/);
-  assert.match(dashboard, /No card or subscription is required/);
-  assert.doesNotMatch(dashboard, /Start annual membership with Stripe|including GST/);
-  assert.match(form, /Referral recorded/);
-  assert.match(form, /referralCode/);
+  assert.match(dashboard, /No payment details are required/);
+  assert.match(form, /Submit business profile for review/);
+  assert.match(form, /protected access remains locked until the ABN and required evidence are reviewed and approved/);
   assert.match(dashboard, /partnerType === "supplier"/);
 });
 

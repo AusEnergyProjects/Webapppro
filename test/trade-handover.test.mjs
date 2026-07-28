@@ -64,14 +64,16 @@ test("handover storage excludes household contact and address fields", () => {
   assert.match(adminUi, /Customer names, contact details, notes and street addresses are excluded/);
 });
 
-test("trade handover actions are authenticated, same-origin, installer-only, owner-scoped and paywalled", () => {
-  assert.match(tradeRoute, /requireFirebaseIdentity/);
+test("trade handover actions are authenticated, same-origin, installer-only, owner-scoped and verification protected", () => {
+  assert.match(tradeRoute, /requireVerifiedTradeAccess/);
   assert.match(tradeRoute, /sameOrigin\(request\)/);
-  assert.match(tradeRoute, /account\.partner_type !== "installer"/);
-  assert.match(tradeRoute, /entitlements\.features\.business_operations/);
+  assert.match(tradeRoute, /partnerTypes: \["installer"\]/);
   assert.match(tradeRoute, /WHERE id = \? AND firebase_uid = \?/);
   assert.match(tradeRoute, /WHERE work_order_id = \? AND firebase_uid = \?/);
-  assert.match(tradeUi, /Premium Business Hub feature/);
+  assert.match(tradeRoute, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
+  assert.doesNotMatch(tradeRoute, /billing_status/);
+  assert.match(tradeUi, /Verification required/);
+  assert.doesNotMatch(tradeUi, /Premium Business Hub feature/);
 });
 
 test("protected documents use R2 and customers can download only published visible records they own", () => {

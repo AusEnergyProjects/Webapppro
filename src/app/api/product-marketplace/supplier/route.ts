@@ -1,7 +1,10 @@
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
-import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -14,20 +17,22 @@ function jsonList(value: unknown) {
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  let identity;
-  try { identity = await requireFirebaseIdentity(request); }
-  catch { return adminJson({ ok: false, error: "Sign in to continue." }, 401); }
-  const installer = await getD1().prepare(`SELECT partner_type, account_status, billing_status FROM trade_accounts
-    WHERE firebase_uid = ?`).bind(identity.uid).first<Row>();
-  if (!installer || installer.partner_type !== "installer" || installer.account_status !== "active"
-    || !await accountHasFeature(identity.uid, "installer", installer.billing_status, "installer_marketplace")) {
-    return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
+  try {
+    await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  } catch (error) {
+    if (error instanceof TradeAccessError) {
+      return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+    }
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") {
+      return adminJson({ ok: false, error: "Sign in to continue." }, 401);
+    }
+    return adminJson({ ok: false, error: "The wholesaler profile could not be loaded." }, 500);
   }
   const supplierUid = cleanAdminText(new URL(request.url).searchParams.get("supplierUid"), 180);
   const supplier = await getD1().prepare(`SELECT firebase_uid, email, business_name, abn, address_line_1, suburb,
       address_state, postcode, contact_name, phone, business_website, service_states, capabilities, summary
-    FROM trade_accounts WHERE firebase_uid = ? AND partner_type = 'supplier' AND account_status = 'active'
-      AND verification_status = 'approved'`).bind(supplierUid).first<Row>();
+    FROM trade_accounts supplier WHERE supplier.firebase_uid = ? AND supplier.partner_type = 'supplier'
+      AND ${verifiedTradeAccountPredicate("supplier")}`).bind(supplierUid).first<Row>();
   if (!supplier) return adminJson({ ok: false, error: "This wholesaler profile is not available." }, 404);
   const [locations, products, totals] = await Promise.all([
     getD1().prepare(`SELECT id, location_name, location_type, address_line_1, suburb, address_state, postcode,

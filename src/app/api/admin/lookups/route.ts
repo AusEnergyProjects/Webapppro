@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../../db";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -20,9 +21,11 @@ export async function GET(request: Request) {
     const term = lookupTerm(query);
     if (type === "installer") {
       const rows = await db.prepare(`SELECT firebase_uid id, business_name label, address_state state, postcode
-        FROM trade_accounts WHERE partner_type = 'installer' AND account_status = 'active'
-          AND (? = firebase_uid OR LOWER(business_name) LIKE ? OR LOWER(postcode) LIKE ?)
-        ORDER BY CASE WHEN firebase_uid = ? THEN 0 ELSE 1 END, business_name COLLATE NOCASE, firebase_uid LIMIT 25`)
+        FROM trade_accounts account WHERE account.partner_type = 'installer'
+          AND ${verifiedTradeAccountPredicate("account")}
+          AND (? = account.firebase_uid OR LOWER(account.business_name) LIKE ? OR LOWER(account.postcode) LIKE ?)
+        ORDER BY CASE WHEN account.firebase_uid = ? THEN 0 ELSE 1 END,
+          account.business_name COLLATE NOCASE, account.firebase_uid LIMIT 25`)
         .bind(selected, term, term, selected).all<Record<string, unknown>>();
       return adminJson({ ok: true, options: rows.results.map((row) => ({ id: row.id, label: row.label, secondary: [row.state, row.postcode].filter(Boolean).join(" ") })) });
     }
@@ -43,7 +46,8 @@ export async function GET(request: Request) {
     if (type === "product") {
       const rows = await db.prepare(`SELECT p.id, p.name label, p.brand, p.model_number, a.business_name supplier
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
-        WHERE ? = p.id OR LOWER(p.name) LIKE ? OR LOWER(p.brand) LIKE ? OR LOWER(p.model_number) LIKE ?
+        WHERE ${verifiedTradeAccountPredicate("a")}
+          AND (? = p.id OR LOWER(p.name) LIKE ? OR LOWER(p.brand) LIKE ? OR LOWER(p.model_number) LIKE ?)
         ORDER BY CASE WHEN p.id = ? THEN 0 ELSE 1 END, p.name COLLATE NOCASE, p.id LIMIT 25`)
         .bind(selected, term, term, term, selected).all<Record<string, unknown>>();
       return adminJson({ ok: true, options: rows.results.map((row) => ({ id: row.id, label: row.label, secondary: `${row.brand} ${row.model_number} | ${row.supplier}` })) });

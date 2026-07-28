@@ -42,8 +42,8 @@ test("role scoped list views are durable and unique per workspace", () => {
 });
 
 test("saved views enforce trade and operations account boundaries", () => {
-  assert.match(tradeRoute, /requireFirebaseIdentity/);
-  assert.match(tradeRoute, /account_status/);
+  assert.match(tradeRoute, /requireVerifiedTradeAccess/);
+  assert.match(tradeRoute, /TradeAccessError/);
   assert.match(tradeRoute, /sameOrigin/);
   assert.match(adminRoute, /requireAdminIdentity/);
   assert.match(adminRoute, /sameOrigin/);

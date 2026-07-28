@@ -18,7 +18,6 @@ const route = read("../src/app/api/admin/notifications/route.ts");
 const inbox = read("../src/components/AdminNotificationInbox.tsx");
 const leads = read("../src/app/api/leads/route.js");
 const probe = read("../src/app/api/internal/lead-webhook-probe/route.js");
-const stripe = read("../src/app/api/stripe/webhook/route.ts");
 const admins = read("../src/app/api/admin/admins/route.ts");
 const appsScript = read("../integrations/google-apps-script/lead-email-relay.gs");
 
@@ -48,7 +47,7 @@ test("the delivery migration queues new actionable alerts without replaying hist
     .forEach((statement) => database.exec(statement));
   database.prepare(`INSERT INTO admin_notifications
     (id, event_type, requires_action, priority, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).run("new-action", "billing.membership_attention_required", 1, "high", "2026-07-15T00:00:00.000Z", "2026-07-15T00:00:00.000Z");
+    VALUES (?, ?, ?, ?, ?, ?)`).run("new-action", "platform.lead_delivery_failed", 1, "high", "2026-07-15T00:00:00.000Z", "2026-07-15T00:00:00.000Z");
   database.prepare(`INSERT INTO admin_notifications
     (id, event_type, requires_action, priority, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)`).run("new-low", "customer.signup", 0, "low", "2026-07-15T00:00:00.000Z", "2026-07-15T00:00:00.000Z");
@@ -135,13 +134,10 @@ test("failed delivery retries back off without losing the durable record", () =>
   assert.match(delivery, /Promise\.all/);
 });
 
-test("billing, lead-delivery and administrator security gaps create operations events", () => {
+test("lead-delivery and administrator security gaps create operations events", () => {
   assert.match(leads, /platform\.lead_delivery_failed/);
   assert.match(leads, /platform\.lead_rate_limit_unavailable/);
   assert.match(probe, /platform\.lead_delivery_probe_failed/);
-  assert.match(stripe, /billing\.membership_attention_required/);
-  assert.match(stripe, /billing\.webhook_processing_failed/);
-  assert.match(stripe, /invoice\.payment_failed/);
   assert.match(admins, /security\.admin_invited/);
   assert.match(admins, /security\.admin_access_changed/);
 });
@@ -158,7 +154,7 @@ test("administrators can see delivery health, test a channel and retry failures"
 });
 
 test("new operations delivery copy avoids prohibited dash characters", () => {
-  for (const source of [delivery, notifications, route, inbox, leads, probe, stripe, admins, appsScript]) {
+  for (const source of [delivery, notifications, route, inbox, leads, probe, admins, appsScript]) {
     assert.doesNotMatch(source, /[\u2013\u2014]/);
   }
 });

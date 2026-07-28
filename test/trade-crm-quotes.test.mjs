@@ -76,7 +76,7 @@ test("secure quote sharing is revocable, expiring and commercially provider neut
     assert.match(sharingMigration, new RegExp("CREATE TABLE `" + table + "`"));
   }
   for (const evidence of ["token_hash", "encrypted_token", "token_issue", "signer_name", "commercial_reference", "currency"]) assert.match(sharingMigration, new RegExp(evidence));
-  for (const provider of ["xero", "myob", "quickbooks", "stripe", "square"]) assert.match(commercial, new RegExp(provider));
+  assert.doesNotMatch(commercial, /stripe|square|paymentAdapters|accountingAdapters/i);
   assert.match(commercial, /currency: "AUD"/);
   assert.match(commercial, /subtotalCents: Math\.trunc/);
   assert.match(linkRoute, /calculateQuoteSelection/);

@@ -16,7 +16,7 @@ const sections = [
   },
   {
     title: "Information we collect",
-    body: "Depending on the service, we may hold account and business details, authorised customer contacts, service addresses, job and appointment records, quotes, invoices, payment status, support messages, audit events and files deliberately supplied for a job. We collect only the information needed for the selected workflow.",
+    body: "Depending on the service, we may hold account and business details, authorised customer contacts, service addresses, job and appointment records, quotes, invoices, accounting status, support messages, audit events and files deliberately supplied for a job. We collect only the information needed for the selected workflow.",
   },
   {
     title: "How information is used",
@@ -28,7 +28,7 @@ const sections = [
   },
   {
     title: "Connected services",
-    body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB, QuickBooks, Stripe or Square. TLink sends only the information needed for the chosen action. TLink remains the operational source of truth, and connected providers apply their own privacy terms. Account owners can disconnect a provider from the TLink integration workspace.",
+    body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. TLink sends only the information needed for the chosen action. TLink remains the operational source of truth, and connected providers apply their own privacy terms. TLink does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the TLink integration workspace.",
   },
   {
     title: "Files, photos and meter information",
@@ -46,9 +46,9 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main className="wrap direct-trade-membership-page">
+    <main className="wrap trade-information-page">
       <TLinkHeader active="dashboard" />
-      <header className="membership-hero">
+      <header className="trade-information-hero">
         <div>
           <span>Effective 20 July 2026</span>
           <h1>Privacy notice</h1>
@@ -76,8 +76,8 @@ export default function PrivacyPage() {
         </aside>
       </header>
 
-      <section className="membership-plan-section" aria-label="Privacy notice">
-        <div className="membership-terms-grid">
+      <section className="trade-information-section" aria-label="Privacy notice">
+        <div className="trade-information-grid">
           {sections.map((section) => (
             <article key={section.title}>
               <h2>{section.title}</h2>
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
         </div>
       </section>
 
-      <section className="membership-launch-boundary">
+      <section className="trade-information-boundary">
         <div>
           <span>Need a privacy review?</span>
           <h2>Contact the AEA privacy team</h2>

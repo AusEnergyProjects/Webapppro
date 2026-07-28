@@ -1,7 +1,8 @@
 import type { User } from 'firebase/auth';
 
 import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { getDeviceId } from '@/lib/device';
+import { purgeLocalData } from '@/lib/database';
+import { forgetPushToken, getDeviceId } from '@/lib/device';
 import { firebaseAuth } from '@/lib/auth';
 
 export class ApiError extends Error {
@@ -32,12 +33,17 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
   if (!response.ok) {
-    throw new ApiError(
+    const error = new ApiError(
       String(body.error || 'The request could not be completed.'),
       response.status,
       String(body.code || ''),
       String(body.minimumVersion || ''),
     );
+    if (response.status === 401 || response.status === 403) {
+      await purgeLocalData();
+      await forgetPushToken().catch(() => undefined);
+    }
+    throw error;
   }
   return body as T;
 }

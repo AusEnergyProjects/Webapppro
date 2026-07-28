@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -11,23 +11,18 @@ const WARRANTY_FILTERS = new Set(["", "expired", "due_90", "covered", "no_date"]
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 async function installerIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  const entitlements = await accountEntitlements(access.identity.uid, "installer");
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  return { uid: identity.uid };
+  return { uid: access.identity.uid };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
-  if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "The asset register is available to installer accounts only." }, 403);
-  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using the asset register." }, 403);
+  if (code === "INSTALLER_ONLY" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "The asset register is available to installer accounts only." }, 403);
+  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using the asset register." }, 403);
   if (code === "CUSTOMER_NOT_FOUND") return adminJson({ ok: false, error: "Customer not found." }, 404);
   if (code === "SITE_NOT_FOUND") return adminJson({ ok: false, error: "Choose a service site belonging to this customer." }, 400);
   if (code === "ASSET_NOT_FOUND") return adminJson({ ok: false, error: "Installed asset not found." }, 404);

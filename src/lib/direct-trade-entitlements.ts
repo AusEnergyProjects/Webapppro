@@ -1,9 +1,3 @@
-export const PAID_BILLING_STATUSES = new Set([
-  "trial",
-  "active",
-  "active_cancels_at_period_end",
-]);
-
 export type PartnerType = "installer" | "supplier";
 
 export type FeatureKey =
@@ -12,24 +6,14 @@ export type FeatureKey =
   | "supplier_visibility"
   | "supplier_bulk_import"
   | "business_operations"
-  | "advanced_analytics"
-  | "team_access"
-  | "priority_support";
-
-export type FeatureGrant = {
-  featureKey: FeatureKey;
-  status: "active" | "revoked";
-  expiresAt: string;
-  note: string;
-  updatedAt?: string;
-};
+  | "team_access";
 
 export type FeatureDefinition = {
   key: FeatureKey;
   label: string;
   description: string;
   roles: PartnerType[];
-  tier: "core" | "admin";
+  tier: "core";
 };
 
 export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
@@ -50,7 +34,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {
     key: "supplier_visibility",
     label: "Installer marketplace visibility",
-    description: "Make approved, published products selectable by installer members.",
+    description: "Make approved, published products selectable by verified installers.",
     roles: ["supplier"],
     tier: "core",
   },
@@ -64,30 +48,16 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {
     key: "business_operations",
     label: "CRM and Business Hub",
-    description: "Run customers, jobs, scheduling, tasks, issues, quote and invoice progress, reporting, asset records, compliance and reviewed customer handovers in one workspace.",
+    description: "Run customers, jobs, scheduling, tasks, quotes, invoices, reporting, assets and service workflows.",
     roles: ["installer", "supplier"],
     tier: "core",
-  },
-  {
-    key: "advanced_analytics",
-    label: "Advanced analytics",
-    description: "Access conversion, demand, coverage and catalogue performance insights.",
-    roles: ["installer", "supplier"],
-    tier: "admin",
   },
   {
     key: "team_access",
     label: "Team access",
-    description: "Prepare the account for additional users and shared workflow ownership.",
+    description: "Add authorised team members and share workflow ownership.",
     roles: ["installer", "supplier"],
     tier: "core",
-  },
-  {
-    key: "priority_support",
-    label: "Priority support",
-    description: "Place account support requests into the priority service queue.",
-    roles: ["installer", "supplier"],
-    tier: "admin",
   },
 ];
 
@@ -95,52 +65,20 @@ export const FEATURE_KEYS = new Set<FeatureKey>(
   FEATURE_DEFINITIONS.map((feature) => feature.key),
 );
 
-export function isPaidBillingStatus(status: unknown) {
-  return PAID_BILLING_STATUSES.has(String(status || ""));
-}
-export function activeGrantKeys(
-  grants: Array<Partial<FeatureGrant>>,
-  now = new Date(),
-) {
-  const timestamp = now.getTime();
-  return new Set<FeatureKey>(
-    grants
-      .filter((grant) => {
-        if (grant.status !== "active" || !grant.featureKey) return false;
-        if (!grant.expiresAt) return true;
-        const expiry = Date.parse(grant.expiresAt);
-        return Number.isFinite(expiry) && expiry > timestamp;
-      })
-      .map((grant) => grant.featureKey as FeatureKey),
-  );
-}
-
 export function resolveEntitlements(
   partnerType: PartnerType,
-  billingStatus: unknown,
-  grants: Array<Partial<FeatureGrant>> = [],
   verified = false,
 ) {
-  const paidMembership = isPaidBillingStatus(billingStatus);
-  const granted = activeGrantKeys(grants);
   const features = Object.fromEntries(
-    FEATURE_DEFINITIONS.map((feature) => {
-      const roleApplies = feature.roles.includes(partnerType);
-      const includedForVerifiedTrades = feature.tier === "core";
-      return [
-        feature.key,
-        roleApplies &&
-          verified &&
-          (includedForVerifiedTrades || granted.has(feature.key)),
-      ];
-    }),
+    FEATURE_DEFINITIONS.map((feature) => [
+      feature.key,
+      verified && feature.roles.includes(partnerType),
+    ]),
   ) as Record<FeatureKey, boolean>;
 
   return {
-    paidMembership,
     verified,
-    accessLabel: verified ? "Verified trade access" : "Verification required",
+    accessLabel: verified ? "Verified trade access" : "ABN review required",
     features,
-    activeGrants: [...granted],
   };
 }

@@ -11,7 +11,6 @@ function errorResponse(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) return adminJson({ ok: false, error: "Commercial handoff is not available to this account." }, 403);
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "This handoff is only available for your own direct customer jobs." }, 403);
-  if (code === "DEPOSIT_ALREADY_REQUESTED") return adminJson({ ok: false, error: "This deposit amount is locked because a payment request already exists." }, 409);
   if (code === "INVALID_COMMERCIAL_HANDOFF") return adminJson({ ok: false, error: "The accepted quote could not produce a safe commercial handoff." }, 409);
   return adminJson({ ok: false, error: "The accepted quote handoff could not be loaded." }, 500);
 }
@@ -69,11 +68,6 @@ async function timeline(firebaseUid: string, handoff: Row) {
   const db = getD1(); const handoffId = String(handoff.id); const events: { type: string; status: string; provider: string; summary: string; occurredAt: string }[] = [
     { type: "accepted", status: "confirmed", provider: "tlink", summary: `Quote accepted for ${String(handoff.commercial_reference)}.`, occurredAt: String(handoff.accepted_at) },
   ];
-  const payments = await db.prepare(`SELECT provider, status, amount_cents, paid_amount_cents, created_at, last_event_at FROM trade_crm_payment_links
-    WHERE firebase_uid = ? AND commercial_handoff_id = ? ORDER BY created_at`).bind(firebaseUid, handoffId).all<Row>();
-  for (const row of payments.results) events.push({ type: "deposit", status: String(row.status), provider: String(row.provider),
-    summary: row.status === "paid" ? `Provider confirmed the ${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(Number(row.paid_amount_cents) / 100)} deposit.` : `${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(Number(row.amount_cents) / 100)} deposit request created.`,
-    occurredAt: String(row.last_event_at || row.created_at) });
   const documents = await db.prepare(`SELECT provider, status, external_number, created_at, last_synced_at, last_error FROM trade_crm_accounting_documents
     WHERE firebase_uid = ? AND commercial_handoff_id = ? ORDER BY created_at`).bind(firebaseUid, handoffId).all<Row>();
   for (const row of documents.results) events.push({ type: "accounting", status: String(row.status), provider: String(row.provider),
@@ -97,9 +91,6 @@ export async function POST(request: Request) {
     const identity = await requireInstallerOperations(request); const body = await request.json() as Row;
     const workOrderId = cleanAdminText(body.workOrderId, 180); await directJob(identity.uid, workOrderId);
     const handoff = await ensureHandoff(identity.uid, workOrderId); if (!handoff) return adminJson({ ok: false, error: "Accept a quote before setting its deposit." }, 409);
-    const existing = await getD1().prepare(`SELECT id FROM trade_crm_payment_links WHERE firebase_uid = ? AND commercial_handoff_id = ? LIMIT 1`)
-      .bind(identity.uid, handoff.id).first();
-    if (existing) throw new Error("DEPOSIT_ALREADY_REQUESTED");
     const kind = cleanAdminText(body.depositKind, 20) === "fixed" ? "fixed" : "percentage";
     const value = Number(body.value); const amount = depositAmountCents(Number(handoff.total_cents), kind, value);
     const now = new Date().toISOString();

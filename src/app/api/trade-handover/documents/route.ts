@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
-import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { HANDOVER_DOCUMENT_CATEGORIES } from "@/lib/trade-handover.mjs";
 import { requireAdminIdentity, writeAdminAudit } from "@/lib/admin-server";
 import { canCustomerAccessHandover } from "@/lib/customer-asset-ownership-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -55,12 +55,9 @@ async function identityOrResponse(request: Request) {
   catch { return null; }
 }
 
-async function editableInstallerPack(firebaseUid: string, workOrderId: string) {
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(firebaseUid).first<Record<string, unknown>>();
-  if (!account || account.account_status !== "active" || account.partner_type !== "installer") return null;
-  const entitlements = await accountEntitlements(firebaseUid, "installer", account.billing_status);
-  if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
+async function editableInstallerPack(request: Request, workOrderId: string) {
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  const firebaseUid = access.identity.uid;
   return getD1().prepare(`SELECT p.id, p.status, p.work_order_id
     FROM trade_handover_packs p
     JOIN trade_work_orders w ON w.id = p.work_order_id
@@ -80,7 +77,15 @@ export async function GET(request: Request) {
     JOIN trade_handover_packs p ON p.id = d.handover_pack_id
     WHERE d.id = ?`).bind(documentId).first<DocumentAccessRecord>();
   if (!record) return json({ ok: false, error: "Handover document not found." }, 404);
-  const ownerAccess = record.owner_uid === identity.uid;
+  let ownerAccess = false;
+  if (record.owner_uid === identity.uid) {
+    try {
+      await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+      ownerAccess = true;
+    } catch {
+      ownerAccess = false;
+    }
+  }
   const customerAccess = record.pack_status === "published" && Boolean(record.customer_visible)
     && await canCustomerAccessHandover(identity.uid, record.handover_pack_id);
   let adminAccess = false;
@@ -119,9 +124,13 @@ export async function POST(request: Request) {
   const customerVisible = String(form.get("customerVisible") || "true") !== "false";
   const file = form.get("file");
   let pack: Awaited<ReturnType<typeof editableInstallerPack>>;
-  try { pack = await editableInstallerPack(identity.uid, workOrderId); }
+  try { pack = await editableInstallerPack(request, workOrderId); }
   catch (error) {
-    return json({ ok: false, error: error instanceof Error && error.message === "FULL_ACCESS_REQUIRED"
+    const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+    if (code === "PROFILE_REQUIRED" || code === "TRADE_ROLE_REQUIRED") {
+      return json({ ok: false, error: "Start a valid installer handover pack first." }, 404);
+    }
+    return json({ ok: false, error: code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED"
       ? "Complete trade verification before using handover documents."
       : "The handover pack could not be opened." }, 403);
   }
@@ -179,7 +188,7 @@ export async function DELETE(request: Request) {
   const id = url.searchParams.get("id") || "";
   const workOrderId = url.searchParams.get("workOrderId") || "";
   let pack: Awaited<ReturnType<typeof editableInstallerPack>>;
-  try { pack = await editableInstallerPack(identity.uid, workOrderId); }
+  try { pack = await editableInstallerPack(request, workOrderId); }
   catch { return json({ ok: false, error: "Handover document access was not accepted." }, 403); }
   if (!pack) return json({ ok: false, error: "Handover pack not found." }, 404);
   if (!EDITABLE_PACK_STATUSES.has(pack.status)) return json({ ok: false, error: "This handover is locked while it is under review or already published." }, 409);

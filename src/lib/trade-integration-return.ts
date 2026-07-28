@@ -4,8 +4,6 @@ export const INTEGRATION_RETURN_PROVIDERS = [
   "xero",
   "myob",
   "quickbooks",
-  "stripe",
-  "square",
   "google_calendar",
   "microsoft_calendar",
 ] as const;
@@ -42,8 +40,6 @@ export function integrationProviderLabel(provider: IntegrationReturnProvider) {
     xero: "Xero",
     myob: "MYOB",
     quickbooks: "QuickBooks",
-    stripe: "Stripe",
-    square: "Square",
     google_calendar: "Google Calendar",
     microsoft_calendar: "Outlook Calendar",
   };

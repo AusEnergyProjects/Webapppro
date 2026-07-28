@@ -8,7 +8,9 @@ import type { FieldJob, OfflineAction, QueueRow, SyncChange, UploadRow } from '@
 
 const DATABASE_NAME = 'aea-field.db';
 const DATABASE_KEY_NAME = 'aea-field-database-key-v1';
+const DATABASE_OWNER_KEY = 'aea-field-database-owner-v1';
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let purgePromise: Promise<void> | null = null;
 
 async function databaseKey() {
   const existing = await SecureStore.getItemAsync(DATABASE_KEY_NAME);
@@ -80,7 +82,7 @@ async function openDatabase() {
 }
 
 export function getDatabase() {
-  databasePromise ||= openDatabase();
+  databasePromise ||= purgePromise ? purgePromise.then(openDatabase) : openDatabase();
   return databasePromise;
 }
 
@@ -356,12 +358,33 @@ export async function setSetting(key: string, value: string) {
   );
 }
 
+export async function prepareLocalDataOwner(firebaseUid: string) {
+  const ownerUid = firebaseUid.trim();
+  if (!ownerUid) throw new Error('A signed-in account is required before opening local field data.');
+  const currentOwnerUid = await SecureStore.getItemAsync(DATABASE_OWNER_KEY);
+  if (currentOwnerUid === ownerUid) return;
+  await purgeLocalData();
+  await SecureStore.setItemAsync(DATABASE_OWNER_KEY, ownerUid, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+}
+
 export async function purgeLocalData() {
-  const db = await getDatabase();
-  await db.closeAsync();
+  if (purgePromise) return purgePromise;
+  const activeDatabase = databasePromise;
   databasePromise = null;
-  await SQLite.deleteDatabaseAsync(DATABASE_NAME);
-  await SecureStore.deleteItemAsync(DATABASE_KEY_NAME);
-  purgeEncryptedFiles();
-  await purgeEncryptionKey();
+  purgePromise = (async () => {
+    if (activeDatabase) {
+      const db = await activeDatabase;
+      await db.closeAsync();
+    }
+    await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+    await SecureStore.deleteItemAsync(DATABASE_KEY_NAME);
+    await SecureStore.deleteItemAsync(DATABASE_OWNER_KEY);
+    purgeEncryptedFiles();
+    await purgeEncryptionKey();
+  })().finally(() => {
+    purgePromise = null;
+  });
+  return purgePromise;
 }

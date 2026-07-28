@@ -59,7 +59,7 @@ test("table mutation policy is explicit, default-deny and hides database interna
     assert.equal(policy.canInsert, true);
     assert.equal(policy.canDelete, true);
   }
-  for (const name of ["admin_users", "admin_audit_log", "trade_crm_payment_links", "trade_crm_quote_events", "trade_work_orders", "future_application_table"]) {
+  for (const name of ["admin_users", "admin_audit_log", "trade_crm_quote_events", "trade_work_orders", "future_application_table"]) {
     const policy = databaseTablePolicy(name);
     assert.equal(policy.visible, true, name);
     assert.equal(policy.canInsert, false, name);
@@ -242,7 +242,7 @@ test("the edge route is owner-only, bounded, bound-value based and atomically au
 test("the operations portal mounts a lazy owner-only database workspace", () => {
   assert.match(portal, /"database" \| "access"/);
   assert.match(portal, /session\.role === "owner"/);
-  assert.match(portal, /<span>16<\/span>Database/);
+  assert.match(portal, /<span>15<\/span>Database/);
   assert.match(portal, /tab === "database" && session\.role === "owner" && <AdminDatabaseWorkspace api=\{api\} setStatus=\{setStatus\}/);
   assert.doesNotMatch(portal.slice(portal.indexOf("const loadWorkspace"), portal.indexOf("const loadSession")), /\/api\/admin\/database/);
   assert.match(workspace, /Raw SQL, bulk changes and schema controls are not exposed/);

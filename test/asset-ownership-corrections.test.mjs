@@ -102,7 +102,9 @@ test("ownership and correction workflows preserve platform privacy and account b
   const ownershipSchema = schema.slice(schema.indexOf("export const customerAssetOwnerships"), schema.indexOf("export const tradeOpportunities"));
   assert.doesNotMatch(ownershipSchema, /customer_name|customer_email|customer_phone|street_address|address_line|private_notes/i);
   assert.doesNotMatch(transferAdminRoute, /sender\.email|recipient\.email|display_name|fromCustomerUid:|toCustomerUid:/);
-  assert.match(correctionRoute, /account\.partner_type !== "installer"/);
+  assert.match(correctionRoute, /requireVerifiedTradeAccess/);
+  assert.match(correctionRoute, /partnerTypes: \["installer"\]/);
+  assert.match(correctionRoute, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.doesNotMatch(correctionRoute, /supplier|wholesaler.*lead/i);
   assert.match(customerUi, /Free home records/);
   assert.match(customerUi, /Trades cannot browse your account or home-record library/);

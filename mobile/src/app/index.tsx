@@ -30,14 +30,36 @@ function GoogleButton({ onError }: { onError: (message: string) => void }) {
 }
 
 export default function SignInScreen() {
-  const { user, loading } = useApp();
+  const { user, loading, access, sync, syncNow, signOut } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colours.green} /><Text>Opening secure field work...</Text></View>;
-  if (user) return <Redirect href="/(tabs)/work" />;
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colours.green} /><Text>Checking secure trade access...</Text></View>;
+  if (user && access.status === 'approved') return <Redirect href="/(tabs)/work" />;
+  if (user) {
+    return (
+      <Screen>
+        <View style={styles.brand}>
+          <View style={styles.mark}><Text style={styles.markText}>AEA</Text></View>
+          <Text style={styles.eyebrow}>SECURE FIELD ACCESS</Text>
+          <Text style={styles.title}>{access.title}</Text>
+          <Text accessibilityLiveRegion="polite" style={styles.intro}>{access.message}</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Signed in as</Text>
+          <Text style={styles.account}>{user.email || 'Work account'}</Text>
+          <Text style={styles.guidance}>{access.guidance}</Text>
+          <FieldButton loading={sync.running || access.status === 'checking'} onPress={() => void syncNow()}>
+            Check access again
+          </FieldButton>
+          <FieldButton variant="danger" onPress={() => void signOut()}>Sign out and remove local work</FieldButton>
+        </View>
+        <Text style={styles.privacy}>Protected jobs remain locked and cached work is removed when the server rejects access.</Text>
+      </Screen>
+    );
+  }
 
   async function signIn() {
     setBusy(true); setMessage('');
@@ -91,6 +113,8 @@ const styles = StyleSheet.create({
   intro: { color: colours.muted, fontSize: 17, lineHeight: 25 },
   card: { backgroundColor: colours.white, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colours.line },
   cardTitle: { color: colours.ink, fontSize: 21, fontWeight: '800', marginBottom: spacing.sm },
+  account: { color: colours.ink, fontSize: 16, fontWeight: '700' },
+  guidance: { color: colours.muted, lineHeight: 21, marginBottom: spacing.sm },
   label: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },
   input: { minHeight: 52, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontSize: 16, color: colours.ink, backgroundColor: '#fbfdfc' },
   message: { color: colours.red, lineHeight: 20, paddingVertical: spacing.xs },

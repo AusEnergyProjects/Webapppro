@@ -69,7 +69,7 @@ test("customer release is explicit, exact-match scoped, verified and audited", (
     'action === "release_contact"',
     "raw.confirmContactRelease !== true",
     'customer_decision !== "shortlisted"',
-    'verification_status !== "approved"',
+    'verifiedTradeAccountPredicate("a")',
     "customerContactReadiness(releaseSource, current)",
     "customer_project_contact_release_events",
     "matched_installer_contact_release:",

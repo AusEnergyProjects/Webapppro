@@ -130,7 +130,7 @@ export function TradeBusinessHub(props: {
   onOpenInvoices?: () => void;
 }) {
   if (!props.fullAccess) {
-    return <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open CRM, jobs, scheduling, team, forms and purchasing. No card or subscription is required.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>;
+    return <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open CRM, jobs, scheduling, team, forms and purchasing. No payment details are required.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>;
   }
   if (props.partnerType === "installer" && props.fullAccess) {
     return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} navigationTarget={props.navigationTarget} onOpenSchedule={props.onOpenSchedule} onOpenInvoices={props.onOpenInvoices} />;
@@ -323,7 +323,7 @@ function BusinessHubFoundation({
                   <option key={`${item.sourceType}:${item.id}`} value={`${item.sourceType}:${item.id}`}>{item.label}</option>
                 ))}
               </select>
-              <small>{access.fullAccess ? "Eligible platform work appears here when it is ready." : "Paid access or an admin grant adds platform conversion."}</small>
+              <small>{access.fullAccess ? "Eligible platform work appears here when it is ready." : "Complete verification to use platform conversion."}</small>
             </label>
             <label>
               <span>Work title</span>
@@ -414,7 +414,7 @@ function BusinessHubFoundation({
                 <div className="business-work-schedule">
                   <span>Schedule</span>
                   <strong>{displayDate(order.scheduledStart)}{order.scheduledEnd ? ` to ${displayDate(order.scheduledEnd)}` : ""}</strong>
-                  <small>{order.assigneeLabel ? `Crew: ${order.assigneeLabel}` : access.teamAccess ? "No crew assigned" : "Team assignment is a premium feature"}</small>
+                  <small>{order.assigneeLabel ? `Crew: ${order.assigneeLabel}` : access.teamAccess ? "No crew assigned" : "Complete verification to assign a team"}</small>
                 </div>
 
                 <div className="business-work-tasks">

@@ -8,9 +8,8 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0068_accepted_quote_handoff.sql");
 const handoffRoute = read("../src/app/api/trade-commercial-handoff/route.ts");
-const paymentRoute = read("../src/app/api/trade-payment-links/route.ts");
+const paymentRouteUrl = new URL("../src/app/api/trade-payment-links/route.ts", import.meta.url);
 const accountingRoute = read("../src/app/api/trade-accounting/route.ts");
-const reconciliation = read("../src/lib/trade-payment-reconciliation.ts");
 const ui = read("../src/components/TradeCommercialHandoffPanel.tsx");
 const accountingUi = read("../src/components/TradeAccountingPanel.tsx");
 
@@ -43,15 +42,9 @@ test("the handoff migration is additive and deposit idempotency is commercial-re
   assert.equal(handoff.name, "trade_crm_commercial_handovers");
 });
 
-test("accepted quote drives one provider-hosted deposit and verified payment state", () => {
-  for (const boundary of ["sameOrigin", "requireInstallerOperations", "trade_crm_commercial_handovers", "deposit_amount_cents", "commercial_reference"]) assert.match(paymentRoute, new RegExp(boundary));
-  assert.match(paymentRoute, /\? "invoice" : "deposit"/);
-  assert.match(paymentRoute, /AND purpose = \?/);
-  assert.match(paymentRoute, /Idempotency-Key/);
-  assert.match(paymentRoute, /online-checkout\/payment-links/);
-  assert.match(reconciliation, /status = 'deposit_paid'/);
-  assert.match(reconciliation, /amountMismatch/);
-  assert.doesNotMatch(paymentRoute, /body\.amountCents/);
+test("accepted quote keeps a deposit record but Sites cannot initiate its payment", () => {
+  assert.equal(fs.existsSync(paymentRouteUrl), false);
+  assert.match(ui, /TLink records the amount but does not initiate its payment while hosted on Sites/);
 });
 
 test("Xero, MYOB and QuickBooks reuse the accepted handoff", () => {
@@ -65,10 +58,11 @@ test("Xero, MYOB and QuickBooks reuse the accepted handoff", () => {
 });
 
 test("the office flow is progressive and exposes one commercial timeline", () => {
-  for (const copy of ["Accepted quote handoff", "10% is the simple default", "Request with Stripe", "Request with Square", "Commercial timeline", "No retyping or provider calculations"]) assert.match(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const copy of ["Accepted quote handoff", "10% is the simple default", "Payment processing is outside TLink", "Commercial timeline", "No retyping or provider calculations"]) assert.match(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(`${ui}\n${read("../src/components/TradePaymentPanel.tsx")}`, /Request with Stripe|Request with Square|Open checkout/);
   for (const copy of ["Invoice preview", "Draft, not sent", "Preview, then create the draft", "Accounting system", "Nothing is approved or emailed automatically"]) assert.match(accountingUi, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(accountingUi, /invoiceLines\.map/);
-  assert.match(handoffRoute, /DEPOSIT_ALREADY_REQUESTED/);
+  assert.doesNotMatch(handoffRoute, /DEPOSIT_ALREADY_REQUESTED|trade_crm_payment_links/);
   assert.match(handoffRoute, /timeline/);
-  assert.doesNotMatch(`${handoffRoute}\n${paymentRoute}\n${accountingRoute}\n${ui}\n${accountingUi}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${handoffRoute}\n${accountingRoute}\n${ui}\n${accountingUi}`, /[\u2013\u2014]/);
 });

@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { australiaSydneyLocalDateTime, normalisePreferredWindows, parsePreferredWindows } from "@/lib/appointment-rescheduling";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
@@ -30,6 +31,9 @@ function errorResponse(error: unknown) {
 }
 
 const authorisedCustomerJoin = `
+  JOIN trade_accounts installer_access ON installer_access.firebase_uid = a.firebase_uid
+    AND installer_access.partner_type = 'installer'
+    AND ${verifiedTradeAccountPredicate("installer_access")}
   JOIN trade_crm_job_details d ON d.work_order_id = a.work_order_id AND d.firebase_uid = a.firebase_uid
     AND d.customer_source = 'trade_owned' AND d.crm_customer_id != ''
   JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = a.firebase_uid AND c.record_status = 'active'
@@ -64,11 +68,17 @@ async function customerPayload(identity: FirebaseIdentity) {
     db.prepare(`SELECT r.id, r.appointment_id, r.status, r.preferred_windows, r.reason, r.access_notes,
         r.requested_appointment_revision, r.original_starts_at, r.original_ends_at, r.proposed_starts_at,
         r.proposed_ends_at, r.decision_note, r.revision, r.requested_at, r.decided_at,
-        a.title, a.starts_at current_starts_at, a.ends_at current_ends_at, w.work_number
+        a.title,
+        CASE WHEN current_installer.firebase_uid IS NULL THEN '' ELSE a.starts_at END current_starts_at,
+        CASE WHEN current_installer.firebase_uid IS NULL THEN '' ELSE a.ends_at END current_ends_at,
+        w.work_number
       FROM trade_crm_appointment_reschedule_requests r
       JOIN trade_crm_appointments a ON a.id = r.appointment_id AND a.firebase_uid = r.firebase_uid
       JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
       JOIN trade_crm_customers c ON c.id = r.crm_customer_id AND c.firebase_uid = r.firebase_uid AND c.record_status = 'active'
+      LEFT JOIN trade_accounts current_installer ON current_installer.firebase_uid = r.firebase_uid
+        AND current_installer.partner_type = 'installer'
+        AND ${verifiedTradeAccountPredicate("current_installer")}
       WHERE r.customer_firebase_uid = ? AND LOWER(r.actor_email) = LOWER(?)
         AND (LOWER(c.email) = LOWER(?) OR EXISTS (SELECT 1 FROM trade_crm_customer_contacts contact
           WHERE contact.firebase_uid = c.firebase_uid AND contact.customer_id = c.id
@@ -110,38 +120,55 @@ export async function POST(request: Request) {
       WHERE appointment_id = ? AND active_key = ? LIMIT 1`).bind(appointmentId, appointmentId).first();
     if (active) throw new Error("DUPLICATE_REQUEST");
     const id = crypto.randomUUID(); const now = new Date().toISOString();
-    await db.batch([
-      db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
-        (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
-         assignee_label, change_source, source_reference, changed_by_uid, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'customer_request_snapshot', ?, ?, ?)`).bind(
-          crypto.randomUUID(), appointment.id, appointment.work_order_id, appointment.firebase_uid, appointment.revision,
-          appointment.starts_at, appointment.ends_at, appointment.assignee_member_id, appointment.assignee_label, id, identity.uid, now),
+    const mutationResults = await db.batch([
       db.prepare(`INSERT INTO trade_crm_appointment_reschedule_requests
         (id, appointment_id, work_order_id, firebase_uid, crm_customer_id, customer_firebase_uid, actor_email,
          status, active_key, preferred_windows, reason, access_notes, requested_appointment_revision,
          original_starts_at, original_ends_at, original_assignee_member_id, original_assignee_label,
          requested_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+        SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        FROM trade_accounts mutation_installer
+        WHERE mutation_installer.firebase_uid = ?
+          AND mutation_installer.partner_type = 'installer'
+          AND ${verifiedTradeAccountPredicate("mutation_installer")}`).bind(
           id, appointment.id, appointment.work_order_id, appointment.firebase_uid, appointment.crm_customer_id,
           identity.uid, identity.email, appointment.id, JSON.stringify(windows), reason, accessNotes,
           appointment.revision, appointment.starts_at, appointment.ends_at, appointment.assignee_member_id,
-          appointment.assignee_label, now, now, now),
+          appointment.assignee_label, now, now, now, appointment.firebase_uid),
+      db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
+        (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
+         assignee_label, change_source, source_reference, changed_by_uid, created_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'customer_request_snapshot', ?, ?, ?
+         FROM trade_crm_appointment_reschedule_requests request_guard
+         WHERE request_guard.id = ? AND request_guard.firebase_uid = ?`).bind(
+          crypto.randomUUID(), appointment.id, appointment.work_order_id, appointment.firebase_uid, appointment.revision,
+          appointment.starts_at, appointment.ends_at, appointment.assignee_member_id, appointment.assignee_label,
+          id, identity.uid, now, id, appointment.firebase_uid),
       db.prepare(`INSERT INTO trade_work_order_tasks
         (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'pending', '', 1, 999, ?, ?)`).bind(
+         SELECT ?, ?, ?, ?, ?, 'pending', '', 1, 999, ?, ?
+         FROM trade_crm_appointment_reschedule_requests request_guard
+         WHERE request_guard.id = ? AND request_guard.firebase_uid = ?`).bind(
           `${id}:review-task`, appointment.work_order_id, appointment.firebase_uid, `Review customer appointment change request ${id.slice(0, 8)}`,
-          appointment.starts_at, now, now),
+          appointment.starts_at, now, now, id, appointment.firebase_uid),
       db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
         (id, request_id, appointment_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type,
          request_revision, from_starts_at, from_ends_at, summary, created_at)
-        VALUES (?, ?, ?, ?, ?, 'customer', ?, 'requested', 1, ?, ?, ?, ?)`).bind(
+         SELECT ?, ?, ?, ?, ?, 'customer', ?, 'requested', 1, ?, ?, ?, ?
+         FROM trade_crm_appointment_reschedule_requests request_guard
+         WHERE request_guard.id = ? AND request_guard.firebase_uid = ?`).bind(
           crypto.randomUUID(), id, appointment.id, appointment.work_order_id, appointment.firebase_uid, identity.uid,
-          appointment.starts_at, appointment.ends_at, "Verified customer requested an appointment change for staff review.", now),
+          appointment.starts_at, appointment.ends_at, "Verified customer requested an appointment change for staff review.",
+          now, id, appointment.firebase_uid),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, 'appointment_reschedule_requested', ?, ?)`).bind(
-          crypto.randomUUID(), appointment.work_order_id, appointment.firebase_uid, "Verified customer requested an appointment change. The existing schedule remains unchanged.", now),
+         SELECT ?, ?, ?, 'appointment_reschedule_requested', ?, ?
+         FROM trade_crm_appointment_reschedule_requests request_guard
+         WHERE request_guard.id = ? AND request_guard.firebase_uid = ?`).bind(
+          crypto.randomUUID(), appointment.work_order_id, appointment.firebase_uid,
+          "Verified customer requested an appointment change. The existing schedule remains unchanged.",
+          now, id, appointment.firebase_uid),
     ]);
+    if (Number(mutationResults[0]?.meta.changes || 0) !== 1) throw new Error("APPOINTMENT_NOT_FOUND");
     return adminJson({ ok: true, id, ...(await customerPayload(identity)) }, 201);
   } catch (error) { return errorResponse(error); }
 }

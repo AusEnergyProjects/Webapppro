@@ -3018,7 +3018,7 @@ export function CustomerDashboard({
               </p>
               <div>
                 <strong>Always free for households</strong>
-                <small>No paid tier, lead fee or feature paywall.</small>
+                <small>All household project tools are included at no cost.</small>
               </div>
             </div>
             <aside>

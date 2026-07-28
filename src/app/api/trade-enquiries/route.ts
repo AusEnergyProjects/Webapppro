@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 
 export const runtime = "edge";
@@ -12,23 +12,18 @@ const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
 
 async function installerIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
+  const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  const entitlements = await accountEntitlements(access.identity.uid, "installer");
   if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  return { uid: identity.uid };
+  return { uid: access.identity.uid };
 }
 
 function errorResponse(error: unknown) {
-  const code = error instanceof Error ? error.message : "";
+  const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the business profile first." }, 404);
-  if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "The enquiry inbox is available to installer accounts only." }, 403);
-  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using the enquiry inbox." }, 403);
+  if (code === "INSTALLER_ONLY" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "The enquiry inbox is available to installer accounts only." }, 403);
+  if (code === "ACCOUNT_INACTIVE" || code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using the enquiry inbox." }, 403);
   if (code === "ENQUIRY_NOT_FOUND") return adminJson({ ok: false, error: "Enquiry not found." }, 404);
   if (code === "PROTECTED_CUSTOMER_BOUNDARY") return adminJson({ ok: false, error: "Protected marketplace details cannot be copied into private customer records. Continue in the marketplace workflow." }, 409);
   return adminJson({ ok: false, error: "The private enquiry request could not be completed." }, 500);

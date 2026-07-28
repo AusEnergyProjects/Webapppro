@@ -28,8 +28,6 @@ const providerNotes: Record<Provider["provider"], string> = {
   xero: "Export a direct-customer job as a draft Xero invoice, then refresh its total and payment status without sharing a Xero password.",
   myob: "Export a direct-customer job as a draft MYOB service invoice, then refresh its total and payment status without giving AEA your MYOB login.",
   quickbooks: "Create a draft QuickBooks Online invoice from the exact accepted quote, then refresh its status without making QuickBooks the source of truth.",
-  stripe: "Create secure checkout links from a direct customer job. Card details stay with Stripe and never enter this CRM.",
-  square: "Create secure Square checkout links from a direct customer job using the connected business location.",
   google_calendar: "Mirror TLink appointments to Google Calendar. TLink stays authoritative and protected customer details are withheld.",
   microsoft_calendar: "Mirror TLink appointments to Outlook. TLink stays authoritative and protected customer details are withheld.",
 };
@@ -107,13 +105,17 @@ export function TradeIntegrationCentre({ user }: { user: User }) {
     {status && <p className="crm-inline-status" role="status">{status}</p>}
     {loading ? <section className="crm-loading"><span /><div><strong>Checking business connections</strong><p>Loading provider readiness...</p></div></section> : <>
       <section className="crm-integration-grid">
-        {providers.map((provider) => <article key={provider.provider} className={provider.status === "connected" ? "connected" : ""}>
-          <header><div className={`crm-provider-mark ${provider.provider}`}>{provider.label.slice(0, 1)}</div><div><span>{provider.purpose}</span><h4>{provider.label}</h4></div><strong>{provider.status === "connected" ? "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</strong></header>
-          <p>{providerNotes[provider.provider]}</p>
-          {provider.status === "connected" && <div className="crm-connected-account"><span>Authorised account</span><strong>{provider.accountLabel || `${provider.label} business`}</strong><small>Tokens are encrypted and isolated to this installer account.</small></div>}
-          {!provider.configured && provider.status !== "connected" && <p className="crm-integration-setup-note">TLink is completing the secure provider registration. Once available, press Connect and sign in to your own {provider.label} account.</p>}
-          <button type="button" disabled={Boolean(busy) || (!provider.configured && provider.status !== "connected")} onClick={() => provider.status === "connected" ? void disconnect(provider) : void connect(provider)}>{busy === provider.provider ? "Working..." : provider.status === "connected" ? `Disconnect ${provider.label}` : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button>
-        </article>)}
+        {providers.map((provider) => {
+          return <article key={provider.provider} className={provider.status === "connected" ? "connected" : ""}>
+            <header><div className={`crm-provider-mark ${provider.provider}`}>{provider.label.slice(0, 1)}</div><div><span>{provider.purpose}</span><h4>{provider.label}</h4></div><strong>{provider.status === "connected" ? "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</strong></header>
+            <p>{providerNotes[provider.provider]}</p>
+            {provider.status === "connected" && <div className="crm-connected-account"><span>Authorised account</span><strong>{provider.accountLabel || `${provider.label} business`}</strong><small>Tokens are encrypted and isolated to this installer account.</small></div>}
+            {!provider.configured && provider.status !== "connected" && <p className="crm-integration-setup-note">TLink is completing the secure provider registration. Once available, press Connect and sign in to your own {provider.label} account.</p>}
+            {provider.status === "connected"
+              ? <button type="button" disabled={Boolean(busy)} onClick={() => void disconnect(provider)}>{busy === provider.provider ? "Working..." : `Disconnect ${provider.label}`}</button>
+              : <button type="button" disabled={Boolean(busy) || !provider.configured} onClick={() => void connect(provider)}>{busy === provider.provider ? "Working..." : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button>}
+          </article>;
+        })}
       </section>
     </>}
   </div>;

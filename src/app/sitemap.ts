@@ -23,8 +23,7 @@ const routes = [
   "/direct-trade",
   "/direct-trade/partners",
   "/direct-trade/integrations",
-  "/direct-trade/membership",
-  "/direct-trade/membership/terms",
+  "/direct-trade/access",
   "/direct-trade/standards",
 ];
 

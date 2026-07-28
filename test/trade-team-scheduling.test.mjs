@@ -16,11 +16,14 @@ const adminRoute = read("../src/app/api/admin/accounts/route.ts");
 const adminUi = read("../src/components/AdminAccountWorkspace.tsx");
 const apply = (db, sql) => { for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement); };
 
-test("stored approved verification is authoritative in admin and signed-in account responses", () => {
-  assert.match(profileRoute, /record\.verification_status === "approved"/);
-  assert.match(adminRoute, /account\.verification_status === "approved"/);
-  assert.match(adminUi, /authoritative access record/);
-  assert.match(adminUi, /Saving approved verification unlocks core account features/);
+test("the exact reviewed ABN projection is authoritative in admin and signed-in account responses", () => {
+  assert.match(profileRoute, /approvedAbnAccess\(\{/);
+  assert.match(profileRoute, /verifiedAbn: String\(record\.verified_abn/);
+  assert.match(profileRoute, /verificationReviewedAt: String\(record\.verification_reviewed_at/);
+  assert.match(profileRoute, /verificationReviewedByUid: String\(record\.verification_reviewed_by_uid/);
+  assert.match(adminRoute, /accessApproved: approvedAbnAccess\(account\)/);
+  assert.match(adminUi, /Approved ABN access/);
+  assert.match(adminUi, /No approved review is recorded/);
 });
 
 test("week and capacity calculations are deterministic", () => {

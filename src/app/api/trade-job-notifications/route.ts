@@ -21,7 +21,7 @@ type JobNotification = {
 function notificationError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED"].includes(code)) {
+  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) {
     return adminJson({ ok: false, error: "An active installer account is required." }, 403);
   }
   return adminJson({ ok: false, error: "Job notifications could not be loaded." }, 500);
@@ -47,7 +47,7 @@ function workEventPresentation(eventType: string) {
 async function notifications(access: TeamAccess) {
   const db = getD1();
   const scope = jobScope(access);
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, paymentEvents, fieldEvents, signoffs, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, reads] = await Promise.all([
     db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title
       FROM trade_crm_photo_request_completions completion
@@ -91,15 +91,6 @@ async function notifications(access: TeamAccess) {
       WHERE event.firebase_uid = ? AND event.actor_type = 'customer' AND event.event_type = 'requested'
         AND (? <> 'technician' OR work.assignee_member_id = ?)
       ORDER BY event.created_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT event.id, event.work_order_id, event.status, event.amount_cents, event.provider,
-        event.received_at, work.work_number, work.title
-      FROM trade_crm_payment_events event
-      JOIN trade_work_orders work ON work.id = event.work_order_id AND work.firebase_uid = event.firebase_uid
-        AND work.record_status = 'active'
-      WHERE event.firebase_uid = ? AND event.status IN ('paid', 'failed', 'review_required')
-        AND (? <> 'technician' OR work.assignee_member_id = ?)
-      ORDER BY event.received_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
     db.prepare(`SELECT event.id, event.work_order_id, event.event_type, event.summary, event.created_at,
         work.work_number, work.title
@@ -154,14 +145,6 @@ async function notifications(access: TeamAccess) {
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer requested a schedule change",
       summary: limitedSummary(row.summary, "Review the customer's requested appointment change."), createdAt: String(row.created_at),
       targetTab: "schedule" as const, source: "customer" as const })),
-    ...paymentEvents.results.map((row) => { const paid = row.status === "paid"; const failed = row.status === "failed";
-      const amount = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(Number(row.amount_cents || 0) / 100);
-      return { id: `payment-event:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
-        title: paid ? "Customer payment received" : failed ? "Customer payment failed" : "Customer payment needs review",
-        summary: paid ? `${amount} was paid through ${String(row.provider)} for ${String(row.title)}.`
-          : failed ? `The ${String(row.provider)} payment for ${String(row.title)} failed.`
-            : `The ${String(row.provider)} payment for ${String(row.title)} needs amount or currency review.`,
-        createdAt: String(row.received_at), targetTab: "invoice" as const, source: "customer" as const }; }),
     ...fieldEvents.results.map((row) => { const presentation = workEventPresentation(String(row.event_type)); return {
       id: `field-event:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
       title: presentation.title, summary: limitedSummary(row.summary, `Field work changed for ${String(row.title)}.`),
@@ -181,7 +164,7 @@ async function notifications(access: TeamAccess) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     return adminJson({ ok: true, ...(await notifications(access)) });
   } catch (error) { return notificationError(error); }
 }
@@ -189,7 +172,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request, false);
+    const access = await requireInstallerTeamAccess(request);
     const body = await request.json().catch(() => ({})) as Row;
     const notificationKey = cleanAdminText(body.notificationKey, 240);
     const current = await notifications(access);

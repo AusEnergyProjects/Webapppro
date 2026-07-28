@@ -73,22 +73,6 @@ type AdminUser = {
   last_login_at: string;
   created_at: string;
 };
-type ReferralRecord = {
-  id: string;
-  code: string;
-  status: string;
-  riskReason: string;
-  referrerBusiness: string;
-  referrerEmail: string;
-  referredBusiness: string;
-  referredEmail: string;
-  registeredAt: string;
-  firstPaidAt: string;
-  rewardedAt: string;
-  appliedCredits: number;
-  failedCredits: number;
-  updatedAt: string;
-};
 type EcosystemHealth = {
   status: "healthy" | "attention";
   checkedAt: string;
@@ -156,13 +140,11 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "referrals" | "field-pilot" | "database" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
-  const [accountListCounts, setAccountListCounts] = useState({ total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
   const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
   const [productEnquirySummary, setProductEnquirySummary] = useState<ProductEnquirySummary>({ total: 0, open: 0, responded: 0, valueCents: 0 });
   const [ecosystemHealth, setEcosystemHealth] = useState<EcosystemHealth | null>(null);
   const [ecosystemBusy, setEcosystemBusy] = useState(false);
@@ -208,16 +190,10 @@ export function AdminOperationsPortal() {
   const loadWorkspace = useCallback(
     async (nextSession: AdminSession) => {
       const datasets = await Promise.allSettled([
-        api("/api/admin/accounts?pageSize=25"),
-        api("/api/admin/referrals"),
         api("/api/admin/product-enquiries"),
       ]);
       const failures: string[] = [];
-      const [accountResult, referralResult, enquiryResult] = datasets;
-      if (accountResult.status === "fulfilled") setAccountListCounts(accountResult.value.counts || { total: 0, paid: 0, free: 0, hiddenSuppliers: 0, leadLockedInstallers: 0 });
-      else failures.push("partners");
-      if (referralResult.status === "fulfilled") setReferrals(referralResult.value.referrals || []);
-      else failures.push("referrals");
+      const [enquiryResult] = datasets;
       if (enquiryResult.status === "fulfilled") setProductEnquirySummary(summariseProductEnquiries(enquiryResult.value.enquiries || []));
       else failures.push("product enquiries");
       if (nextSession.role === "owner") {
@@ -395,10 +371,6 @@ export function AdminOperationsPortal() {
       setTab("catalogue");
       return;
     }
-    if (notification.entityType === "trade_referral") {
-      setTab("referrals");
-      return;
-    }
     if (["supplier_product_enquiry", "installer_product_list"].includes(notification.entityType)) {
       setTab("enquiries");
       return;
@@ -427,28 +399,6 @@ export function AdminOperationsPortal() {
       }
     }
     setTab("opportunities");
-  }
-
-  async function moderateReferral(
-    referral: ReferralRecord,
-    action: "approve" | "reject" | "retry",
-  ) {
-    const note = action === "reject"
-      ? window.prompt("Record the reason this referral is not eligible:", referral.riskReason || "") || ""
-      : "";
-    if (action === "reject" && !note.trim()) return;
-    setStatus(`${readable(action)} referral reward...`);
-    try {
-      await api("/api/admin/referrals", {
-        method: "PATCH",
-        body: JSON.stringify({ id: referral.id, action, note }),
-      });
-      const result = await api("/api/admin/referrals");
-      setReferrals(result.referrals || []);
-      setStatus("Referral decision saved and added to the audit history.");
-    } catch (error) {
-      setStatus(authMessage(error));
-    }
   }
 
   async function inviteAdmin(event: FormEvent) {
@@ -497,10 +447,6 @@ export function AdminOperationsPortal() {
   const opportunityCounts = metrics.opportunities || {};
   const matchCounts = metrics.matches || {};
   const productCounts = metrics.products || {};
-  const paidAccounts = accountListCounts.paid;
-  const freeAccounts = accountListCounts.free;
-  const hiddenSuppliers = accountListCounts.hiddenSuppliers;
-  const leadLockedInstallers = accountListCounts.leadLockedInstallers;
   const openProductEnquiries = productEnquirySummary.open;
   const activeOwners = admins.filter(
     (item) => item.role === "owner" && item.status === "active",
@@ -775,16 +721,10 @@ export function AdminOperationsPortal() {
             <span>13</span>Field forms
           </button>
           <button
-            className={tab === "referrals" ? "active" : ""}
-            onClick={() => setTab("referrals")}
-          >
-            <span>14</span>Referrals
-          </button>
-          <button
             className={tab === "field-pilot" ? "active" : ""}
             onClick={() => setTab("field-pilot")}
           >
-            <span>15</span>Field pilot
+            <span>14</span>Field pilot
           </button>
           {session.role === "owner" && (
             <>
@@ -792,13 +732,13 @@ export function AdminOperationsPortal() {
                 className={tab === "database" ? "active" : ""}
                 onClick={() => setTab("database")}
               >
-                <span>16</span>Database
+                <span>15</span>Database
               </button>
               <button
                 className={tab === "access" ? "active" : ""}
                 onClick={() => setTab("access")}
               >
-                <span>17</span>Access & audit
+                <span>16</span>Access & audit
               </button>
             </>
           )}
@@ -917,11 +857,10 @@ export function AdminOperationsPortal() {
                   </small>
                 </article>
               </section>
-              <section className="admin-access-metrics" aria-label="Membership access health">
-                <article><span>Paid memberships</span><strong>{paidAccounts}</strong><small>Commercial role tools active</small></article>
-                <article><span>Free profiles</span><strong>{freeAccounts}</strong><small>Setup and verification access only</small></article>
-                <article><span>Hidden wholesalers</span><strong>{hiddenSuppliers}</strong><small>Products excluded from installer selection</small></article>
-                <article><span>Lead-locked installers</span><strong>{leadLockedInstallers}</strong><small>Excluded from opportunity allocation</small></article>
+              <section className="admin-access-metrics" aria-label="Trade access readiness">
+                <article><span>Business profiles</span><strong>{accountCounts.total || 0}</strong><small>{accountCounts.installers || 0} installers and {accountCounts.suppliers || 0} wholesalers</small></article>
+                <article><span>Approved</span><strong>{verificationCounts.approved || 0}</strong><small>Role-appropriate access available</small></article>
+                <article><span>Awaiting review</span><strong>{verificationCounts.awaiting || 0}</strong><small>ABN and evidence review required</small></article>
               </section>
               <section className="admin-panel admin-ecosystem-check" aria-labelledby="ecosystem-check-title">
                 <div className="admin-panel-heading">
@@ -1037,7 +976,7 @@ export function AdminOperationsPortal() {
 
           {tab === "partners" && (
             <>
-              <AdminAccountWorkspace api={api} role={session.role} setStatus={setStatus} onCounts={setAccountListCounts} target={partnerTarget} verificationTarget={partnerVerificationTarget} />
+              <AdminAccountWorkspace api={api} role={session.role} setStatus={setStatus} onCounts={() => undefined} target={partnerTarget} verificationTarget={partnerVerificationTarget} />
             </>
           )}
 
@@ -1051,57 +990,6 @@ export function AdminOperationsPortal() {
 
 
           {tab === "enquiries" && <AdminProductEnquiryWorkspace api={api} setStatus={setStatus} onSummary={setProductEnquirySummary} />}
-
-          {tab === "referrals" && (
-            <>
-              <header className="admin-page-heading">
-                <span>Member growth controls</span>
-                <h1>Referral rewards and eligibility</h1>
-                <p>
-                  Follow each new-business referral from signup to first paid
-                  membership and confirm that both one-month extensions were
-                  applied. Exact duplicate signals pause a reward for review.
-                </p>
-              </header>
-              <section className="admin-metric-grid">
-                <article><span>Total referrals</span><strong>{referrals.length}</strong><small>One reward maximum per new business</small></article>
-                <article><span>Awaiting payment</span><strong>{referrals.filter((item) => item.status === "registered").length}</strong><small>Profile created, first payment not yet cleared</small></article>
-                <article><span>Needs review</span><strong>{referrals.filter((item) => ["review_required", "reward_failed"].includes(item.status)).length}</strong><small>Eligibility or Stripe retry attention</small></article>
-                <article><span>Completed</span><strong>{referrals.filter((item) => item.status === "rewarded").length}</strong><small>Two membership months applied</small></article>
-              </section>
-              <section className="admin-panel admin-referral-workspace">
-                <div className="admin-panel-heading">
-                  <span>Two-sided ledger</span>
-                  <h2>Referral history</h2>
-                  <p>Monthly members receive their second month free; annual members receive month 13 free.</p>
-                </div>
-                <div className="admin-referral-list tlink-data-table">
-                  {referrals.length ? referrals.map((item) => (
-                    <article key={item.id}>
-                      <div className="admin-referral-parties">
-                        <div><span>Referrer</span><strong>{item.referrerBusiness}</strong><small>{item.referrerEmail}</small></div>
-                        <b aria-hidden="true">to</b>
-                        <div><span>New member</span><strong>{item.referredBusiness}</strong><small>{item.referredEmail}</small></div>
-                      </div>
-                      <div className="admin-referral-status">
-                        <span className={`admin-pill admin-pill-${item.status}`}>{readable(item.status)}</span>
-                        <small>{item.code} Ãƒâ€šÃ‚Â· joined {dateTime(item.registeredAt)}</small>
-                        <small>{item.appliedCredits}/2 free months applied</small>
-                        {item.riskReason && <p>{item.riskReason}</p>}
-                      </div>
-                      {["owner", "admin"].includes(session.role) && (
-                        <div className="admin-referral-actions">
-                          {item.status === "review_required" && <button onClick={() => void moderateReferral(item, "approve")}>Approve eligibility</button>}
-                          {item.status === "reward_failed" && <button onClick={() => void moderateReferral(item, "retry")}>Retry reward</button>}
-                          {!['rewarded', 'rejected'].includes(item.status) && <button className="danger" onClick={() => void moderateReferral(item, "reject")}>Reject</button>}
-                        </div>
-                      )}
-                    </article>
-                  )) : <p className="admin-empty">No referral links have produced a new member yet.</p>}
-                </div>
-              </section>
-            </>
-          )}
 
           {tab === "database" && session.role === "owner" && <AdminDatabaseWorkspace api={api} setStatus={setStatus} />}
 

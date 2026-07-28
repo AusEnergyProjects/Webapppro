@@ -12,6 +12,7 @@ import {
   serviceReminderRetryAt,
   type ReminderChannel,
 } from "@/lib/service-reminder-delivery";
+import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 type QueueInput = {
   appointmentId: string;
@@ -40,6 +41,7 @@ async function appointmentContext(appointmentId: string, ownerUid = "") {
       customer.email customer_email, customer.account_updates, customer.account_status customer_account_status,
       trade.email installer_email, trade.business_name, trade.account_status installer_account_status,
       trade.email_opportunities, trade.consent_at installer_consent_at,
+      CASE WHEN ${verifiedTradeAccountPredicate("trade")} THEN 1 ELSE 0 END trade_access_approved,
       EXISTS (SELECT 1 FROM customer_consent_receipts receipt WHERE receipt.firebase_uid = proposal.customer_uid
         AND receipt.purpose = 'customer_account' AND receipt.withdrawn_at = '') customer_account_consent,
       EXISTS (SELECT 1 FROM customer_service_reminder_opt_outs optout WHERE optout.customer_uid = proposal.customer_uid
@@ -73,6 +75,9 @@ async function dailyLimitAvailable(channel: ReminderChannel, dailyLimit: number)
 }
 
 function consentState(context: Context, audience: AppointmentNotificationAudience, channel: ReminderChannel) {
+  if (Number(context.trade_access_approved) !== 1) {
+    return { allowed: false, reason: "The trade business does not currently have approved access." };
+  }
   if (audience === "installer") {
     if (channel !== "email") return { allowed: false, reason: "Installer SMS requires a separately verified operational contact." };
     const allowed = context.installer_account_status === "active" && Boolean(context.email_opportunities)

@@ -51,7 +51,7 @@ async function payload(uid: string, workOrderId: string) {
   if (!handoff) return { handoff: false, plan: null, phases: [], requirements: [], readiness: null, execution: null, completion: null };
   const plan = await db.prepare(`SELECT * FROM trade_crm_job_plans WHERE firebase_uid = ? AND commercial_handoff_id = ?`).bind(uid, handoff.id).first<Row>();
   if (!plan) return { handoff: true, plan: null, phases: [], requirements: [], readiness: null, execution: null, completion: null };
-  const [phases, requirements, member, deposit, proof] = await Promise.all([
+  const [phases, requirements, member, proof] = await Promise.all([
     db.prepare(`SELECT * FROM trade_crm_job_plan_phases WHERE firebase_uid = ? AND job_plan_id = ? ORDER BY position`).bind(uid, plan.id).all<Row>(),
     db.prepare(`SELECT r.*, a.quantity_milli actual_quantity_milli, a.duration_minutes actual_duration_minutes,
         a.total_cost_cents actual_total_cost_cents, a.note actual_note
@@ -59,7 +59,6 @@ async function payload(uid: string, workOrderId: string) {
         ON a.job_plan_requirement_id = r.id AND a.firebase_uid = r.firebase_uid
       WHERE r.firebase_uid = ? AND r.job_plan_id = ? ORDER BY r.position`).bind(uid, plan.id).all<Row>(),
     job.assignee_member_id ? db.prepare(`SELECT status, display_name FROM trade_team_members WHERE id = ? AND owner_uid = ?`).bind(job.assignee_member_id, uid).first<Row>() : Promise.resolve(null),
-    db.prepare(`SELECT status FROM trade_crm_payment_links WHERE firebase_uid = ? AND commercial_handoff_id = ? AND status = 'paid' LIMIT 1`).bind(uid, handoff.id).first<Row>(),
     proofCheck(uid, workOrderId),
   ]);
   const byType = (type: string) => requirements.results.filter((row) => row.requirement_type === type);
@@ -67,7 +66,7 @@ async function payload(uid: string, workOrderId: string) {
   const scope = requirements.results.filter((row) => !["form", "material"].includes(String(row.requirement_type)));
   const checks = { scope: phases.results.length > 0 && requirements.results.length > 0,
     forms: forms.every((row) => row.status !== "required"), people: Boolean(member && member.status === "active"),
-    materials: materials.every((row) => row.status !== "required"), deposit: plan.deposit_requirement !== "required" || Boolean(deposit) };
+    materials: materials.every((row) => row.status !== "required"), deposit: true };
   const actualCostCents = requirements.results.reduce((sum, row) => sum + Number(row.actual_total_cost_cents || 0), 0);
   const remainingBudgetCents = requirements.results.filter((row) => !requirementDone(row)).reduce((sum, row) => sum + Number(row.total_cost_cents || 0), 0);
   const forecastCostCents = actualCostCents + remainingBudgetCents; const budgetCostCents = Number(plan.budget_cost_cents);

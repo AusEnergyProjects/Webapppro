@@ -13,7 +13,7 @@ const businessHub = read("../src/components/TradeBusinessHub.tsx");
 const verification = read(
   "../src/components/DirectTradeVerificationCentre.tsx",
 );
-const membership = read("../src/app/direct-trade/membership/page.tsx");
+const access = read("../src/app/direct-trade/access/page.tsx");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
 const verificationRoute = read(
   "../src/app/api/trade-verification/documents/route.ts",
@@ -83,14 +83,10 @@ test("verification evidence is private, bounded and owner protected", () => {
 });
 
 test("trade access page presents the free verified operating model", () => {
-  assert.match(membership, /Run the core trade workflow for A\$0/);
-  assert.match(membership, /without a card, subscription, seat fee, job fee, quote fee or/);
-  assert.match(membership, /Free and previously paid businesses use the same core data, screens and workflow/);
-  assert.match(membership, /No new subscription is required for core access/);
-  assert.match(membership, /Manage an existing Stripe membership/);
-  assert.doesNotMatch(membership, /Sign in to choose this plan|\$99|\$399/);
+  assert.match(access, /Run the core trade workflow for A\$0/);
+  assert.match(access, /no card details, seat fee, job fee, quote fee/);
+  assert.match(access, /A valid ABN and the required business evidence must be supplied/);
   assert.match(dashboard, /Unlimited users, leads, jobs and quotes remain A\$0/);
-  assert.doesNotMatch(dashboard, /Start annual membership|Generate my referral link/);
 });
 
 test("free access and verification routes are connected across the account journey", () => {
@@ -156,9 +152,9 @@ test("wholesaler work is progressive instead of one crowded catalogue page", () 
   assert.match(businessHub, /Move supply work from request to completion/);
 });
 
-test("new dashboard, verification and membership copy avoids prohibited dash characters", () => {
+test("new dashboard, verification and access copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(
-    dashboard + supplierCatalogue + purchasing + businessHub + verification + membership,
+    dashboard + supplierCatalogue + purchasing + businessHub + verification + access,
     /[\u2013\u2014]/,
   );
 });

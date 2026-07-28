@@ -19,8 +19,10 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   summary: text("summary").notNull().default(""),
   accountStatus: text("account_status").notNull().default("active"),
   verificationStatus: text("verification_status").notNull().default("not_started"),
-  planKey: text("plan_key").notNull().default("unselected"),
-  billingStatus: text("billing_status").notNull().default("not_connected"),
+  verifiedAbn: text("verified_abn").notNull().default(""),
+  verificationReviewId: text("verification_review_id").notNull().default(""),
+  verificationReviewedAt: text("verification_reviewed_at").notNull().default(""),
+  verificationReviewedByUid: text("verification_reviewed_by_uid").notNull().default(""),
   availabilityStatus: text("availability_status").notNull().default("paused"),
   serviceBasePostcode: text("service_base_postcode").notNull().default(""),
   serviceRadiusKm: integer("service_radius_km").notNull().default(50),
@@ -33,7 +35,8 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
-  index("trade_accounts_eligibility_idx").on(table.partnerType, table.accountStatus, table.verificationStatus, table.billingStatus, table.firebaseUid),
+  index("trade_accounts_eligibility_idx").on(table.partnerType, table.accountStatus, table.verificationStatus, table.verifiedAbn, table.firebaseUid),
+  uniqueIndex("trade_accounts_verified_abn_unique_idx").on(table.verifiedAbn).where(sql`${table.verifiedAbn} <> ''`),
   index("trade_accounts_admin_type_updated_idx").on(table.partnerType, table.updatedAt, table.firebaseUid),
   index("trade_accounts_admin_status_updated_idx").on(table.accountStatus, table.updatedAt, table.firebaseUid),
   index("trade_accounts_admin_verification_updated_idx").on(table.verificationStatus, table.updatedAt, table.firebaseUid),
@@ -61,34 +64,6 @@ export const tradeSupplierLocations = sqliteTable("trade_supplier_locations", {
   index("trade_supplier_locations_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.addressState, table.postcode),
 ]);
 
-export const stripeMemberships = sqliteTable("stripe_memberships", {
-  id: text("id").primaryKey(),
-  firebaseUid: text("firebase_uid").notNull(),
-  partnerType: text("partner_type").notNull(),
-  planKey: text("plan_key").notNull(),
-  paymentLinkId: text("payment_link_id").notNull(),
-  stripeCustomerId: text("stripe_customer_id").notNull().default(""),
-  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
-  status: text("status").notNull(),
-  cancelAtPeriodEnd: integer("cancel_at_period_end", {
-    mode: "boolean",
-  }).notNull().default(false),
-  currentPeriodEnd: integer("current_period_end").notNull().default(0),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("stripe_memberships_subscription_idx").on(table.stripeSubscriptionId),
-  index("stripe_memberships_owner_idx").on(table.firebaseUid, table.updatedAt),
-]);
-
-export const stripeWebhookEvents = sqliteTable("stripe_webhook_events", {
-  id: text("id").primaryKey(),
-  eventType: text("event_type").notNull(),
-  createdAt: text("created_at").notNull(),
-}, (table) => [
-  index("stripe_webhook_events_created_idx").on(table.createdAt),
-]);
-
 export const leadRateLimits = sqliteTable("lead_rate_limits", {
   clientHash: text("client_hash").primaryKey(),
   timestamps: text("timestamps").notNull().default("[]"),
@@ -96,58 +71,6 @@ export const leadRateLimits = sqliteTable("lead_rate_limits", {
   updatedAt: integer("updated_at").notNull(),
 }, (table) => [
   index("lead_rate_limits_updated_idx").on(table.updatedAt),
-]);
-
-export const tradeReferralCodes = sqliteTable("trade_referral_codes", {
-  code: text("code").primaryKey(),
-  firebaseUid: text("firebase_uid").notNull(),
-  status: text("status").notNull().default("active"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_referral_codes_owner_idx").on(table.firebaseUid),
-  index("trade_referral_codes_status_idx").on(table.status),
-]);
-
-export const tradeReferrals = sqliteTable("trade_referrals", {
-  id: text("id").primaryKey(),
-  referralCode: text("referral_code").notNull(),
-  referrerUid: text("referrer_uid").notNull(),
-  referredUid: text("referred_uid").notNull(),
-  status: text("status").notNull().default("registered"),
-  riskReason: text("risk_reason").notNull().default(""),
-  referredSubscriptionId: text("referred_subscription_id").notNull().default(""),
-  registeredAt: text("registered_at").notNull(),
-  firstPaidAt: text("first_paid_at").notNull().default(""),
-  rewardedAt: text("rewarded_at").notNull().default(""),
-  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
-  reviewedAt: text("reviewed_at").notNull().default(""),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_referrals_referred_idx").on(table.referredUid),
-  index("trade_referrals_referrer_idx").on(table.referrerUid, table.createdAt),
-  index("trade_referrals_code_idx").on(table.referralCode),
-  index("trade_referrals_status_idx").on(table.status, table.updatedAt),
-]);
-
-export const tradeMembershipCredits = sqliteTable("trade_membership_credits", {
-  id: text("id").primaryKey(),
-  referralId: text("referral_id").notNull(),
-  firebaseUid: text("firebase_uid").notNull(),
-  beneficiaryRole: text("beneficiary_role").notNull(),
-  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
-  status: text("status").notNull().default("pending"),
-  extensionStart: integer("extension_start").notNull().default(0),
-  extensionEnd: integer("extension_end").notNull().default(0),
-  stripeRequestId: text("stripe_request_id").notNull().default(""),
-  failureCode: text("failure_code").notNull().default(""),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_membership_credits_beneficiary_idx").on(table.referralId, table.firebaseUid),
-  index("trade_membership_credits_owner_idx").on(table.firebaseUid, table.createdAt),
-  index("trade_membership_credits_status_idx").on(table.status, table.updatedAt),
 ]);
 
 export const verificationDocuments = sqliteTable("verification_documents", {
@@ -324,6 +247,24 @@ export const tradeAccountNotes = sqliteTable("trade_account_notes", {
   index("trade_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
+export const tradeAccountVerificationReviews = sqliteTable("trade_account_verification_reviews", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  abn: text("abn").notNull(),
+  businessName: text("business_name").notNull(),
+  partnerType: text("partner_type").notNull(),
+  legalEntityName: text("legal_entity_name").notNull(),
+  decision: text("decision").notNull(),
+  reviewMethod: text("review_method").notNull(),
+  sourceReference: text("source_reference").notNull().default(""),
+  note: text("note").notNull(),
+  reviewedByUid: text("reviewed_by_uid").notNull(),
+  reviewedAt: text("reviewed_at").notNull(),
+}, (table) => [
+  index("trade_account_verification_reviews_owner_idx").on(table.firebaseUid, table.reviewedAt),
+  index("trade_account_verification_reviews_reviewer_idx").on(table.reviewedByUid, table.reviewedAt),
+]);
+
 export const customerAccountNotes = sqliteTable("customer_account_notes", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -332,21 +273,6 @@ export const customerAccountNotes = sqliteTable("customer_account_notes", {
   createdAt: text("created_at").notNull(),
 }, (table) => [
   index("customer_account_notes_owner_idx").on(table.firebaseUid, table.createdAt),
-]);
-
-export const tradeAccountFeatureGrants = sqliteTable("trade_account_feature_grants", {
-  id: text("id").primaryKey(),
-  firebaseUid: text("firebase_uid").notNull(),
-  featureKey: text("feature_key").notNull(),
-  status: text("status").notNull().default("active"),
-  expiresAt: text("expires_at").notNull().default(""),
-  note: text("note").notNull().default(""),
-  grantedByUid: text("granted_by_uid").notNull(),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_account_feature_grants_owner_key_idx").on(table.firebaseUid, table.featureKey),
-  index("trade_account_feature_grants_owner_idx").on(table.firebaseUid, table.status, table.expiresAt),
 ]);
 
 export const tradeWorkOrders = sqliteTable("trade_work_orders", {
@@ -2203,23 +2129,6 @@ export const tradeCrmQuickInvoiceCredits = sqliteTable("trade_crm_quick_invoice_
   index("trade_crm_quick_invoice_credits_owner_idx").on(table.firebaseUid, table.createdAt),
 ]);
 
-export const tradeCrmInvoicePaymentAllocations = sqliteTable("trade_crm_invoice_payment_allocations", {
-  id: text("id").primaryKey(),
-  invoiceId: text("invoice_id").notNull(),
-  workOrderId: text("work_order_id").notNull(),
-  firebaseUid: text("firebase_uid").notNull(),
-  paymentLinkId: text("payment_link_id").notNull(),
-  provider: text("provider").notNull(),
-  providerPaymentId: text("provider_payment_id").notNull().default(""),
-  amountCents: integer("amount_cents").notNull(),
-  allocatedAt: text("allocated_at").notNull(),
-  createdAt: text("created_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_crm_invoice_payment_allocations_link_idx").on(table.paymentLinkId),
-  index("trade_crm_invoice_payment_allocations_invoice_idx").on(table.invoiceId, table.allocatedAt),
-  index("trade_crm_invoice_payment_allocations_owner_idx").on(table.firebaseUid, table.allocatedAt),
-]);
-
 export const tradeCrmIntegrations = sqliteTable("trade_crm_integrations", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -2251,61 +2160,6 @@ export const tradeCrmOauthStates = sqliteTable("trade_crm_oauth_states", {
 }, (table) => [
   uniqueIndex("trade_crm_oauth_states_hash_idx").on(table.stateHash),
   index("trade_crm_oauth_states_owner_expiry_idx").on(table.firebaseUid, table.expiresAt),
-]);
-
-export const tradeCrmPaymentLinks = sqliteTable("trade_crm_payment_links", {
-  id: text("id").primaryKey(),
-  workOrderId: text("work_order_id").notNull(),
-  firebaseUid: text("firebase_uid").notNull(),
-  commercialHandoffId: text("commercial_handoff_id").notNull().default(""),
-  commercialReference: text("commercial_reference").notNull().default(""),
-  purpose: text("purpose").notNull().default("payment"),
-  provider: text("provider").notNull(),
-  externalId: text("external_id").notNull(),
-  providerOrderId: text("provider_order_id").notNull().default(""),
-  providerPaymentId: text("provider_payment_id").notNull().default(""),
-  amountCents: integer("amount_cents").notNull(),
-  paidAmountCents: integer("paid_amount_cents").notNull().default(0),
-  checkoutUrl: text("checkout_url").notNull(),
-  status: text("status").notNull().default("open"),
-  attemptNumber: integer("attempt_number").notNull().default(1),
-  supersededById: text("superseded_by_id").notNull().default(""),
-  supersededAt: text("superseded_at").notNull().default(""),
-  paidAt: text("paid_at").notNull().default(""),
-  failureCode: text("failure_code").notNull().default(""),
-  lastEventId: text("last_event_id").notNull().default(""),
-  lastEventAt: text("last_event_at").notNull().default(""),
-  idempotencyKey: text("idempotency_key").notNull(),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_crm_payment_links_idempotency_idx").on(table.idempotencyKey),
-  uniqueIndex("trade_crm_payment_links_commercial_attempt_idx").on(table.firebaseUid, table.commercialReference, table.purpose, table.attemptNumber),
-  uniqueIndex("trade_crm_payment_links_collectible_idx").on(table.firebaseUid, table.commercialReference, table.purpose)
-    .where(sql`${table.status} IN ('creating','open','processing','paid')`),
-  index("trade_crm_payment_links_commercial_status_idx").on(table.firebaseUid, table.commercialReference, table.purpose, table.status),
-  index("trade_crm_payment_links_owner_idx").on(table.firebaseUid, table.updatedAt),
-  index("trade_crm_payment_links_work_order_idx").on(table.workOrderId, table.updatedAt),
-  index("trade_crm_payment_links_provider_order_idx").on(table.provider, table.providerOrderId),
-]);
-
-export const tradeCrmPaymentEvents = sqliteTable("trade_crm_payment_events", {
-  id: text("id").primaryKey(),
-  provider: text("provider").notNull(),
-  eventId: text("event_id").notNull(),
-  eventType: text("event_type").notNull(),
-  paymentLinkId: text("payment_link_id").notNull(),
-  workOrderId: text("work_order_id").notNull(),
-  firebaseUid: text("firebase_uid").notNull(),
-  status: text("status").notNull(),
-  amountCents: integer("amount_cents").notNull().default(0),
-  providerPaymentId: text("provider_payment_id").notNull().default(""),
-  occurredAt: text("occurred_at").notNull().default(""),
-  receivedAt: text("received_at").notNull(),
-}, (table) => [
-  uniqueIndex("trade_crm_payment_events_provider_event_idx").on(table.provider, table.eventId),
-  index("trade_crm_payment_events_link_idx").on(table.paymentLinkId, table.receivedAt),
-  index("trade_crm_payment_events_owner_idx").on(table.firebaseUid, table.receivedAt),
 ]);
 
 export const tradeCrmAccountingDocuments = sqliteTable("trade_crm_accounting_documents", {

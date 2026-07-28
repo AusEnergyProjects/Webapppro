@@ -30,7 +30,7 @@ test("job notification read receipts are owner scoped and durable", () => {
 
 test("customer and field activity powers one unread installer review queue", () => {
   assert.match(route, /trade_crm_photo_request_completions/);
-  for (const source of ["trade_crm_quote_questions", "trade_crm_quote_acceptances", "trade_crm_quote_events", "trade_crm_appointment_reschedule_events", "trade_crm_payment_events", "trade_work_order_events", "trade_crm_signoffs"]) {
+  for (const source of ["trade_crm_quote_questions", "trade_crm_quote_acceptances", "trade_crm_quote_events", "trade_crm_appointment_reschedule_events", "trade_work_order_events", "trade_crm_signoffs"]) {
     assert.match(route, new RegExp(source));
   }
   assert.match(route, /trade_job_notification_reads/);
@@ -38,7 +38,7 @@ test("customer and field activity powers one unread installer review queue", () 
   assert.match(route, /quote-question:/);
   assert.match(route, /quote-decision:/);
   assert.match(route, /Quote accepted/);
-  assert.match(route, /Customer payment received/);
+  assert.doesNotMatch(route, /trade_crm_payment_events|Customer payment received/);
   assert.match(route, /Field job completed/);
   assert.match(route, /requireInstallerTeamAccess/);
   assert.match(route, /current\.items\.some\(\(item\) => item\.id === notificationKey\)/);

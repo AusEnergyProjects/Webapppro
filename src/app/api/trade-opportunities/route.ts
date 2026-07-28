@@ -1,5 +1,4 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { parseJsonList } from "@/lib/admin-server";
 import {
   allocateNearestInstallers,
@@ -7,6 +6,11 @@ import {
   syncMarketplaceEnquiries,
 } from "@/lib/opportunity-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 import { normalizePlatformQuote, parseStoredJson } from "@/lib/customer-projects.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
@@ -38,7 +42,8 @@ async function productSnapshot(installerUid: string, productListId: string) {
     JOIN supplier_products p ON p.id = i.product_id
     JOIN trade_accounts a ON a.firebase_uid = i.supplier_uid
     WHERE i.list_id = ? AND p.listing_status = 'published' AND p.review_status = 'approved'
-      AND a.partner_type = 'supplier' AND a.account_status = 'active' AND a.verification_status = 'approved'
+      AND p.firebase_uid = i.supplier_uid
+      AND ${verifiedTradeAccountPredicate("a")} AND a.partner_type = 'supplier'
       ORDER BY p.brand, p.name`).bind(productListId).all<Record<string, unknown>>();
   if (!rows.results.length || rows.results.length !== Number(allItems?.count || 0)) throw new Error("PRODUCT_LIST_UNAVAILABLE");
   const products = rows.results.map((row: Record<string, unknown>) => ({
@@ -65,46 +70,27 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-async function identity(request: Request) {
-  try {
-    return await requireFirebaseIdentity(request);
-  } catch {
-    return null;
-  }
+function tradeAccessCode(error: unknown) {
+  return error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
 }
 
 export async function GET(request: Request) {
   if (!sameOrigin(request))
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
-  const user = await identity(request);
-  if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
+  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  try {
+    access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  } catch (error) {
+    const code = tradeAccessCode(error);
+    if (code === "AUTH_REQUIRED") return json({ ok: false, error: "Sign in to continue." }, 401);
+    if (code === "PROFILE_REQUIRED") return json({ ok: false, error: "Complete the business profile first." }, 404);
+    if (code === "TRADE_ROLE_REQUIRED") return json({ ok: false, error: "Household opportunities are never available to wholesaler accounts." }, 403);
+    if (code === "ACCOUNT_INACTIVE") return json({ ok: false, error: "This business account is not active." }, 403);
+    return json({ ok: false, error: "Complete trade verification before opening marketplace opportunities." }, 403);
+  }
+  const user = access.identity;
   const db = getD1();
-  const account = await db
-    .prepare(
-      "SELECT account_status, partner_type, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
-    )
-    .bind(user.uid)
-    .first<Record<string, unknown>>();
-  if (!account)
-    return json(
-      { ok: false, error: "Complete the business profile first." },
-      404,
-    );
-  if (account.partner_type !== "installer")
-    return json(
-      {
-        ok: false,
-        error:
-          "Household opportunities are never available to wholesaler accounts.",
-      },
-      403,
-    );
-  if (account.account_status !== "active")
-    return json(
-      { ok: false, error: "This business account is not active." },
-      403,
-    );
-  if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
+  if (!await accountHasFeature(user.uid, "installer", "installer_leads"))
     return json(
       { ok: false, error: "Complete trade verification before opening marketplace opportunities." },
       403,
@@ -237,8 +223,19 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request))
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
-  const user = await identity(request);
-  if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
+  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  try {
+    access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+  } catch (error) {
+    const code = tradeAccessCode(error);
+    if (code === "AUTH_REQUIRED") return json({ ok: false, error: "Sign in to continue." }, 401);
+    if (code === "TRADE_ROLE_REQUIRED") return json({ ok: false, error: "Wholesalers cannot access or respond to household opportunities." }, 403);
+    if (code === "PROFILE_REQUIRED" || code === "ACCOUNT_INACTIVE") {
+      return json({ ok: false, error: "An active installer account is required." }, 403);
+    }
+    return json({ ok: false, error: "Complete trade verification before responding to marketplace opportunities." }, 403);
+  }
+  const user = access.identity;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -252,27 +249,8 @@ export async function PATCH(request: Request) {
   if (!matchId)
     return json({ ok: false, error: "Choose a valid opportunity." }, 400);
   const db = getD1();
-  const account = await db
-    .prepare(
-      "SELECT account_status, partner_type, billing_status, business_name FROM trade_accounts WHERE firebase_uid = ?",
-    )
-    .bind(user.uid)
-    .first<Record<string, unknown>>();
-  if (!account || account.account_status !== "active")
-    return json(
-      { ok: false, error: "An active installer account is required." },
-      403,
-    );
-  if (account.partner_type !== "installer")
-    return json(
-      {
-        ok: false,
-        error:
-          "Wholesalers cannot access or respond to household opportunities.",
-      },
-      403,
-    );
-  if (!await accountHasFeature(user.uid, "installer", account.billing_status, "installer_leads"))
+  const account = { business_name: access.businessName };
+  if (!await accountHasFeature(user.uid, "installer", "installer_leads"))
     return json(
       { ok: false, error: "Complete trade verification before responding to marketplace opportunities." },
       403,

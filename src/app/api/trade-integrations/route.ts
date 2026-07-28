@@ -45,25 +45,12 @@ export async function GET(request: Request) {
   try {
     const identity = await requireInstallerOperations(request);
     const db = getD1();
-    const [connections, links] = await Promise.all([
-      db.prepare(`SELECT provider, status, external_account_label, created_at, last_sync_at, last_error
-        FROM trade_crm_integrations WHERE firebase_uid = ? ORDER BY provider`).bind(identity.uid).all<Record<string, unknown>>(),
-      db.prepare(`SELECT id, work_order_id, commercial_reference, purpose, provider, external_id, amount_cents, paid_amount_cents,
-          checkout_url, status, paid_at, failure_code, last_event_at, created_at
-        FROM trade_crm_payment_links WHERE firebase_uid = ? ORDER BY created_at DESC LIMIT 100`)
-        .bind(identity.uid).all<Record<string, unknown>>(),
-    ]);
+    const connections = await db.prepare(`SELECT provider, status, external_account_label, created_at, last_sync_at, last_error
+      FROM trade_crm_integrations WHERE firebase_uid = ? ORDER BY provider`).bind(identity.uid).all<Record<string, unknown>>();
     const connectedByProvider = Object.fromEntries(connections.results.map((row) => [String(row.provider), row]));
     return adminJson({
       ok: true,
       providers: INTEGRATION_PROVIDERS.map((provider) => providerReadiness(provider, connectedByProvider[provider])),
-      paymentLinks: links.results.map((row) => ({
-        id: row.id, workOrderId: row.work_order_id, commercialReference: row.commercial_reference, purpose: row.purpose,
-        provider: row.provider, externalId: row.external_id,
-        amountCents: Number(row.amount_cents || 0), paidAmountCents: Number(row.paid_amount_cents || 0),
-        checkoutUrl: row.checkout_url, status: row.status, paidAt: row.paid_at,
-        failureCode: row.failure_code, lastEventAt: row.last_event_at, createdAt: row.created_at,
-      })),
     });
   } catch (error) { return integrationError(error); }
 }
@@ -102,7 +89,6 @@ export async function POST(request: Request) {
     authorization.searchParams.set("scope", setting.scopes.join(" "));
     authorization.searchParams.set("state", state);
     if (providerValue === "myob") authorization.searchParams.set("prompt", "consent");
-    if (providerValue === "square") authorization.searchParams.set("session", "false");
     if (providerValue === "google_calendar") { authorization.searchParams.set("access_type", "offline"); authorization.searchParams.set("prompt", "consent"); }
     return adminJson({ ok: true, authorizationUrl: authorization.toString() });
   } catch (error) { return integrationError(error); }
@@ -143,7 +129,6 @@ async function bestEffortRevoke(provider: IntegrationProvider, row: Record<strin
   let credentials: Record<string, unknown>;
   try { credentials = await decryptIntegrationCredentials(String(row.encrypted_credentials || "")); }
   catch { return false; }
-  const setting = providerSetting(provider);
   try {
     const externalMetadata = credentials.external_metadata && typeof credentials.external_metadata === "object"
       ? credentials.external_metadata as Record<string, unknown>
@@ -165,17 +150,6 @@ async function bestEffortRevoke(provider: IntegrationProvider, row: Record<strin
         method: "DELETE", headers: { Authorization: `Bearer ${String(credentials.access_token)}` },
       });
       if (!response.ok && response.status !== 404) throw new Error("XERO_DISCONNECT_FAILED");
-    } else if (provider === "stripe" && row.external_account_id) {
-      const body = new URLSearchParams({ client_id: setting.clientId, stripe_user_id: String(row.external_account_id) });
-      await fetch("https://connect.stripe.com/oauth/deauthorize", {
-        method: "POST", headers: { Authorization: `Bearer ${setting.clientSecret}`, "Content-Type": "application/x-www-form-urlencoded" }, body,
-      });
-    } else if (provider === "square" && credentials.access_token) {
-      await fetch(setting.tokenUrl.replace("/token", "/revoke"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Client ${setting.clientSecret}`, "Square-Version": "2026-05-20" },
-        body: JSON.stringify({ client_id: setting.clientId, access_token: credentials.access_token }),
-      });
     }
     return true;
   } catch { return false; }

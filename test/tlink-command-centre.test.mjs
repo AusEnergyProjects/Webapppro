@@ -19,7 +19,8 @@ test("the TLink command centre uses a bounded role scoped server search", () => 
   assert.doesNotMatch(command, /\/api\/(trade-crm|product-marketplace|supplier-products|trade-purchasing|trade-team)/);
   assert.match(command, /}, 220\)/);
   assert.match(command, /requestRef\.current\?\.abort\(\)/);
-  assert.match(searchRoute, /requireFirebaseIdentity/);
+  assert.match(searchRoute, /requireVerifiedTradeAccess/);
+  assert.match(searchRoute, /TradeAccessError/);
   assert.match(searchRoute, /sameOrigin\(request\)/);
   assert.match(searchRoute, /accountEntitlements/);
   assert.match(searchRoute, /RESULT_LIMIT = 32/);

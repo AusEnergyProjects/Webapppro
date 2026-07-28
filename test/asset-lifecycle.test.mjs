@@ -70,11 +70,13 @@ test("the lifecycle migration applies cleanly to SQLite", () => {
   assert.ok(tables.includes("customer_asset_lifecycle_preferences"));
 });
 
-test("installer lifecycle actions are authenticated, installer-only, owner-scoped and paywalled", () => {
-  assert.match(tradeRoute, /requireFirebaseIdentity/);
+test("installer lifecycle actions require reviewed ABN access, installer role and owner scope", () => {
+  assert.match(tradeRoute, /requireVerifiedTradeAccess/);
   assert.match(tradeRoute, /sameOrigin\(request\)/);
-  assert.match(tradeRoute, /account\.partner_type !== "installer"/);
+  assert.match(tradeRoute, /partnerTypes: \["installer"\]/);
+  assert.match(tradeRoute, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.match(tradeRoute, /entitlements\.features\.business_operations/);
+  assert.doesNotMatch(tradeRoute, /billing_status/);
   assert.match(tradeRoute, /work_order_id = \? AND firebase_uid = \?/);
   assert.match(tradeRoute, /Keep customer names, contact details and addresses out of service records/);
   assert.match(tradeUi, /No household identity was used/);

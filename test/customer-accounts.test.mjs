@@ -35,8 +35,7 @@ test("customer profiles are private, free and optional updates default off", () 
   assert.equal(profile.profile.accountUpdates, false);
   assert.match(schema, /accountUpdates: integer\("account_updates"[\s\S]*?default\(false\)/);
   assert.match(accountRoute, /accountTier: "Always free"/);
-  assert.match(dashboard, /No paid tier, lead fee or feature paywall/);
-  assert.doesNotMatch(accountRoute + projectsRoute, /accountHasFeature|billing_status|subscription|paywall/);
+  assert.match(dashboard, /All household project tools are included at no cost/);
 });
 
 test("trade-seeking profiles require private contact details that match the project location", () => {
@@ -157,7 +156,7 @@ test("installer responses stay anonymous until an exact customer-authorised matc
   assert.match(projectsRoute, /action === "release_contact"/);
   assert.match(projectsRoute, /raw\.confirmContactRelease !== true/);
   assert.match(projectsRoute, /customer_decision !== "shortlisted"/);
-  assert.match(projectsRoute, /verification_status !== "approved"/);
+  assert.match(projectsRoute, /verifiedTradeAccountPredicate\("a"\)/);
   assert.match(projectsRoute, /matched_installer_contact_release:/);
   assert.match(projectsRoute, /customer_project_contact_release_events/);
   assert.doesNotMatch(projectsRoute, /partner_note/);

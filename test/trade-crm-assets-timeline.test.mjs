@@ -38,7 +38,10 @@ test("the additive migration preserves handover provenance and requires installe
 });
 
 test("asset APIs are owner scoped and require explicit handover review", () => {
-  for (const boundary of ["requireFirebaseIdentity", "sameOrigin", "partner_type !== \"installer\"", "business_operations", "firebase_uid = ?"]) assert.match(route, new RegExp(boundary));
+  for (const boundary of ["requireVerifiedTradeAccess", "sameOrigin", "partnerTypes: \\[\"installer\"\\]", "business_operations", "firebase_uid = ?"]) {
+    assert.match(route, new RegExp(boundary));
+  }
+  assert.match(route, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.match(route, /action === "review_handover_asset"/);
   assert.match(route, /review_status = 'pending_review'/);
   assert.match(route, /review_status = 'confirmed'/);

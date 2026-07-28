@@ -16,7 +16,6 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { normalizeReferralCode } from "@/lib/direct-trade-referrals";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
 import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
@@ -91,7 +90,6 @@ export function DirectTradePartnerForm() {
   const [statusType, setStatusType] = useState<"" | "ok" | "err">("");
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
-  const [referralCode, setReferralCode] = useState("");
 
   useEffect(() => onAuthStateChanged(firebaseAuth, (nextUser) => {
     setUser(nextUser);
@@ -101,15 +99,6 @@ export function DirectTradePartnerForm() {
       setProfileSaved(false);
     }
   }), []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setReferralCode(normalizeReferralCode(
-        new URLSearchParams(window.location.search).get("ref"),
-      ));
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     if (!user || profileLoaded) return;
@@ -260,17 +249,15 @@ export function DirectTradePartnerForm() {
           contactName: name.trim(),
           phone: phone.trim(),
           consent: true,
-          referralCode,
         }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "Your business profile could not be saved.");
       setProfileSaved(true);
-      const referral = result.referral as { accepted?: boolean; message?: string } | null;
-      setStatusType(referral && referral.accepted === false ? "err" : "ok");
-      setStatus(referral?.message
-        ? `Your business profile is ready. ${referral.message}`
-        : "Your business profile is ready. Open the dashboard to review verification and opportunity readiness.");
+      setStatusType("ok");
+      setStatus(
+        "Your business profile has been submitted for review. Protected trade access remains locked until the ABN and required business evidence are approved.",
+      );
     } catch (error) {
       setStatusType("err");
       setStatus(error instanceof Error ? error.message : "Your business profile could not be saved. Please try again.");
@@ -281,9 +268,7 @@ export function DirectTradePartnerForm() {
 
   return <main className="wrap direct-trade-request-page">
     <TLinkHeader active="partners" />
-    <header className="direct-trade-request-hero trade-account-hero"><div><span>TLink trade accounts</span><h1>Join TLink and run more of your business in one place</h1><p>Create a free business profile, define where your team works and complete verification for A$0 access to the trade operating platform.</p><div className="trade-account-hero-links"><a className="direct-trade-hero-link" href="/direct-trade/standards">Read the marketplace and customer standards</a><a className="direct-trade-hero-link" href="/direct-trade/membership">See what is included for free</a></div></div><aside><strong>No card or subscription</strong><p>Verified trades receive CRM, jobs, scheduling, marketplace, team, field and purchasing tools. Matching follows capability, service coverage and availability.</p><span className="trade-trial-badge">Core access A$0</span></aside></header>
-
-    {referralCode && <section className="trade-referral-banner" role="status"><div><span>Referral recorded</span><strong>{referralCode}</strong></div><p>Core trade access is now free after verification. This historical referral code does not change access, ranking or opportunity priority.</p></section>}
+    <header className="direct-trade-request-hero trade-account-hero"><div><span>TLink trade accounts</span><h1>Join TLink and run more of your business in one place</h1><p>Create a free business profile, define where your team works and submit the required details for A$0 access to the trade operating platform.</p><div className="trade-account-hero-links"><a className="direct-trade-hero-link" href="/direct-trade/standards">Read the marketplace and customer standards</a><a className="direct-trade-hero-link" href="/direct-trade/access">See what is included for free</a></div></div><aside><strong>No payment details required</strong><p>Approved trades receive CRM, jobs, scheduling, marketplace, team, field and purchasing tools. Matching follows capability, service coverage and availability.</p><span className="trade-free-access-badge">Core access A$0</span></aside></header>
 
     {!authReady ? <section className="trade-auth-card trade-auth-loading" aria-live="polite"><span className="trade-auth-loader" aria-hidden="true" /><div><strong>Checking your secure sign-in</strong><p>Loading account options...</p></div></section> : !user ? <section className="trade-auth-card" aria-labelledby="trade-account-title">
       <div className="trade-auth-intro"><span>Step 1</span><h2 id="trade-account-title">Create your free TLink account</h2><p>Use Google for the quickest setup, or create an account with your business email.</p></div>
@@ -300,13 +285,13 @@ export function DirectTradePartnerForm() {
         </form>
         {authStatus && <p className="trade-auth-status" role="status">{authStatus}</p>}
       </div>
-      <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Installer or wholesaler-specific setup</li><li>No card, subscription or per-lead charge</li><li>Core workspace access after verification</li></ul></aside>
+      <aside className="trade-auth-benefits"><strong>Build the profile first</strong><ul><li>National service-area and capability profile</li><li>Installer or wholesaler-specific setup</li><li>No payment details or per-lead charge</li><li>Core workspace access after approval</li></ul></aside>
     </section> : <>
-      <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Profile ready" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Your dashboard is ready to review." : "Complete the business profile to prepare the dashboard."}</small></div><div className="trade-signed-in-actions">{profileSaved && <a href="/direct-trade/dashboard">Open dashboard</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></section>
+      <section className="trade-signed-in" aria-label="Signed in account"><div><span>{profileSaved ? "Profile submitted" : "Secure account connected"}</span><strong>{user.email}</strong><small>{profileSaved ? "Application status is available while trade access remains locked for review." : "Complete the business profile to begin review."}</small></div><div className="trade-signed-in-actions">{profileSaved && <a href="/direct-trade/dashboard">View application status</a>}<button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></div></section>
       <form className="direct-trade-brief" onSubmit={submitProfile} noValidate>
-        <section className="direct-trade-form-section" aria-labelledby="partner-type-title"><div className="direct-trade-form-heading"><span>Step 2</span><h2 id="partner-type-title">Set up the business profile</h2><p>Choose the role that best describes the business. An account can be created immediately, while work-specific evidence can be checked later.</p></div><div className="partner-type-grid"><label className={partnerType === "installer" ? "selected" : ""}><input type="radio" name="partner-type" checked={partnerType === "installer"} onChange={() => setPartnerType("installer")} /><span><strong>Licensed installer</strong><small>Install, commission and support household energy upgrades within your service areas.</small></span></label><label className={partnerType === "supplier" ? "selected" : ""}><input type="radio" name="partner-type" checked={partnerType === "supplier"} onChange={() => setPartnerType("supplier")} /><span><strong>Product supplier or wholesaler</strong><small>Support qualified trades with suitable products, warranty pathways and technical service.</small></span></label></div></section>
+        <section className="direct-trade-form-section" aria-labelledby="partner-type-title"><div className="direct-trade-form-heading"><span>Step 2</span><h2 id="partner-type-title">Set up the business profile</h2><p>Choose the role that best describes the business. The profile can be saved now, but protected access remains locked until the ABN and required evidence are reviewed and approved.</p></div><div className="partner-type-grid"><label className={partnerType === "installer" ? "selected" : ""}><input type="radio" name="partner-type" checked={partnerType === "installer"} onChange={() => setPartnerType("installer")} /><span><strong>Licensed installer</strong><small>Install, commission and support household energy upgrades within your service areas.</small></span></label><label className={partnerType === "supplier" ? "selected" : ""}><input type="radio" name="partner-type" checked={partnerType === "supplier"} onChange={() => setPartnerType("supplier")} /><span><strong>Product supplier or wholesaler</strong><small>Support qualified trades with suitable products, warranty pathways and technical service.</small></span></label></div></section>
         <section className="direct-trade-form-section" aria-labelledby="partner-business-title"><div className="direct-trade-form-heading"><span>Step 3</span><h2 id="partner-business-title">Where is the business based and what do you deliver?</h2><p>A business address is required for account integrity and verification. It remains private unless you later choose to publish or share it.</p></div><div className="direct-trade-field-grid trade-account-fields"><Field label="Business name"><input required type="text" value={businessName} onChange={(event) => setBusinessName(event.target.value)} autoComplete="organization" /></Field><Field label="ABN"><input required type="text" inputMode="numeric" pattern="[0-9]{11}" maxLength={11} value={abn} onChange={(event) => setAbn(event.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="11 digit ABN" /></Field><Field label="Business website" optional="optional"><input type="url" value={businessWebsite} onChange={(event) => setBusinessWebsite(event.target.value)} inputMode="url" placeholder="https://example.com.au" /></Field><Field label="Business street address"><input required type="text" value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} autoComplete="address-line1" /></Field><Field label="Suburb or locality"><input required type="text" value={suburb} onChange={(event) => setSuburb(event.target.value)} autoComplete="address-level2" /></Field><Field label="State or territory"><select required value={addressState} onChange={(event) => setAddressState(event.target.value)} autoComplete="address-level1"><option value="">Choose one</option>{states.map((value) => <option value={value} key={value}>{value}</option>)}</select></Field><Field label="Postcode"><input required type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} autoComplete="postal-code" /></Field></div><fieldset className="partner-check-group"><legend>States and territories served</legend><div className="partner-chip-grid">{states.map((value) => <label className={serviceStates.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={serviceStates.includes(value)} onChange={() => toggle(value, serviceStates, setServiceStates)} />{value}</label>)}</div></fieldset><fieldset className="partner-check-group"><legend>{partnerType === "installer" ? "Installation capabilities" : "Product categories"}</legend><div className="partner-category-grid">{categories.map(([value, label]) => <label className={selectedCategories.includes(value) ? "selected" : ""} key={value}><input type="checkbox" checked={selectedCategories.includes(value)} onChange={() => toggle(value, selectedCategories, setSelectedCategories)} />{label}</label>)}</div></fieldset><Field label={partnerType === "installer" ? "Capabilities and credential summary" : "Products, warranties and support summary"} optional="optional" hint="Maximum 800 characters. Do not upload or paste licence documents, identity records, customer lists, wholesale price files or confidential contracts."><textarea maxLength={800} rows={5} value={partnerNotes} onChange={(event) => setPartnerNotes(event.target.value)} /></Field></section>
-        <section className="direct-trade-form-section" aria-labelledby="partner-contact-title"><div className="direct-trade-form-heading"><span>Step 4</span><h2 id="partner-contact-title">Confirm the account contact</h2><p>This person receives account, profile, verification and suitable-opportunity communication.</p></div><div className="direct-trade-field-grid"><Field label="Contact name"><input required type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></Field><Field label="Account email"><input required type="email" value={user.email || ""} readOnly aria-readonly="true" /></Field><Field label="Business contact number"><input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field></div><label className="direct-trade-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree that Australian Energy Assessments, as the operator of TLink, may maintain this private business profile and contact me about account activity, verification and suitable opportunities. Account creation does not replace licensing, accreditation, insurance or scheme requirements.</span></label><button className="btn direct-trade-submit" disabled={sending}>{sending ? "Saving..." : profileSaved ? "Update business profile" : "Activate business profile"}</button>{status && <p className={`direct-trade-form-status ${statusType}`} role="status">{status}</p>}</section>
+        <section className="direct-trade-form-section" aria-labelledby="partner-contact-title"><div className="direct-trade-form-heading"><span>Step 4</span><h2 id="partner-contact-title">Confirm the account contact</h2><p>This person receives account, profile, verification and suitable-opportunity communication.</p></div><div className="direct-trade-field-grid"><Field label="Contact name"><input required type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></Field><Field label="Account email"><input required type="email" value={user.email || ""} readOnly aria-readonly="true" /></Field><Field label="Business contact number"><input required type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field></div><label className="direct-trade-consent"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree that Australian Energy Assessments, as the operator of TLink, may maintain this private business profile and contact me about account activity, verification and suitable opportunities. Account creation does not replace licensing, accreditation, insurance or scheme requirements.</span></label><button className="btn direct-trade-submit" disabled={sending}>{sending ? "Saving..." : profileSaved ? "Update business profile" : "Submit business profile for review"}</button>{status && <p className={`direct-trade-form-status ${statusType}`} role="status">{status}</p>}</section>
       </form>
     </>}
     <SiteFooter>TLink is operated by Australian Energy Assessments. Creating an account does not replace trade licensing, government accreditation, scheme approval, insurance, product compliance or each participant&apos;s customer obligations.</SiteFooter>

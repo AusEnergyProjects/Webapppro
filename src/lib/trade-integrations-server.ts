@@ -1,9 +1,7 @@
 import { env } from "cloudflare:workers";
-import { getD1 } from "../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
-import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { requireVerifiedTradeAccess } from "@/lib/trade-access-server";
 
-export const INTEGRATION_PROVIDERS = ["xero", "myob", "quickbooks", "stripe", "square", "google_calendar", "microsoft_calendar"] as const;
+export const INTEGRATION_PROVIDERS = ["xero", "myob", "quickbooks", "google_calendar", "microsoft_calendar"] as const;
 export type IntegrationProvider = typeof INTEGRATION_PROVIDERS[number];
 
 type ProviderSetting = {
@@ -25,14 +23,6 @@ type IntegrationEnvironment = {
   MYOB_CLIENT_SECRET?: string;
   QUICKBOOKS_CLIENT_ID?: string;
   QUICKBOOKS_CLIENT_SECRET?: string;
-  STRIPE_CONNECT_CLIENT_ID?: string;
-  STRIPE_CONNECT_SECRET_KEY?: string;
-  STRIPE_CONNECT_WEBHOOK_SECRET?: string;
-  SQUARE_APPLICATION_ID?: string;
-  SQUARE_APPLICATION_SECRET?: string;
-  SQUARE_ENVIRONMENT?: string;
-  SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
-  SQUARE_WEBHOOK_NOTIFICATION_URL?: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
   MICROSOFT_CALENDAR_CLIENT_ID?: string;
@@ -49,7 +39,6 @@ export function isIntegrationProvider(value: string): value is IntegrationProvid
 
 export function providerSetting(provider: IntegrationProvider): ProviderSetting {
   const values = integrationEnvironment();
-  const squareSandbox = values.SQUARE_ENVIRONMENT === "sandbox";
   if (provider === "xero") return {
     provider, label: "Xero", purpose: "Accounting and invoice sync", clientId: values.XERO_CLIENT_ID || "",
     clientSecret: values.XERO_CLIENT_SECRET || "", authorizeUrl: "https://login.xero.com/identity/connect/authorize",
@@ -66,18 +55,6 @@ export function providerSetting(provider: IntegrationProvider): ProviderSetting 
     provider, label: "QuickBooks", purpose: "Accounting and invoice sync", clientId: values.QUICKBOOKS_CLIENT_ID || "",
     clientSecret: values.QUICKBOOKS_CLIENT_SECRET || "", authorizeUrl: "https://appcenter.intuit.com/connect/oauth2",
     tokenUrl: "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", scopes: ["com.intuit.quickbooks.accounting"],
-  };
-  if (provider === "stripe") return {
-    provider, label: "Stripe", purpose: "Secure customer payment requests", clientId: values.STRIPE_CONNECT_CLIENT_ID || "",
-    clientSecret: values.STRIPE_CONNECT_SECRET_KEY || "", authorizeUrl: "https://connect.stripe.com/oauth/authorize",
-    tokenUrl: "https://connect.stripe.com/oauth/token", scopes: ["read_write"],
-  };
-  if (provider === "square") return {
-    provider, label: "Square", purpose: "Secure customer payment requests", clientId: values.SQUARE_APPLICATION_ID || "",
-    clientSecret: values.SQUARE_APPLICATION_SECRET || "",
-    authorizeUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/authorize" : "https://connect.squareup.com/oauth2/authorize",
-    tokenUrl: squareSandbox ? "https://connect.squareupsandbox.com/oauth2/token" : "https://connect.squareup.com/oauth2/token",
-    scopes: ["MERCHANT_PROFILE_READ", "ORDERS_READ", "ORDERS_WRITE", "PAYMENTS_READ", "PAYMENTS_WRITE"],
   };
   if (provider === "google_calendar") return {
     provider, label: "Google Calendar", purpose: "One-way TLink appointment sync",
@@ -99,21 +76,17 @@ export function providerConfigured(provider: IntegrationProvider) {
   const setting = providerSetting(provider);
   const baseReady = Boolean(setting.clientId && setting.clientSecret && values.CRM_INTEGRATION_ENCRYPTION_KEY);
   if (!baseReady) return false;
-  if (provider === "stripe") return Boolean(values.STRIPE_CONNECT_WEBHOOK_SECRET);
-  if (provider === "square") return Boolean(values.SQUARE_WEBHOOK_SIGNATURE_KEY && values.SQUARE_WEBHOOK_NOTIFICATION_URL);
   return true;
 }
 
 export async function requireInstallerOperations(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, billing_status, business_name
-    FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  if (account.partner_type !== "installer") throw new Error("INSTALLER_ONLY");
-  const entitlements = await accountEntitlements(identity.uid, "installer", account.billing_status);
-  if (!entitlements.features.business_operations) throw new Error("FULL_ACCESS_REQUIRED");
-  return { uid: identity.uid, businessName: String(account.business_name || "Trade business") };
+  const access = await requireVerifiedTradeAccess(request, {
+    partnerTypes: ["installer"],
+  });
+  return {
+    uid: access.identity.uid,
+    businessName: access.businessName || "Trade business",
+  };
 }
 
 export function integrationCallbackUri(request: Request, provider: IntegrationProvider) {

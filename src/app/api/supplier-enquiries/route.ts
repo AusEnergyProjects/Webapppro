@@ -1,23 +1,26 @@
 import { getD1 } from "../../../../db";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 
 const STATUSES = new Set(["new", "viewed", "responded", "closed"]);
 
 async function supplierIdentity(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare("SELECT partner_type, account_status, business_name FROM trade_accounts WHERE firebase_uid = ?")
-    .bind(identity.uid).first<Record<string, unknown>>();
-  if (!account) throw new Error("PROFILE_REQUIRED");
-  if (account.partner_type !== "supplier") throw new Error("SUPPLIER_REQUIRED");
-  if (account.account_status !== "active") throw new Error("ACCOUNT_INACTIVE");
-  return { ...identity, businessName: String(account.business_name || "Wholesaler") };
+  const access = await requireVerifiedTradeAccess(request, {
+    partnerTypes: ["supplier"],
+  });
+  return {
+    ...access.identity,
+    businessName: access.businessName || "Wholesaler",
+  };
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeAccessError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the wholesaler profile first." }, 404);

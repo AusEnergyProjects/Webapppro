@@ -14,8 +14,8 @@ const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
 function formError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (code === "TEAM_MEMBERSHIP_REQUIRED") return adminJson({ ok: false, error: "No active installer team membership was found." }, 404);
-  if (code === "FULL_ACCESS_REQUIRED" || code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field forms require paid installer operations access." }, 403);
+  if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
+  if (code === "FULL_ACCESS_REQUIRED" || code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field forms require approved installer access." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Field forms are available to installer accounts." }, 403);
   if (code === "JOB_NOT_FOUND" || code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not available to your account." }, 404);
@@ -63,7 +63,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
 }
 
 async function accessAndJob(request: Request, workOrderId: string) {
-  const access = await requireInstallerTeamAccess(request, false);
+  const access = await requireInstallerTeamAccess(request);
   const job = await assignedJob(access, workOrderId);
   return { access, job };
 }

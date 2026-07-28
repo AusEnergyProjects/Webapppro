@@ -154,8 +154,8 @@ export async function POST(request: Request) {
     await getD1().prepare(`
       UPDATE trade_accounts
       SET verification_status = CASE
-        WHEN verification_status IN ('approved', 'submitted') THEN verification_status
-        ELSE 'evidence_started'
+        WHEN verification_status = 'approved' THEN verification_status
+        ELSE 'under_review'
       END, updated_at = ?
       WHERE firebase_uid = ?
     `).bind(now, identity.uid).run();
@@ -203,8 +203,8 @@ export async function DELETE(request: Request) {
     await getD1().prepare(`
       UPDATE trade_accounts
       SET verification_status = CASE
-        WHEN verification_status IN ('approved', 'submitted') THEN verification_status
-        ELSE 'not_started'
+        WHEN verification_status = 'approved' THEN verification_status
+        ELSE 'submitted'
       END, updated_at = ?
       WHERE firebase_uid = ?
     `).bind(new Date().toISOString(), identity.uid).run();

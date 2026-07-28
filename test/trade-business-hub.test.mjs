@@ -36,7 +36,9 @@ test("Business Hub deliberately excludes household contact fields", () => {
 });
 
 test("every Business Hub read and write is authenticated, same-origin and owner scoped", () => {
-  assert.match(route, /requireFirebaseIdentity/);
+  assert.match(route, /requireVerifiedTradeAccess/);
+  assert.match(route, /partnerTypes: \["installer", "supplier"\]/);
+  assert.match(route, /TradeAccessError/);
   assert.match(route, /sameOrigin\(request\)/);
   assert.match(route, /WHERE firebase_uid = \?/);
   assert.match(route, /WHERE id = \? AND firebase_uid = \?/);
@@ -52,7 +54,7 @@ test("verified trade access and team access are enforced server side", () => {
   assert.match(route, /FULL_ACCESS_REQUIRED/);
   assert.match(route, /TEAM_ACCESS_REQUIRED/);
   assert.match(hub, /Verified trade access/);
-  assert.match(hub, /No card or subscription is required/);
+  assert.match(hub, /No payment details are required/);
   assert.match(dashboard, /Core trade operations cost A\$0/);
 });
 

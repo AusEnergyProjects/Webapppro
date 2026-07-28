@@ -17,7 +17,7 @@ type ResolvedGroup = Awaited<ReturnType<typeof resolveLineGroup>>;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 async function installerAccess(request: Request) {
-  const access = await requireInstallerTeamAccess(request, false);
+  const access = await requireInstallerTeamAccess(request);
   if (!canDispatch(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
   return access;
 }
@@ -25,7 +25,7 @@ async function installerAccess(request: Request) {
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_MEMBERSHIP_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
+  if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
   if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can prepare customer quotes." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose a direct customer job with an authoritative service site." }, 404);
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);

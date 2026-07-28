@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -8,17 +8,23 @@ const TYPES = new Set(["head_office", "warehouse", "dispatch", "showroom"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 
 async function supplier(request: Request) {
-  const identity = await requireFirebaseIdentity(request);
-  const account = await getD1().prepare(`SELECT partner_type, account_status, verification_status FROM trade_accounts WHERE firebase_uid = ?`).bind(identity.uid).first<Row>();
-  if (!account || account.partner_type !== "supplier" || account.account_status !== "active" || account.verification_status !== "approved") throw new Error("SUPPLIER_REQUIRED");
-  return identity.uid;
+  return (await requireVerifiedTradeAccess(request, {
+    partnerTypes: ["supplier"],
+  })).identity.uid;
+}
+
+function accessError(error: unknown) {
+  if (error instanceof TradeAccessError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  }
+  return adminJson({ ok: false, error: "The wholesaler location request could not be completed." }, 500);
 }
 const json = (row: Row) => ({ id: row.id, locationName: row.location_name, locationType: row.location_type, addressLine1: row.address_line_1, suburb: row.suburb, addressState: row.address_state, postcode: row.postcode, salesEmail: row.sales_email, contactNumber: row.contact_number, dispatchNotes: row.dispatch_notes, serviceStates: (() => { try { const value = JSON.parse(String(row.service_states_json)); return Array.isArray(value) ? value : []; } catch { return []; } })() });
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try { const uid = await supplier(request); const rows = await getD1().prepare(`SELECT * FROM trade_supplier_locations WHERE firebase_uid = ? AND record_status = 'active' ORDER BY location_type = 'head_office' DESC, location_name`).bind(uid).all<Row>(); return adminJson({ ok: true, locations: rows.results.map(json) }); }
-  catch { return adminJson({ ok: false, error: "Verified wholesaler access is required." }, 403); }
+  catch (error) { return accessError(error); }
 }
 
 export async function POST(request: Request) {
@@ -34,5 +40,8 @@ export async function POST(request: Request) {
     if (id) await getD1().prepare(`UPDATE trade_supplier_locations SET location_name = ?, location_type = ?, address_line_1 = ?, suburb = ?, address_state = ?, postcode = ?, sales_email = ?, contact_number = ?, dispatch_notes = ?, service_states_json = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(name, type, address, suburb, state, postcode, salesEmail, phone, notes, JSON.stringify(serviceStates), now, id, uid).run();
     else await getD1().prepare(`INSERT INTO trade_supplier_locations (id, firebase_uid, location_name, location_type, address_line_1, suburb, address_state, postcode, sales_email, contact_number, dispatch_notes, service_states_json, record_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).bind(crypto.randomUUID(), uid, name, type, address, suburb, state, postcode, salesEmail, phone, notes, JSON.stringify(serviceStates), now, now).run();
     return GET(request);
-  } catch (error) { return adminJson({ ok: false, error: error instanceof Error && error.message.includes("UNIQUE") ? "Use a unique location name." : "The wholesaler location could not be saved." }, 409); }
+  } catch (error) {
+    if (error instanceof TradeAccessError) return accessError(error);
+    return adminJson({ ok: false, error: error instanceof Error && error.message.includes("UNIQUE") ? "Use a unique location name." : "The wholesaler location could not be saved." }, 409);
+  }
 }

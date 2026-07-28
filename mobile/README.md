@@ -6,7 +6,7 @@ AEA Field is the native iOS and Android technician app for the Australian Energy
 
 - Firebase email and password authentication, password reset and a configuration-ready Google sign-in path.
 - Registered installation-specific devices with app-version enforcement, native push tokens and owner-controlled revocation.
-- Assigned-job bootstrap and delta sync through contract version 2.
+- Assigned-job bootstrap and delta sync through contract version 3.
 - SQLCipher-encrypted job, action, conflict and upload metadata.
 - AES-256-GCM encrypted 5 MB photo and document chunks, with the key held in the device secure store.
 - Offline job stages, checklist updates and time entries with stable action IDs, safe replay and conflict review.

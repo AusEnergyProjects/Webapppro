@@ -840,19 +840,19 @@ export function SupplierCatalogueWorkspace({
       {catalogueView === "overview" && <>
       <section className={`dashboard-visibility-banner ${marketplaceVisible ? "is-live" : "is-locked"}`}>
         <div>
-          <span>{marketplaceVisible ? "Marketplace live" : "Free account"}</span>
+          <span>{marketplaceVisible ? "Marketplace live" : "Verification required"}</span>
           <h2>
             {marketplaceVisible
-              ? "Approved products can be selected by installer members"
+              ? "Approved products can be selected by verified installers"
               : "Your catalogue is private while you prepare it"}
           </h2>
           <p>
             {marketplaceVisible
               ? "Keep prices, stock and lead times current so installers can make reliable product choices."
-              : "You can create your profile and build product listings for free. Until paid visibility or an admin grant is active, every product remains invisible in the installer selection dashboard."}
+              : "You can create the profile and prepare product listings at no cost. Products remain private until the business and each listing are approved."}
           </p>
         </div>
-        <a href="#membership">{marketplaceVisible ? "Manage access" : "Unlock marketplace visibility"}</a>
+        <a href="/direct-trade/dashboard/verification">{marketplaceVisible ? "Review verification" : "Complete verification"}</a>
       </section>
 
       <section className="supplier-overview-actions" aria-label="Catalogue next actions">
@@ -878,7 +878,7 @@ export function SupplierCatalogueWorkspace({
           <span>Installer demand inbox</span>
           <h2 id="supplier-enquiry-title">Product selection enquiries</h2>
           <p>
-            Paid installers can send model-level quantities from their project lists.
+            Approved installers can send model-level quantities from their project lists.
             This inbox contains installer business details and commercial scope only,
             with no household names, street addresses or customer contact details.
           </p>
@@ -1019,18 +1019,18 @@ export function SupplierCatalogueWorkspace({
           </div> : (
             <div className="supplier-bulk-import is-locked">
               <div>
-                <strong>Bulk catalogue import is locked</strong>
+                <strong>Verification is required for bulk import</strong>
                 <span>
-                  Individual product creation stays free. Paid membership or an
-                  administrator grant unlocks CSV import for larger catalogues.
+                  Prepare individual listings now, then complete business
+                  verification to use CSV import for larger catalogues.
                 </span>
               </div>
-              <a href="#membership">Unlock bulk tools</a>
+              <a href="/direct-trade/dashboard/verification">Complete verification</a>
             </div>
           )}
           {hasAnalytics && (
             <div className="supplier-analytics-note">
-              <strong>Advanced analytics enabled</strong>
+              <strong>Catalogue reporting enabled</strong>
               <span>Demand and catalogue performance reporting is active for this account.</span>
             </div>
           )}

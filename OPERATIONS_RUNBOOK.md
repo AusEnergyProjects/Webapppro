@@ -30,11 +30,11 @@ Run `setupOperationalMonitoring` once after deploying the Apps Script source. It
 
 ## Operations inbox and off-screen delivery
 
-The Sites application keeps a durable administrator notification and delivery ledger in D1. Actionable, high and urgent events are queued automatically. This includes customer enquiries, trade responses, approval work, verified billing problems, comparison-enquiry delivery failures and administrator access changes.
+The Sites application keeps a durable administrator notification and delivery ledger in D1. Actionable, high and urgent events are queued automatically. This includes customer enquiries, trade responses, business-verification review, comparison-enquiry delivery failures and administrator access changes.
 
 By default the application reuses the existing Google Apps Script endpoint in `AEA_LEAD_WEBHOOK_URL`. It signs each alert with the same protected `AEA_LEAD_WEBHOOK_TEST_TOKEN` already stored in Sites and Apps Script project properties. Apps Script accepts only a valid HMAC-SHA256 signature created within the previous ten minutes, validates the privacy-safe payload, deduplicates retries by notification ID and emails `info@ausenergyassessments.com`.
 
-The protected administrator email contains the operational title, summary, priority, category, creation time and a link to the protected control centre. It does not expose customer contact details. The existing Google Workspace account provides this route without an additional alerting subscription.
+The protected administrator email contains the operational title, summary, priority, category, creation time and a link to the protected control centre. It does not expose customer contact details. The existing Google Workspace account provides this route without an additional alert provider.
 
 To override Google Workspace with an independent private operations channel, configure:
 
@@ -119,5 +119,3 @@ Before updating the Apps Script deployment:
 4. Create a new Apps Script deployment version rather than relying on saved editor source alone.
 5. Send the built-in privacy-safe administrator test alert and confirm one Gmail message is received.
 6. Run only the privacy-safe operational check after deployment. Do not submit a real customer lead as a health check.
-
-The older Netlify scheduled implementation remains in the repository for its inactive deployment target. It must not be enabled or deployed without explicit Netlify approval.
