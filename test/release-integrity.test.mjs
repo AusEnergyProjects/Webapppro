@@ -76,11 +76,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(releaseTruth, /## Customer home advisor release/);
+  assert.match(releaseTruth, /## Advisor context and admin stability release/);
   assert.match(roadmap, /contains only approved forward work and measurable gates/);
-  assert.match(roadmap, /## Released milestone: CUSTOMER-HOME-ADVISOR-01/);
+  assert.match(roadmap, /## Released milestone: CUSTOMER-ADVISOR-CONTEXT-02/);
   assert.match(handover, /Status: released milestone with the next recommendation recorded below/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-HOME-ADVISOR-01`/);
+  assert.match(handover, /Milestone ID: `CUSTOMER-ADVISOR-CONTEXT-02`/);
+  assert.match(roadmap, /1\. \*\*Household and assessor usability pilot:/);
+  assert.match(handover, /1\. \*\*Household and assessor usability pilot:/);
+  assert.doesNotMatch(roadmap, /1\. \*\*Evidence confidence and provenance:/);
+  assert.doesNotMatch(handover, /1\. \*\*Evidence confidence and provenance:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

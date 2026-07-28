@@ -22,10 +22,13 @@ This is the only current implementation and release-status document. The [dated 
 | Pre-advisor repository and production baseline | `01a8d09022b086c771c938960efa8d9a333542d3` | Documentation-only child of the application source; pushed to GitHub and live as Sites version 203 |
 | Pre-advisor Sites deployment | Sites version 203 at `https://compare.ausenergyassessments.com` | Historical pre-change production identity |
 | Customer home advisor application source | `53e6cf96aff6f48e9e393a23c4eedbeba997eb39` | Validated on the exact clean commit and pushed to GitHub and Sites managed `main` |
-| Current production application | Sites version 204 from `53e6cf96aff6f48e9e393a23c4eedbeba997eb39` at `https://compare.ausenergyassessments.com` | Saved-version provenance, public deployment, environment revision 19 and live checks verified on 29 July 2026 |
+| Customer home advisor production application | Sites version 204 from `53e6cf96aff6f48e9e393a23c4eedbeba997eb39` | Historical customer-home-advisor release |
+| Pre-context documentation checkpoint | `0a82a992e162087eb5ac76b4227dee3a505eae5b` | Documentation-only child of the home-advisor application; pushed to GitHub and live as Sites version 205 before this milestone |
+| Advisor context and admin stability application source | `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 206 |
+| Current executable application identity | Sites version 206 from `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a68ff2f45d08191aec1274c14168407`; saved-version provenance, public deployment, environment revision 19 and signed-in live checks verified on 29 July 2026 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup and customer home advisor are production. Sites version 204 is the exact customer-advisor application source. Public health and the preparation guide return `200`, the retired Home records route returns `404`, and recent production worker-error logs are empty. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`. No real signed-in account was used or fabricated, so an end-to-end approved-account journey remains unverified.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor and advisor-context release are production. Sites version 206 is the exact executable advisor-context and administrator-stability application source. A later documentation-only Sites checkpoint may package those unchanged application bits; it is an operational publication checkpoint, not a new application identity, and its exact source, saved version and deployment remain provider-record evidence. Public health, the preparation guide, signed-out project entry and administrator shell return `200`. Existing signed-in working-demo customer and owner sessions were used for bounded live verification; no real or new account was created. One demo notification changed from unread to read while proving the repaired audited-refresh behavior. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
 
 ## Current product model
 
@@ -72,6 +75,33 @@ The project intake now:
 
 The flow is not a NatHERS assessment, certificate, formal evidence workflow, quote or savings promise. Forward migration `0081_customer_project_advisor.sql` adds and backfills the multi-goal projection, resets retired demo budgets, converts the old combined fabric category across matching and operational records, preserves complete matched-category lists through protected CRM enquiries and work orders, separates legacy strata approval from tenure, forces ambiguous legacy tenure back to an unanswered owner-or-renter choice, removes household occupancy from project context and anonymises stored evidence filenames without rewriting applied history.
 
+## Advisor context and admin stability release
+
+`CUSTOMER-ADVISOR-CONTEXT-02` is deployed from exact application commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`, first saved and published as Sites version 206.
+
+The administrator correction is intentionally narrow. Opening an unread notification case previously triggered an audited read update whose refresh could reorder the queue and collapse or move the active case. The current implementation pins that active case at its prior visible index during background refresh, restores its viewport anchor and preserves deliberate close or resolve behavior. A manual queue, search, category, priority, status, assignee or action-only change resets the pin so an out-of-filter case does not remain visible.
+
+The household advisor now:
+
+- records each important controlled fact as not known, customer reported, photo available for review or document available for review;
+- states that those source labels do not prove a file is attached, linked to the fact, professionally reviewed or verified;
+- derives a broad planning profile only from a valid residential postcode and matching state;
+- labels that profile as an approximate planning aid, not a NatHERS climate zone, rating, assessment, equipment-size calculation or savings estimate;
+- adjusts safe shading or building-shell sequencing from that bounded climate profile;
+- accepts up to twelve private room profiles with controlled room types, comfort concerns and use periods;
+- correlates heat, cold and time within the same room before changing advice;
+- keeps private room names and routines out of generated wording and installer opportunities;
+- puts renter-portable actions before permission-dependent fixed work;
+- builds a maximum-thirty-item permission checklist from tenure, strata context, the current plan, evidence gaps and controlled customer classifications;
+- separates portable options, owner or agent questions, strata or shared-property questions, licensed or site checks, and evidence questions into five previewable sections;
+- retains every authoritative licensed or site-check rule even when a customer selects another classification;
+- keeps arbitrary customer titles, identifiers and note wording inside the signed-in project and replaces them with controlled reminders in the shareable checklist; and
+- states that the checklist is not legal advice and does not grant or confirm permission.
+
+Only controlled broad climate, room-type and comfort-concern aggregates, and known or unknown evidence counts can enter an installer opportunity. Exact postcode remains available only at the protected matching boundary and is returned as an empty value to installers before the existing contact-release workflow. Private room names, use periods, permission titles, permission notes and project-private notes are excluded.
+
+Forward migration `0082_customer_advisor_profile.sql` adds `customer_projects.advisor_profile` as additive JSON text with default `{}`. The server owns normalization and climate derivation. The current plan version is `2026-07-29-evidence-climate-advisor`; the prior `2026-07-29-home-advisor` version remains a safe legacy regeneration input through the existing edited-plan conflict boundary.
+
 ## Local validation evidence
 
 The last complete shared-worktree validation was recorded before the release was split into compatible expansion, application activation and contract cleanup:
@@ -85,7 +115,13 @@ The exact expansion commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` passed `np
 
 Exact application commit `53e6cf96aff6f48e9e393a23c4eedbeba997eb39` passes 174 of 174 integrated focused customer-project, quote-preparation, capability-matching, consent, compatibility, operational-category and Home-record retirement tests. The complete `npm.cmd run validate` gate passes on that clean commit: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. `git diff --check` also passes. Desktop and 375-pixel browser checks confirm the redesigned Home, Goals, Plan, Work and Privacy stages, accurate progress, no preselected goal, explicit preservation or refresh of an edited plan, one evidence-upload boundary, action-local validation, the separate preparation guide and no mobile horizontal overflow. Sites version 204 has matching saved-source provenance; public health, the new guide and signed-out project entry return `200`, the retired Home records route returns `404`, and the recent worker-error query returns zero events.
 
-The external link audit is not green: 166 of 169 destinations were reachable or accepted, 14 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
+Exact application commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77` passes 38 of 38 focused advisor and administrator stability tests. The complete `npm.cmd run validate` gate passes on the exact release source: type checking, warning-free lint, 32 of 32 integration tests, the full 770-test suite with 768 passed and 2 intentionally skipped, all 83 migrations against fresh SQLite and Cloudflare D1 paths, and the Vinext production build. `git diff --check` passes. An independent final review found and closed two pre-release safety defects: customer classifications can no longer replace an authoritative site-check rule, and room concerns can no longer combine with the use period of another room. A malicious permission-title, identifier and note regression proves that arbitrary private wording is not copied into the shareable checklist.
+
+Desktop visual inspection confirmed readable project-guide contrast. A 390 by 844 computed responsive check reported a 390-pixel viewport, 375-pixel root content width and no horizontal overflow. Signed-in working-demo customer verification confirmed five directly selectable steps, multiple goals, explicit source labels, room profiles, broad climate wording, editable linked plan steps and the five-section permission preview. Signed-in owner verification opened the first unread demo notification; after the audited read update removed its `Mark read` action, the record still had one `Close case` control, remained expanded and retained its first visible position. Public health, guide, signed-out customer route and administrator shell returned `200`. Sites version 206 has matching saved-source provenance and environment revision 19.
+
+The post-release Sites error-only query returned three informational canceled `/api/electricity-plans` health-monitor invocations and no exception message attributable to the newly checked release routes. This does not prove an end-to-end electricity-plan provider result and remains an operational monitor observation. No real account was created or used.
+
+The 29 July 2026 `npm.cmd run audit:links` result is not green: 166 of 169 destinations were reachable or accepted, 16 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
 
 The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Existing field-pilot recruitment code remains an inactive future workflow and was not activated or populated by this release. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. Deployed forward contract migration `0080_retire_legacy_trade_commercial_data.sql` uses that explicit authorisation to remove only retired commercial fields, tables and Stripe/Square integration rows after the reviewed-ABN application became live. Its preservation test retains account identities, jobs, quotes, invoices, accounting, calendar and ABN review records. Sites environment revision 19 contains zero Stripe or Square keys after the 16 observed retired keys were removed. Deployment and worker-log evidence is clean, but independent direct querying of the managed live D1 schema and rows remains unavailable; external provider registrations also remain unknown.
 
@@ -104,7 +140,7 @@ The last verified deployed topology remains:
 
 Logical binding access does not prove independent ownership of a Cloudflare account or resource. Ownership, complete export, off-platform backup, point-in-time recovery, transfer and workspace-loss behavior remain unproved.
 
-## Verified deployed capability at the audit baseline
+## Verified deployed capability lineage
 
 The 21 July audit reconciled these capability groups to deployed source:
 
@@ -114,7 +150,8 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Installer CRM, customers, sites, assets, jobs, scheduling, quotes, invoices, field work, handover and team workflows.
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
-- Sites version 204 free reviewed-ABN application, contract cleanup, customer home advisor and current release documentation, including the earlier owner Database Console.
+
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context and administrator notification stability. Those capabilities are live in Sites version 206 alongside the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 

@@ -4,146 +4,180 @@ Status: released milestone with the next recommendation recorded below
 
 Prepared: 29 July 2026
 
-Milestone ID: `CUSTOMER-HOME-ADVISOR-01`
+Milestone ID: `CUSTOMER-ADVISOR-CONTEXT-02`
 
-Implementation baseline: `01a8d09022b086c771c938960efa8d9a333542d3`
+Implementation baseline: `0a82a992e162087eb5ac76b4227dee3a505eae5b`
 
-Deployed application before this milestone: Sites version 203 from `01a8d09022b086c771c938960efa8d9a333542d3`
+Deployed application before this milestone: Sites version 205 from `0a82a992e162087eb5ac76b4227dee3a505eae5b`
 
-Released application: `53e6cf96aff6f48e9e393a23c4eedbeba997eb39`, live as Sites version 204
+Released application: `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`, first deployed as Sites version 206
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns the approved sequence.
+Production URL: `https://compare.ausenergyassessments.com`
+
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. A later documentation-only Sites checkpoint does not become a new executable application release: application identity remains commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`, Sites version 206 and deployment `appgdep_6a68ff2f45d08191aec1274c14168407`; the Sites saved-version record owns the exact publication identity of any documentation-only child.
 
 ## Milestone outcome
 
-Replace the overcomplicated household-project intake with a clear, private and evidence-led home-energy planning flow. The customer can state several goals, identify what they know, review and edit an independent starting plan, and prepare a safe quote scope without being pushed toward a product, brand or installer.
+The administrator notification inbox now keeps an expanded case open and at its prior visible position when the automatic audited read-state update refreshes and reorders the queue.
 
-The dedicated customer Home records tab and ownership-centre page are retired. Durable completed-project handovers, warranties, corrections, consent events and administrator governance remain because they protect historical work integrity; they are no longer presented as a separate empty customer workspace.
+The household project builder also completes the next four advisor priorities:
+
+1. controlled evidence-source confidence and provenance;
+2. postcode and state based broad climate sequencing;
+3. room-by-room comfort evidence that changes advice only when the concern and use period belong to the same room; and
+4. a renter, owner and strata permission checklist derived from tenure, approval context, the current plan and remaining evidence questions.
+
+The result remains an independent, brand-agnostic planning workflow. It is not a NatHERS assessment, legal permission decision, quote, fixed-price estimate or savings promise.
 
 ## User outcomes
 
-- A customer begins with whether they own or rent, then records strata or common-property approval separately because tenure and approval authority are independent.
-- A customer can choose every relevant goal instead of being forced to name one main goal.
-- Detailed but optional home facts cover comfort, glazing, window coverings, insulation, draughts, ventilation, heating, cooling, hot water, cooking, solar, storage and transport.
-- `Not sure` is a valid answer and help text explains unfamiliar property questions without requiring unsafe inspection.
-- A broad budget band affects sequencing without promising that an upgrade fits a fixed market price.
-- The starting plan is independent guidance, not a NatHERS certificate, quote, product endorsement or savings promise.
-- Every plan step can be reviewed through its link, removed, reordered by drag or accessible arrow controls, or supplemented with a private custom item.
-- Quote preparation separates draught-proofing, insulation, glazing, and blinds, shutters or external shading.
-- One upload control explains which safe, privacy-conscious photos and documents can improve remote quoting.
-- Private notes are visibly editable and never shared with trades.
-- Validation guidance appears beside the action the customer selected.
+- An administrator can open an unread case without the case collapsing or jumping away when the read update completes.
+- Explicit close and resolve remain deliberate actions.
+- A deliberate queue, search, category, priority, status or assignee change resets the open-case boundary instead of keeping an out-of-filter record visible.
+- A household can label each important controlled fact as not known, customer reported, photo available for review or document available for review.
+- Evidence labels describe the available source only. They do not claim that a file is attached to the fact, professionally reviewed or verified.
+- A valid matching postcode and state produce a broad planning profile that can change whether shading or building-shell investigation appears first.
+- Invalid, non-residential or postcode/state-mismatched input produces no climate profile.
+- A household can add up to twelve private room profiles using controlled room types, concerns and use periods.
+- Same-room hot daytime evidence can lead with shade and solar control. Same-room cold overnight evidence can lead with safe draught and insulation investigation.
+- Private room names and routines do not enter the installer opportunity.
+- Renter-portable and reversible actions appear before permission-dependent fixed work.
+- The customer can build and preview a five-section property-permission checklist before downloading it.
+- A customer-selected permission class cannot remove a mandatory licensed trade or site check.
+- Arbitrary permission titles, identifiers and note wording remain inside the signed-in project. The shareable checklist uses controlled text and private-note reminders.
+- Every generated evidence, climate and room step links to a plain-language explanation.
 
 ## In scope
 
-- Retire `/account/assets`, its dedicated component, customer navigation entry and obsolete route references.
-- Keep the five project stages directly selectable so customers can preview what will be needed.
-- Persist multiple goals while preserving the singular legacy goal projection for older rows and consumers.
-- Add owner/renter tenure and separate strata/common-property approval guidance using neutral descriptions.
-- Add ten goal choices, twenty-one home-condition inputs and four budget states.
-- Generate a staged plan from controlled goals and home facts.
-- Persist an ordered, removable and sanitized customer plan snapshot with bounded custom items.
-- Keep touch, keyboard and screen-reader plan ordering available alongside drag and drop.
-- Remove the household access-routine question from quote preparation and installer summaries.
-- Split building-fabric work into first-class draught-proofing, insulation, glazing and window-covering categories across installer capability matching and accepted-work handoff.
-- Consolidate property evidence into one upload area for JPEG, PNG, WebP and PDF files.
-- Persist explicit installer-evidence sharing consent, withhold unconsented files and replace customer-authored filenames with generic evidence names before installer delivery.
-- Provide safe-photo and privacy guidance for switchboards, hot water, equipment, windows, shading, draughts, vents, roof access, satellite imagery and redacted energy-use evidence.
-- Add forward migration `0081_customer_project_advisor.sql` to backfill goals, retire demo budget bands and the combined fabric category across operational records, preserve all matched categories through CRM and work orders, separate legacy strata approval from tenure, force ambiguous legacy tenure back to an unanswered choice, remove occupancy and anonymise stored evidence filenames.
-- Update current tests, roadmap, handover and release truth.
+- Stabilise the expanded case in `AdminNotificationInbox` across audited background refreshes.
+- Add a small pure state helper for queue pinning and explicit reset semantics.
+- Add regression tests for reordering, filter-boundary updates, unavailable cases and deliberate filter changes.
+- Add `customer_projects.advisor_profile` as additive JSON text through `0082_customer_advisor_profile.sql`.
+- Persist and hydrate the advisor profile through create, update, list and duplicate project paths.
+- Add server normalization for evidence sources, climate, rooms and permission items.
+- Keep a maximum of twelve rooms, sixty characters per private room name and controlled values for room type, concern and use period.
+- Keep a maximum of thirty permission items and controlled classifications.
+- Generate the permission pack from tenure, strata context, current plan, evidence gaps and customer classifications.
+- Keep authoritative safety rules in their controlled section even when customer classification differs.
+- Replace arbitrary shareable permission text with controlled reminders.
+- Derive installer opportunity context from broad climate, controlled room-type and concern aggregates, and known or unknown source counts.
+- Preserve the exact-postcode allocation boundary while returning an empty postcode to installers before contact release.
+- Add preparation-guide sections for evidence, broad climate and room comfort.
+- Correct guide paragraph contrast on the navy customer canvas.
 
 ## Out of scope
 
-- Issuing or representing a NatHERS assessment, certificate or formal NatHERS evidence workflow.
-- Giving legal advice about tenancy, owners-corporation or heritage rules.
-- Quoting market prices, guaranteeing savings or recommending a brand, product or installer.
-- Asking a customer to enter a roof space, climb a roof, remove an electrical cover or block a required combustion or ventilation opening.
-- Deleting durable completed-project handovers, warranties, corrections, ownership history or administrator audit records.
-- Changing trade-account approval, ABN review, invoicing or provider controls.
-- Changing the immutable dated audit.
-- Deploying before exact source, GitHub and Sites provenance are reconciled.
+- Professional review or verification of household evidence.
+- Formal NatHERS climate zones, ratings, certificates or equipment sizing.
+- Legal advice or proof that owner, agent, strata or owners-corporation permission has been granted.
+- Brand, product, provider or installer ranking.
+- Current market-price estimates or guaranteed savings.
+- Automatic access for an assessor.
+- Creation of real customer, trade, wholesaler or assessor accounts.
+- Generic Database Console withdrawal.
+- Changes to the immutable dated audit.
+- Netlify deployment.
 
-## Advisor boundaries
+## Advisor and privacy boundaries
 
-- Use the supplied learner guide as training context, not as the controlling formal NatHERS standard.
-- Say `independent home energy plan`, not `NatHERS assessment` or `NatHERS certificate`.
-- Keep every recommendation product-, service- and brand-agnostic.
-- Treat self-uploaded files as optional customer quote evidence, not formal NatHERS evidence.
-- Separate renter-controlled portable actions from permission-dependent and fixed works.
-- Never recommend sealing a vent until gas-combustion, moisture and ventilation safety are understood.
-- Use the budget band only to sequence investigation and quotes. State that current quotes are required.
-- Preserve `Not sure` instead of inferring unsupported property facts.
-- Recommend qualified trades for insulation, glazing, electrical, gas, solar, structural and roof work.
+- Use `independent home energy plan`, not `NatHERS assessment` or `NatHERS certificate`.
+- Treat `Not sure` as valid information.
+- Do not infer attachment review, professional validation or proof from a customer source selection.
+- Do not tell customers to enter roof spaces, climb roofs, remove electrical covers or block required ventilation.
+- Keep room names, room use periods, permission titles, permission notes, exact location and project-private notes out of installer opportunity payloads.
+- Keep arbitrary permission wording out of the shareable checklist.
+- Use controlled aggregates only where installer matching needs them.
+- Keep the permission checklist as a question and review aid. It does not grant permission or replace licensed or site-specific advice.
+- Use broad climate only to order investigations. It does not size equipment or predict savings.
 
 ## Data and compatibility requirements
 
-- Add `customer_projects.goals` as JSON text and backfill it from the existing singular `goal`.
-- Continue writing the singular `goal` projection for compatibility.
-- Normalize and allowlist goals, home facts, budget bands and work categories at the server boundary.
-- Bound plan snapshots to versioned, ordered items with controlled links and sanitized custom text.
-- Never persist raw markup or arbitrary destinations from a custom plan item.
-- Keep precise customer work categories in summaries.
-- Preserve draught-proofing, insulation, glazing and window coverings as exact categories through opportunity allocation, installer capability review and work-order creation.
-- Keep `insulation-draughts` only as a bounded legacy input that the forward migration and server normalizer split into draught-proofing and insulation.
-- Require an active, versioned evidence-sharing receipt before an allocated installer can list or download any attached file.
-- Do not require or expose a household access routine in submission readiness or installer summaries.
+- `customer_projects.advisor_profile` is additive JSON text with default `{}`.
+- The forward migration is `0082_customer_advisor_profile.sql`. Applied migration history remains unchanged.
+- The current plan version is `2026-07-29-evidence-climate-advisor`.
+- The prior `2026-07-29-home-advisor` plan version is legacy and regenerates through the existing edited-plan conflict boundary.
+- Server normalization derives climate from the stored postcode and state. Client-supplied climate text is not authoritative.
+- Invalid evidence-source, room, concern, use-period and permission values fall back to controlled safe states.
+- Room concerns affect plan sequencing only when the relevant concern and use period occur in the same room.
+- User classification is supplementary. It cannot replace an authoritative permission or licensed-site-check rule.
+- API writes remain owner scoped and preserve backward compatibility for rows without an advisor profile.
+- Duplicate projects preserve the normalized advisor profile without creating installer disclosure.
 
 ## Acceptance criteria
 
-- No customer Home records navigation item, `/account/assets` page or dedicated ownership-centre component remains.
-- All five project stages are accessible buttons and can be previewed without completing preceding stages.
-- More than one goal can be selected and saved.
-- Tenure and budget are collected before the plan is generated.
-- Glazing, insulation, draughts, window coverings and relevant fixed systems have explicit customer inputs.
-- Renter guidance includes portable or removable actions and clearly distinguishes permission-dependent work.
-- Plan steps support drag ordering, accessible up and down controls, removal and a bounded custom item.
-- The plan contains no redundant `create project` step and does not collapse draught-proofing and insulation into one customer item.
-- Quote preparation contains no usual access-timing question.
-- Draught-proofing, insulation, glazing and blinds, shutters or external shading are separate work categories.
-- Exactly one file input is used for optional quote evidence.
-- Stored or newly selected evidence always exposes the same explicit sharing control, and no original customer filename enters the installer payload.
-- The photo checklist includes switchboard, hot-water location and clearance, heating and cooling, windows and shading, draught or vent details, safe access-hatch context, cropped satellite imagery and redacted energy-use evidence.
-- Private notes are visible at desktop and mobile widths.
-- A failed Continue action shows the reason inside the same action footer.
-- Focused tests, database replay, `npm.cmd run validate` and the production build pass.
-- The exact commit is pushed to GitHub and the Sites source repository before a saved version is created and deployed.
+- The first unread demo case remains expanded and first in the visible queue after its automatic audited read update.
+- That case no longer shows its `Mark read` action after the update, while `Close case` remains available.
+- Manual filter changes reset the pinned case.
+- Evidence labels make no unsupported review or attachment claim.
+- Valid postcode and state input produce one bounded planning profile; invalid or mismatched input produces none.
+- Hot daytime and cold overnight rules do not cross-correlate separate rooms.
+- Room and permission limits are enforced by server normalization.
+- Renter-portable actions precede fixed or permission-dependent work.
+- The permission pack contains five controlled sections and retains authoritative safety rules.
+- Malicious or private permission titles, notes and identifiers are not copied into the pack.
+- Installer opportunity output excludes private room and permission content.
+- Focused tests, full validation, all migrations, the production build, diff hygiene, source provenance and live checks pass.
 
-## Validation commands
+## Validation commands and observed results
+
+The exact application commit passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs test/asset-ownership-corrections.test.mjs test/installer-crm.test.mjs test/release-integrity.test.mjs test/installer-crm-templates.test.mjs test/photo-request-templates.test.mjs test/trade-crm-assets-timeline.test.mjs test/trade-data-imports.test.mjs test/trade-form-governance.test.mjs test/trade-forms-recurring.test.mjs test/trade-handover.test.mjs test/trade-job-packets.test.mjs test/customer-photo-requests.test.mjs test/lead-validation.test.js test/direct-trade-handoff.test.mjs test/direct-trade-matching.test.mjs
-npm.cmd run db:check
-npm.cmd run audit:links
+node --experimental-strip-types --test test/admin-notification-inbox-stability.test.mjs test/customer-advisor-contract.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs
 npm.cmd run validate
+node --experimental-strip-types --test
 git diff --check
 ```
 
-The test runner may execute a wider set than named by an npm wrapper. Report observed totals rather than assuming filtering behavior.
+Observed results:
+
+- focused advisor and administrator regression set: 38 of 38 passed;
+- integration suite inside the release gate: 32 of 32 passed;
+- full suite: 770 tests, 768 passed, 2 intentionally skipped and 0 failed;
+- type checking: passed;
+- warning-free lint: passed;
+- migration verification: all 83 migrations passed on fresh SQLite and Cloudflare D1 paths;
+- Vinext production build: passed;
+- `git diff --check`: passed;
+- application source and Sites managed branch: exact SHA `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`;
+- Sites application version: 206, deployment `appgdep_6a68ff2f45d08191aec1274c14168407`, public, environment revision 19;
+- public health, guide, signed-out customer route and administrator shell: HTTP 200;
+- signed-in customer verification: all five steps selectable; evidence labels, room profile, broad climate, editable plan and five-section permission preview present;
+- responsive verification: desktop guide contrast is readable; the 390 by 844 computed layout has no horizontal overflow;
+- signed-in administrator verification: one working-demo notification changed from unread to read, stayed expanded and retained its first visible position;
+- no real account was created or used.
+
+The Sites error-only query returned three informational canceled `/api/electricity-plans` health-monitor invocations and no exception message attributable to the newly checked release routes. The monitor cancellation remains a separate operational observation, not a passing end-to-end electricity-plan provider check.
 
 ## Released implementation state
 
-The customer redesign was released from exact application commit `53e6cf96aff6f48e9e393a23c4eedbeba997eb39`, based on `01a8d09022b086c771c938960efa8d9a333542d3`. Integrated focused validation passes 174 of 174 tests. The complete `npm.cmd run validate` gate passes on the exact clean release commit: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. Desktop and 375-pixel browser checks confirm clickable stages, multiple initially-unselected goals, renter and budget context, accurate completed-step progress, explicit Keep or Refresh handling for edited plans, one capped upload area, visible notes, split work categories, removal of access timing and validation beside Continue. The preparation guide opens without creating another project, all five deep links resolve, and the customer flow has no horizontal overflow at the checked mobile width.
-
-GitHub and the Sites managed source branch both resolve to the exact application commit. Sites version 204 records that source provenance and is deployed publicly. Live checks return `200` for health, the new preparation guide and the signed-out project entry, `404` for the retired `/account/assets` route, and zero recent worker-error events. No real account was created or used for release verification.
+- GitHub branch: `codex/sites-custom-domain-migration`
+- Application commit: `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`
+- Sites application version: 206
+- Sites application deployment: `appgdep_6a68ff2f45d08191aec1274c14168407`
+- Production URL: `https://compare.ausenergyassessments.com`
+- D1 migration count: 83
+- Immutable audit changes: none
+- Demo data changed during live verification: one notification read-state only
 
 ## Release and stop conditions
 
-Stop if:
+Stop the affected work when:
 
-- complete validation fails;
-- customer-created text or links can escape the server allowlist;
-- advice is represented as a formal NatHERS assessment or unsupported legal, price or savings claim;
-- renter advice could encourage unauthorised fixed work;
-- draught advice could conceal a combustion or ventilation safety issue;
-- durable completed-project or consent evidence would be deleted;
+- evidence wording would imply professional review that did not occur;
+- broad climate wording could be mistaken for a NatHERS result;
+- room or permission text could disclose private household information to installers;
+- a customer classification could remove a mandatory safety or licensed-site check;
+- advice could encourage unsafe inspection, blocked ventilation or unauthorised fixed work;
+- a change would create or use a real account for release testing;
 - the release commit, GitHub branch, Sites source, archive and saved version do not reconcile;
-- live inspection would require creating a real customer, trade or wholesaler account;
-- the change would alter the immutable audit snapshot.
+- a change would alter the immutable dated audit;
+- a legal, regulated-service, privacy, provider or account-ownership decision requires an authorised human.
 
 ## Next five logical product steps
 
-1. **Evidence confidence and provenance:** mark each important home fact as customer-reported, photo-supported, document-supported or unknown and show how that confidence affects advice.
-2. **Postcode and climate-aware sequencing:** use a bounded Australian climate mapping to adjust the order of shading, airflow, draught, insulation and system investigations without creating a formal NatHERS claim.
-3. **Room-by-room comfort profile:** capture seasonal hot, cold, draught, condensation and usage patterns only where they materially change the plan.
-4. **Renter and strata permission pack:** generate a neutral, exportable list separating portable actions, requested permissions and owner or owners-corporation works.
-5. **Household and assessor usability pilot:** test the full flow with representative householders and experienced assessors, then repair the highest-friction accessibility and comprehension findings.
+1. **Household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys, then repair priority accessibility and comprehension friction.
+2. **Recommendation rationale and uncertainty:** show why each item appears, which controlled inputs support it, what remains unknown and what could change its order.
+3. **Adaptive next-best-question guidance:** ask at most three material unanswered questions at a time, retain `Not sure`, and avoid unsafe inspection.
+4. **Customer-owned assessor review and clarification:** keep customer reports separate from authored assessor observations and customer-approved proposed changes.
+5. **Decision-ready independent plan brief:** provide an accessible, brand-agnostic printable or downloadable brief with private location and notes excluded by default.
