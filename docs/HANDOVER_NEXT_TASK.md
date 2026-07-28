@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: active milestone
+Status: released milestone with the next recommendation recorded below
 
 Prepared: 29 July 2026
 
@@ -9,6 +9,8 @@ Milestone ID: `CUSTOMER-HOME-ADVISOR-01`
 Implementation baseline: `01a8d09022b086c771c938960efa8d9a333542d3`
 
 Deployed application before this milestone: Sites version 203 from `01a8d09022b086c771c938960efa8d9a333542d3`
+
+Released application: `53e6cf96aff6f48e9e393a23c4eedbeba997eb39`, live as Sites version 204
 
 The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns the approved sequence.
 
@@ -109,7 +111,7 @@ The dedicated customer Home records tab and ownership-centre page are retired. D
 ## Validation commands
 
 ```powershell
-node --test test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs test/asset-ownership-corrections.test.mjs test/installer-crm.test.mjs test/release-integrity.test.mjs
+node --experimental-strip-types --test test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs test/asset-ownership-corrections.test.mjs test/installer-crm.test.mjs test/release-integrity.test.mjs test/installer-crm-templates.test.mjs test/photo-request-templates.test.mjs test/trade-crm-assets-timeline.test.mjs test/trade-data-imports.test.mjs test/trade-form-governance.test.mjs test/trade-forms-recurring.test.mjs test/trade-handover.test.mjs test/trade-job-packets.test.mjs test/customer-photo-requests.test.mjs test/lead-validation.test.js test/direct-trade-handoff.test.mjs test/direct-trade-matching.test.mjs
 npm.cmd run db:check
 npm.cmd run audit:links
 npm.cmd run validate
@@ -118,11 +120,11 @@ git diff --check
 
 The test runner may execute a wider set than named by an npm wrapper. Report observed totals rather than assuming filtering behavior.
 
-## Current implementation state
+## Released implementation state
 
-The customer redesign is implemented locally from baseline `01a8d09022b086c771c938960efa8d9a333542d3`. Integrated focused validation passes 174 of 174 tests. The complete `npm.cmd run validate` gate passes on the post-review source: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. Desktop and 375-pixel browser checks confirm clickable stages, multiple initially-unselected goals, renter and budget context, accurate completed-step progress, explicit Keep or Refresh handling for edited plans, one capped upload area, visible notes, split work categories, removal of access timing and validation beside Continue. The preparation guide opens without creating another project, all five deep links resolve, and the customer flow has no horizontal overflow at the checked mobile width.
+The customer redesign was released from exact application commit `53e6cf96aff6f48e9e393a23c4eedbeba997eb39`, based on `01a8d09022b086c771c938960efa8d9a333542d3`. Integrated focused validation passes 174 of 174 tests. The complete `npm.cmd run validate` gate passes on the exact clean release commit: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. Desktop and 375-pixel browser checks confirm clickable stages, multiple initially-unselected goals, renter and budget context, accurate completed-step progress, explicit Keep or Refresh handling for edited plans, one capped upload area, visible notes, split work categories, removal of access timing and validation beside Continue. The preparation guide opens without creating another project, all five deep links resolve, and the customer flow has no horizontal overflow at the checked mobile width.
 
-Release status remains `local implementation` until the exact commit passes the complete release gate, is pushed to GitHub and the Sites managed source branch, is saved as a Sites version and is deployed successfully. Record the final identities and any live limitations in `RELEASE_TRUTH.md`.
+GitHub and the Sites managed source branch both resolve to the exact application commit. Sites version 204 records that source provenance and is deployed publicly. Live checks return `200` for health, the new preparation guide and the signed-out project entry, `404` for the retired `/account/assets` route, and zero recent worker-error events. No real account was created or used for release verification.
 
 ## Release and stop conditions
 

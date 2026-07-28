@@ -29,9 +29,9 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - TLink remains the authoritative trade record until an approved migration changes that boundary.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Current milestone: CUSTOMER-HOME-ADVISOR-01
+## Released milestone: CUSTOMER-HOME-ADVISOR-01
 
-Release status: local implementation from baseline `01a8d09022b086c771c938960efa8d9a333542d3`. The pre-change production baseline is Sites version 203 from that same commit. Deployment is not claimed until the final release identity is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+Release status: application commit `53e6cf96aff6f48e9e393a23c4eedbeba997eb39` is validated, pushed to GitHub and the Sites managed source branch, and live as Sites version 204 at `https://compare.ausenergyassessments.com`. Exact validation, saved-version and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
 ### Outcome
 
@@ -73,6 +73,8 @@ Make household planning clear enough for a first-time customer and useful enough
 - `npm run validate` and `npm run build` pass on the exact release commit.
 - GitHub and Sites source provenance match the release commit.
 - Release truth records the saved Sites version, production deployment and dated responsive verification.
+
+All acceptance gates above are met for the released application source. The next product milestone is evidence confidence and provenance, listed first in the ordered sequence below.
 
 ## Forward phases
 
