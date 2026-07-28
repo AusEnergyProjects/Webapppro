@@ -29,7 +29,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 
 ## Current milestone: FREE-ACCESS-ABN-01
 
-Release status: the additive ABN schema expansion is committed and pushed as `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` and is live as Sites version 200. The application activation passes the complete local release gate but remains uncommitted in the shared worktree. The authorised demo-data contract cleanup is not yet created or deployed.
+Release status: the additive ABN schema expansion is committed and pushed as `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` and is live as Sites version 200. The free reviewed-ABN application is committed as `481401d98ef2c0b294252a4cabeebc74eba40a52`, merged with the expansion release ancestry at `fb9c80fb73bf2a0b5d461ed2ecbfa28df6022c71`, pushed to GitHub, and live as Sites version 201. The authorised demo-only contract migration `0080_retire_legacy_trade_commercial_data.sql` passes the complete local release gate and awaits its own exact commit and deployment.
 
 ### Outcome
 

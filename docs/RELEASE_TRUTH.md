@@ -16,12 +16,12 @@ This is the only current implementation and release-status document. The [dated 
 | --- | --- | --- |
 | Audited repository baseline | `ff3c8efe3d5e501286d8e83e28086d6d4590be27` on `codex/sites-custom-domain-migration` | Verified by the 21 July audit |
 | ABN schema expansion source | `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` on `codex/abn-schema-expand` | Validated, pushed to GitHub and Sites managed `main` |
-| Current local application milestone | `FREE-ACCESS-ABN-01` changes in the shared worktree | Complete local release validation passed; not yet committed or deployed |
-| Deployed application source | `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` | Sites version 200; runtime code is equivalent to version 199 plus the additive ABN schema expansion |
-| Sites deployment | `appgdep_6a68b67597f48191847c00c8676e9105`, environment revision 18 | Succeeded on 29 July 2026 |
-| Contract cleanup | Not created | Authorised only after the reviewed-ABN application is live and reconciled |
+| Reviewed-ABN application activation | `481401d98ef2c0b294252a4cabeebc74eba40a52` | Validated and pushed to GitHub |
+| Current deployed source | `fb9c80fb73bf2a0b5d461ed2ecbfa28df6022c71` | Merge release preserving expansion and activation ancestry; Sites version 201 |
+| Sites deployment | `appgdep_6a68baf320848191810e4a4ad5b98727`, environment revision 18 | Succeeded on 29 July 2026 (Australia/Sydney) |
+| Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql` in the current worktree | Complete local validation passed; exact commit and deployment pending |
 
-The additive schema expansion is production. The reviewed-ABN application in the shared worktree is not production until its exact validated commit is saved, deployed and checked in the live signed-in and public journeys.
+The additive schema expansion and reviewed-ABN application are production. Public health, free-access and integration boundaries were verified on the custom domain, and the removed payment-link API returns `404`. No real signed-in account was used or fabricated, so an end-to-end approved-account journey remains unverified.
 
 ## Current product model
 
@@ -46,7 +46,7 @@ TLink trade software costs A$0. Access has no recurring fee, seat charge, lead c
 - Licence, insurance, accreditation, supplier evidence and jurisdiction checks remain separate controls where the workflow requires them.
 - No commercial, invoice, provider-payment or legacy account field can grant trade access.
 
-The local `FREE-ACCESS-ABN-01` implementation enforces this policy across signup, server authorization, administration, data and tests. It is not deployed capability until the release contract below is complete.
+The deployed `FREE-ACCESS-ABN-01` implementation enforces this policy across signup, server authorization, administration, data and tests.
 
 ## Local validation evidence
 
@@ -57,11 +57,11 @@ The last complete shared-worktree validation was recorded before the release was
 - The isolated `DatabaseSync(":memory:")` benchmark with 100,000 rows in each of five datasets. All guarded queries remained below the 75 ms p95 threshold; reviewed-supplier catalogue first-page p95 was 0.118 ms and deep-cursor p95 was 0.127 ms in the final recorded run.
 - The audit snapshot contains exactly 22 nonempty Markdown reports with an H1 and balanced fences. Its redundant duplicate archive is excluded from public source; the two user-profile path roots in the manifest were generalised to `%USERPROFILE%` before publication without changing a substantive finding.
 
-The exact expansion commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` passed `npm.cmd run validate`, including all 80 migrations and the production build. The current shared application worktree also passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 29 integration tests, 718 full-suite tests with 716 passed and 2 intentionally skipped, all 80 migrations and the production build. Mobile type checking passes. The isolated 500,000-row benchmark passes every 75 ms p95 guard; reviewed-supplier first-page p95 is 0.168 ms and deep-cursor p95 is 0.124 ms.
+The exact expansion commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` passed `npm.cmd run validate`, including all 80 migrations and the production build. The application activation passed type checking, warning-free lint, 29 integration tests, 718 full-suite tests with 716 passed and 2 intentionally skipped, all 80 migrations and the production build. The current contract worktree passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 30 integration tests, 719 full-suite tests with 717 passed and 2 intentionally skipped, all 81 migrations and the production build. Mobile type checking passes. The isolated 500,000-row benchmark passes every 75 ms p95 guard; reviewed-supplier first-page p95 is 0.168 ms and deep-cursor p95 is 0.124 ms.
 
 The external link audit is not green: 166 of 169 destinations were reachable or accepted, 15 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
 
-The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. The owner's explicit deletion authorisation is reserved for a separate contract migration after the reviewed-ABN application is live and verified. External provider registrations remain unknown.
+The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. Forward contract migration `0080_retire_legacy_trade_commercial_data.sql` uses that explicit authorisation to remove only retired commercial fields, tables and Stripe/Square integration rows after the reviewed-ABN application became live. Its preservation test retains account identities, jobs, quotes, invoices, accounting, calendar and ABN review records. External provider registrations remain unknown.
 
 ## Active deployed platform
 
@@ -88,7 +88,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Installer CRM, customers, sites, assets, jobs, scheduling, quotes, invoices, field work, handover and team workflows.
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
-- Sites version 199 owner Database Console.
+- Sites version 201 free reviewed-ABN application, including the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 
@@ -98,7 +98,7 @@ The audit recommends withdrawing the generic Database Console because broad cata
 - The application must not collect or process payment-card data.
 - No provider is treated as production ready from source configuration alone.
 - The generic Database Console should not be expanded. Its withdrawal is the first administration-safety milestone after free-access cleanup.
-- The specifically authorised demo-only commercial cleanup must use a separate contract migration after the expansion and application are live and reconciled. Any other production-data deletion remains prohibited without exact scope and evidence.
+- The specifically authorised demo-only commercial cleanup uses separate forward migration `0080_retire_legacy_trade_commercial_data.sql` after the expansion and application were live and reconciled. Any other production-data deletion remains prohibited without exact scope and evidence.
 
 ## Current unknowns and blockers
 
