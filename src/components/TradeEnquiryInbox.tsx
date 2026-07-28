@@ -19,7 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
   new: "New", contacted: "Contacted", site_visit: "Site visit", quote_required: "Quote required",
   quoted: "Quoted", booked: "Booked", won: "Won", lost: "Lost",
 };
-const SERVICES = ["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "other"];
+const SERVICES = ["assessment", "solar", "battery", "heating-cooling", "hot-water", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "electrical", "plumbing", "other"];
 const displayName = (enquiry: Enquiry) => enquiry.businessName || [enquiry.firstName, enquiry.lastName].filter(Boolean).join(" ") || "Protected marketplace enquiry";
 const readable = (value: string) => value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const dateTime = (value: string) => value ? new Date(value).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not set";

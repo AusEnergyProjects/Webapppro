@@ -51,6 +51,17 @@ test("asset APIs are owner scoped and require explicit handover review", () => {
   assert.match(handoverRoute, /directCustomerId && directSiteId \? "confirmed" : "pending_review"/);
 });
 
+test("the asset register writes the four first-class home-fabric categories", () => {
+  const allowed = route.match(/const ASSET_CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  const selectable = workspace.match(/const CATEGORIES = \[([\s\S]*?)\];/)?.[1] || "";
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.match(allowed, new RegExp(`"${category}"`));
+    assert.match(selectable, new RegExp(`"${category}"`));
+  }
+  assert.doesNotMatch(allowed, /insulation-draughts/);
+  assert.doesNotMatch(selectable, /insulation-draughts/);
+});
+
 test("the timeline unifies all required direct-customer sources deterministically", () => {
   for (const source of ["'enquiry' source_type", "'job' source_type", "'appointment' source_type", "'note' source_type", "'handover' source_type", "'asset' source_type", "'service' source_type"]) assert.match(route, new RegExp(source));
   for (const table of ["trade_crm_enquiry_events", "trade_work_order_events", "trade_crm_appointments", "trade_crm_job_notes", "trade_handover_packs", "trade_installed_assets", "trade_asset_service_events"]) assert.match(route, new RegExp(table));

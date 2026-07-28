@@ -201,7 +201,7 @@ async function dispatchServiceReminder(request: Request, access: Awaited<ReturnT
   try {
     const canonical = String(process.env.SERVICE_REMINDER_TWILIO_CALLBACK_URL || `${new URL(request.url).origin}/api/service-reminder-provider-events/twilio`);
     const result = await sendServiceReminderProviderMessage({ channel, recipient: destination, subject: candidate.reminderSubject,
-      body: `${candidate.reminderBody}\n\nManage or stop reminders in your private account: ${new URL("/account/assets", request.url)}`,
+      body: `${candidate.reminderBody}\n\nManage or stop reminders from the related project in your private account: ${new URL("/account", request.url)}`,
       idempotencyKey, callbackUrl: canonical });
     await db.batch([
       db.prepare(`UPDATE service_reminder_deliveries SET status = 'sent', attempts = ?, provider_message_id = ?, provider_status = ?,

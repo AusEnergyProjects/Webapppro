@@ -36,6 +36,18 @@ test("form publishing is role protected, validated and auditable", () => {
   assert.match(portal, /Clone next version/);
 });
 
+test("governed forms use separate home-fabric service categories", () => {
+  const allowed = route.match(/const CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  const selectable = portal.match(/const categoryOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.match(allowed, new RegExp(`"${category}"`));
+    assert.match(selectable, new RegExp(`"${category}"`));
+  }
+  assert.doesNotMatch(allowed, /insulation-draughts/);
+  assert.doesNotMatch(selectable, /insulation-draughts/);
+  assert.match(route, /Clone this legacy form and choose current work categories before publishing/);
+});
+
 test("offline forms keep snapshots, privacy checks and conflict safe coalescing", () => {
   assert.match(sync, /template_snapshot/);
   assert.match(sync, /save_job_form/);

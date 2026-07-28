@@ -12,7 +12,11 @@ const templates = [
     version: 1,
     name: "Pre-start risk and site readiness",
     jurisdiction: "AU",
-    categories: ["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"],
+    categories: [
+      "assessment", "solar", "battery", "heating-cooling", "hot-water",
+      "draught-proofing", "insulation", "glazing", "window-coverings",
+      "ev-charging", "other",
+    ],
     description: "A practical pre-start record for site conditions, access, hazards and the agreed work area.",
     guidance: "Use this as a supporting business record. Apply the licences, permits, safety documents and formal certificates required for the actual work and location.",
     fields: [
@@ -76,8 +80,8 @@ const templates = [
     version: 1,
     name: "Building fabric completion support record",
     jurisdiction: "AU",
-    categories: ["insulation-draughts"],
-    description: "Records installed areas, exclusions, clearances, coverage and quality checks for insulation and draught work.",
+    categories: ["draught-proofing", "insulation", "glazing", "window-coverings"],
+    description: "Records installed areas, exclusions, clearances, coverage and quality checks for building fabric, glazing and window-covering work.",
     guidance: "This supports the job file and does not replace product instructions, electrical clearance requirements, permits or formal scheme evidence.",
     fields: [
       ...sharedFields,
@@ -92,7 +96,11 @@ const templates = [
     version: 1,
     name: "Scheduled service visit record",
     jurisdiction: "AU",
-    categories: ["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"],
+    categories: [
+      "assessment", "solar", "battery", "heating-cooling", "hot-water",
+      "draught-proofing", "insulation", "glazing", "window-coverings",
+      "ev-charging", "other",
+    ],
     description: "A concise record for planned maintenance, observed condition, work completed and the next action.",
     guidance: "Record technical service information only. Formal testing, certificates and manufacturer procedures remain the responsibility of the service provider.",
     fields: [

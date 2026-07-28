@@ -54,7 +54,16 @@ export const IMPORT_DEFINITIONS = {
 
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const OPERATIONAL_SERVICE_CATEGORIES = new Set([
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "draught-proofing", "insulation", "glazing", "window-coverings",
+  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+]);
+const PRODUCT_CATEGORIES = new Set([
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "insulation-draughts", "ev-charging", "electrical", "plumbing",
+  "mounting-hardware", "controls", "other",
+]);
 const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
@@ -156,7 +165,7 @@ function enquiryRow(record) {
   if (values.email && !EMAIL_PATTERN.test(values.email)) issues.push({ level: "error", message: "Check the email address." });
   if (values.addressState && !STATES.has(values.addressState)) issues.push({ level: "error", message: "Use a valid Australian state or territory code." });
   if (values.postcode && !/^\d{4}$/.test(values.postcode)) issues.push({ level: "error", message: "Postcode must contain four digits." });
-  if (!SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
+  if (!OPERATIONAL_SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
   if (!PRIORITIES.has(values.urgency)) issues.push({ level: "error", message: "Urgency must be low, standard, high or urgent." });
   if (!validDate(values.preferredDate)) issues.push({ level: "error", message: "Preferred date must use YYYY-MM-DD." });
   if (!values.email && !values.phone) issues.push({ level: "warning", message: "No email or phone was supplied." });
@@ -177,7 +186,7 @@ function jobRow(record, customerEmails) {
   const issues = [];
   if (!values.title) issues.push({ level: "error", message: "Add a job title." });
   if (values.customerEmail && !EMAIL_PATTERN.test(values.customerEmail)) issues.push({ level: "error", message: "Check the customer email address." });
-  if (!SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
+  if (!OPERATIONAL_SERVICE_CATEGORIES.has(values.serviceCategory)) issues.push({ level: "error", message: "Choose a supported service category." });
   if (!PIPELINE_STAGES.has(values.pipelineStage)) issues.push({ level: "error", message: "Choose a supported sales stage." });
   if (!WORK_STAGES.has(values.workStage)) issues.push({ level: "error", message: "Choose a supported work stage." });
   if (!PRIORITIES.has(values.priority)) issues.push({ level: "error", message: "Priority must be low, standard, high or urgent." });
@@ -199,7 +208,7 @@ function productRow(record) {
   };
   const issues = [];
   if (!values.modelNumber || !values.brand || !values.name || !values.description) issues.push({ level: "error", message: "Model, brand, product name and description are required." });
-  if (!SERVICE_CATEGORIES.has(values.category)) issues.push({ level: "error", message: "Choose a supported product category." });
+  if (!PRODUCT_CATEGORIES.has(values.category)) issues.push({ level: "error", message: "Choose a supported product category." });
   if (values.unitPriceCentsExGst <= 0) issues.push({ level: "error", message: "Unit price must be greater than zero." });
   if (!STOCK_STATUSES.has(values.stockStatus)) issues.push({ level: "error", message: "Choose in_stock, limited, order_in or unavailable." });
   if (values.leadTimeDays < 0 || values.warrantyYears < 0) issues.push({ level: "error", message: "Lead time and warranty must be whole numbers." });

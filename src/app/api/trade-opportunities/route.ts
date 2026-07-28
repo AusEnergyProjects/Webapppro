@@ -11,7 +11,11 @@ import {
   TradeAccessError,
   verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
-import { normalizePlatformQuote, parseStoredJson } from "@/lib/customer-projects.mjs";
+import {
+  buildInstallerPropertyContext,
+  normalizePlatformQuote,
+  parseStoredJson,
+} from "@/lib/customer-projects.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
@@ -26,6 +30,14 @@ function distanceBand(value: unknown) {
   if (kilometres < 50) return "25 to 50 km from your service base";
   if (kilometres < 100) return "50 to 100 km from your service base";
   return "More than 100 km from your service base";
+}
+
+function installerEvidenceName(item: Record<string, unknown>) {
+  const extension = item.content_type === "application/pdf" ? "pdf"
+    : item.content_type === "image/png" ? "png"
+      : item.content_type === "image/webp" ? "webp" : "jpg";
+  const category = String(item.category || "project-evidence").replace(/[^a-z0-9-]/g, "");
+  return `${category || "project-evidence"}.${extension}`;
 }
 
 async function productSnapshot(installerUid: string, productListId: string) {
@@ -128,14 +140,20 @@ export async function GET(request: Request) {
     )
     .bind(user.uid)
     .all<Record<string, unknown>>();
-  const evidenceRows = await db.prepare(`SELECT e.id, e.project_id, e.category, e.file_name, e.content_type,
+  const evidenceRows = await db.prepare(`SELECT e.id, e.project_id, e.category, e.content_type,
       e.size_bytes, e.created_at, m.id opportunity_match_id
     FROM customer_project_evidence e
     JOIN customer_projects p ON p.id = e.project_id AND p.firebase_uid = e.customer_uid
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE e.status = 'active' AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND o.status IN ('open', 'paused') ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
+      AND o.status IN ('open', 'paused')
+      AND EXISTS (
+        SELECT 1 FROM customer_consent_receipts consent
+        WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
+          AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
+      )
+    ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
   return json({
     ok: true,
     opportunities: rows.results.map((row: Record<string, unknown>) => ({
@@ -160,7 +178,9 @@ export async function GET(request: Request) {
       priority: row.priority,
       timing: row.timing,
       summary: row.summary,
-      propertyContext: parseStoredJson(row.property_context, {}),
+      propertyContext: buildInstallerPropertyContext(
+        parseStoredJson(row.property_context, {}),
+      ),
       opportunityStatus: row.status,
       platformOnly: String(row.source_reference || "").startsWith("customer-project:"),
       customerContact: row.contact_release_id ? {
@@ -180,7 +200,7 @@ export async function GET(request: Request) {
         .map((item: Record<string, unknown>) => ({
           id: item.id,
           category: item.category,
-          fileName: item.file_name,
+          fileName: installerEvidenceName(item),
           contentType: item.content_type,
           sizeBytes: Number(item.size_bytes || 0),
           createdAt: item.created_at,

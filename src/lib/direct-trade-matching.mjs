@@ -7,9 +7,16 @@ const CATEGORY_REQUIREMENTS = {
   battery: ["battery"],
   "heating-cooling": ["heating-cooling"],
   "hot-water": ["hot-water"],
-  "insulation-draughts": ["insulation-draughts"],
+  "draught-proofing": ["draught-proofing"],
+  insulation: ["insulation"],
+  glazing: ["glazing"],
+  "window-coverings": ["window-coverings"],
   "ev-charging": ["ev-charging"],
   other: ["other"],
+};
+
+const LEGACY_CATEGORY_ALIASES = {
+  "insulation-draughts": ["insulation", "draught-proofing"],
 };
 
 const QUOTE_EVIDENCE = {
@@ -68,10 +75,28 @@ const QUOTE_EVIDENCE = {
       "Tank or delivery capacity, climate performance, tariff needs and backup operation",
     ],
   ],
-  "insulation-draughts": [
+  "draught-proofing": [
     [
-      "fabric-scope",
-      "Areas, R values, access, moisture, ventilation and electrical safety controls",
+      "draught-scope",
+      "Leak locations, proposed seals, exclusions, ventilation, moisture and combustion safety checks",
+    ],
+  ],
+  insulation: [
+    [
+      "insulation-scope",
+      "Areas, existing and proposed R values, coverage, clearances, moisture and electrical safety controls",
+    ],
+  ],
+  glazing: [
+    [
+      "glazing-schedule",
+      "Opening schedule, glass and frame specifications, thermal and safety performance, installation and make-good scope",
+    ],
+  ],
+  "window-coverings": [
+    [
+      "window-covering-scope",
+      "Opening measurements, orientation, internal or external location, operation, fixing and shading or thermal intent",
     ],
   ],
   "ev-charging": [
@@ -94,18 +119,28 @@ function uniqueStrings(value) {
     : [];
 }
 
+function normalizedCategories(value) {
+  return [
+    ...new Set(
+      uniqueStrings(value).flatMap(
+        (category) => LEGACY_CATEGORY_ALIASES[category] || [category],
+      ),
+    ),
+  ];
+}
+
 function canonicalState(value) {
   return canonicalAustralianState(value) || "";
 }
 
 function projectCapabilities(project) {
-  return uniqueStrings(project?.projectCategories).flatMap(
+  return normalizedCategories(project?.projectCategories).flatMap(
     (category) => CATEGORY_REQUIREMENTS[category] || [],
   );
 }
 
 export function createQuoteEvidenceChecklist(project) {
-  const categoryItems = uniqueStrings(project?.projectCategories).flatMap(
+  const categoryItems = normalizedCategories(project?.projectCategories).flatMap(
     (category) => QUOTE_EVIDENCE[category] || [],
   );
   const items = [...QUOTE_EVIDENCE.common, ...categoryItems];
@@ -117,7 +152,7 @@ export function createQuoteEvidenceChecklist(project) {
 }
 
 export function buildDirectTradeTriage(project) {
-  const categories = uniqueStrings(project?.projectCategories);
+  const categories = normalizedCategories(project?.projectCategories);
   const reviewFlags = [];
   if (project?.propertyRelationship === "planning-only")
     reviewFlags.push("property_authority_unconfirmed");
@@ -171,7 +206,7 @@ function participantRejection(project, participant, options) {
       .includes(canonicalState(project?.state))
   )
     return "outside_service_area";
-  const capabilities = uniqueStrings(participant?.capabilities);
+  const capabilities = normalizedCategories(participant?.capabilities);
   if (
     !projectCapabilities(project).every((capability) =>
       capabilities.includes(capability),

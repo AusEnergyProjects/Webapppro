@@ -18,11 +18,13 @@ This is the only current implementation and release-status document. The [dated 
 | ABN schema expansion source | `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` on `codex/abn-schema-expand` | Validated, pushed to GitHub and Sites managed `main` |
 | Reviewed-ABN application activation | `481401d98ef2c0b294252a4cabeebc74eba40a52` | Validated and pushed to GitHub |
 | Reviewed-ABN merged release | `fb9c80fb73bf2a0b5d461ed2ecbfa28df6022c71` | Preserves expansion and activation ancestry; Sites version 201 |
-| Current application and contract source | `698a5057cc384d43112e5ccff38a99effbb01fa8` | Validated, pushed to GitHub and Sites managed `main`; Sites version 202 |
-| Current Sites deployment | `appgdep_6a68be4006188191aa338c4438757e62`, environment revision 19 | Succeeded on 29 July 2026 (Australia/Sydney) |
+| Free-access application and contract source | `698a5057cc384d43112e5ccff38a99effbb01fa8` | Validated, pushed to GitHub and Sites managed `main`; Sites version 202 |
+| Pre-advisor repository and production baseline | `01a8d09022b086c771c938960efa8d9a333542d3` | Documentation-only child of the application source; pushed to GitHub and live as Sites version 203 |
+| Current Sites deployment before the advisor release | Sites version 203 at `https://compare.ausenergyassessments.com` | Public project record and exact saved-version provenance verified on 29 July 2026 |
+| Customer home advisor release candidate | Working tree based on `01a8d09022b086c771c938960efa8d9a333542d3` | Focused tests and the complete validation gate, including the production build, pass; commit and deployment remain pending |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application and authorised contract cleanup are production. Public health, free-access and integration boundaries return `200`; retired membership, billing, referral and payment-link routes return `404`; and an unauthenticated trade CRM request returns `401`. No real signed-in account was used or fabricated, so an end-to-end approved-account journey remains unverified.
+The additive schema expansion, reviewed-ABN application and authorised contract cleanup are production. Sites version 203 contains the same application source plus the reconciled release documents. Public health, free-access and integration boundaries return `200`; retired membership, billing, referral and payment-link routes return `404`; and an unauthenticated trade CRM request returns `401`. No real signed-in account was used or fabricated, so an end-to-end approved-account journey remains unverified.
 
 ## Current product model
 
@@ -49,6 +51,26 @@ TLink trade software costs A$0. Access has no recurring fee, seat charge, lead c
 
 The deployed `FREE-ACCESS-ABN-01` implementation enforces this policy across signup, server authorization, administration, data and tests.
 
+## Customer home advisor release candidate
+
+`CUSTOMER-HOME-ADVISOR-01` is locally implemented from the exact version 203 source baseline. It retires the dedicated customer Home records page and navigation while retaining completed-project handovers, warranty and correction integrity, consent events and administrator governance.
+
+The project intake now:
+
+- records owner or renter tenure separately from strata or common-property approval;
+- accepts several goals and detailed home facts;
+- uses a broad budget band only to sequence investigation;
+- treats `Not sure` as useful information;
+- generates an independent, brand-agnostic and editable starting plan;
+- supports drag ordering, accessible arrow ordering, removal and bounded custom steps;
+- preserves draught-proofing, insulation, glazing and window coverings through installer capability matching and accepted-work handoff;
+- removes the household access-routine question;
+- uses one optional evidence upload with durable sharing consent, generic installer filenames and safe-photo and privacy guidance;
+- keeps private notes visibly editable; and
+- places validation beside the customer action.
+
+The flow is not a NatHERS assessment, certificate, formal evidence workflow, quote or savings promise. Forward migration `0081_customer_project_advisor.sql` adds and backfills the multi-goal projection, resets retired demo budgets, converts the old combined fabric category across matching and operational records, preserves complete matched-category lists through protected CRM enquiries and work orders, separates legacy strata approval from tenure, forces ambiguous legacy tenure back to an unanswered owner-or-renter choice, removes household occupancy from project context and anonymises stored evidence filenames without rewriting applied history. This section remains a release-candidate statement until exact commit, GitHub, Sites saved-version, deployment and live evidence are recorded.
+
 ## Local validation evidence
 
 The last complete shared-worktree validation was recorded before the release was split into compatible expansion, application activation and contract cleanup:
@@ -60,7 +82,9 @@ The last complete shared-worktree validation was recorded before the release was
 
 The exact expansion commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` passed `npm.cmd run validate`, including all 80 migrations and the production build. The application activation passed type checking, warning-free lint, 29 integration tests, 718 full-suite tests with 716 passed and 2 intentionally skipped, all 80 migrations and the production build. The exact contract commit `698a5057cc384d43112e5ccff38a99effbb01fa8` passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 30 integration tests, 719 full-suite tests with 717 passed and 2 intentionally skipped, all 81 migrations and the production build. Mobile type checking passes. The isolated 500,000-row benchmark passes every 75 ms p95 guard; reviewed-supplier first-page p95 is 0.168 ms and deep-cursor p95 is 0.124 ms.
 
-The external link audit is not green: 166 of 169 destinations were reachable or accepted, 15 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
+The current customer advisor candidate passes 174 of 174 integrated focused customer-project, quote-preparation, capability-matching, consent, compatibility, operational-category and Home-record retirement tests. The complete `npm.cmd run validate` gate passes on the post-review source: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. `git diff --check` also passes. Desktop and 375-pixel browser checks confirm the redesigned Home, Goals, Plan, Work and Privacy stages, accurate progress, no preselected goal, explicit preservation or refresh of an edited plan, one evidence-upload boundary, action-local validation, the separate preparation guide and no mobile horizontal overflow. Production deployment remains pending.
+
+The external link audit is not green: 166 of 169 destinations were reachable or accepted, 14 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
 
 The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. Deployed forward contract migration `0080_retire_legacy_trade_commercial_data.sql` uses that explicit authorisation to remove only retired commercial fields, tables and Stripe/Square integration rows after the reviewed-ABN application became live. Its preservation test retains account identities, jobs, quotes, invoices, accounting, calendar and ABN review records. Sites environment revision 19 contains zero Stripe or Square keys after the 16 observed retired keys were removed. Deployment and worker-log evidence is clean, but independent direct querying of the managed live D1 schema and rows remains unavailable; external provider registrations also remain unknown.
 
@@ -89,7 +113,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Installer CRM, customers, sites, assets, jobs, scheduling, quotes, invoices, field work, handover and team workflows.
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
-- Sites version 201 free reviewed-ABN application, including the earlier owner Database Console.
+- Sites version 203 free reviewed-ABN application, contract cleanup and current release documentation, including the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 

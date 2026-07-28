@@ -2,7 +2,13 @@
 
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   onAuthStateChanged,
   sendEmailVerification,
@@ -11,17 +17,16 @@ import {
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import {
-  createHomeEnergyPlan,
-  homeEnergyPlanOptions as rawHomeEnergyPlanOptions,
-} from "@/lib/home-energy-plan.mjs";
-import {
+  buildAnonymizedOpportunity,
+  CUSTOMER_LEGACY_PLAN_VERSIONS,
+  createCustomerProjectPlan,
   customerProjectOptions as rawCustomerProjectOptions,
   platformQuoteOptions as rawPlatformQuoteOptions,
+  preserveEditedPlanItems,
 } from "@/lib/customer-projects.mjs";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
-import { CustomerAssetOwnershipCentre } from "./CustomerAssetOwnershipCentre";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
 import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
@@ -31,18 +36,16 @@ type DashboardView =
   | "editor"
   | "profile"
   | "detail"
-  | "assets"
   | "quotes"
   | "appointments";
 type Option = [string, string];
 
-const homeEnergyPlanOptions = rawHomeEnergyPlanOptions as {
+const customerProjectOptions = rawCustomerProjectOptions as {
   goals: Option[];
   paces: Option[];
   situations: Option[];
-  features: Option[];
-};
-const customerProjectOptions = rawCustomerProjectOptions as {
+  approvalContexts: Option[];
+  homeFeatures: Option[];
   states: string[];
   propertyTypes: Option[];
   serviceCategories: Option[];
@@ -55,9 +58,42 @@ const customerProjectOptions = rawCustomerProjectOptions as {
   floorAreas: Option[];
   roofTypes: Option[];
   switchboards: Option[];
-  occupancies: Option[];
   accessConstraints: Option[];
 };
+const homeFeatureGroups = [
+  {
+    title: "Comfort, windows and the building shell",
+    values: [
+      "draughty",
+      "condensation-moisture",
+      "single-glazing",
+      "double-glazing",
+      "glazing-unknown",
+      "roof-insulation",
+      "wall-insulation",
+      "floor-insulation",
+      "insulation-unknown",
+      "external-shading",
+      "internal-window-coverings",
+      "open-wall-vents",
+      "evaporative-ducts",
+    ],
+  },
+  {
+    title: "Heating, cooling, hot water and cooking",
+    values: [
+      "reverse-cycle",
+      "gas-heating",
+      "gas-hot-water",
+      "heat-pump-hot-water",
+      "gas-cooking",
+    ],
+  },
+  {
+    title: "Solar, storage and transport",
+    values: ["solar", "battery", "ev"],
+  },
+];
 const platformQuoteOptions = rawPlatformQuoteOptions as {
   quoteTypes: Option[];
   inclusions: Option[];
@@ -176,6 +212,15 @@ type CustomerHandoverPack = {
   }>;
 };
 
+type CustomerPlanItem = {
+  id: string;
+  stage: string;
+  title: string;
+  text: string;
+  href: string;
+  action: string;
+};
+
 type CustomerProject = {
   id: string;
   title: string;
@@ -185,6 +230,7 @@ type CustomerProject = {
   propertyType: string;
   householdSituation: string;
   goal: string;
+  goals: string[];
   pace: string;
   existingFeatures: string[];
   serviceCategories: string[];
@@ -198,21 +244,15 @@ type CustomerProject = {
     floorArea: string;
     roofType: string;
     switchboard: string;
-    occupancy: string;
+    approvalContext: string;
     accessConstraints: string[];
   };
   privateNotes: string;
   planSnapshot: {
+    version?: string;
     title?: string;
     summary?: string;
-    items?: Array<{
-      id: string;
-      stage: string;
-      title: string;
-      text: string;
-      href: string;
-      action: string;
-    }>;
+    items?: CustomerPlanItem[];
   };
   completedPlanItems: string[];
   status: string;
@@ -240,6 +280,7 @@ type CustomerProject = {
     sizeBytes: number;
     createdAt: string;
   }>;
+  evidenceSharingConsent: boolean;
   handoverPacks: CustomerHandoverPack[];
 };
 
@@ -252,6 +293,7 @@ type ProjectDraft = Pick<
   | "propertyType"
   | "householdSituation"
   | "goal"
+  | "goals"
   | "pace"
   | "existingFeatures"
   | "serviceCategories"
@@ -261,6 +303,7 @@ type ProjectDraft = Pick<
   | "budgetRange"
   | "propertyContext"
   | "privateNotes"
+  | "planSnapshot"
 >;
 type PendingProjectEvidence = { id: string; file: File; category: string };
 
@@ -312,12 +355,17 @@ function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
     postcode: profile?.postcode || "",
     addressState: profile?.addressState || "",
     propertyType: profile?.propertyType || "house",
-    householdSituation: profile?.householdSituation || "owner",
-    goal: "lower-bills",
+    householdSituation: ["owner", "renter"].includes(
+      profile?.householdSituation || "",
+    )
+      ? profile!.householdSituation
+      : "",
+    goal: "",
+    goals: [],
     pace: "staged",
     existingFeatures: [],
     serviceCategories: [],
-    priorities: ["lower-bills"],
+    priorities: [],
     projectStage: "exploring",
     timing: "planning",
     budgetRange: "not_set",
@@ -327,10 +375,11 @@ function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
       floorArea: "",
       roofType: "",
       switchboard: "",
-      occupancy: "",
+      approvalContext: "none",
       accessConstraints: [],
     },
     privateNotes: "",
+    planSnapshot: {},
   };
 }
 
@@ -350,8 +399,13 @@ function projectDefaultsWithSelection(
   return {
     ...draft,
     goal: selection.goal || draft.goal,
+    goals: selection.goal ? [selection.goal] : draft.goals,
     pace: selection.pace || draft.pace,
-    householdSituation: selection.situation || draft.householdSituation,
+    householdSituation: ["owner", "renter"].includes(
+      selection.situation || "",
+    )
+      ? selection.situation!
+      : draft.householdSituation,
     existingFeatures: selection.features || draft.existingFeatures,
     serviceCategories: selection.categories || draft.serviceCategories,
     postcode: selection.postcode || draft.postcode,
@@ -376,7 +430,11 @@ function ProfileForm({
     postcode: profile?.postcode || "",
     addressState: profile?.addressState || "",
     propertyType: profile?.propertyType || "house",
-    householdSituation: profile?.householdSituation || "owner",
+    householdSituation: ["owner", "renter"].includes(
+      profile?.householdSituation || "",
+    )
+      ? profile!.householdSituation
+      : "",
     accountUpdates: profile?.accountUpdates ?? false,
     consent: Boolean(profile),
   }));
@@ -539,12 +597,14 @@ function ProfileForm({
           </Field>
           <Field label="Property situation">
             <select
+              required
               value={draft.householdSituation}
               onChange={(event) =>
                 setDraft({ ...draft, householdSituation: event.target.value })
               }
             >
-              {homeEnergyPlanOptions.situations.map(
+              <option value="">Choose owner or renter</option>
+              {customerProjectOptions.situations.map(
                 ([value, label]: [string, string]) => (
                   <option value={value} key={value}>
                     {label}
@@ -609,6 +669,8 @@ function ProfileForm({
 function ProjectEditor({
   initial,
   existingId,
+  storedEvidenceCount,
+  evidenceSharingConsent,
   emailVerified,
   onCancel,
   onSave,
@@ -616,6 +678,8 @@ function ProjectEditor({
 }: {
   initial: ProjectDraft;
   existingId?: string;
+  storedEvidenceCount: number;
+  evidenceSharingConsent: boolean;
   emailVerified: boolean;
   onCancel: () => void;
   onSave: (draft: ProjectDraft, id?: string) => Promise<string>;
@@ -631,29 +695,149 @@ function ProjectEditor({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const [validationError, setValidationError] = useState("");
   const [savedId, setSavedId] = useState(existingId || "");
+  const [customPlanItem, setCustomPlanItem] = useState("");
+  const draggedPlanItem = useRef("");
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
   >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
-    useState(false);
-  const plan = useMemo(
+    useState(evidenceSharingConsent);
+  const advisorPlan = useMemo(
     () =>
-      createHomeEnergyPlan({
+      createCustomerProjectPlan({
+        goals: draft.goals,
         goal: draft.goal,
         pace: draft.pace,
-        situation: draft.householdSituation,
-        features: draft.existingFeatures,
+        householdSituation: draft.householdSituation,
+        approvalContext: draft.propertyContext.approvalContext,
+        existingFeatures: draft.existingFeatures,
+        budgetRange: draft.budgetRange,
       }),
-    [draft.goal, draft.pace, draft.householdSituation, draft.existingFeatures],
+    [
+      draft.goals,
+      draft.goal,
+      draft.pace,
+      draft.householdSituation,
+      draft.propertyContext.approvalContext,
+      draft.existingFeatures,
+      draft.budgetRange,
+    ],
   );
+  const [planItems, setPlanItems] = useState<CustomerPlanItem[]>(() => {
+    const prepared = createCustomerProjectPlan({
+      goals: initial.goals,
+      goal: initial.goal,
+      pace: initial.pace,
+      householdSituation: initial.householdSituation,
+      approvalContext: initial.propertyContext.approvalContext,
+      existingFeatures: initial.existingFeatures,
+      budgetRange: initial.budgetRange,
+      planSnapshot: initial.planSnapshot,
+    });
+    return prepared.items as CustomerPlanItem[];
+  });
+  const [planEdited, setPlanEdited] = useState(
+    Array.isArray(initial.planSnapshot?.items),
+  );
+  const [planInputsChanged, setPlanInputsChanged] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [planSnapshotConflict, setPlanSnapshotConflict] = useState(() => {
+    const snapshot = initial.planSnapshot;
+    if (!snapshot || Object.keys(snapshot).length === 0) return false;
+    if (
+      snapshot.version
+      && CUSTOMER_LEGACY_PLAN_VERSIONS.includes(snapshot.version)
+    ) {
+      return false;
+    }
+    return (
+      snapshot.version !== advisorPlan.version
+      || !Array.isArray(snapshot.items)
+    );
+  });
+  const visiblePlanItems = planEdited
+    ? planItems
+    : (advisorPlan.items as CustomerPlanItem[]);
+
+  const draftWithPlan = (): ProjectDraft => ({
+    ...draft,
+    goal: draft.goals[0] || "",
+    planSnapshot: {
+      version: advisorPlan.version,
+      title: advisorPlan.title,
+      summary: advisorPlan.summary,
+      items: visiblePlanItems,
+    },
+  });
+
+  const invalidateStepsFrom = (firstStep: number) => {
+    setCompletedSteps((current) => new Set(
+      [...current].filter((completedStep) => completedStep < firstStep),
+    ));
+  };
+
   const set = <K extends keyof ProjectDraft>(
     key: K,
     value: ProjectDraft[K],
   ) => {
     setDraft((current) => ({ ...current, [key]: value }));
+    if (
+      key === "goals" ||
+      key === "goal" ||
+      key === "pace" ||
+      key === "householdSituation" ||
+      key === "existingFeatures" ||
+      key === "budgetRange"
+    ) {
+      if (planEdited) setPlanInputsChanged(true);
+    }
+    if (
+      key === "title" ||
+      key === "homeNickname" ||
+      key === "postcode" ||
+      key === "addressState" ||
+      key === "propertyType" ||
+      key === "householdSituation"
+    ) {
+      invalidateStepsFrom(1);
+    } else if (
+      key === "goals" ||
+      key === "goal" ||
+      key === "pace" ||
+      key === "existingFeatures" ||
+      key === "budgetRange"
+    ) {
+      invalidateStepsFrom(2);
+    } else if (
+      key === "serviceCategories" ||
+      key === "priorities" ||
+      key === "projectStage" ||
+      key === "timing"
+    ) {
+      invalidateStepsFrom(4);
+    }
     setDirty(true);
     setStatus("");
+    setValidationError("");
+  };
+  const toggleGoal = (value: string) => {
+    const goals = draft.goals.includes(value)
+      ? draft.goals.filter((item) => item !== value)
+      : [...draft.goals, value].slice(0, 10);
+    setDraft((current) => ({
+      ...current,
+      goals,
+      goal: goals[0] || "",
+    }));
+    if (planEdited) setPlanInputsChanged(true);
+    invalidateStepsFrom(2);
+    setDirty(true);
+    setStatus("");
+    setValidationError("");
   };
   const toggle = (
     key: "existingFeatures" | "serviceCategories" | "priorities",
@@ -670,6 +854,12 @@ function ProjectEditor({
     value: string | string[],
   ) => {
     set("propertyContext", { ...draft.propertyContext, [key]: value });
+    if (key === "approvalContext") {
+      if (planEdited) setPlanInputsChanged(true);
+      invalidateStepsFrom(1);
+    } else {
+      invalidateStepsFrom(4);
+    }
   };
   const toggleAccessConstraint = (value: string) =>
     setPropertyContext(
@@ -680,24 +870,94 @@ function ProjectEditor({
           )
         : [...draft.propertyContext.accessConstraints, value],
     );
-  const addEvidence = (files: FileList | null, camera = false) => {
+  const addEvidence = (files: FileList | null) => {
     if (!files?.length) return;
     const next = [...files]
-      .slice(0, Math.max(0, 5 - pendingEvidence.length))
+      .slice(
+        0,
+        Math.max(
+          0,
+          12 - storedEvidenceCount - pendingEvidence.length,
+        ),
+      )
       .map((file) => ({
         id: crypto.randomUUID(),
         file,
         category:
-          camera || file.type.startsWith("image/")
+          file.type.startsWith("image/")
             ? "property-photo"
             : "supporting-document",
       }));
     setPendingEvidence((current) => [...current, ...next]);
     setStatus(
       next.length < files.length
-        ? "Up to five new files can be added with one request. Remove one to choose another."
+        ? "Up to 12 files can be added to one project. Remove one to choose another."
         : "Files selected. They upload only when you request installer responses.",
     );
+  };
+
+  const updateEvidenceCategory = (id: string, category: string) => {
+    setPendingEvidence((current) =>
+      current.map((item) => (item.id === id ? { ...item, category } : item)),
+    );
+    setDirty(true);
+  };
+
+  const updatePlanItems = (items: CustomerPlanItem[]) => {
+    setPlanItems(items);
+    setPlanEdited(true);
+    setPlanSnapshotConflict(false);
+    invalidateStepsFrom(3);
+    setDirty(true);
+    setStatus("");
+    setValidationError("");
+  };
+
+  const movePlanItem = (id: string, direction: -1 | 1) => {
+    const from = visiblePlanItems.findIndex((item) => item.id === id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= visiblePlanItems.length) return;
+    const next = [...visiblePlanItems];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    updatePlanItems(next);
+  };
+
+  const dropPlanItem = (targetId: string) => {
+    const sourceId = draggedPlanItem.current;
+    draggedPlanItem.current = "";
+    if (!sourceId || sourceId === targetId) return;
+    const sourceIndex = visiblePlanItems.findIndex(
+      (item) => item.id === sourceId,
+    );
+    const targetIndex = visiblePlanItems.findIndex(
+      (item) => item.id === targetId,
+    );
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const next = [...visiblePlanItems];
+    const [item] = next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, item);
+    updatePlanItems(next);
+  };
+
+  const addCustomPlanItem = () => {
+    const title = customPlanItem.trim();
+    if (!title) {
+      setValidationError("Write a short home-specific step before adding it.");
+      return;
+    }
+    updatePlanItems([
+      ...visiblePlanItems,
+      {
+        id: `custom-${crypto.randomUUID()}`,
+        stage: "Your note",
+        title: title.slice(0, 160),
+        text: "Added to this private plan for your home or budget.",
+        href: "",
+        action: "",
+      },
+    ]);
+    setCustomPlanItem("");
   };
 
   useEffect(() => {
@@ -708,15 +968,34 @@ function ProjectEditor({
     return () => window.removeEventListener("beforeunload", protect);
   }, [dirty]);
 
+  function openStep(nextStep: number) {
+    setValidationError("");
+    setStep(nextStep);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function validate(nextStep: number) {
     if (
       step === 1 &&
       (!draft.title.trim() ||
         !/^\d{4}$/.test(draft.postcode) ||
-        !draft.addressState)
+        !draft.addressState ||
+        !draft.householdSituation)
     ) {
-      setStatus(
-        "Add a private project name, postcode and state before continuing.",
+      setValidationError(
+        "Add a private project name, postcode, state and ownership situation before continuing.",
+      );
+      return false;
+    }
+    if (step === 2 && !draft.goals.length) {
+      setValidationError(
+        "Choose at least one goal so the advisor can build your plan.",
+      );
+      return false;
+    }
+    if (step === 3 && planInputsChanged) {
+      setValidationError(
+        "Refresh the advisor suggestions or confirm that you want to keep your edited steps before continuing.",
       );
       return false;
     }
@@ -724,7 +1003,7 @@ function ProjectEditor({
       step === 4 &&
       (!draft.serviceCategories.length || !draft.priorities.length)
     ) {
-      setStatus(
+      setValidationError(
         "Choose at least one type of work and one priority before reviewing the enquiry.",
       );
       return false;
@@ -737,25 +1016,37 @@ function ProjectEditor({
         draft.propertyContext.floorArea,
         draft.propertyContext.roofType,
         draft.propertyContext.switchboard,
-        draft.propertyContext.occupancy,
       ].every(Boolean)
     ) {
-      setStatus(
-        "Complete the property details before reviewing the enquiry. Choose Not sure where needed.",
+      setValidationError(
+        "Choose an answer for home height, age, floor area, roof type and switchboard. Not sure is a valid answer.",
       );
       return false;
     }
-    setStatus("");
-    setStep(nextStep);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setCompletedSteps((current) => new Set(current).add(step));
+    openStep(nextStep);
     return true;
   }
 
   async function saveDraft() {
+    if (planInputsChanged) {
+      openStep(3);
+      setValidationError(
+        "Your home answers changed after you edited the plan. Refresh the suggestions or confirm that you want to keep your edited steps before saving.",
+      );
+      return;
+    }
+    if (planSnapshotConflict) {
+      openStep(3);
+      setValidationError(
+        "This saved plan was created by a different advisor version. Reset the advisor suggestions before saving.",
+      );
+      return;
+    }
     setBusy(true);
     setStatus("Saving your draft...");
     try {
-      const id = await onSave(draft, savedId || undefined);
+      const id = await onSave(draftWithPlan(), savedId || undefined);
       setSavedId(id);
       setDirty(false);
       setStatus("Draft saved to your private account.");
@@ -771,28 +1062,79 @@ function ProjectEditor({
   }
 
   async function submitProject() {
-    if (!emailVerified) {
-      setStatus(
-        "Verify your account email before requesting installer responses.",
+    if (planInputsChanged) {
+      openStep(3);
+      setValidationError(
+        "Your home answers changed after you edited the plan. Refresh the suggestions or confirm that you want to keep your edited steps before requesting responses.",
       );
       return;
     }
-    if (!confirmInstallerPhotoSharing) {
-      setStatus(
-        "Confirm the quoting photo sharing notice before requesting installer responses.",
+    if (planSnapshotConflict) {
+      openStep(3);
+      setValidationError(
+        "This saved plan was created by a different advisor version. Reset the advisor suggestions before requesting responses.",
+      );
+      return;
+    }
+    if (
+      !draft.title.trim() ||
+      !/^\d{4}$/.test(draft.postcode) ||
+      !draft.addressState ||
+      !draft.householdSituation
+    ) {
+      openStep(1);
+      setValidationError(
+        "Complete the home and project details before requesting responses.",
+      );
+      return;
+    }
+    if (!draft.goals.length) {
+      openStep(2);
+      setValidationError(
+        "Choose at least one goal before requesting responses.",
       );
       return;
     }
     if (!draft.serviceCategories.length || !draft.priorities.length) {
-      setStatus("Choose the work and priorities before submitting.");
-      setStep(4);
+      openStep(4);
+      setValidationError("Choose the work and priorities before submitting.");
+      return;
+    }
+    if (
+      ![
+        draft.propertyContext.storeys,
+        draft.propertyContext.ageBand,
+        draft.propertyContext.floorArea,
+        draft.propertyContext.roofType,
+        draft.propertyContext.switchboard,
+      ].every(Boolean)
+    ) {
+      openStep(4);
+      setValidationError(
+        "Complete the five property questions before requesting responses. Not sure is a valid answer.",
+      );
+      return;
+    }
+    if (!emailVerified) {
+      setValidationError(
+        "Verify your account email before requesting installer responses.",
+      );
+      return;
+    }
+    if (
+      storedEvidenceCount + pendingEvidence.length > 0
+      && !confirmInstallerPhotoSharing
+    ) {
+      setValidationError(
+        "Confirm the quoting photo sharing notice before requesting installer responses.",
+      );
       return;
     }
     setBusy(true);
     setStatus("Creating the anonymised installer scope...");
     try {
       await onSubmit(
-        draft,
+        draftWithPlan(),
         pendingEvidence,
         confirmInstallerPhotoSharing,
         savedId || undefined,
@@ -817,6 +1159,70 @@ function ProjectEditor({
   const categoryLabels = draft.serviceCategories.map((item) =>
     optionLabel(customerProjectOptions.serviceCategories, item),
   );
+  const homeContextLabels = [
+    optionLabel(
+      customerProjectOptions.storeys,
+      draft.propertyContext.storeys,
+    ),
+    optionLabel(
+      customerProjectOptions.ageBands,
+      draft.propertyContext.ageBand,
+    ),
+    optionLabel(
+      customerProjectOptions.floorAreas,
+      draft.propertyContext.floorArea,
+    ),
+    optionLabel(
+      customerProjectOptions.roofTypes,
+      draft.propertyContext.roofType,
+    ),
+    optionLabel(
+      customerProjectOptions.switchboards,
+      draft.propertyContext.switchboard,
+    ),
+  ].filter(Boolean);
+  const goalLabels = draft.goals.map((item) =>
+    optionLabel(customerProjectOptions.goals, item),
+  );
+  const siteConsiderationLabels = [
+    draft.propertyContext.approvalContext === "strata"
+      ? "Strata, owners corporation or common-property approval may apply"
+      : draft.propertyContext.approvalContext === "not_sure"
+        ? "Approval requirements are not confirmed"
+        : "",
+    ...draft.propertyContext.accessConstraints.map((item) =>
+      optionLabel(customerProjectOptions.accessConstraints, item),
+    ),
+  ].filter(Boolean);
+  const installerPreview = buildAnonymizedOpportunity(
+    draftWithPlan(),
+    "customer-preview",
+  );
+  const stepReadiness = [
+    Boolean(
+      draft.title.trim()
+      && /^\d{4}$/.test(draft.postcode)
+      && draft.addressState
+      && draft.householdSituation,
+    ),
+    draft.goals.length > 0,
+    !planSnapshotConflict && !planInputsChanged,
+    Boolean(
+      draft.serviceCategories.length
+      && draft.priorities.length
+      && [
+        draft.propertyContext.storeys,
+        draft.propertyContext.ageBand,
+        draft.propertyContext.floorArea,
+        draft.propertyContext.roofType,
+        draft.propertyContext.switchboard,
+      ].every(Boolean),
+    ),
+    false,
+  ];
+  const completedStepCount = stepReadiness.filter(
+    (ready, index) => ready && completedSteps.has(index + 1),
+  ).length;
   return (
     <section
       className="customer-project-editor"
@@ -839,11 +1245,11 @@ function ProjectEditor({
           Exit project
         </button>
       </header>
-      <div
+      <nav
         className="customer-stepper"
-        aria-label={`Project builder step ${step} of 5`}
+        aria-label="Project builder steps"
       >
-        <div style={{ width: `${step * 20}%` }} />
+        <div style={{ width: `${completedStepCount * 20}%` }} />
         <ol>
           {["Home", "Goals", "Your plan", "Work", "Privacy"].map(
             (label, index) => (
@@ -851,19 +1257,26 @@ function ProjectEditor({
                 className={
                   step === index + 1
                     ? "active"
-                    : step > index + 1
+                    : completedSteps.has(index + 1)
+                        && stepReadiness[index]
                       ? "complete"
                       : ""
                 }
                 key={label}
               >
-                <span>{index + 1}</span>
-                {label}
+                <button
+                  type="button"
+                  aria-current={step === index + 1 ? "step" : undefined}
+                  onClick={() => openStep(index + 1)}
+                >
+                  <span>{index + 1}</span>
+                  {label}
+                </button>
               </li>
             ),
           )}
         </ol>
-      </div>
+      </nav>
       {status && (
         <p className="customer-editor-status" role="alert">
           {status}
@@ -876,10 +1289,36 @@ function ProjectEditor({
               <span>Step 1</span>
               <h2>Which home and project is this?</h2>
               <p>
-                The name and home nickname stay inside your account. Installers
-                receive no customer-created titles.
+                Start with whether you own or rent. That changes which actions
+                you can take yourself and which may need permission.
               </p>
             </div>
+            <fieldset className="customer-choice-group first-question">
+              <legend>Do you own or rent this home?</legend>
+              <div className="customer-choice-grid compact">
+                {customerProjectOptions.situations.map(([value, label]) => (
+                  <label
+                    className={
+                      draft.householdSituation === value ? "selected" : ""
+                    }
+                    key={value}
+                  >
+                    <input
+                      type="radio"
+                      name="customer-situation"
+                      checked={draft.householdSituation === value}
+                      onChange={() => set("householdSituation", value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="customer-choice-help">
+                {draft.householdSituation === "renter"
+                  ? "Your plan will lead with portable or reversible actions and flag changes that may need the owner’s permission."
+                  : "This answer helps separate actions you control from work that needs another approval."}
+              </p>
+            </fieldset>
             <div className="customer-field-grid">
               <Field label="Private project name">
                 <input
@@ -895,6 +1334,10 @@ function ProjectEditor({
                   placeholder="My home"
                 />
               </Field>
+              <p className="customer-private-field-note">
+                Project names and home nicknames stay inside your account.
+                Installers do not receive them.
+              </p>
               <Field label="Project postcode">
                 <input
                   value={draft.postcode}
@@ -933,14 +1376,20 @@ function ProjectEditor({
                   )}
                 </select>
               </Field>
-              <Field label="Property situation">
+              <Field
+                label="Strata or common-property approval"
+                hint="This can apply whether you own or rent, especially for apartments, units and some townhouses."
+              >
                 <select
-                  value={draft.householdSituation}
+                  value={draft.propertyContext.approvalContext}
                   onChange={(event) =>
-                    set("householdSituation", event.target.value)
+                    setPropertyContext(
+                      "approvalContext",
+                      event.target.value,
+                    )
                   }
                 >
-                  {homeEnergyPlanOptions.situations.map(
+                  {customerProjectOptions.approvalContexts.map(
                     ([value, label]: [string, string]) => (
                       <option value={value} key={value}>
                         {label}
@@ -956,48 +1405,27 @@ function ProjectEditor({
           <section className="customer-editor-step">
             <div className="customer-step-heading">
               <span>Step 2</span>
-              <h2>What would you like to improve?</h2>
+              <h2>Tell the advisor what matters and what you know</h2>
               <p>
-                Your answers build a private step-by-step plan. Nothing is sent
-                to an installer yet.
+                Choose every goal that matters. Not sure is useful information,
+                and nothing is sent to an installer yet.
               </p>
             </div>
             <fieldset className="customer-choice-group">
-              <legend>Main goal</legend>
+              <legend>Main goals, choose all that apply</legend>
               <div className="customer-choice-grid">
-                {homeEnergyPlanOptions.goals.map(
-                  ([value, label]: [string, string]) => (
-                    <label
-                      className={draft.goal === value ? "selected" : ""}
-                      key={value}
-                    >
-                      <input
-                        type="radio"
-                        name="customer-goal"
-                        checked={draft.goal === value}
-                        onChange={() => set("goal", value)}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ),
-                )}
-              </div>
-            </fieldset>
-            <fieldset className="customer-choice-group">
-              <legend>What is already in the home?</legend>
-              <div className="customer-choice-grid">
-                {homeEnergyPlanOptions.features.map(
+                {customerProjectOptions.goals.map(
                   ([value, label]: [string, string]) => (
                     <label
                       className={
-                        draft.existingFeatures.includes(value) ? "selected" : ""
+                        draft.goals.includes(value) ? "selected" : ""
                       }
                       key={value}
                     >
                       <input
                         type="checkbox"
-                        checked={draft.existingFeatures.includes(value)}
-                        onChange={() => toggle("existingFeatures", value)}
+                        checked={draft.goals.includes(value)}
+                        onChange={() => toggleGoal(value)}
                       />
                       <span>{label}</span>
                     </label>
@@ -1006,9 +1434,83 @@ function ProjectEditor({
               </div>
             </fieldset>
             <fieldset className="customer-choice-group">
+              <legend>What describes the home today?</legend>
+              <p className="customer-choice-help">
+                Include comfort problems and anything already installed. Choose
+                the unknown option when you cannot tell.
+              </p>
+              <div className="customer-feature-groups">
+                {homeFeatureGroups.map((group) => (
+                  <section key={group.title}>
+                    <h3>{group.title}</h3>
+                    <div className="customer-choice-grid">
+                      {customerProjectOptions.homeFeatures
+                        .filter(([value]) => group.values.includes(value))
+                        .map(([value, label]: [string, string]) => (
+                          <label
+                            className={
+                              draft.existingFeatures.includes(value)
+                                ? "selected"
+                                : ""
+                            }
+                            key={value}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={draft.existingFeatures.includes(value)}
+                              onChange={() =>
+                                toggle("existingFeatures", value)
+                              }
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </fieldset>
+            <details className="customer-question-help">
+              <summary>How can I tell what glazing or insulation I have?</summary>
+              <div>
+                <p>
+                  Double glazing usually has a visible spacer at the glass
+                  edge, but homes can contain a mix. Insulation may be recorded
+                  on plans, invoices or an earlier assessment.
+                </p>
+                <p>
+                  Do not enter a roof space, remove a cover or guess. Choose Not
+                  sure and add a safe photo or document later if useful.
+                </p>
+              </div>
+            </details>
+            <div className="customer-budget-question">
+              <div>
+                <span>Planning range</span>
+                <h3>What budget should the plan work around?</h3>
+                <p>
+                  This only changes sequence and scope. It is not a price
+                  estimate, savings promise or claim that an upgrade will fit.
+                </p>
+              </div>
+              <select
+                aria-label="Private planning budget"
+                value={draft.budgetRange}
+                onChange={(event) => set("budgetRange", event.target.value)}
+              >
+                {customerProjectOptions.budgets.map(
+                  ([value, label]: [string, string]) => (
+                    <option value={value} key={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+            <fieldset className="customer-choice-group">
               <legend>Preferred pace</legend>
               <div className="customer-choice-grid compact">
-                {homeEnergyPlanOptions.paces.map(
+                {customerProjectOptions.paces.map(
                   ([value, label]: [string, string]) => (
                     <label
                       className={draft.pace === value ? "selected" : ""}
@@ -1026,37 +1528,189 @@ function ProjectEditor({
                 )}
               </div>
             </fieldset>
+            {draft.householdSituation === "renter" && (
+              <div className="customer-guidance-note renter">
+                <strong>Renter-friendly ideas come first</strong>
+                <p>
+                  Your starting plan can include layers and electric throws,
+                  draught snakes, removable window insulation or solar-control
+                  screens, portable fans and suitable portable induction
+                  cooking. Fixed sealing, vent covers and installed equipment
+                  still need permission and a safety check where relevant.
+                </p>
+              </div>
+            )}
           </section>
         )}
         {step === 3 && (
           <section className="customer-editor-step">
             <div className="customer-step-heading">
               <span>Step 3</span>
-              <h2>{plan.title}</h2>
-              <p>{plan.summary}</p>
+              <h2>{advisorPlan.title}</h2>
+              <p>{advisorPlan.summary}</p>
+            </div>
+            {planInputsChanged && (
+              <div className="customer-plan-change-warning" role="status">
+                <strong>Your edited plan is preserved</strong>
+                <p>
+                  You changed an answer that can affect the advice. Refresh the
+                  suggestions to rebuild the plan, or confirm that you want to
+                  keep your current removals, order and private notes. Steps
+                  that are no longer part of the new advice stay as private
+                  items without an advisor link.
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanItems(
+                        advisorPlan.items as CustomerPlanItem[],
+                      );
+                      setPlanEdited(false);
+                      setPlanInputsChanged(false);
+                      setPlanSnapshotConflict(false);
+                      invalidateStepsFrom(3);
+                      setDirty(true);
+                      setValidationError("");
+                    }}
+                  >
+                    Refresh advisor suggestions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanItems(
+                        preserveEditedPlanItems(
+                          visiblePlanItems,
+                          advisorPlan.items,
+                        ) as CustomerPlanItem[],
+                      );
+                      setPlanEdited(true);
+                      setPlanInputsChanged(false);
+                      invalidateStepsFrom(3);
+                      setDirty(true);
+                      setValidationError("");
+                    }}
+                  >
+                    Keep my edited steps
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="customer-plan-toolbar">
+              <p>
+                Drag steps into your preferred order, use the arrow buttons on
+                touch or keyboard, or remove anything that does not apply.
+              </p>
+              {(planEdited || planSnapshotConflict) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanItems(
+                      advisorPlan.items as CustomerPlanItem[],
+                    );
+                    setPlanEdited(false);
+                    setPlanInputsChanged(false);
+                    setPlanSnapshotConflict(false);
+                    invalidateStepsFrom(3);
+                    setDirty(true);
+                    setValidationError("");
+                  }}
+                >
+                  Reset advisor suggestions
+                </button>
+              )}
             </div>
             <ol className="customer-roadmap-preview">
-              {plan.items.map(
-                (
-                  item: {
-                    id: string;
-                    stage: string;
-                    title: string;
-                    text: string;
-                  },
-                  index: number,
-                ) => (
-                  <li key={item.id}>
+              {visiblePlanItems.map((item, index) => (
+                  <li
+                    draggable
+                    onDragStart={() => {
+                      draggedPlanItem.current = item.id;
+                    }}
+                    onDragEnd={() => {
+                      draggedPlanItem.current = "";
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => dropPlanItem(item.id)}
+                    key={item.id}
+                  >
                     <span>{String(index + 1).padStart(2, "0")}</span>
                     <div>
                       <small>{item.stage}</small>
                       <h3>{item.title}</h3>
                       <p>{item.text}</p>
+                      {item.href && item.action && (
+                        <a href={item.href} target="_blank" rel="noreferrer">
+                          {item.action}
+                        </a>
+                      )}
+                    </div>
+                    <div className="customer-plan-item-actions">
+                      <button
+                        type="button"
+                        aria-label={`Move ${item.title} earlier`}
+                        onClick={() => movePlanItem(item.id, -1)}
+                        disabled={index === 0}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${item.title} later`}
+                        onClick={() => movePlanItem(item.id, 1)}
+                        disabled={index === visiblePlanItems.length - 1}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="remove"
+                        aria-label={`Remove ${item.title} from the plan`}
+                        onClick={() =>
+                          updatePlanItems(
+                            visiblePlanItems.filter(
+                              (entry) => entry.id !== item.id,
+                            ),
+                          )
+                        }
+                      >
+                        ×
+                      </button>
                     </div>
                   </li>
-                ),
-              )}
+                ))}
             </ol>
+            {!visiblePlanItems.length && (
+              <div className="customer-plan-empty">
+                <strong>Your plan is empty</strong>
+                <p>
+                  Add a home-specific step below or reset the advisor
+                  suggestions.
+                </p>
+              </div>
+            )}
+            <div className="customer-plan-add">
+              <div>
+                <span>Add a home-specific step</span>
+                <strong>Include something unique to this home or budget</strong>
+              </div>
+              <input
+                value={customPlanItem}
+                maxLength={160}
+                placeholder="Example: Ask strata about external shading approval"
+                aria-label="Home-specific plan step"
+                onChange={(event) => setCustomPlanItem(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  addCustomPlanItem();
+                }}
+              />
+              <button type="button" onClick={addCustomPlanItem}>
+                Add to plan
+              </button>
+            </div>
             <div className="customer-guidance-note">
               <strong>Keep this plan even if you do not request prices</strong>
               <p>
@@ -1071,10 +1725,10 @@ function ProjectEditor({
           <section className="customer-editor-step">
             <div className="customer-step-heading">
               <span>Step 4</span>
-              <h2>Describe the property and the work you may want priced</h2>
+              <h2>Prepare a clear, safe scope for possible quotes</h2>
               <p>
-                These structured property facts help matched installers judge
-                suitability without receiving your identity or exact location.
+                Simple facts and useful photos can reduce guesswork. Choose Not
+                sure when you do not know and never access an unsafe area.
               </p>
             </div>
             <div className="customer-field-grid customer-property-context-grid">
@@ -1153,24 +1807,39 @@ function ProjectEditor({
                   ))}
                 </select>
               </Field>
-              <Field label="Usual access timing">
-                <select
-                  value={draft.propertyContext.occupancy}
-                  onChange={(event) =>
-                    setPropertyContext("occupancy", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.occupancies.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+            </div>
+            <div className="customer-question-help-grid">
+              <details className="customer-question-help">
+                <summary>? Home height and floor area</summary>
+                <p>
+                  Count the main levels above ground. For floor area, a broad
+                  estimate from a plan, listing or memory is enough.
+                </p>
+              </details>
+              <details className="customer-question-help">
+                <summary>? Roof type</summary>
+                <p>
+                  Choose the main visible roof covering, such as metal or
+                  tiles. A safely taken exterior or satellite image can help.
+                </p>
+              </details>
+              <details className="customer-question-help">
+                <summary>? Switchboard</summary>
+                <p>
+                  A front photo with the normal door open is enough. Never
+                  remove the internal panel or touch wiring.
+                </p>
+              </details>
+              <details className="customer-question-help">
+                <summary>? Not sure</summary>
+                <p>
+                  Not sure is a valid answer. It tells the advisor or trade what
+                  to confirm instead of encouraging a guess.
+                </p>
+              </details>
             </div>
             <fieldset className="customer-choice-group">
-              <legend>Access considerations, optional</legend>
+              <legend>Site constraints a trade should know, optional</legend>
               <div className="customer-choice-grid">
                 {customerProjectOptions.accessConstraints.map(
                   ([value, label]) => (
@@ -1196,7 +1865,7 @@ function ProjectEditor({
               </div>
             </fieldset>
             <fieldset className="customer-choice-group">
-              <legend>Types of work</legend>
+              <legend>Types of work you may want quoted</legend>
               <div className="customer-choice-grid">
                 {customerProjectOptions.serviceCategories.map(
                   ([value, label]: [string, string]) => (
@@ -1270,20 +1939,6 @@ function ProjectEditor({
                   )}
                 </select>
               </Field>
-              <Field label="Private planning budget">
-                <select
-                  value={draft.budgetRange}
-                  onChange={(event) => set("budgetRange", event.target.value)}
-                >
-                  {customerProjectOptions.budgets.map(
-                    ([value, label]: [string, string]) => (
-                      <option value={value} key={value}>
-                        {label}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </Field>
             </div>
             <section
               className="customer-project-evidence-picker"
@@ -1293,12 +1948,11 @@ function ProjectEditor({
                 <div>
                   <span>Optional property evidence</span>
                   <h3 id="project-evidence-title">
-                    Add photos or supporting files
+                    Add useful photos or documents
                   </h3>
                   <p>
-                    On a phone or tablet you can take a new photo with the
-                    device camera. Every uploaded photo and document, including
-                    floor plans and PDFs, is shared with each verified installer
+                    Use this one upload area for existing files or a phone
+                    camera. Every file is shared with each verified installer
                     allocated to this enquiry for quoting guidance.
                   </p>
                 </div>
@@ -1306,30 +1960,55 @@ function ProjectEditor({
               </header>
               <div className="customer-project-evidence-actions">
                 <label>
-                  <span>Choose photos or files</span>
+                  <span>Add photos or documents</span>
+                  <small>JPEG, PNG, WebP or PDF, up to 8 MB each</small>
                   <input
                     type="file"
                     multiple
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
                     onChange={(event) => {
                       addEvidence(event.target.files);
                       event.target.value = "";
                     }}
                   />
                 </label>
-                <label>
-                  <span>Take a property photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(event) => {
-                      addEvidence(event.target.files, true);
-                      event.target.value = "";
-                    }}
-                  />
-                </label>
               </div>
+              <details className="customer-photo-checklist">
+                <summary>Recommended photo and document checklist</summary>
+                <ul>
+                  <li>Switchboard front with its ordinary door open</li>
+                  <li>
+                    Hot-water system, rating label and wall-to-fence clearance
+                  </li>
+                  <li>
+                    Heating or cooling units, outlets and accessible labels
+                  </li>
+                  <li>
+                    Representative windows, glazing edges, curtains, blinds,
+                    shutters and external shading
+                  </li>
+                  <li>
+                    Visible draught gaps, vents, chimneys or evaporative outlets
+                  </li>
+                  <li>
+                    Roof or ceiling access hatch photographed safely from the
+                    room
+                  </li>
+                  <li>
+                    Cropped satellite roof screenshot showing roof form, shade
+                    and existing panels without an address marker
+                  </li>
+                  <li>
+                    Energy-use summary with the NMI, account number, name and
+                    address removed
+                  </li>
+                </ul>
+                <p>
+                  Wide photos show context and close photos show labels. Never
+                  climb onto a roof, enter a roof space or remove an electrical
+                  cover for this form.
+                </p>
+              </details>
               {pendingEvidence.length > 0 && (
                 <ul>
                   {pendingEvidence.map((item) => (
@@ -1340,6 +2019,28 @@ function ProjectEditor({
                           {fileSize(item.file.size)} |{" "}
                           {item.category.replaceAll("-", " ")}
                         </small>
+                        <select
+                          aria-label={`Category for ${item.file.name}`}
+                          value={item.category}
+                          onChange={(event) =>
+                            updateEvidenceCategory(
+                              item.id,
+                              event.target.value,
+                            )
+                          }
+                        >
+                          <option value="property-photo">
+                            Home or site photo
+                          </option>
+                          <option value="existing-equipment">
+                            Existing equipment
+                          </option>
+                          <option value="switchboard">Switchboard</option>
+                          <option value="supporting-document">
+                            Supporting document
+                          </option>
+                          <option value="other">Other useful evidence</option>
+                        </select>
                       </span>
                       <button
                         type="button"
@@ -1356,8 +2057,8 @@ function ProjectEditor({
                 </ul>
               )}
               <small>
-                Up to five new files in one request, 8 MB each. Do not upload
-                people, mail, licence plates, identity documents, bills, meter
+                Up to 12 files, 8 MB each. Do not upload people, mail, licence
+                plates, identity documents, unredacted bills, meter
                 identifiers, passwords or anything you do not want every
                 allocated installer to see.
               </small>
@@ -1393,7 +2094,9 @@ function ProjectEditor({
                 <h3>
                   {categoryLabels.length === 1
                     ? `${categoryLabels[0]} project`
-                    : "Multi-upgrade home project"}
+                    : categoryLabels.length > 1
+                      ? "Multi-upgrade home project"
+                      : "Home energy project"}
                 </h3>
                 <dl>
                   <div>
@@ -1405,30 +2108,14 @@ function ProjectEditor({
                     <dd>{propertyLabel}</dd>
                   </div>
                   <div>
+                    <dt>Goals</dt>
+                    <dd>{goalLabels.join(", ") || "Choose goals"}</dd>
+                  </div>
+                  <div>
                     <dt>Home context</dt>
                     <dd>
-                      {[
-                        optionLabel(
-                          customerProjectOptions.storeys,
-                          draft.propertyContext.storeys,
-                        ),
-                        optionLabel(
-                          customerProjectOptions.ageBands,
-                          draft.propertyContext.ageBand,
-                        ),
-                        optionLabel(
-                          customerProjectOptions.floorAreas,
-                          draft.propertyContext.floorArea,
-                        ),
-                        optionLabel(
-                          customerProjectOptions.roofTypes,
-                          draft.propertyContext.roofType,
-                        ),
-                        optionLabel(
-                          customerProjectOptions.switchboards,
-                          draft.propertyContext.switchboard,
-                        ),
-                      ].join(", ")}
+                      {homeContextLabels.join(", ")
+                        || "Complete or choose Not sure for the five property questions"}
                     </dd>
                   </div>
                   <div>
@@ -1464,8 +2151,22 @@ function ProjectEditor({
                     </dd>
                   </div>
                   <div>
+                    <dt>Site considerations</dt>
+                    <dd>
+                      {siteConsiderationLabels.join(", ")
+                        || "No additional site constraint selected"}
+                    </dd>
+                  </div>
+                  <div>
                     <dt>Shared files</dt>
-                    <dd>{pendingEvidence.length || "None attached"}</dd>
+                    <dd>
+                      {storedEvidenceCount + pendingEvidence.length
+                        || "None attached"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Generated installer summary</dt>
+                    <dd>{installerPreview.summary}</dd>
                   </div>
                 </dl>
               </div>
@@ -1480,20 +2181,22 @@ function ProjectEditor({
                 </ul>
               </aside>
             </div>
-            <label className="customer-submit-consent">
-              <input
-                type="checkbox"
-                checked={confirmInstallerPhotoSharing}
-                onChange={(event) =>
-                  setConfirmInstallerPhotoSharing(event.target.checked)
-                }
-              />
-              <span>
-                I understand that every verified installer allocated to this
-                enquiry can view every attached photo and supporting document
-                for quoting guidance.
-              </span>
-            </label>
+            {storedEvidenceCount + pendingEvidence.length > 0 && (
+              <label className="customer-submit-consent">
+                <input
+                  type="checkbox"
+                  checked={confirmInstallerPhotoSharing}
+                  onChange={(event) =>
+                    setConfirmInstallerPhotoSharing(event.target.checked)
+                  }
+                />
+                <span>
+                  I understand that every verified installer allocated to this
+                  enquiry can view every attached photo and supporting document
+                  for quoting guidance.
+                </span>
+              </label>
+            )}
           </section>
         )}
       </div>
@@ -1518,11 +2221,16 @@ function ProjectEditor({
                 : "Nothing is sent until you choose"}
           </small>
         </div>
-        <div>
+        <div className="customer-editor-next">
+          {validationError && (
+            <p className="customer-action-error" role="alert">
+              {validationError}
+            </p>
+          )}
           {step > 1 && (
             <button
               type="button"
-              onClick={() => setStep(step - 1)}
+              onClick={() => openStep(step - 1)}
               disabled={busy}
             >
               Back
@@ -1787,7 +2495,9 @@ function ProjectDetail({
                       <small>{item.stage}</small>
                       <h3>{item.title}</h3>
                       <p>{item.text}</p>
-                      <a href={item.href}>{item.action}</a>
+                      {item.href && item.action && (
+                        <a href={item.href}>{item.action}</a>
+                      )}
                     </div>
                   </li>
                 );
@@ -2593,7 +3303,7 @@ export function CustomerDashboard({
   initialPlannerSelection,
 }: {
   initialView?:
-    "overview" | "new" | "profile" | "assets" | "quotes" | "appointments";
+    "overview" | "new" | "profile" | "quotes" | "appointments";
   initialProjectId?: string;
   initialEdit?: boolean;
   initialPlannerSelection?: {
@@ -2623,13 +3333,11 @@ export function CustomerDashboard({
         ? "editor"
         : initialView === "profile"
           ? "profile"
-          : initialView === "assets"
-            ? "assets"
-            : initialView === "quotes"
-              ? "quotes"
-              : initialView === "appointments"
-                ? "appointments"
-                : "overview",
+          : initialView === "quotes"
+            ? "quotes"
+            : initialView === "appointments"
+              ? "appointments"
+              : "overview",
   );
   const [selectedId, setSelectedId] = useState(initialProjectId);
   const [editingId, setEditingId] = useState(
@@ -2710,9 +3418,7 @@ export function CustomerDashboard({
     setView(
       initialView === "new"
         ? "editor"
-        : initialView === "assets"
-          ? "assets"
-          : "overview",
+        : "overview",
     );
     if (user) await load(user);
   }
@@ -2762,6 +3468,10 @@ export function CustomerDashboard({
       form.set("clientUploadId", item.id);
       form.set("category", item.category);
       form.set("file", uploadFile);
+      form.set(
+        "confirmInstallerPhotoSharing",
+        String(confirmInstallerPhotoSharing),
+      );
       const uploadResponse = await fetch("/api/customer-project-evidence", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -3119,12 +3829,6 @@ export function CustomerDashboard({
               Overview
             </a>
             <a
-              className={view === "assets" ? "active" : ""}
-              href="/account/assets"
-            >
-              Home records
-            </a>
-            <a
               className={view === "quotes" ? "active" : ""}
               href="/account/quotes"
             >
@@ -3189,6 +3893,10 @@ export function CustomerDashboard({
                       propertyType: editing.propertyType,
                       householdSituation: editing.householdSituation,
                       goal: editing.goal,
+                      goals:
+                        editing.goals?.length > 0
+                          ? editing.goals
+                          : [editing.goal],
                       pace: editing.pace,
                       existingFeatures: editing.existingFeatures,
                       serviceCategories: editing.serviceCategories,
@@ -3201,6 +3909,7 @@ export function CustomerDashboard({
                         ...(editing.propertyContext || {}),
                       },
                       privateNotes: editing.privateNotes,
+                      planSnapshot: editing.planSnapshot,
                     }
                   : projectDefaultsWithSelection(
                       account.profile,
@@ -3208,6 +3917,10 @@ export function CustomerDashboard({
                     )
               }
               existingId={editing?.id}
+              storedEvidenceCount={editing?.evidence.length || 0}
+              evidenceSharingConsent={Boolean(
+                editing?.evidenceSharingConsent,
+              )}
               emailVerified={account.emailVerified}
               onCancel={() => {
                 setView("overview");
@@ -3228,8 +3941,6 @@ export function CustomerDashboard({
               onDownloadEvidence={downloadProjectEvidence}
               onDeleteEvidence={deleteProjectEvidence}
             />
-          ) : view === "assets" ? (
-            <CustomerAssetOwnershipCentre user={user} />
           ) : view === "quotes" ? (
             <CustomerTradeQuotes user={user} />
           ) : view === "appointments" ? (

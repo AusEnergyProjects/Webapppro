@@ -25,7 +25,7 @@ const ACCOUNT_TYPES = new Set(["customer", "installer", "supplier", "admin"]);
 const CUSTOMER_STATUSES = new Set(["active", "suspended", "closed"]);
 const STATES = new Set(AUSTRALIAN_STATE_CODES);
 const PROPERTY_TYPES = new Set(["house", "townhouse", "apartment", "new-build", "other"]);
-const HOUSEHOLD_SITUATIONS = new Set(["owner", "renter", "strata", "planning-building"]);
+const HOUSEHOLD_SITUATIONS = new Set(["owner", "renter"]);
 const PAGE_SIZES = new Set([25, 50, 100]);
 type DirectorySortTerm = { expression: string; direction: KeysetDirection; rowKey: string };
 type DirectorySort = { orderBy: string; terms: DirectorySortTerm[] };
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
         const includePrivateNotes = ["owner", "admin"].includes(admin.role);
         const [projects, quotes, notes] = await Promise.all([
           db.prepare(`SELECT id, title, home_nickname, postcode, address_state, property_type, household_situation,
-            goal, pace, service_categories, priorities, project_stage, timing, budget_range,
+            goal, goals, pace, service_categories, priorities, project_stage, timing, budget_range,
             ${includePrivateNotes ? "private_notes" : "'' AS private_notes"}, completed_plan_items, status,
             opportunity_id, submitted_at, archived_at, created_at, updated_at
             FROM customer_projects WHERE firebase_uid = ? ORDER BY updated_at DESC LIMIT 100`).bind(uid).all<Record<string, unknown>>(),
@@ -149,6 +149,10 @@ export async function GET(request: Request) {
             propertyType: project.property_type,
             householdSituation: project.household_situation,
             goal: project.goal,
+            goals: (() => {
+              const goals = parseJsonList(project.goals);
+              return goals.length ? goals : [String(project.goal || "lower-bills")];
+            })(),
             pace: project.pace,
             serviceCategories: parseJsonList(project.service_categories),
             priorities: parseJsonList(project.priorities),

@@ -3,6 +3,7 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION } from "@/lib/customer-projects.mjs";
 
 export const runtime = "edge";
 
@@ -56,6 +57,17 @@ function safeFileName(value: string) {
   return value.replace(/[\r\n"\\/]/g, "_").trim().slice(0, 180) || "project-evidence";
 }
 
+function evidenceExtension(contentType: string) {
+  if (contentType === "application/pdf") return "pdf";
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function privateEvidenceName(category: string, contentType: string, id: string) {
+  return `${category}-${id.slice(0, 8)}.${evidenceExtension(contentType)}`;
+}
+
 function publicRecord(record: EvidenceRecord) {
   return {
     id: record.id,
@@ -86,6 +98,11 @@ async function installerCanAccess(installerUid: string, record: EvidenceRecord) 
     WHERE p.id = ? AND p.firebase_uid = ? AND m.firebase_uid = ?
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused') AND a.partner_type = 'installer'
+      AND EXISTS (
+        SELECT 1 FROM customer_consent_receipts consent
+        WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
+          AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
+      )
       AND ${verifiedTradeAccountPredicate("a")} LIMIT 1`)
     .bind(record.project_id, record.customer_uid, installerUid).first();
   return Boolean(access);
@@ -148,6 +165,7 @@ export async function POST(request: Request) {
   const projectId = String(form.get("projectId") || "").trim().slice(0, 180);
   const category = String(form.get("category") || "").trim();
   const clientUploadId = String(form.get("clientUploadId") || "").trim().slice(0, 180);
+  const confirmInstallerPhotoSharing = form.get("confirmInstallerPhotoSharing") === "true";
   const file = form.get("file");
   const project = await ownedProject(user.uid, projectId);
   if (!project || !["draft", "matching", "quote_review"].includes(project.status)) {
@@ -158,6 +176,7 @@ export async function POST(request: Request) {
   if (!account) return json({ ok: false, error: "Complete your active customer account first." }, 403);
   if (!(file instanceof File) || !file.name) return json({ ok: false, error: "Choose a photo or document to upload." }, 400);
   if (!clientUploadId) return json({ ok: false, error: "The upload reference was missing. Choose the file again." }, 400);
+  if (!confirmInstallerPhotoSharing) return json({ ok: false, error: "Confirm that every attached file can be shared with the verified installers allocated to this enquiry." }, 400);
   if (!CATEGORIES.has(category)) return json({ ok: false, error: "Choose a valid property evidence category." }, 400);
   if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a PDF, JPEG, PNG or WebP file. Unsupported phone photos must be converted to JPEG first." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "Each file must be no larger than 8 MB." }, 400);
@@ -168,7 +187,17 @@ export async function POST(request: Request) {
   const existing = await getD1().prepare(`SELECT * FROM customer_project_evidence
     WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ? AND status = 'active'`)
     .bind(projectId, user.uid, clientUploadId).first<EvidenceRecord>();
-  if (existing) return json({ ok: true, evidence: publicRecord(existing) });
+  if (existing) {
+    const now = new Date().toISOString();
+    await getD1().prepare(`INSERT INTO customer_consent_receipts
+      (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+      VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+      ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
+        granted_at = excluded.granted_at, withdrawn_at = ''`)
+      .bind(`customer-evidence-share:${projectId}`, user.uid, projectId,
+        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now).run();
+    return json({ ok: true, evidence: publicRecord(existing) });
+  }
   const count = await getD1().prepare(`SELECT COUNT(*) total FROM customer_project_evidence
     WHERE project_id = ? AND customer_uid = ? AND status = 'active'`).bind(projectId, user.uid).first<{ total: number }>();
   if (Number(count?.total || 0) >= MAX_PROJECT_FILES) return json({ ok: false, error: "This project already has its maximum of 12 evidence files." }, 409);
@@ -176,7 +205,7 @@ export async function POST(request: Request) {
   const id = crypto.randomUUID();
   const objectKey = `customer-projects/${user.uid}/${projectId}/${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const fileName = safeFileName(file.name);
+  const fileName = privateEvidenceName(category, file.type, id);
   const bucket = getEvidenceBucket();
   await bucket.put(objectKey, storedBytes.buffer, {
     httpMetadata: { contentType: file.type },
@@ -192,6 +221,13 @@ export async function POST(request: Request) {
         (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
         VALUES (?, ?, ?, ?, '', 'customer', ?, 'uploaded', ?)`)
         .bind(crypto.randomUUID(), id, projectId, user.uid, user.uid, now),
+      getD1().prepare(`INSERT INTO customer_consent_receipts
+        (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+        VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+        ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
+          granted_at = excluded.granted_at, withdrawn_at = ''`)
+        .bind(`customer-evidence-share:${projectId}`, user.uid, projectId,
+          CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now),
       getD1().prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
         .bind(now, projectId, user.uid),
     ]);

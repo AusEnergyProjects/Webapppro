@@ -24,11 +24,24 @@ const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldUi = read("../src/components/TradeFieldWorkPanel.tsx");
 
 test("service defaults cover each requested upgrade and carry useful and avoid guidance", () => {
-  for (const category of ["solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "assessment"]) {
+  for (const category of [
+    "solar", "battery", "heating-cooling", "hot-water",
+    "draught-proofing", "insulation", "glazing", "window-coverings",
+    "ev-charging", "assessment",
+  ]) {
     const requirements = defaultPhotoRequirements(category);
     assert.ok(requirements.length >= 3, category);
     assert.ok(requirements.every((item) => item.label && item.guidance && item.usefulExample && item.avoidExample));
   }
+  for (const [category, requirementId] of [
+    ["draught-proofing", "draught-opening-overview"],
+    ["insulation", "roof-or-ceiling-access"],
+    ["glazing", "window-overview"],
+    ["window-coverings", "opening-and-surrounds"],
+  ]) {
+    assert.ok(defaultPhotoRequirements(category).some((item) => item.id === requirementId), category);
+  }
+  assert.deepEqual(defaultPhotoRequirements("insulation-draughts"), defaultPhotoRequirements("assessment"));
   assert.match(defaultPhotoRequirements("solar")[0].guidance, /people, documents, street numbers/);
 });
 

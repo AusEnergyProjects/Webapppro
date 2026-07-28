@@ -2,158 +2,146 @@
 
 Status: active milestone
 
-Prepared: 28 July 2026
+Prepared: 29 July 2026
 
-Milestone ID: `FREE-ACCESS-ABN-01`
+Milestone ID: `CUSTOMER-HOME-ADVISOR-01`
 
-Audited baseline: `ff3c8efe3d5e501286d8e83e28086d6d4590be27`
+Implementation baseline: `01a8d09022b086c771c938960efa8d9a333542d3`
 
-Deployed application before this milestone: Sites version 199 from `4a5cd19dda6f86896cfc751f5a42aa07f9b4eff5`
+Deployed application before this milestone: Sites version 203 from `01a8d09022b086c771c938960efa8d9a333542d3`
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns the approved sequence.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns the approved sequence.
 
 ## Milestone outcome
 
-Make TLink a single free trade operating system. A trade applicant supplies a checksum-valid ABN, remains pending while an authorised reviewer verifies the business against an authoritative source, and receives role-appropriate access only after approval.
+Replace the overcomplicated household-project intake with a clear, private and evidence-led home-energy planning flow. The customer can state several goals, identify what they know, review and edit an independent starting plan, and prepare a safe quote scope without being pushed toward a product, brand or installer.
 
-No payment, plan, seat, lead, job, quote, invoice or provider state may grant product access.
+The dedicated customer Home records tab and ownership-centre page are retired. Durable completed-project handovers, warranties, corrections, consent events and administrator governance remain because they protect historical work integrity; they are no longer presented as a separate empty customer workspace.
 
 ## User outcomes
 
-- A legitimate trade applicant can submit one clear application without entering card details or choosing a commercial plan.
-- An applicant can see that review is pending without entering any trade workspace.
-- A reviewer can inspect the supplied ABN, record the authoritative result and deliberately approve, request information or reject the application.
-- An approved installer or supplier receives the correct free tools for its role.
-- Changing the ABN immediately returns the account to review.
-- Existing customer invoices and provider-neutral accounting records continue to represent work performed without affecting access.
+- A customer begins with whether they own or rent, then records strata or common-property approval separately because tenure and approval authority are independent.
+- A customer can choose every relevant goal instead of being forced to name one main goal.
+- Detailed but optional home facts cover comfort, glazing, window coverings, insulation, draughts, ventilation, heating, cooling, hot water, cooking, solar, storage and transport.
+- `Not sure` is a valid answer and help text explains unfamiliar property questions without requiring unsafe inspection.
+- A broad budget band affects sequencing without promising that an upgrade fits a fixed market price.
+- The starting plan is independent guidance, not a NatHERS certificate, quote, product endorsement or savings promise.
+- Every plan step can be reviewed through its link, removed, reordered by drag or accessible arrow controls, or supplemented with a private custom item.
+- Quote preparation separates draught-proofing, insulation, glazing, and blinds, shutters or external shading.
+- One upload control explains which safe, privacy-conscious photos and documents can improve remote quoting.
+- Private notes are visibly editable and never shared with trades.
+- Validation guidance appears beside the action the customer selected.
 
 ## In scope
 
-- Remove retired commercial-access routes, controls, copy and navigation.
-- Remove commercial access decisions from entitlements, APIs, pages and administration.
-- Use a staged expand, application and contract sequence to remove obsolete commercial account fields, tables and demo rows, based on the product owner's explicit statement that no real customer, trade or wholesaler accounts exist.
-- Remove the unsafe live-identity synthetic generator and its commercial-state fixture.
-- Keep isolated local scale benchmarking separate from identities and production data.
-- Preserve the existing 11-digit ABN checksum validation.
-- Save new applicants in a pending state.
-- Add an explicit authoritative ABN review record with outcome, reviewer and decision time.
-- Require active account status, approved review and correct role at every trade workspace and API.
-- Reset review and access after an ABN change.
-- Migrate existing trade accounts through an explicit reviewed rule with no commercial-state grandfathering.
-- Remove obsolete commercial administration fields, filters, summaries, alerts and database-console descriptions.
-- Update focused tests, current documentation and release integrity checks.
+- Retire `/account/assets`, its dedicated component, customer navigation entry and obsolete route references.
+- Keep the five project stages directly selectable so customers can preview what will be needed.
+- Persist multiple goals while preserving the singular legacy goal projection for older rows and consumers.
+- Add owner/renter tenure and separate strata/common-property approval guidance using neutral descriptions.
+- Add ten goal choices, twenty-one home-condition inputs and four budget states.
+- Generate a staged plan from controlled goals and home facts.
+- Persist an ordered, removable and sanitized customer plan snapshot with bounded custom items.
+- Keep touch, keyboard and screen-reader plan ordering available alongside drag and drop.
+- Remove the household access-routine question from quote preparation and installer summaries.
+- Split building-fabric work into first-class draught-proofing, insulation, glazing and window-covering categories across installer capability matching and accepted-work handoff.
+- Consolidate property evidence into one upload area for JPEG, PNG, WebP and PDF files.
+- Persist explicit installer-evidence sharing consent, withhold unconsented files and replace customer-authored filenames with generic evidence names before installer delivery.
+- Provide safe-photo and privacy guidance for switchboards, hot water, equipment, windows, shading, draughts, vents, roof access, satellite imagery and redacted energy-use evidence.
+- Add forward migration `0081_customer_project_advisor.sql` to backfill goals, retire demo budget bands and the combined fabric category across operational records, preserve all matched categories through CRM and work orders, separate legacy strata approval from tenure, force ambiguous legacy tenure back to an unanswered choice, remove occupancy and anonymise stored evidence filenames.
+- Update current tests, roadmap, handover and release truth.
 
 ## Out of scope
 
-- Activating any payment-provider path on Sites.
-- Handling payment-card data in TLink.
-- Provider onboarding or real customer transactions.
-- Rewriting applied migrations.
-- Changing household-account access.
-- Replacing the existing role, tenant, privacy, licence or insurance controls.
-- Deploying before the exact release commit passes validation.
-- Altering any file in the dated audit snapshot.
+- Issuing or representing a NatHERS assessment, certificate or formal NatHERS evidence workflow.
+- Giving legal advice about tenancy, owners-corporation or heritage rules.
+- Quoting market prices, guaranteeing savings or recommending a brand, product or installer.
+- Asking a customer to enter a roof space, climb a roof, remove an electrical cover or block a required combustion or ventilation opening.
+- Deleting durable completed-project handovers, warranties, corrections, ownership history or administrator audit records.
+- Changing trade-account approval, ABN review, invoicing or provider controls.
+- Changing the immutable dated audit.
+- Deploying before exact source, GitHub and Sites provenance are reconciled.
 
-## Required access state
+## Advisor boundaries
 
-| State | Allowed |
-| --- | --- |
-| Authenticated, no trade application | Application start and account-safe help only |
-| Application submitted, ABN checksum valid, review pending | Application status and requested-evidence response only |
-| More information required | Application status and bounded correction/evidence response only |
-| Rejected, suspended or expired | Decision/status information and approved support path only |
-| Active account, approved ABN review, installer role | Installer tools authorised by role and tenant |
-| Active account, approved ABN review, supplier role | Supplier tools authorised by role and tenant |
-| ABN changed after approval | Immediate return to pending review; trade tools denied |
+- Use the supplied learner guide as training context, not as the controlling formal NatHERS standard.
+- Say `independent home energy plan`, not `NatHERS assessment` or `NatHERS certificate`.
+- Keep every recommendation product-, service- and brand-agnostic.
+- Treat self-uploaded files as optional customer quote evidence, not formal NatHERS evidence.
+- Separate renter-controlled portable actions from permission-dependent and fixed works.
+- Never recommend sealing a vent until gas-combustion, moisture and ventilation safety are understood.
+- Use the budget band only to sequence investigation and quotes. State that current quotes are required.
+- Preserve `Not sure` instead of inferring unsupported property facts.
+- Recommend qualified trades for insulation, glazing, electrical, gas, solar, structural and roof work.
 
-## Data and audit requirements
+## Data and compatibility requirements
 
-- Keep the submitted normalized ABN and the authoritative review outcome.
-- Record review status, source class, reviewer UID, reviewed time and a bounded reason or reference.
-- Do not copy unnecessary registry personal data into TLink.
-- Preserve an append-only decision event for approval, information request, rejection, reset and suspension.
-- Prevent duplicate active business identities under the approved duplicate-ABN policy.
-- Use additive migration `0079_trade_abn_access_gate.sql` to expand the access schema without breaking the previously deployed application, and preserve stable account identifiers.
-- Keep job invoice totals and provider-neutral accounting status separate from product access.
-
-## Implementation boundaries
-
-- `src/app/api/trade-profile/route.ts` owns application input and checksum validation.
-- Central server authorization owns the active, approved and role checks.
-- Trade pages and APIs consume the central authorization result rather than reimplementing commercial rules.
-- Administrator review uses one named domain action and writes the audit event atomically.
-- The later contract cleanup does not rewrite applied migrations or delete legitimate jobs, invoices, provider-neutral accounting or audit records.
-- Public and signed-in copy state only the free verified model.
+- Add `customer_projects.goals` as JSON text and backfill it from the existing singular `goal`.
+- Continue writing the singular `goal` projection for compatibility.
+- Normalize and allowlist goals, home facts, budget bands and work categories at the server boundary.
+- Bound plan snapshots to versioned, ordered items with controlled links and sanitized custom text.
+- Never persist raw markup or arbitrary destinations from a custom plan item.
+- Keep precise customer work categories in summaries.
+- Preserve draught-proofing, insulation, glazing and window coverings as exact categories through opportunity allocation, installer capability review and work-order creation.
+- Keep `insulation-draughts` only as a bounded legacy input that the forward migration and server normalizer split into draught-proofing and insulation.
+- Require an active, versioned evidence-sharing receipt before an allocated installer can list or download any attached file.
+- Do not require or expose a household access routine in submission readiness or installer summaries.
 
 ## Acceptance criteria
 
-- Invalid checksum ABNs fail before persistence.
-- Valid checksum alone never grants trade access.
-- A new application is pending by default.
-- Every trade workspace and API denies pending, rejected, suspended and expired accounts.
-- Approval requires an authorised reviewer and a complete review record.
-- An ABN update resets review and access atomically.
-- Installer and supplier permissions remain distinct.
-- Admin pages contain no trade plan, price or commercial-access controls.
-- Current operational source and documentation contain no retired trade charging model. Applied migration history, the immutable audit and Git history are historical evidence and are excluded.
-- Legitimate customer invoice and payment terminology remains intact.
-- No unsafe live-identity seed generator or commercial-state fixture remains.
-- Focused success, denial, transition, duplicate and migration tests pass.
-- Internal documentation links resolve.
-- `npm run validate` and `npm run build` pass on the exact release commit.
-- No deployment claim is made before exact Sites provenance and live verification are recorded.
+- No customer Home records navigation item, `/account/assets` page or dedicated ownership-centre component remains.
+- All five project stages are accessible buttons and can be previewed without completing preceding stages.
+- More than one goal can be selected and saved.
+- Tenure and budget are collected before the plan is generated.
+- Glazing, insulation, draughts, window coverings and relevant fixed systems have explicit customer inputs.
+- Renter guidance includes portable or removable actions and clearly distinguishes permission-dependent work.
+- Plan steps support drag ordering, accessible up and down controls, removal and a bounded custom item.
+- The plan contains no redundant `create project` step and does not collapse draught-proofing and insulation into one customer item.
+- Quote preparation contains no usual access-timing question.
+- Draught-proofing, insulation, glazing and blinds, shutters or external shading are separate work categories.
+- Exactly one file input is used for optional quote evidence.
+- Stored or newly selected evidence always exposes the same explicit sharing control, and no original customer filename enters the installer payload.
+- The photo checklist includes switchboard, hot-water location and clearance, heating and cooling, windows and shading, draught or vent details, safe access-hatch context, cropped satellite imagery and redacted energy-use evidence.
+- Private notes are visible at desktop and mobile widths.
+- A failed Continue action shows the reason inside the same action footer.
+- Focused tests, database replay, `npm.cmd run validate` and the production build pass.
+- The exact commit is pushed to GitHub and the Sites source repository before a saved version is created and deployed.
 
 ## Validation commands
 
-Run focused tests selected by the implementation owner, including:
-
 ```powershell
-npm.cmd test -- test/direct-trade-entitlements.test.mjs
-npm.cmd test -- test/direct-trade-dashboard.test.mjs
-npm.cmd test -- test/direct-trade-partners.test.mjs
-npm.cmd test -- test/customer-property-arrivals.test.mjs
-npm.cmd test -- test/admin-operations.test.mjs
+node --test test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs test/asset-ownership-corrections.test.mjs test/installer-crm.test.mjs test/release-integrity.test.mjs
 npm.cmd run db:check
 npm.cmd run audit:links
 npm.cmd run validate
-npm.cmd run build
+git diff --check
 ```
 
-The test runner may execute a wider set than the named files. Report the observed totals rather than assuming filtering behavior.
+The test runner may execute a wider set than named by an npm wrapper. Report observed totals rather than assuming filtering behavior.
 
-## Current local implementation state
+## Current implementation state
 
-The compatibility expansion is live as Sites version 200 from pushed commit `7ebcb1905d3c28245fbcfede55525e0cfee8df8a`. It changes only `0079_trade_abn_access_gate.sql`, adds four reviewed-ABN projection fields, two indexes, the append-only review ledger and protective triggers, and leaves the version 199 runtime compatible. The reviewed-ABN application is committed as `481401d98ef2c0b294252a4cabeebc74eba40a52`, merged with the expansion release ancestry at `fb9c80fb73bf2a0b5d461ed2ecbfa28df6022c71`, and is live as Sites version 201. The contract cleanup is committed as `698a5057cc384d43112e5ccff38a99effbb01fa8`, live as Sites version 202 through deployment `appgdep_6a68be4006188191aa338c4438757e62`, and active at environment revision 19 after all 16 observed Stripe, Square and retired paid-plan runtime keys were removed.
+The customer redesign is implemented locally from baseline `01a8d09022b086c771c938960efa8d9a333542d3`. Integrated focused validation passes 174 of 174 tests. The complete `npm.cmd run validate` gate passes on the post-review source: type checking, warning-free lint, 32 integration tests, the full 755-test suite with 753 passed and 2 intentionally skipped, all 82 migrations against a fresh local D1 database, and the production build. Desktop and 375-pixel browser checks confirm clickable stages, multiple initially-unselected goals, renter and budget context, accurate completed-step progress, explicit Keep or Refresh handling for edited plans, one capped upload area, visible notes, split work categories, removal of access timing and validation beside Continue. The preparation guide opens without creating another project, all five deep links resolve, and the customer flow has no horizontal overflow at the checked mobile width.
 
-The last complete validation before the staged split was:
-
-- `npm.cmd run validate`: passed, including 35 integration tests, 717 full-suite tests with 715 passed and 2 intentionally skipped, all 80 migrations replayed, and the production build.
-- `npm.cmd --prefix mobile run typecheck`: passed.
-- `npm.cmd run benchmark:scale`: passed at 500,000 isolated in-memory rows with all guarded p95 values below 75 ms.
-- `npm.cmd run audit:links`: nonzero because 7 external provider or network probes failed or timed out; 170 of 177 destinations were reachable or accepted and 16 were classified separately as automation-blocked.
-
-The expansion commit passed `npm.cmd run validate`, including all 80 migrations and the production build. The application activation passed type checking, warning-free lint, 29 integration tests, 718 full-suite tests with 716 passed and 2 intentionally skipped, all 80 migrations and the production build. The exact contract commit `698a5057cc384d43112e5ccff38a99effbb01fa8` passes the complete integrated `npm.cmd run validate` gate: type checking, warning-free lint, 30 integration tests, 719 full-suite tests with 717 passed and 2 intentionally skipped, all 81 migrations and the production build. Mobile type checking passes. The isolated 500,000-row benchmark passes all 75 ms p95 guards. The external link audit checked 169 destinations: 166 were reachable or accepted, 15 were separately classified as automation-blocked, and 3 failed or timed out.
-
-The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Migration `0079_trade_abn_access_gate.sql` is intentionally additive: it performs no row deletion, column removal, table drop or provider cleanup. After the reviewed-ABN application became live, forward contract migration `0080_retire_legacy_trade_commercial_data.sql` used that explicit authorisation to remove the retired plan and billing columns, legacy payment, membership, referral and feature-grant tables, and Stripe/Square integration rows. Focused preservation checks retain account identities, jobs, quotes, invoices, provider-neutral accounting, calendar and append-only ABN review records. The contract is deployed. Managed live D1 schema and rows cannot be queried independently through the available Sites controls, so the database claim is based on exact migration provenance, successful deployment, clean worker logs and local D1 reconciliation rather than a separate live-table export.
+Release status remains `local implementation` until the exact commit passes the complete release gate, is pushed to GitHub and the Sites managed source branch, is saved as a Sites version and is deployed successfully. Record the final identities and any live limitations in `RELEASE_TRUTH.md`.
 
 ## Release and stop conditions
 
 Stop if:
 
-- the authoritative ABN source or reviewer authority is unavailable;
-- a route cannot be brought under the central approved-account boundary without changing an unrelated domain;
-- live reconciliation shows that a contract-cleanup target contains legitimate customer, job, invoice, accounting or audit records;
-- a provider or production action requires owner identity, legal acceptance or card details;
 - complete validation fails;
-- the exact source, saved version and deployment cannot be reconciled;
+- customer-created text or links can escape the server allowlist;
+- advice is represented as a formal NatHERS assessment or unsupported legal, price or savings claim;
+- renter advice could encourage unauthorised fixed work;
+- draught advice could conceal a combustion or ventilation safety issue;
+- durable completed-project or consent evidence would be deleted;
+- the release commit, GitHub branch, Sites source, archive and saved version do not reconcile;
+- live inspection would require creating a real customer, trade or wholesaler account;
 - the change would alter the immutable audit snapshot.
-
-All three exact saved-version gates are complete: expansion at version 200, reviewed-ABN application at version 201, and contract cleanup at version 202. Public health and information routes pass, retired routes are absent, unauthenticated access is denied and the payment boundary is visible. The signed-in approved-account journey remains unverified because the owner confirmed there are no real accounts and no account was fabricated for release evidence. Record every later identity and deviation in `RELEASE_TRUTH.md`.
 
 ## Next five logical product steps
 
-1. **Withdraw the generic Database Console:** replace broad catalogue and generic mutation access only with justified least-privilege diagnostics and named domain repair actions.
-2. **Owner export and restore proof:** produce encrypted owner-held data and object exports and complete an isolated restore reconciliation.
-3. **Ownership and privileged-access baseline:** name accountable owners, establish two-human administration, MFA, recovery and route authorization evidence.
-4. **Owner-controlled platform foundation:** approve the target architecture and provision reproducible development, staging and production foundations.
-5. **Migration and core-workflow proof:** rehearse data migration and validate the selected customer, trade, field and provider journeys before cutover.
+1. **Evidence confidence and provenance:** mark each important home fact as customer-reported, photo-supported, document-supported or unknown and show how that confidence affects advice.
+2. **Postcode and climate-aware sequencing:** use a bounded Australian climate mapping to adjust the order of shading, airflow, draught, insulation and system investigations without creating a formal NatHERS claim.
+3. **Room-by-room comfort profile:** capture seasonal hot, cold, draught, condensation and usage patterns only where they materially change the plan.
+4. **Renter and strata permission pack:** generate a neutral, exportable list separating portable actions, requested permissions and owner or owners-corporation works.
+5. **Household and assessor usability pilot:** test the full flow with representative householders and experienced assessors, then repair the highest-friction accessibility and comprehension findings.

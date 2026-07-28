@@ -73,10 +73,25 @@ const CATEGORY_ITEMS = {
     ["ev-compliance-evidence", "Relevant electrical evidence attached", "Confirm the evidence required for the completed scope is included."],
     ["ev-load-guidance", "Charging schedule and load-management guidance attached", "Record practical settings for the household."],
   ],
-  "insulation-draughts": [
-    ["fabric-installation-recorded", "Installed areas, products and coverage recorded", "Record what was installed and any areas that were excluded."],
-    ["fabric-safety-evidence", "Clearance and safety checks recorded", "Include relevant installation evidence or mark not applicable."],
-    ["fabric-care-guidance", "Care, access and future-work guidance attached", "Note practical considerations for future building or electrical work."],
+  "draught-proofing": [
+    ["draught-installation-recorded", "Treated openings, seals and exclusions recorded", "Record what was sealed, the products used and any areas that were excluded."],
+    ["draught-ventilation-checked", "Required ventilation and combustion safety checked", "Confirm fixed ventilation, exhaust and combustion-air requirements were not obstructed."],
+    ["draught-care-guidance", "Seal care and future-adjustment guidance attached", "Explain inspection, cleaning and adjustment needs for the completed work."],
+  ],
+  insulation: [
+    ["insulation-installation-recorded", "Installed areas, products and coverage recorded", "Record product details, coverage and any areas that were excluded."],
+    ["insulation-safety-evidence", "Clearance and safety checks recorded", "Include electrical, heat-source and access-clearance evidence where relevant."],
+    ["insulation-care-guidance", "Access and future-work guidance attached", "Note practical considerations for future building, electrical or roof-space work."],
+  ],
+  glazing: [
+    ["glazing-installation-recorded", "Glazed openings, frame and glass specifications recorded", "Record each completed opening and the installed performance and safety-glazing details."],
+    ["glazing-compliance-evidence", "Relevant glazing and installation evidence attached", "Include the evidence required for the completed scope and location."],
+    ["glazing-care-guidance", "Operation, cleaning and warranty guidance attached", "Explain safe operation, care and the available support path."],
+  ],
+  "window-coverings": [
+    ["covering-installation-recorded", "Installed coverings, controls and openings recorded", "Record the completed openings, covering type and control arrangement."],
+    ["covering-safety-evidence", "Fixings, clearances and control safety checked", "Confirm secure fixing and applicable cord, chain, electrical or access safety requirements."],
+    ["covering-care-guidance", "Operation, care and adjustment guidance attached", "Explain safe operation, cleaning and seasonal adjustment where relevant."],
   ],
   other: [
     ["completion-evidence-ready", "Completion and quality evidence attached", "Include the documents relevant to the completed scope."],

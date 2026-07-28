@@ -37,6 +37,20 @@ test("templates prefill jobs and copy up to 24 checklist tasks", () => {
   assert.match(crm, /Checklist, one item per line/);
 });
 
+test("CRM jobs use the four first-class home-fabric service categories", () => {
+  const allowed = route.match(/const SERVICE_CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  const crmOptions = crm.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
+  const newJobOptions = newJob.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.match(allowed, new RegExp(`"${category}"`));
+    assert.match(crmOptions, new RegExp(`"${category}"`));
+    assert.match(newJobOptions, new RegExp(`"${category}"`));
+  }
+  assert.doesNotMatch(allowed, /insulation-draughts/);
+  assert.doesNotMatch(crmOptions, /insulation-draughts/);
+  assert.doesNotMatch(newJobOptions, /insulation-draughts/);
+});
+
 test("public access copy makes free and verification boundaries explicit", () => {
   assert.match(platform, /Always free/);
   assert.match(platform, /Core trade operations cost A\$0 after verification/);

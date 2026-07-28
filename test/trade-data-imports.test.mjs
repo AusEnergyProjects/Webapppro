@@ -41,11 +41,48 @@ test("job previews warn when a customer link is unavailable but keep valid histo
   assert.match(result.rows[0].issues[0].message, /not in the CRM/);
 });
 
+test("operational imports accept split fabric work and reject the retired combined category", () => {
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    const enquiries = validateImportCsv({
+      importType: "enquiries",
+      source: importTemplateCsv("enquiries").replace(",solar,", `,${category},`),
+      existingKeys: new Set(),
+      customerEmails: new Set(),
+    });
+    assert.notEqual(enquiries.rows[0].status, "error", category);
+    const jobs = validateImportCsv({
+      importType: "jobs",
+      source: importTemplateCsv("jobs").replace(",hot-water,", `,${category},`),
+      existingKeys: new Set(),
+      customerEmails: new Set(),
+    });
+    assert.notEqual(jobs.rows[0].status, "error", category);
+  }
+
+  for (const importType of ["enquiries", "jobs"]) {
+    const source = importTemplateCsv(importType)
+      .replace(importType === "enquiries" ? ",solar," : ",hot-water,", ",insulation-draughts,");
+    const result = validateImportCsv({ importType, source, existingKeys: new Set(), customerEmails: new Set() });
+    assert.equal(result.rows[0].status, "error");
+    assert.match(result.rows[0].issues[0].message, /supported service category/);
+  }
+});
+
 test("product previews block duplicate model numbers from automatic import", () => {
   const result = validateImportCsv({ importType: "products", source: importTemplateCsv("products"), existingKeys: new Set(["model:ex-hp-270"]), customerEmails: new Set() });
   assert.equal(result.rows[0].status, "duplicate");
   assert.equal(result.rows[0].resolution, "skip");
   assert.equal(result.rows[1].status, "ready");
+});
+
+test("the operational cutover does not change the separate product catalogue taxonomy", () => {
+  const result = validateImportCsv({
+    importType: "products",
+    source: importTemplateCsv("products").replace(",hot-water,", ",insulation-draughts,"),
+    existingKeys: new Set(),
+    customerEmails: new Set(),
+  });
+  assert.equal(result.rows[0].status, "ready");
 });
 
 test("enquiry previews preserve source IDs and require valid customer and service data", () => {

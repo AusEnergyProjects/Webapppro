@@ -31,6 +31,7 @@ type CustomerProject = {
   postcode: string;
   addressState: string;
   goal: string;
+  goals: string[];
   pace: string;
   serviceCategories: string[];
   priorities: string[];
@@ -368,7 +369,7 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
                 <label>Postcode<input value={String(selected.account.postcode || "")} inputMode="numeric" maxLength={4} disabled={!selected.canEdit} onChange={(event) => updateCustomer("postcode", event.target.value)} /></label>
                 <label>State or territory<select value={String(selected.account.addressState || "").toUpperCase()} disabled={!selected.canEdit} onChange={(event) => updateCustomer("addressState", event.target.value)}>{AUSTRALIAN_STATE_CODES.map((value) => <option key={value}>{value}</option>)}</select></label>
                 <label>Property type<select value={String(selected.account.propertyType || "house")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("propertyType", event.target.value)}>{['house','townhouse','apartment','new-build','other'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
-                <label>Household situation<select value={String(selected.account.householdSituation || "owner")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("householdSituation", event.target.value)}>{['owner','renter','strata','planning-building'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
+                <label>Household situation<select value={String(selected.account.householdSituation || "owner")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("householdSituation", event.target.value)}>{['owner','renter'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
                 <label>Account status<select value={String(selected.account.accountStatus || "active")} disabled={!selected.canEdit} onChange={(event) => updateCustomer("accountStatus", event.target.value)}>{['active','suspended','closed'].map((value) => <option value={value} key={value}>{readable(value)}</option>)}</select></label>
                 <label className="full">Internal support note<textarea value={note} disabled={!selected.canEdit} onChange={(event) => setNote(event.target.value)} placeholder="Record the reason for any adjustment or follow-up." /></label>
                 {selected.canEdit && <button type="submit">Save and audit adjustment</button>}
@@ -378,7 +379,7 @@ export function AdminAccountDirectory({ api, role, target, fixedType, onManageTr
                 {selected.projects?.length ? selected.projects.map((project) => (
                   <article key={project.id}>
                     <div className="admin-customer-project-heading"><div><strong>{project.title}</strong><small>{project.homeNickname} · {project.addressState} {project.postcode}</small></div><span className={`admin-pill admin-pill-${project.status}`}>{readable(project.status)}</span></div>
-                    <dl><div><dt>Goal</dt><dd>{readable(project.goal)}</dd></div><div><dt>Timing</dt><dd>{readable(project.timing)}</dd></div><div><dt>Budget</dt><dd>{readable(project.budgetRange)}</dd></div><div><dt>Services</dt><dd>{project.serviceCategories.map(readable).join(", ") || "Not set"}</dd></div></dl>
+                    <dl><div><dt>Goals</dt><dd>{(project.goals?.length ? project.goals : [project.goal]).map(readable).join(", ")}</dd></div><div><dt>Timing</dt><dd>{readable(project.timing)}</dd></div><div><dt>Budget</dt><dd>{readable(project.budgetRange)}</dd></div><div><dt>Services</dt><dd>{project.serviceCategories.map(readable).join(", ") || "Not set"}</dd></div></dl>
                     {project.privateNotes && <div className="admin-private-note"><strong>Customer private notes</strong><p>{project.privateNotes}</p></div>}
                     {project.quotes.length > 0 && <div className="admin-customer-quotes"><strong>Quote options</strong>{project.quotes.map((quote) => <div key={quote.id}><span>{quote.installerBusiness}</span><b>{money(quote.totalCentsExGst)}</b><small>{readable(quote.customerDecision)} · {readable(quote.quoteType)} · submitted {dateTime(quote.submittedAt)}</small></div>)}</div>}
                   </article>

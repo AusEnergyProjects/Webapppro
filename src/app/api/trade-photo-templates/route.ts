@@ -45,6 +45,12 @@ type RequestUsageRow = {
 
 const serviceCategories = new Set<string>(PHOTO_REQUEST_SERVICE_CATEGORIES);
 
+function normaliseServiceCategory(value: unknown) {
+  const requestedCategory = cleanAdminText(value, 60);
+  if (requestedCategory === "insulation-draughts") return "insulation";
+  return serviceCategories.has(requestedCategory) ? requestedCategory : "other";
+}
+
 function responseForError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
@@ -73,8 +79,7 @@ function parseRequirements(value: string): PhotoRequirement[] {
 function cleanTemplateInput(body: Record<string, unknown>) {
   const name = cleanAdminText(body.name, 100);
   if (!name) throw new Error("PHOTO_TEMPLATE_NAME_REQUIRED");
-  const requestedCategory = cleanAdminText(body.serviceCategory, 60);
-  const serviceCategory = serviceCategories.has(requestedCategory) ? requestedCategory : "other";
+  const serviceCategory = normaliseServiceCategory(body.serviceCategory);
   const requirements = normalisePhotoRequirements(body.requirements);
   return { name, serviceCategory, requirements };
 }
@@ -271,7 +276,7 @@ export async function POST(request: Request) {
         (id, firebase_uid, name, service_category, status, draft_requirements, published_version,
          created_by_uid, updated_by_uid, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'draft', ?, 0, ?, ?, ?, ?)`).bind(
-        crypto.randomUUID(), access.ownerUid, copyName, template.service_category, JSON.stringify(sourceRequirements),
+        crypto.randomUUID(), access.ownerUid, copyName, normaliseServiceCategory(template.service_category), JSON.stringify(sourceRequirements),
         access.actorUid, access.actorUid, now, now,
       ).run();
     } else if (action === "archive") {

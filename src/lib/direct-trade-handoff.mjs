@@ -5,7 +5,22 @@ const SOURCES = {
   "gas-hot-water": { label: "gas hot-water upgrade estimate", returnHref: "/gas-compare" },
 };
 
-const SERVICES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
+const SERVICES = new Set([
+  "assessment",
+  "solar",
+  "battery",
+  "heating-cooling",
+  "hot-water",
+  "draught-proofing",
+  "insulation",
+  "glazing",
+  "window-coverings",
+  "ev-charging",
+  "other",
+]);
+const LEGACY_SERVICE_ALIASES = {
+  "insulation-draughts": ["insulation", "draught-proofing"],
+};
 const PRIORITIES = new Set(["lower-running-costs", "improve-comfort", "replace-equipment", "move-from-gas", "solar-storage", "assessment-compliance", "need-advice"]);
 
 function sourceInfo(value) {
@@ -18,9 +33,21 @@ function safeList(value, allowed, maximum) {
   return [...new Set(items.map((item) => String(item).trim()).filter((item) => allowed.has(item)))].slice(0, maximum);
 }
 
+function safeServices(value) {
+  const items = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const normalized = items.flatMap((item) => {
+    const service = String(item).trim();
+    return LEGACY_SERVICE_ALIASES[service] || [service];
+  });
+  return [...new Set(normalized.filter((item) => SERVICES.has(item)))].slice(
+    0,
+    SERVICES.size,
+  );
+}
+
 export function createDirectTradeHandoffUrl(input) {
   const source = sourceInfo(input?.source) ? input.source : "";
-  const services = safeList(input?.services, SERVICES, 8);
+  const services = safeServices(input?.services);
   const priorities = safeList(input?.priorities, PRIORITIES, 7);
   const postcode = /^\d{4}$/.test(String(input?.postcode || "")) ? String(input.postcode) : "";
   const params = new URLSearchParams();
@@ -41,7 +68,7 @@ export function parseDirectTradeHandoff(search) {
     source,
     sourceLabel: info?.label || "",
     returnHref: info?.returnHref || "",
-    services: safeList(params.get("services") || "", SERVICES, 8),
+    services: safeServices(params.get("services") || ""),
     priorities: safeList(params.get("priorities") || "", PRIORITIES, 7),
     postcode: /^\d{4}$/.test(params.get("postcode") || "") ? params.get("postcode") : "",
   };

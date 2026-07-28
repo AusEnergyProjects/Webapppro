@@ -29,6 +29,18 @@ test("handover templates combine a common record with category-aware completion 
   assert.ok(solar.some((item) => item.key === "solar-commissioning-recorded"));
   assert.ok(battery.some((item) => item.key === "battery-safety-guidance"));
   assert.equal(new Set(solar.map((item) => item.key)).size, solar.length);
+  const fabricKeys = new Map([
+    ["draught-proofing", "draught-installation-recorded"],
+    ["insulation", "insulation-installation-recorded"],
+    ["glazing", "glazing-installation-recorded"],
+    ["window-coverings", "covering-installation-recorded"],
+  ]);
+  for (const [category, key] of fabricKeys) {
+    assert.ok(complianceTemplateFor(category).some((item) => item.key === key), category);
+  }
+  const legacy = complianceTemplateFor("insulation-draughts");
+  assert.ok(legacy.some((item) => item.key === "completion-evidence-ready"));
+  for (const key of fabricKeys.values()) assert.equal(legacy.some((item) => item.key === key), false);
 });
 
 test("customer handover readiness requires a platform link, completed work, assets, resolved checks and a visible document", () => {

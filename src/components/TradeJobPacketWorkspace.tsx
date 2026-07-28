@@ -17,9 +17,19 @@ type FormOption = PacketForm & { name: string; description: string };
 type Result = { ok?: boolean; packets?: JobPacket[]; priceBookItems?: PacketPriceItem[]; jobTemplates?: JobTemplate[]; formOptions?: FormOption[]; error?: string };
 type Draft = { name: string; serviceCategory: string; jobTemplateId: string; suggestedCrewSize: string; recordStatus: string; lines: PacketLine[]; forms: PacketForm[] };
 
-const SERVICE_LABELS: Record<string, string> = { assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
-  "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "insulation-draughts": "Insulation and draughts",
-  "ev-charging": "EV charging", electrical: "Electrical", plumbing: "Plumbing", "mounting-hardware": "Mounting hardware", controls: "Controls", other: "Other" };
+const SERVICE_OPTIONS = [
+  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
+  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
+  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
+  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ["electrical", "Electrical"], ["plumbing", "Plumbing"], ["mounting-hardware", "Mounting hardware"],
+  ["controls", "Controls"], ["other", "Other"],
+] as const;
+const SERVICE_CATEGORIES = new Set<string>(SERVICE_OPTIONS.map(([value]) => value));
+const SERVICE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(SERVICE_OPTIONS),
+  "insulation-draughts": "Insulation and draughts",
+};
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const percent = (basisPoints: number) => `${(basisPoints / 100).toFixed(1)}%`;
 const blankDraft = (): Draft => ({ name: "", serviceCategory: "assessment", jobTemplateId: "", suggestedCrewSize: "1", recordStatus: "active", lines: [], forms: [] });
@@ -58,7 +68,7 @@ export function TradeJobPacketWorkspace({ user, onOpenItems }: { user: User; onO
   function chooseCategory(value: string) { setLoading(true); change("serviceCategory", value); change("jobTemplateId", ""); change("forms", []); }
   function toggleForm(form: FormOption) { const selected = draft.forms.some((item) => item.templateKey === form.templateKey && item.templateVersion === form.templateVersion);
     change("forms", selected ? draft.forms.filter((item) => item.templateKey !== form.templateKey || item.templateVersion !== form.templateVersion) : [...draft.forms, { templateKey: form.templateKey, templateVersion: form.templateVersion }]); }
-  async function save(event: FormEvent) { event.preventDefault(); setBusy("save"); setMessage(""); try {
+  async function save(event: FormEvent) { event.preventDefault(); if (!SERVICE_CATEGORIES.has(draft.serviceCategory)) { setMessage("Choose a current service before saving this common job."); return; } setBusy("save"); setMessage(""); try {
     const isNew = editing === "new"; const packetId = typeof editing === "object" && editing ? editing.id : "";
     await request(draft.serviceCategory, { method: isNew ? "POST" : "PATCH", body: JSON.stringify({ action: isNew ? "create" : "update", packetId, ...draft }) });
     await load(draft.serviceCategory); setEditing(null); setMessage(isNew ? "Packet saved. It is ready to apply to a direct-job quote." : "Packet updated. Future quotes use this revision.");
@@ -76,7 +86,7 @@ export function TradeJobPacketWorkspace({ user, onOpenItems }: { user: User; onO
       {editing !== "new" && editing.unavailableItemCount > 0 && <p className={styles.warning}>{editing.unavailableItemCount} saved item is unavailable. Choose its active replacement before marking this common job ready.</p>}
       <fieldset disabled={editing !== "new" && editing.recordStatus === "archived"}><div className={styles.core}>
         <label><span>Common job name</span><input required maxLength={140} value={draft.name} onChange={(event) => change("name", event.target.value)} placeholder="e.g. Standard heat pump install" /></label>
-        <label><span>Service</span><select value={draft.serviceCategory} onChange={(event) => chooseCategory(event.target.value)}>{Object.entries(SERVICE_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label><span>Service</span><select value={SERVICE_CATEGORIES.has(draft.serviceCategory) ? draft.serviceCategory : ""} onChange={(event) => chooseCategory(event.target.value)}><option value="" disabled>Choose a current service</option>{SERVICE_OPTIONS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label><span>Status</span><select value={draft.recordStatus} onChange={(event) => change("recordStatus", event.target.value)}><option value="active">Ready to quote</option><option value="draft">Draft</option></select></label>
       </div><section className={styles.items}><header><div><span>Saved scope</span><strong>{draft.lines.length} item{draft.lines.length === 1 ? "" : "s"}</strong></div><button type="button" onClick={addLine} disabled={draft.lines.length >= priceItems.length}>Add item</button></header>
         {draft.lines.map((line, index) => <div className={styles.line} key={`${index}:${line.id || "new"}`}><select aria-label={`Common job item ${index + 1}`} value={line.priceBookItemId} onChange={(event) => updateLine(index, "priceBookItemId", event.target.value)}>{priceItems.filter((item) => item.id === line.priceBookItemId || !draft.lines.some((existing) => existing.priceBookItemId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} / {item.unitLabel}</option>)}</select><label><span>Quantity</span><input aria-label={`Common job item ${index + 1} quantity`} required inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} /></label><button type="button" onClick={() => change("lines", draft.lines.filter((_, position) => position !== index))}>Remove</button></div>)}
@@ -89,7 +99,7 @@ export function TradeJobPacketWorkspace({ user, onOpenItems }: { user: User; onO
         {summary?.requiredCapabilities.length ? <p className={styles.capabilities}><strong>Required capabilities</strong><span>{summary.requiredCapabilities.join(", ")}</span></p> : null}
         {formOptions.length > 0 && <fieldset className={styles.forms}><legend>Published forms</legend>{formOptions.map((form) => <label key={`${form.templateKey}:${form.templateVersion}`}><input type="checkbox" checked={draft.forms.some((item) => item.templateKey === form.templateKey && item.templateVersion === form.templateVersion)} onChange={() => toggleForm(form)} /><span><strong>{form.name}</strong><small>{form.description}</small></span></label>)}</fieldset>}
       </div></details></fieldset>
-      {(editing === "new" || editing.recordStatus !== "archived") && <div className={styles.actions}><button type="submit" disabled={Boolean(busy) || !draft.lines.length}>{busy === "save" ? "Saving..." : draft.recordStatus === "active" ? "Save common job" : "Save draft"}</button>{editing !== "new" && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void archive(editing)}>Archive common job</button>}</div>}
+      {(editing === "new" || editing.recordStatus !== "archived") && <div className={styles.actions}><button type="submit" disabled={Boolean(busy) || !draft.lines.length || !SERVICE_CATEGORIES.has(draft.serviceCategory)}>{busy === "save" ? "Saving..." : draft.recordStatus === "active" ? "Save common job" : "Save draft"}</button>{editing !== "new" && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void archive(editing)}>Archive common job</button>}</div>}
     </form>}
     {!editing && packets.length > 0 && <div className={styles.list}>{packets.map((packet) => <article key={packet.id}><button type="button" onClick={() => startEdit(packet)}><div><span>{packet.packetCode} | {SERVICE_LABELS[packet.serviceCategory] || packet.serviceCategory}</span><strong>{packet.name}</strong><small>{packet.lines.length} items | {packet.taskCount} tasks | {packet.formCount} forms</small></div><div><span>Sell ex GST</span><strong>{money(packet.summary.sellCentsExGst)}</strong><small>{packet.summary.estimatedDurationMinutes ? `${packet.summary.estimatedDurationMinutes} min` : "Time not set"}</small></div><div><span>Crew readiness</span><strong>{packet.crewReady ? "Ready" : "Needs people"}</strong><small>{packet.suggestedCrewSize} suggested | {packet.activeCrewCount} available</small></div><em className={packet.canApply ? styles.ready : styles.attention}>{packet.recordStatus === "active" ? packet.canApply ? "Ready" : "Needs attention" : packet.recordStatus}</em></button></article>)}</div>}
     {loading && <p className={styles.loading}>Loading common jobs...</p>}{message && <p className={styles.message} role="status">{message}</p>}

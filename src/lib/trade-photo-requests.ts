@@ -4,7 +4,8 @@ export const PHOTO_REQUEST_LINK_DAYS = 30;
 export const PHOTO_TEMPLATE_LIMIT = 60;
 export const PHOTO_TEMPLATE_FEEDBACK_VALUES = ["useful", "unclear", "unnecessary"] as const;
 export const PHOTO_REQUEST_SERVICE_CATEGORIES = [
-  "assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts",
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "draught-proofing", "insulation", "glazing", "window-coverings",
   "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
 ] as const;
 
@@ -43,10 +44,25 @@ const defaults: Record<string, PhotoRequirement[]> = {
     { id: "model-label", label: "System model label", guidance: `Take a straight, readable photo of the rating or model label. ${sharedPrivacyGuidance}`, usefulExample: "The complete model and electrical details are in focus.", avoidExample: "A blurred label or an unrelated energy bill.", required: true },
     { id: "replacement-location", label: "Replacement location", guidance: `Show available space, ventilation, drainage and access. ${sharedPrivacyGuidance}`, usefulExample: "A wide photo showing the proposed area and surrounding clearances.", avoidExample: "A tight photo that hides doors, windows or access paths.", required: false },
   ],
-  "insulation-draughts": [
+  "draught-proofing": [
+    { id: "draught-opening-overview", label: "Main draught area", guidance: `Show the complete door, window, vent or other opening and its surrounding wall or floor. ${sharedPrivacyGuidance}`, usefulExample: "A wide context photo followed by a clear view of the relevant gap.", avoidExample: "A close-up with no indication where the gap is located.", required: true },
+    { id: "existing-seals", label: "Existing seals and edges", guidance: `Show any current seals, worn edges or visible gaps without removing fittings. ${sharedPrivacyGuidance}`, usefulExample: "The frame, threshold and existing seal are clearly visible.", avoidExample: "Removed hardware or a photo too dark to show the opening.", required: false },
+    { id: "fixed-ventilation", label: "Nearby fixed ventilation", guidance: `Show nearby wall vents, exhausts, flues or evaporative-cooling outlets so required ventilation is not mistaken for a draught. ${sharedPrivacyGuidance}`, usefulExample: "A room view showing the draught area and fixed ventilation.", avoidExample: "Covering or altering a vent before professional advice.", required: false },
+  ],
+  insulation: [
     { id: "roof-or-ceiling-access", label: "Roof or ceiling access", guidance: `Photograph the access opening from a safe standing position. Do not enter a roof space. ${sharedPrivacyGuidance}`, usefulExample: "A well-lit context photo showing the access size and location.", avoidExample: "Entering an unsafe roof space or showing personal storage items.", required: true },
     { id: "existing-insulation", label: "Existing insulation visible from access", guidance: `Only if safely visible, show the material and approximate coverage without disturbing it. ${sharedPrivacyGuidance}`, usefulExample: "A clear view from the access opening with material coverage visible.", avoidExample: "Moving insulation, touching wiring or entering the roof space.", required: false },
-    { id: "draught-area", label: "Main draught or comfort area", guidance: `Show the door, window or gap in its surrounding wall or floor context. ${sharedPrivacyGuidance}`, usefulExample: "A wide photo plus a closer view of the relevant gap.", avoidExample: "A close-up with no indication where the gap is located.", required: false },
+    { id: "insulation-area-context", label: "Area needing insulation", guidance: `Show the ceiling, wall or floor area from a safe occupied space and include nearby access constraints. ${sharedPrivacyGuidance}`, usefulExample: "A wide room or underfloor-access context photo without entering a restricted area.", avoidExample: "Entering a roof space, crawling under floors or disturbing building material.", required: false },
+  ],
+  glazing: [
+    { id: "window-overview", label: "Window or glazed door overview", guidance: `Show the complete opening, frame and surrounding wall from inside the room. ${sharedPrivacyGuidance}`, usefulExample: "A straight, wide photo showing the full opening and nearby clearance.", avoidExample: "A glass close-up that hides the frame and opening size.", required: true },
+    { id: "frame-and-glass", label: "Frame and glass detail", guidance: `Show the frame material, opening style and any visible glass markings without removing fittings. ${sharedPrivacyGuidance}`, usefulExample: "A clear angled photo that distinguishes the frame, sash and glass.", avoidExample: "Reflections that show people, documents or unrelated rooms.", required: false },
+    { id: "external-access", label: "Safe external access context", guidance: `From ground level, show how the opening can be reached and any fixed obstacles. Do not use a ladder. ${sharedPrivacyGuidance}`, usefulExample: "A ground-level view showing the opening, path and nearby structures.", avoidExample: "Climbing, unsafe heights or an identifiable street number.", required: false },
+  ],
+  "window-coverings": [
+    { id: "opening-and-surrounds", label: "Opening and surrounds", guidance: `Show the full window or door, reveal, wall and available mounting area. ${sharedPrivacyGuidance}`, usefulExample: "A straight room view showing the complete opening and surrounding surfaces.", avoidExample: "A cropped photo that hides the head, sill or side clearances.", required: true },
+    { id: "existing-covering", label: "Existing blind, curtain or shutter", guidance: `Show the existing covering, track or mounting points if present. ${sharedPrivacyGuidance}`, usefulExample: "The full covering and how it is fixed are visible.", avoidExample: "Removing fittings or including people and private belongings.", required: false },
+    { id: "outside-shading-context", label: "External shading context", guidance: `From a safe position, show eaves, awnings, vegetation and other fixed shade near the opening. ${sharedPrivacyGuidance}`, usefulExample: "A ground-level context photo showing the opening and existing shade.", avoidExample: "Using a ladder or photographing an identifiable street number.", required: false },
   ],
   "ev-charging": [
     { id: "parking-location", label: "Parking and charger location", guidance: `Show the vehicle parking position, proposed charger wall and cable path. ${sharedPrivacyGuidance}`, usefulExample: "A wide photo showing the bay, wall and likely cable route.", avoidExample: "Vehicle number plates, street numbers or a wall-only close-up.", required: true },

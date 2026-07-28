@@ -9,13 +9,16 @@ import { queueAppointmentNotifications } from "@/lib/appointment-notification-se
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   buildAnonymizedOpportunity,
+  buildInstallerPropertyContext,
   CUSTOMER_CONTACT_RELEASE_FIELDS,
   CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION,
+  CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
   CUSTOMER_NOTICE_VERSION,
   MAX_CUSTOMER_PROJECTS,
   MAX_OPEN_CUSTOMER_OPPORTUNITIES,
   normalizeCustomerProject,
   parseStoredJson,
+  reconcileCompletedPlanItems,
   customerContactReadiness,
   submissionReadiness,
 } from "@/lib/customer-projects.mjs";
@@ -52,6 +55,7 @@ function projectShape(
   evidence: Record<string, unknown>[],
   hasRetainedAssetHistory: boolean,
   contactReady: boolean,
+  evidenceSharingConsent: boolean,
 ) {
   const status = String(row.status);
   const responseCount = Number(progress?.response_count || 0);
@@ -61,6 +65,12 @@ function projectShape(
     : status === "matching" && responseCount
       ? "responses"
       : status;
+  const storedGoals = parseStoredJson(row.goals, []);
+  const goals = Array.isArray(storedGoals) && storedGoals.length
+    ? storedGoals
+    : row.goal
+      ? [String(row.goal)]
+      : ["lower-bills"];
   return {
     id: row.id,
     title: row.title,
@@ -70,6 +80,7 @@ function projectShape(
     propertyType: row.property_type,
     householdSituation: row.household_situation,
     goal: row.goal,
+    goals,
     pace: row.pace,
     existingFeatures: parseStoredJson(row.existing_features, []),
     serviceCategories: parseStoredJson(row.service_categories, []),
@@ -77,7 +88,9 @@ function projectShape(
     projectStage: row.project_stage,
     timing: row.timing,
     budgetRange: row.budget_range,
-    propertyContext: parseStoredJson(row.property_context, {}),
+    propertyContext: buildInstallerPropertyContext(
+      parseStoredJson(row.property_context, {}),
+    ),
     privateNotes: row.private_notes,
     planSnapshot: parseStoredJson(row.plan_snapshot, {}),
     completedPlanItems: parseStoredJson(row.completed_plan_items, []),
@@ -144,6 +157,7 @@ function projectShape(
       sizeBytes: Number(item.size_bytes || 0),
       createdAt: item.created_at,
     })),
+    evidenceSharingConsent,
     handoverPacks: handovers.map((handover) => ({
       id: handover.id,
       workNumber: handover.work_number,
@@ -213,6 +227,11 @@ async function projectsForOwner(firebaseUid: string) {
     FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
       AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
     .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const evidenceConsentRows = projectIds.length ? await db.prepare(`SELECT project_id
+    FROM customer_consent_receipts
+    WHERE firebase_uid = ? AND purpose = 'installer_evidence_sharing' AND withdrawn_at = ''
+      AND project_id IN (${projectIds.map(() => "?").join(",")})`)
+    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const handoverIds = handoverRows.results.map((row: Record<string, unknown>) => String(row.id));
   const assetRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
     model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
@@ -279,6 +298,7 @@ async function projectsForOwner(firebaseUid: string) {
     evidenceRows.results.filter((item: Record<string, unknown>) => item.project_id === row.id),
     retainedHandoverRows.results.some((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
     Boolean(account && customerContactReadiness(account, row).ok),
+    evidenceConsentRows.results.some((consent: Record<string, unknown>) => consent.project_id === row.id),
   ));
 }
 
@@ -322,11 +342,11 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   await db.prepare(`INSERT INTO customer_projects
     (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
-     goal, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
+     goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
      property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
     .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
-      project.propertyType, project.householdSituation, project.goal, project.pace,
+      project.propertyType, project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace,
       JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
       project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
       JSON.stringify(project.planSnapshot), Number(account.is_synthetic || 0), now, now).run();
@@ -359,22 +379,45 @@ export async function PATCH(request: Request) {
     if (!postcodeMatchesState(project.postcode, project.addressState)) {
       return json({ ok: false, error: "The project postcode does not match the selected state or territory." }, 400);
     }
+    const completedPlanItems = reconcileCompletedPlanItems(
+      parseStoredJson(current.completed_plan_items, []),
+      project.planSnapshot,
+    );
     await db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
-      property_type = ?, household_situation = ?, goal = ?, pace = ?, existing_features = ?, service_categories = ?,
-      priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?, updated_at = ?
+      property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
+      priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
+      completed_plan_items = ?, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
       .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
-        project.householdSituation, project.goal, project.pace, JSON.stringify(project.existingFeatures),
+        project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace, JSON.stringify(project.existingFeatures),
         JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-        project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes, JSON.stringify(project.planSnapshot), now, id, user.uid).run();
+        project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+        JSON.stringify(project.planSnapshot), JSON.stringify(completedPlanItems), now, id, user.uid).run();
   } else if (action === "submit") {
-    if (raw.confirmInstallerPhotoSharing !== true) {
-      return json({ ok: false, error: "Confirm that attached quoting photos can be shared with the verified installers allocated to this enquiry." }, 400);
-    }
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    const evidenceCount = await db.prepare(`SELECT COUNT(*) count
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(id, user.uid)
+      .first<{ count: number }>();
+    const evidenceConsent = await db.prepare(`SELECT id FROM customer_consent_receipts
+      WHERE firebase_uid = ? AND project_id = ? AND purpose = 'installer_evidence_sharing'
+        AND withdrawn_at = '' LIMIT 1`)
+      .bind(user.uid, id).first<{ id: string }>();
+    if (
+      Number(evidenceCount?.count || 0) > 0
+      && !evidenceConsent
+      && raw.confirmInstallerPhotoSharing !== true
+    ) {
+      return json({ ok: false, error: "Confirm that attached quoting photos can be shared with the verified installers allocated to this enquiry." }, 400);
+    }
     const stored = {
       ...current,
+      goals: (() => {
+        const storedGoals = parseStoredJson(current.goals, []);
+        return Array.isArray(storedGoals) && storedGoals.length ? storedGoals : [String(current.goal || "lower-bills")];
+      })(),
       existingFeatures: parseStoredJson(current.existing_features, []),
       serviceCategories: parseStoredJson(current.service_categories, []),
       priorities: parseStoredJson(current.priorities, []),
@@ -398,7 +441,7 @@ export async function PATCH(request: Request) {
     const opportunity = buildAnonymizedOpportunity(stored, id);
     const opportunityId = `customer-project:${id}`;
     const submittedAt = now;
-    await db.batch([
+    const submitStatements = [
       db.prepare(`INSERT INTO trade_opportunities
         (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
          source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
@@ -428,7 +471,23 @@ export async function PATCH(request: Request) {
         metadata: { opportunityId, state: opportunity.state, serviceCategories: opportunity.serviceCategories },
         occurredAt: submittedAt,
       }),
-    ]);
+    ];
+    if (
+      Number(evidenceCount?.count || 0) > 0
+      && !evidenceConsent
+      && raw.confirmInstallerPhotoSharing === true
+    ) {
+      submitStatements.push(
+        db.prepare(`INSERT INTO customer_consent_receipts
+          (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+          VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+          ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
+            granted_at = excluded.granted_at, withdrawn_at = ''`)
+          .bind(`customer-evidence-share:${id}`, user.uid, id,
+            CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, submittedAt, submittedAt),
+      );
+    }
+    await db.batch(submitStatements);
     await dispatchAdminNotificationDeliveries();
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
   } else if (action === "release_contact") {
@@ -573,10 +632,10 @@ export async function PATCH(request: Request) {
     const duplicateId = crypto.randomUUID();
     await db.prepare(`INSERT INTO customer_projects
       (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
-       goal, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
+       goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
        property_context, private_notes, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
       SELECT ?, firebase_uid, substr(title || ' copy', 1, 120), home_nickname, postcode, address_state, property_type,
-       household_situation, goal, pace, existing_features, service_categories, priorities, project_stage, timing,
+       household_situation, goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing,
        budget_range, property_context, private_notes, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
       FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
       .bind(duplicateId, now, now, id, user.uid).run();
@@ -599,7 +658,9 @@ export async function PATCH(request: Request) {
         .bind(now, id),
       db.prepare(`UPDATE customer_project_arrival_proposals SET status = 'withdrawn', withdrawn_at = ?, updated_at = ?
         WHERE project_id = ? AND customer_uid = ? AND status IN ('proposed', 'selected', 'direct_contact')`).bind(now, now, id, user.uid),
-      db.prepare("UPDATE customer_consent_receipts SET withdrawn_at = ? WHERE project_id = ? AND purpose = 'anonymized_installer_matching' AND withdrawn_at = ''")
+      db.prepare(`UPDATE customer_consent_receipts SET withdrawn_at = ?
+        WHERE project_id = ? AND purpose IN ('anonymized_installer_matching', 'installer_evidence_sharing')
+          AND withdrawn_at = ''`)
         .bind(now, id),
     ];
     for (const release of activeReleases.results) {

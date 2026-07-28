@@ -38,7 +38,8 @@ const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageC
 const emptyCounts: AccountCounts = { total: 0, approvedAccess: 0, reviewRequired: 0, suspended: 0 };
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries", "heating-cooling": "Heating and cooling",
-  "hot-water": "Hot water", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrades",
+  "hot-water": "Hot water", "draught-proofing": "Draught-proofing", insulation: "Insulation", glazing: "Glazing",
+  "window-coverings": "Blinds, shutters and external shading", "ev-charging": "EV charging", other: "Other energy upgrades",
 };
 
 

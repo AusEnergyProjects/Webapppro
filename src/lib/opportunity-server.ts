@@ -3,6 +3,10 @@ import { parseJsonList } from "@/lib/admin-server";
 import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import {
+  matchedServiceCategories,
+  selectInstallerCandidatesForCoverage,
+} from "@/lib/trade-service-matching.mjs";
 
 export const MAX_VISIBLE_INSTALLERS = 6;
 export const DEFAULT_CONNECTED_INSTALLERS = 3;
@@ -12,17 +16,19 @@ export const OPPORTUNITY_LIFETIME_DAYS = 30;
 export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: string, firebaseUid = "") {
   await db.prepare(`INSERT INTO trade_crm_enquiries
     (id, firebase_uid, source_type, source_reference, external_record_id, opportunity_match_id, status,
-     service_category, description, urgency, service_region, protected_source, duplicate_decision,
+     service_category, service_categories, description, urgency, service_region, protected_source, duplicate_decision,
      record_status, created_at, updated_at)
     SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
       CASE WHEN m.status IN ('interested', 'connected') THEN 'contacted'
            WHEN m.status IN ('declined', 'closed') THEN 'lost' ELSE 'new' END,
-      COALESCE(NULLIF(o.project_type, ''), 'other'), o.summary, o.priority, o.state, 1, 'protected',
+      COALESCE(json_extract(m.matched_categories, '$[0]'), 'other'), m.matched_categories,
+      o.summary, o.priority, o.state, 1, 'protected',
       'active', m.matched_at, m.updated_at
     FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.opportunity_id = ? AND (? = '' OR m.firebase_uid = ?)
     ON CONFLICT(firebase_uid, source_type, source_reference) DO UPDATE SET
-      status = excluded.status, service_category = excluded.service_category, description = excluded.description,
+      status = excluded.status, service_category = excluded.service_category,
+      service_categories = excluded.service_categories, description = excluded.description,
       urgency = excluded.urgency, service_region = excluded.service_region, updated_at = excluded.updated_at`)
     .bind(opportunityId, firebaseUid, firebaseUid).run();
 }
@@ -39,7 +45,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   battery: "home battery",
   "heating-cooling": "heating and cooling",
   "hot-water": "hot water",
-  "insulation-draughts": "insulation and draught control",
+  "draught-proofing": "draught-proofing",
+  insulation: "insulation",
+  glazing: "glazing",
+  "window-coverings": "blinds, shutters and external shading",
   "ev-charging": "EV charging",
   other: "energy upgrade",
 };
@@ -200,9 +209,7 @@ function candidateFromRow(
   const capabilities = parseJsonList(row.capabilities);
   const categories = parseJsonList(opportunity.service_categories);
   const state = canonicalMarketplaceState(opportunity.state);
-  const matchedCategories = categories.filter((item) =>
-    capabilities.includes(item),
-  );
+  const matchedCategories = matchedServiceCategories(categories, capabilities);
   if (!serviceStates.includes(state) || !matchedCategories.length) return null;
   const basePostcode = String(row.service_base_postcode || row.postcode || "");
   const distanceKm = postcodeDistanceKm(
@@ -259,7 +266,8 @@ export async function allocateNearestInstallers(
 
   const existing = await db
     .prepare(
-      `SELECT firebase_uid, status FROM trade_opportunity_matches WHERE opportunity_id = ?`,
+      `SELECT firebase_uid, status, matched_categories
+      FROM trade_opportunity_matches WHERE opportunity_id = ?`,
     )
     .bind(opportunityId)
     .all<Record<string, unknown>>();
@@ -272,6 +280,11 @@ export async function allocateNearestInstallers(
   const lifetimeRecipientCount = existing.results.length;
   const openSlots = Math.max(0, MAX_VISIBLE_INSTALLERS - lifetimeRecipientCount);
   if (!openSlots) return { allocated: [], activeCount, eligibleCount: 0 };
+  const requestedCategories = parseJsonList(opportunity.service_categories);
+  const coveredCategories = new Set(existing.results
+    .filter((item: Record<string, unknown>) => ACTIVE_MATCH_STATUSES.has(String(item.status)))
+    .flatMap((item: Record<string, unknown>) => parseJsonList(item.matched_categories)));
+  const uncoveredCategories = requestedCategories.filter((category) => !coveredCategories.has(category));
 
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const rows = await db
@@ -301,7 +314,11 @@ export async function allocateNearestInstallers(
         left.businessName.localeCompare(right.businessName),
     );
 
-  const selected = candidates.slice(0, openSlots);
+  const selected = selectInstallerCandidatesForCoverage(
+    candidates,
+    uncoveredCategories,
+    openSlots,
+  ) as InstallerCandidate[];
   const now = new Date().toISOString();
   if (selected.length)
     await db.batch(

@@ -1,5 +1,5 @@
 import { getD1 } from "../../../../db";
-import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber, nextTradeWorkNumber } from "@/lib/trade-job-number-server";
@@ -28,7 +28,10 @@ const SERVICE_CATEGORIES = new Set([
   "battery",
   "heating-cooling",
   "hot-water",
-  "insulation-draughts",
+  "draught-proofing",
+  "insulation",
+  "glazing",
+  "window-coverings",
   "ev-charging",
   "product-fulfilment",
   "other",
@@ -122,7 +125,7 @@ function errorResponse(error: unknown) {
 async function sourceOptions(identity: TradeIdentity) {
   const db = getD1();
   if (identity.partnerType === "installer") {
-    const rows = await db.prepare(`SELECT m.id, o.title, o.state, o.service_categories
+    const rows = await db.prepare(`SELECT m.id, o.title, o.state, m.matched_categories
       FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       WHERE m.firebase_uid = ? AND m.status IN ('interested', 'connected')
@@ -140,13 +143,14 @@ async function sourceOptions(identity: TradeIdentity) {
         )
       ORDER BY m.updated_at DESC LIMIT 50`).bind(identity.uid).all<Record<string, unknown>>();
     return rows.results.map((row: Record<string, unknown>) => {
-      let categories: string[] = [];
-      try { categories = JSON.parse(String(row.service_categories || "[]")); } catch { categories = []; }
+      const categories = parseJsonList(row.matched_categories)
+        .filter((item) => SERVICE_CATEGORIES.has(item));
       return {
         id: row.id,
         sourceType: "opportunity",
         label: row.title,
-        serviceCategory: categories.find((item) => SERVICE_CATEGORIES.has(item)) || "other",
+        serviceCategory: categories[0] || "other",
+        serviceCategories: categories.length ? categories : ["other"],
         siteArea: row.state,
       };
     });
@@ -166,6 +170,7 @@ async function sourceOptions(identity: TradeIdentity) {
     sourceType: "product_enquiry",
     label: `Product request: ${String(row.name || "installer equipment list")}`,
     serviceCategory: "product-fulfilment",
+    serviceCategories: ["product-fulfilment"],
     siteArea: "",
   }));
 }
@@ -173,7 +178,7 @@ async function sourceOptions(identity: TradeIdentity) {
 async function workOrderPayload(identity: TradeIdentity) {
   const db = getD1();
   const orderRows = await db.prepare(`SELECT id, partner_type, work_type, source_type, source_reference,
-    work_number, title, service_category, site_area, stage, priority, scheduled_start, scheduled_end,
+    work_number, title, service_category, service_categories, site_area, stage, priority, scheduled_start, scheduled_end,
     assignee_label, revision, record_status, created_at, updated_at
     FROM trade_work_orders WHERE firebase_uid = ? AND record_status = 'active'
     ORDER BY CASE stage
@@ -228,6 +233,11 @@ async function workOrderPayload(identity: TradeIdentity) {
         workNumber: row.work_number,
         title: row.title,
         serviceCategory: row.service_category,
+        serviceCategories: (() => {
+          const categories = parseJsonList(row.service_categories)
+            .filter((item) => SERVICE_CATEGORIES.has(item));
+          return categories.length ? categories : [String(row.service_category || "other")];
+        })(),
         siteArea: row.site_area,
         stage: row.stage,
         priority: row.priority,
@@ -334,6 +344,7 @@ export async function POST(request: Request) {
     const sourceReference = cleanAdminText(body.sourceReference, 180);
     let title = cleanAdminText(body.title, 160);
     let serviceCategory = cleanAdminText(body.serviceCategory, 60);
+    let serviceCategories = SERVICE_CATEGORIES.has(serviceCategory) ? [serviceCategory] : ["other"];
     let siteArea = cleanAdminText(body.siteArea, 80);
     let selectedArrival: { proposalId: string; startsAt: string; endsAt: string; revision: number } | null = null;
     if (!SERVICE_CATEGORIES.has(serviceCategory)) serviceCategory = "other";
@@ -341,7 +352,7 @@ export async function POST(request: Request) {
 
     if (sourceType === "opportunity") {
       if (identity.partnerType !== "installer" || !sourceReference) throw new Error("SOURCE_NOT_FOUND");
-      const source = await db.prepare(`SELECT o.title, o.state, o.service_categories,
+      const source = await db.prepare(`SELECT o.title, o.state, m.matched_categories,
         ap.id arrival_proposal_id, ap.selected_window arrival_selected_window, ap.revision arrival_revision
         FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
         LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id
@@ -356,10 +367,13 @@ export async function POST(request: Request) {
           ))`)
         .bind(sourceReference, identity.uid).first<Record<string, unknown>>();
       if (!source) throw new Error("SOURCE_NOT_FOUND");
-      let categories: string[] = [];
-      try { categories = JSON.parse(String(source.service_categories || "[]")); } catch { categories = []; }
+      const categories = parseJsonList(source.matched_categories)
+        .filter((item) => SERVICE_CATEGORIES.has(item));
       title = cleanAdminText(source.title, 160);
-      serviceCategory = categories.find((item) => SERVICE_CATEGORIES.has(item)) || "other";
+      serviceCategories = categories.length ? categories : ["other"];
+      serviceCategory = serviceCategories.includes(serviceCategory)
+        ? serviceCategory
+        : serviceCategories[0];
       siteArea = cleanAdminText(source.state, 80);
       if (source.arrival_proposal_id) {
         try {
@@ -380,6 +394,7 @@ export async function POST(request: Request) {
       if (!source) throw new Error("SOURCE_NOT_FOUND");
       title = `Product request: ${cleanAdminText(source.name, 130) || "equipment list"}`;
       serviceCategory = "product-fulfilment";
+      serviceCategories = ["product-fulfilment"];
       siteArea = "";
     }
     if (privateDataDetected(`${title} ${siteArea}`)) throw new Error("PRIVATE_DATA");
@@ -409,11 +424,11 @@ export async function POST(request: Request) {
     const createStatements = [
       db.prepare(`INSERT INTO trade_work_orders
         (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
-         service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
+         service_category, service_categories, site_area, stage, priority, scheduled_start, scheduled_end, assignee_label,
          record_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, 'active', ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, 'active', ?, ?)`)
         .bind(workOrderId, identity.uid, identity.partnerType, workType, sourceType, sourceReference,
-          workNumber, title, serviceCategory, siteArea, priority, scheduledStart, scheduledEnd,
+          workNumber, title, serviceCategory, JSON.stringify(serviceCategories), siteArea, priority, scheduledStart, scheduledEnd,
           requestedAssignee, now, now),
       eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now),
       ...offlineSyncStatements(db, identity, workOrderId, 1, now),

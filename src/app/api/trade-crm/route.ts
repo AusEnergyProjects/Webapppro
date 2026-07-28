@@ -25,7 +25,11 @@ const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved", "scheduled", "in_progress", "complete", "invoiced", "paid", "lost"]);
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
-const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const SERVICE_CATEGORIES = new Set([
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "draught-proofing", "insulation", "glazing", "window-coverings",
+  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+]);
 const APPOINTMENT_TYPES = new Set(["phone_call", "site_visit", "quote_review", "installation", "service", "admin"]);
 const APPOINTMENT_STATUSES = new Set(["scheduled", "completed", "cancelled", "no_show"]);
 const BUILDING_TYPES = new Set(["house_townhouse", "apartment_unit", "commercial_office", "retail_hospitality", "industrial_warehouse", "institutional_community_health", "other", "not_sure"]);
@@ -39,6 +43,8 @@ const PAGE_SIZES = new Set([25, 50, 100]);
 const SERVICE_LABELS: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
   "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
+  "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Glazing",
+  "window-coverings": "Blinds, shutters and external shading",
   "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging",
   electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",

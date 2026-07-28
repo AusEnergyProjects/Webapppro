@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 28 July 2026
+Last reconciled: 29 July 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -24,52 +24,55 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - A valid checksum is only an input check. An authorised reviewer must verify the business against an authoritative source before any trade workspace or trade API becomes available.
 - Installer and supplier permissions remain role scoped. Licences, insurance, product evidence, privacy controls and jurisdiction rules remain separate approval gates where applicable.
 - Household accounts remain free and private.
+- Household planning remains independent, brand-agnostic and advisory. It is not represented as a NatHERS assessment, certificate, quote or savings guarantee.
+- Household advice records owner or renter tenure separately from strata or common-property approval and supports several concurrent goals because authority, comfort, budget and upgrade sequencing can differ.
 - TLink remains the authoritative trade record until an approved migration changes that boundary.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Current milestone: FREE-ACCESS-ABN-01
+## Current milestone: CUSTOMER-HOME-ADVISOR-01
 
-Release status: the additive ABN schema expansion is committed and pushed as `7ebcb1905d3c28245fbcfede55525e0cfee8df8a` and is live as Sites version 200. The free reviewed-ABN application is committed as `481401d98ef2c0b294252a4cabeebc74eba40a52`, merged with the expansion release ancestry at `fb9c80fb73bf2a0b5d461ed2ecbfa28df6022c71`, pushed to GitHub, and live as Sites version 201. The authorised demo-only contract migration is committed and pushed as `698a5057cc384d43112e5ccff38a99effbb01fa8`, deployed as Sites version 202, and active at environment revision 19 after removal of all 16 observed Stripe, Square and retired paid-plan runtime keys.
+Release status: local implementation from baseline `01a8d09022b086c771c938960efa8d9a333542d3`. The pre-change production baseline is Sites version 203 from that same commit. Deployment is not claimed until the final release identity is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
 ### Outcome
 
-Remove the retired trade charging model and make reviewed business identity the only entry gate to the free role-appropriate trade system.
+Make household planning clear enough for a first-time customer and useful enough for an experienced assessor without turning it into a product pitch or formal NatHERS assessment.
 
 ### In scope
 
-- Remove obsolete commercial-access routes, controls, copy and navigation.
-- Remove retired plan and billing controls from trade administration.
-- Remove retired commercial-access dependencies from active reads and schema definitions. After the additive expansion and reviewed-ABN application are live and verified, apply a separate contract migration that deletes the retired demo-only commercial columns, tables, payment-provider connections, checkout/event/allocation rows and access records under the product owner's explicit no-real-accounts declaration.
-- Require a checksum-valid ABN when a trade application is submitted.
-- Create or update the applicant in a pending state.
-- Require an authorised manual ABN review against an authoritative source.
-- Record the review outcome, reviewer and decision time without storing unnecessary source material.
-- Deny every trade workspace and trade API until the account is active and the review is approved.
-- Reset approval and revoke trade access when the ABN changes.
-- Preserve legitimate jobs, customer invoices and provider-neutral accounting records. Keep them separate from TLink access.
-- Remove the unsafe live-identity synthetic generator and its commercial-state fixture. Retain only isolated local benchmark tooling that cannot target production identities or shared data.
+- Retire the empty customer Home records navigation and dedicated page while preserving durable completed-project handovers and governance.
+- Make all project stages accessible for preview.
+- Collect tenure, several goals, detailed home facts and a broad budget band before generating advice.
+- Give renters portable and removable actions separately from permission-dependent fixed work.
+- Generate a private, independent starting plan that can be reordered, removed or supplemented with a bounded custom item.
+- Keep draught-proofing, insulation, glazing and window coverings separate from customer selection through installer capability matching and accepted-work handoff.
+- Use one optional evidence-upload area with safe-photo and privacy guidance.
+- Require durable, explicit file-sharing consent and remove customer-authored filenames before any evidence reaches allocated installers.
+- Keep private notes visible and validation beside the attempted action.
+- Persist the expanded contract through forward migration `0081_customer_project_advisor.sql`, including an explicit unanswered state for ambiguous legacy tenure, retired budget and combined-category transforms, removal of household routines, protected evidence filenames and full matched-category preservation through CRM and work orders.
 
 ### Out of scope
 
-- Activating payment initiation while the application remains on Sites.
-- Provider onboarding, real card processing or accounting-provider activation.
-- Rewriting applied migrations.
-- Broad redesign of trade workflows.
+- Formal NatHERS assessment, certification or formal evidence collection.
+- Brand, product, installer or service-provider recommendations.
+- Fixed price estimates or guaranteed savings.
+- Legal tenancy or owners-corporation determinations.
+- Unsafe customer inspection or advice to seal required ventilation.
+- Deletion of completed-project handovers, warranties, corrections, consent events or audit history.
 - Production deployment before the complete release gate passes.
 
 ### Acceptance gate
 
-- New applicants cannot enter a trade workspace before approval.
-- Invalid ABNs are rejected by checksum validation.
-- A reviewer cannot approve an application without recording the authoritative review result.
-- An ABN change returns the account to review and immediately removes trade access.
-- Existing approved accounts follow an explicit reviewed migration rule, with no silent grandfathering from a commercial state.
-- Admin screens contain no trade plan or commercial-access controls.
-- Current operational source and documentation contain no retired trade charging copy or access decision. Applied migration history, the immutable dated audit and Git history are excluded from this scan.
-- Legitimate invoice and customer-payment terms remain intact and cannot grant product access.
-- Focused access, ABN, admin and migration tests pass.
+- No customer Home records route or navigation remains.
+- Every project stage is a directly selectable accessible button.
+- Multiple goals, tenure, budget and detailed home facts persist through the server allowlist.
+- Plan items can be reordered, removed and added without accepting arbitrary markup or destinations.
+- Customer plan wording remains independent, brand-agnostic and explicit about its limits.
+- Quote preparation has four separate fabric categories, one upload input, visible private notes and no household access routine.
+- Every attached file remains unavailable to installers without an active sharing receipt, and installer payloads use generic filenames.
+- Focused domain, UI, persistence, compatibility and migration tests pass.
 - `npm run validate` and `npm run build` pass on the exact release commit.
-- Release truth records the exact commit, deployment and dated live verification. Until then, the milestone is not deployment verified.
+- GitHub and Sites source provenance match the release commit.
+- Release truth records the saved Sites version, production deployment and dated responsive verification.
 
 ## Forward phases
 
@@ -170,11 +173,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Withdraw the generic Database Console:** replace broad catalogue and generic mutation access only with justified least-privilege diagnostics and named domain repair actions.
-2. **Owner export and restore proof:** produce encrypted owner-held data and object exports and complete an isolated restore reconciliation.
-3. **Ownership and privileged-access baseline:** name accountable owners, establish two-human administration, MFA, recovery and route authorization evidence.
-4. **Owner-controlled platform foundation:** approve the target architecture and provision reproducible development, staging and production foundations.
-5. **Migration and core-workflow proof:** rehearse data migration and validate the selected customer, trade, field and provider journeys before cutover.
+1. **Evidence confidence and provenance:** mark important facts as customer-reported, photo-supported, document-supported or unknown and expose how confidence changes advice.
+2. **Postcode and climate-aware sequencing:** adjust shading, airflow, draught, insulation and system priorities through a bounded Australian climate mapping without making a formal NatHERS claim.
+3. **Room-by-room comfort profile:** collect only the seasonal symptoms and room-use details that materially change the plan.
+4. **Renter and strata permission pack:** export portable actions, requested permissions and owner or owners-corporation works as separate neutral lists.
+5. **Household and assessor usability pilot:** test the full flow with representative householders and experienced assessors and repair the highest-friction accessibility and comprehension findings.
 
 ## Global stop conditions
 

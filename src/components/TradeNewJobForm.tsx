@@ -14,7 +14,19 @@ type TeamMember = { id: string; displayName: string; role: string; status: strin
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
 type AddressSuggestion = { id: string; label: string; addressLine1: string; addressLine2: string; suburb: string; addressState: string; postcode: string };
 
-const serviceLabels: Record<string, string> = { assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", electrical: "Electrical services", plumbing: "Plumbing services", "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work" };
+const serviceOptions = [
+  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
+  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
+  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
+  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
+  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"], ["other", "Other work"],
+] as const;
+const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));
+const serviceLabels: Record<string, string> = {
+  ...Object.fromEntries(serviceOptions),
+  "insulation-draughts": "Insulation and draught control",
+};
 const appointmentLabels: Record<string, string> = { phone_call: "Phone call", site_visit: "Site visit", quote_review: "Quote review", installation: "Installation", service: "Service visit", admin: "Office task" };
 const buildingTypes = [["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]];
 const steps = ["Job", "Customer", "Appointment", "Time", "Evidence", "Invoice"];
@@ -69,7 +81,8 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   const [step, setStep] = useState(1);
   const [message, setMessage] = useState("");
   const [templateId, setTemplateId] = useState("");
-  const template = templates.find((item) => item.id === templateId);
+  const selectableTemplates = templates.filter((item) => serviceCategories.has(item.serviceCategory));
+  const template = selectableTemplates.find((item) => item.id === templateId);
   const [serviceCategory, setServiceCategory] = useState("assessment");
   const [priority, setPriority] = useState("standard");
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
@@ -96,6 +109,7 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   const effectiveAssigneeMemberId = assigneeMemberId || teamMembers[0]?.id || "";
 
   function changeServiceCategory(value: string) {
+    if (!serviceCategories.has(value)) return;
     const next = defaultPhotoRequirements(value);
     setServiceCategory(value); setSelectedRequirementIds(new Set(next.map((item) => item.id)));
   }
@@ -203,8 +217,8 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
     {message && <div className="crm-wizard-message" role="status">{message}</div>}
 
     <section data-step="1" hidden={step !== 1} className="crm-wizard-panel"><header><span>1 of 6</span><h3>Create the job</h3><p>Choose the work. The customer name and work type will become the job and appointment title automatically.</p></header>
-      {templates.length > 0 && <label className="crm-template-picker"><span>Start from a template, optional</span><select name="templateId" value={templateId} onChange={(event) => { const id = event.target.value; const selected = templates.find((item) => item.id === id); setTemplateId(id); if (selected) { changeServiceCategory(selected.serviceCategory); setPriority(selected.priority); } }}><option value="">Blank job</option>{templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>{template ? `${template.taskTitles.length} checklist items will be added automatically.` : "Templates keep common scopes and checklists consistent."}</small></label>}
-      <div className="crm-form-grid"><label><span>Work type</span><select name="serviceCategory" value={serviceCategory} onChange={(event) => changeServiceCategory(event.target.value)}>{Object.entries(serviceLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" defaultValue="not_sure">{buildingTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
+      {selectableTemplates.length > 0 && <label className="crm-template-picker"><span>Start from a template, optional</span><select name="templateId" value={templateId} onChange={(event) => { const id = event.target.value; const selected = selectableTemplates.find((item) => item.id === id); setTemplateId(id); if (selected) { changeServiceCategory(selected.serviceCategory); setPriority(selected.priority); } }}><option value="">Blank job</option>{selectableTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>{template ? `${template.taskTitles.length} checklist items will be added automatically.` : "Templates keep common scopes and checklists consistent."}</small></label>}
+      <div className="crm-form-grid"><label><span>Work type</span><select name="serviceCategory" value={serviceCategory} onChange={(event) => changeServiceCategory(event.target.value)}>{serviceOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" defaultValue="not_sure">{buildingTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="standard">Standard</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
       {template?.description && <input type="hidden" name="description" value={template.description} />}
       <div className="crm-wizard-actions"><button type="button" className="btn" onClick={() => next(2)}>Add customer</button></div>
     </section>

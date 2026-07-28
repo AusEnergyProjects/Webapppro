@@ -7,7 +7,19 @@ type Field = { key: string; label: string; type: string; required: boolean; maxL
 type Template = { id: string; templateKey: string; version: number; name: string; jurisdiction: string; categories: string[]; description: string; guidance: string; fields: Field[]; sourceNotes: string; status: string; publishedAt: string; updatedAt: string };
 type Api = (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
 
-const categoryOptions = [["assessment", "Assessment"], ["solar", "Solar"], ["battery", "Battery"], ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"], ["insulation-draughts", "Insulation and draughts"], ["ev-charging", "EV charging"], ["other", "Other"]];
+const categoryOptions = [
+  ["assessment", "Assessment"], ["solar", "Solar"], ["battery", "Battery"],
+  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
+  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
+  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"], ["other", "Other"],
+] as const;
+const categoryLabels: Record<string, string> = {
+  ...Object.fromEntries(categoryOptions),
+  "insulation-draughts": "Insulation and draughts",
+};
+const normaliseEditableCategories = (categories: string[]) => [...new Set(categories.flatMap((category) => (
+  category === "insulation-draughts" ? ["draught-proofing", "insulation"] : [category]
+)))];
 const empty = { templateKey: "", version: 1, name: "", jurisdiction: "AU", categories: [] as string[], description: "", guidance: "", sourceNotes: "", fields: [{ key: "work_date", label: "Work date", type: "date", required: true }] as Field[] };
 
 export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
@@ -26,7 +38,7 @@ export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
 
   function updateField(index: number, patch: Partial<Field>) { setDraft((current) => ({ ...current, fields: current.fields.map((field, position) => position === index ? { ...field, ...patch } : field) })); }
   function toggleCategory(value: string) { setDraft((current) => ({ ...current, categories: current.categories.includes(value) ? current.categories.filter((item) => item !== value) : [...current.categories, value] })); }
-  function clone(template: Template) { setDraft({ templateKey: template.templateKey, version: template.version + 1, name: template.name, jurisdiction: template.jurisdiction, categories: [...template.categories], description: template.description, guidance: template.guidance, sourceNotes: "", fields: template.fields.map((field) => ({ ...field, options: field.options ? [...field.options] : undefined })) }); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function clone(template: Template) { setDraft({ templateKey: template.templateKey, version: template.version + 1, name: template.name, jurisdiction: template.jurisdiction, categories: normaliseEditableCategories(template.categories), description: template.description, guidance: template.guidance, sourceNotes: "", fields: template.fields.map((field) => ({ ...field, options: field.options ? [...field.options] : undefined })) }); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   async function save(publishNow: boolean) {
     setBusy(true); setStatus(publishNow ? "Validating and publishing the new form version..." : "Saving the draft form version...");
@@ -39,6 +51,10 @@ export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
   }
 
   async function action(template: Template, next: "publish" | "withdraw") {
+    if (next === "publish" && template.categories.includes("insulation-draughts")) {
+      setStatus("Clone this legacy form first so draught-proofing and insulation can be selected separately.");
+      return;
+    }
     setBusy(true); setStatus(`${next === "publish" ? "Publishing" : "Withdrawing"} the form version...`);
     try { const result = await api("/api/admin/form-templates", { method: "PATCH", body: JSON.stringify({ id: template.id, action: next }) }); setTemplates((result.templates || []) as Template[]); setStatus("Form availability updated and recorded in the audit history."); }
     catch (error) { setStatus(error instanceof Error ? error.message : "The form version could not be updated."); }
@@ -71,7 +87,7 @@ export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
       <footer><button disabled={busy}>Save draft</button><button className="primary" type="button" disabled={busy} onClick={(event) => { const form = event.currentTarget.closest("form"); if (form?.reportValidity()) void save(true); }}>Validate and publish</button></footer>
     </form>}
     <section className="admin-card admin-template-register"><header><div><span>Version register</span><h2>Published, draft and withdrawn forms</h2></div><strong>{templates.length} governed version{templates.length === 1 ? "" : "s"}</strong></header>
-      {templates.length ? templates.map((template) => <article key={template.id}><div><span>{template.jurisdiction} | Version {template.version}</span><h3>{template.name}</h3><p>{template.description}</p><small>{template.categories.join(", ")} | {template.fields.length} fields</small></div><div><b className={`admin-status status-${template.status}`}>{template.status}</b>{canManage && <button type="button" onClick={() => clone(template)}>Clone next version</button>}{canManage && template.status === "draft" && <button type="button" disabled={busy} onClick={() => void action(template, "publish")}>Publish</button>}{canManage && template.status === "published" && <button type="button" disabled={busy} onClick={() => void action(template, "withdraw")}>Withdraw</button>}</div></article>) : <div className="admin-empty"><strong>No governed forms yet</strong><p>The built-in national forms remain available. Create a governed version when operations needs a reviewed update or jurisdiction-specific workflow.</p></div>}
+      {templates.length ? templates.map((template) => <article key={template.id}><div><span>{template.jurisdiction} | Version {template.version}</span><h3>{template.name}</h3><p>{template.description}</p><small>{template.categories.map((category) => categoryLabels[category] || category).join(", ")} | {template.fields.length} fields</small></div><div><b className={`admin-status status-${template.status}`}>{template.status}</b>{canManage && <button type="button" onClick={() => clone(template)}>Clone next version</button>}{canManage && template.status === "draft" && <button type="button" disabled={busy || template.categories.includes("insulation-draughts")} title={template.categories.includes("insulation-draughts") ? "Clone this version to split the legacy category before publishing." : undefined} onClick={() => void action(template, "publish")}>Publish</button>}{canManage && template.status === "published" && <button type="button" disabled={busy} onClick={() => void action(template, "withdraw")}>Withdraw</button>}</div></article>) : <div className="admin-empty"><strong>No governed forms yet</strong><p>The built-in national forms remain available. Create a governed version when operations needs a reviewed update or jurisdiction-specific workflow.</p></div>}
     </section>
   </>;
 }

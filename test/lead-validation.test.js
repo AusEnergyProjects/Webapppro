@@ -146,6 +146,39 @@ test('direct trade project briefs retain only allowlisted project fields', async
   assert.equal(result.value.projectSource, 'electricity-battery');
 });
 
+test('direct trade leads retain the four current building-fabric categories', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-project';
+  payload.state = 'VIC';
+  payload.projectCategories = ['draught-proofing', 'insulation', 'glazing', 'window-coverings'];
+  payload.propertyType = 'house';
+  payload.propertyRelationship = 'owner-occupier';
+  payload.projectPriorities = ['improve-comfort'];
+  payload.projectStage = 'seeking-quotes';
+  payload.timeframe = 'one-three-months';
+  payload.preferredContact = 'email';
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.projectCategories, ['draught-proofing', 'insulation', 'glazing', 'window-coverings']);
+});
+
+test('direct trade leads normalize the legacy combined category without emitting it', async () => {
+  const { validateLeadPayload } = await validationModule;
+  const payload = validComparison();
+  payload.submissionType = 'upgrade';
+  payload.enquiry = 'direct-trade-partner';
+  payload.partnerType = 'installer';
+  payload.businessName = 'Existing Fabric Trade';
+  payload.serviceStates = ['VIC'];
+  payload.projectCategories = ['insulation-draughts', 'insulation'];
+  const result = validateLeadPayload(payload);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value.projectCategories, ['insulation', 'draught-proofing']);
+  assert.equal(result.value.projectCategories.includes('insulation-draughts'), false);
+});
+
 test('direct trade project briefs require location, service and project details', async () => {
   const { validateLeadPayload } = await validationModule;
   const payload = validComparison();

@@ -7,7 +7,11 @@ import { canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
-const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const SERVICE_CATEGORIES = new Set([
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "draught-proofing", "insulation", "glazing", "window-coverings",
+  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+]);
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";

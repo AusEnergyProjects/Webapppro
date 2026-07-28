@@ -5,7 +5,10 @@ import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access
 
 export const runtime = "edge";
 
-const ASSET_CATEGORIES = new Set(["solar", "battery", "hot-water", "heating-cooling", "ev-charging", "electrical", "insulation-draughts", "controls", "other"]);
+const ASSET_CATEGORIES = new Set([
+  "solar", "battery", "hot-water", "heating-cooling", "ev-charging", "electrical",
+  "draught-proofing", "insulation", "glazing", "window-coverings", "controls", "other",
+]);
 const ASSET_STATUSES = new Set(["active", "retired", "replaced"]);
 const WARRANTY_FILTERS = new Set(["", "expired", "due_90", "covered", "no_date"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

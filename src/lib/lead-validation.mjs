@@ -1,7 +1,22 @@
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const DIRECT_TRADE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
+const DIRECT_TRADE_CATEGORIES = new Set([
+  "assessment",
+  "solar",
+  "battery",
+  "heating-cooling",
+  "hot-water",
+  "draught-proofing",
+  "insulation",
+  "glazing",
+  "window-coverings",
+  "ev-charging",
+  "other",
+]);
+const LEGACY_DIRECT_TRADE_CATEGORY_ALIASES = {
+  "insulation-draughts": ["insulation", "draught-proofing"],
+};
 const PROPERTY_TYPES = new Set(["house", "townhouse-unit", "apartment", "small-business", "other"]);
 const PROJECT_STAGES = new Set(["researching", "assessment-ready", "seeking-quotes", "replacement-urgent"]);
 const PROJECT_TIMEFRAMES = new Set(["urgent", "one-three-months", "three-six-months", "later"]);
@@ -30,6 +45,18 @@ function cleanEnum(value, allowed) {
 function cleanStringArray(value, allowed, maximum = 8) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.map((item) => cleanEnum(item, allowed)).filter(Boolean))].slice(0, maximum);
+}
+
+function cleanDirectTradeCategories(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = value.flatMap((item) => {
+    const text = typeof item === "string" ? item.trim() : "";
+    return LEGACY_DIRECT_TRADE_CATEGORY_ALIASES[text] || [text];
+  });
+  return [...new Set(normalized.filter((item) => DIRECT_TRADE_CATEGORIES.has(item)))].slice(
+    0,
+    DIRECT_TRADE_CATEGORIES.size,
+  );
 }
 
 function cleanTopPlans(value) {
@@ -90,7 +117,7 @@ export function validateLeadPayload(raw) {
   const postcode = cleanText(raw.postcode, 4);
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
   const enquiry = cleanText(raw.enquiry, 80);
-  const projectCategories = cleanStringArray(raw.projectCategories, DIRECT_TRADE_CATEGORIES);
+  const projectCategories = cleanDirectTradeCategories(raw.projectCategories);
   const state = canonicalAustralianState(raw.state) || "";
   const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);
   const projectStage = cleanEnum(raw.projectStage, PROJECT_STAGES);

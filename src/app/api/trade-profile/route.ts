@@ -24,7 +24,10 @@ const CAPABILITIES = new Set([
   "battery",
   "heating-cooling",
   "hot-water",
-  "insulation-draughts",
+  "draught-proofing",
+  "insulation",
+  "glazing",
+  "window-coverings",
   "ev-charging",
   "other",
 ]);

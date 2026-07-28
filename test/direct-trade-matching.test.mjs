@@ -111,3 +111,97 @@ test("quote evidence remains incomplete until every check is accepted", () => {
     complete: true,
   });
 });
+
+test("building-fabric categories have separate capabilities and quote evidence", () => {
+  const buildingFabricProject = {
+    ...project,
+    projectCategories: [
+      "draught-proofing",
+      "insulation",
+      "glazing",
+      "window-coverings",
+    ],
+  };
+  const triage = buildDirectTradeTriage(buildingFabricProject);
+  assert.deepEqual(triage.matchCriteria.capabilities, [
+    "draught-proofing",
+    "insulation",
+    "glazing",
+    "window-coverings",
+  ]);
+  const evidenceIds = triage.quoteEvidence.map((item) => item.id);
+  for (const id of [
+    "draught-scope",
+    "insulation-scope",
+    "glazing-schedule",
+    "window-covering-scope",
+  ]) {
+    assert.ok(evidenceIds.includes(id), `missing ${id}`);
+  }
+
+  const candidates = matchDirectTradeParticipants(
+    buildingFabricProject,
+    [
+      {
+        ...participantEvidence,
+        id: "all-four",
+        serviceStates: ["VIC"],
+        capabilities: [
+          "draught-proofing",
+          "insulation",
+          "glazing",
+          "window-coverings",
+        ],
+      },
+      {
+        ...participantEvidence,
+        id: "partial-fabric",
+        serviceStates: ["VIC"],
+        capabilities: ["draught-proofing", "insulation"],
+      },
+    ],
+    { now: new Date("2026-07-14T01:00:00.000Z") },
+  );
+  assert.equal(
+    candidates.find((candidate) => candidate.participantId === "all-four")
+      .eligibleForReview,
+    true,
+  );
+  assert.deepEqual(
+    candidates.find((candidate) => candidate.participantId === "partial-fabric")
+      .reasons,
+    ["capability_mismatch"],
+  );
+});
+
+test("legacy combined project and participant categories normalize to current capabilities", () => {
+  const legacyProject = {
+    ...project,
+    projectCategories: ["insulation-draughts"],
+  };
+  const triage = buildDirectTradeTriage(legacyProject);
+  assert.deepEqual(triage.matchCriteria.capabilities, [
+    "insulation",
+    "draught-proofing",
+  ]);
+  assert.equal(
+    triage.matchCriteria.capabilities.includes("insulation-draughts"),
+    false,
+  );
+  assert.ok(triage.quoteEvidence.some((item) => item.id === "insulation-scope"));
+  assert.ok(triage.quoteEvidence.some((item) => item.id === "draught-scope"));
+
+  const [candidate] = matchDirectTradeParticipants(
+    legacyProject,
+    [
+      {
+        ...participantEvidence,
+        id: "legacy-fabric",
+        serviceStates: ["VIC"],
+        capabilities: ["insulation-draughts"],
+      },
+    ],
+    { now: new Date("2026-07-14T01:00:00.000Z") },
+  );
+  assert.equal(candidate.eligibleForReview, true);
+});

@@ -14,8 +14,6 @@ const correctionAdminRoute = read("../src/app/api/admin/handover-corrections/rou
 const documentRoute = read("../src/app/api/trade-handover/documents/route.ts");
 const lifecycleRoute = read("../src/app/api/customer-asset-lifecycle/route.ts");
 const projectRoute = read("../src/app/api/customer-projects/route.ts");
-const customerUi = read("../src/components/CustomerAssetOwnershipCentre.tsx");
-const customerDashboard = read("../src/components/CustomerDashboard.tsx");
 const tradeUi = read("../src/components/TradeHandoverCorrections.tsx");
 const adminUi = read("../src/components/AdminAssetGovernance.tsx");
 
@@ -55,8 +53,6 @@ test("one-time claim codes are hashed, expiring and require both customer consen
   assert.match(ownershipRoute, /if \(!identity\.emailVerified\)/);
   assert.match(ownershipRoute, /SELF_TRANSFER/);
   assert.match(ownershipRoute, /status = 'awaiting_admin'/);
-  assert.match(customerUi, /Shown once/);
-  assert.match(customerUi, /AEA stores only its secure hash/);
 });
 
 test("administrator approval changes the active owner atomically and keeps a consent ledger", () => {
@@ -80,8 +76,6 @@ test("active ownership overrides the original project link across documents and 
   assert.match(lifecycleRoute, /canCustomerAccessHandover\(customerUid, packId\)/);
   assert.match(lifecycleRoute, /customer_asset_ownerships history/);
   assert.match(projectRoute, /customer_asset_ownerships ownership/);
-  assert.match(customerDashboard, /Home records/);
-  assert.match(customerUi, /Moving out\? Transfer this home record/);
 });
 
 test("published handover corrections retain the previous value and require administrator review", () => {
@@ -106,7 +100,10 @@ test("ownership and correction workflows preserve platform privacy and account b
   assert.match(correctionRoute, /partnerTypes: \["installer"\]/);
   assert.match(correctionRoute, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
   assert.doesNotMatch(correctionRoute, /supplier|wholesaler.*lead/i);
-  assert.match(customerUi, /Free home records/);
-  assert.match(customerUi, /Trades cannot browse your account or home-record library/);
-  assert.doesNotMatch(`${ownershipRoute}\n${ownershipServer}\n${transferAdminRoute}\n${correctionRoute}\n${correctionAdminRoute}\n${customerUi}\n${tradeUi}\n${adminUi}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${ownershipRoute}\n${ownershipServer}\n${transferAdminRoute}\n${correctionRoute}\n${correctionAdminRoute}\n${tradeUi}\n${adminUi}`, /[\u2013\u2014]/);
+});
+
+test("the obsolete dedicated customer home records surface stays retired", () => {
+  assert.equal(fs.existsSync(new URL("../src/app/account/assets/page.tsx", import.meta.url)), false);
+  assert.equal(fs.existsSync(new URL("../src/components/CustomerAssetOwnershipCentre.tsx", import.meta.url)), false);
 });

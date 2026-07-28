@@ -69,9 +69,10 @@ test("trade requests require structured property context and keep it anonymised"
   const opportunity = buildAnonymizedOpportunity(complete.project, "project-1");
   assert.match(opportunity.summary, /two storeys/);
   assert.match(opportunity.summary, /limited parking/);
+  assert.doesNotMatch(opportunity.summary, /away on weekdays|access timing/i);
   assert.match(
     opportunity.summary,
-    /photos and documents are available separately/,
+    /customer-approved photos and documents are provided separately/,
   );
   assert.equal("privateNotes" in opportunity, false);
 });
@@ -168,8 +169,13 @@ test("project evidence is R2 backed with every upload shared to allocated verifi
   assert.match(privateImageEvidence, /stripPngMetadata/);
   assert.match(privateImageEvidence, /stripWebpMetadata/);
   assert.match(evidenceRoute, /customer-quoting-photo/);
+  assert.match(evidenceRoute, /purpose = 'installer_evidence_sharing'/);
+  assert.match(evidenceRoute, /confirmInstallerPhotoSharing/);
   assert.match(evidenceRoute, /'installer', \?, 'viewed'/);
   assert.match(opportunityRoute, /sharingScope: "allocated-installers"/);
+  assert.match(opportunityRoute, /purpose = 'installer_evidence_sharing'/);
+  assert.match(opportunityRoute, /fileName: installerEvidenceName\(item\)/);
+  assert.doesNotMatch(opportunityRoute, /fileName: item\.file_name/);
   assert.doesNotMatch(
     opportunityRoute,
     /e\.category IN \('property-photo', 'existing-equipment', 'switchboard'\)/,
@@ -192,12 +198,17 @@ test("only an accepted installer can propose windows or convert the platform lea
   assert.doesNotMatch(installerUi, /Book site visit/);
 });
 
-test("customer devices can choose files or capture a new property photo", () => {
+test("customer devices use one clear evidence upload with safe photo guidance", () => {
   assert.match(
     customerUi,
-    /multiple[\s\S]{0,80}accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif,application\/pdf"/,
+    /multiple[\s\S]{0,100}accept="image\/jpeg,image\/png,image\/webp,application\/pdf"/,
   );
-  assert.match(customerUi, /capture="environment"/);
+  assert.doesNotMatch(customerUi, /capture="environment"/);
+  assert.equal((customerUi.match(/type="file"/g) || []).length, 1);
+  assert.match(customerUi, /Recommended photo and document checklist/);
+  assert.match(customerUi, /switchboard front/i);
+  assert.match(customerUi, /wall-to-fence clearance/i);
+  assert.match(customerUi, /NMI, account number, name and\s+address removed/);
   assert.match(customerUi, /prepareEvidenceUpload/);
   assert.match(customerPhotoUpload, /MAX_PREPARED_CUSTOMER_PHOTO_BYTES = 640 \* 1024/);
   assert.match(customerPhotoUpload, /maximumDimension = 1920/);
@@ -209,6 +220,9 @@ test("customer devices can choose files or capture a new property photo", () => 
     customerUi,
     /every attached photo[\s\S]{0,60}and supporting document/,
   );
+  assert.match(customerUi, /pendingEvidence\.length > 0/);
+  assert.match(customerRoute, /purpose = 'installer_evidence_sharing'/);
+  assert.match(customerRoute, /Number\(evidenceCount\?\.count \|\| 0\) > 0/);
   assert.match(customerRoute, /confirmInstallerPhotoSharing !== true/);
   assert.match(customerUi, /Accept installer for next step/);
   assert.match(arrivalUi, /Provide arrival windows for the customer/);

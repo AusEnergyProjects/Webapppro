@@ -17,7 +17,7 @@ type TimelineEntry = {
 };
 type AssetResult = { ok?: boolean; assets?: Asset[]; pendingReviews?: Asset[]; timeline?: TimelineEntry[]; id?: string; error?: string };
 
-const CATEGORIES = ["solar", "battery", "hot-water", "heating-cooling", "ev-charging", "electrical", "insulation-draughts", "controls", "other"];
+const CATEGORIES = ["solar", "battery", "hot-water", "heating-cooling", "ev-charging", "electrical", "draught-proofing", "insulation", "glazing", "window-coverings", "controls", "other"];
 const readable = (value: string) => value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const dateLabel = (value: string) => value ? new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleString("en-AU", value.length === 10 ? { dateStyle: "medium" } : { dateStyle: "medium", timeStyle: "short" }) : "Not recorded";
 const warrantyState = (end: string) => {

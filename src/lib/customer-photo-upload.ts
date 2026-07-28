@@ -39,7 +39,7 @@ export async function prepareCustomerPhotoUpload(file: File, fallbackName = "cus
       }
     }
     if (!blob || blob.size > MAX_PREPARED_CUSTOMER_PHOTO_BYTES) throw new Error("PHOTO_TOO_LARGE");
-    const baseName = file.name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 80) || fallbackName;
+    const baseName = fallbackName.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 80) || "customer-photo";
     return new File([blob], `${baseName}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
   } finally {
     URL.revokeObjectURL(objectUrl);

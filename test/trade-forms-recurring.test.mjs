@@ -26,6 +26,16 @@ test("the form library is work-type specific, versioned and explicit about legal
   assert.equal(tradeFormTemplate("hot-water-commissioning-support", 1, "solar"), null);
 });
 
+test("the form library keeps each home-fabric work category first class", () => {
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    const templates = tradeFormTemplatesFor(category);
+    assert.ok(templates.some((item) => item.key === "building-fabric-completion-support"), category);
+    assert.ok(templates.some((item) => item.key === "pre-start-risk-readiness"), category);
+    assert.ok(templates.some((item) => item.key === "service-visit-support"), category);
+  }
+  assert.deepEqual(tradeFormTemplatesFor("insulation-draughts"), []);
+});
+
 test("form answer normalisation is bounded and completion requires checked confirmations", () => {
   const template = tradeFormTemplate("service-visit-support", 1, "other");
   assert.ok(template);

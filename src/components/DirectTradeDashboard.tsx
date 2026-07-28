@@ -121,7 +121,10 @@ const capabilityLabels: Record<string, string> = {
   battery: "Home batteries",
   "heating-cooling": "Heating and cooling",
   "hot-water": "Hot water",
-  "insulation-draughts": "Insulation and draught control",
+  "draught-proofing": "Draught-proofing",
+  insulation: "Insulation",
+  glazing: "Glazing",
+  "window-coverings": "Blinds, shutters and external shading",
   "ev-charging": "EV charging",
   electrical: "Electrical services",
   plumbing: "Plumbing services",
@@ -807,7 +810,7 @@ export function DirectTradeDashboard() {
                             </strong>
                           </header>
                           <p>{opportunity.summary}</p>
-                          {opportunity.platformOnly && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Access timing</dt><dd>{String(opportunity.propertyContext.occupancy || "not confirmed").replaceAll("_", " ")}</dd></div></dl>}
+                          {opportunity.platformOnly && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}
                           <div className="dashboard-opportunity-tags">
                             <span>
                               Allocation {opportunity.allocationRank} of 6

@@ -5,7 +5,10 @@ export const runtime = "edge";
 
 const TYPES = new Set(["checkbox", "text", "textarea", "date", "select"]);
 const JURISDICTIONS = new Set(["AU", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "other"]);
+const CATEGORIES = new Set([
+  "assessment", "solar", "battery", "heating-cooling", "hot-water",
+  "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "other",
+]);
 
 function parseJson<T>(value: unknown, fallback: T): T {
   try { return JSON.parse(String(value || "")) as T; } catch { return fallback; }
@@ -100,11 +103,15 @@ export async function PATCH(request: Request) {
     const admin = await requireAdminIdentity(request, ["owner", "admin"]);
     const body = await request.json() as Record<string, unknown>;
     const id = cleanAdminText(body.id, 180); const action = cleanAdminText(body.action, 20);
-    const current = await getD1().prepare("SELECT id, name, version, status, source_notes FROM trade_form_templates WHERE id = ?").bind(id).first<Record<string, unknown>>();
+    const current = await getD1().prepare("SELECT id, name, version, status, source_notes, categories FROM trade_form_templates WHERE id = ?").bind(id).first<Record<string, unknown>>();
     if (!current) return adminJson({ ok: false, error: "Form template not found." }, 404);
     const now = new Date().toISOString();
     if (action === "publish") {
       if (!String(current.source_notes).trim()) return adminJson({ ok: false, error: "Add governance notes by creating a reviewed version before publishing." }, 400);
+      const categories = parseJson<string[]>(current.categories, []);
+      if (!categories.length || categories.some((category) => !CATEGORIES.has(category))) {
+        return adminJson({ ok: false, error: "Clone this legacy form and choose current work categories before publishing." }, 409);
+      }
       await getD1().prepare("UPDATE trade_form_templates SET status = 'published', published_by_uid = ?, published_at = ?, withdrawn_at = '', updated_at = ? WHERE id = ? AND status = 'draft'").bind(admin.uid, now, now, id).run();
     } else if (action === "withdraw") {
       await getD1().prepare("UPDATE trade_form_templates SET status = 'withdrawn', withdrawn_at = ?, updated_at = ? WHERE id = ? AND status = 'published'").bind(now, now, id).run();

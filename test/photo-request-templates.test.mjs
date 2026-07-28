@@ -5,6 +5,7 @@ import {
   normalisePhotoRequirements,
   normalisePhotoTemplateFeedback,
   photoRequirementsEqual,
+  PHOTO_REQUEST_SERVICE_CATEGORIES,
 } from "../src/lib/trade-photo-requests.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -55,6 +56,18 @@ test("template management is role protected, owner scoped, versioned and archive
   assert.match(templateRoute, /status = 'archived'/);
   assert.match(templateRoute, /status <> 'archived'/);
   assert.match(templateRoute, /PHOTO_TEMPLATE_UNCHANGED/);
+});
+
+test("photo templates write only current home-fabric service categories", () => {
+  const selectable = libraryUi.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
+  for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.ok(PHOTO_REQUEST_SERVICE_CATEGORIES.includes(category));
+    assert.match(selectable, new RegExp(`"${category}"`));
+  }
+  assert.equal(PHOTO_REQUEST_SERVICE_CATEGORIES.includes("insulation-draughts"), false);
+  assert.doesNotMatch(selectable, /insulation-draughts/);
+  assert.match(templateRoute, /requestedCategory === "insulation-draughts"\) return "insulation"/);
+  assert.match(templateRoute, /normaliseServiceCategory\(template\.service_category\)/);
 });
 
 test("new requests accept only the current published version and retain an independent snapshot", () => {

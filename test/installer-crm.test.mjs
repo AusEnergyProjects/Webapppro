@@ -11,7 +11,6 @@ const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
 const hub = read("../src/components/TradeBusinessHub.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
-const customerAssets = read("../src/components/CustomerAssetOwnershipCentre.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
 const numberer = read("../src/lib/trade-job-number-server.ts");
 
@@ -286,15 +285,6 @@ test("CRM writes no longer return the full customer and job workspace", () => {
   assert.match(crm, /pageSize: "25"/);
 });
 
-test("customer home records use plain language and progressive disclosure", () => {
-  assert.match(customerAssets, /Free home records/);
-  assert.match(customerAssets, /Your products, warranties and documents/);
-  assert.match(customerAssets, /customer-asset-move-tools/);
-  assert.match(customerAssets, /customer-pack-transfer/);
-  assert.match(customerLifecycle, /customer-lifecycle-simple/);
-  assert.match(customerLifecycle, /Care and warranty reminders/);
-});
-
 test("new CRM and customer copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${crm}\n${customerAssets}\n${customerLifecycle}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${route}\n${crm}\n${customerLifecycle}`, /[\u2013\u2014]/);
 });

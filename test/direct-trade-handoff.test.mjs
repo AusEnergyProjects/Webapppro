@@ -29,3 +29,31 @@ test("handoff parsing ignores sensitive, unknown and malformed query values", ()
   assert.equal("projectNotes" in parsed, false);
   assert.equal("email" in parsed, false);
 });
+
+test("handoffs accept current building-fabric services and never emit the legacy combined value", () => {
+  const url = createDirectTradeHandoffUrl({
+    services: [
+      "draught-proofing",
+      "insulation",
+      "glazing",
+      "window-coverings",
+      "insulation-draughts",
+    ],
+  });
+  assert.equal(
+    url,
+    "/direct-trade?services=draught-proofing%2Cinsulation%2Cglazing%2Cwindow-coverings",
+  );
+  assert.doesNotMatch(url, /insulation-draughts/);
+
+  const parsed = parseDirectTradeHandoff(
+    "?services=insulation-draughts,glazing,window-coverings",
+  );
+  assert.deepEqual(parsed.services, [
+    "insulation",
+    "draught-proofing",
+    "glazing",
+    "window-coverings",
+  ]);
+  assert.equal(parsed.services.includes("insulation-draughts"), false);
+});

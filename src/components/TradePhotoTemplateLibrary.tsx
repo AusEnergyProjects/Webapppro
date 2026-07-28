@@ -28,12 +28,18 @@ type PhotoTemplate = {
 };
 type Result = { ok?: boolean; templates?: PhotoTemplate[]; error?: string };
 
+const serviceOptions = [
+  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
+  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
+  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
+  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
+  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"], ["other", "Other work"],
+] as const;
+const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));
 const serviceLabels: Record<string, string> = {
-  assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
-  "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
-  "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging",
-  electrical: "Electrical services", plumbing: "Plumbing services",
-  "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
+  ...Object.fromEntries(serviceOptions),
+  "insulation-draughts": "Insulation and draught control",
 };
 
 function blankRequirement(): PhotoRequirement {
@@ -97,6 +103,10 @@ export function TradePhotoTemplateLibrary({ user }: { user: User }) {
   }
 
   async function action(actionName: "create" | "save_draft" | "publish" | "duplicate" | "archive") {
+    if (actionName !== "archive" && !serviceCategories.has(serviceCategory)) {
+      setStatus("Choose a current upgrade or service before saving this template.");
+      return;
+    }
     setBusy(actionName); setStatus("");
     try {
       const token = await user.getIdToken();
@@ -123,6 +133,7 @@ export function TradePhotoTemplateLibrary({ user }: { user: User }) {
   if (loading) return <section className={styles.state}><strong>Opening photo guidance templates</strong><span>Loading the business library...</span></section>;
 
   const archived = selected?.status === "archived";
+  const serviceCategoryIsSelectable = serviceCategories.has(serviceCategory);
   return <section className={styles.library} aria-labelledby="photo-template-library-title">
     <header className={styles.heading}><div><span>Customer photo guidance</span><h3 id="photo-template-library-title">Photo request templates</h3><p>Maintain upgrade-specific guidance from trade feedback. Publishing creates an immutable version, while each job gets its own editable copy.</p></div><button type="button" onClick={() => edit(null)}>New photo template</button></header>
     <div className={styles.boundary}><strong>Business only</strong><span>Templates, usage and feedback stay inside this installer business. Counts use request metadata only and never inspect customer images.</span></div>
@@ -134,8 +145,9 @@ export function TradePhotoTemplateLibrary({ user }: { user: User }) {
       </aside>
       <div className={styles.editor}>
         <header><div><span>{selected ? "Template editor" : "New draft"}</span><h4>{selected?.name || "Create reusable photo guidance"}</h4></div>{selected && <em data-state={selected.status}>{selected.status}</em>}</header>
-        <div className={styles.fields}><label><span>Template name</span><input value={name} maxLength={100} disabled={archived} onChange={(event) => setName(event.target.value)} placeholder="Standard heat pump quote photos" /></label><label><span>Upgrade or service</span><select value={serviceCategory} disabled={archived} onChange={(event) => setServiceCategory(event.target.value)}>{Object.entries(serviceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
-        {!archived && <button type="button" className={styles.reset} onClick={() => setRequirements(defaultPhotoRequirements(serviceCategory))}>Reset to safe {serviceLabels[serviceCategory] || serviceCategory} defaults</button>}
+        <div className={styles.fields}><label><span>Template name</span><input value={name} maxLength={100} disabled={archived} onChange={(event) => setName(event.target.value)} placeholder="Standard heat pump quote photos" /></label><label><span>Upgrade or service</span><select value={serviceCategoryIsSelectable ? serviceCategory : ""} disabled={archived} onChange={(event) => setServiceCategory(event.target.value)}><option value="" disabled>Choose a current upgrade or service</option>{serviceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+        {!archived && !serviceCategoryIsSelectable && <p className={styles.status}>This legacy combined category is read only. Choose a current upgrade or service before saving or publishing.</p>}
+        {!archived && serviceCategoryIsSelectable && <button type="button" className={styles.reset} onClick={() => setRequirements(defaultPhotoRequirements(serviceCategory))}>Reset to safe {serviceLabels[serviceCategory] || serviceCategory} defaults</button>}
         <div className={styles.requirements}>{requirements.map((item, index) => <article key={item.id}>
           <header><strong>Photo {index + 1}</strong><label><input type="checkbox" checked={item.required} disabled={archived} onChange={(event) => updateRequirement(index, "required", event.target.checked)} /><span>Required</span></label></header>
           <label><span>What the customer should photograph</span><input value={item.label} maxLength={120} disabled={archived} onChange={(event) => updateRequirement(index, "label", event.target.value)} /></label>
@@ -143,7 +155,7 @@ export function TradePhotoTemplateLibrary({ user }: { user: User }) {
           <div><label><span>Useful example</span><textarea value={item.usefulExample} maxLength={300} rows={2} disabled={archived} onChange={(event) => updateRequirement(index, "usefulExample", event.target.value)} /></label><label><span>Avoid example</span><textarea value={item.avoidExample} maxLength={300} rows={2} disabled={archived} onChange={(event) => updateRequirement(index, "avoidExample", event.target.value)} /></label></div>
           {!archived && <footer><span>Requirement ID: {item.id}</span><button type="button" disabled={requirements.length <= 1} onClick={() => setRequirements((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></footer>}
         </article>)}</div>
-        {!archived && <div className={styles.actions}><button type="button" className={styles.secondary} disabled={requirements.length >= 12 || Boolean(busy)} onClick={() => setRequirements((current) => [...current, blankRequirement()])}>Add photo requirement</button><button type="button" disabled={Boolean(busy)} onClick={() => void action(selected ? "save_draft" : "create")}>{busy === "save_draft" || busy === "create" ? "Saving..." : selected ? "Save draft changes" : "Create draft"}</button>{selected && <button type="button" disabled={Boolean(busy)} onClick={() => void action("publish")}>{busy === "publish" ? "Publishing..." : selected.publishedVersion ? "Publish new version" : "Publish version 1"}</button>}{selected && <button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={() => void action("duplicate")}>Duplicate</button>}{selected && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void action("archive")}>Archive</button>}</div>}
+        {!archived && <div className={styles.actions}><button type="button" className={styles.secondary} disabled={requirements.length >= 12 || Boolean(busy)} onClick={() => setRequirements((current) => [...current, blankRequirement()])}>Add photo requirement</button><button type="button" disabled={Boolean(busy) || !serviceCategoryIsSelectable} onClick={() => void action(selected ? "save_draft" : "create")}>{busy === "save_draft" || busy === "create" ? "Saving..." : selected ? "Save draft changes" : "Create draft"}</button>{selected && <button type="button" disabled={Boolean(busy) || !serviceCategoryIsSelectable} onClick={() => void action("publish")}>{busy === "publish" ? "Publishing..." : selected.publishedVersion ? "Publish new version" : "Publish version 1"}</button>}{selected && <button type="button" className={styles.secondary} disabled={Boolean(busy) || !serviceCategoryIsSelectable} onClick={() => void action("duplicate")}>Duplicate</button>}{selected && <button type="button" className={styles.danger} disabled={Boolean(busy)} onClick={() => void action("archive")}>Archive</button>}</div>}
         {selected?.latestVersion && <section className={styles.metrics}><header><div><span>Privacy-safe feedback</span><h4>Published v{selected.latestVersion.version} usage</h4></div><small>No customer identity, address, contact or image content</small></header><div><article><span>Jobs selected</span><strong>{selected.metrics.selections}</strong></article><article><span>Jobs edited</span><strong>{selected.metrics.editedJobs}</strong></article><article><span>Photos requested</span><strong>{selected.metrics.requestedRequirements}</strong></article><article><span>Requirements completed</span><strong>{selected.metrics.completedRequirements}</strong></article><article><span>Accepted proof</span><strong>{selected.metrics.reviewCounts.accepted}</strong></article><article><span>Retakes requested</span><strong>{selected.metrics.reviewCounts.retakeRequested}</strong></article><article><span>Not needed</span><strong>{selected.metrics.reviewCounts.notNeeded}</strong></article><article><span>Missing guidance</span><strong>{selected.metrics.missingFeedback}</strong></article><article><span>Unclear feedback</span><strong>{selected.metrics.feedbackCounts.unclear}</strong></article></div>{selected.metrics.requirementStats.length > 0 && <ul>{selected.metrics.requirementStats.map((item) => <li key={item.id}><strong>{item.label}</strong><span>{item.selectedCount} requested</span><span>{item.completedCount} supplied</span><span>{item.acceptedCount} accepted</span><span>{item.retakeCount} retake</span><span>{item.notNeededCount} not needed</span><span>{item.usefulCount} useful</span><span>{item.unclearCount} unclear</span></li>)}</ul>}</section>}
         {status && <p className={styles.status} role="status">{status}</p>}
       </div>

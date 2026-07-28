@@ -9,7 +9,7 @@ export const runtime = "edge";
 const ENQUIRY_STATUSES = new Set(["new", "contacted", "site_visit", "quote_required", "quoted", "booked", "won", "lost"]);
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "insulation-draughts", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
 
 async function installerIdentity(request: Request) {
   const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
@@ -108,9 +108,9 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_crm_enquiries
           (id, firebase_uid, source_type, source_reference, external_record_id, status, customer_type, first_name, last_name,
            business_name, business_number, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,
-           service_category, description, urgency, preferred_date, protected_source, duplicate_decision, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'unchecked', 'active', ?, ?)`)
-          .bind(id, uid, cleanAdminText(body.sourceType, 40) || "direct", id, values.externalRecordId, values.customerType, values.firstName, values.lastName, values.businessName, values.businessNumber, values.email, values.phone, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, values.serviceCategory, values.description, values.urgency, values.preferredDate, now, now),
+           service_category, service_categories, description, urgency, preferred_date, protected_source, duplicate_decision, record_status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'unchecked', 'active', ?, ?)`)
+          .bind(id, uid, cleanAdminText(body.sourceType, 40) || "direct", id, values.externalRecordId, values.customerType, values.firstName, values.lastName, values.businessName, values.businessNumber, values.email, values.phone, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, values.serviceCategory, JSON.stringify([values.serviceCategory]), values.description, values.urgency, values.preferredDate, now, now),
         db.prepare("INSERT INTO trade_crm_enquiry_events (id, enquiry_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'created', 'Direct enquiry recorded.', ?)").bind(crypto.randomUUID(), id, uid, now),
       ]);
       return adminJson({ ok: true, id }, 201);

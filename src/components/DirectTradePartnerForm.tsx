@@ -27,7 +27,10 @@ const categories = [
   ["battery", "Home batteries"],
   ["heating-cooling", "Heating and cooling"],
   ["hot-water", "Hot water"],
-  ["insulation-draughts", "Insulation and draught control"],
+  ["draught-proofing", "Draught-proofing"],
+  ["insulation", "Insulation"],
+  ["glazing", "Glazing"],
+  ["window-coverings", "Blinds, shutters and external shading"],
   ["ev-charging", "EV charging"],
   ["other", "Other energy upgrades"],
 ] as const;
