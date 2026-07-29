@@ -307,7 +307,7 @@ test("draft save state and plan sharing controls are readable and phone safe", (
   );
   assert.match(
     planDocument,
-    /overflow-wrap:anywhere;">\$\{escapeHtml\(report\.professionalReview\.statement\)\}/,
+    /overflow-wrap:anywhere;word-break:break-word;">\$\{escapeHtml\(professional\.title\)\}/,
   );
   assert.match(styles, /\.customer-plan-toolbar-actions,[\s\S]{0,80}width: 100%/);
 });

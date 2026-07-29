@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PDFDocument } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+} from "pdf-lib";
 import {
   createCustomerPlanReportView,
 } from "../src/lib/customer-plan-document.mjs";
@@ -95,6 +100,10 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   const bytes = await createCustomerPlanPdfBytes(report);
 
   assert.equal(
+    CUSTOMER_PLAN_PDF_VERSION,
+    "2026-07-29-premium-report-pdf-v3",
+  );
+  assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
     "%PDF-",
   );
@@ -109,6 +118,42 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   assert.equal(pdf.getCreator(), "Australian Energy Assessments");
   assert.match(pdf.getKeywords() || "", /home energy plan/i);
   assert.match(pdf.getKeywords() || "", new RegExp(CUSTOMER_PLAN_PDF_VERSION));
+});
+
+test("direct plan PDF keeps friendly guide labels clickable", async () => {
+  const report = normalizedReport({
+    actions: [{
+      number: 1,
+      id: "heating-guide-step",
+      stage: "Use what is already installed",
+      title: "Check the existing heating system",
+      description:
+        "Record controls, filters, condition and recent servicing before changing equipment.",
+      completed: false,
+      guideLabel: "Review heating and cooling guidance",
+      guideHref: "/guides/heating",
+    }],
+  });
+  const bytes = await createCustomerPlanPdfBytes(report);
+  const pdf = await PDFDocument.load(bytes);
+  const urls = [];
+
+  for (const page of pdf.getPages()) {
+    const annotations = page.node.lookupMaybe(
+      PDFName.of("Annots"),
+      PDFArray,
+    );
+    if (!annotations) continue;
+    for (const reference of annotations.asArray()) {
+      const annotation = pdf.context.lookup(reference, PDFDict);
+      const action = annotation.lookup(PDFName.of("A"), PDFDict);
+      urls.push(action.get(PDFName.of("URI")).decodeText());
+    }
+  }
+
+  assert.deepEqual(urls, [
+    "https://compare.ausenergyassessments.com/guides/heating",
+  ]);
 });
 
 test("direct plan PDF filename is fixed, dated and independent of private fields", () => {

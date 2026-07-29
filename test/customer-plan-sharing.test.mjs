@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   CUSTOMER_PLAN_DOCUMENT_VERSION,
+  CUSTOMER_PLAN_EMAIL_SUBJECT,
   CUSTOMER_PLAN_REPORT_VERSION,
   createCustomerPlanDocument,
   createCustomerPlanReportView,
@@ -11,6 +12,9 @@ import {
   isSingleEmailAddress,
   normalizeCustomerPlanEmailRequest,
 } from "../src/lib/customer-plan-document.mjs";
+import {
+  CUSTOMER_PLAN_REPORT_DESIGN_VERSION,
+} from "../src/lib/customer-plan-report-design.mjs";
 import {
   CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
   customerAdvisorOptions,
@@ -179,7 +183,7 @@ test("plans without a valid professional review retain the exact household evide
   const report = createCustomerPlanReportView(document);
 
   assert.equal(CUSTOMER_PLAN_DOCUMENT_VERSION, "2026-07-29-plan-document-v2");
-  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-07-29-concise-report-v2");
+  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-07-29-premium-report-v3");
   assert.equal(document.version, CUSTOMER_PLAN_DOCUMENT_VERSION);
   assert.equal(report.version, CUSTOMER_PLAN_REPORT_VERSION);
   assert.equal(document.professionalReview, null);
@@ -321,11 +325,35 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
   assert.doesNotMatch(html, /<img src=x/);
   assert.match(html, /Australian Energy Assessments/);
+  assert.equal(CUSTOMER_PLAN_EMAIL_SUBJECT, "Your home energy plan is ready");
+  assert.match(
+    html,
+    new RegExp(`x-aea-report-design" content="${CUSTOMER_PLAN_REPORT_DESIGN_VERSION}`),
+  );
   assert.match(html, /style="/);
   assert.match(html, /https:\/\/compare\.ausenergyassessments\.com\/guides\//);
   assert.doesNotMatch(html, /attacker\.example/);
-  assert.match(text, /YOUR PLANNING CONTEXT/);
-  assert.match(text, /ORDERED ROADMAP/);
+  assert.match(html, /29 July 2026/);
+  assert.match(html, /@media only screen and \(max-width: 680px\)/);
+  assert.match(html, /\.snapshot-cell \{ display: block !important/);
+  assert.doesNotMatch(html, /width="145"/);
+  assert.doesNotMatch(html, /<ul\b/i);
+  assert.doesNotMatch(html, /<img\b/i);
+  assert.ok(
+    html.indexOf("The choices shaping this plan")
+      < html.indexOf("Your first three steps"),
+  );
+  assert.ok(
+    html.indexOf("Your first three steps")
+      < html.indexOf("What to consider next"),
+  );
+  assert.ok(
+    html.indexOf("What to consider next")
+      < html.indexOf("Small comfort wins for everyday life"),
+  );
+  assert.match(text, /YOUR HOME AT A GLANCE/);
+  assert.match(text, /START HERE/);
+  assert.match(text, /YOUR STEP-BY-STEP PLAN/);
   assert.match(text, /PRIVATE BY DESIGN/);
   assert.doesNotMatch(text, /SECRET|3006|private-owner/);
 });
@@ -383,8 +411,8 @@ test("everyday actions are allowlisted, capped, rendered once and kept outside r
       .filter((id) => EVERYDAY_ACTION_IDS.includes(id)),
     [],
   );
-  assert.equal(occurrenceCount(html, "Helpful things you can try now"), 1);
-  assert.equal(occurrenceCount(text, "HELPFUL THINGS YOU CAN TRY NOW"), 1);
+  assert.equal(occurrenceCount(html, "Easy things to try"), 1);
+  assert.equal(occurrenceCount(text, "EASY THINGS TO TRY"), 1);
   for (const action of allowedActions) {
     assert.equal(occurrenceCount(html, action.title), 1, action.id);
     assert.equal(occurrenceCount(text, action.title), 1, action.id);
@@ -431,6 +459,14 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
     document.actions.map((action) => action.id),
   );
   assert.equal(report.actions.filter((action) => action.priority).length, 3);
+  assert.deepEqual(
+    report.priorityActions.map((action) => action.id),
+    report.actions.filter((action) => action.priority).map((action) => action.id),
+  );
+  assert.deepEqual(
+    report.laterActions.map((action) => action.id),
+    report.actions.filter((action) => !action.priority).map((action) => action.id),
+  );
   assert.ok(report.questions.length <= 3);
   assert.ok(report.decisionBasis.length <= 4);
   assert.ok(report.beforeTrade.length <= 3);
@@ -452,11 +488,11 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
       action.title,
     );
   }
-  // This maximum canonical everyday-action fixture currently renders at about
-  // 38.9 KB HTML and 11.4 KB text. The caps retain bounded headroom while still
-  // catching duplicated sections or unbounded per-action detail.
-  assert.ok(html.length < 42_000, `HTML length was ${html.length}`);
-  assert.ok(text.length < 12_000, `text length was ${text.length}`);
+  // The premium email keeps client-safe inline typography on every repeated
+  // action card. The cap retains bounded headroom while still catching
+  // duplicated sections or unbounded per-action detail.
+  assert.ok(html.length < 60_000, `HTML length was ${html.length}`);
+  assert.ok(text.length < 12_500, `text length was ${text.length}`);
   assert.equal(
     text.split(report.changeBoundary).length - 1,
     1,
@@ -466,6 +502,29 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
   assert.doesNotMatch(text, /0 of 12|tracked home facts have/i);
   assert.doesNotMatch(html, /Permission and licensed-work boundary/);
   assert.doesNotMatch(text, /Permission and licensed-work boundary/);
+});
+
+test("completed plans use a clear progress state instead of an empty start section", () => {
+  const source = createCustomerPlanDocument(row, {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+  });
+  const completed = {
+    ...source,
+    actions: source.actions.map((action) => ({
+      ...action,
+      completed: true,
+    })),
+  };
+  const report = createCustomerPlanReportView(completed);
+  const html = customerPlanDocumentHtml(completed);
+  const text = customerPlanDocumentText(completed);
+
+  assert.equal(report.priorityActions.length, 0);
+  assert.equal(report.laterActions.length, report.actions.length);
+  assert.doesNotMatch(html, />Your first three steps</);
+  assert.doesNotMatch(text, /\nSTART HERE\n/);
+  assert.match(html, />Every step in this plan is marked complete</);
+  assert.match(text, /\nPLAN PROGRESS\n/);
 });
 
 test("plan email request accepts one bounded address, explicit consent and no extra fields", () => {
