@@ -2,13 +2,13 @@
 
 Status: released implementation milestone
 
-Prepared: 29 July 2026
+Prepared: 30 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-PREMIUM-REPORT-08`
+Milestone ID: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 
-Implementation baseline: `d7599fc39b56c56eb01b2b89edccf1645f1a8a07`
+Implementation baseline: `a92e18b9ea79b53eaf6eda8665f37ec02c861972`
 
-Released application for this milestone: Sites version 218 from application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`
+Released application for this milestone: Sites version 220 from application commit `f401575a5bf463b85c7688424db0b99dddd220c5`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,9 +18,9 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Give a household or self-declared accredited adviser one elegant, brand-consistent home energy report in PDF and email, with clear first actions, readable plain language and a layout that feels appropriate for a high-end customer platform.
+Give a household or self-declared accredited adviser one distinctive, high-end technical home energy presentation in PDF and email, with the exact AEA mark, easy-to-scan priorities, truthful completion status and readable plain language.
 
-The release keeps the proven browser-native, non-mutating PDF attachment path and replaces only the report presentation layer. PDF, responsive email HTML and plain text now use one shared privacy-filtered report design and copy contract. The first page leads with a branded cover and home snapshot, the next section makes the first three unfinished actions obvious, and later sections separate the roadmap, everyday comfort ideas, plan confidence, professional attribution, trade checks and privacy.
+The release keeps the proven browser-native, non-mutating PDF attachment path and the shared privacy-filtered report projection. It replaces the temporary initials tile with the exact AEA navigation mark, strengthens the cover, plan signals, snapshot and action hierarchy, retains the exact household or self-declared professional evidence boundary once, and gives a fully completed plan an honest all-complete state with zero work left to plan.
 
 ## Current user outcomes
 
@@ -34,22 +34,26 @@ The release keeps the proven browser-native, non-mutating PDF attachment path an
 - Positive-only triggers prevent cold-weather, cooling or renter-specific advice from appearing when the recorded facts do not support it.
 - Email, public PDF and signed-in PDF use the same privacy-filtered document projection, customer wording and section order.
 - Public and signed-in PDF actions use one browser-native attachment request with a short duplicate-click guard and no account mutation.
-- PDF and email use the site's deep navy, teal, green, mint and warm warning palette with editorial serif headings and readable sans-serif body copy.
-- The report leads with the home snapshot and first three unfinished actions, then separates later work, everyday actions, climate context, plan confidence, professional attribution, trade checks and privacy.
+- PDF and email use the site's deep navy, electric blue, teal, aqua, green, mint and warm warning palette with readable technical hierarchy and customer-scale body copy.
+- The exact 96 by 96 AEA navigation mark is embedded directly in the PDF and served to email from `https://compare.ausenergyassessments.com/api/aea-brandmark`.
+- The report leads with a stronger branded cover, plan signals and one lead home fact, then separates the remaining snapshot, first unfinished actions, later work, everyday ideas, climate context, plan confidence, professional attribution, trade checks and privacy.
 - Allowlisted guide labels are real same-origin PDF annotations; raw URLs are not drawn into the report.
-- Long adviser names, references and notes wrap safely, and a fully completed plan uses an explicit completion state instead of an empty priority section.
-- The PDF format version is `2026-07-29-premium-report-pdf-v3`, the report version is `2026-07-29-premium-report-v3`, and the shared design version is `2026-07-29-premium-report-v1`. The plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, and the document remains `2026-07-29-plan-document-v2`.
+- Long adviser names, references and notes wrap safely, and a fully completed plan reports every current step complete and zero left to plan instead of inventing a next action.
+- The exact household-supplied or self-declared professional evidence boundary appears once in the PDF and is not weakened or duplicated.
+- The PDF format version is `2026-07-30-tech-presentation-pdf-v1`, the shared design version is `2026-07-30-tech-presentation-design-v1`, and the report version remains `2026-07-29-premium-report-v3`. The plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, and the document remains `2026-07-29-plan-document-v2`.
 
 ## Current in scope
 
-- Add one shared design and plain-language copy contract for PDF, responsive email HTML and plain text.
-- Give page one a strong branded cover, prepared date, summary and compact two-column home snapshot.
-- Highlight the first three unfinished actions before the remaining ordered roadmap.
+- Share one exact AEA brandmark source between live navigation, the PDF and the immutable public PNG endpoint used by email.
+- Apply one technical visual system to the PDF and responsive email without changing the normalized report facts.
+- Give the cover stronger brand lockup, plan signals and completion-aware counts.
+- Lead the home snapshot with one readable primary fact and keep the remaining facts compact.
+- Highlight the first three unfinished actions before the remaining ordered roadmap, or show all steps complete with zero left to plan.
 - Keep recommendation cards together across A4 page breaks and give every content page a section header plus page count.
-- Use standard built-in PDF fonts so the edge response remains small and avoids browser font or worker dependencies.
+- Use standard built-in PDF fonts and the in-source PNG so the edge response avoids browser font, image-fetch or worker dependencies.
 - Render guide text as customer-friendly labels with real same-origin annotations and no raw visible URL.
-- Keep email table based, inline styled, 640 px wide on desktop and stacked at narrow widths with no remote images.
-- Lead confidence and professional sections with the practical customer result while retaining the exact self-declared and household evidence boundaries.
+- Keep email table based, inline styled, 640 px wide on desktop and stacked at narrow widths.
+- Preserve the exact self-declared or household evidence boundary once instead of repeating it in multiple sections.
 - Preserve the bounded same-origin PDF route, response limits, no-store headers and synchronous native form download.
 - Keep project saving, pending-photo preparation and evidence upload entirely outside the PDF action.
 - Preserve existing email ownership, confirmation, idempotency, provider acceptance and rate-limit controls.
@@ -97,9 +101,12 @@ The release keeps the proven browser-native, non-mutating PDF attachment path an
 - Account and project HTML is excluded from shared caching and returns `private, no-store, max-age=0`.
 - Representative maximum-content, long-professional-note and Unicode A4 reports wrap safely, keep cards together and retain readable contrast.
 - PDF annotations are same-origin, raw URLs remain hidden, and fully completed plans have no empty priority section.
-- Desktop and 375 px email renders retain the same hierarchy with no horizontal overflow or external image dependency.
+- The PDF contains the exact AEA mark without a runtime image fetch, and email references only the exact first-party HTTPS mark endpoint.
+- The household or professional evidence boundary appears exactly once in the PDF.
+- A completed report states every current step is complete and reports zero left to plan without inventing a next step.
+- Automated email HTML retains the same hierarchy at narrow widths; delivered Gmail and Outlook rendering remains a controlled follow-up rather than a release claim.
 - Type checking, lint, focused tests, the full validation gate, all migrations, the production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Desktop, signed-in and narrow-viewport live checks show no horizontal overflow or unreadable plan content.
+- The live plan and brandmark routes return valid public responses and are visually inspected without using a signed-in customer project.
 
 ## Current stop conditions
 
@@ -125,33 +132,36 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --test test/customer-plan-sharing.test.mjs test/customer-plan-pdf.test.mjs test/customer-project-advisor-ui.test.mjs
+node --experimental-strip-types --test test/customer-plan-sharing.test.mjs test/customer-plan-pdf.test.mjs test/site-navigation.test.mjs test/customer-project-advisor-ui.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused report, PDF and customer-project UI set: 33 of 33 passed;
+- focused final report, PDF, email, brand, navigation and customer-project set: 56 of 56 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 822 tests, 820 passed, 2 intentionally skipped and 0 failed;
+- complete suite: 826 tests, 824 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
 - migration verification: all 84 migrations passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub and Sites managed source branch: exact application SHA `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`;
-- Sites application version: 218, deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`, public, environment revision 19;
-- one representative maximum-content, professional-review report produced an unencrypted eight-page A4 PDF with no JavaScript, 13 same-origin guide annotations, no raw visible URL and no blank or clipped page;
-- the matching email rendered at 760 px desktop and 375 px mobile widths with one shared hierarchy, clean stacking and no remote images;
-- the live custom-domain action emitted one download event, recovered the `Download PDF` button, opened no dialog and produced no browser error;
-- the post-deployment Sites error-only log query returned zero events;
-- no real account or project was created, no working-demo record was saved, no email was sent and no provider delivery path was exercised.
+- GitHub and Sites managed source branch: exact application SHA `f401575a5bf463b85c7688424db0b99dddd220c5`;
+- Sites application version: 220, deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`, public, environment revision 19;
+- one representative household report produced a 41,925-byte, unencrypted nine-page A4 PDF with no JavaScript; all pages were rendered and visually inspected;
+- page 2 contains the exact household-supplied evidence boundary once;
+- a completed-plan cover and second page were inspected with `16 STEPS COMPLETE` and `0 LEFT TO PLAN`;
+- live `GET /api/aea-brandmark` returned `200`, `image/png`, `Cache-Control: public, max-age=31536000, immutable`, 3,595 bytes and a valid PNG signature, and the browser showed the exact 96 by 96 mark;
+- live `/plan` returned `200`, 54,406 bytes and was visually inspected;
+- Sites logs recorded the new logo and plan requests with outcome `ok` and status `200`;
+- no email was sent, no customer, project or other data was mutated, and native print was not invoked; and
+- browser security blocked the local-file email render, so delivered Gmail and Outlook acceptance remains unverified and is retained as the second next step.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`
-- Sites application version: 218
-- Sites application deployment: `appgdep_6a6a11c02e088191bb27cc302c8b35af`
+- Application commit: `f401575a5bf463b85c7688424db0b99dddd220c5`
+- Sites application version: 220
+- Sites application deployment: `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 84
@@ -162,7 +172,11 @@ Observed results:
 
 `npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the PDF feature and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PLAN-NATIVE-PDF-07`
+## Prior released milestone: `CUSTOMER-PLAN-PREMIUM-REPORT-08`
+
+The prior release established the shared premium PDF, responsive email HTML and plain-text hierarchy while retaining the reliable non-mutating native attachment path. Its exact application commit was `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`, first deployed as Sites version 218 through deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`. Documentation-only child `a92e18b9ea79b53eaf6eda8665f37ec02c861972` was recorded as historical Sites version 219 without changing that executable application. The shared report projection and privacy boundaries remain active underneath the version 220 technical presentation.
+
+## Earlier released milestone: `CUSTOMER-PLAN-NATIVE-PDF-07`
 
 The prior release established the reliable non-mutating browser-native PDF attachment path. Its exact application commit was `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`, first deployed as Sites version 216 through deployment `appgdep_6a69f763e0b08191b6ac8539e0828d84`. Its delivery mechanism remains active underneath the premium report presentation.
 
@@ -485,7 +499,7 @@ Stop the affected work when:
 ## Next five logical product steps
 
 1. **Premium on-page report preview:** align the legacy `/plan/print` preview with the shared premium PDF and email hierarchy without changing the native download path.
-2. **Controlled email-client acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
-3. **Accessible PDF structure:** add document landmarks, reading-order and assistive-technology checks while preserving the lightweight edge renderer.
+2. **Controlled Gmail/Outlook acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
+3. **Accessible/tagged PDF structure:** add document landmarks, reading order and assistive-technology checks while preserving the lightweight edge renderer.
 4. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
 5. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.

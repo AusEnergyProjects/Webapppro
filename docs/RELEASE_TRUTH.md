@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 29 July 2026
+Last reconciled locally: 30 July 2026
 
-Deployment evidence last verified: 29 July 2026
+Deployment evidence last verified: 30 July 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -31,10 +31,13 @@ This is the only current implementation and release-status document. The [dated 
 | Direct customer-plan PDF application source | `d5c675a5ceffa6e924df033e8cb8b505bb4d6336` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 214 |
 | Browser-native customer PDF application source | `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 216 |
 | Premium customer plan report application source | `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 218 |
-| Current executable application identity | Sites version 218 from `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`; saved-version provenance, public deployment, environment revision 19 and live browser download verified on 30 July 2026 |
+| Premium report documentation checkpoint | `a92e18b9ea79b53eaf6eda8665f37ec02c861972` | Historical documentation-only child of the version 218 application; published as Sites version 219 without changing the executable report source |
+| Technical customer-plan presentation application source | `f401575a5bf463b85c7688424db0b99dddd220c5` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 220 |
+| Current executable application identity | Sites version 220 from `f401575a5bf463b85c7688424db0b99dddd220c5` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`; saved-version provenance, public deployment, environment revision 19 and live browser evidence verified on 30 July 2026 |
+| Current source checkpoint | Documentation-only child containing this release record | Its commit and any later saved-version identity are intentionally not stated before they exist; it does not change the executable version 220 application |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release, professional-review, browser-native PDF and premium customer-report releases are production. Sites version 218 is the exact executable customer-plan application source. The version 214 public PDF path was technically valid, but its signed-in action still saved the project, processed pending images and uploaded evidence before PDF generation, then attempted a delayed synthetic download. Product-owner use proved that account path could freeze or fail in Chrome, so version 214 is historical and superseded. Version 216 established the non-mutating attachment path. Version 218 retains that path and gives PDF plus email one premium, responsive, privacy-filtered report hierarchy. The live browser verification did not create or save an account project, upload evidence, send an email or invoke native print. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release, professional-review, browser-native PDF, premium customer-report and technical presentation releases are production. Sites version 220 is the exact executable customer-plan application source. Version 214 is historical and superseded because its signed-in action could save the project, process pending images and upload evidence before PDF generation, then attempt a delayed synthetic download. Version 216 established the non-mutating attachment path. Version 218 established the shared premium PDF and email hierarchy, and version 219 recorded that release as a documentation-only historical checkpoint. Version 220 retains those contracts while adding the exact AEA mark, a more distinctive technical visual system, a truthful completed-plan state and one non-duplicated household or professional evidence boundary. Live verification did not create or save an account project, upload evidence, send an email or invoke native print. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
 
 ## Current product model
 
@@ -219,6 +222,24 @@ The release:
 
 The PDF format version is `2026-07-29-premium-report-pdf-v3`, the report version is `2026-07-29-premium-report-v3`, and the shared design version is `2026-07-29-premium-report-v1`. The plan, advisor profile, professional declaration and document versions remain unchanged.
 
+## Technical customer plan presentation release
+
+`CUSTOMER-PLAN-TECH-PRESENTATION-09` is deployed from exact application commit `f401575a5bf463b85c7688424db0b99dddd220c5`, saved and published as Sites version 220 through deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f` with environment revision 19.
+
+The release:
+
+- replaces the temporary PDF initials tile with the exact 96 by 96 transparent AEA navigation mark from one shared in-source asset;
+- serves that same mark to email from `https://compare.ausenergyassessments.com/api/aea-brandmark` with a stable PNG response and immutable public caching;
+- gives PDF and responsive email a more distinctive technical presentation using the site's deep navy, electric blue, teal, aqua, green, mint and warm warning palette;
+- improves hierarchy and spacing across the branded cover, plan signals, lead home fact, remaining snapshot, first actions, later roadmap, everyday ideas, confidence, trade checks and privacy;
+- retains the same normalized, privacy-filtered report content across PDF, HTML email and plain text;
+- preserves the exact household-supplied or self-declared professional evidence boundary once in the PDF instead of repeating or weakening it;
+- gives a completed plan truthful progress signals, including all steps complete and zero left to plan, without inventing a next action;
+- preserves same-origin guide annotations, customer-friendly labels, bounded edge generation, native attachment download and zero project or evidence mutation; and
+- makes no schema or migration change and does not alter working-demo data.
+
+The PDF format version is `2026-07-30-tech-presentation-pdf-v1`, the shared design version is `2026-07-30-tech-presentation-design-v1`, and the report version remains `2026-07-29-premium-report-v3`. Sites versions 218 and 219 remain historical premium-report application and documentation checkpoints; version 220 is current.
+
 ## Local validation evidence
 
 The last complete shared-worktree validation was recorded before the release was split into compatible expansion, application activation and contract cleanup:
@@ -262,6 +283,10 @@ Exact application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` passes 33 of
 
 A representative maximum-content professional-review report produced a 20,125-byte, unencrypted eight-page A4 PDF with no JavaScript, no blank page, no clipped or split action card, 13 same-origin link annotations and no raw visible URL. Every rendered PDF page was inspected. The matching email was inspected at 760-pixel desktop and 375-pixel mobile widths with no horizontal overflow or remote image. The live custom-domain action emitted one download event, recovered the enabled `Download PDF` button, opened no JavaScript dialog and produced no browser error. The post-deployment Sites error-only log query returned zero events. No project or account record was created or saved, no evidence was uploaded, no email was sent and no provider delivery path was exercised.
 
+Exact application commit `f401575a5bf463b85c7688424db0b99dddd220c5` passes 56 of 56 focused final report, PDF, email, brand and navigation tests. The complete `npm.cmd run validate` gate passes on the exact source: type checking, warning-free lint, 31 of 31 integration tests, the full 826-test suite with 824 passed, 2 intentionally skipped and 0 failed, all 84 migrations against fresh SQLite and Cloudflare D1 paths, and the Vinext production build. `git diff --check` passed before publication. GitHub `main`, the working branch and the Sites managed source branch contain the exact application SHA. Sites saved version 220 reports that SHA and deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f` succeeded with environment revision 19.
+
+A representative household report produced a 41,925-byte, unencrypted nine-page A4 PDF with no JavaScript. Every page was rendered and visually inspected, including page 2 where the exact household-supplied evidence boundary appears once. A completed-plan PDF cover and second page were separately inspected and reported `16 STEPS COMPLETE` and `0 LEFT TO PLAN`, without inventing a next step. Live `GET /api/aea-brandmark` returned `200`, `image/png`, `Cache-Control: public, max-age=31536000, immutable`, 3,595 bytes and a valid PNG signature; browser inspection showed the exact 96 by 96 mark. Live `/plan` returned `200`, 54,406 bytes and was visually inspected. Sites logs recorded the new logo and plan requests with outcome `ok` and status `200`. No email was sent, no customer, project or other data was mutated, and native print was not invoked. Browser security blocked a local-file email render, so delivered Gmail and Outlook rendering remains unverified and is retained as explicit forward work.
+
 The 29 July 2026 `npm.cmd run audit:links` result is not green: 166 of 169 destinations were reachable or accepted, 16 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
 
 The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Existing field-pilot recruitment code remains an inactive future workflow and was not activated or populated by this release. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. Deployed forward contract migration `0080_retire_legacy_trade_commercial_data.sql` uses that explicit authorisation to remove only retired commercial fields, tables and Stripe/Square integration rows after the reviewed-ABN application became live. Its preservation test retains account identities, jobs, quotes, invoices, accounting, calendar and ABN review records. Sites environment revision 19 contains zero Stripe or Square keys after the 16 observed retired keys were removed. Deployment and worker-log evidence is clean, but independent direct querying of the managed live D1 schema and rows remains unavailable; external provider registrations also remain unknown.
@@ -292,7 +317,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, and the shared premium PDF plus email report. Those capabilities are live in Sites version 218 alongside the earlier owner Database Console.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, and the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling. Those capabilities are live in Sites version 220 alongside the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 

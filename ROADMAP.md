@@ -234,7 +234,7 @@ All acceptance gates above are met for the released application source, except t
 
 ## Released milestone: CUSTOMER-PLAN-PREMIUM-REPORT-08
 
-Release status: application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 218 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af` succeeded with environment revision 19. The field pilot remains deferred.
+Release status: application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 218 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af` succeeded with environment revision 19. Documentation-only child `a92e18b9ea79b53eaf6eda8665f37ec02c861972` was subsequently recorded as Sites version 219 without changing the executable version 218 application. Both are historical checkpoints superseded by the milestone below. The field pilot remains deferred.
 
 ### Outcome
 
@@ -261,6 +261,36 @@ Turn the working customer-plan PDF and email into one elegant, brand-consistent 
 - Focused tests, the full validation gate, all 84 migrations, production build, GitHub provenance, Sites provenance and post-deployment error check pass.
 
 All acceptance gates above are met. The release check did not create or save a project, upload evidence, send an email or use a real customer, trade, wholesaler or assessor account.
+
+## Released milestone: CUSTOMER-PLAN-TECH-PRESENTATION-09
+
+Release status: application commit `f401575a5bf463b85c7688424db0b99dddd220c5` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 220 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Make the customer PDF and email feel like one distinctive, high-end technical presentation while preserving the fast browser-native download, simple language, privacy boundaries and independent advice.
+
+### In scope
+
+- Use the exact shared AEA navigation mark in the PDF and serve it to email from `https://compare.ausenergyassessments.com/api/aea-brandmark`.
+- Apply one deep navy, electric blue, teal, aqua, green, mint and warm warning system across PDF and responsive email.
+- Improve cover, signal, snapshot, section and action-card hierarchy without changing the normalized report facts.
+- Keep the exact household-supplied or self-declared professional evidence boundary once in the PDF.
+- Report completed plans as all steps complete with zero left to plan instead of inventing a next action.
+- Preserve allowlisted same-origin annotations, route bounds, no-store response, native attachment delivery and zero project or evidence mutation.
+- Keep the report version at `2026-07-29-premium-report-v3` while advancing PDF to `2026-07-30-tech-presentation-pdf-v1` and design to `2026-07-30-tech-presentation-design-v1`.
+- Make no schema, migration, account or working-demo data change.
+
+### Acceptance gate
+
+- The exact 96 by 96 AEA PNG is shared by navigation and reports, and the live immutable HTTPS endpoint returns a valid PNG.
+- A representative household PDF renders every page without clipping, JavaScript or encryption and contains the exact household evidence boundary once.
+- A completed-plan PDF reports all steps complete and zero left to plan without a false next-step section.
+- PDF, HTML email and plain text retain the same normalized customer facts and evidence boundary.
+- Focused tests, the complete validation gate, all 84 migrations, the production build, GitHub provenance, Sites provenance and relevant live logs pass.
+- Release verification sends no email, mutates no customer or project data and invokes no native print.
+
+All listed acceptance gates are met. Delivered rendering in Gmail and Outlook remains explicitly unverified and is the second forward step below. The release check did not create or save a project, upload evidence, send an email, mutate customer data or use native print.
 
 ## Forward phases
 
@@ -362,8 +392,8 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 ## Next five logical product steps
 
 1. **Premium on-page report preview:** align the legacy `/plan/print` preview with the shared premium PDF and email hierarchy without changing the native download path.
-2. **Controlled email-client acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
-3. **Accessible PDF structure:** add document landmarks, reading-order and assistive-technology checks while preserving the lightweight edge renderer.
+2. **Controlled Gmail/Outlook acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
+3. **Accessible/tagged PDF structure:** add document landmarks, reading order and assistive-technology checks while preserving the lightweight edge renderer.
 4. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
 5. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
 
