@@ -340,7 +340,7 @@ export function HomeEnergyPlanner({
             Continue in my free account
           </a>
           <a href={`/plan/print?${selectionParams.toString()}`}>
-            Open print view
+            Preview and download PDF
           </a>
           <button type="button" className="planner-reset" onClick={resetPlan}>
             Start over

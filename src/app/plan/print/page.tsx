@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { CustomerPlanPrintReport } from "@/components/CustomerPlanShareDialog";
-import { PrintRoadmapButton } from "@/components/PrintRoadmapButton";
+import {
+  DownloadCustomerPlanPdfButton,
+} from "@/components/DownloadCustomerPlanPdfButton";
 import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
 import {
   createCustomerProjectPlan,
@@ -9,8 +11,8 @@ import {
 } from "@/lib/customer-projects.mjs";
 
 export const metadata: Metadata = {
-  title: "Printable Home Energy Roadmap | Australian Energy Assessments",
-  description: "A lightweight printable copy of your private home energy roadmap.",
+  title: "Download Home Energy Roadmap | Australian Energy Assessments",
+  description: "Preview and download a private, well-formatted home energy roadmap.",
   robots: { index: false, follow: false },
 };
 
@@ -175,8 +177,8 @@ export default async function PrintableHomeEnergyPlanPage({
 
   return (
     <main className="planner-print-page">
-      <nav className="planner-print-actions" aria-label="Printable plan actions">
-        <PrintRoadmapButton />
+      <nav className="planner-print-actions" aria-label="Plan download actions">
+        <DownloadCustomerPlanPdfButton report={report} />
         <a href={`/plan?${returnParams.toString()}`}>Return to planner</a>
         <span>{context.join(" | ")}</span>
       </nav>

@@ -3475,7 +3475,6 @@ body input[type="number"]::-webkit-outer-spin-button {
 .customer-plan-dialog form > footer button { background: #fff; border: 1px solid #b8cdc4; border-radius: 9px; color: #315e50; cursor: pointer; font-size: .7rem; font-weight: 850; min-height: 44px; padding: 8px 14px; }
 .customer-plan-dialog form > footer button.primary { background: #08794c; border-color: #08794c; color: #fff; }
 .customer-plan-dialog form > footer button:disabled { cursor: not-allowed; opacity: .55; }
-.customer-plan-print-frame { border: 0; bottom: 0; height: 1px; opacity: 0; pointer-events: none; position: fixed; right: 0; width: 1px; z-index: -1; }
 .customer-plan-print-report-visible { background: #fff; border: 1px solid #c9d9d5; border-radius: 18px; box-shadow: 0 18px 46px rgba(0, 5, 14, .24); color: #16382f; display: block; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
 .customer-plan-print-report > header { align-items: flex-start; background: #073b4c; border-bottom: 5px solid #14ad8a; color: #fff; display: flex; gap: 24px; justify-content: space-between; padding: 34px; }
 .customer-plan-print-report > header span,

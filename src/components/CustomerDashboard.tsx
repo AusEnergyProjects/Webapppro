@@ -48,8 +48,9 @@ import {
 import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
 import {
   createCustomerPlanDocument,
-  customerPlanDocumentHtml,
+  createCustomerPlanReportView,
 } from "@/lib/customer-plan-document.mjs";
+import { downloadCustomerPlanPdf } from "@/lib/customer-plan-pdf-client";
 
 type DashboardView =
   | "overview"
@@ -520,52 +521,6 @@ function downloadPermissionPack(
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function createCustomerPlanPrintFrame(
-  html: string,
-  signal: AbortSignal,
-): Promise<HTMLIFrameElement> {
-  const frame = window.document.createElement("iframe");
-  frame.className = "customer-plan-print-frame";
-  frame.title = "Print-ready independent home energy plan";
-  frame.setAttribute("aria-hidden", "true");
-  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
-  frame.srcdoc = html;
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", abort);
-      frame.remove();
-      reject(error);
-    };
-    const abort = () => fail(
-      new DOMException("The print request was cancelled.", "AbortError"),
-    );
-    const timeout = window.setTimeout(() => {
-      fail(new Error("The print-ready plan took too long to prepare."));
-    }, 10_000);
-    frame.addEventListener("load", () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", abort);
-      if (!frame.contentWindow) {
-        frame.remove();
-        reject(new Error("The print-ready plan could not be opened."));
-        return;
-      }
-      resolve(frame);
-    }, { once: true });
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    window.document.body.append(frame);
-  });
-}
 async function prepareEvidenceUpload(item: PendingProjectEvidence) {
   const quotingPhotoCategories = new Set([
     "property-photo",
@@ -991,8 +946,9 @@ function ProjectEditor({
   const [shareStatus, setShareStatus] = useState("");
   const [shareError, setShareError] = useState("");
   const [shareRequestId, setShareRequestId] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
   const draggedPlanItem = useRef("");
-  const activePrintCleanup = useRef<null | (() => void)>(null);
+  const activePdfDownload = useRef(false);
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
   >([]);
@@ -1001,9 +957,6 @@ function ProjectEditor({
   >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
     useState(evidenceSharingConsent);
-  useEffect(() => () => {
-    activePrintCleanup.current?.();
-  }, []);
   const storedEvidenceCount = storedEvidence.length + uploadedEvidence.length;
   const storedInstallerEvidenceCount = storedEvidence.filter(
     (item) => item.sharingScope === "allocated-installers",
@@ -1951,87 +1904,35 @@ function ProjectEditor({
     }
   }
 
-  async function printPlan() {
-    if (activePrintCleanup.current) {
-      setValidationError(
-        "A print preview is already open. Close it before opening another.",
-      );
-      return;
-    }
+  async function downloadPlanPdf() {
+    if (activePdfDownload.current) return;
     const blocker = planShareBlocker();
     if (blocker) {
       setValidationError(blocker);
       return;
     }
-    setShareBusy(true);
+    activePdfDownload.current = true;
+    setPdfBusy(true);
     setValidationError("");
-    const abortController = new AbortController();
-    let cancelled = false;
-    let cleanedUp = false;
-    let cleanupTimer: number | null = null;
-    let printFrame: HTMLIFrameElement | null = null;
-    const returnFocus =
-      window.document.activeElement instanceof HTMLElement
-        ? window.document.activeElement
-        : null;
-    const cleanup = () => {
-      if (cleanedUp) return;
-      cleanedUp = true;
-      if (cleanupTimer !== null) window.clearTimeout(cleanupTimer);
-      printFrame?.remove();
-      printFrame = null;
-      if (activePrintCleanup.current === cancel) {
-        activePrintCleanup.current = null;
-      }
-      window.requestAnimationFrame(() => {
-        if (returnFocus?.isConnected) {
-          returnFocus.focus({ preventScroll: true });
-        }
-      });
-    };
-    const cancel = () => {
-      cancelled = true;
-      abortController.abort();
-      cleanup();
-    };
-    activePrintCleanup.current = cancel;
+    setStatus("Saving the exact plan before preparing your PDF...");
     try {
       await savePlanForSharing();
-      if (cancelled) return;
-      printFrame = await createCustomerPlanPrintFrame(
-        customerPlanDocumentHtml(shareablePlanDocument),
-        abortController.signal,
+      setStatus("Preparing your PDF download...");
+      const report = createCustomerPlanReportView(
+        shareablePlanDocument,
       );
-      if (cancelled) {
-        printFrame.remove();
-        printFrame = null;
-        return;
-      }
-      const printView = printFrame.contentWindow;
-      if (!printView) throw new Error("The print-ready plan could not be opened.");
-      cleanupTimer = window.setTimeout(cleanup, 300_000);
-      printView.addEventListener("afterprint", cleanup, { once: true });
-      printView.focus();
-      try {
-        printView.print();
-      } catch (error) {
-        cleanup();
-        throw error;
-      }
+      await downloadCustomerPlanPdf(report);
+      setStatus("Your PDF download has started.");
     } catch (error) {
-      const shouldReport =
-        !cancelled
-        && !(error instanceof DOMException && error.name === "AbortError");
-      cleanup();
-      if (shouldReport) {
-        setValidationError(
-          error instanceof Error
-            ? error.message
-            : "The plan could not be prepared for printing.",
-        );
-      }
+      setStatus("");
+      setValidationError(
+        error instanceof Error
+          ? error.message
+          : "The PDF could not be prepared.",
+      );
     } finally {
-      if (!cancelled) setShareBusy(false);
+      activePdfDownload.current = false;
+      setPdfBusy(false);
     }
   }
 
@@ -2938,7 +2839,7 @@ function ProjectEditor({
                 <button
                   type="button"
                   className="primary"
-                  disabled={!emailVerified || shareBusy}
+                  disabled={!emailVerified || shareBusy || pdfBusy}
                   onClick={openShareDialog}
                 >
                   {emailVerified
@@ -2947,10 +2848,10 @@ function ProjectEditor({
                 </button>
                 <button
                   type="button"
-                  disabled={shareBusy}
-                  onClick={() => void printPlan()}
+                  disabled={shareBusy || pdfBusy}
+                  onClick={() => void downloadPlanPdf()}
                 >
-                  Print or save PDF
+                  {pdfBusy ? "Preparing PDF..." : "Download PDF"}
                 </button>
                 {(planEdited || planSnapshotConflict) && (
                   <button

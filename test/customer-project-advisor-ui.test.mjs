@@ -13,6 +13,10 @@ const projectPlan = read("../src/lib/customer-projects.mjs");
 const homePlan = read("../src/lib/home-energy-plan.mjs");
 const planShareDialog = read("../src/components/CustomerPlanShareDialog.tsx");
 const planDocument = read("../src/lib/customer-plan-document.mjs");
+const planPdf = read("../src/lib/customer-plan-pdf.mjs");
+const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
+const planPdfWorker = read("../src/lib/customer-plan-pdf.worker.ts");
+const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 
 test("the customer project wizard exposes every stage as an accessible button", () => {
@@ -202,55 +206,75 @@ test("everyday actions stay outside the ordered roadmap in account and report vi
   assert.match(projectPlan, /everydayActions,\s*everydayActionsBoundary:[\s\S]{0,100}\s*items,/);
 });
 
-test("plan email and isolated print actions use one saved privacy-filtered report", () => {
-  const printPlanSource = dashboard.match(
-    /async function printPlan\(\)[\s\S]*?async function submitProject\(\)/,
+test("plan email and direct PDF actions use one saved privacy-filtered report without native print", () => {
+  const downloadPlanSource = dashboard.match(
+    /async function downloadPlanPdf\(\)[\s\S]*?async function submitProject\(\)/,
   )?.[0] || "";
   assert.match(dashboard, /Email this plan/);
-  assert.match(dashboard, /Print or save PDF/);
+  assert.match(dashboard, /Download PDF/);
   assert.match(dashboard, /await savePlanForSharing\(\)/);
   assert.match(dashboard, /customer-project-plan-email/);
   assert.match(dashboard, /consentConfirmed: true/);
   assert.match(dashboard, /key=\{shareRequestId \|\| "plan-share"\}/);
-  assert.match(dashboard, /customerPlanDocumentHtml\(shareablePlanDocument\)/);
-  assert.match(dashboard, /createCustomerPlanPrintFrame\(/);
-  assert.match(dashboard, /frame\.srcdoc = html/);
-  assert.match(dashboard, /signal: AbortSignal/);
-  assert.match(dashboard, /signal\.addEventListener\("abort", abort/);
-  assert.match(dashboard, /if \(signal\.aborted\)/);
   assert.match(
-    dashboard,
-    /frame\.setAttribute\("sandbox", "allow-same-origin allow-modals"\)/,
-  );
-  assert.match(dashboard, /const printView = printFrame\.contentWindow/);
-  assert.match(dashboard, /activePrintCleanup\.current/);
-  assert.match(dashboard, /const abortController = new AbortController\(\)/);
-  assert.match(dashboard, /abortController\.abort\(\)/);
-  assert.match(dashboard, /activePrintCleanup\.current = cancel/);
-  assert.ok(
-    printPlanSource.indexOf("activePrintCleanup.current = cancel")
-      < printPlanSource.indexOf("await savePlanForSharing()"),
-    "print cancellation is registered before the first asynchronous operation",
+    downloadPlanSource,
+    /await savePlanForSharing\(\);[\s\S]*await downloadCustomerPlanPdf\(/,
   );
   assert.match(
-    printPlanSource,
-    /await savePlanForSharing\(\);\s*if \(cancelled\) return;/,
+    downloadPlanSource,
+    /createCustomerPlanReportView\(\s*shareablePlanDocument,\s*\)/,
   );
+  assert.match(planPdf, /export async function createCustomerPlanPdfBytes\(/);
+  assert.match(planPdf, /export function customerPlanPdfFileName\(report/);
   assert.match(
-    dashboard,
-    /customerPlanDocumentHtml\(shareablePlanDocument\),\s*abortController\.signal/,
+    planPdfClient,
+    /export async function downloadCustomerPlanPdf\(/,
   );
-  assert.match(dashboard, /A print preview is already open/);
-  assert.match(dashboard, /let cleanedUp = false/);
-  assert.match(dashboard, /if \(cleanedUp\) return/);
-  assert.match(dashboard, /window\.clearTimeout\(cleanupTimer\)/);
-  assert.ok(
-    dashboard.indexOf("cleanupTimer = window.setTimeout(cleanup, 300_000)")
-      < dashboard.indexOf("printView.print()"),
-    "the bounded fallback is registered before printing",
+  assert.match(planPdfClient, /new Worker\(/);
+  assert.match(planPdfClient, /customer-plan-pdf\.worker\.ts/);
+  assert.match(planPdfClient, /worker\.postMessage\(request\)/);
+  assert.match(planPdfClient, /worker\.terminate\(\)/);
+  assert.match(
+    planPdfClient,
+    /new Blob\(\[generated\.bytes\], \{ type: "application\/pdf" \}\)/,
   );
-  assert.match(dashboard, /printView\.print\(\)/);
+  assert.match(planPdfClient, /URL\.createObjectURL\(blob\)/);
+  assert.match(planPdfClient, /anchor\.download = generated\.fileName/);
+  assert.match(planPdfClient, /window\.document\.body\.append\(anchor\)/);
+  assert.match(planPdfClient, /anchor\.click\(\)/);
+  assert.match(planPdfClient, /anchor\.remove\(\)/);
+  assert.match(planPdfClient, /URL\.revokeObjectURL\(url\)/);
+  assert.match(
+    planPdfWorker,
+    /createCustomerPlanPdfBytes\(report, fontBytes\)/,
+  );
+  assert.match(planPdfWorker, /DejaVuSans\.ttf\?url/);
+  assert.match(planPdfWorker, /DejaVuSans-Bold\.ttf\?url/);
+  assert.doesNotMatch(planPdfWorker, /\.woff2?\?url/);
+  assert.match(planPdfWorker, /customerPlanPdfFileName\(report\)/);
+  assert.match(planPdfWorker, /workerScope\.postMessage\(response, \[bytes\]\)/);
+  assert.match(planPdfButton, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(planPdfButton, /if \(downloadingRef\.current\) return/);
+  assert.match(planPdfButton, /downloadingRef\.current = true/);
+  assert.match(planPdfButton, /downloadingRef\.current = false/);
+  assert.match(planPdfButton, /disabled=\{busy\}/);
+  assert.match(planPdfButton, /Download PDF/);
+  assert.match(downloadPlanSource, /if \(activePdfDownload\.current\) return/);
+  assert.match(downloadPlanSource, /activePdfDownload\.current = true/);
+  assert.match(downloadPlanSource, /activePdfDownload\.current = false/);
+  assert.doesNotMatch(dashboard, /createCustomerPlanPrintFrame/);
+  assert.doesNotMatch(dashboard, /activePrintCleanup/);
+  assert.doesNotMatch(dashboard, /customerPlanDocumentHtml/);
+  assert.doesNotMatch(dashboard, /printView\.print\(\)/);
   assert.doesNotMatch(dashboard, /window\.print\(\)/);
+  assert.doesNotMatch(
+    dashboard,
+    /afterprint|createElement\("iframe"\)|srcdoc/,
+  );
+  assert.doesNotMatch(planPdfClient, /(?:window|contentWindow)\.print\(\)/);
+  assert.doesNotMatch(planPdfWorker, /(?:window|contentWindow)\.print\(\)/);
+  assert.doesNotMatch(planPdfButton, /(?:window|contentWindow)\.print\(\)/);
+  assert.doesNotMatch(planPdfClient, /createElement\("iframe"\)|srcdoc/);
   assert.doesNotMatch(dashboard, /<CustomerPlanPrintReport(?:\s|>)/);
   assert.doesNotMatch(styles, /body:has\(\.customer-plan-print-report\)/);
   assert.doesNotMatch(styles, /\.customer-plan-print-report \{ display: none; \}/);

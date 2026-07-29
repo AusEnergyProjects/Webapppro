@@ -20,6 +20,8 @@ const assessments = read("../src/app/assessments/page.tsx");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
 const plannerRoute = read("../src/app/plan/page.tsx");
 const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
+const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
+const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
 const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
@@ -215,13 +217,23 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /HomeFeatureIntake/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
-  assert.match(planner, /Open print view/);
+  assert.match(planner, /Preview and download PDF/);
   assert.match(planner, /Start over/);
   assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);
   assert.doesNotMatch(planner, /params\.(?:set|append)\("postcode"/);
   assert.doesNotMatch(planner, /target="_blank"/);
   assert.doesNotMatch(planner, /window\.print/);
-  assert.match(plannerPrintRoute, /PrintRoadmapButton/);
+  assert.match(plannerPrintRoute, /DownloadCustomerPlanPdfButton/);
+  assert.match(
+    plannerPrintRoute,
+    /<DownloadCustomerPlanPdfButton\s+report=\{report\}\s*\/>/,
+  );
+  assert.doesNotMatch(plannerPrintRoute, /PrintRoadmapButton/);
+  assert.match(planPdfButton, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(planPdfButton, /Download PDF/);
+  assert.doesNotMatch(planPdfButton, /window\.print/);
+  assert.doesNotMatch(planPdfClient, /window\.print/);
+  assert.doesNotMatch(planPdfClient, /createElement\("iframe"\)|srcdoc/);
   assert.match(plannerPrintRoute, /createCustomerProjectPlan/);
   assert.match(plannerPrintRoute, /robots: \{ index: false, follow: false \}/);
   assert.match(plannerRoute, /initialSelection=/);
