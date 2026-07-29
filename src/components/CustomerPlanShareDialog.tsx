@@ -7,61 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
-
-type PlanDocument = {
-  heading: string;
-  planTitle: string;
-  summary: string;
-  preparedDate: string;
-  overview: {
-    goals: string[];
-    propertyType: string;
-    tenure: string;
-    approval: string;
-    pace: string;
-    budget: string;
-    state: string;
-  };
-  climate: null | {
-    label: string;
-    summary: string;
-    boundary: string;
-  };
-  evidence: {
-    total: number;
-    known: number;
-    unknown: number;
-  };
-  actions: Array<{
-    number: number;
-    id: string;
-    stage: string;
-    title: string;
-    description: string;
-    completed: boolean;
-    guideLabel: string;
-    guideHref: string;
-    guidance: {
-      basedOn: string[];
-      stillUncertain: string[];
-      reconsiderIf: string[];
-    };
-  }>;
-  questions: Array<{
-    number: number;
-    prompt: string;
-    whyItMatters: string;
-  }>;
-  permissionSections: Array<{
-    label: string;
-    items: Array<{ title: string; note: string }>;
-  }>;
-  permissionBoundary: string;
-  omitted: Record<string, number>;
-  privacyNote: string;
-  adviceBoundary: string;
-};
 
 type PlanReportView = {
   heading: string;
@@ -80,6 +25,22 @@ type PlanReportView = {
     message: string;
     boundary: string;
   };
+  professionalReview: null | {
+    roleLabel: string;
+    adviserName: string;
+    accreditationScheme: string;
+    accreditationReference: string;
+    notes: string;
+    statement: string;
+    boundary: string;
+  };
+  everydayActions: Array<{
+    id: string;
+    category: string;
+    title: string;
+    description: string;
+  }>;
+  everydayActionsBoundary: string;
   questions: Array<{
     number: number;
     prompt: string;
@@ -305,27 +266,19 @@ export function CustomerPlanShareDialog({
 }
 
 export function CustomerPlanPrintReport({
-  document,
-  report: suppliedReport,
-  visible = false,
+  report,
 }: {
-  document?: PlanDocument;
-  report?: PlanReportView;
-  visible?: boolean;
+  report: PlanReportView;
 }) {
-  const report = suppliedReport
-    || createCustomerPlanReportView(document) as PlanReportView;
   return (
-    <article
-      className={`customer-plan-print-report${visible ? " customer-plan-print-report-visible" : ""}`}
-    >
+    <article className="customer-plan-print-report customer-plan-print-report-visible">
       <header>
         <div>
           <span>Australian Energy Assessments</span>
           <h1>{report.heading}</h1>
           <p>{report.planTitle}</p>
         </div>
-        <small>Prepared {report.preparedDate}</small>
+        <small>Generated {report.preparedDate}</small>
       </header>
       <section className="customer-plan-print-intro">
         <p>{report.summary}</p>
@@ -360,6 +313,34 @@ export function CustomerPlanPrintReport({
           </ol>
         )}
       </section>
+      {report.professionalReview && (
+        <section className="customer-plan-print-professional-review">
+          <h2>Professional review, self-declared</h2>
+          <p>{report.professionalReview.statement}</p>
+          {report.professionalReview.notes && (
+            <blockquote>
+              <strong>Adviser notes</strong>
+              <p>{report.professionalReview.notes}</p>
+            </blockquote>
+          )}
+          <small>{report.professionalReview.boundary}</small>
+        </section>
+      )}
+      {report.everydayActions.length > 0 && (
+        <section className="customer-plan-print-everyday">
+          <h2>Helpful things you can try now</h2>
+          <p>{report.everydayActionsBoundary}</p>
+          <div>
+            {report.everydayActions.map((action) => (
+              <article key={action.id}>
+                <small>{action.category}</small>
+                <h3>{action.title}</h3>
+                <p>{action.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <section className="customer-plan-print-basis">
         <span>Why this order</span>
         <ul>

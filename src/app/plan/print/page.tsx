@@ -38,6 +38,13 @@ type CustomerPlan = {
   features: string[];
   title: string;
   summary: string;
+  everydayActions: Array<{
+    id: string;
+    category: string;
+    title: string;
+    text: string;
+  }>;
+  everydayActionsBoundary: string;
   items: CustomerPlanItem[];
   nextQuestions: Array<{
     id: string;
@@ -146,6 +153,11 @@ export default async function PrintableHomeEnergyPlanPage({
     existingFeatures: plan.features,
     climate: null,
     questions: plan.nextQuestions,
+    everydayActions: plan.everydayActions.map((action) => ({
+      ...action,
+      description: action.text,
+    })),
+    everydayActionsBoundary: plan.everydayActionsBoundary,
     actions: plan.items.map((item, index) => ({
       number: index + 1,
       id: item.id,
@@ -168,7 +180,7 @@ export default async function PrintableHomeEnergyPlanPage({
         <a href={`/plan?${returnParams.toString()}`}>Return to planner</a>
         <span>{context.join(" | ")}</span>
       </nav>
-      <CustomerPlanPrintReport report={report} visible />
+      <CustomerPlanPrintReport report={report} />
     </main>
   );
 }

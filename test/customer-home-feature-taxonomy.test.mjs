@@ -389,14 +389,14 @@ test("the public planner uses the accessible shared intake and bounded query han
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-home-feature-taxonomy-v2");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-adviser-print-comfort-v3");
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
-    "2026-07-29-advisor-profile-v3",
+    "2026-07-29-advisor-profile-v4",
   );
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
-      "2026-07-29-decision-support-advisor",
+      "2026-07-29-home-feature-taxonomy-v2",
     ),
     true,
   );

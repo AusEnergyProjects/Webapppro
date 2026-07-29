@@ -6,13 +6,17 @@ import {
   CUSTOMER_ADVISOR_PROFILE_VERSION,
   CUSTOMER_LEGACY_PLAN_VERSIONS,
   CUSTOMER_PLAN_VERSION,
+  CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
   buildAnonymizedOpportunity,
   createCustomerPermissionPack,
   createCustomerProjectPlan,
   customerAdvisorOptions,
   derivePlanningClimateProfile,
   normalizeCustomerAdvisorProfile,
+  normalizeCustomerProfessionalReview,
   normalizeCustomerProject,
+  resetCustomerProfessionalReviewDeclaration,
+  validateCustomerProfessionalReview,
 } from "../src/lib/customer-projects.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -31,10 +35,16 @@ const project = {
 };
 
 test("important home facts derive customer reports without claiming validation", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-home-feature-taxonomy-v2");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-adviser-print-comfort-v3");
+  assert.equal(CUSTOMER_ADVISOR_PROFILE_VERSION, "2026-07-29-advisor-profile-v4");
+  assert.equal(
+    CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+    "2026-07-29-self-declared-adviser-v1",
+  );
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-decision-support-advisor"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-home-advisor"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-evidence-climate-advisor"));
+  assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-home-feature-taxonomy-v2"));
   assert.deepEqual(
     customerAdvisorOptions.evidenceSources.find(([value]) => value === "photo-supported"),
     ["photo-supported", "Photo available for review"],
@@ -80,6 +90,174 @@ test("important home facts derive customer reports without claiming validation",
   );
   assert.equal(normalized.project.advisorProfile.climate.code, "cool-temperate");
   assert.equal(normalized.project.advisorProfile.climate.notNatHERSAssessment, true);
+});
+
+test("professional review is a bounded self-declaration and disabled records clear safely", () => {
+  const suppliedReview = {
+    enabled: true,
+    role: "accredited-energy-adviser",
+    adviserName: "  Alex   Adviser  ",
+    accreditationScheme: "  Independent Energy Assessors  ",
+    accreditationReference: "IEA / 123-45",
+    notes: "  Reviewed the household answers; roof access remains unknown.  ",
+    declarationAccepted: true,
+    declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+    verified: true,
+    approvedBy: "Australian Energy Assessments",
+    email: "private@example.com",
+  };
+  const validation = validateCustomerProfessionalReview(suppliedReview);
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.review, {
+    enabled: true,
+    role: "accredited-energy-adviser",
+    adviserName: "Alex Adviser",
+    accreditationScheme: "Independent Energy Assessors",
+    accreditationReference: "IEA / 123-45",
+    notes: "Reviewed the household answers; roof access remains unknown.",
+    declarationAccepted: true,
+    declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+  });
+  for (const unsafeKey of ["verified", "approvedBy", "email"]) {
+    assert.equal(unsafeKey in validation.review, false);
+  }
+
+  const normalized = normalizeCustomerProject({
+    ...project,
+    serviceCategories: ["insulation"],
+    priorities: ["comfort"],
+    advisorProfile: { professionalReview: suppliedReview },
+  });
+  assert.equal(normalized.ok, true);
+  assert.deepEqual(
+    normalized.project.advisorProfile.professionalReview,
+    validation.review,
+  );
+  const opportunity = buildAnonymizedOpportunity(
+    normalized.project,
+    "professional-review-private",
+  );
+  assert.doesNotMatch(
+    JSON.stringify(opportunity),
+    /Alex Adviser|Independent Energy Assessors|IEA \/ 123-45|private@example\.com/,
+  );
+
+  const disabled = normalizeCustomerProject({
+    ...project,
+    advisorProfile: {
+      professionalReview: {
+        ...suppliedReview,
+        enabled: false,
+      },
+    },
+  });
+  assert.equal(disabled.ok, true);
+  assert.equal("professionalReview" in disabled.project.advisorProfile, false);
+  assert.equal(
+    normalizeCustomerProfessionalReview({
+      ...suppliedReview,
+      enabled: false,
+    }),
+    null,
+  );
+});
+
+test("incomplete professional review declarations fail instead of being silently published", () => {
+  const complete = {
+    enabled: true,
+    role: "accredited-home-comfort-adviser",
+    adviserName: "Casey Reviewer",
+    accreditationScheme: "Home Comfort Association",
+    accreditationReference: "HCA-2048",
+    notes: "",
+    declarationAccepted: true,
+    declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+  };
+  const cases = [
+    [{ ...complete, role: "unverified-role" }, /Choose the accredited adviser role/i],
+    [{ ...complete, adviserName: " " }, /Enter the adviser name/i],
+    [{ ...complete, accreditationScheme: "" }, /accreditation scheme or professional body/i],
+    [{ ...complete, accreditationReference: "<script>" }, /valid accreditation or membership reference/i],
+    [{ ...complete, declarationAccepted: false }, /Confirm the professional review declaration/i],
+    [{ ...complete, declarationVersion: undefined }, /current professional review declaration/i],
+    [{ ...complete, declarationVersion: "retired-declaration" }, /current professional review declaration/i],
+  ];
+  for (const [professionalReview, expectedError] of cases) {
+    const result = normalizeCustomerProject({
+      ...project,
+      advisorProfile: { professionalReview },
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, expectedError);
+    assert.equal(normalizeCustomerProfessionalReview(professionalReview), null);
+  }
+});
+
+test("professional review confirmation is invalidated without changing the declared identity", () => {
+  const profile = {
+    rooms: [{ id: "living", name: "Living room" }],
+    professionalReview: {
+      enabled: true,
+      role: "accredited-energy-adviser",
+      adviserName: "Alex Adviser",
+      accreditationScheme: "Independent Energy Assessors",
+      accreditationReference: "IEA-123",
+      notes: "Reviewed from the household record.",
+      declarationAccepted: true,
+      declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+    },
+  };
+  const reset = resetCustomerProfessionalReviewDeclaration(profile);
+  assert.notEqual(reset, profile);
+  assert.deepEqual(reset.rooms, profile.rooms);
+  assert.deepEqual(reset.professionalReview, {
+    enabled: true,
+    role: "accredited-energy-adviser",
+    adviserName: "Alex Adviser",
+    accreditationScheme: "Independent Energy Assessors",
+    accreditationReference: "IEA-123",
+    notes: "Reviewed from the household record.",
+    declarationAccepted: false,
+  });
+  assert.equal(
+    "declarationVersion" in reset.professionalReview,
+    false,
+  );
+  assert.equal(validateCustomerProfessionalReview(reset.professionalReview).ok, false);
+});
+
+test("professional review attribution cannot change generated advice", () => {
+  const input = {
+    ...project,
+    goals: ["improve-comfort", "lower-bills"],
+    existingFeatures: [
+      "comfort-too-cold",
+      "single-glazing",
+      "ceiling-insulation-limited",
+      "reverse-cycle",
+    ],
+    budgetRange: "under_2k",
+  };
+  const withoutReview = createCustomerProjectPlan(input);
+  const withReview = createCustomerProjectPlan({
+    ...input,
+    advisorProfile: {
+      professionalReview: {
+        enabled: true,
+        role: "accredited-energy-adviser",
+        adviserName: "Advice Invariant Canary",
+        accreditationScheme: "Independent Scheme",
+        accreditationReference: "IS-100",
+        notes: "This wording must not enter advice.",
+        declarationAccepted: true,
+      },
+    },
+  });
+  assert.deepEqual(withReview, withoutReview);
+  assert.doesNotMatch(
+    JSON.stringify(withReview),
+    /Advice Invariant Canary|Independent Scheme|IS-100|must not enter advice/,
+  );
 });
 
 test("installer opportunity summaries cannot disclose private room names or permission notes", () => {

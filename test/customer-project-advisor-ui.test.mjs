@@ -142,14 +142,120 @@ test("the private review worksheet never represents authenticated assessor autho
   assert.doesNotMatch(dashboard, /Verified by assessor|Assessor approved/);
 });
 
-test("plan email and print actions use one saved privacy-filtered report", () => {
+test("optional professional review is explicit, self-declared and customer-facing", () => {
+  assert.match(dashboard, /Optional professional review/);
+  assert.match(dashboard, /Preparing this plan as an accredited adviser\?/);
+  assert.match(dashboard, /customer-professional-review-declaration/);
+  assert.match(dashboard, /declarationAccepted: event\.target\.checked/);
+  assert.match(dashboard, /resetCustomerProfessionalReviewDeclaration/);
+  assert.match(dashboard, /confirmsCurrentDeclaration/);
+  assert.match(
+    dashboard,
+    /declarationVersion:\s*CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION/,
+  );
+  assert.match(
+    dashboard,
+    /advisorProfile: affectsAdvice[\s\S]{0,120}resetProfessionalReviewDeclaration/,
+  );
+  assert.match(
+    projectPlan,
+    /supplied\.declarationVersion[\s\S]{0,160}CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION/,
+  );
+  assert.match(
+    dashboard,
+    /Australian Energy Assessments has not checked my[\s\S]{0,120}identity, accreditation, reference or observations/,
+  );
+  assert.match(dashboard, /Adviser notes for the customer report/);
+  assert.match(planShareDialog, /Professional review, self-declared/);
+  assert.match(
+    planDocument,
+    /not an Australian Energy Assessments credential check, site assessment, NatHERS assessment or endorsement/,
+  );
+});
+
+test("everyday actions stay outside the ordered roadmap in account and report views", () => {
+  const accountEverydaySection = dashboard.indexOf(
+    'className="customer-everyday-actions"',
+  );
+  const accountRoadmap = dashboard.indexOf(
+    '<ol className="customer-roadmap-preview">',
+  );
+  assert.ok(accountEverydaySection >= 0, "account everyday section is present");
+  assert.ok(accountRoadmap > accountEverydaySection, "account roadmap follows everyday section");
+  assert.match(
+    dashboard.slice(accountEverydaySection, accountRoadmap),
+    /<\/section>\s*\)\}/,
+  );
+
+  const reportEverydaySection = planShareDialog.indexOf(
+    'className="customer-plan-print-everyday"',
+  );
+  const reportRoadmap = planShareDialog.indexOf(
+    'className="customer-plan-print-roadmap"',
+  );
+  assert.ok(reportEverydaySection >= 0, "report everyday section is present");
+  assert.ok(reportRoadmap > reportEverydaySection, "report roadmap follows everyday section");
+  assert.match(
+    planShareDialog.slice(reportEverydaySection, reportRoadmap),
+    /<\/section>\s*\)\}/,
+  );
+  assert.match(projectPlan, /everydayActions,\s*everydayActionsBoundary:[\s\S]{0,100}\s*items,/);
+});
+
+test("plan email and isolated print actions use one saved privacy-filtered report", () => {
+  const printPlanSource = dashboard.match(
+    /async function printPlan\(\)[\s\S]*?async function submitProject\(\)/,
+  )?.[0] || "";
   assert.match(dashboard, /Email this plan/);
   assert.match(dashboard, /Print or save PDF/);
   assert.match(dashboard, /await savePlanForSharing\(\)/);
   assert.match(dashboard, /customer-project-plan-email/);
   assert.match(dashboard, /consentConfirmed: true/);
   assert.match(dashboard, /key=\{shareRequestId \|\| "plan-share"\}/);
-  assert.match(dashboard, /CustomerPlanPrintReport document=\{shareablePlanDocument\}/);
+  assert.match(dashboard, /customerPlanDocumentHtml\(shareablePlanDocument\)/);
+  assert.match(dashboard, /createCustomerPlanPrintFrame\(/);
+  assert.match(dashboard, /frame\.srcdoc = html/);
+  assert.match(dashboard, /signal: AbortSignal/);
+  assert.match(dashboard, /signal\.addEventListener\("abort", abort/);
+  assert.match(dashboard, /if \(signal\.aborted\)/);
+  assert.match(
+    dashboard,
+    /frame\.setAttribute\("sandbox", "allow-same-origin allow-modals"\)/,
+  );
+  assert.match(dashboard, /const printView = printFrame\.contentWindow/);
+  assert.match(dashboard, /activePrintCleanup\.current/);
+  assert.match(dashboard, /const abortController = new AbortController\(\)/);
+  assert.match(dashboard, /abortController\.abort\(\)/);
+  assert.match(dashboard, /activePrintCleanup\.current = cancel/);
+  assert.ok(
+    printPlanSource.indexOf("activePrintCleanup.current = cancel")
+      < printPlanSource.indexOf("await savePlanForSharing()"),
+    "print cancellation is registered before the first asynchronous operation",
+  );
+  assert.match(
+    printPlanSource,
+    /await savePlanForSharing\(\);\s*if \(cancelled\) return;/,
+  );
+  assert.match(
+    dashboard,
+    /customerPlanDocumentHtml\(shareablePlanDocument\),\s*abortController\.signal/,
+  );
+  assert.match(dashboard, /A print preview is already open/);
+  assert.match(dashboard, /let cleanedUp = false/);
+  assert.match(dashboard, /if \(cleanedUp\) return/);
+  assert.match(dashboard, /window\.clearTimeout\(cleanupTimer\)/);
+  assert.ok(
+    dashboard.indexOf("cleanupTimer = window.setTimeout(cleanup, 300_000)")
+      < dashboard.indexOf("printView.print()"),
+    "the bounded fallback is registered before printing",
+  );
+  assert.match(dashboard, /printView\.print\(\)/);
+  assert.doesNotMatch(dashboard, /window\.print\(\)/);
+  assert.doesNotMatch(dashboard, /<CustomerPlanPrintReport(?:\s|>)/);
+  assert.doesNotMatch(styles, /body:has\(\.customer-plan-print-report\)/);
+  assert.doesNotMatch(styles, /\.customer-plan-print-report \{ display: none; \}/);
+  assert.doesNotMatch(planShareDialog, /document\?: PlanDocument|visible\?: boolean/);
+  assert.doesNotMatch(planShareDialog, /createCustomerPlanReportView/);
   assert.match(planShareDialog, /role="dialog"/);
   assert.match(planShareDialog, /aria-modal="true"/);
   assert.match(planShareDialog, /event\.key === "Escape"/);
@@ -159,6 +265,14 @@ test("plan email and print actions use one saved privacy-filtered report", () =>
   assert.match(dashboard, /readiness=\{shareablePlanDocument\.readiness\}/);
   assert.match(dashboard, /onReviewHomeDetails=\{reviewHomeDetailsBeforeSharing\}/);
   assert.match(planShareDialog, /PrintReport/);
+  assert.match(
+    planShareDialog,
+    /<h2>Professional review, self-declared<\/h2>/,
+  );
+  assert.match(
+    planShareDialog,
+    /<h2>Helpful things you can try now<\/h2>/,
+  );
   assert.match(planShareDialog, /href=\{action\.guideHref\}/);
   assert.match(planDocument, /customerPlanDocumentHtml/);
   assert.match(planDocument, /customerPlanDocumentText/);
@@ -172,6 +286,14 @@ test("draft save state and plan sharing controls are readable and phone safe", (
   assert.match(styles, /\.customer-plan-dialog-backdrop/);
   assert.match(styles, /@page \{ margin: 12mm; size: A4; \}/);
   assert.match(styles, /\.customer-plan-print-roadmap > ol > li[\s\S]{0,180}break-inside: avoid/);
+  assert.match(
+    styles,
+    /\.customer-plan-print-professional-review blockquote p \{[^}]*overflow-wrap: anywhere/,
+  );
+  assert.match(
+    planDocument,
+    /overflow-wrap:anywhere;">\$\{escapeHtml\(report\.professionalReview\.statement\)\}/,
+  );
   assert.match(styles, /\.customer-plan-toolbar-actions,[\s\S]{0,80}width: 100%/);
 });
 

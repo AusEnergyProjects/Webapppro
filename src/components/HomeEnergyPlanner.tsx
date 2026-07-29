@@ -24,6 +24,13 @@ type CustomerPlanItem = {
 type CustomerPlan = {
   title: string;
   summary: string;
+  everydayActions: Array<{
+    id: string;
+    category: string;
+    title: string;
+    text: string;
+  }>;
+  everydayActionsBoundary: string;
   items: CustomerPlanItem[];
   nextQuestions: Array<{
     id: string;
@@ -339,6 +346,27 @@ export function HomeEnergyPlanner({
             Start over
           </button>
         </div>
+        {plan.everydayActions.length > 0 && (
+          <section
+            className="planner-everyday-actions"
+            aria-labelledby="planner-everyday-actions-title"
+          >
+            <span>Useful alongside the roadmap</span>
+            <h3 id="planner-everyday-actions-title">
+              Helpful things you can try now
+            </h3>
+            <p>{plan.everydayActionsBoundary}</p>
+            <div>
+              {plan.everydayActions.map((action) => (
+                <article key={action.id}>
+                  <small>{action.category}</small>
+                  <h4>{action.title}</h4>
+                  <p>{action.text}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         {plan.nextQuestions.length > 0 && (
           <section className="planner-next-questions">
             <span>Best next information</span>

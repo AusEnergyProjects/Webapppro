@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   buildAnonymizedOpportunity,
   buildInstallerPropertyContext,
+  CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY,
   CUSTOMER_PLAN_VERSION,
   createCustomerProjectPlan,
   customerProjectOptions,
@@ -109,6 +110,179 @@ test("advisor plans combine goals, property evidence, renting and a bounded budg
   assert.equal(ids.includes("brief"), false);
   assert.match(plan.summary, /not a product endorsement, quote or savings promise/);
   assert.doesNotMatch(JSON.stringify(plan), /Renshade|Duck film/i);
+});
+
+test("everyday actions are deterministic, bounded and separate from the ordered upgrade plan", () => {
+  const input = {
+    goals: [
+      "healthier-home",
+      "improve-comfort",
+      "lower-bills",
+      "renter-friendly",
+    ],
+    pace: "staged",
+    situation: "renter",
+    features: [
+      "condensation-moisture",
+      "comfort-too-cold",
+      "comfort-too-hot",
+      "reverse-cycle",
+      "single-glazing",
+      "window-coverings-basic",
+    ],
+    budgetRange: "under_2k",
+    postcode: "3000",
+    addressState: "VIC",
+  };
+  const first = createCustomerProjectPlan(input);
+  const second = createCustomerProjectPlan(input);
+  assert.deepEqual(second.everydayActions, first.everydayActions);
+  assert.equal(first.everydayActions.length <= 6, true);
+  assert.deepEqual(
+    first.everydayActions.map((action) => action.id),
+    [
+      "moisture-safe-routine",
+      "personal-warmth-first",
+      "use-existing-controls",
+      "safe-seasonal-airflow",
+      "seasonal-window-and-landscape",
+      "renter-friendly-diy-boundary",
+    ],
+  );
+  assert.equal(
+    new Set(first.everydayActions.map((action) => action.id)).size,
+    first.everydayActions.length,
+  );
+  const orderedIds = new Set(first.items.map((item) => item.id));
+  assert.ok(first.everydayActions.every((action) => !orderedIds.has(action.id)));
+  assert.equal(first.everydayActionsBoundary, CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY);
+  assert.match(first.everydayActionsBoundary, /not upgrade steps/i);
+  assert.match(first.everydayActionsBoundary, /not .*product endorsements/i);
+  assert.match(first.everydayActionsBoundary, /unsafe|unsuitable/i);
+});
+
+test("everyday actions have controlled triggers, safety boundaries and no product brands or prices", () => {
+  const scenarios = [
+    {
+      input: {
+        goals: ["healthier-home"],
+        features: ["condensation-moisture"],
+      },
+      expectedId: "moisture-safe-routine",
+    },
+    {
+      input: {
+        goals: ["improve-comfort"],
+        features: ["comfort-too-cold"],
+      },
+      expectedId: "personal-warmth-first",
+    },
+    {
+      input: {
+        goals: ["lower-bills"],
+        features: ["reverse-cycle"],
+      },
+      expectedId: "use-existing-controls",
+    },
+    {
+      input: {
+        goals: ["improve-comfort"],
+        features: ["comfort-too-hot"],
+      },
+      expectedId: "safe-seasonal-airflow",
+    },
+    {
+      input: {
+        goals: ["improve-comfort"],
+        features: ["window-coverings-basic"],
+      },
+      expectedId: "seasonal-window-and-landscape",
+    },
+    {
+      input: {
+        goals: ["renter-friendly"],
+        situation: "renter",
+        budgetRange: "under_2k",
+      },
+      expectedId: "renter-friendly-diy-boundary",
+    },
+  ];
+  for (const { input, expectedId } of scenarios) {
+    const plan = createCustomerProjectPlan(input);
+    assert.ok(
+      plan.everydayActions.some((action) => action.id === expectedId),
+      `expected ${expectedId}`,
+    );
+  }
+
+  const actions = createCustomerProjectPlan({
+    goals: ["healthier-home", "improve-comfort", "lower-bills", "renter-friendly"],
+    situation: "renter",
+    features: [
+      "condensation-moisture",
+      "comfort-too-cold",
+      "comfort-too-hot",
+      "reverse-cycle",
+      "single-glazing",
+      "window-coverings-basic",
+    ],
+    budgetRange: "under_2k",
+  }).everydayActions;
+  const serialized = JSON.stringify(actions);
+  assert.doesNotMatch(
+    serialized,
+    /Renshade|Duck ?film|BrandCo|Bunnings|IKEA|\$\d|guaranteed savings/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "moisture-safe-routine").text,
+    /Do not block fixed vents|combustion-safety/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "personal-warmth-first").text,
+    /manufacturer directs|not a substitute for safe adequate heating/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "use-existing-controls").text,
+    /Do not disable hot-water safety cycles|bypass safety controls/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "safe-seasonal-airflow").text,
+    /humidity, smoke, weather, noise and security/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "seasonal-window-and-landscape").text,
+    /approval|underground and overhead services|bushfire risk/i,
+  );
+  assert.match(
+    actions.find((action) => action.id === "renter-friendly-diy-boundary").text,
+    /Never cover a fixed vent|permission-free/i,
+  );
+});
+
+test("everyday actions do not contradict explicit comfort or tenure answers", () => {
+  const hotOwnerIds = createCustomerProjectPlan({
+    goals: ["improve-comfort"],
+    situation: "owner",
+    features: ["comfort-too-hot"],
+  }).everydayActions.map((action) => action.id);
+  assert.equal(hotOwnerIds.includes("personal-warmth-first"), false);
+  assert.equal(hotOwnerIds.includes("safe-seasonal-airflow"), true);
+
+  const coldHomeIds = createCustomerProjectPlan({
+    goals: ["improve-comfort"],
+    situation: "owner",
+    features: ["comfort-too-cold", "reverse-cycle"],
+  }).everydayActions.map((action) => action.id);
+  assert.equal(coldHomeIds.includes("personal-warmth-first"), true);
+  assert.equal(coldHomeIds.includes("safe-seasonal-airflow"), false);
+
+  const lowBudgetOwnerIds = createCustomerProjectPlan({
+    goals: ["lower-bills"],
+    situation: "owner",
+    features: [],
+    budgetRange: "under_2k",
+  }).everydayActions.map((action) => action.id);
+  assert.equal(lowBudgetOwnerIds.includes("renter-friendly-diy-boundary"), false);
 });
 
 test("existing efficient equipment changes the advice instead of being collected without effect", () => {

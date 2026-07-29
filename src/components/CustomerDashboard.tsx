@@ -20,6 +20,7 @@ import {
   buildAnonymizedOpportunity,
   CUSTOMER_LEGACY_PLAN_VERSIONS,
   CUSTOMER_ADVISOR_PROFILE_VERSION,
+  CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
   customerHomeFeatureSections as rawCustomerHomeFeatureSections,
   createCustomerPermissionPack,
   createCustomerProjectPlan,
@@ -28,7 +29,9 @@ import {
   derivePlanningClimateProfile,
   platformQuoteOptions as rawPlatformQuoteOptions,
   preserveEditedPlanItems,
+  resetCustomerProfessionalReviewDeclaration,
   updateHomeFeatureSelection,
+  validateCustomerProfessionalReview,
 } from "@/lib/customer-projects.mjs";
 import {
   customerReviewOptions as rawCustomerReviewOptions,
@@ -40,11 +43,13 @@ import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
 import { HomeFeatureIntake } from "./HomeFeatureIntake";
 import {
-  CustomerPlanPrintReport,
   CustomerPlanShareDialog,
 } from "./CustomerPlanShareDialog";
 import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
-import { createCustomerPlanDocument } from "@/lib/customer-plan-document.mjs";
+import {
+  createCustomerPlanDocument,
+  customerPlanDocumentHtml,
+} from "@/lib/customer-plan-document.mjs";
 
 type DashboardView =
   | "overview"
@@ -115,6 +120,16 @@ type CustomerAdvisorProfile = {
     text: string;
     status: CustomerReviewStatus;
   }>;
+  professionalReview?: {
+    enabled: true;
+    role: string;
+    adviserName: string;
+    accreditationScheme: string;
+    accreditationReference: string;
+    notes: string;
+    declarationAccepted: boolean;
+    declarationVersion?: string;
+  };
   climate?: PlanningClimateProfile;
 };
 type CustomerPermissionPack = {
@@ -131,6 +146,12 @@ type CustomerPermissionPack = {
   }>;
   disclaimer: string;
 };
+
+const resetProfessionalReviewDeclaration = (
+  profile: CustomerAdvisorProfile,
+) => resetCustomerProfessionalReviewDeclaration(
+  profile,
+) as CustomerAdvisorProfile;
 
 const customerProjectOptions = rawCustomerProjectOptions as {
   goals: Option[];
@@ -159,6 +180,7 @@ const customerAdvisorOptions = rawCustomerAdvisorOptions as {
   comfortConcerns: Option[];
   usePeriods: Option[];
   permissionClasses: Option[];
+  professionalRoles: Option[];
 };
 const customerReviewOptions = rawCustomerReviewOptions as {
   kinds: Option[];
@@ -304,6 +326,12 @@ type CustomerPlanItem = {
     stillUncertain: string[];
     reconsiderIf: string[];
   };
+};
+type CustomerEverydayAction = {
+  id: string;
+  category: string;
+  title: string;
+  text: string;
 };
 type CustomerPlanQuestion = {
   id: string;
@@ -491,6 +519,52 @@ function downloadPermissionPack(
   anchor.download = "property-permission-checklist.txt";
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function createCustomerPlanPrintFrame(
+  html: string,
+  signal: AbortSignal,
+): Promise<HTMLIFrameElement> {
+  const frame = window.document.createElement("iframe");
+  frame.className = "customer-plan-print-frame";
+  frame.title = "Print-ready independent home energy plan";
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+  frame.srcdoc = html;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      frame.remove();
+      reject(error);
+    };
+    const abort = () => fail(
+      new DOMException("The print request was cancelled.", "AbortError"),
+    );
+    const timeout = window.setTimeout(() => {
+      fail(new Error("The print-ready plan took too long to prepare."));
+    }, 10_000);
+    frame.addEventListener("load", () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      if (!frame.contentWindow) {
+        frame.remove();
+        reject(new Error("The print-ready plan could not be opened."));
+        return;
+      }
+      resolve(frame);
+    }, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    window.document.body.append(frame);
+  });
 }
 async function prepareEvidenceUpload(item: PendingProjectEvidence) {
   const quotingPhotoCategories = new Set([
@@ -918,6 +992,7 @@ function ProjectEditor({
   const [shareError, setShareError] = useState("");
   const [shareRequestId, setShareRequestId] = useState("");
   const draggedPlanItem = useRef("");
+  const activePrintCleanup = useRef<null | (() => void)>(null);
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
   >([]);
@@ -926,6 +1001,9 @@ function ProjectEditor({
   >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
     useState(evidenceSharingConsent);
+  useEffect(() => () => {
+    activePrintCleanup.current?.();
+  }, []);
   const storedEvidenceCount = storedEvidence.length + uploadedEvidence.length;
   const storedInstallerEvidenceCount = storedEvidence.filter(
     (item) => item.sharingScope === "allocated-installers",
@@ -1026,6 +1104,15 @@ function ProjectEditor({
   const visiblePlanItems = planEdited
     ? planItems
     : (advisorPlan.items as CustomerPlanItem[]);
+  const everydayActions = (
+    Array.isArray(advisorPlan.everydayActions)
+      ? advisorPlan.everydayActions
+      : []
+  ) as CustomerEverydayAction[];
+  const everydayActionsBoundary =
+    typeof advisorPlan.everydayActionsBoundary === "string"
+      ? advisorPlan.everydayActionsBoundary
+      : "";
   const permissionPackPreview = createCustomerPermissionPack(
     draft.advisorProfile,
     {
@@ -1034,6 +1121,13 @@ function ProjectEditor({
       planItems: visiblePlanItems,
     },
   ) as CustomerPermissionPack;
+  const professionalReviewValidation = validateCustomerProfessionalReview(
+    draft.advisorProfile.professionalReview,
+  ) as { ok: boolean; error?: string };
+  const professionalReviewError = professionalReviewValidation.ok
+    ? ""
+    : professionalReviewValidation.error
+      || "Complete the professional review details before continuing.";
 
   const draftWithPlan = (): ProjectDraft => ({
     ...draft,
@@ -1087,7 +1181,15 @@ function ProjectEditor({
     key: K,
     value: ProjectDraft[K],
   ) => {
-    setDraft((current) => ({ ...current, [key]: value }));
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      return {
+        ...next,
+        advisorProfile: resetProfessionalReviewDeclaration(
+          next.advisorProfile,
+        ),
+      };
+    });
     if (
       key === "goals" ||
       key === "goal" ||
@@ -1137,6 +1239,9 @@ function ProjectEditor({
       ...current,
       goals,
       goal: goals[0] || "",
+      advisorProfile: resetProfessionalReviewDeclaration(
+        current.advisorProfile,
+      ),
     }));
     if (planEdited) setPlanInputsChanged(true);
     invalidateStepsFrom(2);
@@ -1179,15 +1284,80 @@ function ProjectEditor({
     update: (profile: CustomerAdvisorProfile) => CustomerAdvisorProfile,
     affectsAdvice = true,
   ) => {
-    setDraft((current) => ({
-      ...current,
-      advisorProfile: update(current.advisorProfile),
-    }));
+    setDraft((current) => {
+      const updatedProfile = update(current.advisorProfile);
+      return {
+        ...current,
+        advisorProfile: affectsAdvice
+          ? resetProfessionalReviewDeclaration(updatedProfile)
+          : updatedProfile,
+      };
+    });
     if (affectsAdvice && planEdited) setPlanInputsChanged(true);
     if (affectsAdvice) invalidateStepsFrom(2);
     setDirty(true);
     setStatus("");
     setValidationError("");
+  };
+  const setProfessionalReviewEnabled = (enabled: boolean) => {
+    updateAdvisorProfile((profile) => {
+      if (!enabled) {
+        const next = { ...profile };
+        delete next.professionalReview;
+        return next;
+      }
+      return {
+        ...profile,
+        professionalReview: {
+          enabled: true,
+          role: "accredited-energy-adviser",
+          adviserName: "",
+          accreditationScheme: "",
+          accreditationReference: "",
+          notes: "",
+          declarationAccepted: false,
+        },
+      };
+    }, false);
+  };
+  const updateProfessionalReview = (
+    update: Partial<NonNullable<CustomerAdvisorProfile["professionalReview"]>>,
+  ) => {
+    const confirmsCurrentDeclaration =
+      Object.keys(update).length === 1
+      && update.declarationAccepted === true;
+    updateAdvisorProfile((profile) => {
+      const nextProfile = {
+        ...profile,
+        professionalReview: {
+          enabled: true as const,
+          role:
+            profile.professionalReview?.role
+            || "accredited-energy-adviser",
+          adviserName: profile.professionalReview?.adviserName || "",
+          accreditationScheme:
+            profile.professionalReview?.accreditationScheme || "",
+          accreditationReference:
+            profile.professionalReview?.accreditationReference || "",
+          notes: profile.professionalReview?.notes || "",
+          declarationAccepted:
+            profile.professionalReview?.declarationAccepted || false,
+          ...update,
+        },
+      };
+      if (confirmsCurrentDeclaration) {
+        return {
+          ...nextProfile,
+          professionalReview: {
+            ...nextProfile.professionalReview,
+            declarationAccepted: true,
+            declarationVersion:
+              CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+          },
+        };
+      }
+      return resetProfessionalReviewDeclaration(nextProfile);
+    }, false);
   };
   const markUnansweredHomeQuestionsNotSure = () => {
     let next = draft.existingFeatures;
@@ -1532,6 +1702,33 @@ function ProjectEditor({
     });
   }
 
+  function showProfessionalReviewError(message = professionalReviewError) {
+    openStep(2);
+    setValidationError(message);
+    window.requestAnimationFrame(() => {
+      const section = window.document.getElementById(
+        "customer-professional-review",
+      );
+      const fieldId =
+        message.includes("adviser name")
+          ? "customer-professional-review-name"
+          : message.includes("scheme or professional body")
+            ? "customer-professional-review-scheme"
+            : message.includes("reference")
+              ? "customer-professional-review-reference"
+              : message.includes("declaration")
+                ? "customer-professional-review-declaration"
+                : "customer-professional-review-role";
+      const target =
+        window.document.getElementById(fieldId)
+        || section?.querySelector<HTMLElement>("input, select, textarea");
+      section?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus({
+        preventScroll: true,
+      });
+    });
+  }
+
   function validate(nextStep: number) {
     if (
       step === 1 &&
@@ -1549,6 +1746,10 @@ function ProjectEditor({
       setValidationError(
         "Choose at least one goal so the advisor can build your plan.",
       );
+      return false;
+    }
+    if (step === 2 && professionalReviewError) {
+      showProfessionalReviewError();
       return false;
     }
     if (step === 3 && planInputsChanged) {
@@ -1587,6 +1788,10 @@ function ProjectEditor({
   }
 
   async function saveDraft() {
+    if (professionalReviewError) {
+      showProfessionalReviewError();
+      return;
+    }
     if (planInputsChanged) {
       openStep(3);
       setValidationError(
@@ -1620,6 +1825,7 @@ function ProjectEditor({
   }
 
   function planShareBlocker() {
+    if (professionalReviewError) return professionalReviewError;
     if (planInputsChanged) {
       return "Refresh the advisor suggestions or confirm that you want to keep the edited steps before sharing.";
     }
@@ -1746,6 +1952,12 @@ function ProjectEditor({
   }
 
   async function printPlan() {
+    if (activePrintCleanup.current) {
+      setValidationError(
+        "A print preview is already open. Close it before opening another.",
+      );
+      return;
+    }
     const blocker = planShareBlocker();
     if (blocker) {
       setValidationError(blocker);
@@ -1753,26 +1965,73 @@ function ProjectEditor({
     }
     setShareBusy(true);
     setValidationError("");
+    const abortController = new AbortController();
+    let cancelled = false;
+    let cleanedUp = false;
+    let cleanupTimer: number | null = null;
+    let printFrame: HTMLIFrameElement | null = null;
+    const returnFocus =
+      window.document.activeElement instanceof HTMLElement
+        ? window.document.activeElement
+        : null;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      if (cleanupTimer !== null) window.clearTimeout(cleanupTimer);
+      printFrame?.remove();
+      printFrame = null;
+      if (activePrintCleanup.current === cancel) {
+        activePrintCleanup.current = null;
+      }
+      window.requestAnimationFrame(() => {
+        if (returnFocus?.isConnected) {
+          returnFocus.focus({ preventScroll: true });
+        }
+      });
+    };
+    const cancel = () => {
+      cancelled = true;
+      abortController.abort();
+      cleanup();
+    };
+    activePrintCleanup.current = cancel;
     try {
       await savePlanForSharing();
-      const previousTitle = window.document.title;
-      window.document.title = "Independent home energy plan - Australian Energy Assessments";
-      const restoreTitle = () => {
-        window.document.title = previousTitle;
-      };
-      window.addEventListener("afterprint", restoreTitle, { once: true });
-      window.requestAnimationFrame(() => {
-        window.print();
-        window.setTimeout(restoreTitle, 1000);
-      });
-    } catch (error) {
-      setValidationError(
-        error instanceof Error
-          ? error.message
-          : "The plan could not be prepared for printing.",
+      if (cancelled) return;
+      printFrame = await createCustomerPlanPrintFrame(
+        customerPlanDocumentHtml(shareablePlanDocument),
+        abortController.signal,
       );
+      if (cancelled) {
+        printFrame.remove();
+        printFrame = null;
+        return;
+      }
+      const printView = printFrame.contentWindow;
+      if (!printView) throw new Error("The print-ready plan could not be opened.");
+      cleanupTimer = window.setTimeout(cleanup, 300_000);
+      printView.addEventListener("afterprint", cleanup, { once: true });
+      printView.focus();
+      try {
+        printView.print();
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    } catch (error) {
+      const shouldReport =
+        !cancelled
+        && !(error instanceof DOMException && error.name === "AbortError");
+      cleanup();
+      if (shouldReport) {
+        setValidationError(
+          error instanceof Error
+            ? error.message
+            : "The plan could not be prepared for printing.",
+        );
+      }
     } finally {
-      setShareBusy(false);
+      if (!cancelled) setShareBusy(false);
     }
   }
 
@@ -1808,6 +2067,10 @@ function ProjectEditor({
       setValidationError(
         "Choose at least one goal before requesting responses.",
       );
+      return;
+    }
+    if (professionalReviewError) {
+      showProfessionalReviewError();
       return;
     }
     if (!draft.serviceCategories.length || !draft.priorities.length) {
@@ -2198,6 +2461,159 @@ function ProjectEditor({
               </div>
             </details>
             <section
+              id="customer-professional-review"
+              className={`customer-professional-review${
+                draft.advisorProfile.professionalReview ? " is-enabled" : ""
+              }`}
+              aria-labelledby="customer-professional-review-title"
+            >
+              <header>
+                <div>
+                  <span>Optional professional review</span>
+                  <h3 id="customer-professional-review-title">
+                    Preparing this plan as an accredited adviser?
+                  </h3>
+                  <p>
+                    Add a self-declared review to the customer email and print
+                    copy. It stays out of installer matching and does not make
+                    this a NatHERS assessment.
+                  </p>
+                </div>
+                <label className="customer-professional-review-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(
+                      draft.advisorProfile.professionalReview,
+                    )}
+                    onChange={(event) =>
+                      setProfessionalReviewEnabled(event.target.checked)
+                    }
+                  />
+                  <span>
+                    I am an accredited energy or home-comfort adviser and I
+                    reviewed these home answers
+                  </span>
+                </label>
+              </header>
+              {draft.advisorProfile.professionalReview && (
+                <div className="customer-professional-review-fields">
+                  <label>
+                    <span>Adviser role</span>
+                    <select
+                      id="customer-professional-review-role"
+                      value={draft.advisorProfile.professionalReview.role}
+                      onChange={(event) =>
+                        updateProfessionalReview({ role: event.target.value })
+                      }
+                    >
+                      {customerAdvisorOptions.professionalRoles.map(
+                        ([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Adviser name</span>
+                    <input
+                      id="customer-professional-review-name"
+                      type="text"
+                      autoComplete="name"
+                      maxLength={80}
+                      value={
+                        draft.advisorProfile.professionalReview.adviserName
+                      }
+                      onChange={(event) =>
+                        updateProfessionalReview({
+                          adviserName: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Accreditation scheme or professional body</span>
+                    <input
+                      id="customer-professional-review-scheme"
+                      type="text"
+                      maxLength={120}
+                      value={
+                        draft.advisorProfile.professionalReview
+                          .accreditationScheme
+                      }
+                      onChange={(event) =>
+                        updateProfessionalReview({
+                          accreditationScheme: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Accreditation or membership reference</span>
+                    <input
+                      id="customer-professional-review-reference"
+                      type="text"
+                      maxLength={80}
+                      value={
+                        draft.advisorProfile.professionalReview
+                          .accreditationReference
+                      }
+                      onChange={(event) =>
+                        updateProfessionalReview({
+                          accreditationReference: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="customer-professional-review-notes">
+                    <span>Adviser notes for the customer report</span>
+                    <textarea
+                      maxLength={1200}
+                      rows={5}
+                      placeholder="Add relevant observations, limitations or details the household should keep with this plan."
+                      value={draft.advisorProfile.professionalReview.notes}
+                      onChange={(event) =>
+                        updateProfessionalReview({ notes: event.target.value })
+                      }
+                    />
+                    <small>
+                      These notes appear in emailed and printed plan copies.
+                      They do not enter installer matching or the private review
+                      worksheet.
+                    </small>
+                  </label>
+                  <label className="customer-professional-review-declaration">
+                    <input
+                      id="customer-professional-review-declaration"
+                      type="checkbox"
+                      checked={
+                        draft.advisorProfile.professionalReview
+                          .declarationAccepted
+                      }
+                      onChange={(event) =>
+                        updateProfessionalReview({
+                          declarationAccepted: event.target.checked,
+                        })
+                      }
+                    />
+                    <span>
+                      I confirm these are my details and I reviewed the home
+                      answers. Australian Energy Assessments has not checked my
+                      identity, accreditation, reference or observations and
+                      does not endorse this as an assessment.
+                    </span>
+                  </label>
+                  {validationError === professionalReviewError
+                    && professionalReviewError && (
+                    <p className="customer-professional-review-error" role="alert">
+                      {professionalReviewError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+            <section
               className="customer-room-profile"
               aria-labelledby="room-profile-title"
             >
@@ -2489,6 +2905,29 @@ function ProjectEditor({
                   </button>
                 </div>
               </div>
+            )}
+            {everydayActions.length > 0 && (
+              <section
+                className="customer-everyday-actions"
+                aria-labelledby="customer-everyday-actions-title"
+              >
+                <header>
+                  <span>Useful alongside the roadmap</span>
+                  <h3 id="customer-everyday-actions-title">
+                    Helpful things you can try now
+                  </h3>
+                  <p>{everydayActionsBoundary}</p>
+                </header>
+                <div>
+                  {everydayActions.map((action) => (
+                    <article key={action.id}>
+                      <small>{action.category}</small>
+                      <h4>{action.title}</h4>
+                      <p>{action.text}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
             )}
             <div className="customer-plan-toolbar">
               <p>
@@ -3512,7 +3951,6 @@ function ProjectEditor({
         onReviewHomeDetails={reviewHomeDetailsBeforeSharing}
         onSubmit={emailPlan}
       />
-      <CustomerPlanPrintReport document={shareablePlanDocument} />
     </section>
   );
 }

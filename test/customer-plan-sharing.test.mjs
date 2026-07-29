@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
+  CUSTOMER_PLAN_DOCUMENT_VERSION,
+  CUSTOMER_PLAN_REPORT_VERSION,
   createCustomerPlanDocument,
   createCustomerPlanReportView,
   customerPlanDocumentHtml,
@@ -10,9 +12,41 @@ import {
   normalizeCustomerPlanEmailRequest,
 } from "../src/lib/customer-plan-document.mjs";
 import {
+  CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
   customerAdvisorOptions,
   customerProjectOptions,
 } from "../src/lib/customer-projects.mjs";
+
+const HOUSEHOLD_EVIDENCE_BOUNDARY =
+  "These details were supplied by the household and have not been professionally checked.";
+const SELF_DECLARED_REVIEW_BOUNDARY =
+  "This is a self-declared professional review, not an Australian Energy Assessments credential check, site assessment, NatHERS assessment or endorsement.";
+const SELF_DECLARED_READINESS_BOUNDARY =
+  "These home answers are marked as reviewed by the self-declared accredited adviser named below. Australian Energy Assessments has not independently checked that review.";
+const EVERYDAY_ACTION_IDS = [
+  "moisture-safe-routine",
+  "personal-warmth-first",
+  "use-existing-controls",
+  "safe-seasonal-airflow",
+  "seasonal-window-and-landscape",
+  "renter-friendly-diy-boundary",
+];
+const MAXIMUM_EVERYDAY_ACTION_FEATURES = [
+  "comfort-too-hot",
+  "comfort-too-cold",
+  "ceiling-insulation-none",
+  "wall-insulation-none",
+  "floor-insulation-none",
+  "single-glazing",
+  "window-coverings-basic",
+  "external-shading-none",
+  "ventilation-unknown",
+  "reverse-cycle",
+  "electric-storage-hot-water",
+  "electric-resistance-cooking",
+  "solar-none",
+  "battery-none",
+];
 
 const row = {
   id: "project-private-1",
@@ -72,6 +106,20 @@ const row = {
   evidence_filename: "SECRET-NMI-NEM12.csv",
 };
 
+function withProfessionalReview(professionalReview) {
+  return {
+    ...row,
+    advisor_profile: JSON.stringify({
+      ...JSON.parse(row.advisor_profile),
+      professionalReview,
+    }),
+  };
+}
+
+function occurrenceCount(value, needle) {
+  return value.split(needle).length - 1;
+}
+
 test("shareable plan is server-derived, ordered and excludes private project content", () => {
   const document = createCustomerPlanDocument(row, {
     preparedAt: "2026-07-29T10:00:00.000Z",
@@ -124,6 +172,124 @@ test("shareable plan is server-derived, ordered and excludes private project con
   }
 });
 
+test("plans without a valid professional review retain the exact household evidence boundary", () => {
+  const document = createCustomerPlanDocument(row, {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+  });
+  const report = createCustomerPlanReportView(document);
+
+  assert.equal(CUSTOMER_PLAN_DOCUMENT_VERSION, "2026-07-29-plan-document-v2");
+  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-07-29-concise-report-v2");
+  assert.equal(document.version, CUSTOMER_PLAN_DOCUMENT_VERSION);
+  assert.equal(report.version, CUSTOMER_PLAN_REPORT_VERSION);
+  assert.equal(document.professionalReview, null);
+  assert.equal(report.professionalReview, null);
+  assert.equal(document.readiness.boundary, HOUSEHOLD_EVIDENCE_BOUNDARY);
+  assert.equal(report.readiness.boundary, HOUSEHOLD_EVIDENCE_BOUNDARY);
+  assert.ok(customerPlanDocumentHtml(document).includes(HOUSEHOLD_EVIDENCE_BOUNDARY));
+  assert.ok(customerPlanDocumentText(document).includes(HOUSEHOLD_EVIDENCE_BOUNDARY));
+});
+
+test("valid adviser self-declaration projects its exact evidence boundary and escaped notes", () => {
+  const adviserName = 'Alex <img src=x onerror="ADVISER_NAME_CANARY">';
+  const accreditationScheme = "Example Accredited Adviser Scheme";
+  const accreditationReference = "EA-1234";
+  const adviserNotes =
+    'Check draught sources before sealing. <img src=x onerror="ADVISER_NOTES_CANARY">';
+  const document = createCustomerPlanDocument(withProfessionalReview({
+    enabled: true,
+    role: "accredited-energy-adviser",
+    adviserName,
+    accreditationScheme,
+    accreditationReference,
+    notes: adviserNotes,
+    declarationAccepted: true,
+    declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+    privateEmail: "PROFESSIONAL_PRIVATE_CANARY@example.com",
+  }), {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+  });
+  const report = createCustomerPlanReportView(document);
+  const html = customerPlanDocumentHtml(document);
+  const text = customerPlanDocumentText(document);
+  const evidenceBoundary =
+    `These home details were reviewed by ${adviserName}, who declares they are an accredited energy adviser under ${accreditationScheme}, reference ${accreditationReference}. Australian Energy Assessments has not independently verified the adviser identity, accreditation, reference or home observations.`;
+
+  assert.ok(document.professionalReview);
+  assert.equal(document.professionalReview.roleLabel, "Accredited energy adviser");
+  assert.equal(document.professionalReview.notes, adviserNotes);
+  assert.equal(document.professionalReview.statement, evidenceBoundary);
+  assert.equal(document.professionalReview.boundary, SELF_DECLARED_REVIEW_BOUNDARY);
+  assert.equal(document.readiness.boundary, SELF_DECLARED_READINESS_BOUNDARY);
+  assert.ok(report.professionalReview);
+  assert.equal(report.professionalReview.notes, adviserNotes);
+  assert.equal(report.professionalReview.statement, evidenceBoundary);
+  assert.equal(report.professionalReview.boundary, SELF_DECLARED_REVIEW_BOUNDARY);
+  assert.equal(report.readiness.boundary, SELF_DECLARED_READINESS_BOUNDARY);
+  assert.doesNotMatch(report.readiness.boundary, /supplied by the household/i);
+  assert.match(html, /Professional review, self-declared/);
+  assert.match(html, /Alex &lt;img src=x onerror=&quot;ADVISER_NAME_CANARY&quot;&gt;/);
+  assert.match(html, /&lt;img src=x onerror=&quot;ADVISER_NOTES_CANARY&quot;&gt;/);
+  assert.doesNotMatch(html, /<img src=x onerror="ADVISER_/);
+  assert.match(text, new RegExp(adviserNotes.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(
+    `${JSON.stringify(document)}\n${JSON.stringify(report)}\n${html}\n${text}`,
+    /PROFESSIONAL_PRIVATE_CANARY/,
+  );
+});
+
+test("disabled or invalid adviser declarations are excluded without leaking canaries", () => {
+  const cases = [
+    {
+      label: "disabled",
+      canary: "DISABLED_REVIEW_CANARY",
+      professionalReview: {
+        enabled: false,
+        role: "accredited-energy-adviser",
+        adviserName: "DISABLED_REVIEW_CANARY",
+        accreditationScheme: "Example Scheme",
+        accreditationReference: "EA-1234",
+        notes: "DISABLED_REVIEW_CANARY",
+        declarationAccepted: true,
+      },
+    },
+    {
+      label: "invalid",
+      canary: "INVALID_REVIEW_CANARY",
+      professionalReview: {
+        enabled: true,
+        role: "unsupported-role",
+        adviserName: "INVALID_REVIEW_CANARY",
+        accreditationScheme: "Example Scheme",
+        accreditationReference: "EA-1234",
+        notes: "INVALID_REVIEW_CANARY",
+        declarationAccepted: false,
+      },
+    },
+  ];
+
+  for (const { label, canary, professionalReview } of cases) {
+    const document = createCustomerPlanDocument(
+      withProfessionalReview(professionalReview),
+      { preparedAt: "2026-07-29T10:00:00.000Z" },
+    );
+    const report = createCustomerPlanReportView(document);
+    const output = [
+      JSON.stringify(document),
+      JSON.stringify(report),
+      customerPlanDocumentHtml(document),
+      customerPlanDocumentText(document),
+    ].join("\n");
+
+    assert.equal(document.professionalReview, null, label);
+    assert.equal(report.professionalReview, null, label);
+    assert.equal(document.readiness.boundary, HOUSEHOLD_EVIDENCE_BOUNDARY, label);
+    assert.equal(report.readiness.boundary, HOUSEHOLD_EVIDENCE_BOUNDARY, label);
+    assert.doesNotMatch(output, new RegExp(canary), label);
+    assert.doesNotMatch(output, /professional review, self-declared/i, label);
+  }
+});
+
 test("shareable plan preserves room-driven advice without exposing room routines", () => {
   const document = createCustomerPlanDocument({
     ...row,
@@ -164,13 +330,81 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.doesNotMatch(text, /SECRET|3006|private-owner/);
 });
 
+test("everyday actions are allowlisted, capped, rendered once and kept outside report actions", () => {
+  const document = createCustomerPlanDocument(row, {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+  });
+  const allowedActions = EVERYDAY_ACTION_IDS.map((id, index) => ({
+    id,
+    category: `Everyday category ${index + 1}`,
+    title: `Everyday action ${index + 1}`,
+    description: `Everyday description ${index + 1}`,
+  }));
+  const projectedDocument = {
+    ...document,
+    everydayActionsBoundary:
+      'Everyday boundary <img src=x onerror="EVERYDAY_BOUNDARY_CANARY">',
+    everydayActions: [
+      allowedActions[0],
+      {
+        id: "not-allowlisted",
+        category: "DISALLOWED_CATEGORY_CANARY",
+        title: "DISALLOWED_TITLE_CANARY",
+        description: "DISALLOWED_DESCRIPTION_CANARY",
+      },
+      {
+        ...allowedActions[0],
+        title: "DUPLICATE_EVERYDAY_CANARY",
+      },
+      ...allowedActions.slice(1),
+    ],
+  };
+  const report = createCustomerPlanReportView(projectedDocument);
+  const html = customerPlanDocumentHtml(projectedDocument);
+  const text = customerPlanDocumentText(projectedDocument);
+
+  assert.deepEqual(
+    report.everydayActions.map((action) => action.id),
+    EVERYDAY_ACTION_IDS,
+  );
+  assert.equal(report.everydayActions.length, 6);
+  assert.ok(report.everydayActions.every((action) => (
+    !("number" in action)
+    && !("priority" in action)
+    && !("completed" in action)
+  )));
+  assert.deepEqual(
+    report.actions.map((action) => action.id),
+    document.actions.map((action) => action.id),
+  );
+  assert.deepEqual(
+    report.actions
+      .map((action) => action.id)
+      .filter((id) => EVERYDAY_ACTION_IDS.includes(id)),
+    [],
+  );
+  assert.equal(occurrenceCount(html, "Helpful things you can try now"), 1);
+  assert.equal(occurrenceCount(text, "HELPFUL THINGS YOU CAN TRY NOW"), 1);
+  for (const action of allowedActions) {
+    assert.equal(occurrenceCount(html, action.title), 1, action.id);
+    assert.equal(occurrenceCount(text, action.title), 1, action.id);
+  }
+  assert.match(
+    html,
+    /Everyday boundary &lt;img src=x onerror=&quot;EVERYDAY_BOUNDARY_CANARY&quot;&gt;/,
+  );
+  assert.doesNotMatch(html, /<img src=x onerror="EVERYDAY_BOUNDARY_CANARY">/);
+  assert.doesNotMatch(
+    `${JSON.stringify(report)}\n${html}\n${text}`,
+    /DISALLOWED_(?:CATEGORY|TITLE|DESCRIPTION)_CANARY|DUPLICATE_EVERYDAY_CANARY/,
+  );
+});
+
 test("broad customer reports stay concise, ordered and free of repeated per-action rationale", () => {
   const broadRow = {
     ...row,
     goals: JSON.stringify(customerProjectOptions.goals.map(([value]) => value)),
-    existing_features: JSON.stringify(
-      customerProjectOptions.homeFeatures.map(([value]) => value),
-    ),
+    existing_features: JSON.stringify(MAXIMUM_EVERYDAY_ACTION_FEATURES),
     plan_snapshot: "",
     completed_plan_items: JSON.stringify([]),
   };
@@ -200,6 +434,10 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
   assert.ok(report.questions.length <= 3);
   assert.ok(report.decisionBasis.length <= 4);
   assert.ok(report.beforeTrade.length <= 3);
+  assert.deepEqual(
+    report.everydayActions.map((action) => action.id),
+    EVERYDAY_ACTION_IDS,
+  );
   assert.equal(report.readiness.linked, 2);
   assert.ok(report.readiness.missingLabels.length <= 3);
   assert.match(report.readiness.boundary, /supplied by the household/i);
@@ -214,8 +452,11 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
       action.title,
     );
   }
-  assert.ok(html.length < 35_000, `HTML length was ${html.length}`);
-  assert.ok(text.length < 10_000, `text length was ${text.length}`);
+  // This maximum canonical everyday-action fixture currently renders at about
+  // 38.9 KB HTML and 11.4 KB text. The caps retain bounded headroom while still
+  // catching duplicated sections or unbounded per-action detail.
+  assert.ok(html.length < 42_000, `HTML length was ${html.length}`);
+  assert.ok(text.length < 12_000, `text length was ${text.length}`);
   assert.equal(
     text.split(report.changeBoundary).length - 1,
     1,

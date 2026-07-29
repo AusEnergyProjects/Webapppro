@@ -1,4 +1,5 @@
 import {
+  CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY,
   createCustomerPermissionPack,
   createCustomerProjectPlan,
   customerAdvisorOptions,
@@ -7,11 +8,12 @@ import {
   derivePlanningClimateProfile,
   normalizeHomeFeatureSelections,
   normalizeCustomerAdvisorProfile,
+  normalizeCustomerProfessionalReview,
   parseStoredJson,
 } from "./customer-projects.mjs";
 
-export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v1";
-export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-concise-report-v1";
+export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
+export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-concise-report-v2";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your independent home energy plan";
 export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
 
@@ -53,6 +55,14 @@ const readinessFactKeys = new Set(
     ),
   ),
 );
+const allowedEverydayActionIds = new Set([
+  "moisture-safe-routine",
+  "personal-warmth-first",
+  "use-existing-controls",
+  "safe-seasonal-airflow",
+  "seasonal-window-and-landscape",
+  "renter-friendly-diy-boundary",
+]);
 
 const optionLabel = (options, value, fallback = "") => (
   options.find(([key]) => key === value)?.[1] || fallback
@@ -104,10 +114,31 @@ function safeAdvisorProfile(value) {
       usePeriods: [],
     }))
     : [];
+  const professionalReview = normalizeCustomerProfessionalReview(
+    profile.professionalReview,
+  );
   return {
     factEvidence: facts,
     rooms,
     permissionItems: [],
+    ...(professionalReview ? { professionalReview } : {}),
+  };
+}
+
+function professionalReviewProjection(value) {
+  const review = normalizeCustomerProfessionalReview(value);
+  if (!review) return null;
+  const roleLabel = optionLabel(
+    customerAdvisorOptions.professionalRoles,
+    review.role,
+    "Accredited adviser",
+  );
+  return {
+    ...review,
+    roleLabel,
+    statement: `These home details were reviewed by ${review.adviserName}, who declares they are an ${roleLabel.toLowerCase()} under ${review.accreditationScheme}, reference ${review.accreditationReference}. Australian Energy Assessments has not independently verified the adviser identity, accreditation, reference or home observations.`,
+    readinessBoundary: "These home answers are marked as reviewed by the self-declared accredited adviser named below. Australian Energy Assessments has not independently checked that review.",
+    boundary: "This is a self-declared professional review, not an Australian Energy Assessments credential check, site assessment, NatHERS assessment or endorsement.",
   };
 }
 
@@ -295,10 +326,16 @@ export function createCustomerPlanDocument(
 ) {
   const goals = parsedArray(row.goals);
   const existingFeatures = parsedArray(row.existing_features);
-  const readiness = createCustomerPlanReadiness(existingFeatures, evidence);
   const propertyContext = parsedObject(row.property_context);
   const sourceAdvisorProfile = parsedObject(row.advisor_profile);
   const advisorProfile = safeAdvisorProfile(sourceAdvisorProfile);
+  const professionalReview = professionalReviewProjection(
+    advisorProfile.professionalReview,
+  );
+  const baseReadiness = createCustomerPlanReadiness(existingFeatures, evidence);
+  const readiness = professionalReview
+    ? { ...baseReadiness, boundary: professionalReview.readinessBoundary }
+    : baseReadiness;
   const planningAdvisorProfile = normalizeCustomerAdvisorProfile(
     sourceAdvisorProfile,
     {
@@ -364,6 +401,17 @@ export function createCustomerPlanDocument(
       whyItMatters: boundedText(question?.whyItMatters, 360),
     })).filter((question) => question.prompt)
     : [];
+  const everydayActions = Array.isArray(generatedPlan.everydayActions)
+    ? generatedPlan.everydayActions
+      .filter((item) => allowedEverydayActionIds.has(item?.id))
+      .slice(0, 6)
+      .map((item) => ({
+        id: boundedText(item.id, 80),
+        category: boundedText(item.category, 100),
+        title: boundedText(item.title, 180),
+        description: boundedText(item.text, 900),
+      }))
+    : [];
   return {
     version: CUSTOMER_PLAN_DOCUMENT_VERSION,
     heading: "Your independent home energy plan",
@@ -414,6 +462,12 @@ export function createCustomerPlanDocument(
       linkedFacts: readiness.linked,
     },
     readiness,
+    professionalReview,
+    everydayActions,
+    everydayActionsBoundary: boundedText(
+      generatedPlan.everydayActionsBoundary,
+      700,
+    ),
     actions,
     questions,
     permissionSections: permissionPack.sections
@@ -599,7 +653,15 @@ export function createCustomerPlanReportView(document) {
       "The sequence reflects the goals, home context, budget and pace recorded for this plan.",
     );
   }
-  const readiness = reportReadiness(document);
+  const professionalReview = professionalReviewProjection(
+    document?.professionalReview,
+  );
+  const readiness = {
+    ...reportReadiness(document),
+    ...(professionalReview
+      ? { boundary: professionalReview.readinessBoundary }
+      : {}),
+  };
   const questions = readiness.missingLabels.length
     ? readiness.missingLabels.map((label, index) => ({
       number: index + 1,
@@ -649,6 +711,32 @@ export function createCustomerPlanReportView(document) {
       summary: boundedText(document.climate.summary, 480),
     }
     : null;
+  const seenEverydayActionIds = new Set();
+  const everydayActions = (
+    Array.isArray(document?.everydayActions) ? document.everydayActions : []
+  )
+    .slice(0, 12)
+    .flatMap((item) => {
+      const id = boundedText(item?.id, 80);
+      if (
+        !allowedEverydayActionIds.has(id)
+        || seenEverydayActionIds.has(id)
+      ) return [];
+      seenEverydayActionIds.add(id);
+      const title = boundedText(item?.title, 180);
+      const description = boundedText(
+        item?.description || item?.text,
+        900,
+      );
+      if (!title || !description) return [];
+      return [{
+        id,
+        category: boundedText(item?.category, 100),
+        title,
+        description,
+      }];
+    })
+    .slice(0, 6);
   return {
     version: CUSTOMER_PLAN_REPORT_VERSION,
     heading: boundedText(document?.heading, 180)
@@ -660,8 +748,14 @@ export function createCustomerPlanReportView(document) {
     planningSnapshot,
     climate: climate?.label || climate?.summary ? climate : null,
     readiness,
+    professionalReview,
     questions,
     decisionBasis,
+    everydayActions,
+    everydayActionsBoundary: boundedText(
+      document?.everydayActionsBoundary,
+      700,
+    ) || CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY,
     actions,
     changeBoundary: "New evidence or a licensed site check can change safety, capacity, access or the recommended sequence.",
     beforeTrade: [
@@ -695,6 +789,16 @@ export function customerPlanDocumentHtml(document) {
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>${escapeHtml(report.heading)}</title>
+    <style>
+      @page { size: A4; margin: 10mm; }
+      html { background: #ffffff; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      a { overflow-wrap: anywhere; }
+      @media print {
+        body, table[role="presentation"] { background: #ffffff !important; }
+        body > table[role="presentation"] > tbody > tr > td { padding: 0 !important; }
+      }
+    </style>
   </head>
   <body style="margin:0;padding:0;background:#edf5f1;color:#0a2e3f;font-family:Arial,Helvetica,sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
@@ -734,6 +838,28 @@ export function customerPlanDocumentHtml(document) {
                   ${report.questions.length ? htmlList(report.questions.map((question) => `${question.prompt} ${question.whyItMatters}`)) : ""}
                 </td></tr>
               </table>
+              ${report.professionalReview ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;background:#eef8f5;border:1px solid #bcded2;border-radius:12px;break-inside:avoid-page;page-break-inside:avoid;">
+                <tr><td style="padding:16px;">
+                  <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Professional review, self-declared</div>
+                  <p style="margin:7px 0 0;color:#29453d;font-size:14px;line-height:1.5;overflow-wrap:anywhere;">${escapeHtml(report.professionalReview.statement)}</p>
+                  ${report.professionalReview.notes ? `<div style="margin:12px 0 0;padding:12px;background:#ffffff;border-left:4px solid #13aa78;color:#355a52;font-size:13px;line-height:1.55;overflow-wrap:anywhere;white-space:pre-wrap;"><strong style="display:block;margin-bottom:4px;color:#0a704d;">Adviser notes</strong>${escapeHtml(report.professionalReview.notes)}</div>` : ""}
+                  <p style="margin:8px 0 0;color:#557068;font-size:12px;line-height:1.5;overflow-wrap:anywhere;">${escapeHtml(report.professionalReview.boundary)}</p>
+                </td></tr>
+              </table>` : ""}
+              ${report.everydayActions.length ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;background:#f3f8f6;border:1px solid #d5e5df;border-radius:12px;">
+                <tr><td style="padding:16px;">
+                  <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Helpful things you can try now</div>
+                  <p style="margin:7px 0 0;color:#557068;font-size:12px;line-height:1.5;">${escapeHtml(report.everydayActionsBoundary)}</p>
+                  ${report.everydayActions.map((action) => `
+                  <div style="margin-top:12px;padding-top:12px;border-top:1px solid #d5e5df;break-inside:avoid-page;page-break-inside:avoid;">
+                    <div style="color:#0a8c61;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">${escapeHtml(action.category)}</div>
+                    <strong style="display:block;margin-top:3px;color:#0a2e3f;font-family:Georgia,serif;font-size:16px;line-height:1.35;">${escapeHtml(action.title)}</strong>
+                    <p style="margin:4px 0 0;color:#48645c;font-size:13px;line-height:1.5;">${escapeHtml(action.description)}</p>
+                  </div>`).join("")}
+                </td></tr>
+              </table>` : ""}
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#f3f8f6;border:1px solid #d5e5df;border-radius:12px;">
                 <tr><td style="padding:16px;">
                   <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Why this order</div>
@@ -746,7 +872,7 @@ export function customerPlanDocumentHtml(document) {
               ${report.actions.map((action) => {
                 const guideHref = absoluteGuideHref(action.guideHref);
                 return action.priority ? `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;border:2px solid #9fd3c3;border-radius:14px;background:#f7fcfa;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;border:2px solid #9fd3c3;border-radius:14px;background:#f7fcfa;break-inside:avoid-page;page-break-inside:avoid;">
                 <tr>
                   <td width="54" valign="top" style="padding:16px 0 16px 16px;">
                     <div style="width:36px;height:36px;line-height:36px;text-align:center;border-radius:11px;background:#073b4c;color:#ffffff;font-size:13px;font-weight:700;">${String(action.number).padStart(2, "0")}</div>
@@ -760,7 +886,7 @@ export function customerPlanDocumentHtml(document) {
                   </td>
                 </tr>
               </table>` : `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 8px;border:1px solid #d5e5df;border-radius:10px;background:#ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 8px;border:1px solid #d5e5df;border-radius:10px;background:#ffffff;break-inside:avoid-page;page-break-inside:avoid;">
                 <tr>
                   <td width="46" valign="top" style="padding:12px 0 12px 12px;color:${action.completed ? "#0a704d" : "#073b4c"};font-size:12px;font-weight:700;">${action.completed ? "Done" : String(action.number).padStart(2, "0")}</td>
                   <td valign="top" style="padding:12px;">
@@ -795,7 +921,7 @@ export function customerPlanDocumentHtml(document) {
           </tr>
           <tr>
             <td style="padding:18px 34px;background:#062f40;color:#cfe2e7;font-size:12px;line-height:1.5;">
-              Prepared ${escapeHtml(report.preparedDate)} by Australian Energy Assessments. Product and service brands are not selected or endorsed in this plan.
+              Generated ${escapeHtml(report.preparedDate)} by Australian Energy Assessments from the saved plan. Product and service brands are not selected or endorsed in this plan.
             </td>
           </tr>
         </table>
@@ -810,7 +936,7 @@ export function customerPlanDocumentText(document) {
   const lines = [
     report.heading,
     report.planTitle,
-    `Prepared ${report.preparedDate}`,
+    `Generated ${report.preparedDate}`,
     "",
     report.summary,
     "",
@@ -836,6 +962,31 @@ export function customerPlanDocumentText(document) {
       report.climate.label,
       report.climate.summary,
     );
+  }
+  if (report.professionalReview) {
+    lines.push(
+      "",
+      "PROFESSIONAL REVIEW, SELF-DECLARED",
+      report.professionalReview.statement,
+    );
+    if (report.professionalReview.notes) {
+      lines.push("Adviser notes:", report.professionalReview.notes);
+    }
+    lines.push(report.professionalReview.boundary);
+  }
+  if (report.everydayActions.length) {
+    lines.push(
+      "",
+      "HELPFUL THINGS YOU CAN TRY NOW",
+      report.everydayActionsBoundary,
+    );
+    for (const action of report.everydayActions) {
+      lines.push(
+        "",
+        `${action.category}: ${action.title}`,
+        action.description,
+      );
+    }
   }
   lines.push("", "WHY THIS ORDER", ...report.decisionBasis.map((item) => `- ${item}`));
   lines.push("", "ORDERED ROADMAP");

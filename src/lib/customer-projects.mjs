@@ -16,14 +16,17 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-29-home-feature-taxonomy-v2";
+export const CUSTOMER_PLAN_VERSION = "2026-07-29-adviser-print-comfort-v3";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
   "2026-07-29-evidence-climate-advisor",
   "2026-07-29-decision-support-advisor",
+  "2026-07-29-home-feature-taxonomy-v2",
 ];
-export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v3";
+export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v4";
+export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
+  "2026-07-29-self-declared-adviser-v1";
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
@@ -562,6 +565,10 @@ export const customerAdvisorOptions = {
     ["fixed-or-shared", "Fixed or shared property"],
     ["not-sure", "Not sure"],
   ],
+  professionalRoles: [
+    ["accredited-energy-adviser", "Accredited energy adviser"],
+    ["accredited-home-comfort-adviser", "Accredited home-comfort adviser"],
+  ],
 };
 
 export const platformQuoteOptions = {
@@ -615,6 +622,9 @@ const roomTypes = new Set(customerAdvisorOptions.roomTypes.map(([value]) => valu
 const comfortConcerns = new Set(customerAdvisorOptions.comfortConcerns.map(([value]) => value));
 const roomUsePeriods = new Set(customerAdvisorOptions.usePeriods.map(([value]) => value));
 const permissionClasses = new Set(customerAdvisorOptions.permissionClasses.map(([value]) => value));
+const professionalReviewRoles = new Set(
+  customerAdvisorOptions.professionalRoles.map(([value]) => value),
+);
 const quoteTypes = new Set(platformQuoteOptions.quoteTypes.map(([value]) => value));
 const quoteInclusions = new Set(platformQuoteOptions.inclusions.map(([value]) => value));
 const quoteStartWindows = new Set(platformQuoteOptions.startWindows.map(([value]) => value));
@@ -887,6 +897,102 @@ function boundedIdentifier(value, prefix, index) {
   return `${prefix}-${index + 1}`;
 }
 
+export function validateCustomerProfessionalReview(raw) {
+  const supplied = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw
+    : {};
+  if (supplied.enabled !== true) return { ok: true, review: null };
+  const role = professionalReviewRoles.has(supplied.role) ? supplied.role : "";
+  const adviserName = text(supplied.adviserName, 80);
+  const accreditationScheme = text(supplied.accreditationScheme, 120);
+  const accreditationReference = text(supplied.accreditationReference, 80);
+  const notes = text(supplied.notes, 1200);
+  if (!role) {
+    return {
+      ok: false,
+      error: "Choose the accredited adviser role used for this review.",
+    };
+  }
+  if (adviserName.length < 2) {
+    return {
+      ok: false,
+      error: "Enter the adviser name before using the professional review statement.",
+    };
+  }
+  if (accreditationScheme.length < 2) {
+    return {
+      ok: false,
+      error: "Enter the accreditation scheme or professional body.",
+    };
+  }
+  if (
+    accreditationReference.length < 2
+    || !/^[a-zA-Z0-9][a-zA-Z0-9 ./_-]{1,79}$/.test(accreditationReference)
+  ) {
+    return {
+      ok: false,
+      error: "Enter a valid accreditation or membership reference.",
+    };
+  }
+  if (supplied.declarationAccepted !== true) {
+    return {
+      ok: false,
+      error: "Confirm the professional review declaration before continuing.",
+    };
+  }
+  if (
+    supplied.declarationVersion
+    !== CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION
+  ) {
+    return {
+      ok: false,
+      error: "Review and confirm the current professional review declaration before continuing.",
+    };
+  }
+  return {
+    ok: true,
+    review: {
+      enabled: true,
+      role,
+      adviserName,
+      accreditationScheme,
+      accreditationReference,
+      notes,
+      declarationAccepted: true,
+      declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+    },
+  };
+}
+
+export function normalizeCustomerProfessionalReview(raw) {
+  const result = validateCustomerProfessionalReview(raw);
+  return result.ok ? result.review : null;
+}
+
+export function resetCustomerProfessionalReviewDeclaration(profile) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+    return profile;
+  }
+  const professionalReview = profile.professionalReview;
+  if (
+    !professionalReview
+    || typeof professionalReview !== "object"
+    || Array.isArray(professionalReview)
+    || professionalReview.enabled !== true
+  ) {
+    return profile;
+  }
+  const reviewWithoutVersion = { ...professionalReview };
+  delete reviewWithoutVersion.declarationVersion;
+  return {
+    ...profile,
+    professionalReview: {
+      ...reviewWithoutVersion,
+      declarationAccepted: false,
+    },
+  };
+}
+
 export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
   const supplied = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const selectedHomeFeatures = Array.isArray(context.homeFeatures)
@@ -959,12 +1065,16 @@ export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
     allowedFactKeys: [...advisorFactKeys],
     allowedPlanItemIds: context.allowedPlanItemIds,
   });
+  const professionalReview = normalizeCustomerProfessionalReview(
+    supplied.professionalReview,
+  );
   return {
     version: CUSTOMER_ADVISOR_PROFILE_VERSION,
     factEvidence,
     rooms,
     permissionItems,
     reviewItems,
+    ...(professionalReview ? { professionalReview } : {}),
     ...(climate ? { climate } : {}),
   };
 }
@@ -1318,9 +1428,9 @@ const advisorRecommendations = {
   },
   renter: {
     id: "renter-friendly-actions",
-    stage: "Low-cost and reversible",
-    title: "Start with changes that can move with you",
-    text: "Consider layers, electric throws, portable induction cooking, removable window film, internal shading and removable draught seals. Check ventilation and obtain permission before covering any fixed vent.",
+    stage: "Separate portable from fixed work",
+    title: "Confirm which actions are reversible and which need permission",
+    text: "Keep portable or reversible comfort actions separate from fixed sealing, electrical, plumbing, external, shared-property or installed-equipment work. Confirm the lease, ventilation and written approval boundary before committing to a fixed change.",
     href: "/guides/insulation-draught-proofing",
     action: "Review renter-friendly comfort guidance",
   },
@@ -1421,6 +1531,134 @@ const advisorRecommendations = {
     action: "See what this budget stage needs",
   },
 };
+
+export const CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY =
+  "Optional general actions based on the answers in this plan. They are not upgrade steps, a site assessment, product endorsements or savings promises. Skip anything unsafe, unsuitable or inconsistent with product instructions.";
+
+const everydayActionCatalogue = [
+  {
+    id: "moisture-safe-routine",
+    category: "Moisture and ventilation",
+    title: "Control moisture at the source and keep required ventilation working",
+    text: "Use functioning kitchen and bathroom exhausts where they discharge safely, contain steam and moisture at the source, and air the home only when outdoor humidity, smoke, weather and security make it suitable. Do not block fixed vents or seal unexplained gaps before their purpose and any combustion-safety need are understood.",
+    matches: ({ features, selectedGoals }) => (
+      features.some((item) => [
+        "condensation-moisture",
+        "open-wall-vents",
+        "evaporative-ducts",
+        "exhaust-ducted-outside",
+        "mechanical-ventilation",
+        "ventilation-unknown",
+      ].includes(item))
+      || selectedGoals.includes("healthier-home")
+    ),
+  },
+  {
+    id: "personal-warmth-first",
+    category: "Personal comfort",
+    title: "Warm the person before heating every room",
+    text: "Layers, warm socks or slippers, suitable bedding and an electric throw used exactly as its manufacturer directs can improve personal comfort with less whole-room heating. Keep controls and cords undamaged and accessible. This is optional comfort advice, not a substitute for safe adequate heating where age, health or vulnerability makes that necessary.",
+    matches: ({ features }) => (
+      features.some((item) => ["comfort-too-cold", "draughty"].includes(item))
+    ),
+  },
+  {
+    id: "use-existing-controls",
+    category: "Equipment settings",
+    title: "Use the controls and timers your existing equipment already supports",
+    text: "Check the manufacturer instructions for schedules, timers, fan speeds, economy modes, filter cleaning and hot-water tariff or timer settings that the installed equipment actually supports. Match operation to occupied rooms and routines. Do not disable hot-water safety cycles, bypass safety controls or assume one generic setting suits every appliance.",
+    matches: ({ features, selectedGoals }) => (
+      selectedGoals.includes("lower-bills")
+      || features.some((item) => [
+        "reverse-cycle",
+        "gas-heating",
+        "electric-resistance-heating",
+        "evaporative-cooling",
+        "fans-only",
+        "gas-hot-water",
+        "heat-pump-hot-water",
+        "electric-storage-hot-water",
+        "electric-instant-hot-water",
+        "solar-hot-water",
+        "gas-cooking",
+        "electric-resistance-cooking",
+        "induction-cooking",
+        "mixed-cooking",
+      ].includes(item))
+    ),
+  },
+  {
+    id: "safe-seasonal-airflow",
+    category: "Cooling habits",
+    title: "Use fans and seasonal airflow only when outdoor conditions help",
+    text: "Fans can improve comfort in occupied rooms. Cross-flow ventilation can help when outdoor temperature, humidity, smoke, weather, noise and security are suitable, then windows and coverings can be managed as conditions change. Avoid a rule that windows should always stay open or always stay closed.",
+    matches: ({ features, advisorProfile }) => (
+      features.some((item) => [
+        "comfort-too-hot",
+        "evaporative-cooling",
+        "fans-only",
+      ].includes(item))
+      || ["hot-humid", "hot-dry", "warm-humid"].includes(
+        advisorProfile.climate?.code,
+      )
+    ),
+  },
+  {
+    id: "seasonal-window-and-landscape",
+    category: "Windows, shade and garden",
+    title: "Time window coverings and observe shade before changing the landscape",
+    text: "Use close-fitting coverings to manage unwanted heat or heat loss while preserving useful winter sun where it helps. Basic roller, vertical and Venetian blinds usually insulate less than honeycomb or thermal blinds or heavy curtains with pelmets. Before planting or changing external shade, observe seasonal sun and consider owner or strata approval, mature size, roots, drainage, underground and overhead services, fire or bushfire risk, security, airflow and winter solar access.",
+    matches: ({ features, selectedGoals }) => (
+      selectedGoals.includes("improve-comfort")
+      || features.some((item) => [
+        "comfort-too-hot",
+        "comfort-too-cold",
+        "single-glazing",
+        "mixed-glazing",
+        "window-coverings-none",
+        "window-coverings-basic",
+        "window-coverings-mixed",
+        "external-shading-none",
+        "external-shading",
+      ].includes(item))
+    ),
+  },
+  {
+    id: "renter-friendly-diy-boundary",
+    category: "Renter-friendly and DIY",
+    title: "Keep low-cost measures removable, safe and permission-aware",
+    text: "Draught snakes, suitable removable seals or films, reversible covers for unused evaporative-cooling outlets, and portable induction cooking may help where the product, surface, outlet capacity, ventilation and lease conditions are suitable. Removable does not guarantee damage-free or permission-free. Never cover a fixed vent, flue or active outlet without confirming its purpose.",
+    matches: ({ selectedGoals, situation }) => (
+      situation === "renter"
+      || selectedGoals.includes("renter-friendly")
+    ),
+  },
+];
+
+function createEverydayActions({
+  selectedGoals,
+  situation,
+  features,
+  budgetRange,
+  advisorProfile,
+}) {
+  const context = {
+    selectedGoals,
+    situation,
+    features,
+    budgetRange,
+    advisorProfile,
+  };
+  return everydayActionCatalogue
+    .filter((item) => item.matches(context))
+    .slice(0, 6)
+    .map((item) => ({
+      id: item.id,
+      category: item.category,
+      title: item.title,
+      text: item.text,
+    }));
+}
 
 const insulationNeedsAttention = new Set([
   "ceiling-insulation-none",
@@ -1809,6 +2047,13 @@ function createAdvisorPlan({
     : pace === "whole-home"
       ? "a coordinated whole-home scope"
       : "a staged roadmap";
+  const everydayActions = createEverydayActions({
+    selectedGoals,
+    situation,
+    features,
+    budgetRange,
+    advisorProfile,
+  });
   return {
     version: CUSTOMER_PLAN_VERSION,
     goal: selectedGoals[0] || "",
@@ -1819,6 +2064,8 @@ function createAdvisorPlan({
     features,
     title,
     summary: `This is ${paceLabel}. It is independent guidance, not a product endorsement, quote or savings promise.`,
+    everydayActions,
+    everydayActionsBoundary: CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY,
     items,
     nextQuestions,
   };
@@ -2004,6 +2251,12 @@ export function normalizeCustomerProject(raw = {}) {
   });
   const safePace = paces.has(pace) ? pace : "staged";
   const budgetRange = budgets.has(raw.budgetRange) ? raw.budgetRange : "not_set";
+  const professionalReviewValidation = validateCustomerProfessionalReview(
+    raw.advisorProfile?.professionalReview,
+  );
+  if (!professionalReviewValidation.ok) {
+    return { ok: false, error: professionalReviewValidation.error };
+  }
   const preparedPlan = prepareCustomerProjectPlan({
     goals: selectedGoals,
     pace: safePace,
