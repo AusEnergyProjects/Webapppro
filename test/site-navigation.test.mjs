@@ -212,7 +212,7 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /Do you own or rent the home/);
   assert.match(planner, /Could shared-property approval apply/);
   assert.match(planner, /What budget boundary should guide the first stage/);
-  assert.match(planner, /customerProjectOptions\.homeFeatures/);
+  assert.match(planner, /HomeFeatureIntake/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
   assert.match(planner, /Open print view/);
@@ -229,7 +229,8 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(plannerPrintRoute, /returnParams\.append\("goal", item\)/);
   assert.doesNotMatch(plannerPrintRoute, /params\.postcode|params\.room|params\.evidence/);
   assert.match(newProjectRoute, /goals = values\(query\.goal, 10\)/);
-  assert.match(newProjectRoute, /features: values\(query\.feature, 24\)/);
+  assert.match(newProjectRoute, /MAX_HOME_FEATURE_SELECTIONS/);
+  assert.match(newProjectRoute, /normalizeHomeFeatureSelections/);
   assert.match(newProjectRoute, /approvalContext: controlledValue\(/);
   assert.match(newProjectRoute, /budgetRange: controlledValue\(/);
   assert.match(newProjectRoute, /addressState: controlledValue\(/);

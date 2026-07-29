@@ -16,16 +16,378 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-29-decision-support-advisor";
+export const CUSTOMER_PLAN_VERSION = "2026-07-29-home-feature-taxonomy-v2";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
   "2026-07-29-evidence-climate-advisor",
+  "2026-07-29-decision-support-advisor",
 ];
-export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v2";
+export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v3";
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
+export const MAX_HOME_FEATURE_SELECTIONS = 32;
+
+export const customerHomeFeatureSections = [
+  {
+    id: "comfort",
+    title: "How the home feels",
+    description: "Choose each issue you notice. These are household observations, not a diagnosis.",
+    questions: [
+      {
+        id: "comfort-concerns",
+        label: "Which comfort or moisture issues do you notice?",
+        help: "Choose all that apply.",
+        mode: "multiple",
+        noneValue: "comfort-none",
+        unknownValue: "comfort-unknown",
+        options: [
+          ["comfort-too-hot", "Too hot in warm weather"],
+          ["comfort-too-cold", "Too cold in cool weather"],
+          ["draughty", "Noticeable unwanted draughts"],
+          ["condensation-moisture", "Condensation, damp or mould"],
+          ["comfort-none", "None of these"],
+          ["comfort-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "insulation",
+    title: "Insulation",
+    description: "Choose what you safely know. Do not enter a roof space or disturb insulation to answer.",
+    questions: [
+      {
+        id: "ceiling-insulation",
+        label: "Roof or ceiling insulation above this home",
+        help: "Condition and coverage matter as much as whether insulation is present.",
+        mode: "single",
+        unknownValue: "ceiling-insulation-unknown",
+        options: [
+          ["ceiling-insulation-none", "No insulation that I know of"],
+          ["ceiling-insulation-limited", "A little, old, patchy or probably inadequate"],
+          ["ceiling-insulation-well", "Well insulated or recently upgraded"],
+          ["ceiling-insulation-not-applicable", "Another dwelling is directly above"],
+          ["ceiling-insulation-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "wall-insulation",
+        label: "Wall insulation",
+        help: "Plans, invoices or an earlier assessment may be more reliable than guessing from the wall surface.",
+        mode: "single",
+        unknownValue: "wall-insulation-unknown",
+        options: [
+          ["wall-insulation-none", "No wall insulation that I know of"],
+          ["wall-insulation-limited", "Some, old, patchy or probably inadequate"],
+          ["wall-insulation-well", "Well insulated or recently upgraded"],
+          ["wall-insulation-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "floor-insulation",
+        label: "Underfloor insulation",
+        help: "Choose Not applicable for a slab floor or when another dwelling is directly below.",
+        mode: "single",
+        unknownValue: "floor-insulation-unknown",
+        options: [
+          ["floor-insulation-none", "No underfloor insulation that I know of"],
+          ["floor-insulation-limited", "Some, old, patchy or probably inadequate"],
+          ["floor-insulation-well", "Well insulated or recently upgraded"],
+          ["floor-insulation-not-applicable", "Slab floor or another dwelling is directly below"],
+          ["floor-insulation-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "windows",
+    title: "Windows and shading",
+    description: "Glazing, internal coverings and external shade can all affect comfort in different ways.",
+    questions: [
+      {
+        id: "glazing",
+        label: "Window glazing",
+        help: "A home can contain a mix. A visible spacer at the glass edge often indicates double glazing.",
+        mode: "single",
+        unknownValue: "glazing-unknown",
+        options: [
+          ["single-glazing", "Mostly single glazed"],
+          ["mixed-glazing", "A mix of single and double or secondary glazing"],
+          ["double-glazing", "Mostly double or secondary glazed"],
+          ["glazing-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "window-coverings",
+        label: "Internal window coverings",
+        help: "Basic rollers and Venetians usually provide less thermal benefit than close-fitting coverings. Fit and edge gaps still matter.",
+        mode: "single",
+        unknownValue: "window-coverings-unknown",
+        options: [
+          ["window-coverings-none", "No internal blinds or curtains"],
+          ["window-coverings-basic", "Basic roller, vertical or Venetian blinds"],
+          ["window-coverings-thermal", "Close-fitting honeycomb or thermal blinds, or heavy curtains with pelmets"],
+          ["window-coverings-mixed", "A mix of basic and better-performing coverings"],
+          ["window-coverings-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "external-shading",
+        label: "External shade on sun-exposed windows",
+        help: "Include awnings, shutters, external blinds and useful shade from the building or vegetation.",
+        mode: "single",
+        unknownValue: "external-shading-unknown",
+        options: [
+          ["external-shading-none", "No effective external shade"],
+          ["external-shading", "Some sun-exposed windows have useful external shade"],
+          ["external-shading-most", "Most sun-exposed windows have effective external shade"],
+          ["external-shading-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "ventilation",
+    title: "Draughts and ventilation",
+    description: "Record fixed openings so the plan does not mistake required ventilation for an unwanted draught.",
+    questions: [
+      {
+        id: "ventilation-features",
+        label: "Which fixed openings or ventilation systems are present?",
+        help: "Choose all that apply. Never block a fixed vent without confirming why it is there.",
+        mode: "multiple",
+        noneValue: "ventilation-none-known",
+        unknownValue: "ventilation-unknown",
+        options: [
+          ["open-wall-vents", "Open wall vents or an unused chimney"],
+          ["evaporative-ducts", "Evaporative-cooling ceiling outlets"],
+          ["exhaust-ducted-outside", "Kitchen or bathroom exhaust ducted outside"],
+          ["mechanical-ventilation", "Purpose-designed mechanical ventilation"],
+          ["ventilation-none-known", "None of these that I know of"],
+          ["ventilation-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "heating-cooling",
+    title: "Heating and cooling",
+    description: "Choose every system used in the home. More than one system can be present.",
+    questions: [
+      {
+        id: "heating-cooling-systems",
+        label: "What heating and cooling is installed or regularly used?",
+        help: "Choose all that apply.",
+        mode: "multiple",
+        noneValue: "heating-cooling-none",
+        unknownValue: "heating-cooling-unknown",
+        options: [
+          ["reverse-cycle", "Reverse-cycle air conditioner or heat pump"],
+          ["gas-heating", "Gas space or ducted heating"],
+          ["electric-resistance-heating", "Electric panel, portable or resistance heating"],
+          ["evaporative-cooling", "Evaporative cooling"],
+          ["fans-only", "Ceiling or portable fans"],
+          ["heating-cooling-none", "No fixed heating or cooling"],
+          ["heating-cooling-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "hot-water-cooking",
+    title: "Hot water and cooking",
+    description: "Choose the main hot-water and cooking systems.",
+    questions: [
+      {
+        id: "hot-water",
+        label: "Main hot-water system",
+        help: "Choose the system that supplies most household hot water.",
+        mode: "single",
+        unknownValue: "hot-water-unknown",
+        options: [
+          ["gas-hot-water", "Gas hot water"],
+          ["heat-pump-hot-water", "Heat-pump hot water"],
+          ["electric-storage-hot-water", "Electric storage hot water"],
+          ["electric-instant-hot-water", "Instantaneous electric hot water"],
+          ["solar-hot-water", "Solar hot water, including boosted systems"],
+          ["hot-water-other", "Another type"],
+          ["hot-water-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "cooking",
+        label: "Main cooking setup",
+        help: "Choose Mixed when the cooktop and oven use different fuels.",
+        mode: "single",
+        unknownValue: "cooking-unknown",
+        options: [
+          ["gas-cooking", "Gas cooktop or oven"],
+          ["electric-resistance-cooking", "Standard electric cooktop or oven"],
+          ["induction-cooking", "Induction cooking"],
+          ["mixed-cooking", "Mixed gas and electric cooking"],
+          ["cooking-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "solar-storage-transport",
+    title: "Solar, battery and electric vehicle",
+    description: "Record what is already installed or planned so the roadmap does not recommend the wrong next step.",
+    questions: [
+      {
+        id: "solar",
+        label: "Rooftop solar",
+        help: "",
+        mode: "single",
+        unknownValue: "solar-unknown",
+        options: [
+          ["solar", "Rooftop solar is installed"],
+          ["solar-none", "No rooftop solar"],
+          ["solar-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "battery",
+        label: "Home battery",
+        help: "",
+        mode: "single",
+        unknownValue: "battery-unknown",
+        options: [
+          ["battery", "A home battery is installed"],
+          ["battery-none", "No home battery"],
+          ["battery-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "ev",
+        label: "Electric vehicle",
+        help: "",
+        mode: "single",
+        unknownValue: "ev-unknown",
+        options: [
+          ["ev", "An electric vehicle is owned or planned"],
+          ["ev-none", "No electric vehicle is owned or planned"],
+          ["ev-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+];
+
+const canonicalHomeFeatureOptions = customerHomeFeatureSections.flatMap((section) =>
+  section.questions.flatMap((question) => question.options));
+const canonicalHomeFeatureValues = new Set(
+  canonicalHomeFeatureOptions.map(([value]) => value),
+);
+const legacyHomeFeatureValues = new Set([
+  "roof-insulation",
+  "wall-insulation",
+  "floor-insulation",
+  "insulation-unknown",
+  "internal-window-coverings",
+]);
+
+function questionHasSelection(question, selected) {
+  return question.options.some(([value]) => selected.has(value));
+}
+
+function migrateLegacyHomeFeatures(value) {
+  const supplied = Array.isArray(value)
+    ? value.filter((item) => typeof item === "string").slice(0, 64)
+    : [];
+  const selected = new Set(
+    supplied.filter((item) =>
+      canonicalHomeFeatureValues.has(item) || legacyHomeFeatureValues.has(item)),
+  );
+  const findQuestion = (questionId) => customerHomeFeatureSections
+    .flatMap((section) => section.questions)
+    .find((question) => question.id === questionId);
+  const addWhenUnanswered = (questionId, feature) => {
+    const question = findQuestion(questionId);
+    if (question && !questionHasSelection(question, selected)) selected.add(feature);
+  };
+  if (selected.has("roof-insulation")) {
+    addWhenUnanswered("ceiling-insulation", "ceiling-insulation-unknown");
+  }
+  if (selected.has("wall-insulation")) {
+    addWhenUnanswered("wall-insulation", "wall-insulation-unknown");
+  }
+  if (selected.has("floor-insulation")) {
+    addWhenUnanswered("floor-insulation", "floor-insulation-unknown");
+  }
+  if (selected.has("insulation-unknown")) {
+    addWhenUnanswered("ceiling-insulation", "ceiling-insulation-unknown");
+    addWhenUnanswered("wall-insulation", "wall-insulation-unknown");
+    addWhenUnanswered("floor-insulation", "floor-insulation-unknown");
+  }
+  if (selected.has("internal-window-coverings")) {
+    addWhenUnanswered("window-coverings", "window-coverings-unknown");
+  }
+  for (const legacy of legacyHomeFeatureValues) selected.delete(legacy);
+  return selected;
+}
+
+export function normalizeHomeFeatureSelections(value) {
+  const supplied = migrateLegacyHomeFeatures(value);
+  const normalized = [];
+  for (const section of customerHomeFeatureSections) {
+    for (const question of section.questions) {
+      let selected = question.options
+        .map(([optionValue]) => optionValue)
+        .filter((optionValue) => supplied.has(optionValue));
+      if (question.id === "glazing" && selected.length > 1) {
+        const known = selected.filter((item) => item !== "glazing-unknown");
+        selected = known.includes("single-glazing") && known.includes("double-glazing")
+          && !selected.includes("glazing-unknown")
+          ? ["mixed-glazing"]
+          : [question.unknownValue];
+      } else if (question.mode === "single" && selected.length > 1) {
+        selected = question.unknownValue ? [question.unknownValue] : [];
+      } else if (question.mode === "multiple") {
+        if (question.unknownValue && selected.includes(question.unknownValue)) {
+          selected = [question.unknownValue];
+        } else if (question.noneValue && selected.includes(question.noneValue)) {
+          selected = [question.noneValue];
+        }
+      }
+      normalized.push(...selected);
+    }
+  }
+  return normalized.slice(0, MAX_HOME_FEATURE_SELECTIONS);
+}
+
+export function updateHomeFeatureSelection(
+  current,
+  questionId,
+  value,
+  checked = true,
+) {
+  const question = customerHomeFeatureSections
+    .flatMap((section) => section.questions)
+    .find((item) => item.id === questionId);
+  if (!question || !question.options.some(([optionValue]) => optionValue === value)) {
+    return normalizeHomeFeatureSelections(current);
+  }
+  const questionValues = new Set(question.options.map(([optionValue]) => optionValue));
+  const selected = new Set(normalizeHomeFeatureSelections(current));
+  if (question.mode === "single") {
+    for (const optionValue of questionValues) selected.delete(optionValue);
+    if (checked) selected.add(value);
+  } else if (!checked) {
+    selected.delete(value);
+  } else if (value === question.noneValue || value === question.unknownValue) {
+    for (const optionValue of questionValues) selected.delete(optionValue);
+    selected.add(value);
+  } else {
+    if (question.noneValue) selected.delete(question.noneValue);
+    if (question.unknownValue) selected.delete(question.unknownValue);
+    selected.add(value);
+  }
+  return normalizeHomeFeatureSelections([...selected]);
+}
 
 export const customerProjectOptions = {
   states: AUSTRALIAN_STATE_CODES,
@@ -75,29 +437,7 @@ export const customerProjectOptions = {
     ["ev-charging", "EV charging"],
     ["other", "Other energy upgrade"],
   ],
-  homeFeatures: [
-    ["draughty", "Draughty, too hot or too cold"],
-    ["condensation-moisture", "Condensation, damp or mould concerns"],
-    ["single-glazing", "Some or all windows are single glazed"],
-    ["double-glazing", "Some or all windows are double glazed"],
-    ["glazing-unknown", "Window glazing is not known"],
-    ["roof-insulation", "Roof or ceiling insulation"],
-    ["wall-insulation", "Wall insulation"],
-    ["floor-insulation", "Underfloor insulation"],
-    ["insulation-unknown", "Insulation is not known"],
-    ["external-shading", "External blinds, awnings, shutters or shade"],
-    ["internal-window-coverings", "Curtains or internal blinds"],
-    ["open-wall-vents", "Open wall vents or an unused chimney"],
-    ["evaporative-ducts", "Evaporative cooling ducts or ceiling outlets"],
-    ["reverse-cycle", "Reverse-cycle heating and cooling"],
-    ["gas-heating", "Gas heating"],
-    ["gas-hot-water", "Gas hot water"],
-    ["heat-pump-hot-water", "Heat pump hot water"],
-    ["gas-cooking", "Gas cooking"],
-    ["solar", "Rooftop solar"],
-    ["battery", "Home battery"],
-    ["ev", "EV or planned EV"],
-  ],
+  homeFeatures: canonicalHomeFeatureOptions,
   priorities: [
     ["lower-bills", "Lower ongoing bills"],
     ["comfort", "Improve comfort"],
@@ -169,10 +509,13 @@ export const customerProjectOptions = {
 export const customerAdvisorOptions = {
   factKeys: [
     ["glazing", "Window glazing"],
+    ["window-coverings", "Internal window coverings"],
+    ["external-shading", "External window shading"],
     ["ceiling-insulation", "Ceiling or roof insulation"],
     ["wall-insulation", "Wall insulation"],
     ["floor-insulation", "Underfloor insulation"],
     ["draughts", "Draught locations"],
+    ["ventilation", "Fixed openings and ventilation"],
     ["heating-cooling", "Heating and cooling equipment"],
     ["hot-water", "Hot water system"],
     ["cooking", "Cooking equipment"],
@@ -180,6 +523,7 @@ export const customerAdvisorOptions = {
     ["switchboard", "Switchboard"],
     ["solar", "Rooftop solar"],
     ["battery", "Home battery"],
+    ["ev", "Electric vehicle"],
   ],
   evidenceSources: [
     ["unknown", "Not known or not checked"],
@@ -255,7 +599,6 @@ const serviceCategories = new Set([
   ...customerProjectOptions.serviceCategories.map(([value]) => value),
   "insulation-draughts",
 ]);
-const homeFeatures = new Set(customerProjectOptions.homeFeatures.map(([value]) => value));
 const priorities = new Set(customerProjectOptions.priorities.map(([value]) => value));
 const stages = new Set(customerProjectOptions.stages.map(([value]) => value));
 const timings = new Set(customerProjectOptions.timings.map(([value]) => value));
@@ -286,6 +629,139 @@ function list(value, allowed, maximum = 20) {
   return Array.isArray(value)
     ? [...new Set(value.filter((item) => typeof item === "string" && allowed.has(item)))].slice(0, maximum)
     : [];
+}
+
+const homeFeatureFactRules = new Map([
+  ["glazing", {
+    answered: new Set(["single-glazing", "mixed-glazing", "double-glazing"]),
+    unknown: new Set(["glazing-unknown"]),
+  }],
+  ["window-coverings", {
+    answered: new Set([
+      "window-coverings-none",
+      "window-coverings-basic",
+      "window-coverings-thermal",
+      "window-coverings-mixed",
+    ]),
+    unknown: new Set(["window-coverings-unknown"]),
+  }],
+  ["external-shading", {
+    answered: new Set([
+      "external-shading-none",
+      "external-shading",
+      "external-shading-most",
+    ]),
+    unknown: new Set(["external-shading-unknown"]),
+  }],
+  ["ceiling-insulation", {
+    answered: new Set([
+      "ceiling-insulation-none",
+      "ceiling-insulation-limited",
+      "ceiling-insulation-well",
+      "ceiling-insulation-not-applicable",
+    ]),
+    unknown: new Set(["ceiling-insulation-unknown"]),
+  }],
+  ["wall-insulation", {
+    answered: new Set([
+      "wall-insulation-none",
+      "wall-insulation-limited",
+      "wall-insulation-well",
+    ]),
+    unknown: new Set(["wall-insulation-unknown"]),
+  }],
+  ["floor-insulation", {
+    answered: new Set([
+      "floor-insulation-none",
+      "floor-insulation-limited",
+      "floor-insulation-well",
+      "floor-insulation-not-applicable",
+    ]),
+    unknown: new Set(["floor-insulation-unknown"]),
+  }],
+  ["draughts", {
+    answered: new Set(["draughty", "comfort-none"]),
+    unknown: new Set(["comfort-unknown"]),
+  }],
+  ["ventilation", {
+    answered: new Set([
+      "open-wall-vents",
+      "evaporative-ducts",
+      "exhaust-ducted-outside",
+      "mechanical-ventilation",
+      "ventilation-none-known",
+    ]),
+    unknown: new Set(["ventilation-unknown"]),
+  }],
+  ["heating-cooling", {
+    answered: new Set([
+      "reverse-cycle",
+      "gas-heating",
+      "electric-resistance-heating",
+      "evaporative-cooling",
+      "fans-only",
+      "heating-cooling-none",
+    ]),
+    unknown: new Set(["heating-cooling-unknown"]),
+  }],
+  ["hot-water", {
+    answered: new Set([
+      "gas-hot-water",
+      "heat-pump-hot-water",
+      "electric-storage-hot-water",
+      "electric-instant-hot-water",
+      "solar-hot-water",
+      "hot-water-other",
+    ]),
+    unknown: new Set(["hot-water-unknown"]),
+  }],
+  ["cooking", {
+    answered: new Set([
+      "gas-cooking",
+      "electric-resistance-cooking",
+      "induction-cooking",
+      "mixed-cooking",
+    ]),
+    unknown: new Set(["cooking-unknown"]),
+  }],
+  ["solar", {
+    answered: new Set(["solar", "solar-none"]),
+    unknown: new Set(["solar-unknown"]),
+  }],
+  ["battery", {
+    answered: new Set(["battery", "battery-none"]),
+    unknown: new Set(["battery-unknown"]),
+  }],
+  ["ev", {
+    answered: new Set(["ev", "ev-none"]),
+    unknown: new Set(["ev-unknown"]),
+  }],
+]);
+
+function factSourceForHomeSelections(factKey, suppliedSource, selectedFeatures) {
+  const rule = homeFeatureFactRules.get(factKey);
+  if (!rule || !(selectedFeatures instanceof Set)) return suppliedSource;
+  if ([...rule.unknown].some((value) => selectedFeatures.has(value))) return "unknown";
+  if ([...rule.answered].some((value) => selectedFeatures.has(value))) {
+    if (suppliedSource === "photo-supported" || suppliedSource === "document-supported") {
+      return suppliedSource;
+    }
+    return "customer-reported";
+  }
+  return "unknown";
+}
+
+function factSourceForPropertyContext(factKey, suppliedSource, propertyContext) {
+  if (!["roof", "switchboard"].includes(factKey)) return suppliedSource;
+  if (!propertyContext || typeof propertyContext !== "object") return suppliedSource;
+  const value = factKey === "roof"
+    ? propertyContext.roofType
+    : propertyContext.switchboard;
+  if (typeof value !== "string" || !value || value === "not_sure") return "unknown";
+  if (suppliedSource === "photo-supported" || suppliedSource === "document-supported") {
+    return suppliedSource;
+  }
+  return "customer-reported";
 }
 
 function normaliseServiceCategories(value) {
@@ -413,8 +889,11 @@ function boundedIdentifier(value, prefix, index) {
 
 export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
   const supplied = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const selectedHomeFeatures = Array.isArray(context.homeFeatures)
+    ? new Set(normalizeHomeFeatureSelections(context.homeFeatures))
+    : null;
   const suppliedFacts = Array.isArray(supplied.factEvidence)
-    ? supplied.factEvidence.slice(0, 16)
+    ? supplied.factEvidence.slice(0, customerAdvisorOptions.factKeys.length)
     : [];
   const factSources = new Map();
   for (const item of suppliedFacts) {
@@ -423,7 +902,15 @@ export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
   }
   const factEvidence = customerAdvisorOptions.factKeys.map(([factKey]) => ({
     factKey,
-    source: factSources.get(factKey) || "unknown",
+    source: factSourceForPropertyContext(
+      factKey,
+      factSourceForHomeSelections(
+        factKey,
+        factSources.get(factKey) || "unknown",
+        selectedHomeFeatures,
+      ),
+      context.propertyContext,
+    ),
   }));
 
   const seenRoomIds = new Set();
@@ -560,11 +1047,6 @@ const permissionPlanRules = new Map([
     section: "evidence-questions",
     title: "Ask the assessor to separate observed facts from assumptions",
     note: "Record which findings were observed, customer reported, photo supported, document supported or still unknown.",
-  }],
-  ["evidence-confidence", {
-    section: "evidence-questions",
-    title: "List the facts that could change the scope",
-    note: "Ask what evidence is still needed before safety, sizing or major-work decisions.",
   }],
   ["room-comfort-profile", {
     section: "evidence-questions",
@@ -898,6 +1380,22 @@ const advisorRecommendations = {
     href: "/guides/hot-water",
     action: "Review hot-water guidance",
   },
+  electricResistance: {
+    id: "electric-resistance-heating-review",
+    stage: "Use the existing system carefully",
+    title: "Review electric resistance heating before adding capacity",
+    text: "Record which rooms use portable, panel or resistance heating and when. Reduce avoidable heat loss first, then compare efficient reverse-cycle options for the remaining occupied-room need.",
+    href: "/guides/heating",
+    action: "Review heating and cooling guidance",
+  },
+  electricHotWater: {
+    id: "electric-hot-water-review",
+    stage: "Review the existing system",
+    title: "Check electric hot-water timing and replacement options",
+    text: "Record the system type, tank or unit size, location, tariff and household demand. Compare controls and an efficient replacement only after capacity, electrical work and current incentives are confirmed.",
+    href: "/guides/hot-water",
+    action: "Review hot-water guidance",
+  },
   lowBudget: {
     id: "budget-under-2k",
     stage: "Keep the first stage bounded",
@@ -923,6 +1421,131 @@ const advisorRecommendations = {
     action: "See what this budget stage needs",
   },
 };
+
+const insulationNeedsAttention = new Set([
+  "ceiling-insulation-none",
+  "ceiling-insulation-limited",
+  "wall-insulation-none",
+  "wall-insulation-limited",
+  "floor-insulation-none",
+  "floor-insulation-limited",
+]);
+const insulationUnknown = new Set([
+  "ceiling-insulation-unknown",
+  "wall-insulation-unknown",
+  "floor-insulation-unknown",
+]);
+const insulationWell = new Set([
+  "ceiling-insulation-well",
+  "wall-insulation-well",
+  "floor-insulation-well",
+]);
+const glazingKnownNeedsReview = new Set(["single-glazing", "mixed-glazing"]);
+const windowCoveringsNeedReview = new Set([
+  "window-coverings-none",
+  "window-coverings-basic",
+  "window-coverings-mixed",
+]);
+
+function includesAny(features, values) {
+  return features.some((feature) => values.has(feature));
+}
+
+function insulationRecommendationFor(features, selectedGoals, pace) {
+  if (includesAny(features, insulationNeedsAttention)) {
+    return {
+      ...advisorRecommendations.insulation,
+      title: "Assess missing, old or patchy insulation before sizing equipment",
+      text: "Confirm safe access, coverage, condition, moisture and electrical clearances. Improve the highest-impact incomplete area first, using a suitable total R-value and current site-specific scope.",
+    };
+  }
+  if (includesAny(features, insulationUnknown)) {
+    return advisorRecommendations.insulation;
+  }
+  if (includesAny(features, insulationWell)) {
+    if (pace !== "whole-home" && !selectedGoals.includes("improve-comfort")) {
+      return null;
+    }
+    return {
+      ...advisorRecommendations.insulation,
+      title: "Protect existing insulation and investigate only specific gaps",
+      text: "The household reports good insulation in at least one area. Check condition, continuity, moisture and electrical clearances only where comfort evidence or planned work suggests a gap. Do not assume more insulation is automatically required.",
+    };
+  }
+  return pace === "whole-home" || selectedGoals.includes("improve-comfort")
+    ? advisorRecommendations.insulation
+    : null;
+}
+
+function windowRecommendationFor(features) {
+  if (includesAny(features, windowCoveringsNeedReview)) {
+    return {
+      ...advisorRecommendations.windows,
+      title: "Improve close-fitting window coverings before major glazing work",
+      text: "Basic or missing internal coverings can leave avoidable heat flow at the glass. Compare fit, edge gaps, honeycomb or thermal blinds, and heavy curtains with pelmets before assuming replacement glazing is the first step.",
+    };
+  }
+  if (includesAny(features, glazingKnownNeedsReview)) {
+    return {
+      ...advisorRecommendations.windows,
+      title: "Reduce heat flow through single or mixed glazing",
+      text: "Record which windows are single, double or secondary glazed, then compare frame and seal repair, close-fitting coverings, suitable external shade, secondary glazing and replacement glazing.",
+    };
+  }
+  if (
+    features.includes("glazing-unknown")
+    || features.includes("window-coverings-unknown")
+  ) {
+    return advisorRecommendations.windows;
+  }
+  if (
+    features.includes("double-glazing")
+    || features.includes("window-coverings-thermal")
+  ) {
+    return {
+      ...advisorRecommendations.windows,
+      title: "Check frames, seals and remaining window-specific comfort gaps",
+      text: "The household reports double or secondary glazing or stronger thermal coverings. Check fit, seals, frames, orientation and the rooms still affected before considering more window work.",
+    };
+  }
+  return null;
+}
+
+function shadingRecommendationFor(features, selectedGoals, advisorProfile) {
+  const heatConcern = features.includes("comfort-too-hot");
+  const hotClimate = ["hot-humid", "hot-dry", "warm-humid"].includes(
+    advisorProfile.climate?.code,
+  );
+  if (
+    features.includes("external-shading-none")
+    && (heatConcern || hotClimate || selectedGoals.includes("improve-comfort"))
+  ) {
+    return {
+      ...advisorRecommendations.shading,
+      title: "Add suitable external shade where summer sun is a problem",
+      text: "Map when direct sun reaches each affected window. Compare orientation-specific awnings, shutters, external blinds or other suitable shade before adding cooling capacity.",
+    };
+  }
+  if (features.includes("external-shading-unknown") && (heatConcern || hotClimate)) {
+    return {
+      ...advisorRecommendations.shading,
+      title: "Map direct sun before choosing more shade",
+      text: "Record which windows receive direct sun and when. This separates an external-shade opportunity from glazing, ventilation or equipment needs.",
+    };
+  }
+  if (
+    (features.includes("external-shading")
+      || features.includes("external-shading-most"))
+    && (heatConcern || selectedGoals.includes("improve-comfort"))
+  ) {
+    return {
+      ...advisorRecommendations.shading,
+      title: "Check whether existing shade protects the problem windows",
+      text: "The household reports some external shade. Confirm its orientation, seasonal coverage and the rooms still overheating before adding more shade or cooling capacity.",
+    };
+  }
+  return null;
+}
 
 function normaliseGoals(raw) {
   if (Array.isArray(raw.goals)) return list(raw.goals, goals, 10);
@@ -1030,21 +1653,6 @@ function createAdvisorPlan({
   const addContext = (item) => {
     if (item && !contextual.some((existing) => existing.id === item.id)) contextual.push(item);
   };
-  const unknownFactCount = advisorProfile.factEvidence
-    .filter((item) => item.source === "unknown").length;
-  const supportedFactCount = advisorProfile.factEvidence.length - unknownFactCount;
-  addContext({
-    id: "evidence-confidence",
-    stage: "Check what the advice relies on",
-    title: unknownFactCount
-      ? "Close the highest-impact evidence gaps"
-      : "Keep the evidence trail with the plan",
-    text: unknownFactCount
-      ? `${unknownFactCount} of ${advisorProfile.factEvidence.length} important home facts are still marked unknown. Start with the facts that could change scope or sequencing. A customer selection, photo or document is recorded as its source, not as professional validation.`
-      : `All ${supportedFactCount} tracked home facts have a customer-selected source. Keep photos and documents with the project, and use a qualified assessment where the result affects safety, sizing or major work.`,
-    href: "/guides/project-preparation#evidence-first",
-    action: "Review the evidence boundary",
-  });
   if (advisorProfile.climate) {
     addContext({
       id: "climate-sequence",
@@ -1070,31 +1678,46 @@ function createAdvisorPlan({
   if (features.includes("condensation-moisture") || selectedGoals.includes("healthier-home")) addContext(advisorRecommendations.moisture);
   if (
     selectedGoals.includes("improve-comfort")
-    || features.some((item) => ["draughty", "open-wall-vents", "evaporative-ducts"].includes(item))
+    || features.some((item) => [
+      "draughty",
+      "open-wall-vents",
+      "evaporative-ducts",
+      "ventilation-unknown",
+    ].includes(item))
   ) addContext(advisorRecommendations.draughts);
-  if (
-    pace === "whole-home"
-    || selectedGoals.includes("improve-comfort")
-    || features.some((item) => ["roof-insulation", "wall-insulation", "floor-insulation", "insulation-unknown"].includes(item))
-  ) {
-    addContext(advisorRecommendations.insulation);
-  }
-  if (features.some((item) => ["single-glazing", "double-glazing", "glazing-unknown"].includes(item))) addContext(advisorRecommendations.windows);
-  if (features.some((item) => ["external-shading", "internal-window-coverings"].includes(item))) addContext(advisorRecommendations.shading);
+  addContext(insulationRecommendationFor(features, selectedGoals, pace));
+  addContext(windowRecommendationFor(features));
+  addContext(shadingRecommendationFor(features, selectedGoals, advisorProfile));
   if (features.includes("reverse-cycle")) {
     pull("heating");
     addContext(advisorRecommendations.reverseCycle);
   }
+  if (
+    features.includes("electric-resistance-heating")
+    && selectedGoals.some((goal) =>
+      ["lower-bills", "improve-comfort", "replace-now"].includes(goal))
+  ) {
+    pull("heating");
+    addContext(advisorRecommendations.electricResistance);
+  }
   if (features.includes("heat-pump-hot-water")) {
     pull("hot-water");
     addContext(advisorRecommendations.heatPumpHotWater);
+  }
+  if (
+    features.some((item) =>
+      ["electric-storage-hot-water", "electric-instant-hot-water"].includes(item))
+    && selectedGoals.some((goal) =>
+      ["lower-bills", "replace-now"].includes(goal))
+  ) {
+    pull("hot-water");
+    addContext(advisorRecommendations.electricHotWater);
   }
   if (budgetRange === "under_2k") addContext(advisorRecommendations.lowBudget);
   if (budgetRange === "2_10k") addContext(advisorRecommendations.mediumBudget);
   if (budgetRange === "10k_plus") addContext(advisorRecommendations.largerBudget);
   const climateOrder = roomComfort.daytimeHeat
     ? [
-        "evidence-confidence",
         "room-comfort-profile",
         "climate-sequence",
         "moisture-ventilation",
@@ -1105,7 +1728,6 @@ function createAdvisorPlan({
       ]
     : roomComfort.overnightCold
       ? [
-          "evidence-confidence",
           "room-comfort-profile",
           "moisture-ventilation",
           "draught-proofing",
@@ -1118,7 +1740,6 @@ function createAdvisorPlan({
         advisorProfile.climate?.code,
       )
     ? [
-        "evidence-confidence",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
@@ -1128,7 +1749,6 @@ function createAdvisorPlan({
         "insulation-review",
       ]
     : [
-        "evidence-confidence",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
@@ -1282,13 +1902,17 @@ function prepareCustomerProjectPlan(input = {}) {
     : situationInput === "strata"
       ? "strata"
       : "none";
-  const features = list(input.features || input.existingFeatures, homeFeatures, 24);
+  const features = normalizeHomeFeatureSelections(
+    input.features || input.existingFeatures,
+  );
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
   const baseAdvisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
     postcode: input.postcode,
     addressState: input.addressState,
     householdSituation: situation,
     approvalContext,
+    homeFeatures: features,
+    propertyContext: input.propertyContext,
   });
   const generatedPlan = createAdvisorPlan({
     selectedGoals,
@@ -1305,6 +1929,8 @@ function prepareCustomerProjectPlan(input = {}) {
     addressState: input.addressState,
     householdSituation: situation,
     approvalContext,
+    homeFeatures: features,
+    propertyContext: input.propertyContext,
     allowedPlanItemIds: snapshot.ok
       ? snapshot.plan.items.map((item) => item.id)
       : generatedPlan.items.map((item) => item.id),
@@ -1327,9 +1953,9 @@ export function preserveEditedPlanItems(editedItems = [], currentItems = []) {
     .slice(0, 40)
     .flatMap((item, index) => {
       if (!item || typeof item !== "object") return [];
+      if (item.id === "evidence-confidence") return [];
       const currentItem = current.get(item.id);
       const derivedAdvisorItem = [
-        "evidence-confidence",
         "climate-sequence",
         "room-comfort-profile",
       ].includes(item.id);
@@ -1368,7 +1994,7 @@ export function normalizeCustomerProject(raw = {}) {
   const householdSituation = situations.has(raw.householdSituation)
     ? raw.householdSituation
     : "";
-  const existingFeatures = list(raw.existingFeatures, homeFeatures, 24);
+  const existingFeatures = normalizeHomeFeatureSelections(raw.existingFeatures);
   const suppliedContext = raw.propertyContext && typeof raw.propertyContext === "object" ? raw.propertyContext : {};
   const propertyContext = buildInstallerPropertyContext({
     ...suppliedContext,
@@ -1387,6 +2013,7 @@ export function normalizeCustomerProject(raw = {}) {
     budgetRange,
     postcode,
     addressState,
+    propertyContext,
     advisorProfile: raw.advisorProfile,
     planSnapshot: raw.planSnapshot,
   });
@@ -1472,6 +2099,8 @@ export function buildAnonymizedOpportunity(project, projectId) {
     addressState: project.addressState,
     householdSituation: project.householdSituation,
     approvalContext: context.approvalContext,
+    homeFeatures: project.existingFeatures,
+    propertyContext: context,
   });
   const roomTypeLabels = [...new Set(advisorProfile.rooms.map((room) =>
     label(customerAdvisorOptions.roomTypes, room.roomType),
@@ -1489,7 +2118,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     roomTypeLabels.length
       ? `room types: ${roomTypeLabels.join(", ").toLowerCase()}${concernLabels.length ? `; reported concerns: ${concernLabels.join(", ").toLowerCase()}` : ""}`
       : "",
-    `${knownFactCount} tracked facts have a customer-selected source and ${unknownFactCount} remain unknown; source status does not mean professional review`,
+    `${knownFactCount} tracked home facts have a household answer or linked evidence and ${unknownFactCount} remain not known or not checked; this status does not mean professional review`,
   ].filter(Boolean).join(". ");
   const title = categoryLabels.length === 1 ? `${categoryLabels[0]} project` : "Multi-upgrade home project";
   return {

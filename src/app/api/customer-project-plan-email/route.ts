@@ -117,6 +117,12 @@ export async function POST(request: Request) {
       404,
     );
   }
+  const evidence = await db.prepare(`SELECT fact_keys, sharing_scope
+    FROM customer_project_evidence
+    WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+    ORDER BY created_at`)
+    .bind(normalized.value.projectId, identity.uid)
+    .all<Record<string, unknown>>();
 
   const provider = serviceReminderProviderConfiguration();
   if (!provider.email.configured) {
@@ -149,7 +155,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const document = createCustomerPlanDocument(project);
+  const document = createCustomerPlanDocument(project, {
+    evidence: evidence.results,
+  });
   const idempotencyKey = await serviceReminderIdempotencyKey(
     `customer-plan:${identity.uid}:${normalized.value.projectId}:${normalized.value.recipient}:${normalized.value.requestId}`,
     "email",

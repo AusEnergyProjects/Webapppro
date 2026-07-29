@@ -27,6 +27,13 @@ import { parseArrivalWindows, selectedArrivalWindow } from "@/lib/customer-proje
 
 export const runtime = "edge";
 
+const COMFORT_OUTCOMES = new Set(["better", "about-the-same", "worse", "not-sure"]);
+const ENERGY_OUTCOMES = new Set(["lower", "about-the-same", "higher", "not-checked"]);
+const PLAN_REVISION_READ_LIMIT = 20;
+const PLAN_REVISION_RETENTION_LIMIT = 50;
+const OUTCOME_CHECKIN_READ_LIMIT = 24;
+const OUTCOME_CHECKIN_RETENTION_LIMIT = 48;
+
 function json(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
@@ -54,6 +61,8 @@ function projectShape(
   quotes: Record<string, unknown>[],
   handovers: Record<string, unknown>[],
   evidence: Record<string, unknown>[],
+  planRevisions: Record<string, unknown>[],
+  outcomeCheckins: Record<string, unknown>[],
   hasRetainedAssetHistory: boolean,
   contactReady: boolean,
   evidenceSharingConsent: boolean,
@@ -75,6 +84,7 @@ function projectShape(
   const storedPropertyContext = buildInstallerPropertyContext(
     parseStoredJson(row.property_context, {}),
   );
+  const storedHomeFeatures = parseStoredJson(row.existing_features, []);
   return {
     id: row.id,
     title: row.title,
@@ -86,7 +96,7 @@ function projectShape(
     goal: row.goal,
     goals,
     pace: row.pace,
-    existingFeatures: parseStoredJson(row.existing_features, []),
+    existingFeatures: storedHomeFeatures,
     serviceCategories: parseStoredJson(row.service_categories, []),
     priorities: parseStoredJson(row.priorities, []),
     projectStage: row.project_stage,
@@ -101,6 +111,8 @@ function projectShape(
         addressState: row.address_state,
         householdSituation: row.household_situation,
         approvalContext: storedPropertyContext.approvalContext,
+        homeFeatures: storedHomeFeatures,
+        propertyContext: storedPropertyContext,
       },
     ),
     planSnapshot: parseStoredJson(row.plan_snapshot, {}),
@@ -163,10 +175,34 @@ function projectShape(
     evidence: evidence.map((item) => ({
       id: item.id,
       category: item.category,
+      factKeys: parseStoredJson(item.fact_keys, []),
+      sharingScope: item.sharing_scope === "private-plan"
+        ? "private-plan"
+        : "allocated-installers",
       fileName: item.file_name,
       contentType: item.content_type,
       sizeBytes: Number(item.size_bytes || 0),
       createdAt: item.created_at,
+    })),
+    planRevisions: planRevisions.map((revision) => ({
+      id: revision.id,
+      revisionNumber: Number(revision.revision_number || 0),
+      eventType: revision.event_type,
+      planVersion: revision.plan_version,
+      goals: parseStoredJson(revision.goals, []),
+      homeFeatures: parseStoredJson(revision.home_features, []),
+      pace: revision.pace,
+      budgetRange: revision.budget_range,
+      planSnapshot: parseStoredJson(revision.plan_snapshot, {}),
+      createdAt: revision.created_at,
+    })),
+    outcomeCheckins: outcomeCheckins.map((checkin) => ({
+      id: checkin.id,
+      comfortOutcome: checkin.comfort_outcome,
+      energyOutcome: checkin.energy_outcome,
+      completedItemIds: parseStoredJson(checkin.completed_item_ids, []),
+      note: checkin.note,
+      recordedAt: checkin.recorded_at,
     })),
     evidenceSharingConsent,
     handoverPacks: handovers.map((handover) => ({
@@ -234,9 +270,38 @@ async function projectsForOwner(firebaseUid: string) {
         OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
           WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
     ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, file_name, content_type, size_bytes, created_at
+  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, fact_keys, sharing_scope,
+      file_name, content_type, size_bytes, created_at
     FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
       AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
+    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const planRevisionRows = projectIds.length ? await db.prepare(`WITH ranked_revisions AS (
+      SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
+        pace, budget_range, plan_snapshot, created_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY project_id
+          ORDER BY revision_number DESC, created_at DESC, id DESC
+        ) row_rank
+      FROM customer_project_plan_revisions
+      WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
+    )
+    SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
+      pace, budget_range, plan_snapshot, created_at
+    FROM ranked_revisions WHERE row_rank <= ${PLAN_REVISION_READ_LIMIT}
+    ORDER BY project_id, revision_number DESC`)
+    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const outcomeRows = projectIds.length ? await db.prepare(`WITH ranked_outcomes AS (
+      SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY project_id
+          ORDER BY recorded_at DESC, id DESC
+        ) row_rank
+      FROM customer_project_outcome_checkins
+      WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
+    )
+    SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at
+    FROM ranked_outcomes WHERE row_rank <= ${OUTCOME_CHECKIN_READ_LIMIT}
+    ORDER BY project_id, recorded_at DESC`)
     .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const evidenceConsentRows = projectIds.length ? await db.prepare(`SELECT project_id
     FROM customer_consent_receipts
@@ -307,6 +372,8 @@ async function projectsForOwner(firebaseUid: string) {
     quoteRows.results.filter((quote: Record<string, unknown>) => quote.project_id === row.id),
     shapedHandovers.filter((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
     evidenceRows.results.filter((item: Record<string, unknown>) => item.project_id === row.id),
+    planRevisionRows.results.filter((item: Record<string, unknown>) => item.project_id === row.id),
+    outcomeRows.results.filter((item: Record<string, unknown>) => item.project_id === row.id),
     retainedHandoverRows.results.some((handover: Record<string, unknown>) => handover.customer_project_id === row.id),
     Boolean(account && customerContactReadiness(account, row).ok),
     evidenceConsentRows.results.some((consent: Record<string, unknown>) => consent.project_id === row.id),
@@ -351,16 +418,26 @@ export async function POST(request: Request) {
   }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db.prepare(`INSERT INTO customer_projects
-    (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
-     goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-      property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
-    .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
-      project.propertyType, project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace,
-      JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
-      project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
-      JSON.stringify(project.advisorProfile), JSON.stringify(project.planSnapshot), Number(account.is_synthetic || 0), now, now).run();
+  const storedPlan = JSON.stringify(project.planSnapshot);
+  await db.batch([
+    db.prepare(`INSERT INTO customer_projects
+      (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
+       goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
+        property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
+      .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
+        project.propertyType, project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace,
+        JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
+        project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+        JSON.stringify(project.advisorProfile), storedPlan, Number(account.is_synthetic || 0), now, now),
+    db.prepare(`INSERT INTO customer_project_plan_revisions
+      (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
+       home_features, pace, budget_range, plan_snapshot, created_at)
+      VALUES (?, ?, ?, 1, 'created', ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), id, user.uid, String(project.planSnapshot?.version || ""),
+        JSON.stringify(project.goals), JSON.stringify(project.existingFeatures), project.pace,
+        project.budgetRange, storedPlan, now),
+  ]);
   return json({ ok: true, id, projects: await projectsForOwner(user.uid) }, 201);
 }
 
@@ -394,22 +471,54 @@ export async function PATCH(request: Request) {
       parseStoredJson(current.completed_plan_items, []),
       project.planSnapshot,
     );
-    await db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
-      property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
-      priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
-      advisor_profile = ?, completed_plan_items = ?, updated_at = ?
-      WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
-      .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
-        project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace, JSON.stringify(project.existingFeatures),
-        JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-        project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
-        JSON.stringify(project.planSnapshot), JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems), now, id, user.uid).run();
+    const nextGoals = JSON.stringify(project.goals);
+    const nextFeatures = JSON.stringify(project.existingFeatures);
+    const nextPlan = JSON.stringify(project.planSnapshot);
+    const roadmapChanged = (
+      String(current.goals || "[]") !== nextGoals
+      || String(current.existing_features || "[]") !== nextFeatures
+      || String(current.pace || "") !== project.pace
+      || String(current.budget_range || "") !== project.budgetRange
+      || String(current.plan_snapshot || "{}") !== nextPlan
+    );
+    const statements = [
+      db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
+        property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
+        priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
+        advisor_profile = ?, completed_plan_items = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
+        .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
+          project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
+          JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
+          project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+          nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems), now, id, user.uid),
+    ];
+    if (roadmapChanged) {
+      statements.push(db.prepare(`INSERT INTO customer_project_plan_revisions
+        (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
+         home_features, pace, budget_range, plan_snapshot, created_at)
+        SELECT ?, ?, ?, COALESCE(MAX(revision_number), 0) + 1, 'saved', ?, ?, ?, ?, ?, ?, ?
+        FROM customer_project_plan_revisions
+        WHERE project_id = ? AND customer_uid = ?`)
+        .bind(crypto.randomUUID(), id, user.uid,
+          String(project.planSnapshot?.version || ""), nextGoals, nextFeatures,
+          project.pace, project.budgetRange, nextPlan, now, id, user.uid));
+      statements.push(db.prepare(`DELETE FROM customer_project_plan_revisions
+        WHERE project_id = ? AND customer_uid = ? AND id NOT IN (
+          SELECT id FROM customer_project_plan_revisions
+          WHERE project_id = ? AND customer_uid = ?
+          ORDER BY revision_number DESC, created_at DESC, id DESC
+          LIMIT ${PLAN_REVISION_RETENTION_LIMIT}
+        )`).bind(id, user.uid, id, user.uid));
+    }
+    await db.batch(statements);
   } else if (action === "submit") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
     const evidenceCount = await db.prepare(`SELECT COUNT(*) count
       FROM customer_project_evidence
-      WHERE project_id = ? AND customer_uid = ? AND status = 'active'`)
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+        AND sharing_scope = 'allocated-installers'`)
       .bind(id, user.uid)
       .first<{ count: number }>();
     const evidenceConsent = await db.prepare(`SELECT id FROM customer_consent_receipts
@@ -637,6 +746,37 @@ export async function PATCH(request: Request) {
         occurredAt: now,
       }),
     ]);
+  } else if (action === "record_outcome") {
+    if (current.status === "archived") {
+      return json({ ok: false, error: "Restore or duplicate this project before recording another check-in." }, 409);
+    }
+    const comfortOutcome = typeof raw.comfortOutcome === "string" ? raw.comfortOutcome : "";
+    const energyOutcome = typeof raw.energyOutcome === "string" ? raw.energyOutcome : "";
+    const note = typeof raw.note === "string" ? raw.note.trim().slice(0, 500) : "";
+    if (!COMFORT_OUTCOMES.has(comfortOutcome) || !ENERGY_OUTCOMES.has(energyOutcome)) {
+      return json({ ok: false, error: "Choose valid comfort and energy-use observations." }, 400);
+    }
+    const completedItemIds = reconcileCompletedPlanItems(
+      parseStoredJson(current.completed_plan_items, []),
+      parseStoredJson(current.plan_snapshot, {}),
+    );
+    await db.batch([
+      db.prepare(`INSERT INTO customer_project_outcome_checkins
+        (id, project_id, customer_uid, comfort_outcome, energy_outcome,
+         completed_item_ids, note, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), id, user.uid, comfortOutcome, energyOutcome,
+          JSON.stringify(completedItemIds), note, now),
+      db.prepare(`DELETE FROM customer_project_outcome_checkins
+        WHERE project_id = ? AND customer_uid = ? AND id NOT IN (
+          SELECT id FROM customer_project_outcome_checkins
+          WHERE project_id = ? AND customer_uid = ?
+          ORDER BY recorded_at DESC, id DESC
+          LIMIT ${OUTCOME_CHECKIN_RETENTION_LIMIT}
+        )`).bind(id, user.uid, id, user.uid),
+      db.prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
+        .bind(now, id, user.uid),
+    ]);
   } else if (action === "toggle_milestone") {
     if (current.status === "archived") return json({ ok: false, error: "Restore or duplicate this project before changing its roadmap." }, 409);
     const plan = parseStoredJson(current.plan_snapshot, { items: [] });
@@ -652,15 +792,26 @@ export async function PATCH(request: Request) {
       .bind(user.uid).first<{ count: number }>();
     if (Number(count?.count || 0) >= MAX_CUSTOMER_PROJECTS) return json({ ok: false, error: "Archive an older project before duplicating this one." }, 409);
     const duplicateId = crypto.randomUUID();
-    await db.prepare(`INSERT INTO customer_projects
-      (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
-       goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-       property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
-      SELECT ?, firebase_uid, substr(title || ' copy', 1, 120), home_nickname, postcode, address_state, property_type,
-       household_situation, goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing,
-       budget_range, property_context, private_notes, advisor_profile, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
-      FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
-      .bind(duplicateId, now, now, id, user.uid).run();
+    await db.batch([
+      db.prepare(`INSERT INTO customer_projects
+        (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
+         goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
+         property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+        SELECT ?, firebase_uid, substr(title || ' copy', 1, 120), home_nickname, postcode, address_state, property_type,
+         household_situation, goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing,
+         budget_range, property_context, private_notes, advisor_profile, plan_snapshot, '[]', 'draft', '', '', '', is_synthetic, ?, ?
+        FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
+        .bind(duplicateId, now, now, id, user.uid),
+      db.prepare(`INSERT INTO customer_project_plan_revisions
+        (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
+         home_features, pace, budget_range, plan_snapshot, created_at)
+        SELECT ?, ?, firebase_uid, 1, 'duplicated',
+          COALESCE(CAST(json_extract(plan_snapshot, '$.version') AS text), ''),
+          goals, existing_features,
+          pace, budget_range, plan_snapshot, ?
+        FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
+        .bind(crypto.randomUUID(), duplicateId, now, id, user.uid),
+    ]);
     return json({ ok: true, id: duplicateId, projects: await projectsForOwner(user.uid) }, 201);
   } else if (action === "withdraw" || action === "complete") {
     if (!current.opportunity_id) return json({ ok: false, error: "This project has not been submitted." }, 409);

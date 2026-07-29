@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createCustomerProjectPlan,
-  customerProjectOptions,
+  customerHomeFeatureSections,
 } from "../src/lib/customer-projects.mjs";
 
 test("the public quick plan combines multiple goals through the canonical advisor engine", () => {
@@ -72,7 +72,15 @@ test("the selected planning budget changes the canonical roadmap without claimin
 });
 
 test("the canonical quick plan accepts every current controlled home feature", () => {
-  const features = customerProjectOptions.homeFeatures.map(([value]) => value);
+  const features = customerHomeFeatureSections.flatMap((section) =>
+    section.questions.flatMap((question) => (
+      question.mode === "single"
+        ? [question.options[0][0]]
+        : question.options
+            .map(([value]) => value)
+            .filter((value) =>
+              value !== question.noneValue && value !== question.unknownValue)
+    )));
   const plan = createCustomerProjectPlan({
     goals: ["improve-comfort", "move-from-gas", "improve-resilience"],
     situation: "owner",
@@ -83,7 +91,7 @@ test("the canonical quick plan accepts every current controlled home feature", (
   assert.ok(plan.items.some((item) => item.id === "windows-glazing"));
   assert.ok(plan.items.some((item) => item.id === "window-shading"));
   assert.ok(plan.items.some((item) => item.id === "existing-reverse-cycle"));
-  assert.ok(plan.items.some((item) => item.id === "existing-heat-pump-hot-water"));
+  assert.ok(plan.items.some((item) => item.id === "hot-water"));
 });
 
 test("unknown quick-plan inputs are discarded at the canonical boundary", () => {

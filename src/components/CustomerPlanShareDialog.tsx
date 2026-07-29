@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
 
 type PlanDocument = {
   heading: string;
@@ -62,21 +63,65 @@ type PlanDocument = {
   adviceBoundary: string;
 };
 
+type PlanReportView = {
+  heading: string;
+  planTitle: string;
+  summary: string;
+  preparedDate: string;
+  planningSnapshot: Array<{ label: string; value: string }>;
+  climate: null | { label: string; summary: string };
+  readiness: {
+    answered: number;
+    total: number;
+    notSure: number;
+    linked: number;
+    missing: number;
+    missingLabels: string[];
+    message: string;
+    boundary: string;
+  };
+  questions: Array<{
+    number: number;
+    prompt: string;
+    whyItMatters: string;
+  }>;
+  decisionBasis: string[];
+  actions: Array<{
+    number: number;
+    id: string;
+    stage: string;
+    title: string;
+    description: string;
+    completed: boolean;
+    priority: boolean;
+    guideLabel: string;
+    guideHref: string;
+  }>;
+  changeBoundary: string;
+  beforeTrade: string[];
+  privacyNote: string;
+  adviceBoundary: string;
+};
+
 export function CustomerPlanShareDialog({
   open,
   defaultRecipient,
+  readiness,
   busy,
   status,
   error,
   onClose,
+  onReviewHomeDetails,
   onSubmit,
 }: {
   open: boolean;
   defaultRecipient: string;
+  readiness: PlanReportView["readiness"];
   busy: boolean;
   status: string;
   error: string;
   onClose: () => void;
+  onReviewHomeDetails: () => void;
   onSubmit: (recipient: string) => Promise<void>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -158,8 +203,7 @@ export function CustomerPlanShareDialog({
           <strong>What the recipient receives</strong>
           <p id="customer-plan-dialog-description">
             A carefully formatted independent home energy plan with your
-            controlled goals, ordered advisor actions, rationale, open
-            questions and safety boundaries.
+            planning snapshot, key questions and complete ordered roadmap.
           </p>
           <ul>
             <li>No exact postcode, account details or private project labels</li>
@@ -167,6 +211,49 @@ export function CustomerPlanShareDialog({
             <li>No customer review text or home-specific custom wording</li>
           </ul>
         </div>
+        <section
+          className={`customer-plan-dialog-readiness${
+            readiness.missing ? " needs-review" : " is-ready"
+          }`}
+          aria-labelledby="customer-plan-dialog-readiness-title"
+        >
+          <div>
+            <span>Home-detail check</span>
+            <h3 id="customer-plan-dialog-readiness-title">
+              {readiness.missing
+                ? `${readiness.missing} question${readiness.missing === 1 ? "" : "s"} still need an answer`
+                : "Your home questions are addressed"}
+            </h3>
+            <p>
+              {readiness.answered} answered, {readiness.notSure} marked Not sure
+              {readiness.linked
+                ? `, and ${readiness.linked} linked to supporting evidence`
+                : ""}.
+            </p>
+          </div>
+          {readiness.missing > 0 && (
+            <>
+              <ul>
+                {readiness.missingLabels.map((label) => (
+                  <li key={label}>{label}</li>
+                ))}
+                {readiness.missing > readiness.missingLabels.length && (
+                  <li>
+                    And {readiness.missing - readiness.missingLabels.length} more
+                  </li>
+                )}
+              </ul>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onReviewHomeDetails}
+              >
+                Review home details
+              </button>
+            </>
+          )}
+          <small>{readiness.boundary}</small>
+        </section>
         <form onSubmit={(event) => void submit(event)}>
           <label>
             <span>Recipient email address</span>
@@ -217,89 +304,84 @@ export function CustomerPlanShareDialog({
   );
 }
 
-function GuidanceGroup({
-  label,
-  items,
-}: {
-  label: string;
-  items: string[];
-}) {
-  if (!items.length) return null;
-  return (
-    <section>
-      <strong>{label}</strong>
-      <ul>
-        {items.map((item) => <li key={item}>{item}</li>)}
-      </ul>
-    </section>
-  );
-}
-
 export function CustomerPlanPrintReport({
   document,
+  report: suppliedReport,
+  visible = false,
 }: {
-  document: PlanDocument;
+  document?: PlanDocument;
+  report?: PlanReportView;
+  visible?: boolean;
 }) {
-  const omittedTotal = Object.values(document.omitted)
-    .reduce((total, count) => total + Number(count || 0), 0);
+  const report = suppliedReport
+    || createCustomerPlanReportView(document) as PlanReportView;
   return (
-    <article className="customer-plan-print-report" aria-hidden="true">
+    <article
+      className={`customer-plan-print-report${visible ? " customer-plan-print-report-visible" : ""}`}
+    >
       <header>
         <div>
           <span>Australian Energy Assessments</span>
-          <h1>{document.heading}</h1>
-          <p>{document.planTitle}</p>
+          <h1>{report.heading}</h1>
+          <p>{report.planTitle}</p>
         </div>
-        <small>Prepared {document.preparedDate}</small>
+        <small>Prepared {report.preparedDate}</small>
       </header>
       <section className="customer-plan-print-intro">
-        <p>{document.summary}</p>
+        <p>{report.summary}</p>
         <dl>
-          <div>
-            <dt>Goals</dt>
-            <dd>{document.overview.goals.join(", ") || "Not recorded"}</dd>
-          </div>
-          <div>
-            <dt>Home and tenure</dt>
-            <dd>
-              {document.overview.propertyType}, {document.overview.tenure},{" "}
-              {document.overview.state}
-            </dd>
-          </div>
-          <div>
-            <dt>Approval context</dt>
-            <dd>{document.overview.approval}</dd>
-          </div>
-          <div>
-            <dt>Plan boundary</dt>
-            <dd>{document.overview.pace}, {document.overview.budget}</dd>
-          </div>
+          {report.planningSnapshot.map((item) => (
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
         </dl>
       </section>
-      {document.climate && (
+      {report.climate && (
         <section className="customer-plan-print-climate">
           <span>Broad climate planning context</span>
-          <h2>{document.climate.label}</h2>
-          <p>{document.climate.summary}</p>
-          <small>{document.climate.boundary}</small>
+          <h2>{report.climate.label}</h2>
+          <p>{report.climate.summary}</p>
         </section>
       )}
-      <section className="customer-plan-print-evidence">
-        <strong>Evidence boundary</strong>
-        <p>
-          {document.evidence.known} of {document.evidence.total} tracked home
-          facts have a customer-selected source. {document.evidence.unknown}{" "}
-          remain not known or not checked.
-        </p>
+      <section className="customer-plan-print-readiness">
+        <span>Before spending money</span>
+        <p>{report.readiness.message}</p>
+        <small>{report.readiness.boundary}</small>
+        {report.questions.length > 0 && (
+          <ol>
+            {report.questions.map((question) => (
+              <li key={question.number}>
+                <strong>{question.prompt}</strong>
+                <p>{question.whyItMatters}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+      <section className="customer-plan-print-basis">
+        <span>Why this order</span>
+        <ul>
+          {report.decisionBasis.map((item) => <li key={item}>{item}</li>)}
+        </ul>
       </section>
       <section className="customer-plan-print-roadmap">
         <span>Ordered roadmap</span>
         <h2>What to consider, in order</h2>
+        <p>
+          The first three unfinished steps are highlighted. Every remaining
+          step stays in its original order.
+        </p>
         <ol>
-          {document.actions.map((action) => (
-            <li key={action.id}>
+          {report.actions.map((action) => (
+            <li
+              className={action.priority ? "is-priority" : "is-compact"}
+              key={action.id}
+            >
               <b>{action.completed ? "Done" : String(action.number).padStart(2, "0")}</b>
               <div>
+                {action.priority && <em>Priority step</em>}
                 <small>{action.stage}</small>
                 <h3>{action.title}</h3>
                 <p>{action.description}</p>
@@ -308,65 +390,25 @@ export function CustomerPlanPrintReport({
                     {action.guideLabel}
                   </a>
                 )}
-                <div className="customer-plan-print-guidance">
-                  <GuidanceGroup label="Based on" items={action.guidance.basedOn} />
-                  <GuidanceGroup
-                    label="Still uncertain"
-                    items={action.guidance.stillUncertain}
-                  />
-                  <GuidanceGroup
-                    label="Could change if"
-                    items={action.guidance.reconsiderIf}
-                  />
-                </div>
               </div>
             </li>
           ))}
         </ol>
       </section>
-      {document.questions.length > 0 && (
-        <section className="customer-plan-print-questions">
-          <span>Questions that could improve the plan</span>
-          <ol>
-            {document.questions.map((question) => (
-              <li key={question.number}>
-                <strong>{question.prompt}</strong>
-                <p>{question.whyItMatters}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-      {document.permissionSections.length > 0 && (
-        <section className="customer-plan-print-permissions">
-          <span>Permission and licensed-work boundary</span>
-          <div>
-            {document.permissionSections.map((section) => (
-              <article key={section.label}>
-                <h3>{section.label}</h3>
-                <ul>
-                  {section.items.map((item) => (
-                    <li key={`${section.label}:${item.title}`}>
-                      <strong>{item.title}</strong>
-                      {item.note && <p>{item.note}</p>}
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-          <small>{document.permissionBoundary}</small>
-        </section>
-      )}
+      <section className="customer-plan-print-change">
+        <strong>What could change this order</strong>
+        <p>{report.changeBoundary}</p>
+      </section>
+      <section className="customer-plan-print-before-trade">
+        <span>Before engaging a trade</span>
+        <ul>
+          {report.beforeTrade.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      </section>
       <footer>
         <strong>Private by design</strong>
-        <p>
-          {document.privacyNote}
-          {omittedTotal
-            ? ` ${omittedTotal} private or customer-written records were omitted from this copy.`
-            : ""}
-        </p>
-        <small>{document.adviceBoundary}</small>
+        <p>{report.privacyNote}</p>
+        <small>{report.adviceBoundary}</small>
       </footer>
     </article>
   );

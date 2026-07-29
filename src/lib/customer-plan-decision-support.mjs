@@ -21,7 +21,6 @@ export const customerReviewOptions = {
 };
 
 const ITEM_FACTS = {
-  "evidence-confidence": [],
   "climate-sequence": [],
   "room-comfort-profile": [],
   authority: [],
@@ -29,10 +28,10 @@ const ITEM_FACTS = {
   compare: [],
   "compare-gas": [],
   fabric: ["draughts", "ceiling-insulation", "wall-insulation", "floor-insulation"],
-  "draught-proofing": ["draughts"],
+  "draught-proofing": ["draughts", "ventilation"],
   "insulation-review": ["ceiling-insulation", "wall-insulation", "floor-insulation"],
   "windows-glazing": ["glazing"],
-  "window-shading": ["glazing"],
+  "window-shading": ["glazing", "window-coverings", "external-shading"],
   heating: ["heating-cooling", "switchboard"],
   "reverse-cycle-existing": ["heating-cooling", "switchboard"],
   "hot-water": ["hot-water", "switchboard"],
@@ -40,7 +39,7 @@ const ITEM_FACTS = {
   cooking: ["cooking", "switchboard"],
   solar: ["roof", "switchboard", "solar"],
   battery: ["solar", "battery", "switchboard"],
-  ev: ["switchboard"],
+  ev: ["ev", "switchboard"],
 };
 
 const FACT_QUESTIONS = {
@@ -92,6 +91,50 @@ const FACT_QUESTIONS = {
     prompt: "If a battery is installed, is its usable capacity and backup behaviour known?",
     whyItMatters: "Usable capacity, power and operating mode determine what storage can actually support.",
   },
+  "window-coverings": {
+    prompt: "What type of blinds or curtains are fitted to the main windows?",
+    whyItMatters: "Fit, edge gaps and thermal layers can change whether a low-cost covering improvement should come before glazing work.",
+  },
+  "external-shading": {
+    prompt: "Which sun-exposed windows already have effective external shade?",
+    whyItMatters: "Orientation-specific external shade can reduce summer heat before cooling equipment or glazing changes are considered.",
+  },
+  ventilation: {
+    prompt: "Are fixed vents, chimneys, exhausts or mechanical ventilation present?",
+    whyItMatters: "Required ventilation must be separated from unwanted draughts before sealing work is planned.",
+  },
+  ev: {
+    prompt: "Is an electric vehicle already used or likely during this plan?",
+    whyItMatters: "Charging demand can change switchboard, solar and load-sequencing decisions.",
+  },
+};
+
+const FACT_TARGET_QUESTIONS = {
+  glazing: "glazing",
+  "ceiling-insulation": "ceiling-insulation",
+  "wall-insulation": "wall-insulation",
+  "floor-insulation": "floor-insulation",
+  draughts: "comfort-concerns",
+  ventilation: "ventilation-features",
+  "heating-cooling": "heating-cooling-systems",
+  "hot-water": "hot-water",
+  cooking: "cooking",
+  solar: "solar",
+  battery: "battery",
+  ev: "ev",
+  "window-coverings": "window-coverings",
+  "external-shading": "external-shading",
+};
+
+const FACT_TARGET_OVERRIDES = {
+  roof: {
+    targetStep: 4,
+    targetAnchor: "customer-property-roof",
+  },
+  switchboard: {
+    targetStep: 4,
+    targetAnchor: "customer-property-switchboard",
+  },
 };
 
 function cleanText(value, maximum) {
@@ -128,16 +171,18 @@ function guidanceForItem(item, context) {
   const relevantFacts = ITEM_FACTS[item.id] || [];
   const knownFacts = relevantFacts
     .filter((factKey) => factSources.get(factKey) && factSources.get(factKey) !== "unknown")
-    .map((factKey) => `${factLabels.get(factKey) || factKey} has a source recorded`);
+    .map((factKey) => {
+      const factLabel = factLabels.get(factKey) || factKey;
+      const source = factSources.get(factKey);
+      if (source === "photo-supported") return `${factLabel} has a supporting photo available for review`;
+      if (source === "document-supported") return `${factLabel} has a supporting document available for review`;
+      return `${factLabel} has a household answer recorded`;
+    });
   const unknownFacts = relevantFacts
     .filter((factKey) => !factSources.get(factKey) || factSources.get(factKey) === "unknown")
     .map((factKey) => `${factLabels.get(factKey) || factKey} is still not known`);
   const basedOn = [];
-  if (item.id === "evidence-confidence") {
-    basedOn.push(
-      `${context.knownFactCount || 0} of ${context.factCount || 0} tracked home facts have a source selected.`,
-    );
-  } else if (item.id === "climate-sequence" && context.climateLabel) {
+  if (item.id === "climate-sequence" && context.climateLabel) {
     basedOn.push(`${context.climateLabel} from the broad postcode and state planning profile.`);
   } else if (item.id === "room-comfort-profile") {
     basedOn.push(
@@ -167,9 +212,7 @@ function guidanceForItem(item, context) {
 
   const reconsiderIf = item.id === "authority" || item.id === "renter-friendly-actions"
     ? ["Written owner, agent, strata or owners-corporation requirements change."]
-    : item.id === "evidence-confidence"
-      ? ["A safe photo, document, qualified assessment or site check changes an important home fact."]
-      : item.id === "climate-sequence"
+    : item.id === "climate-sequence"
         ? ["Room observations or a site-specific assessment show a different main comfort constraint."]
         : item.id.includes("budget")
           ? ["Your available budget or timing changes."]
@@ -258,10 +301,9 @@ export function createNextBestQuestions({
   const itemIds = new Set(
     (Array.isArray(items) ? items : []).map((item) => item?.id).filter(Boolean),
   );
-  const relevantFacts = uniqueBounded(
-    [...itemIds].flatMap((itemId) => ITEM_FACTS[itemId] || []),
-    12,
-  );
+  const relevantFacts = [
+    ...new Set([...itemIds].flatMap((itemId) => ITEM_FACTS[itemId] || [])),
+  ].filter((factKey) => FACT_QUESTIONS[factKey]);
   const sources = new Map(
     (Array.isArray(factEvidence) ? factEvidence : [])
       .map((item) => [item?.factKey, item?.source]),
@@ -273,8 +315,9 @@ export function createNextBestQuestions({
     add({
       id: `fact-${factKey}`,
       ...question,
-      targetStep: 2,
-      targetAnchor: `advisor-fact-${factKey}`,
+      targetStep: FACT_TARGET_OVERRIDES[factKey]?.targetStep || 2,
+      targetAnchor: FACT_TARGET_OVERRIDES[factKey]?.targetAnchor
+        || `customer-home-feature-${FACT_TARGET_QUESTIONS[factKey] || factKey}`,
     });
   }
   if (

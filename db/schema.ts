@@ -2386,6 +2386,8 @@ export const customerProjectEvidence = sqliteTable("customer_project_evidence", 
   customerUid: text("customer_uid").notNull(),
   clientUploadId: text("client_upload_id").notNull(),
   category: text("category").notNull(),
+  factKeys: text("fact_keys").notNull().default("[]"),
+  sharingScope: text("sharing_scope").notNull().default("allocated-installers"),
   fileName: text("file_name").notNull(),
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
@@ -2411,6 +2413,37 @@ export const customerProjectEvidenceEvents = sqliteTable("customer_project_evide
 }, (table) => [
   index("customer_project_evidence_events_item_idx").on(table.evidenceId, table.createdAt),
   index("customer_project_evidence_events_project_idx").on(table.customerUid, table.projectId, table.createdAt),
+]);
+
+export const customerProjectPlanRevisions = sqliteTable("customer_project_plan_revisions", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  revisionNumber: integer("revision_number").notNull(),
+  eventType: text("event_type").notNull().default("saved"),
+  planVersion: text("plan_version").notNull().default(""),
+  goals: text("goals").notNull().default("[]"),
+  homeFeatures: text("home_features").notNull().default("[]"),
+  pace: text("pace").notNull().default(""),
+  budgetRange: text("budget_range").notNull().default(""),
+  planSnapshot: text("plan_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_plan_revisions_number_idx").on(table.projectId, table.revisionNumber),
+  index("customer_project_plan_revisions_owner_idx").on(table.customerUid, table.projectId, table.createdAt),
+]);
+
+export const customerProjectOutcomeCheckins = sqliteTable("customer_project_outcome_checkins", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  comfortOutcome: text("comfort_outcome").notNull(),
+  energyOutcome: text("energy_outcome").notNull(),
+  completedItemIds: text("completed_item_ids").notNull().default("[]"),
+  note: text("note").notNull().default(""),
+  recordedAt: text("recorded_at").notNull(),
+}, (table) => [
+  index("customer_project_outcome_checkins_owner_idx").on(table.customerUid, table.projectId, table.recordedAt),
 ]);
 
 export const customerProjectArrivalProposals = sqliteTable("customer_project_arrival_proposals", {

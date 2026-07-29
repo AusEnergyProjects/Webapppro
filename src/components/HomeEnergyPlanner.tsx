@@ -5,6 +5,7 @@ import {
   createCustomerProjectPlan,
   customerProjectOptions as rawCustomerProjectOptions,
 } from "@/lib/customer-projects.mjs";
+import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
 
 type Option = [string, string];
 type CustomerPlanItem = {
@@ -47,7 +48,6 @@ const customerProjectOptions = rawCustomerProjectOptions as unknown as {
   situations: Option[];
   approvalContexts: Option[];
   budgets: Option[];
-  homeFeatures: Option[];
   states: string[];
 };
 
@@ -126,14 +126,6 @@ export function HomeEnergyPlanner({
         ? current.filter((item) => item !== value)
         : current;
     });
-  }
-
-  function toggleFeature(value: string) {
-    setFeatures((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
-    );
   }
 
   function resetPlan() {
@@ -225,27 +217,17 @@ export function HomeEnergyPlanner({
 
         <fieldset>
           <legend>
-            <span>4</span>What is already in the home?
+            <span>4</span>What does your home have today?
           </legend>
           <p>
-            Select everything relevant, including anything that is unknown.
-            Leaving a choice blank is fine.
+            Work through the categories and choose what you safely know. Not
+            sure is a useful answer, and leaving a question blank is fine.
           </p>
-          <div className="planner-choice-grid">
-            {customerProjectOptions.homeFeatures.map(([value, label]) => (
-              <label
-                className={features.includes(value) ? "selected" : ""}
-                key={value}
-              >
-                <input
-                  type="checkbox"
-                  checked={features.includes(value)}
-                  onChange={() => toggleFeature(value)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
+          <HomeFeatureIntake
+            idPrefix="public-home-feature"
+            selected={features}
+            onChange={setFeatures}
+          />
         </fieldset>
 
         <fieldset>

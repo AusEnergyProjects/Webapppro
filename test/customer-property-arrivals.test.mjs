@@ -154,7 +154,7 @@ test("the additive migration stores property context, protected evidence and arr
   db.close();
 });
 
-test("project evidence is R2 backed with every upload shared to allocated verified installers", () => {
+test("project evidence is R2 backed with explicit private or installer sharing scope", () => {
   assert.match(evidenceRoute, /EVIDENCE/);
   assert.match(evidenceRoute, /QUOTING_PHOTO_CATEGORIES/);
   assert.match(
@@ -171,6 +171,8 @@ test("project evidence is R2 backed with every upload shared to allocated verifi
   assert.match(evidenceRoute, /customer-quoting-photo/);
   assert.match(evidenceRoute, /purpose = 'installer_evidence_sharing'/);
   assert.match(evidenceRoute, /confirmInstallerPhotoSharing/);
+  assert.match(evidenceRoute, /record\.sharing_scope !== "allocated-installers"/);
+  assert.match(evidenceRoute, /"private-plan"/);
   assert.match(evidenceRoute, /'installer', \?, 'viewed'/);
   assert.match(opportunityRoute, /sharingScope: "allocated-installers"/);
   assert.match(opportunityRoute, /purpose = 'installer_evidence_sharing'/);
@@ -214,11 +216,11 @@ test("customer devices use one clear evidence upload with safe photo guidance", 
   assert.match(customerPhotoUpload, /maximumDimension = 1920/);
   assert.match(
     customerUi,
-    /shared with each\s+verified installer\s+allocated to this enquiry/,
+    /Files stay private to your plan unless you\s+explicitly choose installer quoting access/,
   );
   assert.match(
     customerUi,
-    /every attached photo[\s\S]{0,60}and supporting document/,
+    /each file marked for installer sharing/,
   );
   assert.match(customerUi, /pendingEvidence\.length > 0/);
   assert.match(customerRoute, /purpose = 'installer_evidence_sharing'/);

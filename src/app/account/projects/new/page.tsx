@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { CustomerDashboard } from "@/components/CustomerDashboard";
-import { customerProjectOptions } from "@/lib/customer-projects.mjs";
+import {
+  MAX_HOME_FEATURE_SELECTIONS,
+  customerProjectOptions,
+  normalizeHomeFeatureSelections,
+} from "@/lib/customer-projects.mjs";
 
 export const metadata: Metadata = {
   title: "Create a Home Energy Project | Australian Energy Assessments",
@@ -38,7 +42,6 @@ export default async function NewCustomerProjectPage({ searchParams }: NewProjec
     return candidate && allowed.has(candidate) ? candidate : undefined;
   };
   const goalOptions = optionSet(customerProjectOptions.goals);
-  const featureOptions = optionSet(customerProjectOptions.homeFeatures);
   const categoryOptions = optionSet(customerProjectOptions.serviceCategories);
   const goals = values(query.goal, 10).filter((item) =>
     goalOptions.has(item),
@@ -64,8 +67,8 @@ export default async function NewCustomerProjectPage({ searchParams }: NewProjec
       query.addressState,
       new Set(customerProjectOptions.states),
     ),
-    features: values(query.feature, 24).filter((item) =>
-      featureOptions.has(item),
+    features: normalizeHomeFeatureSelections(
+      values(query.feature, MAX_HOME_FEATURE_SELECTIONS),
     ),
     categories: values(query.category, 12).filter((item) =>
       categoryOptions.has(item),

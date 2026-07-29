@@ -1,13 +1,17 @@
 import {
   createCustomerPermissionPack,
   createCustomerProjectPlan,
+  customerAdvisorOptions,
+  customerHomeFeatureSections,
   customerProjectOptions,
   derivePlanningClimateProfile,
+  normalizeHomeFeatureSelections,
   normalizeCustomerAdvisorProfile,
   parseStoredJson,
 } from "./customer-projects.mjs";
 
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v1";
+export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-concise-report-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your independent home energy plan";
 export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
 
@@ -35,6 +39,20 @@ const evidenceSourceLabels = new Map([
   ["photo-supported", "Photo recorded in the private project"],
   ["document-supported", "Document recorded in the private project"],
 ]);
+
+const readinessFactKeyByQuestion = new Map([
+  ["comfort-concerns", "draughts"],
+  ["ventilation-features", "ventilation"],
+  ["heating-cooling-systems", "heating-cooling"],
+]);
+
+const readinessFactKeys = new Set(
+  customerHomeFeatureSections.flatMap((section) =>
+    section.questions.map((question) =>
+      readinessFactKeyByQuestion.get(question.id) || question.id,
+    ),
+  ),
+);
 
 const optionLabel = (options, value, fallback = "") => (
   options.find(([key]) => key === value)?.[1] || fallback
@@ -173,13 +191,18 @@ function countPrivateItems(profile, snapshotItems) {
 }
 
 function evidenceSummary(profile) {
-  const sources = new Map();
+  const allowedFactKeys = new Set(
+    customerAdvisorOptions.factKeys.map(([factKey]) => factKey),
+  );
+  const sources = new Map(
+    [...allowedFactKeys].map((factKey) => [factKey, "unknown"]),
+  );
   for (const item of Array.isArray(profile.factEvidence) ? profile.factEvidence : []) {
     const key = boundedText(item?.factKey, 80);
     const source = evidenceSourceLabels.has(item?.source) ? item.source : "unknown";
-    if (key) sources.set(key, source);
+    if (allowedFactKeys.has(key)) sources.set(key, source);
   }
-  const total = 12;
+  const total = allowedFactKeys.size;
   const known = [...sources.values()].filter((source) => source !== "unknown").length;
   const bySource = [...evidenceSourceLabels.entries()].map(([source, label]) => ({
     source,
@@ -189,9 +212,90 @@ function evidenceSummary(profile) {
   return { total, known, unknown: Math.max(0, total - known), bySource };
 }
 
-export function createCustomerPlanDocument(row, { preparedAt = new Date().toISOString() } = {}) {
+function linkedFactEvidenceSummary(evidence, allowedFactKeys) {
+  const linkedFacts = new Set();
+  for (const row of Array.isArray(evidence) ? evidence.slice(0, 100) : []) {
+    const scope = boundedText(row?.sharing_scope, 40);
+    if (scope !== "private-plan" && scope !== "allocated-installers") continue;
+    for (const factKey of parsedArray(row?.fact_keys).slice(0, 16)) {
+      const key = boundedText(factKey, 80);
+      if (key && (!allowedFactKeys || allowedFactKeys.has(key))) {
+        linkedFacts.add(key);
+      }
+    }
+  }
+  return { linkedFacts: linkedFacts.size };
+}
+
+export function createCustomerPlanReadiness(existingFeatures, evidence = []) {
+  const selected = new Set(normalizeHomeFeatureSelections(existingFeatures));
+  const questions = customerHomeFeatureSections
+    .flatMap((section) => section.questions);
+  let answered = 0;
+  let notSure = 0;
+  const missingLabels = [];
+  for (const question of questions) {
+    const selectedValues = question.options
+      .map(([value]) => value)
+      .filter((value) => selected.has(value));
+    if (!selectedValues.length) {
+      if (missingLabels.length < 3) missingLabels.push(question.label);
+      continue;
+    }
+    if (
+      question.unknownValue
+      && selectedValues.includes(question.unknownValue)
+    ) {
+      notSure += 1;
+    } else {
+      answered += 1;
+    }
+  }
+  const linked = linkedFactEvidenceSummary(
+    evidence,
+    readinessFactKeys,
+  ).linkedFacts;
+  const missing = Math.max(0, questions.length - answered - notSure);
+  const statusParts = [
+    answered
+      ? `${answered} home-detail answer${answered === 1 ? "" : "s"} recorded`
+      : "No confirmed home-detail answers recorded yet",
+    notSure
+      ? `${notSure} marked Not sure`
+      : "",
+    missing
+      ? `${missing} still to answer`
+      : "All questions addressed",
+    linked
+      ? `Supporting evidence linked to ${linked} home detail${linked === 1 ? "" : "s"}`
+      : "",
+  ].filter(Boolean);
+  return {
+    answered,
+    total: questions.length,
+    notSure,
+    linked,
+    missing,
+    missingLabels,
+    message: `${statusParts.join(". ")}.`,
+    boundary: "These details were supplied by the household and have not been professionally checked.",
+  };
+}
+
+/**
+ * @param {any} row
+ * @param {{preparedAt?: string, evidence?: Array<Record<string, unknown>>}} [options]
+ */
+export function createCustomerPlanDocument(
+  row,
+  {
+    preparedAt = new Date().toISOString(),
+    evidence = [],
+  } = {},
+) {
   const goals = parsedArray(row.goals);
   const existingFeatures = parsedArray(row.existing_features);
+  const readiness = createCustomerPlanReadiness(existingFeatures, evidence);
   const propertyContext = parsedObject(row.property_context);
   const sourceAdvisorProfile = parsedObject(row.advisor_profile);
   const advisorProfile = safeAdvisorProfile(sourceAdvisorProfile);
@@ -305,7 +409,11 @@ export function createCustomerPlanDocument(row, { preparedAt = new Date().toISOS
         boundary: boundedText(climate.disclaimer, 520),
       }
       : null,
-    evidence: evidenceSummary(advisorProfile),
+    evidence: {
+      ...evidenceSummary(advisorProfile),
+      linkedFacts: readiness.linked,
+    },
+    readiness,
     actions,
     questions,
     permissionSections: permissionPack.sections
@@ -396,6 +504,178 @@ function absoluteGuideHref(href) {
     : "";
 }
 
+function uniqueReportText(values, maximum) {
+  const seen = new Set();
+  const result = [];
+  for (const supplied of Array.isArray(values) ? values : []) {
+    const value = boundedText(supplied, 320);
+    const key = value.toLocaleLowerCase("en-AU");
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+    if (result.length >= maximum) break;
+  }
+  return result;
+}
+
+function reportReadiness(document) {
+  const supplied = document?.readiness
+    && typeof document.readiness === "object"
+    ? document.readiness
+    : null;
+  if (supplied && Number(supplied.total || 0) > 0) {
+    return {
+      answered: Math.max(0, Number(supplied.answered || 0)),
+      total: Math.max(0, Number(supplied.total || 0)),
+      notSure: Math.max(0, Number(supplied.notSure || 0)),
+      linked: Math.max(0, Number(supplied.linked || 0)),
+      missing: Math.max(0, Number(supplied.missing || 0)),
+      missingLabels: boundedStringList(supplied.missingLabels, 3, 160),
+      message: boundedText(supplied.message, 520),
+      boundary: boundedText(supplied.boundary, 320),
+    };
+  }
+  if (Array.isArray(document?.existingFeatures)) {
+    return createCustomerPlanReadiness(document.existingFeatures);
+  }
+  return {
+    answered: 0,
+    total: 0,
+    notSure: 0,
+    linked: 0,
+    missing: 0,
+    missingLabels: [],
+    message: "This starter roadmap uses the choices recorded here. Review the open questions before treating the order as final.",
+    boundary: "These details were supplied by the household and have not been professionally checked.",
+  };
+}
+
+export function createCustomerPlanReportView(document) {
+  const sourceActions = Array.isArray(document?.actions)
+    ? document.actions.slice(0, 40)
+    : [];
+  const priorityIndexes = new Set(
+    sourceActions
+      .map((action, index) => ({ action, index }))
+      .filter(({ action }) => action?.completed !== true)
+      .slice(0, 3)
+      .map(({ index }) => index),
+  );
+  const actions = sourceActions.map((action, index) => {
+    const guideHref = safeGuideHref(action?.guideHref || action?.href);
+    return {
+      number: Number.isFinite(Number(action?.number))
+        ? Number(action.number)
+        : index + 1,
+      id: boundedText(action?.id, 80) || `report-action-${index + 1}`,
+      stage: boundedText(action?.stage, 100),
+      title: boundedText(action?.title, 180),
+      description: boundedText(action?.description || action?.text, 900),
+      completed: action?.completed === true,
+      priority: priorityIndexes.has(index),
+      guideLabel: guideHref
+        ? boundedText(action?.guideLabel || action?.action, 120)
+          || "Open the related guide"
+        : "",
+      guideHref,
+    };
+  });
+  const decisionBasis = uniqueReportText(
+    sourceActions
+      .flatMap((action) => (
+        Array.isArray(action?.guidance?.basedOn)
+          ? action.guidance.basedOn
+          : []
+      ))
+      .filter((item) => (
+        !/selected goals include/i.test(String(item))
+        && !/tracked home facts/i.test(String(item))
+        && !/part of the independent planning sequence/i.test(String(item))
+      )),
+    4,
+  );
+  if (!decisionBasis.length) {
+    decisionBasis.push(
+      "The sequence reflects the goals, home context, budget and pace recorded for this plan.",
+    );
+  }
+  const readiness = reportReadiness(document);
+  const questions = readiness.missingLabels.length
+    ? readiness.missingLabels.map((label, index) => ({
+      number: index + 1,
+      prompt: label,
+      whyItMatters: "Choose the answer that best fits this home. Not sure remains a valid answer.",
+    }))
+    : (Array.isArray(document?.questions) ? document.questions : [])
+      .slice(0, 3)
+      .map((question, index) => ({
+        number: index + 1,
+        prompt: boundedText(question?.prompt, 240),
+        whyItMatters: boundedText(question?.whyItMatters, 360),
+      }))
+      .filter((question) => question.prompt);
+  const overview = document?.overview && typeof document.overview === "object"
+    ? document.overview
+    : {};
+  const goals = boundedStringList(overview.goals, 10, 120);
+  const planningSnapshot = [
+    {
+      label: "Goals",
+      value: goals.join(", ") || "Not recorded",
+    },
+    {
+      label: "Home and tenure",
+      value: [
+        boundedText(overview.propertyType, 100),
+        boundedText(overview.tenure, 100),
+        boundedText(overview.state, 20),
+      ].filter(Boolean).join(", ") || "Not recorded",
+    },
+    {
+      label: "Approval context",
+      value: boundedText(overview.approval, 180) || "Not recorded",
+    },
+    {
+      label: "Plan boundary",
+      value: [
+        boundedText(overview.pace, 100),
+        boundedText(overview.budget, 100),
+      ].filter(Boolean).join(", ") || "Not recorded",
+    },
+  ];
+  const climate = document?.climate && typeof document.climate === "object"
+    ? {
+      label: boundedText(document.climate.label, 160),
+      summary: boundedText(document.climate.summary, 480),
+    }
+    : null;
+  return {
+    version: CUSTOMER_PLAN_REPORT_VERSION,
+    heading: boundedText(document?.heading, 180)
+      || "Your independent home energy plan",
+    planTitle: boundedText(document?.planTitle, 180)
+      || "An evidence-led home energy plan",
+    summary: boundedText(document?.summary, 480),
+    preparedDate: boundedText(document?.preparedDate, 20),
+    planningSnapshot,
+    climate: climate?.label || climate?.summary ? climate : null,
+    readiness,
+    questions,
+    decisionBasis,
+    actions,
+    changeBoundary: "New evidence or a licensed site check can change safety, capacity, access or the recommended sequence.",
+    beforeTrade: [
+      "Confirm any owner, agent, strata or owners-corporation approval in writing before fixed or shared-property work.",
+      "Use appropriately licensed trades for regulated electrical, plumbing, gas and building work.",
+      "Compare written scopes, inclusions, exclusions, warranties and current official incentives before committing.",
+    ],
+    privacyNote: boundedText(document?.privacyNote, 700)
+      || "Private account details and customer-written notes are not included in this shared copy.",
+    adviceBoundary: boundedText(document?.adviceBoundary, 700)
+      || "This plan is independent general guidance, not a quote, product endorsement, site assessment or savings promise.",
+  };
+}
+
 function htmlList(items) {
   if (!items.length) return "";
   return `<ul style="margin:8px 0 0;padding-left:20px;color:#29453d;">${items
@@ -403,116 +683,119 @@ function htmlList(items) {
     .join("")}</ul>`;
 }
 
-function actionGuidanceHtml(guidance) {
-  const groups = [
-    ["Based on", guidance.basedOn],
-    ["Still uncertain", guidance.stillUncertain],
-    ["Could change if", guidance.reconsiderIf],
-  ].filter(([, items]) => items.length);
-  if (!groups.length) return "";
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;border-top:1px solid #d5e5df;">${groups.map(([label, items]) => `
-    <tr>
-      <td style="padding:10px 0 0;color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">${escapeHtml(label)}</td>
-    </tr>
-    <tr><td>${htmlList(items)}</td></tr>`).join("")}</table>`;
-}
-
 export function customerPlanDocumentHtml(document) {
-  const badges = [
-    ...document.overview.goals.map((goal) => `Goal: ${goal}`),
-    document.overview.tenure,
-    document.overview.propertyType,
-    document.overview.state,
-    document.overview.budget,
-  ].filter(Boolean);
-  const omittedTotal = Object.values(document.omitted).reduce(
-    (sum, value) => sum + Number(value || 0),
-    0,
-  );
+  const report = createCustomerPlanReportView(document);
+  const preheader = report.questions.length
+    ? `${report.planTitle}. Review ${report.questions.length} open question${report.questions.length === 1 ? "" : "s"} before treating the order as final.`
+    : `${report.planTitle}. Your ordered independent home energy roadmap.`;
   return `<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>${escapeHtml(report.heading)}</title>
+  </head>
   <body style="margin:0;padding:0;background:#edf5f1;color:#0a2e3f;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf5f1;">
       <tr><td align="center" style="padding:28px 12px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #c7ddd5;">
           <tr>
             <td style="padding:34px;background:#063448;color:#ffffff;border-bottom:6px solid #20d8c1;">
               <div style="color:#63f1cd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;">Australian Energy Assessments</div>
-              <h1 style="margin:12px 0 8px;font-family:Georgia,serif;font-size:34px;line-height:1.12;color:#ffffff;">${escapeHtml(document.heading)}</h1>
-              <p style="margin:0;color:#d8ebf0;font-size:16px;line-height:1.55;">${escapeHtml(document.planTitle)}</p>
+              <h1 style="margin:12px 0 8px;font-family:Georgia,serif;font-size:34px;line-height:1.12;color:#ffffff;">${escapeHtml(report.heading)}</h1>
+              <p style="margin:0;color:#d8ebf0;font-size:16px;line-height:1.55;">${escapeHtml(report.planTitle)}</p>
             </td>
           </tr>
           <tr>
             <td style="padding:28px 34px;">
-              <p style="margin:0 0 18px;color:#355a62;font-size:15px;line-height:1.6;">${escapeHtml(document.summary)}</p>
-              <div style="margin:0 0 22px;">${badges.map((badge) => `<span style="display:inline-block;margin:0 6px 7px 0;padding:7px 11px;border-radius:999px;background:#e6f7ef;color:#0a704d;font-size:12px;font-weight:700;">${escapeHtml(badge)}</span>`).join("")}</div>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#f3f8f6;border:1px solid #d5e5df;border-radius:12px;">
+              <p style="margin:0 0 20px;color:#355a62;font-size:15px;line-height:1.6;">${escapeHtml(report.summary)}</p>
+              <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Your planning snapshot</div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:9px 0 20px;border:1px solid #d5e5df;border-radius:12px;background:#f3f8f6;">
+                ${report.planningSnapshot.map((item) => `
                 <tr>
-                  <td style="padding:18px;">
-                    <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Evidence boundary</div>
-                    <p style="margin:7px 0 0;color:#29453d;font-size:14px;line-height:1.55;">${escapeHtml(`${document.evidence.known} of ${document.evidence.total} tracked home facts have a customer-selected source. ${document.evidence.unknown} remain not known or not checked.`)}</p>
-                  </td>
-                </tr>
+                  <td width="145" valign="top" style="padding:10px 14px;color:#0a704d;font-size:12px;font-weight:700;">${escapeHtml(item.label)}</td>
+                  <td valign="top" style="padding:10px 14px;color:#29453d;font-size:14px;line-height:1.45;">${escapeHtml(item.value)}</td>
+                </tr>`).join("")}
               </table>
-              ${document.climate ? `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 28px;background:#073b4c;border-radius:14px;">
-                <tr><td style="padding:20px;color:#ffffff;">
-                  <div style="color:#63f1cd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Broad climate planning context</div>
-                  <h2 style="margin:7px 0 8px;font-family:Georgia,serif;font-size:22px;color:#ffffff;">${escapeHtml(document.climate.label)}</h2>
-                  <p style="margin:0 0 8px;color:#e4f1f4;font-size:14px;line-height:1.55;">${escapeHtml(document.climate.summary)}</p>
-                  <p style="margin:0;color:#bfd4da;font-size:12px;line-height:1.5;">${escapeHtml(document.climate.boundary)}</p>
+              ${report.climate ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;background:#edf7f3;border-left:4px solid #13aa78;">
+                <tr><td style="padding:14px 16px;">
+                  <strong style="color:#0a704d;font-size:13px;">${escapeHtml(report.climate.label || "Broad climate planning context")}</strong>
+                  ${report.climate.summary ? `<p style="margin:5px 0 0;color:#355a52;font-size:13px;line-height:1.5;">${escapeHtml(report.climate.summary)}</p>` : ""}
                 </td></tr>
               </table>` : ""}
-              <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Ordered roadmap</div>
-              <h2 style="margin:7px 0 18px;font-family:Georgia,serif;font-size:28px;color:#0a2e3f;">What to consider, in order</h2>
-              ${document.actions.map((action) => {
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;background:#fff8e8;border:1px solid #ead8aa;border-radius:12px;">
+                <tr><td style="padding:16px;">
+                  <div style="color:#7b5c0b;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Before spending money</div>
+                  <p style="margin:7px 0 0;color:#68561d;font-size:14px;line-height:1.5;">${escapeHtml(report.readiness.message)}</p>
+                  <p style="margin:5px 0 0;color:#7a672f;font-size:12px;line-height:1.5;">${escapeHtml(report.readiness.boundary)}</p>
+                  ${report.questions.length ? htmlList(report.questions.map((question) => `${question.prompt} ${question.whyItMatters}`)) : ""}
+                </td></tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#f3f8f6;border:1px solid #d5e5df;border-radius:12px;">
+                <tr><td style="padding:16px;">
+                  <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Why this order</div>
+                  ${htmlList(report.decisionBasis)}
+                </td></tr>
+              </table>
+              <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Your ordered roadmap</div>
+              <h2 style="margin:7px 0 6px;font-family:Georgia,serif;font-size:28px;color:#0a2e3f;">What to consider, in order</h2>
+              <p style="margin:0 0 18px;color:#62776f;font-size:13px;line-height:1.5;">The first three unfinished steps are highlighted. Every remaining step stays in its original order.</p>
+              ${report.actions.map((action) => {
                 const guideHref = absoluteGuideHref(action.guideHref);
-                return `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px;border:1px solid #d5e5df;border-radius:14px;background:#fbfdfc;">
+                return action.priority ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;border:2px solid #9fd3c3;border-radius:14px;background:#f7fcfa;">
                 <tr>
-                  <td width="58" valign="top" style="padding:18px 0 18px 18px;">
-                    <div style="width:38px;height:38px;line-height:38px;text-align:center;border-radius:12px;background:${action.completed ? "#0a704d" : "#073b4c"};color:#ffffff;font-size:13px;font-weight:700;">${action.completed ? "✓" : String(action.number).padStart(2, "0")}</div>
+                  <td width="54" valign="top" style="padding:16px 0 16px 16px;">
+                    <div style="width:36px;height:36px;line-height:36px;text-align:center;border-radius:11px;background:#073b4c;color:#ffffff;font-size:13px;font-weight:700;">${String(action.number).padStart(2, "0")}</div>
                   </td>
-                  <td valign="top" style="padding:18px;">
+                  <td valign="top" style="padding:16px;">
+                    <div style="color:#087952;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Priority step</div>
                     <div style="color:#0a8c61;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">${escapeHtml(action.stage)}</div>
-                    <h3 style="margin:5px 0 7px;font-family:Georgia,serif;font-size:20px;line-height:1.3;color:#0a2e3f;">${escapeHtml(action.title)}</h3>
+                    <h3 style="margin:4px 0 7px;font-family:Georgia,serif;font-size:20px;line-height:1.3;color:#0a2e3f;">${escapeHtml(action.title)}</h3>
                     <p style="margin:0;color:#48645c;font-size:14px;line-height:1.55;">${escapeHtml(action.description)}</p>
                     ${guideHref ? `<p style="margin:12px 0 0;"><a href="${escapeHtml(guideHref)}" style="color:#087952;font-size:13px;font-weight:700;text-decoration:underline;">${escapeHtml(action.guideLabel || "Open the related guide")}</a></p>` : ""}
-                    ${actionGuidanceHtml(action.guidance)}
+                  </td>
+                </tr>
+              </table>` : `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 8px;border:1px solid #d5e5df;border-radius:10px;background:#ffffff;">
+                <tr>
+                  <td width="46" valign="top" style="padding:12px 0 12px 12px;color:${action.completed ? "#0a704d" : "#073b4c"};font-size:12px;font-weight:700;">${action.completed ? "Done" : String(action.number).padStart(2, "0")}</td>
+                  <td valign="top" style="padding:12px;">
+                    <div style="color:#0a8c61;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">${escapeHtml(action.stage)}</div>
+                    <h3 style="margin:3px 0 4px;font-family:Georgia,serif;font-size:17px;line-height:1.3;color:#0a2e3f;">${escapeHtml(action.title)}</h3>
+                    <p style="margin:0;color:#48645c;font-size:13px;line-height:1.5;">${escapeHtml(action.description)}</p>
+                    ${guideHref ? `<p style="margin:8px 0 0;"><a href="${escapeHtml(guideHref)}" style="color:#087952;font-size:12px;font-weight:700;text-decoration:underline;">${escapeHtml(action.guideLabel || "Open the related guide")}</a></p>` : ""}
                   </td>
                 </tr>
               </table>`;
               }).join("")}
-              ${document.questions.length ? `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 0;background:#fff8e8;border:1px solid #ead8aa;border-radius:14px;">
-                <tr><td style="padding:20px;">
-                  <div style="color:#7b5c0b;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Questions that could improve the plan</div>
-                  ${document.questions.map((question) => `<h3 style="margin:14px 0 4px;color:#453607;font-family:Georgia,serif;font-size:18px;">${escapeHtml(`${question.number}. ${question.prompt}`)}</h3><p style="margin:0;color:#68561d;font-size:13px;line-height:1.5;">${escapeHtml(question.whyItMatters)}</p>`).join("")}
-                </td></tr>
-              </table>` : ""}
-              ${document.permissionSections.length ? `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 0;background:#f3f8f6;border:1px solid #d5e5df;border-radius:14px;">
-                <tr><td style="padding:20px;">
-                  <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Permission and licensed-work boundary</div>
-                  ${document.permissionSections.map((section) => `
-                    <h3 style="margin:14px 0 6px;color:#0a2e3f;font-family:Georgia,serif;font-size:18px;">${escapeHtml(section.label)}</h3>
-                    <ul style="margin:0;padding-left:20px;color:#355a52;font-size:13px;line-height:1.5;">${section.items.map((item) => `<li style="margin:5px 0;"><strong>${escapeHtml(item.title)}</strong>${item.note ? ` ${escapeHtml(item.note)}` : ""}</li>`).join("")}</ul>
-                  `).join("")}
-                  <p style="margin:14px 0 0;color:#62776f;font-size:12px;line-height:1.5;">${escapeHtml(document.permissionBoundary)}</p>
-                </td></tr>
-              </table>` : ""}
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 0;background:#edf7f3;border-left:4px solid #13aa78;">
-                <tr><td style="padding:18px;">
-                  <strong style="color:#0a704d;font-size:14px;">Private by design</strong>
-                  <p style="margin:7px 0 0;color:#355a52;font-size:13px;line-height:1.55;">${escapeHtml(document.privacyNote)}${omittedTotal ? ` ${escapeHtml(`${omittedTotal} private or customer-written records were omitted from this copy.`)}` : ""}</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:20px 0 0;background:#fff8e8;border-left:4px solid #c49723;">
+                <tr><td style="padding:16px;">
+                  <strong style="color:#6d520b;font-size:14px;">What could change this order</strong>
+                  <p style="margin:6px 0 0;color:#68561d;font-size:13px;line-height:1.5;">${escapeHtml(report.changeBoundary)}</p>
                 </td></tr>
               </table>
-              <p style="margin:20px 0 0;color:#62776f;font-size:12px;line-height:1.55;">${escapeHtml(document.adviceBoundary)}</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:16px 0 0;background:#f3f8f6;border:1px solid #d5e5df;border-radius:12px;">
+                <tr><td style="padding:16px;">
+                  <div style="color:#0a704d;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Before engaging a trade</div>
+                  ${htmlList(report.beforeTrade)}
+                </td></tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:16px 0 0;background:#edf7f3;border-left:4px solid #13aa78;">
+                <tr><td style="padding:16px;">
+                  <strong style="color:#0a704d;font-size:14px;">Private by design</strong>
+                  <p style="margin:6px 0 0;color:#355a52;font-size:13px;line-height:1.55;">${escapeHtml(report.privacyNote)}</p>
+                </td></tr>
+              </table>
+              <p style="margin:18px 0 0;color:#62776f;font-size:12px;line-height:1.55;">${escapeHtml(report.adviceBoundary)}</p>
             </td>
           </tr>
           <tr>
             <td style="padding:18px 34px;background:#062f40;color:#cfe2e7;font-size:12px;line-height:1.5;">
-              Prepared ${escapeHtml(document.preparedDate)} by Australian Energy Assessments. Product and service brands are not selected or endorsed in this plan.
+              Prepared ${escapeHtml(report.preparedDate)} by Australian Energy Assessments. Product and service brands are not selected or endorsed in this plan.
             </td>
           </tr>
         </table>
@@ -522,90 +805,64 @@ export function customerPlanDocumentHtml(document) {
 </html>`;
 }
 
-function textSection(label, items) {
-  return items.length
-    ? `\n${label}:\n${items.map((item) => `- ${item}`).join("\n")}\n`
-    : "";
-}
-
 export function customerPlanDocumentText(document) {
+  const report = createCustomerPlanReportView(document);
   const lines = [
-    document.heading,
-    document.planTitle,
-    `Prepared ${document.preparedDate}`,
+    report.heading,
+    report.planTitle,
+    `Prepared ${report.preparedDate}`,
     "",
-    document.summary,
+    report.summary,
     "",
     "YOUR PLANNING CONTEXT",
-    `Goals: ${document.overview.goals.join(", ") || "Not recorded"}`,
-    `Property: ${document.overview.propertyType}`,
-    `State or territory: ${document.overview.state}`,
-    `Tenure: ${document.overview.tenure}`,
-    `Approval context: ${document.overview.approval}`,
-    `Preferred pace: ${document.overview.pace}`,
-    `Budget boundary: ${document.overview.budget}`,
+    ...report.planningSnapshot.map((item) => `${item.label}: ${item.value}`),
     "",
-    "EVIDENCE BOUNDARY",
-    `${document.evidence.known} of ${document.evidence.total} tracked home facts have a customer-selected source. ${document.evidence.unknown} remain not known or not checked.`,
+    "BEFORE SPENDING MONEY",
+    report.readiness.message,
+    report.readiness.boundary,
   ];
-  if (document.climate) {
-    lines.push(
-      "",
-      "BROAD CLIMATE PLANNING CONTEXT",
-      document.climate.label,
-      document.climate.summary,
-      document.climate.boundary,
-    );
-  }
-  lines.push("", "ORDERED ROADMAP");
-  for (const action of document.actions) {
-    lines.push(
-      "",
-      `${String(action.number).padStart(2, "0")}. ${action.title}${action.completed ? " [completed]" : ""}`,
-      action.stage,
-      action.description,
-    );
-    if (action.guideHref) {
-      lines.push(`${action.guideLabel || "Related guide"}: ${absoluteGuideHref(action.guideHref)}`);
-    }
-    lines.push(textSection("Based on", action.guidance.basedOn).trimEnd());
-    lines.push(textSection("Still uncertain", action.guidance.stillUncertain).trimEnd());
-    lines.push(textSection("Could change if", action.guidance.reconsiderIf).trimEnd());
-  }
-  if (document.questions.length) {
-    lines.push("", "QUESTIONS THAT COULD IMPROVE THE PLAN");
-    for (const question of document.questions) {
+  if (report.questions.length) {
+    for (const question of report.questions) {
       lines.push(
         `${question.number}. ${question.prompt}`,
         question.whyItMatters,
       );
     }
   }
-  if (document.permissionSections.length) {
-    lines.push("", "PERMISSION AND LICENSED-WORK BOUNDARY");
-    for (const section of document.permissionSections) {
-      lines.push(
-        section.label,
-        ...section.items.map((item) =>
-          `- ${item.title}${item.note ? ` ${item.note}` : ""}`),
-      );
-    }
-    lines.push(document.permissionBoundary);
+  if (report.climate) {
+    lines.push(
+      "",
+      "BROAD CLIMATE PLANNING CONTEXT",
+      report.climate.label,
+      report.climate.summary,
+    );
   }
-  const omittedTotal = Object.values(document.omitted).reduce(
-    (sum, value) => sum + Number(value || 0),
-    0,
-  );
+  lines.push("", "WHY THIS ORDER", ...report.decisionBasis.map((item) => `- ${item}`));
+  lines.push("", "ORDERED ROADMAP");
+  for (const action of report.actions) {
+    lines.push(
+      "",
+      `${String(action.number).padStart(2, "0")}. ${action.title}${action.completed ? " [completed]" : action.priority ? " [priority]" : ""}`,
+      action.stage,
+      action.description,
+    );
+    if (action.guideHref) {
+      lines.push(`${action.guideLabel || "Related guide"}: ${absoluteGuideHref(action.guideHref)}`);
+    }
+  }
   lines.push(
     "",
+    "WHAT COULD CHANGE THIS ORDER",
+    report.changeBoundary,
+    "",
+    "BEFORE ENGAGING A TRADE",
+    ...report.beforeTrade.map((item) => `- ${item}`),
+    "",
     "PRIVATE BY DESIGN",
-    document.privacyNote,
-    ...(omittedTotal
-      ? [`${omittedTotal} private or customer-written records were omitted from this copy.`]
-      : []),
+    report.privacyNote,
     "",
     "IMPORTANT BOUNDARY",
-    document.adviceBoundary,
+    report.adviceBoundary,
   );
   return lines.filter((line, index) => line !== "" || lines[index - 1] !== "").join("\n").trim();
 }

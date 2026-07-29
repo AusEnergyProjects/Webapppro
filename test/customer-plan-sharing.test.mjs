@@ -3,11 +3,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   createCustomerPlanDocument,
+  createCustomerPlanReportView,
   customerPlanDocumentHtml,
   customerPlanDocumentText,
   isSingleEmailAddress,
   normalizeCustomerPlanEmailRequest,
 } from "../src/lib/customer-plan-document.mjs";
+import {
+  customerAdvisorOptions,
+  customerProjectOptions,
+} from "../src/lib/customer-projects.mjs";
 
 const row = {
   id: "project-private-1",
@@ -81,7 +86,16 @@ test("shareable plan is server-derived, ordered and excludes private project con
   assert.equal(document.omitted.roomRecords, 1);
   assert.equal(document.omitted.permissionNotes, 1);
   assert.equal(document.omitted.reviewItems, 1);
+  assert.equal(document.evidence.total, customerAdvisorOptions.factKeys.length);
   assert.equal(document.evidence.known, 2);
+  assert.equal(
+    document.evidence.unknown,
+    customerAdvisorOptions.factKeys.length - 2,
+  );
+  assert.equal(
+    document.evidence.bySource.reduce((total, source) => total + source.count, 0),
+    customerAdvisorOptions.factKeys.length,
+  );
   assert.equal(document.overview.state, "VIC");
   assert.ok(document.permissionSections.length > 0);
   assert.match(document.permissionBoundary, /not legal advice/i);
@@ -148,6 +162,69 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.match(text, /ORDERED ROADMAP/);
   assert.match(text, /PRIVATE BY DESIGN/);
   assert.doesNotMatch(text, /SECRET|3006|private-owner/);
+});
+
+test("broad customer reports stay concise, ordered and free of repeated per-action rationale", () => {
+  const broadRow = {
+    ...row,
+    goals: JSON.stringify(customerProjectOptions.goals.map(([value]) => value)),
+    existing_features: JSON.stringify(
+      customerProjectOptions.homeFeatures.map(([value]) => value),
+    ),
+    plan_snapshot: "",
+    completed_plan_items: JSON.stringify([]),
+  };
+  const document = createCustomerPlanDocument(broadRow, {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+    evidence: [
+      {
+        fact_keys: JSON.stringify(["glazing", "ceiling-insulation"]),
+        sharing_scope: "private-plan",
+      },
+      {
+        fact_keys: JSON.stringify(["glazing", "switchboard"]),
+        sharing_scope: "allocated-installers",
+      },
+    ],
+  });
+  const report = createCustomerPlanReportView(document);
+  const html = customerPlanDocumentHtml(document);
+  const text = customerPlanDocumentText(document);
+
+  assert.ok(report.actions.length >= 15);
+  assert.deepEqual(
+    report.actions.map((action) => action.id),
+    document.actions.map((action) => action.id),
+  );
+  assert.equal(report.actions.filter((action) => action.priority).length, 3);
+  assert.ok(report.questions.length <= 3);
+  assert.ok(report.decisionBasis.length <= 4);
+  assert.ok(report.beforeTrade.length <= 3);
+  assert.equal(report.readiness.linked, 2);
+  assert.ok(report.readiness.missingLabels.length <= 3);
+  assert.match(report.readiness.boundary, /supplied by the household/i);
+  assert.match(report.readiness.boundary, /not been professionally checked/i);
+
+  for (const action of report.actions) {
+    assert.equal(html.split(`>${action.title}</h3>`).length - 1, 1, action.title);
+    assert.equal(
+      text.split(`${String(action.number).padStart(2, "0")}. ${action.title}`)
+        .length - 1,
+      1,
+      action.title,
+    );
+  }
+  assert.ok(html.length < 35_000, `HTML length was ${html.length}`);
+  assert.ok(text.length < 10_000, `text length was ${text.length}`);
+  assert.equal(
+    text.split(report.changeBoundary).length - 1,
+    1,
+    "generic change boundary should appear once",
+  );
+  assert.doesNotMatch(html, /0 of 12|tracked home facts have/i);
+  assert.doesNotMatch(text, /0 of 12|tracked home facts have/i);
+  assert.doesNotMatch(html, /Permission and licensed-work boundary/);
+  assert.doesNotMatch(text, /Permission and licensed-work boundary/);
 });
 
 test("plan email request accepts one bounded address, explicit consent and no extra fields", () => {

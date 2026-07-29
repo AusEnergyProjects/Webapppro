@@ -30,8 +30,9 @@ const project = {
   pace: "staged",
 };
 
-test("important home facts keep an explicit allowlisted source without inferred validation", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-decision-support-advisor");
+test("important home facts derive customer reports without claiming validation", () => {
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-home-feature-taxonomy-v2");
+  assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-decision-support-advisor"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-home-advisor"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-evidence-climate-advisor"));
   assert.deepEqual(
@@ -44,7 +45,7 @@ test("important home facts keep an explicit allowlisted source without inferred 
   );
   const normalized = normalizeCustomerProject({
     ...project,
-    existingFeatures: ["single-glazing", "roof-insulation"],
+    existingFeatures: ["single-glazing", "ceiling-insulation-limited"],
     evidence: [{ category: "property-photo" }],
     advisorProfile: {
       climate: { code: "hot-humid", notNatHERSAssessment: false },
@@ -71,7 +72,7 @@ test("important home facts keep an explicit allowlisted source without inferred 
   );
   assert.deepEqual(
     normalized.project.advisorProfile.factEvidence.find((item) => item.factKey === "ceiling-insulation"),
-    { factKey: "ceiling-insulation", source: "unknown" },
+    { factKey: "ceiling-insulation", source: "customer-reported" },
   );
   assert.equal(
     normalized.project.advisorProfile.factEvidence.some((item) => item.factKey === "private-routine"),
@@ -114,7 +115,10 @@ test("installer opportunity summaries cannot disclose private room names or perm
   assert.match(opportunity.summary, /cool temperate planning profile/i);
   assert.match(opportunity.summary, /room types: bedroom/i);
   assert.match(opportunity.summary, /reported concerns: too cold/i);
-  assert.match(opportunity.summary, /1 tracked facts have a customer-selected source and 11 remain unknown/i);
+  assert.match(
+    opportunity.summary,
+    /0 tracked home facts have a household answer or linked evidence and 16 remain not known or not checked/i,
+  );
   assert.doesNotMatch(opportunity.summary, /overnight|permission-needed/i);
 });
 
@@ -320,9 +324,10 @@ test("postcode and state produce deterministic broad planning profiles and plan 
   assert.notEqual(coolClimate.title, hotClimate.title);
   assert.equal(coolClimate.href, "/guides/project-preparation#climate-planning");
   assert.equal(
-    coolPlan.items.find((item) => item.id === "evidence-confidence").href,
-    "/guides/project-preparation#evidence-first",
+    coolPlan.items.some((item) => item.id === "evidence-confidence"),
+    false,
   );
+  assert.ok(coolPlan.nextQuestions.some((item) => item.id.startsWith("fact-")));
   assert.ok(
     hotPlan.items.findIndex((item) => item.id === "window-shading")
       < hotPlan.items.findIndex((item) => item.id === "draught-proofing"),

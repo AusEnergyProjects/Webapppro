@@ -47,17 +47,24 @@ test("multiple goals and detailed neutral home features are allowlisted", () => 
   const result = normalizeCustomerProject({
     ...baseProject,
     goals: ["improve-comfort", "lower-bills", "improve-comfort", "unsafe-goal"],
-    existingFeatures: ["single-glazing", "roof-insulation", "unsafe-feature"],
+    existingFeatures: [
+      "single-glazing",
+      "ceiling-insulation-limited",
+      "unsafe-feature",
+    ],
     budgetRange: "under_2k",
   });
   assert.equal(result.ok, true);
   assert.deepEqual(result.project.goals, ["improve-comfort", "lower-bills"]);
   assert.equal(result.project.goal, "improve-comfort");
-  assert.deepEqual(result.project.existingFeatures, ["single-glazing", "roof-insulation"]);
+  assert.deepEqual(result.project.existingFeatures, [
+    "ceiling-insulation-limited",
+    "single-glazing",
+  ]);
   assert.equal(result.project.planSnapshot.goal, "improve-comfort");
   assert.deepEqual(result.project.planSnapshot.goals, result.project.goals);
   assert.ok(customerProjectOptions.goals.length >= 10);
-  assert.ok(customerProjectOptions.homeFeatures.some(([value]) => value === "wall-insulation"));
+  assert.ok(customerProjectOptions.homeFeatures.some(([value]) => value === "wall-insulation-well"));
   assert.ok(customerProjectOptions.homeFeatures.some(([value]) => value === "double-glazing"));
 
   const everyGoal = normalizeCustomerProject({

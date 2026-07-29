@@ -146,7 +146,8 @@ export async function GET(request: Request) {
     JOIN customer_projects p ON p.id = e.project_id AND p.firebase_uid = e.customer_uid
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
     JOIN trade_opportunities o ON o.id = m.opportunity_id
-    WHERE e.status = 'active' AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+    WHERE e.status = 'active' AND e.sharing_scope = 'allocated-installers'
+      AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent

@@ -3,7 +3,10 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
-import { CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION } from "@/lib/customer-projects.mjs";
+import {
+  CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
+  customerAdvisorOptions,
+} from "@/lib/customer-projects.mjs";
 
 export const runtime = "edge";
 
@@ -17,6 +20,10 @@ const ALLOWED_TYPES = new Set([
 ]);
 const CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard", "supporting-document", "other"]);
 const QUOTING_PHOTO_CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard"]);
+const SHARING_SCOPES = new Set(["private-plan", "allocated-installers"]);
+const FACT_KEYS = new Set(
+  (customerAdvisorOptions.factKeys as Array<[string, string]>).map(([value]) => value),
+);
 
 type EvidenceBucket = {
   put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
@@ -30,6 +37,8 @@ type EvidenceRecord = {
   customer_uid: string;
   client_upload_id: string;
   category: string;
+  fact_keys: string;
+  sharing_scope: string;
   file_name: string;
   content_type: string;
   size_bytes: number;
@@ -72,11 +81,29 @@ function publicRecord(record: EvidenceRecord) {
   return {
     id: record.id,
     category: record.category,
+    factKeys: normaliseFactKeys(record.fact_keys),
+    sharingScope: SHARING_SCOPES.has(record.sharing_scope)
+      ? record.sharing_scope
+      : "allocated-installers",
     fileName: record.file_name,
     contentType: record.content_type,
     sizeBytes: Number(record.size_bytes),
     createdAt: record.created_at,
   };
+}
+
+function normaliseFactKeys(value: unknown) {
+  let supplied: unknown = value;
+  if (typeof value === "string") {
+    try { supplied = JSON.parse(value); }
+    catch { supplied = []; }
+  }
+  if (!Array.isArray(supplied)) return [];
+  return [...new Set(
+    supplied
+      .map((item) => String(item || "").trim())
+      .filter((item) => FACT_KEYS.has(item)),
+  )].slice(0, 6);
 }
 
 async function identity(request: Request) {
@@ -90,6 +117,7 @@ async function ownedProject(customerUid: string, projectId: string) {
 }
 
 async function installerCanAccess(installerUid: string, record: EvidenceRecord) {
+  if (record.sharing_scope !== "allocated-installers") return false;
   const access = await getD1().prepare(`SELECT m.id
     FROM customer_projects p
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id
@@ -165,6 +193,8 @@ export async function POST(request: Request) {
   const projectId = String(form.get("projectId") || "").trim().slice(0, 180);
   const category = String(form.get("category") || "").trim();
   const clientUploadId = String(form.get("clientUploadId") || "").trim().slice(0, 180);
+  const factKeys = normaliseFactKeys(form.get("factKeys"));
+  const sharingScope = String(form.get("sharingScope") || "private-plan").trim();
   const confirmInstallerPhotoSharing = form.get("confirmInstallerPhotoSharing") === "true";
   const file = form.get("file");
   const project = await ownedProject(user.uid, projectId);
@@ -176,26 +206,28 @@ export async function POST(request: Request) {
   if (!account) return json({ ok: false, error: "Complete your active customer account first." }, 403);
   if (!(file instanceof File) || !file.name) return json({ ok: false, error: "Choose a photo or document to upload." }, 400);
   if (!clientUploadId) return json({ ok: false, error: "The upload reference was missing. Choose the file again." }, 400);
-  if (!confirmInstallerPhotoSharing) return json({ ok: false, error: "Confirm that every attached file can be shared with the verified installers allocated to this enquiry." }, 400);
+  if (!SHARING_SCOPES.has(sharingScope)) return json({ ok: false, error: "Choose a valid evidence sharing setting." }, 400);
+  if (sharingScope === "allocated-installers" && !confirmInstallerPhotoSharing) {
+    return json({ ok: false, error: "Confirm that this file can be shared with the verified installers allocated to this enquiry." }, 400);
+  }
   if (!CATEGORIES.has(category)) return json({ ok: false, error: "Choose a valid property evidence category." }, 400);
   if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a PDF, JPEG, PNG or WebP file. Unsupported phone photos must be converted to JPEG first." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "Each file must be no larger than 8 MB." }, 400);
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   if (!hasAllowedSignature(fileBytes, file.type)) return json({ ok: false, error: "The file contents do not match the selected photo or document type." }, 400);
-  const storedBytes = QUOTING_PHOTO_CATEGORIES.has(category) ? sanitiseQuotingPhoto(fileBytes, file.type) : fileBytes;
-  if (!storedBytes) return json({ ok: false, error: "This photo could not be made safe for installer sharing. Convert it to JPEG and try again." }, 400);
+  const storedBytes = file.type.startsWith("image/")
+    ? sanitiseQuotingPhoto(fileBytes, file.type)
+    : fileBytes;
+  if (!storedBytes) {
+    return json({
+      ok: false,
+      error: "This photo could not be safely stored. Convert it to JPEG and try again.",
+    }, 400);
+  }
   const existing = await getD1().prepare(`SELECT * FROM customer_project_evidence
     WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ? AND status = 'active'`)
     .bind(projectId, user.uid, clientUploadId).first<EvidenceRecord>();
   if (existing) {
-    const now = new Date().toISOString();
-    await getD1().prepare(`INSERT INTO customer_consent_receipts
-      (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-      VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
-      ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
-        granted_at = excluded.granted_at, withdrawn_at = ''`)
-      .bind(`customer-evidence-share:${projectId}`, user.uid, projectId,
-        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now).run();
     return json({ ok: true, evidence: publicRecord(existing) });
   }
   const count = await getD1().prepare(`SELECT COUNT(*) total FROM customer_project_evidence
@@ -209,35 +241,97 @@ export async function POST(request: Request) {
   const bucket = getEvidenceBucket();
   await bucket.put(objectKey, storedBytes.buffer, {
     httpMetadata: { contentType: file.type },
-    customMetadata: { customerUid: user.uid, projectId, evidenceId: id },
+    customMetadata: { customerUid: user.uid, projectId, evidenceId: id, sharingScope },
   });
   try {
-    await getD1().batch([
+    const statements = [
       getD1().prepare(`INSERT INTO customer_project_evidence
-        (id, project_id, customer_uid, client_upload_id, category, file_name, content_type, size_bytes, object_key, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .bind(id, projectId, user.uid, clientUploadId, category, fileName, file.type, storedBytes.byteLength, objectKey, now, now),
+        (id, project_id, customer_uid, client_upload_id, category, fact_keys, sharing_scope,
+         file_name, content_type, size_bytes, object_key, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+        .bind(id, projectId, user.uid, clientUploadId, category, JSON.stringify(factKeys), sharingScope,
+          fileName, file.type, storedBytes.byteLength, objectKey, now, now),
       getD1().prepare(`INSERT INTO customer_project_evidence_events
         (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
         VALUES (?, ?, ?, ?, '', 'customer', ?, 'uploaded', ?)`)
         .bind(crypto.randomUUID(), id, projectId, user.uid, user.uid, now),
-      getD1().prepare(`INSERT INTO customer_consent_receipts
+      getD1().prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
+        .bind(now, projectId, user.uid),
+    ];
+    if (sharingScope === "allocated-installers") {
+      statements.push(getD1().prepare(`INSERT INTO customer_consent_receipts
         (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
         VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
         ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
           granted_at = excluded.granted_at, withdrawn_at = ''`)
         .bind(`customer-evidence-share:${projectId}`, user.uid, projectId,
-          CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now),
-      getD1().prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(now, projectId, user.uid),
-    ]);
+          CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now));
+    }
+    await getD1().batch(statements);
   } catch (error) {
     await bucket.delete(objectKey);
     throw error;
   }
   return json({ ok: true, evidence: publicRecord({ id, project_id: projectId, customer_uid: user.uid,
-    client_upload_id: clientUploadId, category, file_name: fileName, content_type: file.type, size_bytes: storedBytes.byteLength, object_key: objectKey,
+    client_upload_id: clientUploadId, category, fact_keys: JSON.stringify(factKeys), sharing_scope: sharingScope,
+    file_name: fileName, content_type: file.type, size_bytes: storedBytes.byteLength, object_key: objectKey,
     status: "active", created_at: now }) }, 201);
+}
+
+export async function PATCH(request: Request) {
+  if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  const user = await identity(request);
+  if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
+  if (Number(request.headers.get("content-length") || 0) > 4_000) {
+    return json({ ok: false, error: "The evidence update was too large." }, 413);
+  }
+  let raw: Record<string, unknown>;
+  try { raw = await request.json() as Record<string, unknown>; }
+  catch { return json({ ok: false, error: "The evidence update could not be read." }, 400); }
+  const id = String(raw.id || "").trim().slice(0, 180);
+  const sharingScope = String(raw.sharingScope || "").trim();
+  const factKeys = normaliseFactKeys(raw.factKeys);
+  const record = await getD1().prepare(`SELECT * FROM customer_project_evidence
+    WHERE id = ? AND customer_uid = ? AND status = 'active'`)
+    .bind(id, user.uid).first<EvidenceRecord>();
+  if (!record) return json({ ok: false, error: "Project evidence not found." }, 404);
+  if (!SHARING_SCOPES.has(sharingScope)) return json({ ok: false, error: "Choose a valid evidence sharing setting." }, 400);
+  const grantingInstallerAccess = (
+    record.sharing_scope !== "allocated-installers"
+    && sharingScope === "allocated-installers"
+  );
+  if (grantingInstallerAccess && raw.confirmInstallerPhotoSharing !== true) {
+    return json({ ok: false, error: "Confirm that this file can be shared with allocated verified installers." }, 400);
+  }
+  const now = new Date().toISOString();
+  const statements = [
+    getD1().prepare(`UPDATE customer_project_evidence
+      SET fact_keys = ?, sharing_scope = ?, updated_at = ?
+      WHERE id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(JSON.stringify(factKeys), sharingScope, now, id, user.uid),
+    getD1().prepare(`INSERT INTO customer_project_evidence_events
+      (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
+      VALUES (?, ?, ?, ?, '', 'customer', ?, 'metadata_updated', ?)`)
+      .bind(crypto.randomUUID(), id, record.project_id, user.uid, user.uid, now),
+  ];
+  if (grantingInstallerAccess) {
+    statements.push(getD1().prepare(`INSERT INTO customer_consent_receipts
+      (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+      VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+      ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
+        granted_at = excluded.granted_at, withdrawn_at = ''`)
+      .bind(`customer-evidence-share:${record.project_id}`, user.uid, record.project_id,
+        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now));
+  }
+  await getD1().batch(statements);
+  return json({
+    ok: true,
+    evidence: publicRecord({
+      ...record,
+      fact_keys: JSON.stringify(factKeys),
+      sharing_scope: sharingScope,
+    }),
+  });
 }
 
 export async function DELETE(request: Request) {

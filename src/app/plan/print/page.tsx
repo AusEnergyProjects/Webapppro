@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { CustomerPlanPrintReport } from "@/components/CustomerPlanShareDialog";
 import { PrintRoadmapButton } from "@/components/PrintRoadmapButton";
+import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
 import {
   createCustomerProjectPlan,
   customerProjectOptions,
+  MAX_HOME_FEATURE_SELECTIONS,
 } from "@/lib/customer-projects.mjs";
 
 export const metadata: Metadata = {
@@ -82,7 +85,7 @@ export default async function PrintableHomeEnergyPlanPage({
     approvalContext: value(params.approvalContext) || "not_sure",
     budgetRange: suppliedBudget,
     addressState: suppliedState,
-    features: values(params.feature, 24),
+    features: values(params.feature, MAX_HOME_FEATURE_SELECTIONS),
   }) as CustomerPlan;
   const budgetRange = optionLabel(
     customerProjectOptions.budgets,
@@ -117,81 +120,55 @@ export default async function PrintableHomeEnergyPlanPage({
     optionLabel(customerProjectOptions.paces, plan.pace),
     addressState,
   ].filter(Boolean);
+  const report = createCustomerPlanReportView({
+    heading: "Your independent home energy plan",
+    planTitle: plan.title,
+    summary: plan.summary,
+    preparedDate: new Date().toISOString().slice(0, 10),
+    overview: {
+      goals: plan.goals
+        .map((item) => optionLabel(customerProjectOptions.goals, item))
+        .filter(Boolean),
+      propertyType: "Home",
+      tenure: optionLabel(customerProjectOptions.situations, plan.situation)
+        || "Not recorded",
+      approval: optionLabel(
+        customerProjectOptions.approvalContexts,
+        plan.approvalContext,
+      ) || "Not recorded",
+      pace: optionLabel(customerProjectOptions.paces, plan.pace)
+        || "Not recorded",
+      budget: optionLabel(customerProjectOptions.budgets, budgetRange)
+        || "Not recorded",
+      state: addressState || "Not recorded",
+    },
+    evidence: null,
+    existingFeatures: plan.features,
+    climate: null,
+    questions: plan.nextQuestions,
+    actions: plan.items.map((item, index) => ({
+      number: index + 1,
+      id: item.id,
+      stage: item.stage,
+      title: item.title,
+      description: item.text,
+      completed: false,
+      guideLabel: item.action,
+      guideHref: item.href,
+      guidance: item.guidance,
+    })),
+    privacyNote: "This public copy includes only the planning choices shown in this roadmap. It does not contain account, address, meter or private project records.",
+    adviceBoundary: "This plan is independent general guidance. It is not a quote, product endorsement, home energy rating, equipment sizing result or savings promise. Confirm safety, permissions, suitability and current incentives before committing to work.",
+  });
 
   return (
     <main className="planner-print-page">
-      <header>
-        <span>Australian Energy Assessments</span>
-        <strong>Independent quick home energy roadmap</strong>
-        <h1>{plan.title}</h1>
-        <p>{plan.summary}</p>
-        <div className="planner-print-actions">
-          <PrintRoadmapButton />
-          <a href={`/plan?${returnParams.toString()}`}>Return to planner</a>
-        </div>
-      </header>
-      <aside>
-        <strong>Plan settings</strong>
-        <p>{context.join(" | ")}</p>
-      </aside>
-      {plan.nextQuestions.length > 0 && (
-        <section className="planner-print-questions">
-          <span>Best next information</span>
-          <h2>Questions that could change the order</h2>
-          <p>Not sure remains a valid answer.</p>
-          <div>
-            {plan.nextQuestions.map((question, index) => (
-              <article key={question.id}>
-                <strong>{index + 1}. {question.prompt}</strong>
-                <p>{question.whyItMatters}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-      <ol>
-        {plan.items.map((item, index) => (
-          <li key={item.id}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <div>
-              <small>{item.stage}</small>
-              <h2>{item.title}</h2>
-              <p>{item.text}</p>
-              {item.href ? <a href={item.href}>{item.action}</a> : null}
-              {item.guidance && (
-                <dl className="planner-print-guidance">
-                  <div>
-                    <dt>Based on</dt>
-                    <dd>{item.guidance.basedOn.join(" ")}</dd>
-                  </div>
-                  <div>
-                    <dt>Still uncertain</dt>
-                    <dd>{item.guidance.stillUncertain.join(" ")}</dd>
-                  </div>
-                  <div>
-                    <dt>Could change if</dt>
-                    <dd>{item.guidance.reconsiderIf.join(" ")}</dd>
-                  </div>
-                </dl>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-      <aside>
-        <strong>Before committing</strong>
-        <p>
-          Replace indicative assumptions with current written quotes, confirm
-          official incentives and approvals, and use licensed professionals for
-          regulated work.
-        </p>
-      </aside>
-      <footer>
-        This roadmap is general guidance, not a site assessment, quote,
-        eligibility decision or guarantee of savings. Add controlled evidence,
-        room comfort details, a matching postcode and permission questions in
-        your private account when you need more specific sequencing.
-      </footer>
+      <nav className="planner-print-actions" aria-label="Printable plan actions">
+        <PrintRoadmapButton />
+        <a href={`/plan?${returnParams.toString()}`}>Return to planner</a>
+        <span>{context.join(" | ")}</span>
+      </nav>
+      <CustomerPlanPrintReport report={report} visible />
     </main>
   );
 }

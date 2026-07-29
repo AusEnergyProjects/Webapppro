@@ -20,6 +20,7 @@ import {
   buildAnonymizedOpportunity,
   CUSTOMER_LEGACY_PLAN_VERSIONS,
   CUSTOMER_ADVISOR_PROFILE_VERSION,
+  customerHomeFeatureSections as rawCustomerHomeFeatureSections,
   createCustomerPermissionPack,
   createCustomerProjectPlan,
   customerAdvisorOptions as rawCustomerAdvisorOptions,
@@ -27,6 +28,7 @@ import {
   derivePlanningClimateProfile,
   platformQuoteOptions as rawPlatformQuoteOptions,
   preserveEditedPlanItems,
+  updateHomeFeatureSelection,
 } from "@/lib/customer-projects.mjs";
 import {
   customerReviewOptions as rawCustomerReviewOptions,
@@ -36,6 +38,7 @@ import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
+import { HomeFeatureIntake } from "./HomeFeatureIntake";
 import {
   CustomerPlanPrintReport,
   CustomerPlanShareDialog,
@@ -161,40 +164,16 @@ const customerReviewOptions = rawCustomerReviewOptions as {
   kinds: Option[];
   statuses: Option[];
 };
-const homeFeatureGroups = [
-  {
-    title: "Comfort, windows and the building shell",
-    values: [
-      "draughty",
-      "condensation-moisture",
-      "single-glazing",
-      "double-glazing",
-      "glazing-unknown",
-      "roof-insulation",
-      "wall-insulation",
-      "floor-insulation",
-      "insulation-unknown",
-      "external-shading",
-      "internal-window-coverings",
-      "open-wall-vents",
-      "evaporative-ducts",
-    ],
-  },
-  {
-    title: "Heating, cooling, hot water and cooking",
-    values: [
-      "reverse-cycle",
-      "gas-heating",
-      "gas-hot-water",
-      "heat-pump-hot-water",
-      "gas-cooking",
-    ],
-  },
-  {
-    title: "Solar, storage and transport",
-    values: ["solar", "battery", "ev"],
-  },
-];
+type HomeFeatureQuestion = {
+  id: string;
+  unknownValue?: string;
+  options: Option[];
+};
+const homeFeatureQuestions = (
+  rawCustomerHomeFeatureSections as unknown as Array<{
+    questions: HomeFeatureQuestion[];
+  }>
+).flatMap((section) => section.questions);
 const platformQuoteOptions = rawPlatformQuoteOptions as {
   quoteTypes: Option[];
   inclusions: Option[];
@@ -391,10 +370,37 @@ type CustomerProject = {
   evidence: Array<{
     id: string;
     category: string;
+    factKeys: string[];
+    sharingScope: "private-plan" | "allocated-installers";
     fileName: string;
     contentType: string;
     sizeBytes: number;
     createdAt: string;
+  }>;
+  planRevisions: Array<{
+    id: string;
+    revisionNumber: number;
+    eventType: string;
+    planVersion: string;
+    goals: string[];
+    homeFeatures: string[];
+    pace: string;
+    budgetRange: string;
+    planSnapshot: {
+      version?: string;
+      title?: string;
+      summary?: string;
+      items?: CustomerPlanItem[];
+    };
+    createdAt: string;
+  }>;
+  outcomeCheckins: Array<{
+    id: string;
+    comfortOutcome: string;
+    energyOutcome: string;
+    completedItemIds: string[];
+    note: string;
+    recordedAt: string;
   }>;
   evidenceSharingConsent: boolean;
   handoverPacks: CustomerHandoverPack[];
@@ -422,7 +428,13 @@ type ProjectDraft = Pick<
   | "advisorProfile"
   | "planSnapshot"
 >;
-type PendingProjectEvidence = { id: string; file: File; category: string };
+type PendingProjectEvidence = {
+  id: string;
+  file: File;
+  category: string;
+  factKeys: string[];
+  sharingScope: "private-plan" | "allocated-installers";
+};
 
 type AccountResult = {
   profile: CustomerProfile | null;
@@ -501,6 +513,18 @@ const statusLabels: Record<string, string> = {
   completed: "Complete",
   withdrawn: "Withdrawn",
   archived: "Archived",
+};
+const comfortOutcomeLabels: Record<string, string> = {
+  better: "More comfortable",
+  "about-the-same": "About the same",
+  worse: "Less comfortable",
+  "not-sure": "Not sure yet",
+};
+const energyOutcomeLabels: Record<string, string> = {
+  lower: "Lower energy use or bills",
+  "about-the-same": "About the same",
+  higher: "Higher energy use or bills",
+  "not-checked": "Not checked or not comparable",
 };
 
 function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
@@ -849,20 +873,26 @@ function ProfileForm({
 function ProjectEditor({
   initial,
   existingId,
-  storedEvidenceCount,
+  storedEvidence,
   evidenceSharingConsent,
   emailVerified,
   onCancel,
   onSave,
+  onUploadEvidence,
   onSubmit,
 }: {
   initial: ProjectDraft;
   existingId?: string;
-  storedEvidenceCount: number;
+  storedEvidence: CustomerProject["evidence"];
   evidenceSharingConsent: boolean;
   emailVerified: boolean;
   onCancel: () => void;
   onSave: (draft: ProjectDraft, id?: string) => Promise<string>;
+  onUploadEvidence: (
+    projectId: string,
+    evidence: PendingProjectEvidence[],
+    confirmInstallerPhotoSharing: boolean,
+  ) => Promise<void>;
   onSubmit: (
     draft: ProjectDraft,
     evidence: PendingProjectEvidence[],
@@ -891,8 +921,32 @@ function ProjectEditor({
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
   >([]);
+  const [uploadedEvidence, setUploadedEvidence] = useState<
+    Array<Pick<PendingProjectEvidence, "factKeys" | "sharingScope">>
+  >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
     useState(evidenceSharingConsent);
+  const storedEvidenceCount = storedEvidence.length + uploadedEvidence.length;
+  const storedInstallerEvidenceCount = storedEvidence.filter(
+    (item) => item.sharingScope === "allocated-installers",
+  ).length;
+  const pendingInstallerEvidenceCount = pendingEvidence.filter(
+    (item) => item.sharingScope === "allocated-installers",
+  ).length;
+  const answeredHomeQuestionCount = homeFeatureQuestions.filter((question) =>
+    question.options.some(([value]) => draft.existingFeatures.includes(value)),
+  ).length;
+  const firstUnansweredHomeQuestion = homeFeatureQuestions.find(
+    (question) =>
+      !question.options.some(([value]) =>
+        draft.existingFeatures.includes(value),
+      ),
+  );
+  const notSureHomeQuestionCount = homeFeatureQuestions.filter(
+    (question) =>
+      question.unknownValue
+      && draft.existingFeatures.includes(question.unknownValue),
+  ).length;
   const planningClimate = useMemo(
     () =>
       derivePlanningClimateProfile(
@@ -997,21 +1051,31 @@ function ProjectEditor({
       nextQuestions: advisorPlan.nextQuestions as CustomerPlanQuestion[],
     },
   });
-  const shareablePlanDocument = createCustomerPlanDocument({
-    goal: draft.goals[0] || "",
-    goals: JSON.stringify(draft.goals),
-    pace: draft.pace,
-    postcode: draft.postcode,
-    address_state: draft.addressState,
-    property_type: draft.propertyType,
-    household_situation: draft.householdSituation,
-    existing_features: JSON.stringify(draft.existingFeatures),
-    budget_range: draft.budgetRange,
-    property_context: JSON.stringify(draft.propertyContext),
-    advisor_profile: JSON.stringify(draft.advisorProfile),
-    plan_snapshot: JSON.stringify(draftWithPlan().planSnapshot),
-    completed_plan_items: "[]",
-  });
+  const shareablePlanDocument = createCustomerPlanDocument(
+    {
+      goal: draft.goals[0] || "",
+      goals: JSON.stringify(draft.goals),
+      pace: draft.pace,
+      postcode: draft.postcode,
+      address_state: draft.addressState,
+      property_type: draft.propertyType,
+      household_situation: draft.householdSituation,
+      existing_features: JSON.stringify(draft.existingFeatures),
+      budget_range: draft.budgetRange,
+      property_context: JSON.stringify(draft.propertyContext),
+      advisor_profile: JSON.stringify(draft.advisorProfile),
+      plan_snapshot: JSON.stringify(draftWithPlan().planSnapshot),
+      completed_plan_items: "[]",
+    },
+    {
+      evidence: [...storedEvidence, ...uploadedEvidence, ...pendingEvidence].map(
+        (item) => ({
+          fact_keys: JSON.stringify(item.factKeys),
+          sharing_scope: item.sharingScope,
+        }),
+      ),
+    },
+  );
 
   const invalidateStepsFrom = (firstStep: number) => {
     setCompletedSteps((current) => new Set(
@@ -1125,17 +1189,21 @@ function ProjectEditor({
     setStatus("");
     setValidationError("");
   };
-  const updateFactEvidence = (factKey: string, source: EvidenceSource) =>
-    updateAdvisorProfile((profile) => ({
-      ...profile,
-      factEvidence: customerAdvisorOptions.factKeys.map(([knownFactKey]) => ({
-        factKey: knownFactKey,
-        source: knownFactKey === factKey
-          ? source
-          : profile.factEvidence.find((item) => item.factKey === knownFactKey)?.source
-            || "unknown",
-      })),
-    }));
+  const markUnansweredHomeQuestionsNotSure = () => {
+    let next = draft.existingFeatures;
+    for (const question of homeFeatureQuestions) {
+      const answered = question.options.some(([value]) => next.includes(value));
+      if (!answered && question.unknownValue) {
+        next = updateHomeFeatureSelection(
+          next,
+          question.id,
+          question.unknownValue,
+          true,
+        );
+      }
+    }
+    set("existingFeatures", next);
+  };
   const addRoom = () => {
     if (draft.advisorProfile.rooms.length >= 12) {
       setValidationError("Up to 12 rooms can be included in one comfort profile.");
@@ -1230,25 +1298,50 @@ function ProjectEditor({
           12 - storedEvidenceCount - pendingEvidence.length,
         ),
       )
-      .map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        category:
-          file.type.startsWith("image/")
-            ? "property-photo"
-            : "supporting-document",
-      }));
+       .map((file) => ({
+         id: crypto.randomUUID(),
+         file,
+         category:
+           file.type.startsWith("image/")
+             ? "property-photo"
+             : "supporting-document",
+         factKeys: [],
+         sharingScope: "private-plan" as const,
+       }));
     setPendingEvidence((current) => [...current, ...next]);
     setStatus(
       next.length < files.length
         ? "Up to 12 files can be added to one project. Remove one to choose another."
-        : "Files selected. They upload only when you request installer responses.",
+        : "Files selected. Private files save with your plan when you email or print it; installer-shared files upload only after you confirm an enquiry.",
     );
   };
 
   const updateEvidenceCategory = (id: string, category: string) => {
     setPendingEvidence((current) =>
       current.map((item) => (item.id === id ? { ...item, category } : item)),
+    );
+    setDirty(true);
+  };
+
+  const updateEvidenceFact = (id: string, factKey: string) => {
+    setPendingEvidence((current) =>
+      current.map((item) =>
+        item.id === id
+          ? { ...item, factKeys: factKey ? [factKey] : [] }
+          : item,
+      ),
+    );
+    setDirty(true);
+  };
+
+  const updateEvidenceSharingScope = (
+    id: string,
+    sharingScope: PendingProjectEvidence["sharingScope"],
+  ) => {
+    setPendingEvidence((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, sharingScope } : item,
+      ),
     );
     setDirty(true);
   };
@@ -1425,13 +1518,16 @@ function ProjectEditor({
       window.requestAnimationFrame(() => {
         const target = window.document.getElementById(question.targetAnchor);
         target?.scrollIntoView({ behavior: "smooth", block: "center" });
-        if (
+        const focusTarget = (
           target instanceof HTMLInputElement
           || target instanceof HTMLSelectElement
           || target instanceof HTMLButtonElement
-        ) {
-          target.focus();
-        }
+        )
+          ? target
+          : target?.querySelector<HTMLElement>(
+              "input, select, button, textarea, [tabindex]:not([tabindex='-1'])",
+            );
+        focusTarget?.focus({ preventScroll: true });
       });
     });
   }
@@ -1546,9 +1642,30 @@ function ProjectEditor({
     const blocker = planShareBlocker();
     if (blocker) throw new Error(blocker);
     const id = await onSave(draftWithPlan(), savedId || undefined);
+    const privatePlanEvidence = pendingEvidence.filter(
+      (item) => item.sharingScope === "private-plan",
+    );
+    if (privatePlanEvidence.length) {
+      await onUploadEvidence(id, privatePlanEvidence, false);
+      const uploadedIds = new Set(privatePlanEvidence.map((item) => item.id));
+      setPendingEvidence((current) =>
+        current.filter((item) => !uploadedIds.has(item.id)),
+      );
+      setUploadedEvidence((current) => [
+        ...current,
+        ...privatePlanEvidence.map(({ factKeys, sharingScope }) => ({
+          factKeys,
+          sharingScope,
+        })),
+      ]);
+    }
     setSavedId(id);
     setDirty(false);
-    setStatus("Plan saved to your private account.");
+    setStatus(
+      privatePlanEvidence.length
+        ? "Plan and its private supporting evidence saved to your account."
+        : "Plan saved to your private account.",
+    );
     return id;
   }
 
@@ -1562,6 +1679,26 @@ function ProjectEditor({
     setShareStatus("");
     setShareRequestId(crypto.randomUUID());
     setShareDialogOpen(true);
+  }
+
+  function reviewHomeDetailsBeforeSharing() {
+    setShareDialogOpen(false);
+    openStep(2);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = firstUnansweredHomeQuestion
+          ? window.document.getElementById(
+              `customer-home-feature-${firstUnansweredHomeQuestion.id}`,
+            )
+          : window.document.getElementById(
+              "customer-home-feature-section-comfort",
+            );
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        target?.querySelector<HTMLInputElement>("input")?.focus({
+          preventScroll: true,
+        });
+      });
+    });
   }
 
   async function emailPlan(recipient: string) {
@@ -1700,7 +1837,7 @@ function ProjectEditor({
       return;
     }
     if (
-      storedEvidenceCount + pendingEvidence.length > 0
+      storedInstallerEvidenceCount + pendingInstallerEvidenceCount > 0
       && !confirmInstallerPhotoSharing
     ) {
       setValidationError(
@@ -2013,43 +2150,39 @@ function ProjectEditor({
                 )}
               </div>
             </fieldset>
-            <fieldset className="customer-choice-group">
-              <legend>What describes the home today?</legend>
+            <section className="customer-choice-group">
+              <h3>What describes the home today?</h3>
               <p className="customer-choice-help">
-                Include comfort problems and anything already installed. Choose
-                the unknown option when you cannot tell.
+                Work through the categories below. Each question has a clear
+                answer or a safe Not sure option, so you do not need to guess.
               </p>
-              <div className="customer-feature-groups">
-                {homeFeatureGroups.map((group) => (
-                  <section key={group.title}>
-                    <h3>{group.title}</h3>
-                    <div className="customer-choice-grid">
-                      {customerProjectOptions.homeFeatures
-                        .filter(([value]) => group.values.includes(value))
-                        .map(([value, label]: [string, string]) => (
-                          <label
-                            className={
-                              draft.existingFeatures.includes(value)
-                                ? "selected"
-                                : ""
-                            }
-                            key={value}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={draft.existingFeatures.includes(value)}
-                              onChange={() =>
-                                toggle("existingFeatures", value)
-                              }
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                    </div>
-                  </section>
-                ))}
+              <div className="customer-home-fact-readiness" aria-live="polite">
+                <div>
+                  <strong>
+                    {answeredHomeQuestionCount} of {homeFeatureQuestions.length}
+                    {" "}home questions completed
+                  </strong>
+                  <p>
+                    {notSureHomeQuestionCount
+                      ? `${notSureHomeQuestionCount} marked Not sure. That is valid and shows what may need checking later.`
+                      : "Answers are recorded as household supplied, not professionally verified."}
+                  </p>
+                </div>
+                {answeredHomeQuestionCount < homeFeatureQuestions.length && (
+                  <button
+                    type="button"
+                    onClick={markUnansweredHomeQuestionsNotSure}
+                  >
+                    Mark remaining questions Not sure
+                  </button>
+                )}
               </div>
-            </fieldset>
+              <HomeFeatureIntake
+                idPrefix="customer-home-feature"
+                selected={draft.existingFeatures}
+                onChange={(next) => set("existingFeatures", next)}
+              />
+            </section>
             <details className="customer-question-help">
               <summary>How can I tell what glazing or insulation I have?</summary>
               <div>
@@ -2062,51 +2195,6 @@ function ProjectEditor({
                   Do not enter a roof space, remove a cover or guess. Choose Not
                   sure and add a safe photo or document later if useful.
                 </p>
-              </div>
-            </details>
-            <details className="customer-advisor-disclosure">
-              <summary>How well is each important home fact supported?</summary>
-              <div className="customer-evidence-confidence">
-                <div>
-                  <strong>Record the source, not a confidence score</strong>
-                  <p>
-                    Selecting photo or document means you have it available for
-                    review. It does not mean a file is linked here or that AEA or
-                    a trade has verified the fact. Leave anything uncertain as
-                    Not yet known.
-                  </p>
-                </div>
-                <div className="customer-evidence-confidence-grid">
-                  {customerAdvisorOptions.factKeys.map(([factKey, label]) => {
-                    const source =
-                      draft.advisorProfile.factEvidence.find(
-                        (item) => item.factKey === factKey,
-                      )?.source || "unknown";
-                    return (
-                      <label key={factKey}>
-                        <span>{label}</span>
-                        <select
-                          id={`advisor-fact-${factKey}`}
-                          value={source}
-                          onChange={(event) =>
-                            updateFactEvidence(
-                              factKey,
-                              event.target.value as EvidenceSource,
-                            )
-                          }
-                        >
-                          {customerAdvisorOptions.evidenceSources.map(
-                            ([value, sourceLabel]) => (
-                              <option value={value} key={value}>
-                                {sourceLabel}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                    );
-                  })}
-                </div>
               </div>
             </details>
             <section
@@ -2890,6 +2978,7 @@ function ProjectEditor({
               </Field>
               <Field label="Main roof type">
                 <select
+                  id="customer-property-roof"
                   value={draft.propertyContext.roofType}
                   onChange={(event) =>
                     setPropertyContext("roofType", event.target.value)
@@ -2905,6 +2994,7 @@ function ProjectEditor({
               </Field>
               <Field label="Switchboard">
                 <select
+                  id="customer-property-switchboard"
                   value={draft.propertyContext.switchboard}
                   onChange={(event) =>
                     setPropertyContext("switchboard", event.target.value)
@@ -3061,11 +3151,11 @@ function ProjectEditor({
                   <h3 id="project-evidence-title">
                     Add useful photos or documents
                   </h3>
-                  <p>
-                    Use this one upload area for existing files or a phone
-                    camera. Every file is shared with each verified installer
-                    allocated to this enquiry for quoting guidance.
-                  </p>
+                    <p>
+                      Use this one upload area for existing files or a phone
+                      camera. Files stay private to your plan unless you
+                      explicitly choose installer quoting access.
+                    </p>
                 </div>
                 <strong>{pendingEvidence.length} selected</strong>
               </header>
@@ -3152,6 +3242,39 @@ function ProjectEditor({
                           </option>
                           <option value="other">Other useful evidence</option>
                         </select>
+                        <select
+                          aria-label={`Home fact supported by ${item.file.name}`}
+                          value={item.factKeys[0] || ""}
+                          onChange={(event) =>
+                            updateEvidenceFact(item.id, event.target.value)
+                          }
+                        >
+                          <option value="">General plan evidence</option>
+                          {customerAdvisorOptions.factKeys.map(
+                            ([value, label]) => (
+                              <option value={value} key={value}>
+                                Supports: {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                        <select
+                          aria-label={`Sharing setting for ${item.file.name}`}
+                          value={item.sharingScope}
+                          onChange={(event) =>
+                            updateEvidenceSharingScope(
+                              item.id,
+                              event.target.value as PendingProjectEvidence["sharingScope"],
+                            )
+                          }
+                        >
+                          <option value="private-plan">
+                            Private to my plan
+                          </option>
+                          <option value="allocated-installers">
+                            Share with allocated verified installers
+                          </option>
+                        </select>
                       </span>
                       <button
                         type="button"
@@ -3168,10 +3291,12 @@ function ProjectEditor({
                 </ul>
               )}
               <small>
-                Up to 12 files, 8 MB each. Do not upload people, mail, licence
-                plates, identity documents, unredacted bills, meter
-                identifiers, passwords or anything you do not want every
-                allocated installer to see.
+                Up to 12 files, 8 MB each. Private-plan files stay in your
+                signed-in plan. Only files you explicitly mark for installer
+                sharing can be viewed by allocated verified installers after
+                you confirm the sharing notice. Do not upload people, mail,
+                licence plates, identity documents, unredacted bills, meter
+                identifiers or passwords.
               </small>
             </section>
             <Field
@@ -3269,9 +3394,10 @@ function ProjectEditor({
                     </dd>
                   </div>
                   <div>
-                    <dt>Shared files</dt>
+                    <dt>Files shared for quoting</dt>
                     <dd>
-                      {storedEvidenceCount + pendingEvidence.length
+                      {storedInstallerEvidenceCount
+                        + pendingInstallerEvidenceCount
                         || "None attached"}
                     </dd>
                   </div>
@@ -3292,7 +3418,7 @@ function ProjectEditor({
                 </ul>
               </aside>
             </div>
-            {storedEvidenceCount + pendingEvidence.length > 0 && (
+            {storedInstallerEvidenceCount + pendingInstallerEvidenceCount > 0 && (
               <label className="customer-submit-consent">
                 <input
                   type="checkbox"
@@ -3303,8 +3429,8 @@ function ProjectEditor({
                 />
                 <span>
                   I understand that every verified installer allocated to this
-                  enquiry can view every attached photo and supporting document
-                  for quoting guidance.
+                  enquiry can view each file marked for installer sharing.
+                  Files marked private to my plan stay owner-only.
                 </span>
               </label>
             )}
@@ -3376,12 +3502,14 @@ function ProjectEditor({
         key={shareRequestId || "plan-share"}
         open={shareDialogOpen}
         defaultRecipient={firebaseAuth.currentUser?.email || ""}
+        readiness={shareablePlanDocument.readiness}
         busy={shareBusy}
         status={shareStatus}
         error={shareError}
         onClose={() => {
           if (!shareBusy) setShareDialogOpen(false);
         }}
+        onReviewHomeDetails={reviewHomeDetailsBeforeSharing}
         onSubmit={emailPlan}
       />
       <CustomerPlanPrintReport document={shareablePlanDocument} />
@@ -3525,6 +3653,7 @@ function ProjectDetail({
   onDownloadHandover,
   onDownloadEvidence,
   onDeleteEvidence,
+  onUpdateEvidence,
 }: {
   user: User;
   project: CustomerProject;
@@ -3539,6 +3668,10 @@ function ProjectDetail({
   onDeleteEvidence: (
     item: CustomerProject["evidence"][number],
   ) => Promise<void>;
+  onUpdateEvidence: (
+    item: CustomerProject["evidence"][number],
+    factKeys: string[],
+  ) => Promise<void>;
 }) {
   const [releaseConfirmations, setReleaseConfirmations] = useState<
     Record<string, boolean>
@@ -3549,6 +3682,9 @@ function ProjectDetail({
   const [preparationConfirmations, setPreparationConfirmations] = useState<
     Record<string, Record<string, boolean>>
   >({});
+  const [comfortOutcome, setComfortOutcome] = useState("not-sure");
+  const [energyOutcome, setEnergyOutcome] = useState("not-checked");
+  const [outcomeNote, setOutcomeNote] = useState("");
   const planItems = project.planSnapshot.items || [];
   const permissionPack = createCustomerPermissionPack(
     project.advisorProfile,
@@ -3558,8 +3694,16 @@ function ProjectDetail({
       planItems,
     },
   ) as CustomerPermissionPack;
-  const supportedFacts = project.advisorProfile.factEvidence.filter(
-    (item) => item.source !== "unknown",
+  const answeredHomeQuestions = homeFeatureQuestions.filter((question) =>
+    question.options.some(([value]) => project.existingFeatures.includes(value)),
+  );
+  const notSureHomeQuestions = homeFeatureQuestions.filter(
+    (question) =>
+      question.unknownValue
+      && project.existingFeatures.includes(question.unknownValue),
+  );
+  const linkedEvidenceFacts = new Set(
+    project.evidence.flatMap((item) => item.factKeys),
   );
   const progressSteps = [
     ["Scope saved", Boolean(project.submittedAt)],
@@ -3639,6 +3783,39 @@ function ProjectDetail({
               })}
             </ol>
           </section>
+          {project.planRevisions.length > 0 && (
+            <section className="customer-detail-panel customer-plan-history">
+              <div className="customer-panel-heading">
+                <span>Private plan history</span>
+                <h2>Saved roadmap versions</h2>
+                <p>
+                  A new version is kept only when the roadmap inputs or ordered
+                  steps change. Private notes and contact details are not copied
+                  into this history.
+                </p>
+              </div>
+              <ol>
+                {project.planRevisions.slice(0, 8).map((revision) => (
+                  <li key={revision.id}>
+                    <div>
+                      <strong>Version {revision.revisionNumber}</strong>
+                      <small>
+                        {new Date(revision.createdAt).toLocaleString("en-AU")}
+                      </small>
+                    </div>
+                    <span>
+                      {revision.planSnapshot.items?.length || 0} ordered steps
+                      {" | "}
+                      {optionLabel(
+                        customerProjectOptions.budgets,
+                        revision.budgetRange,
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           {project.advisorProfile.climate && (
             <section className="customer-detail-panel customer-detail-climate">
               <div className="customer-panel-heading">
@@ -3657,19 +3834,28 @@ function ProjectDetail({
           <section className="customer-detail-panel customer-detail-advisor-profile">
             <div className="customer-panel-heading">
               <span>Advice basis</span>
-              <h2>What the advisor knows and what is still uncertain</h2>
+              <h2>Your home answers and useful supporting evidence</h2>
               <p>
-                Evidence labels record what the household says is available.
-                Choosing photo or document is not proof that a file is attached,
-                linked to that fact or professionally reviewed.
+                Your selections are household-supplied observations. Linked
+                photos and documents are available for later review; neither is
+                treated as professional verification.
               </p>
             </div>
             <dl>
               <div>
-                <dt>Facts with a recorded source</dt>
+                <dt>Home questions completed</dt>
                 <dd>
-                  {supportedFacts.length} of{" "}
-                  {project.advisorProfile.factEvidence.length}
+                  {answeredHomeQuestions.length} of {homeFeatureQuestions.length}
+                </dd>
+              </div>
+              <div>
+                <dt>Answered Not sure</dt>
+                <dd>{notSureHomeQuestions.length}</dd>
+              </div>
+              <div>
+                <dt>Tracked home facts with linked evidence</dt>
+                <dd>
+                  {linkedEvidenceFacts.size} of {customerAdvisorOptions.factKeys.length}
                 </dd>
               </div>
               <div>
@@ -3706,6 +3892,90 @@ function ProjectDetail({
                     </li>
                   ))}
                 </ul>
+              </details>
+            )}
+          </section>
+          <section className="customer-detail-panel customer-outcome-checkin">
+            <div className="customer-panel-heading">
+              <span>Private progress check-in</span>
+              <h2>What changed after you tried a step?</h2>
+              <p>
+                Record your own observation so the roadmap can be reviewed over
+                time. This is not a verified savings or causation claim.
+              </p>
+            </div>
+            <div className="customer-outcome-fields">
+              <label>
+                <span>Comfort since the last change</span>
+                <select
+                  value={comfortOutcome}
+                  onChange={(event) => setComfortOutcome(event.target.value)}
+                >
+                  {Object.entries(comfortOutcomeLabels).map(([value, label]) => (
+                    <option value={value} key={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Energy use or bills</span>
+                <select
+                  value={energyOutcome}
+                  onChange={(event) => setEnergyOutcome(event.target.value)}
+                >
+                  {Object.entries(energyOutcomeLabels).map(([value, label]) => (
+                    <option value={value} key={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Optional private note</span>
+                <textarea
+                  value={outcomeNote}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Example: The living room felt less draughty during cold evenings."
+                  onChange={(event) => setOutcomeNote(event.target.value)}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void onAction("record_outcome", {
+                  comfortOutcome,
+                  energyOutcome,
+                  note: outcomeNote,
+                })
+              }
+            >
+              Save private check-in
+            </button>
+            {project.outcomeCheckins.length > 0 && (
+              <details>
+                <summary>
+                  Review {project.outcomeCheckins.length} saved check-in
+                  {project.outcomeCheckins.length === 1 ? "" : "s"}
+                </summary>
+                <ol>
+                  {project.outcomeCheckins.map((checkin) => (
+                    <li key={checkin.id}>
+                      <strong>
+                        {comfortOutcomeLabels[checkin.comfortOutcome]
+                          || checkin.comfortOutcome}
+                        {" | "}
+                        {energyOutcomeLabels[checkin.energyOutcome]
+                          || checkin.energyOutcome}
+                      </strong>
+                      <small>
+                        {new Date(checkin.recordedAt).toLocaleString("en-AU")}
+                        {" | "}
+                        {checkin.completedItemIds.length} steps marked complete
+                      </small>
+                      {checkin.note && <p>{checkin.note}</p>}
+                    </li>
+                  ))}
+                </ol>
               </details>
             )}
           </section>
@@ -3798,9 +4068,9 @@ function ProjectDetail({
                 <span>Property evidence</span>
                 <h2>Your project photos and files</h2>
                 <p>
-                  Every photo and supporting document is shared with all
-                  verified installers allocated to this enquiry so they can
-                  prepare a more informed quote.
+                  Private-plan files stay owner-only. Only files explicitly
+                  marked for installer access are shared with allocated verified
+                  installers after consent.
                 </p>
               </div>
               <div>
@@ -3813,6 +4083,44 @@ function ProjectDetail({
                         {fileSize(item.sizeBytes)} | Added{" "}
                         {new Date(item.createdAt).toLocaleDateString("en-AU")}
                       </small>
+                      <small>
+                        {item.sharingScope === "private-plan"
+                          ? "Private to this plan"
+                          : "Available to allocated verified installers after consent"}
+                        {" | "}
+                        {item.factKeys.length
+                          ? item.factKeys
+                              .map((factKey) =>
+                                optionLabel(
+                                  customerAdvisorOptions.factKeys,
+                                  factKey,
+                                ),
+                              )
+                              .join(", ")
+                          : "General plan evidence"}
+                      </small>
+                      <label>
+                        <span>What this file supports</span>
+                        <select
+                          value={item.factKeys[0] || ""}
+                          disabled={busy}
+                          onChange={(event) =>
+                            void onUpdateEvidence(
+                              item,
+                              event.target.value ? [event.target.value] : [],
+                            )
+                          }
+                        >
+                          <option value="">General plan evidence</option>
+                          {customerAdvisorOptions.factKeys.map(
+                            ([value, label]) => (
+                              <option value={value} key={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
                     </div>
                     <div>
                       <button
@@ -4073,10 +4381,11 @@ function ProjectDetail({
                             step
                           </strong>
                           <p>
-                            All allocated installers already have the uploaded
-                            quoting files. Accepting this installer lets them
-                            propose arrival windows. It does not accept a final
-                            contract or authorise installation work.
+                            All allocated installers can view only the files you
+                            marked for installer sharing. Accepting this
+                            installer lets them propose arrival windows. It does
+                            not accept a final contract or authorise installation
+                            work.
                           </p>
                           <label className="customer-check-row">
                             <input
@@ -4121,9 +4430,10 @@ function ProjectDetail({
                           </strong>
                           <p>
                             This installer can view your released contact
-                            details. All allocated installers can view the
-                            project uploads. The accepted installer provides the
-                            arrival windows for you to review.
+                            details. All allocated installers can view only the
+                            project files you marked for installer sharing. The
+                            accepted installer provides the arrival windows for
+                            you to review.
                           </p>
                           <button
                             type="button"
@@ -4226,9 +4536,10 @@ function ProjectDetail({
                 <strong>You control the handover</strong>
                 <p>
                   Shortlisting alone does not create a contract, release your
-                  contact details or authorise work. Every uploaded photo and
-                  document is already shared with the allocated verified
-                  installers under the submission notice.
+                  contact details or authorise work. Only photos and documents
+                  you marked for installer sharing are available to allocated
+                  verified installers under the submission notice. Private-plan
+                  files remain owner-only.
                 </p>
               </div>
             </section>
@@ -4706,13 +5017,12 @@ export function CustomerDashboard({
     return id || String(result.id);
   }
 
-  async function submitProject(
-    draft: ProjectDraft,
+  async function uploadProjectEvidence(
+    projectId: string,
     evidence: PendingProjectEvidence[],
     confirmInstallerPhotoSharing: boolean,
-    id?: string,
   ) {
-    const projectId = await saveProject(draft, id);
+    if (!evidence.length) return;
     if (!user) throw new Error("Sign in to continue.");
     const token = await user.getIdToken();
     for (const item of evidence) {
@@ -4721,10 +5031,15 @@ export function CustomerDashboard({
       form.set("projectId", projectId);
       form.set("clientUploadId", item.id);
       form.set("category", item.category);
+      form.set("factKeys", JSON.stringify(item.factKeys));
+      form.set("sharingScope", item.sharingScope);
       form.set("file", uploadFile);
       form.set(
         "confirmInstallerPhotoSharing",
-        String(confirmInstallerPhotoSharing),
+        String(
+          item.sharingScope === "allocated-installers"
+            && confirmInstallerPhotoSharing,
+        ),
       );
       const uploadResponse = await fetch("/api/customer-project-evidence", {
         method: "POST",
@@ -4732,11 +5047,26 @@ export function CustomerDashboard({
         body: form,
       });
       const uploadResult = await uploadResponse.json().catch(() => ({}));
-      if (!uploadResponse.ok || !uploadResult.ok)
+      if (!uploadResponse.ok || !uploadResult.ok) {
         throw new Error(
           uploadResult.error || `${item.file.name} could not be uploaded.`,
         );
+      }
     }
+  }
+
+  async function submitProject(
+    draft: ProjectDraft,
+    evidence: PendingProjectEvidence[],
+    confirmInstallerPhotoSharing: boolean,
+    id?: string,
+  ) {
+    const projectId = await saveProject(draft, id);
+    await uploadProjectEvidence(
+      projectId,
+      evidence,
+      confirmInstallerPhotoSharing,
+    );
     const result = await projectRequest("PATCH", {
       id: projectId,
       action: "submit",
@@ -4804,6 +5134,10 @@ export function CustomerDashboard({
         );
       else if (action === "acknowledge_arrival_preparation")
         setStatus("Site preparation confirmed for the CRM appointment.");
+      else if (action === "record_outcome")
+        setStatus(
+          "Private progress check-in saved. It is not shared with installers or presented as verified savings.",
+        );
       else setStatus("Project updated.");
     } catch (error) {
       setStatus(
@@ -4921,6 +5255,46 @@ export function CustomerDashboard({
         error instanceof Error
           ? error.message
           : "The project file could not be removed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateProjectEvidence(
+    item: CustomerProject["evidence"][number],
+    factKeys: string[],
+  ) {
+    if (!user) return;
+    setBusy(true);
+    setStatus("Updating the evidence link...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/customer-project-evidence", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: item.id,
+          factKeys,
+          sharingScope: item.sharingScope,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(
+          result.error || "The evidence link could not be updated.",
+        );
+      }
+      await load(user);
+      setStatus("Evidence link updated. A linked file remains available for review, not verified.");
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "The evidence link could not be updated.",
       );
     } finally {
       setBusy(false);
@@ -5184,7 +5558,7 @@ export function CustomerDashboard({
                     )
               }
               existingId={editing?.id}
-              storedEvidenceCount={editing?.evidence.length || 0}
+              storedEvidence={editing?.evidence || []}
               evidenceSharingConsent={Boolean(
                 editing?.evidenceSharingConsent,
               )}
@@ -5194,6 +5568,7 @@ export function CustomerDashboard({
                 setEditingId("");
               }}
               onSave={saveProject}
+              onUploadEvidence={uploadProjectEvidence}
               onSubmit={submitProject}
             />
           ) : view === "detail" && selected ? (
@@ -5207,6 +5582,7 @@ export function CustomerDashboard({
               onDownloadHandover={downloadHandoverDocument}
               onDownloadEvidence={downloadProjectEvidence}
               onDeleteEvidence={deleteProjectEvidence}
+              onUpdateEvidence={updateProjectEvidence}
             />
           ) : view === "quotes" ? (
             <CustomerTradeQuotes user={user} />

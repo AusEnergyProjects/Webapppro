@@ -27,7 +27,8 @@ test("advisor intake supports multiple goals, tenure, budget and detailed home f
   assert.match(dashboard, /Strata or common-property approval/);
   assert.match(dashboard, /Main goals, choose all that apply/);
   assert.match(dashboard, /type="checkbox"[\s\S]{0,120}checked=\{draft\.goals\.includes\(value\)\}/);
-  assert.match(dashboard, /customerProjectOptions\.homeFeatures/);
+  assert.match(dashboard, /customerHomeFeatureSections as rawCustomerHomeFeatureSections/);
+  assert.match(dashboard, /<HomeFeatureIntake/);
   assert.match(dashboard, /What budget should the plan work around\?/);
   assert.match(dashboard, /This only changes sequence and scope/);
   assert.match(dashboard, /Do not enter a roof space, remove a cover or guess/);
@@ -35,16 +36,14 @@ test("advisor intake supports multiple goals, tenure, budget and detailed home f
   assert.match(dashboard, /priorities: \[\]/);
 });
 
-test("advisor evidence labels remain explicit and never claim uploaded files were verified", () => {
-  assert.match(dashboard, /How well is each important home fact supported\?/);
-  assert.match(dashboard, /Record the source, not a confidence score/);
-  assert.match(
-    dashboard,
-    /does not mean a file is linked[\s\S]{0,80}verified the fact/,
-  );
-  assert.match(dashboard, /not proof that a[\s\S]{0,80}file is attached/);
-  assert.match(dashboard, /customerAdvisorOptions\.evidenceSources/);
-  assert.match(dashboard, /updateFactEvidence\(/);
+test("home answers and linked evidence remain distinct and never claim verification", () => {
+  assert.match(dashboard, /Answers are recorded as household supplied, not professionally verified/);
+  assert.match(dashboard, /What this file supports/);
+  assert.match(dashboard, /Private to this plan/);
+  assert.match(dashboard, /A linked file remains available for review, not verified/);
+  assert.match(dashboard, /Mark remaining questions Not sure/);
+  assert.doesNotMatch(dashboard, /updateFactEvidence\(/);
+  assert.doesNotMatch(dashboard, /customerAdvisorOptions\.evidenceSources\.map/);
   assert.doesNotMatch(dashboard, /Automatically verified|Evidence verified/);
 });
 
@@ -123,7 +122,12 @@ test("recommendations explain uncertainty and next questions return to controlle
   assert.match(dashboard, /Not sure is allowed/);
   assert.match(dashboard, /openPlanQuestion\(question\)/);
   assert.match(dashboard, /getElementById\(question\.targetAnchor\)/);
-  assert.match(dashboard, /id=\{`advisor-fact-\$\{factKey\}`\}/);
+  assert.match(dashboard, /target\?\.querySelector<HTMLElement>/);
+  assert.match(dashboard, /id="customer-property-roof"/);
+  assert.match(dashboard, /id="customer-property-switchboard"/);
+  assert.match(dashboard, /HomeFeatureIntake/);
+  assert.match(dashboard, /Mark remaining questions Not sure/);
+  assert.doesNotMatch(dashboard, /updateFactEvidence/);
   assert.match(dashboard, /id="customer-add-room"/);
 });
 
@@ -150,6 +154,10 @@ test("plan email and print actions use one saved privacy-filtered report", () =>
   assert.match(planShareDialog, /aria-modal="true"/);
   assert.match(planShareDialog, /event\.key === "Escape"/);
   assert.match(planShareDialog, /returnFocusRef/);
+  assert.match(planShareDialog, /Review home details/);
+  assert.match(planShareDialog, /readiness\.missingLabels\.map/);
+  assert.match(dashboard, /readiness=\{shareablePlanDocument\.readiness\}/);
+  assert.match(dashboard, /onReviewHomeDetails=\{reviewHomeDetailsBeforeSharing\}/);
   assert.match(planShareDialog, /PrintReport/);
   assert.match(planShareDialog, /href=\{action\.guideHref\}/);
   assert.match(planDocument, /customerPlanDocumentHtml/);
@@ -176,11 +184,9 @@ test("quote preparation is simpler, safer and keeps errors beside the action", (
   assert.match(dashboard, /Recommended photo and document checklist/);
   assert.equal((dashboard.match(/type="file"/g) || []).length, 1);
   assert.match(dashboard, /customer-action-error/);
-  assert.match(dashboard, /storedEvidenceCount \+ pendingEvidence\.length > 0/);
-  assert.match(
-    dashboard,
-    /12 - storedEvidenceCount - pendingEvidence\.length/,
-  );
+  assert.match(dashboard, /storedInstallerEvidenceCount \+ pendingInstallerEvidenceCount > 0/);
+  assert.match(dashboard, /sharingScope === "private-plan"/);
+  assert.match(dashboard, /homeFeatureQuestions\.length/);
   assert.match(dashboard, /useState\(evidenceSharingConsent\)/);
   assert.match(dashboard, /form\.set\(\s*"confirmInstallerPhotoSharing"/);
   assert.match(dashboard, /Generated installer summary/);

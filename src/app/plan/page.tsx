@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { HomeEnergyPlanner } from "@/components/HomeEnergyPlanner";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import {
+  MAX_HOME_FEATURE_SELECTIONS,
   createCustomerProjectPlan,
   customerProjectOptions,
 } from "@/lib/customer-projects.mjs";
@@ -42,7 +43,10 @@ export default async function HomeEnergyPlanPage({
 }) {
   const params = await searchParams;
   const suppliedGoals = values(params.goal, 10);
-  const suppliedFeatures = values(params.feature, 24);
+  const suppliedFeatures = values(
+    params.feature,
+    MAX_HOME_FEATURE_SELECTIONS,
+  );
   const suppliedBudget = value(params.budgetRange);
   const suppliedState = value(params.addressState).toUpperCase();
   const plan = createCustomerProjectPlan({

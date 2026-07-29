@@ -103,7 +103,8 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /tick off completed steps/i);
   assert.match(customerDashboard, /Review exactly what installers can see/);
   assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and\s+exact postcode stay hidden/);
-  assert.match(customerDashboard, /Every photo and supporting document is shared with all\s+verified installers allocated to this enquiry/);
+  assert.match(customerDashboard, /Private-plan files stay in your\s+signed-in plan/);
+  assert.match(customerDashboard, /Only files you explicitly mark for installer\s+sharing can be viewed by allocated verified installers/);
   assert.match(customerDashboard, /confirmContactRelease: true/);
   assert.match(customerDashboard, /Other\s+installers remain anonymised/);
   assert.match(customerDashboard, /All household project tools are included at no cost/);
@@ -114,7 +115,8 @@ test("comparison handoffs prefill only controlled project planning choices", () 
   assert.match(newProjectRoute, /goalOptions\.has\(item\)/);
   assert.match(newProjectRoute, /pace: controlledValue\(query\.pace/);
   assert.match(newProjectRoute, /situation: controlledValue\(/);
-  assert.match(newProjectRoute, /features: values\(query\.feature, 24\)\.filter/);
+  assert.match(newProjectRoute, /features: normalizeHomeFeatureSelections\(/);
+  assert.match(newProjectRoute, /values\(query\.feature, MAX_HOME_FEATURE_SELECTIONS\)/);
   assert.match(newProjectRoute, /categories: values\(query\.category, 12\)\.filter/);
   assert.match(newProjectRoute, /postcode: postcode &&/);
   assert.match(newProjectRoute, /\.test\(postcode\) \? postcode : undefined/);

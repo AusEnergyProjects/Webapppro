@@ -99,6 +99,41 @@ test("room follow-up returns keyboard focus to the add-room control", () => {
   );
 });
 
+test("roof and switchboard questions return to their controlled work-step fields", () => {
+  const questions = createNextBestQuestions({
+    items: [{ id: "solar" }],
+    factEvidence: [
+      { factKey: "roof", source: "unknown" },
+      { factKey: "switchboard", source: "unknown" },
+      { factKey: "solar", source: "unknown" },
+    ],
+    situation: "owner",
+    approvalContext: "none",
+    budgetRange: "under_2k",
+    roomCount: 1,
+    goals: ["add-solar-storage"],
+  });
+  assert.deepEqual(
+    questions.slice(0, 2).map(({ id, targetStep, targetAnchor }) => ({
+      id,
+      targetStep,
+      targetAnchor,
+    })),
+    [
+      {
+        id: "fact-roof",
+        targetStep: 4,
+        targetAnchor: "customer-property-roof",
+      },
+      {
+        id: "fact-switchboard",
+        targetStep: 4,
+        targetAnchor: "customer-property-switchboard",
+      },
+    ],
+  );
+});
+
 test("review items keep only bounded customer-owned allowlisted records", () => {
   const normalized = normalizeCustomerReviewItems([
     {
