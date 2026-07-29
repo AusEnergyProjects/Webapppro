@@ -19,11 +19,12 @@ import {
   customerPlanReportColors,
   customerPlanReportCopy,
 } from "./customer-plan-report-design.mjs";
-
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
 export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-premium-report-v3";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
 export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
+export const AEA_BRANDMARK_PUBLIC_URL =
+  `${CUSTOMER_PLAN_PUBLIC_ORIGIN}/api/aea-brandmark`;
 
 const allowedGuideHrefs = new Set([
   "/guides/batteries",
@@ -794,12 +795,12 @@ export function createCustomerPlanReportView(document) {
   };
 }
 
-function htmlBulletRows(items, { color = "#3f5d54" } = {}) {
+function htmlBulletRows(items, { color = "#365467" } = {}) {
   if (!items.length) return "";
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${
     items.map((item) => `
       <tr>
-        <td width="22" valign="top" style="padding:7px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#12a66a;">&#8226;</td>
+        <td width="22" valign="top" style="padding:7px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#00a9e8;">&#8226;</td>
         <td valign="top" style="padding:7px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:${color};">${escapeHtml(item)}</td>
       </tr>`).join("")
   }</table>`;
@@ -807,9 +808,10 @@ function htmlBulletRows(items, { color = "#3f5d54" } = {}) {
 
 function htmlSectionHeading(eyebrow, title, intro = "") {
   return `
-    <div style="margin:0 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#08794c;">${escapeHtml(eyebrow)}</div>
-    <h2 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:34px;font-weight:700;color:#062c32;">${escapeHtml(title)}</h2>
-    ${intro ? `<p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#667a72;">${escapeHtml(intro)}</p>` : ""}`;
+    <div style="width:38px;height:4px;margin:0 0 11px;background-color:#20d8c1;font-size:0;line-height:0;">&nbsp;</div>
+    <div style="margin:0 0 7px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878b7;">${escapeHtml(eyebrow)}</div>
+    <h2 style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:29px;line-height:34px;font-weight:800;letter-spacing:-.5px;color:#063448;">${escapeHtml(title)}</h2>
+    ${intro ? `<p style="margin:10px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#637a87;">${escapeHtml(intro)}</p>` : ""}`;
 }
 
 function htmlActionCard(action, priority = false) {
@@ -817,17 +819,24 @@ function htmlActionCard(action, priority = false) {
   const number = action.completed
     ? "Done"
     : String(action.number).padStart(2, "0");
+  const titleColor = priority ? "#ffffff" : "#063448";
+  const bodyColor = priority ? "#cae8f0" : "#365467";
+  const labelColor = priority ? "#74f1d7" : "#0878b7";
+  const linkColor = priority ? "#74f1d7" : "#047857";
+  const surface = priority
+    ? "background-color:#063448;background-image:linear-gradient(135deg,#031f38 0%,#05677b 100%);border:1px solid #20d8c1;border-top:6px solid #20d8c1;"
+    : "background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;border:${priority ? "2px solid #8ed5bd" : "1px solid #d7e5df"};background-color:${priority ? "#edf8f4" : "#ffffff"};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px;${surface}">
       <tr>
         <td width="58" valign="top" style="padding:18px 0 18px 18px;">
-          <div style="width:40px;padding:10px 0;border-radius:12px;background-color:${action.completed ? "#08794c" : "#062c32"};font-family:Arial,Helvetica,sans-serif;font-size:${action.completed ? "11px" : "13px"};line-height:20px;font-weight:700;text-align:center;color:#ffffff;">${escapeHtml(number)}</div>
+          <div style="width:40px;padding:10px 0;border-radius:12px;background-color:${action.completed ? "#047857" : priority ? "#00a9e8" : "#063448"};font-family:Arial,Helvetica,sans-serif;font-size:${action.completed ? "11px" : "13px"};line-height:20px;font-weight:700;text-align:center;color:#ffffff;">${escapeHtml(number)}</div>
         </td>
         <td valign="top" style="padding:18px 18px 18px 14px;">
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#08794c;">${escapeHtml(priority ? `Start here | ${action.stage}` : action.stage)}</div>
-          <h3 style="margin:5px 0 7px;font-family:Georgia,'Times New Roman',serif;font-size:${priority ? "21px" : "18px"};line-height:${priority ? "27px" : "24px"};font-weight:700;color:#062c32;">${escapeHtml(action.title)}</h3>
-          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f5d54;">${escapeHtml(action.description)}</p>
-          ${guideHref ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;"><a href="${escapeHtml(guideHref)}" style="font-weight:700;color:#08794c;text-decoration:underline;">${escapeHtml(action.guideLabel || customerPlanReportCopy.guideLabel)}</a></p>` : ""}
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${labelColor};">${escapeHtml(priority ? `Start here | ${action.stage}` : action.stage)}</div>
+          <h3 style="margin:6px 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:${priority ? "22px" : "19px"};line-height:${priority ? "27px" : "24px"};font-weight:800;letter-spacing:-.25px;color:${titleColor};">${escapeHtml(action.title)}</h3>
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${bodyColor};">${escapeHtml(action.description)}</p>
+          ${guideHref ? `<p style="margin:13px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;"><a href="${escapeHtml(guideHref)}" style="font-weight:700;color:${linkColor};text-decoration:underline;">${escapeHtml(action.guideLabel || customerPlanReportCopy.guideLabel)}</a></p>` : ""}
         </td>
       </tr>
     </table>`;
@@ -838,9 +847,29 @@ export function customerPlanDocumentHtml(document) {
   const copy = report.copy;
   const readiness = report.readinessPresentation;
   const professional = report.professionalPresentation;
-  const preheader = report.questions.length
-    ? `${report.planTitle}. Start with your first three steps and check ${report.questions.length} open home detail${report.questions.length === 1 ? "" : "s"}.`
-    : report.priorityActions.length
+  const [leadSnapshot, ...remainingSnapshots] = report.planningSnapshot;
+  const planComplete = report.actions.length > 0
+    && report.actions.every((action) => action.completed);
+  const reportSignals = planComplete
+    ? [
+      [report.actions.length, "STEPS COMPLETE"],
+      [0, "LEFT TO PLAN"],
+      [report.questions.length, "CHECK FIRST"],
+    ]
+    : [
+      [report.priorityActions.length, "START NOW"],
+      [report.laterActions.length, "PLAN NEXT"],
+      [report.questions.length, "CHECK FIRST"],
+    ];
+  const preheader = planComplete
+    ? `${report.planTitle}. Every current step is marked complete.${
+      report.questions.length
+        ? ` Check ${report.questions.length} open home detail${report.questions.length === 1 ? "" : "s"}.`
+        : ""
+    }`
+    : report.questions.length
+      ? `${report.planTitle}. Start with your first three steps and check ${report.questions.length} open home detail${report.questions.length === 1 ? "" : "s"}.`
+      : report.priorityActions.length
       ? `${report.planTitle}. Your first three steps are ready.`
       : report.actions.length
         ? `${report.planTitle}. Every current step is marked complete.`
@@ -866,48 +895,71 @@ export function customerPlanDocumentHtml(document) {
       }
     </style>
   </head>
-  <body style="margin:0;padding:0;background-color:${customerPlanReportColors.canvas};color:${customerPlanReportColors.text};font-family:Arial,Helvetica,sans-serif;">
+  <body style="margin:0;padding:0;background-color:${customerPlanReportColors.navyDeep};color:${customerPlanReportColors.text};font-family:Arial,Helvetica,sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background-color:${customerPlanReportColors.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background-color:${customerPlanReportColors.navyDeep};">
       <tr><td class="outer-pad" align="center" style="padding:30px 12px;">
-        <table class="email-shell" role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background-color:#ffffff;border:1px solid #d7e5df;">
+        <table class="email-shell" role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background-color:${customerPlanReportColors.canvas};border:1px solid #0b526b;">
           <tr>
-            <td class="hero-pad" style="padding:38px 40px 36px;background-color:${customerPlanReportColors.navy};border-bottom:6px solid ${customerPlanReportColors.teal};color:#ffffff;">
+            <td class="hero-pad" style="padding:38px 40px 40px;background-color:${customerPlanReportColors.navy};background-image:linear-gradient(135deg,#00152b 0%,#055b74 100%);border-bottom:7px solid ${customerPlanReportColors.teal};color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td valign="middle">
-                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.brand)}</div>
+                  <td width="50" valign="middle" style="width:50px;">
+                    <div style="width:42px;height:42px;border:1px solid rgba(116,241,215,.55);background-color:rgba(255,255,255,.08);text-align:center;">
+                      <img src="${AEA_BRANDMARK_PUBLIC_URL}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;margin:5px;border:0;">
+                    </div>
                   </td>
-                  <td align="right" valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#cae0dd;">${escapeHtml(report.displayDate || report.preparedDate)}</td>
+                  <td valign="middle">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#ffffff;">${escapeHtml(copy.brand)}</div>
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:15px;font-weight:600;color:#cae8f0;">Independent energy assessments</div>
+                  </td>
+                  <td align="right" valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#cae8f0;">${escapeHtml(report.displayDate || report.preparedDate)}</td>
                 </tr>
               </table>
-              <div style="margin:28px 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.heroEyebrow)}</div>
-              <h1 class="hero-title" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:42px;line-height:47px;font-weight:700;color:#ffffff;">${escapeHtml(copy.heroTitle)}</h1>
-              <p style="margin:17px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:28px;color:#d7ebe6;">${escapeHtml(report.planTitle)}</p>
-              ${report.summary ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#bcd8d1;">${escapeHtml(report.summary)}</p>` : ""}
+              <div style="margin:34px 0 9px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.heroEyebrow)}</div>
+              <h1 class="hero-title" style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:44px;line-height:48px;font-weight:800;letter-spacing:-1.1px;color:#ffffff;">${escapeHtml(copy.heroTitle)}</h1>
+              <p style="margin:18px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:19px;line-height:28px;font-weight:700;color:#74f1d7;">${escapeHtml(report.planTitle)}</p>
+              ${report.summary ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#cae8f0;">${escapeHtml(report.summary)}</p>` : ""}
+              <div style="margin-top:24px;padding-top:15px;border-top:1px solid rgba(116,241,215,.42);font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:16px;font-weight:700;letter-spacing:1px;color:#74f1d7;">INDEPENDENT | BRAND NEUTRAL | BUILT AROUND YOUR HOME</div>
             </td>
           </tr>
           <tr>
-            <td class="body-pad" style="padding:34px 40px 42px;">
+            <td class="body-pad" style="padding:36px 40px 44px;background-color:${customerPlanReportColors.canvas};">
               ${htmlSectionHeading(copy.snapshotEyebrow, copy.snapshotTitle)}
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;">
-                ${Array.from({ length: Math.ceil(report.planningSnapshot.length / 2) }, (_, rowIndex) => {
-                  const first = report.planningSnapshot[rowIndex * 2];
-                  const second = report.planningSnapshot[(rowIndex * 2) + 1];
+              ${leadSnapshot ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#058794 100%);border-left:6px solid #20d8c1;">
+                <tr><td style="padding:20px 22px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(leadSnapshot.label)}</div>
+                  <div style="margin-top:7px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:27px;font-weight:700;color:#ffffff;">${escapeHtml(leadSnapshot.value)}</div>
+                </td></tr>
+              </table>` : ""}
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:11px;">
+                ${Array.from({ length: Math.ceil(remainingSnapshots.length / 2) }, (_, rowIndex) => {
+                  const first = remainingSnapshots[rowIndex * 2];
+                  const second = remainingSnapshots[(rowIndex * 2) + 1];
                   return `
                   <tr>
-                    <td class="snapshot-cell" width="49%" valign="top" style="padding:15px 16px;background-color:#edf8f4;border:1px solid #d7e5df;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#08794c;">${escapeHtml(first.label)}</div>
-                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#18332c;">${escapeHtml(first.value)}</div>
+                    <td class="snapshot-cell" width="49%" valign="top" style="padding:16px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #00a9e8;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(first.label)}</div>
+                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(first.value)}</div>
                     </td>
                     <td class="snapshot-spacer" width="2%" style="font-size:0;line-height:0;">&nbsp;</td>
-                    ${second ? `<td class="snapshot-cell" width="49%" valign="top" style="padding:15px 16px;background-color:#edf8f4;border:1px solid #d7e5df;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#08794c;">${escapeHtml(second.label)}</div>
-                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#18332c;">${escapeHtml(second.value)}</div>
+                    ${second ? `<td class="snapshot-cell" width="49%" valign="top" style="padding:16px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #20d8c1;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(second.label)}</div>
+                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(second.value)}</div>
                     </td>` : `<td class="snapshot-cell" width="49%">&nbsp;</td>`}
                   </tr>
                   <tr><td colspan="3" height="10" style="height:10px;font-size:0;line-height:0;">&nbsp;</td></tr>`;
                 }).join("")}
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:3px;background-color:#00152b;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);">
+                <tr>
+                  ${reportSignals.map(([value, label], index) => `
+                  <td width="33%" valign="middle" style="padding:16px 18px;border-left:${index ? "1px solid rgba(116,241,215,.3)" : "0"};">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:25px;line-height:29px;font-weight:800;color:#ffffff;">${value}</div>
+                    <div style="margin-top:3px;font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:15px;font-weight:700;letter-spacing:.8px;color:#74f1d7;">${label}</div>
+                  </td>`).join("")}
+                </tr>
               </table>
 
               ${report.priorityActions.length ? `
@@ -937,55 +989,54 @@ export function customerPlanDocumentHtml(document) {
               ${report.everydayActions.length ? `
               <div class="section-pad" style="padding-top:34px;">
                 ${htmlSectionHeading(copy.everydayEyebrow, copy.everydayTitle, copy.everydayIntro)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:#edf8f4;border-left:5px solid #12a66a;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#056779 100%);border-top:6px solid #20d8c1;">
                   <tr><td style="padding:9px 18px 18px;">
                     ${report.everydayActions.map((action) => `
                     <div style="padding-top:12px;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:#08794c;">${escapeHtml(action.category)}</div>
-                      <div style="margin-top:3px;font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:24px;font-weight:700;color:#062c32;">${escapeHtml(action.title)}</div>
-                      <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f5d54;">${escapeHtml(action.description)}</p>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(action.category)}</div>
+                      <div style="margin-top:3px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;font-weight:800;color:#ffffff;">${escapeHtml(action.title)}</div>
+                      <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(action.description)}</p>
                     </div>`).join("")}
-                    <p style="margin:14px 0 0;padding-top:12px;border-top:1px solid #c8dfd6;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#667a72;">${escapeHtml(report.everydayActionsBoundary)}</p>
+                    <p style="margin:14px 0 0;padding-top:12px;border-top:1px solid rgba(116,241,215,.32);font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.everydayActionsBoundary)}</p>
                   </td></tr>
                 </table>
               </div>` : ""}
 
               ${report.climate ? `
               <div class="section-pad" style="padding-top:34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#062c32;border-bottom:5px solid #20d8c1;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);border-bottom:6px solid #20d8c1;">
                   <tr><td style="padding:22px 24px;">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.climateEyebrow)}</div>
-                    <div style="margin-top:6px;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:28px;font-weight:700;color:#ffffff;">${escapeHtml(report.climate.label || "Your local planning context")}</div>
-                    ${report.climate.summary ? `<p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#d7ebe6;">${escapeHtml(report.climate.summary)}</p>` : ""}
+                    <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(report.climate.label || "Your local planning context")}</div>
+                    ${report.climate.summary ? `<p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.climate.summary)}</p>` : ""}
                   </td></tr>
                 </table>
               </div>` : ""}
 
               <div class="section-pad" style="padding-top:34px;">
                 ${htmlSectionHeading(copy.readinessEyebrow, "How confident is this plan?")}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:${report.questions.length ? "#fff7e5" : "#edf8f4"};border:1px solid ${report.questions.length ? "#e8c66f" : "#b8dccf"};">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};border:1px solid ${report.questions.length ? "#e8c66f" : "#74f1d7"};border-top:5px solid ${report.questions.length ? "#e8c66f" : "#20d8c1"};">
                   <tr><td style="padding:20px 22px;">
-                    <div style="font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:27px;font-weight:700;color:${report.questions.length ? "#6d5315" : "#062c32"};">${escapeHtml(readiness.title)}</div>
-                    <p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${report.questions.length ? "#6d5315" : "#3f5d54"};">${escapeHtml(readiness.body)}</p>
-                    <p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:${report.questions.length ? "#7b642c" : "#667a72"};">${escapeHtml(report.readiness.boundary)}</p>
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:${report.questions.length ? "#6d5315" : "#063448"};">${escapeHtml(readiness.title)}</div>
+                    <p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${report.questions.length ? "#6d5315" : "#365467"};">${escapeHtml(readiness.body)}</p>
                     ${report.questions.length ? htmlBulletRows(report.questions.map((question) => `${question.prompt}: ${question.whyItMatters}`), { color: "#6d5315" }) : ""}
                   </td></tr>
                 </table>
                 ${professional ? `
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#ffffff;border:1px solid #d7e5df;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
                   <tr><td style="padding:20px 22px;">
-                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#08794c;">${escapeHtml(professional.eyebrow)}</div>
-                    <div style="margin-top:5px;font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:27px;font-weight:700;color:#062c32;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.title)}</div>
-                    <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f5d54;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml([professional.role, professional.scheme, professional.reference].filter(Boolean).join(" | "))}</p>
-                    ${professional.notes ? `<div style="margin-top:13px;padding:13px 15px;background-color:#edf8f4;border-left:4px solid #12a66a;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#3f5d54;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#062c32;">Adviser note</strong><br>${escapeHtml(professional.notes)}</div>` : ""}
-                    <p style="margin:11px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#667a72;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(professional.eyebrow)}</div>
+                    <div style="margin-top:5px;font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:#063448;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.title)}</div>
+                    <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml([professional.role, professional.scheme, professional.reference].filter(Boolean).join(" | "))}</p>
+                    ${professional.notes ? `<div style="margin-top:13px;padding:13px 15px;background-color:#e8f7f5;border-left:4px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#063448;">Adviser note</strong><br>${escapeHtml(professional.notes)}</div>` : ""}
+                    <p style="margin:11px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#637a87;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
                   </td></tr>
                 </table>` : ""}
               </div>
 
               <div class="section-pad" style="padding-top:34px;">
                 ${htmlSectionHeading(copy.whyEyebrow, copy.whyTitle)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#edf8f4;border-left:5px solid #12a66a;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#e8f7f5;border-left:5px solid #20d8c1;border-top:1px solid #c9dfe5;">
                   <tr><td style="padding:12px 20px 19px;">${htmlBulletRows(report.decisionBasis)}</td></tr>
                 </table>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#fff7e5;border:1px solid #e8c66f;">
@@ -998,25 +1049,25 @@ export function customerPlanDocumentHtml(document) {
 
               <div class="section-pad" style="padding-top:34px;">
                 ${htmlSectionHeading(copy.tradeEyebrow, copy.tradeTitle)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;border:1px solid #d7e5df;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
                   <tr><td style="padding:12px 20px 19px;">${htmlBulletRows(report.beforeTrade)}</td></tr>
                 </table>
               </div>
 
               <div class="section-pad" style="padding-top:34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#062c32;border-bottom:5px solid #20d8c1;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);border-bottom:6px solid #20d8c1;">
                   <tr><td style="padding:24px;">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.privacyEyebrow)}</div>
-                    <div style="margin-top:6px;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:28px;font-weight:700;color:#ffffff;">${escapeHtml(copy.privacyTitle)}</div>
-                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#d7ebe6;">${escapeHtml(report.privacyNote)}</p>
-                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#bcd8d1;">${escapeHtml(report.adviceBoundary)}</p>
+                    <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(copy.privacyTitle)}</div>
+                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.privacyNote)}</p>
+                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.adviceBoundary)}</p>
                   </td></tr>
                 </table>
               </div>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 40px;background-color:#032733;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#bcd8d1;">
+            <td style="padding:20px 40px;background-color:#00152b;border-top:2px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#b9d6e0;">
               Prepared ${escapeHtml(report.displayDate || report.preparedDate)} from the saved plan. ${escapeHtml(copy.footer)}.
             </td>
           </tr>
@@ -1116,7 +1167,6 @@ export function customerPlanDocumentText(document) {
     "HOW CONFIDENT IS THIS PLAN?",
     report.readinessPresentation.title,
     report.readinessPresentation.body,
-    report.readiness.boundary,
   );
   if (report.questions.length) {
     for (const question of report.questions) {

@@ -9,9 +9,12 @@ import {
 import {
   CUSTOMER_PLAN_PUBLIC_ORIGIN,
 } from "./customer-plan-document.mjs";
+import {
+  AEA_BRANDMARK_PNG_DATA_URI,
+} from "./aea-brand-assets.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-29-premium-report-pdf-v3";
+  "2026-07-30-tech-presentation-pdf-v1";
 
 const [PAGE_WIDTH, PAGE_HEIGHT] = PageSizes.A4;
 const MARGIN = 44;
@@ -20,25 +23,49 @@ const CONTENT_BOTTOM = 52;
 const CARD_GAP = 12;
 
 const palette = Object.freeze({
-  navy: rgb(0.024, 0.173, 0.196),
-  navyDeep: rgb(0.012, 0.153, 0.196),
-  inkSoft: rgb(0.047, 0.294, 0.29),
-  green: rgb(0.071, 0.651, 0.416),
-  greenDark: rgb(0.031, 0.475, 0.298),
+  navy: rgb(0.024, 0.204, 0.282),
+  navyDeep: rgb(0.004, 0.082, 0.145),
+  inkSoft: rgb(0.043, 0.322, 0.42),
+  electricBlue: rgb(0, 0.663, 0.91),
+  oceanBlue: rgb(0.031, 0.471, 0.718),
+  green: rgb(0.063, 0.725, 0.506),
+  greenDark: rgb(0.016, 0.471, 0.341),
   teal: rgb(0.125, 0.847, 0.757),
-  mint: rgb(0.929, 0.973, 0.957),
-  mintStrong: rgb(0.875, 0.953, 0.922),
+  aqua: rgb(0.455, 0.945, 0.843),
+  mint: rgb(0.91, 0.969, 0.961),
+  mintStrong: rgb(0.843, 0.953, 0.933),
   white: rgb(1, 1, 1),
-  canvas: rgb(0.933, 0.961, 0.949),
-  text: rgb(0.094, 0.2, 0.173),
-  body: rgb(0.247, 0.365, 0.329),
-  muted: rgb(0.4, 0.478, 0.447),
-  line: rgb(0.843, 0.898, 0.875),
+  paper: rgb(0.973, 0.988, 0.992),
+  canvas: rgb(0.918, 0.957, 0.969),
+  text: rgb(0.031, 0.165, 0.227),
+  body: rgb(0.212, 0.329, 0.404),
+  muted: rgb(0.388, 0.478, 0.529),
+  line: rgb(0.788, 0.875, 0.898),
   cream: rgb(1, 0.969, 0.898),
   creamLine: rgb(0.91, 0.776, 0.435),
   creamText: rgb(0.427, 0.325, 0.082),
-  seaGlass: rgb(0.729, 0.902, 0.839),
-  heroBody: rgb(0.827, 0.925, 0.902),
+  seaGlass: rgb(0.455, 0.945, 0.843),
+  heroBody: rgb(0.796, 0.925, 0.953),
+  glass: rgb(0.08, 0.298, 0.396),
+});
+
+const gradients = Object.freeze({
+  hero: Object.freeze({
+    from: Object.freeze([0, 21, 43]),
+    to: Object.freeze([5, 91, 116]),
+  }),
+  header: Object.freeze({
+    from: Object.freeze([0, 21, 43]),
+    to: Object.freeze([4, 80, 103]),
+  }),
+  signal: Object.freeze({
+    from: Object.freeze([5, 68, 94]),
+    to: Object.freeze([5, 135, 148]),
+  }),
+  priority: Object.freeze({
+    from: Object.freeze([4, 48, 72]),
+    to: Object.freeze([5, 105, 123]),
+  }),
 });
 
 const FONT_FALLBACKS = new Map([
@@ -199,13 +226,23 @@ function wrapText(font, size, value, maximumWidth, supportedCharacters) {
 export async function createCustomerPlanPdfBytes(suppliedReport) {
   const report = requiredReport(suppliedReport);
   const copy = report.copy || {};
+  const priorityActions = Array.isArray(report.priorityActions)
+    ? report.priorityActions
+    : report.actions.filter((action) => action?.priority);
+  const laterActions = Array.isArray(report.laterActions)
+    ? report.laterActions
+    : report.actions.filter((action) => !action?.priority);
+  const planComplete = report.actions.length > 0
+    && report.actions.every((action) => action.completed);
+  const completedCount = report.actions
+    .filter((action) => action.completed)
+    .length;
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const serif = await pdf.embedFont(StandardFonts.TimesRoman);
-  const serifBold = await pdf.embedFont(StandardFonts.TimesRomanBold);
+  const brandmark = await pdf.embedPng(AEA_BRANDMARK_PNG_DATA_URI);
   const supportedCharacters = new Map(
-    [regular, bold, serif, serifBold].map((font) => [
+    [regular, bold].map((font) => [
       font,
       new Set(font.getCharacterSet()),
     ]),
@@ -268,6 +305,99 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     return cursor;
   };
 
+  function gradientColor(from, to, progress) {
+    return rgb(
+      (from[0] + ((to[0] - from[0]) * progress)) / 255,
+      (from[1] + ((to[1] - from[1]) * progress)) / 255,
+      (from[2] + ((to[2] - from[2]) * progress)) / 255,
+    );
+  }
+
+  function drawHorizontalGradient(
+    target,
+    {
+      x = 0,
+      gradientY = 0,
+      width = PAGE_WIDTH,
+      height = PAGE_HEIGHT,
+      from,
+      to,
+      steps = 40,
+    },
+  ) {
+    const stripeWidth = width / steps;
+    for (let index = 0; index < steps; index += 1) {
+      target.drawRectangle({
+        x: x + (stripeWidth * index),
+        y: gradientY,
+        width: stripeWidth + 0.8,
+        height,
+        color: gradientColor(from, to, index / Math.max(steps - 1, 1)),
+      });
+    }
+  }
+
+  function drawBrandLockup({
+    x = MARGIN,
+    lockupY,
+    compact = false,
+    date = "",
+  }) {
+    const tile = compact ? 31 : 46;
+    const logoSize = compact ? 22 : 34;
+    page.drawRectangle({
+      x,
+      y: lockupY,
+      width: tile,
+      height: tile,
+      color: palette.white,
+      opacity: 0.09,
+      borderColor: palette.aqua,
+      borderWidth: 0.8,
+      borderOpacity: 0.42,
+    });
+    page.drawImage(brandmark, {
+      x: x + ((tile - logoSize) / 2),
+      y: lockupY + ((tile - logoSize) / 2),
+      width: logoSize,
+      height: logoSize,
+    });
+    const brandX = x + tile + (compact ? 9 : 12);
+    page.drawText("AUSTRALIAN ENERGY ASSESSMENTS", {
+      x: brandX,
+      y: lockupY + (compact ? 18 : 28),
+      size: compact ? 7 : 8.8,
+      font: bold,
+      color: palette.white,
+      characterSpacing: compact ? 0.45 : 0.7,
+    });
+    page.drawText("INDEPENDENT ENERGY ASSESSMENTS", {
+      x: brandX,
+      y: lockupY + (compact ? 8 : 13),
+      size: compact ? 5.8 : 6.8,
+      font: regular,
+      color: palette.heroBody,
+      characterSpacing: 0.5,
+    });
+    if (date) {
+      const safeDate = fontSafeText(
+        date,
+        regular,
+        supportedCharacters.get(regular),
+      );
+      page.drawText(safeDate, {
+        x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(
+          safeDate,
+          compact ? 7 : 8.2,
+        ),
+        y: lockupY + (compact ? 12 : 22),
+        size: compact ? 7 : 8.2,
+        font: regular,
+        color: palette.heroBody,
+      });
+    }
+  }
+
   pdf.setTitle(normalizedText(report.heading, 180));
   pdf.setAuthor("Australian Energy Assessments");
   pdf.setSubject("Independent home energy planning roadmap");
@@ -312,122 +442,109 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       y: 0,
       width: PAGE_WIDTH,
       height: PAGE_HEIGHT,
-      color: palette.white,
+      color: palette.canvas,
+    });
+    drawHorizontalGradient(page, {
+      x: 0,
+      gradientY: PAGE_HEIGHT - 60,
+      width: PAGE_WIDTH,
+      height: 60,
+      from: gradients.header.from,
+      to: gradients.header.to,
+      steps: 34,
+    });
+    page.drawCircle({
+      x: PAGE_WIDTH - 38,
+      y: PAGE_HEIGHT - 4,
+      size: 82,
+      color: palette.electricBlue,
+      opacity: 0.13,
     });
     page.drawRectangle({
       x: 0,
-      y: PAGE_HEIGHT - 7,
+      y: PAGE_HEIGHT - 64,
       width: PAGE_WIDTH,
-      height: 7,
+      height: 4,
       color: palette.teal,
     });
-    page.drawText("AUSTRALIAN ENERGY ASSESSMENTS", {
+    drawBrandLockup({
       x: MARGIN,
-      y: PAGE_HEIGHT - 31,
-      size: 7.2,
-      font: bold,
-      color: palette.greenDark,
-      characterSpacing: 0.75,
+      lockupY: PAGE_HEIGHT - 47,
+      compact: true,
     });
     if (pageSection) {
       const safeSection = fontSafeText(
         pageSection.toUpperCase(),
-        regular,
-        supportedCharacters.get(regular),
+        bold,
+        supportedCharacters.get(bold),
       );
-      page.drawText(safeSection, {
+      page.drawText(`SECTION | ${safeSection}`, {
         x: PAGE_WIDTH
           - MARGIN
-          - regular.widthOfTextAtSize(safeSection, 7.2),
-        y: PAGE_HEIGHT - 31,
-        size: 7.2,
-        font: regular,
-        color: palette.muted,
+          - bold.widthOfTextAtSize(`SECTION | ${safeSection}`, 7),
+        y: PAGE_HEIGHT - 29,
+        size: 7,
+        font: bold,
+        color: palette.aqua,
         characterSpacing: 0.55,
       });
     }
-    page.drawLine({
-      start: { x: MARGIN, y: PAGE_HEIGHT - 42 },
-      end: { x: PAGE_WIDTH - MARGIN, y: PAGE_HEIGHT - 42 },
-      thickness: 0.75,
-      color: palette.line,
-    });
-    y = PAGE_HEIGHT - 67;
+    y = PAGE_HEIGHT - 89;
   }
 
   function addCoverPage() {
     pageSection = "";
     page = pdf.addPage(PageSizes.A4);
     pages.push(page);
-    page.drawRectangle({
+    drawHorizontalGradient(page, {
       x: 0,
-      y: 0,
+      gradientY: 0,
       width: PAGE_WIDTH,
       height: PAGE_HEIGHT,
-      color: palette.white,
+      from: gradients.hero.from,
+      to: gradients.hero.to,
+      steps: 56,
     });
-    page.drawRectangle({
-      x: 0,
-      y: PAGE_HEIGHT - 334,
-      width: PAGE_WIDTH,
-      height: 334,
-      color: palette.navy,
+    page.drawCircle({
+      x: PAGE_WIDTH - 34,
+      y: PAGE_HEIGHT - 92,
+      size: 178,
+      color: palette.electricBlue,
+      opacity: 0.12,
     });
-    page.drawRectangle({
-      x: 0,
-      y: PAGE_HEIGHT - 341,
-      width: PAGE_WIDTH,
-      height: 7,
+    page.drawCircle({
+      x: PAGE_WIDTH - 112,
+      y: PAGE_HEIGHT - 160,
+      size: 112,
       color: palette.teal,
+      opacity: 0.09,
     });
-
-    page.drawRectangle({
-      x: MARGIN,
-      y: PAGE_HEIGHT - 74,
-      width: 42,
-      height: 42,
-      color: palette.white,
+    page.drawCircle({
+      x: 30,
+      y: 28,
+      size: 138,
+      color: palette.oceanBlue,
       opacity: 0.13,
-      borderColor: palette.seaGlass,
-      borderWidth: 0.8,
     });
-    page.drawText("AEA", {
-      x: MARGIN + 8,
-      y: PAGE_HEIGHT - 58,
-      size: 10,
-      font: bold,
-      color: palette.white,
-      characterSpacing: 0.6,
+    page.drawLine({
+      start: { x: PAGE_WIDTH - 250, y: PAGE_HEIGHT },
+      end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 250 },
+      thickness: 1,
+      color: palette.aqua,
+      opacity: 0.22,
     });
-    page.drawText("AUSTRALIAN ENERGY ASSESSMENTS", {
-      x: MARGIN + 54,
-      y: PAGE_HEIGHT - 51,
-      size: 8.4,
-      font: bold,
-      color: palette.teal,
-      characterSpacing: 0.95,
+    page.drawLine({
+      start: { x: PAGE_WIDTH - 186, y: PAGE_HEIGHT },
+      end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 186 },
+      thickness: 4,
+      color: palette.electricBlue,
+      opacity: 0.13,
     });
-    page.drawText(
-      fontSafeText(
-        report.displayDate || preparedDate,
-        regular,
-        supportedCharacters.get(regular),
-      ),
-      {
-        x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(
-          fontSafeText(
-            report.displayDate || preparedDate,
-            regular,
-            supportedCharacters.get(regular),
-          ),
-          8.2,
-        ),
-        y: PAGE_HEIGHT - 51,
-        size: 8.2,
-        font: regular,
-        color: palette.heroBody,
-      },
-    );
+    drawBrandLockup({
+      x: MARGIN,
+      lockupY: PAGE_HEIGHT - 92,
+      date: report.displayDate || preparedDate,
+    });
 
     const eyebrowLines = linesFor(
       copy.heroEyebrow || "Your personalised home energy plan",
@@ -440,43 +557,176 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       },
     );
     drawLines(eyebrowLines, {
-      startY: PAGE_HEIGHT - 114,
+      startY: PAGE_HEIGHT - 151,
       characterSpacing: 0.9,
     });
     const titleLines = linesFor(
-      copy.heroTitle || "A clearer path to a more comfortable home",
+      copy.heroTitle || "Your home energy roadmap",
       {
-        font: serifBold,
-        size: 31,
-        width: CONTENT_WIDTH - 18,
-        lineHeight: 34,
+        font: bold,
+        size: 38,
+        width: CONTENT_WIDTH - 28,
+        lineHeight: 42,
         color: palette.white,
       },
     ).slice(0, 3);
     const titleBottom = drawLines(titleLines, {
-      startY: PAGE_HEIGHT - 141,
+      startY: PAGE_HEIGHT - 182,
     });
     const planTitleLines = linesFor(report.planTitle, {
-      font: regular,
-      size: 13.2,
-      width: CONTENT_WIDTH - 18,
-      lineHeight: 19,
-      color: palette.heroBody,
+      font: bold,
+      size: 17,
+      width: CONTENT_WIDTH - 50,
+      lineHeight: 23,
+      color: palette.aqua,
     }).slice(0, 2);
     const planTitleBottom = drawLines(planTitleLines, {
-      startY: titleBottom - 7,
+      startY: titleBottom - 12,
     });
     const summaryLines = linesFor(report.summary, {
       font: regular,
-      size: 10,
-      width: CONTENT_WIDTH - 18,
-      lineHeight: 14.5,
+      size: 11.2,
+      width: CONTENT_WIDTH - 76,
+      lineHeight: 16.5,
       color: palette.heroBody,
     }).slice(0, 4);
     drawLines(summaryLines, {
-      startY: planTitleBottom - 5,
+      startY: planTitleBottom - 8,
     });
-    y = PAGE_HEIGHT - 376;
+
+    page.drawLine({
+      start: { x: MARGIN, y: 303 },
+      end: { x: PAGE_WIDTH - MARGIN, y: 303 },
+      thickness: 1.2,
+      color: palette.aqua,
+      opacity: 0.48,
+    });
+    const route = [
+      ["01", "UNDERSTAND"],
+      ["02", "PRIORITISE"],
+      ["03", "TAKE ACTION"],
+    ];
+    route.forEach(([number, label], index) => {
+      const routeX = MARGIN + (index * ((CONTENT_WIDTH - 22) / 3));
+      page.drawCircle({
+        x: routeX + 9,
+        y: 303,
+        size: 9,
+        color: index === 0 ? palette.teal : palette.oceanBlue,
+        borderColor: palette.aqua,
+        borderWidth: 0.8,
+      });
+      page.drawText(number, {
+        x: routeX + 3.7,
+        y: 299.8,
+        size: 5.5,
+        font: bold,
+        color: palette.white,
+      });
+      page.drawText(label, {
+        x: routeX,
+        y: 278,
+        size: 7.2,
+        font: bold,
+        color: palette.heroBody,
+        characterSpacing: 0.8,
+      });
+    });
+
+    page.drawText("YOUR PLAN AT A GLANCE", {
+      x: MARGIN,
+      y: 236,
+      size: 7.8,
+      font: bold,
+      color: palette.teal,
+      characterSpacing: 1,
+    });
+    const metrics = planComplete
+      ? [
+        {
+          value: String(completedCount),
+          label: completedCount === 1 ? "STEP COMPLETE" : "STEPS COMPLETE",
+        },
+        {
+          value: "0",
+          label: "LEFT TO PLAN",
+        },
+        {
+          value: String(report.questions.length),
+          label: report.questions.length === 1
+            ? "DETAIL TO CHECK"
+            : "DETAILS TO CHECK",
+        },
+      ]
+      : [
+        {
+          value: String(priorityActions.length),
+          label: priorityActions.length === 1
+            ? "MOVE TO START"
+            : "MOVES TO START",
+        },
+        {
+          value: String(laterActions.length),
+          label: laterActions.length === 1 ? "STEP TO PLAN" : "STEPS TO PLAN",
+        },
+        {
+          value: String(report.questions.length),
+          label: report.questions.length === 1
+            ? "DETAIL TO CHECK"
+            : "DETAILS TO CHECK",
+        },
+      ];
+    const metricGap = 10;
+    const metricWidth = (CONTENT_WIDTH - (metricGap * 2)) / 3;
+    metrics.forEach((metric, index) => {
+      const metricX = MARGIN + (index * (metricWidth + metricGap));
+      page.drawRectangle({
+        x: metricX,
+        y: 112,
+        width: metricWidth,
+        height: 102,
+        color: palette.white,
+        opacity: 0.08,
+        borderColor: index === 0 ? palette.teal : palette.electricBlue,
+        borderWidth: index === 0 ? 1.5 : 0.8,
+        borderOpacity: 0.64,
+      });
+      page.drawRectangle({
+        x: metricX,
+        y: 208,
+        width: metricWidth,
+        height: 6,
+        color: index === 0 ? palette.teal : palette.electricBlue,
+        opacity: index === 0 ? 1 : 0.76,
+      });
+      page.drawText(metric.value, {
+        x: metricX + 16,
+        y: 158,
+        size: 30,
+        font: bold,
+        color: palette.white,
+      });
+      page.drawText(metric.label, {
+        x: metricX + 16,
+        y: 133,
+        size: 6.8,
+        font: bold,
+        color: palette.heroBody,
+        characterSpacing: 0.65,
+      });
+    });
+    page.drawText(
+      "INDEPENDENT | BRAND NEUTRAL | BUILT AROUND YOUR HOME",
+      {
+        x: MARGIN,
+        y: 58,
+        size: 7,
+        font: bold,
+        color: palette.aqua,
+        characterSpacing: 0.72,
+      },
+    );
+    y = 0;
   }
 
   function ensureSpace(requiredHeight, section = pageSection) {
@@ -490,13 +740,13 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       size: 7.5,
       width: CONTENT_WIDTH,
       lineHeight: 10,
-      color: palette.greenDark,
+      color: palette.oceanBlue,
     });
     const titleLines = linesFor(title, {
-      font: serifBold,
-      size: 21,
+      font: bold,
+      size: 22,
       width: CONTENT_WIDTH,
-      lineHeight: 24,
+      lineHeight: 25,
       color: palette.navy,
     });
     const introLines = intro
@@ -514,6 +764,14 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       + (introLines.length ? 4 + measureLines(introLines) : 0)
       + 14;
     ensureSpace(height);
+    page.drawRectangle({
+      x: MARGIN,
+      y: y + 4,
+      width: 28,
+      height: 3,
+      color: palette.teal,
+    });
+    y -= 6;
     y = drawLines(eyebrowLines, { startY: y, characterSpacing: 0.65 });
     y -= 12;
     y = drawLines(titleLines, { startY: y });
@@ -525,26 +783,85 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   function drawSnapshotGrid() {
+    if (!report.planningSnapshot.length) return;
+    const [lead, ...remaining] = report.planningSnapshot;
+    const leadLabelLines = linesFor(normalizedText(lead?.label).toUpperCase(), {
+      font: bold,
+      size: 7.2,
+      width: CONTENT_WIDTH - 36,
+      lineHeight: 9.5,
+      color: palette.aqua,
+    });
+    const leadValueLines = linesFor(lead?.value, {
+      font: bold,
+      size: 12.2,
+      width: CONTENT_WIDTH - 70,
+      lineHeight: 17,
+      color: palette.white,
+    });
+    const leadHeight = Math.max(
+      86,
+      29 + measureLines(leadLabelLines) + 6 + measureLines(leadValueLines),
+    );
+    ensureSpace(leadHeight + 12);
+    const leadBottom = y - leadHeight;
+    drawHorizontalGradient(page, {
+      x: MARGIN,
+      gradientY: leadBottom,
+      width: CONTENT_WIDTH,
+      height: leadHeight,
+      from: gradients.signal.from,
+      to: gradients.signal.to,
+      steps: 36,
+    });
+    page.drawCircle({
+      x: PAGE_WIDTH - MARGIN - 8,
+      y: leadBottom + 10,
+      size: 80,
+      color: palette.electricBlue,
+      opacity: 0.11,
+    });
+    page.drawRectangle({
+      x: MARGIN,
+      y: leadBottom,
+      width: 6,
+      height: leadHeight,
+      color: palette.teal,
+    });
+    let leadCursor = y - 20;
+    leadCursor = drawLines(leadLabelLines, {
+      x: MARGIN + 20,
+      startY: leadCursor,
+      characterSpacing: 0.6,
+    });
+    leadCursor -= 6;
+    drawLines(leadValueLines, {
+      x: MARGIN + 20,
+      startY: leadCursor,
+    });
+    y = leadBottom - 12;
+
     const cellGap = 10;
     const cellWidth = (CONTENT_WIDTH - cellGap) / 2;
     for (
       let index = 0;
-      index < report.planningSnapshot.length;
+      index < remaining.length;
       index += 2
     ) {
-      const pair = report.planningSnapshot.slice(index, index + 2);
+      const pair = remaining.slice(index, index + 2);
+      const currentCellWidth = pair.length === 1 ? CONTENT_WIDTH : cellWidth;
       const prepared = pair.map((item) => {
         const labelLines = linesFor(normalizedText(item?.label).toUpperCase(), {
           font: bold,
           size: 7.2,
-          width: cellWidth - 28,
+          width: currentCellWidth - 28,
           lineHeight: 9.5,
-          color: palette.greenDark,
+          color: palette.oceanBlue,
         });
         const valueLines = linesFor(item?.value, {
           font: regular,
           size: 10,
-          width: cellWidth - 28,
+          width: currentCellWidth - 28,
           lineHeight: 14.5,
           color: palette.text,
         });
@@ -558,16 +875,23 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       );
       ensureSpace(rowHeight + cellGap);
       prepared.forEach(({ labelLines, valueLines }, pairIndex) => {
-        const x = MARGIN + (pairIndex * (cellWidth + cellGap));
+        const x = MARGIN + (pairIndex * (currentCellWidth + cellGap));
         const bottom = y - rowHeight;
         page.drawRectangle({
           x,
           y: bottom,
-          width: cellWidth,
+          width: currentCellWidth,
           height: rowHeight,
-          color: palette.mint,
+          color: palette.paper,
           borderColor: palette.line,
           borderWidth: 0.8,
+        });
+        page.drawRectangle({
+          x,
+          y: y - 4,
+          width: currentCellWidth,
+          height: 4,
+          color: pairIndex === 0 ? palette.electricBlue : palette.teal,
         });
         let cursor = y - 17;
         cursor = drawLines(labelLines, {
@@ -582,6 +906,61 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     }
   }
 
+  function drawPlanSignalStrip() {
+    const height = 76;
+    ensureSpace(height + CARD_GAP);
+    const bottom = y - height;
+    drawHorizontalGradient(page, {
+      x: MARGIN,
+      gradientY: bottom,
+      width: CONTENT_WIDTH,
+      height,
+      from: gradients.header.from,
+      to: gradients.signal.to,
+      steps: 36,
+    });
+    const signals = planComplete
+      ? [
+        [String(completedCount), "STEPS COMPLETE"],
+        ["0", "LEFT TO PLAN"],
+        [String(report.questions.length), "CHECK FIRST"],
+      ]
+      : [
+        [String(priorityActions.length), "START NOW"],
+        [String(laterActions.length), "PLAN NEXT"],
+        [String(report.questions.length), "CHECK FIRST"],
+      ];
+    const columnWidth = CONTENT_WIDTH / signals.length;
+    signals.forEach(([value, label], index) => {
+      const columnX = MARGIN + (columnWidth * index);
+      if (index > 0) {
+        page.drawLine({
+          start: { x: columnX, y: bottom + 15 },
+          end: { x: columnX, y: y - 15 },
+          thickness: 0.7,
+          color: palette.aqua,
+          opacity: 0.32,
+        });
+      }
+      page.drawText(value, {
+        x: columnX + 18,
+        y: bottom + 34,
+        size: 22,
+        font: bold,
+        color: palette.white,
+      });
+      page.drawText(label, {
+        x: columnX + 18,
+        y: bottom + 18,
+        size: 6.5,
+        font: bold,
+        color: palette.aqua,
+        characterSpacing: 0.55,
+      });
+    });
+    y = bottom - CARD_GAP;
+  }
+
   function drawInfoPanel({
     eyebrow = "",
     title = "",
@@ -593,7 +972,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       ? palette.navy
       : tone === "cream"
         ? palette.cream
-        : palette.mint;
+        : palette.paper;
     const border = tone === "dark"
       ? palette.navy
       : tone === "cream"
@@ -626,7 +1005,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       : [];
     const titleLines = title
       ? linesFor(title, {
-        font: serifBold,
+        font: bold,
         size: 15,
         width: innerWidth,
         lineHeight: 18,
@@ -662,15 +1041,27 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const height = Math.max(58, contentHeight + 30);
     ensureSpace(height + CARD_GAP);
     const bottom = y - height;
-    page.drawRectangle({
-      x: MARGIN,
-      y: bottom,
-      width: CONTENT_WIDTH,
-      height,
-      color: fill,
-      borderColor: border,
-      borderWidth: 0.8,
-    });
+    if (tone === "dark") {
+      drawHorizontalGradient(page, {
+        x: MARGIN,
+        gradientY: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        from: gradients.header.from,
+        to: gradients.signal.to,
+        steps: 36,
+      });
+    } else {
+      page.drawRectangle({
+        x: MARGIN,
+        y: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        color: fill,
+        borderColor: border,
+        borderWidth: 0.8,
+      });
+    }
     page.drawRectangle({
       x: MARGIN,
       y: bottom,
@@ -725,21 +1116,21 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       size: 7.1,
       width: innerWidth,
       lineHeight: 9.5,
-      color: palette.greenDark,
+      color: priority ? palette.aqua : palette.oceanBlue,
     });
     const titleLines = linesFor(action?.title, {
-      font: serifBold,
+      font: bold,
       size: priority ? 15.5 : 14.2,
       width: innerWidth,
       lineHeight: priority ? 18.5 : 17,
-      color: palette.navy,
+      color: priority ? palette.white : palette.navy,
     });
     const bodyLines = linesFor(action?.description, {
       font: regular,
       size: 10,
       width: innerWidth,
       lineHeight: 14.5,
-      color: palette.body,
+      color: priority ? palette.heroBody : palette.body,
     });
     const safeHref = absoluteGuideHref(action?.guideHref);
     const linkLabel = normalizedText(
@@ -752,7 +1143,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         size: 9.2,
         width: innerWidth,
         lineHeight: 12.5,
-        color: palette.greenDark,
+        color: priority ? palette.aqua : palette.greenDark,
       })
       : [];
     const contentHeight = measureLines(stageLines)
@@ -764,15 +1155,41 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const height = Math.max(86, contentHeight + 30);
     ensureSpace(height + CARD_GAP, priority ? "Start here" : "Your plan");
     const bottom = y - height;
-    page.drawRectangle({
-      x: MARGIN,
-      y: bottom,
-      width: CONTENT_WIDTH,
-      height,
-      color: priority ? palette.mint : palette.white,
-      borderColor: priority ? palette.seaGlass : palette.line,
-      borderWidth: priority ? 1.4 : 0.8,
-    });
+    if (priority) {
+      drawHorizontalGradient(page, {
+        x: MARGIN,
+        gradientY: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        from: gradients.priority.from,
+        to: gradients.priority.to,
+        steps: 38,
+      });
+      page.drawCircle({
+        x: PAGE_WIDTH - MARGIN - 8,
+        y: bottom + 8,
+        size: 64,
+        color: palette.electricBlue,
+        opacity: 0.1,
+      });
+    } else {
+      page.drawRectangle({
+        x: MARGIN,
+        y: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        color: palette.paper,
+        borderColor: palette.line,
+        borderWidth: 0.8,
+      });
+      page.drawRectangle({
+        x: MARGIN,
+        y: y - 4,
+        width: CONTENT_WIDTH,
+        height: 4,
+        color: palette.electricBlue,
+      });
+    }
     if (priority) {
       page.drawRectangle({
         x: MARGIN,
@@ -787,7 +1204,11 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       y: y - 58,
       width: numberWidth,
       height: 40,
-      color: action?.completed ? palette.greenDark : palette.navy,
+      color: action?.completed
+        ? palette.greenDark
+        : priority
+          ? palette.electricBlue
+          : palette.navy,
     });
     const safeNumber = fontSafeText(
       numberLabel,
@@ -826,7 +1247,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         start: { x: innerX, y: linkTop - 2 },
         end: { x: innerX + linkWidth, y: linkTop - 2 },
         thickness: 0.5,
-        color: palette.greenDark,
+        color: priority ? palette.aqua : palette.greenDark,
       });
       addLinkAnnotation({
         x: innerX,
@@ -839,98 +1260,117 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     y = bottom - CARD_GAP;
   }
 
-  function drawEverydayCard(action) {
-    const labelLines = linesFor(normalizedText(action?.category).toUpperCase(), {
-      font: bold,
-      size: 7.1,
-      width: CONTENT_WIDTH - 36,
-      lineHeight: 9.5,
-      color: palette.greenDark,
-    });
-    const titleLines = linesFor(action?.title, {
-      font: serifBold,
-      size: 14.5,
-      width: CONTENT_WIDTH - 36,
-      lineHeight: 17.5,
-      color: palette.navy,
-    });
-    const bodyLines = linesFor(action?.description, {
-      font: regular,
-      size: 10,
-      width: CONTENT_WIDTH - 36,
-      lineHeight: 14.5,
-      color: palette.body,
-    });
-    const height = measureLines(labelLines)
-      + 4
-      + measureLines(titleLines)
-      + 5
-      + measureLines(bodyLines)
-      + 28;
-    ensureSpace(height + 8, "Easy things to try");
-    const bottom = y - height;
-    page.drawRectangle({
-      x: MARGIN,
-      y: bottom,
-      width: CONTENT_WIDTH,
-      height,
-      color: palette.mint,
-      borderColor: palette.line,
-      borderWidth: 0.7,
-    });
-    page.drawRectangle({
-      x: MARGIN,
-      y: bottom,
-      width: 5,
-      height,
-      color: palette.green,
-    });
-    let cursor = y - 17;
-    cursor = drawLines(labelLines, {
-      x: MARGIN + 18,
-      startY: cursor,
-      characterSpacing: 0.5,
-    });
-    cursor -= 4;
-    cursor = drawLines(titleLines, {
-      x: MARGIN + 18,
-      startY: cursor,
-    });
-    cursor -= 5;
-    drawLines(bodyLines, {
-      x: MARGIN + 18,
-      startY: cursor,
-    });
-    y = bottom - 8;
+  function drawEverydayGrid(actions) {
+    const gap = 10;
+    const cellWidth = (CONTENT_WIDTH - gap) / 2;
+    for (let index = 0; index < actions.length; index += 2) {
+      const pair = actions.slice(index, index + 2);
+      const prepared = pair.map((action) => {
+        const labelLines = linesFor(
+          normalizedText(action?.category).toUpperCase(),
+          {
+            font: bold,
+            size: 6.8,
+            width: cellWidth - 32,
+            lineHeight: 9,
+            color: palette.oceanBlue,
+          },
+        );
+        const titleLines = linesFor(action?.title, {
+          font: bold,
+          size: 12.7,
+          width: cellWidth - 32,
+          lineHeight: 15.5,
+          color: palette.navy,
+        });
+        const bodyLines = linesFor(action?.description, {
+          font: regular,
+          size: 9.6,
+          width: cellWidth - 32,
+          lineHeight: 13.7,
+          color: palette.body,
+        });
+        return { labelLines, titleLines, bodyLines };
+      });
+      const rowHeight = Math.max(
+        ...prepared.map(({ labelLines, titleLines, bodyLines }) =>
+          measureLines(labelLines)
+            + 5
+            + measureLines(titleLines)
+            + 6
+            + measureLines(bodyLines)
+            + 30
+        ),
+        112,
+      );
+      ensureSpace(rowHeight + gap, "Quick comfort wins");
+      const bottom = y - rowHeight;
+      prepared.forEach((card, pairIndex) => {
+        const x = MARGIN + (pairIndex * (cellWidth + gap));
+        page.drawRectangle({
+          x,
+          y: bottom,
+          width: cellWidth,
+          height: rowHeight,
+          color: palette.paper,
+          borderColor: palette.line,
+          borderWidth: 0.7,
+        });
+        page.drawRectangle({
+          x,
+          y: y - 5,
+          width: cellWidth,
+          height: 5,
+          color: pairIndex === 0 ? palette.teal : palette.electricBlue,
+        });
+        page.drawCircle({
+          x: x + cellWidth - 16,
+          y: y - 18,
+          size: 10,
+          color: pairIndex === 0 ? palette.teal : palette.electricBlue,
+          opacity: 0.18,
+        });
+        let cursor = y - 20;
+        cursor = drawLines(card.labelLines, {
+          x: x + 16,
+          startY: cursor,
+          characterSpacing: 0.45,
+        });
+        cursor -= 5;
+        cursor = drawLines(card.titleLines, {
+          x: x + 16,
+          startY: cursor,
+        });
+        cursor -= 6;
+        drawLines(card.bodyLines, {
+          x: x + 16,
+          startY: cursor,
+        });
+      });
+      y = bottom - gap;
+    }
   }
 
   addCoverPage();
+  addContentPage(copy.snapshotEyebrow || "Home snapshot");
   drawSectionHeading(
     copy.snapshotEyebrow || "Your home at a glance",
-    copy.snapshotTitle || "The choices shaping this plan",
+    copy.snapshotTitle || "Your plan in one view",
   );
   drawSnapshotGrid();
+  drawPlanSignalStrip();
 
   const readiness = report.readinessPresentation || {
     title: report.readiness?.message,
     body: report.readiness?.boundary,
   };
-  const priorityActions = Array.isArray(report.priorityActions)
-    ? report.priorityActions
-    : report.actions.filter((action) => action?.priority);
-  const laterActions = Array.isArray(report.laterActions)
-    ? report.laterActions
-    : report.actions.filter((action) => !action?.priority);
   pageSection = priorityActions.length
     ? copy.startEyebrow || "Start here"
     : copy.completedEyebrow || "Plan progress";
   drawInfoPanel({
     eyebrow: copy.readinessEyebrow || "Before you spend",
     title: readiness.title,
-    body: [
-      readiness.body,
-      report.readiness?.boundary,
-    ].filter(Boolean).join("\n\n"),
+    body: readiness.body,
     tone: report.questions.length ? "cream" : "mint",
   });
 
@@ -940,7 +1380,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     }
     drawSectionHeading(
       copy.startEyebrow || "Start here",
-      copy.startTitle || "Your first three steps",
+      copy.startTitle || "Start with these three moves",
       copy.startIntro,
     );
     priorityActions.forEach((action) => drawActionCard(action, true));
@@ -955,7 +1395,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         ? copy.roadmapEyebrow || "Your step-by-step plan"
         : copy.completedEyebrow || "Plan progress",
       priorityActions.length
-        ? copy.roadmapTitle || "What to consider next"
+        ? copy.roadmapTitle || "Build the rest of your roadmap"
         : copy.completedTitle || "Every step in this plan is marked complete",
       priorityActions.length ? copy.roadmapIntro : copy.completedIntro,
     );
@@ -963,14 +1403,14 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pageSection = copy.everydayEyebrow || "Easy things to try";
-  if (y < 520) addContentPage(copy.everydayEyebrow || "Easy things to try");
   if (report.everydayActions.length) {
+    ensureSpace(240, copy.everydayEyebrow || "Quick comfort wins");
     drawSectionHeading(
       copy.everydayEyebrow || "Easy things to try",
-      copy.everydayTitle || "Small comfort wins for everyday life",
+      copy.everydayTitle || "Comfort wins you can try this week",
       copy.everydayIntro,
     );
-    report.everydayActions.forEach((action) => drawEverydayCard(action));
+    drawEverydayGrid(report.everydayActions);
     drawInfoPanel({
       body: report.everydayActionsBoundary,
       tone: "mint",
@@ -1033,6 +1473,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pageSection = copy.tradeEyebrow || "Before you book a trade";
+  ensureSpace(330, pageSection);
   drawSectionHeading(
     copy.tradeEyebrow || "Before you book a trade",
     copy.tradeTitle || "Three checks that protect your budget",
@@ -1051,12 +1492,35 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     tone: "dark",
   });
 
+  const closingAction = planComplete ? null : priorityActions[0];
+  drawInfoPanel({
+    eyebrow: closingAction ? "Your next move" : "Plan progress",
+    title: closingAction?.title
+      || (
+        planComplete
+          ? "Every current step is marked complete"
+          : "Use this plan as your project checklist"
+      ),
+    body: report.changeBoundary,
+    tone: "dark",
+  });
+
   pages.forEach((currentPage, index) => {
-    currentPage.drawLine({
-      start: { x: MARGIN, y: 34 },
-      end: { x: PAGE_WIDTH - MARGIN, y: 34 },
-      thickness: 0.7,
-      color: palette.line,
+    currentPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_WIDTH,
+      height: 40,
+      color: palette.navyDeep,
+      opacity: index === 0 ? 0.34 : 1,
+    });
+    currentPage.drawRectangle({
+      x: 0,
+      y: 40,
+      width: PAGE_WIDTH,
+      height: 2,
+      color: index === 0 ? palette.aqua : palette.teal,
+      opacity: 0.82,
     });
     currentPage.drawText(
       fontSafeText(
@@ -1066,19 +1530,19 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       ),
       {
         x: MARGIN,
-        y: 19,
-        size: 6.8,
+        y: 17,
+        size: 7,
         font: regular,
-        color: palette.muted,
+        color: palette.heroBody,
       },
     );
     const pageLabel = `Page ${index + 1} of ${pages.length}`;
     currentPage.drawText(pageLabel, {
-      x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(pageLabel, 6.8),
-      y: 19,
-      size: 6.8,
-      font: regular,
-      color: palette.muted,
+      x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(pageLabel, 7),
+      y: 17,
+      size: 7,
+      font: bold,
+      color: palette.aqua,
     });
   });
 

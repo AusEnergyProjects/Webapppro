@@ -1,21 +1,24 @@
 export const CUSTOMER_PLAN_REPORT_DESIGN_VERSION =
-  "2026-07-29-premium-report-v1";
+  "2026-07-30-tech-presentation-design-v1";
 
 export const customerPlanReportColors = Object.freeze({
-  navy: "#062c32",
-  navyDeep: "#032733",
-  inkSoft: "#0c4b4a",
-  green: "#12a66a",
-  greenDark: "#08794c",
+  navy: "#063448",
+  navyDeep: "#001525",
+  inkSoft: "#0b526b",
+  electricBlue: "#00a9e8",
+  oceanBlue: "#0878b7",
+  green: "#10b981",
+  greenDark: "#047857",
   teal: "#20d8c1",
-  mint: "#edf8f4",
-  mintStrong: "#dff3eb",
-  paper: "#ffffff",
-  canvas: "#eef5f2",
-  text: "#18332c",
-  body: "#3f5d54",
-  muted: "#667a72",
-  line: "#d7e5df",
+  aqua: "#74f1d7",
+  mint: "#e8f7f5",
+  mintStrong: "#d7f3ee",
+  paper: "#f8fcfd",
+  canvas: "#eaf4f7",
+  text: "#082a3a",
+  body: "#365467",
+  muted: "#637a87",
+  line: "#c9dfe5",
   cream: "#fff7e5",
   creamLine: "#e8c66f",
   creamText: "#6d5315",
@@ -24,25 +27,25 @@ export const customerPlanReportColors = Object.freeze({
 export const customerPlanReportCopy = Object.freeze({
   brand: "Australian Energy Assessments",
   heroEyebrow: "Your personalised home energy plan",
-  heroTitle: "A clearer path to a more comfortable home",
+  heroTitle: "Your home energy roadmap",
   heroIntro:
-    "Start with the first unfinished step, then work down the list at a pace that suits your home and budget.",
+    "See what to do now, what to check and what can wait.",
   snapshotEyebrow: "Your home at a glance",
-  snapshotTitle: "The choices shaping this plan",
+  snapshotTitle: "Your plan in one view",
   readinessEyebrow: "Before you spend",
   climateEyebrow: "Planning for your climate",
   startEyebrow: "Start here",
-  startTitle: "Your first three steps",
+  startTitle: "Start with these three moves",
   startIntro:
-    "These steps reduce uncertainty first. Complete them before committing to larger work.",
-  everydayEyebrow: "Easy things to try",
-  everydayTitle: "Small comfort wins for everyday life",
+    "These reduce uncertainty first. Work through them before committing to larger upgrades.",
+  everydayEyebrow: "Quick comfort wins",
+  everydayTitle: "Comfort wins you can try this week",
   everydayIntro:
     "Use the ideas that suit your home. Skip anything unsafe, unsuitable or against the product instructions.",
   whyEyebrow: "Why this order",
   whyTitle: "How your priorities were chosen",
   roadmapEyebrow: "Your step-by-step plan",
-  roadmapTitle: "What to consider next",
+  roadmapTitle: "Build the rest of your roadmap",
   roadmapIntro:
     "Each step appears once. A site check or new information can still change the order.",
   completedEyebrow: "Plan progress",
@@ -55,7 +58,7 @@ export const customerPlanReportCopy = Object.freeze({
   privacyTitle: "Useful detail without exposing private information",
   guideLabel: "Open the helpful guide",
   footer:
-    "Independent, product-neutral home energy guidance",
+    "Independent, brand-neutral home energy guidance",
 });
 
 const MONTHS = [
@@ -101,9 +104,14 @@ export function customerPlanReadinessPresentation(
   } else if (total) {
     title = `All ${total} key home questions are covered.`;
   }
-  const body = professionalReview
-    ? "The named adviser says these details were professionally checked. Australian Energy Assessments has not independently verified that declaration."
-    : "These are the household's answers. They are useful for planning, but they are not a site inspection.";
+  const body = String(
+    readiness?.boundary
+      || (
+        professionalReview
+          ? "These answers are marked as reviewed by the named self-declared adviser. Australian Energy Assessments has not independently checked that review."
+          : "These details were supplied by the household and have not been professionally checked."
+      ),
+  );
   return { title, body };
 }
 

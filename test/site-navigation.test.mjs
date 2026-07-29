@@ -9,6 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
+const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
 const gas = read("../src/app/gas-compare/page.tsx");
 const styles = read("../src/app/globals.css");
@@ -30,6 +31,18 @@ const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
+
+test("site navigation and customer reports share one exact AEA brandmark", () => {
+  assert.match(
+    chrome,
+    /import \{ AEA_BRANDMARK_PNG_DATA_URI \} from "@\/lib\/aea-brand-assets\.mjs"/,
+  );
+  assert.doesNotMatch(chrome, /data:image\/png;base64/);
+  assert.equal(
+    brandAssets.match(/data:image\/png;base64/g)?.length,
+    1,
+  );
+});
 
 test("the homepage provides one clear starting journey instead of redirecting", () => {
   assert.match(home, /GettingStarted/);

@@ -5,10 +5,15 @@ import {
   PDFDict,
   PDFDocument,
   PDFName,
+  PDFRawStream,
+  decodePDFRawStream,
 } from "pdf-lib";
 import {
   createCustomerPlanReportView,
 } from "../src/lib/customer-plan-document.mjs";
+import {
+  AEA_BRANDMARK_PNG_DATA_URI,
+} from "../src/lib/aea-brand-assets.mjs";
 import {
   CUSTOMER_PLAN_PDF_VERSION,
   createCustomerPlanPdfBytes,
@@ -95,13 +100,126 @@ function assertEveryPageIsA4(pdf) {
   }
 }
 
+function extractedPdfText(pdf) {
+  const text = [];
+  for (const page of pdf.getPages()) {
+    const contents = page.node.lookup(PDFName.of("Contents"));
+    const references = contents instanceof PDFArray
+      ? Array.from({ length: contents.size() }, (_, index) => contents.get(index))
+      : [contents];
+    for (const reference of references) {
+      const stream = pdf.context.lookup(reference);
+      if (!(stream instanceof PDFRawStream)) continue;
+      const decoded = Buffer.from(
+        decodePDFRawStream(stream).getBytes(),
+      ).toString("latin1");
+      for (const match of decoded.matchAll(/<([0-9a-f]+)>\s*Tj/gi)) {
+        text.push(Buffer.from(match[1], "hex").toString("latin1"));
+      }
+    }
+  }
+  return text.join(" ");
+}
+
+test("the shared report brandmark is the exact 96px AEA PNG", () => {
+  assert.match(AEA_BRANDMARK_PNG_DATA_URI, /^data:image\/png;base64,/);
+  const png = Buffer.from(
+    AEA_BRANDMARK_PNG_DATA_URI.replace(/^data:image\/png;base64,/, ""),
+    "base64",
+  );
+
+  assert.deepEqual(
+    [...png.subarray(0, 8)],
+    [137, 80, 78, 71, 13, 10, 26, 10],
+  );
+  assert.equal(png.readUInt32BE(16), 96);
+  assert.equal(png.readUInt32BE(20), 96);
+});
+
+test("direct plan PDF preserves the exact household and self-declared review boundaries", async () => {
+  const householdBoundary =
+    "These details were supplied by the household and have not been professionally checked.";
+  const professionalBoundary =
+    "These home answers are marked as reviewed by the self-declared accredited adviser named below. Australian Energy Assessments has not independently checked that review.";
+  const householdReport = normalizedReport({
+    readiness: {
+      answered: 14,
+      total: 14,
+      notSure: 0,
+      linked: 0,
+      missing: 0,
+      missingLabels: [],
+      message: "All questions addressed.",
+      boundary: householdBoundary,
+    },
+  });
+  const professionalReport = normalizedReport({
+    readiness: {
+      answered: 14,
+      total: 14,
+      notSure: 0,
+      linked: 0,
+      missing: 0,
+      missingLabels: [],
+      message: "All questions addressed.",
+      boundary: professionalBoundary,
+    },
+    professionalReview: {
+      adviserName: "Alex Example",
+      roleLabel: "Accredited energy adviser",
+      accreditationScheme: "Example scheme",
+      accreditationReference: "ACC-123456",
+      notes: "",
+      boundary:
+        "This professional status is self-declared. Australian Energy Assessments has not checked the adviser's identity, credentials or observations.",
+    },
+  });
+
+  const householdPdf = await PDFDocument.load(
+    await createCustomerPlanPdfBytes(householdReport),
+  );
+  const professionalPdf = await PDFDocument.load(
+    await createCustomerPlanPdfBytes(professionalReport),
+  );
+  const householdText = extractedPdfText(householdPdf);
+  const professionalText = extractedPdfText(professionalPdf);
+
+  assert.equal(
+    householdText.split(householdBoundary).length - 1,
+    1,
+  );
+  assert.equal(
+    professionalText.split(professionalBoundary).length - 1,
+    1,
+  );
+});
+
+test("completed-plan PDF reports progress without inventing a next step", async () => {
+  const completedReport = normalizedReport({
+    actions: reportDocument().actions.map((action) => ({
+      ...action,
+      completed: true,
+    })),
+  });
+  const pdf = await PDFDocument.load(
+    await createCustomerPlanPdfBytes(completedReport),
+  );
+  const text = extractedPdfText(pdf);
+
+  assert.match(text, /STEPS COMPLETE/);
+  assert.match(text, /LEFT TO PLAN/);
+  assert.match(text, /Every current step is marked complete/);
+  assert.doesNotMatch(text, /PLAN NEXT/);
+  assert.doesNotMatch(text, /YOUR NEXT MOVE/);
+});
+
 test("direct plan PDF bytes load as an A4 document with useful metadata", async () => {
   const report = normalizedReport();
   const bytes = await createCustomerPlanPdfBytes(report);
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-07-29-premium-report-pdf-v3",
+    "2026-07-30-tech-presentation-pdf-v1",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),

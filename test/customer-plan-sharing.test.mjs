@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
+  AEA_BRANDMARK_PUBLIC_URL,
   CUSTOMER_PLAN_DOCUMENT_VERSION,
   CUSTOMER_PLAN_EMAIL_SUBJECT,
   CUSTOMER_PLAN_REPORT_VERSION,
@@ -21,6 +22,10 @@ import {
   customerProjectOptions,
 } from "../src/lib/customer-projects.mjs";
 
+const brandmarkRoute = fs.readFileSync(
+  new URL("../src/app/api/aea-brandmark/route.ts", import.meta.url),
+  "utf8",
+);
 const HOUSEHOLD_EVIDENCE_BOUNDARY =
   "These details were supplied by the household and have not been professionally checked.";
 const SELF_DECLARED_REVIEW_BOUNDARY =
@@ -338,18 +343,28 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.match(html, /\.snapshot-cell \{ display: block !important/);
   assert.doesNotMatch(html, /width="145"/);
   assert.doesNotMatch(html, /<ul\b/i);
-  assert.doesNotMatch(html, /<img\b/i);
-  assert.ok(
-    html.indexOf("The choices shaping this plan")
-      < html.indexOf("Your first three steps"),
+  const reportImages = html.match(/<img\b[^>]*>/gi) || [];
+  assert.equal(reportImages.length, 1);
+  assert.ok(reportImages[0].includes(AEA_BRANDMARK_PUBLIC_URL));
+  assert.match(reportImages[0], /alt=""/);
+  assert.doesNotMatch(html, /data:image\//);
+  assert.match(brandmarkRoute, /AEA_BRANDMARK_PNG_DATA_URI/);
+  assert.match(brandmarkRoute, /"Content-Type": "image\/png"/);
+  assert.match(
+    brandmarkRoute,
+    /"Cache-Control": "public, max-age=31536000, immutable"/,
   );
   assert.ok(
-    html.indexOf("Your first three steps")
-      < html.indexOf("What to consider next"),
+    html.indexOf("Your plan in one view")
+      < html.indexOf("Start with these three moves"),
   );
   assert.ok(
-    html.indexOf("What to consider next")
-      < html.indexOf("Small comfort wins for everyday life"),
+    html.indexOf("Start with these three moves")
+      < html.indexOf("Build the rest of your roadmap"),
+  );
+  assert.ok(
+    html.indexOf("Build the rest of your roadmap")
+      < html.indexOf("Comfort wins you can try this week"),
   );
   assert.match(text, /YOUR HOME AT A GLANCE/);
   assert.match(text, /START HERE/);
@@ -411,8 +426,8 @@ test("everyday actions are allowlisted, capped, rendered once and kept outside r
       .filter((id) => EVERYDAY_ACTION_IDS.includes(id)),
     [],
   );
-  assert.equal(occurrenceCount(html, "Easy things to try"), 1);
-  assert.equal(occurrenceCount(text, "EASY THINGS TO TRY"), 1);
+  assert.equal(occurrenceCount(html, "Quick comfort wins"), 1);
+  assert.equal(occurrenceCount(text, "QUICK COMFORT WINS"), 1);
   for (const action of allowedActions) {
     assert.equal(occurrenceCount(html, action.title), 1, action.id);
     assert.equal(occurrenceCount(text, action.title), 1, action.id);
@@ -521,8 +536,12 @@ test("completed plans use a clear progress state instead of an empty start secti
 
   assert.equal(report.priorityActions.length, 0);
   assert.equal(report.laterActions.length, report.actions.length);
-  assert.doesNotMatch(html, />Your first three steps</);
+  assert.doesNotMatch(html, />Start with these three moves</);
+  assert.doesNotMatch(html, /Start with your first three steps/);
+  assert.doesNotMatch(html, />PLAN NEXT</);
   assert.doesNotMatch(text, /\nSTART HERE\n/);
+  assert.match(html, />STEPS COMPLETE</);
+  assert.match(html, />LEFT TO PLAN</);
   assert.match(html, />Every step in this plan is marked complete</);
   assert.match(text, /\nPLAN PROGRESS\n/);
 });
