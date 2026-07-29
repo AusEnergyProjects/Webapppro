@@ -78,9 +78,9 @@ Keep the expanded administrator notification case open through its audited read-
 
 All acceptance gates above are met for the released application source.
 
-## Active milestone: CUSTOMER-PLAN-DECISION-03
+## Released milestone: CUSTOMER-PLAN-DECISION-03
 
-Release status: implementation and validation in progress from documentation checkpoint `ad67936d7fdd849d055f355ebbcffe0e496dfb12`. The field pilot is deferred until the feature-optimisation sequence below is complete.
+Release status: application commit `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e` is validated, pushed to GitHub and the Sites managed source branch, and first deployed as public Sites version 208 at `https://compare.ausenergyassessments.com`. The field pilot remains deferred until the feature-optimisation sequence below is complete.
 
 ### Outcome
 
@@ -106,6 +106,8 @@ Make the plan explainable, question-led, privately reviewable and shareable as o
 - Public and signed-in inputs use the same canonical plan engine.
 - A4 print, desktop, keyboard and 390 px checks pass.
 - The full validation gate, source provenance, GitHub push and Sites deployment reconcile.
+
+All acceptance gates above are met for the released application source. No real account was created and no release check sent an email.
 
 ## Forward phases
 

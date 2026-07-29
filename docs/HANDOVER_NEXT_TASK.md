@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: active implementation milestone
+Status: released implementation milestone
 
 Prepared: 29 July 2026
 
@@ -8,9 +8,9 @@ Milestone ID: `CUSTOMER-PLAN-DECISION-03`
 
 Implementation baseline: `ad67936d7fdd849d055f355ebbcffe0e496dfb12`
 
-Deployed application before this milestone: Sites version 206 from application commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`
+Released application for this milestone: Sites version 208 from application commit `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e`
 
-Current source checkpoint: documentation child `ad67936d7fdd849d055f355ebbcffe0e496dfb12`
+Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -113,6 +113,51 @@ Stop the affected path when:
 - a change would alter the immutable dated audit; or
 - a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
 
+## Current release evidence
+
+The exact application source passed:
+
+```powershell
+node --experimental-strip-types --test test/customer-plan-decision-support.test.mjs test/customer-plan-sharing.test.mjs test/customer-advisor-contract.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/home-energy-plan.test.mjs test/dark-canvas.test.mjs test/direct-trade-enquiry.test.mjs test/service-reminder-delivery.test.mjs test/site-navigation.test.mjs
+npm.cmd run validate
+npm.cmd test
+npm.cmd run test:integration
+git diff --check
+```
+
+Observed results:
+
+- focused plan, privacy, provider, accessibility and navigation review set: 51 of 51 passed;
+- complete suite: 784 tests, 782 passed, 2 intentionally skipped and 0 failed;
+- integration suite: 31 of 31 passed;
+- type checking: passed;
+- warning-free lint: passed;
+- migration verification: all 83 migrations passed on fresh SQLite and Cloudflare D1 paths;
+- Vinext production build: passed;
+- `git diff --check`: passed;
+- GitHub and Sites managed source branch: exact application SHA `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e`;
+- Sites application version: 208, deployment `appgdep_6a6943bcb758819196c764370a2b683a`, public, environment revision 19;
+- required Sites delivery and limiter configuration names are present; secret values were not read or reproduced;
+- live public `/plan` exposes the reconciled seven-part advisor intake and controlled question-led result;
+- the live guide paragraph colour is `rgb(185, 204, 215)` on the navy canvas with no horizontal overflow;
+- the live print route contains the ordered plan, decision questions, guide links and browser Print or Save as PDF action;
+- representative local A4 output was inspected across four pages with complete cards, visible links, clean page breaks and no application shell;
+- no real account was created or used, no working-demo data changed and no release check sent an email.
+
+The authenticated email route and signed-in sharing UI were verified through owner-scope, privacy, provider, idempotency, limiter, modal and projection regressions. Live delivery was deliberately not exercised because the release boundary prohibits sending a test message to a real address.
+
+## Released implementation state
+
+- GitHub branch: `codex/sites-custom-domain-migration`
+- Application commit: `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e`
+- Sites application version: 208
+- Sites application deployment: `appgdep_6a6943bcb758819196c764370a2b683a`
+- Production URL: `https://compare.ausenergyassessments.com`
+- Sites environment revision: 19
+- D1 migration count: 83
+- Immutable audit changes: none
+- Demo data changed during live verification: none
+
 ## Prior released milestone: `CUSTOMER-ADVISOR-CONTEXT-02`
 
 ## Milestone outcome
@@ -193,7 +238,7 @@ The result remains an independent, brand-agnostic planning workflow. It is not a
 
 - `customer_projects.advisor_profile` is additive JSON text with default `{}`.
 - The forward migration is `0082_customer_advisor_profile.sql`. Applied migration history remains unchanged.
-- The current plan version is `2026-07-29-evidence-climate-advisor`.
+- That prior release's plan version was `2026-07-29-evidence-climate-advisor`.
 - The prior `2026-07-29-home-advisor` plan version is legacy and regenerates through the existing edited-plan conflict boundary.
 - Server normalization derives climate from the stored postcode and state. Client-supplied climate text is not authoritative.
 - Invalid evidence-source, room, concern, use-period and permission values fall back to controlled safe states.
