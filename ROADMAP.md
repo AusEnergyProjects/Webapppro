@@ -200,7 +200,37 @@ Replace every customer-plan browser-print path with a direct, privacy-filtered P
 - The complete validation gate, all 84 migrations, production build, GitHub provenance and Sites saved-version provenance pass.
 - A production `/plan/print` download creates a valid unencrypted three-page A4 PDF with the expected title and no embedded JavaScript.
 
-All acceptance gates above are met for the released application source. No account or project was created, no working-demo record was saved, no email was sent and no provider delivery path was exercised during live verification.
+The public gates passed, but the signed-in path was not exercised during release verification. Product-owner use later proved that the account action could freeze or fail while saving the project and processing pending photos before PDF generation, and its delayed hidden-link click could be suppressed by Chrome. The signed-in operational gate was not met, so this milestone is historical and superseded by `CUSTOMER-PLAN-NATIVE-PDF-07`.
+
+## Released milestone: CUSTOMER-PLAN-NATIVE-PDF-07
+
+Release status: application commit `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 216 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a69f763e0b08191b6ac8539e0828d84` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Make public and signed-in customer-plan PDF download one fast, browser-native, non-mutating action that cannot invoke print preview or block on customer-project saving, photo processing or evidence upload.
+
+### In scope
+
+- Build the PDF only from the current normalized privacy-filtered report in memory.
+- Keep project saving and evidence preparation entirely outside the PDF action.
+- Submit one synchronous same-origin form request and return one `application/pdf` attachment with a privacy-safe filename.
+- Generate the bounded A4 document at the edge without a browser, client PDF worker, font fetch, Blob URL or synthetic link click.
+- Reject cross-origin, malformed, oversized and unbounded requests.
+- Remove obsolete worker, fontkit and DejaVu dependencies.
+- Exclude `/account` HTML from shared stale caching and return `private, no-store, max-age=0`.
+- Make no schema, migration or working-demo data change.
+
+### Acceptance gate
+
+- One public or signed-in click cannot call project save, photo preparation, evidence upload or any customer-project mutation endpoint.
+- The browser makes exactly one `POST /api/customer-plan-pdf` document request and receives a `200` attachment with `application/pdf` and `no-store`.
+- The downloaded file has a valid `%PDF-` signature, is unencrypted and uses A4 page boxes.
+- The button recovers, with no alert, page error, native print dialog, client worker or font request.
+- Account and project HTML responses are private and non-cacheable.
+- The complete validation gate, all 84 migrations, production build, GitHub provenance, Sites provenance, live custom-domain download and post-deployment error check pass.
+
+All acceptance gates above are met for the released application source, except that the isolated release browser did not sign in or mutate a working-demo account. The signed-in zero-mutation contract is enforced by regression and the shared PDF request path is verified live.
 
 ## Forward phases
 
