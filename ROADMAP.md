@@ -232,6 +232,36 @@ Make public and signed-in customer-plan PDF download one fast, browser-native, n
 
 All acceptance gates above are met for the released application source, except that the isolated release browser did not sign in or mutate a working-demo account. The signed-in zero-mutation contract is enforced by regression and the shared PDF request path is verified live.
 
+## Released milestone: CUSTOMER-PLAN-PREMIUM-REPORT-08
+
+Release status: application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 218 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Turn the working customer-plan PDF and email into one elegant, brand-consistent home energy report that is easy to scan, readable at normal print size and explicit about the first three actions.
+
+### In scope
+
+- Use one shared report design and copy contract for PDF, responsive email HTML and plain text.
+- Lead with a branded cover, home snapshot and three clear first steps before the longer roadmap.
+- Separate later upgrades, everyday comfort actions, plan confidence, professional attribution, trade checks and privacy.
+- Keep body copy at a readable report size and use the site's navy, teal, green, mint and warm warning palette.
+- Make every allowlisted guide label a real same-origin PDF link without printing raw URLs.
+- Preserve the browser-native attachment response, no-store boundary, privacy filtering and zero-mutation download contract.
+- Handle completed plans without an empty or misleading priority section.
+- Make no schema, migration, account or working-demo data change.
+
+### Acceptance gate
+
+- PDF and email use the same projected titles, ordering, plan status and adviser boundary.
+- A representative maximum-content A4 report has no blank page, clipped text, split action card, orphan heading, raw visible URL, embedded JavaScript or encryption.
+- Desktop and 375 px email renders have no horizontal overflow, duplicated content or unsupported external asset.
+- Every PDF guide destination is an allowlisted same-origin annotation with a customer-friendly visible label.
+- The public live download produces a browser download event, recovers its button and opens no dialog or page error.
+- Focused tests, the full validation gate, all 84 migrations, production build, GitHub provenance, Sites provenance and post-deployment error check pass.
+
+All acceptance gates above are met. The release check did not create or save a project, upload evidence, send an email or use a real customer, trade, wholesaler or assessor account.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -331,11 +361,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
-2. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
-3. **Seasonal private outcome reminders:** let a household schedule private comfort, usage and cost check-ins and view trends without claiming causal savings or measured building performance.
-4. **Evidence-library controls:** add bounded bulk retag, delete, sharing-scope and completeness controls while keeping private-plan material owner-only by default.
-5. **Advisor-rule scenario QA:** exercise the controlled advisor rules against representative NatHERS learner-guide cases before the deferred household and experienced-assessor pilot, without representing the result as a NatHERS assessment.
+1. **Premium on-page report preview:** align the legacy `/plan/print` preview with the shared premium PDF and email hierarchy without changing the native download path.
+2. **Controlled email-client acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
+3. **Accessible PDF structure:** add document landmarks, reading-order and assistive-technology checks while preserving the lightweight edge renderer.
+4. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
+5. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
 
 ## Global stop conditions
 

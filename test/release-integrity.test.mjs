@@ -82,11 +82,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Professional review, responsive print and everyday comfort release/);
   assert.match(releaseTruth, /## Direct customer plan PDF download fix/);
   assert.match(releaseTruth, /## Browser-native customer plan PDF reliability correction/);
+  assert.match(releaseTruth, /## Premium customer plan PDF and email report/);
   assert.match(releaseTruth, /Customer plan evidence and history application source.*Sites version 210/);
   assert.match(releaseTruth, /Professional review, print and comfort application source \| `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` \|[\s\S]{0,150}Sites version 212/);
-  assert.match(releaseTruth, /Sites version 216 from `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`/);
-  assert.match(releaseTruth, /2026-07-29-native-response-pdf-v2/);
-  assert.match(releaseTruth, /browser-native PDF attachment downloads that avoid print APIs and account mutations/);
+  assert.match(releaseTruth, /Sites version 218 from `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`/);
+  assert.match(releaseTruth, /appgdep_6a6a11c02e088191bb27cc302c8b35af/);
+  assert.match(releaseTruth, /2026-07-29-premium-report-pdf-v3/);
+  assert.match(releaseTruth, /2026-07-29-premium-report-v3/);
+  assert.match(releaseTruth, /2026-07-29-premium-report-v1/);
+  assert.match(releaseTruth, /shared premium PDF plus email report/);
   assert.match(roadmap, /contains only approved forward work and measurable gates/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-ADVISOR-CONTEXT-02/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-DECISION-03/);
@@ -94,16 +98,30 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-PRO-PRINT-05/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-DIRECT-PDF-06/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-NATIVE-PDF-07/);
-  assert.match(roadmap, /Release status: application commit `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`[\s\S]{0,250}Sites version 216/);
+  assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-PREMIUM-REPORT-08/);
+  assert.match(roadmap, /Release status: application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`[\s\S]{0,250}Sites version 218/);
   assert.match(handover, /Status: released implementation milestone/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-NATIVE-PDF-07`/);
-  assert.match(handover, /Released application for this milestone: Sites version 216 from application commit `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`/);
-  assert.match(handover, /Sites application version: 216/);
-  assert.match(handover, /2026-07-29-native-response-pdf-v2/);
-  assert.match(roadmap, /1\. \*\*Guided safe photo capture:/);
-  assert.match(handover, /1\. \*\*Guided safe photo capture:/);
-  assert.match(roadmap, /5\. \*\*Advisor-rule scenario QA:/);
-  assert.match(handover, /5\. \*\*Advisor-rule scenario QA:/);
+  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-PREMIUM-REPORT-08`/);
+  assert.match(handover, /Released application for this milestone: Sites version 218 from application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`/);
+  assert.match(handover, /Sites application version: 218/);
+  assert.match(handover, /appgdep_6a6a11c02e088191bb27cc302c8b35af/);
+  assert.match(handover, /2026-07-29-premium-report-pdf-v3/);
+  assert.match(handover, /2026-07-29-premium-report-v3/);
+  assert.match(handover, /2026-07-29-premium-report-v1/);
+
+  const nextFivePattern =
+    /## Next five logical product steps\r?\n\r?\n((?:[1-5]\. .*(?:\r?\n|$)){5})/;
+  const roadmapNextFive = roadmap.match(nextFivePattern)?.[1];
+  const handoverNextFive = handover.match(nextFivePattern)?.[1];
+
+  assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
+  assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
+  assert.equal(handoverNextFive, roadmapNextFive);
+  assert.match(roadmapNextFive, /^1\. \*\*Premium on-page report preview:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Controlled email-client acceptance:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Accessible PDF structure:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Guided safe photo capture:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Revision comparison and restore:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

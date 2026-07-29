@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 29 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-NATIVE-PDF-07`
+Milestone ID: `CUSTOMER-PLAN-PREMIUM-REPORT-08`
 
-Implementation baseline: `81abfff9100fc514112b65631e2fdd8c5716dd1f`
+Implementation baseline: `d7599fc39b56c56eb01b2b89edccf1645f1a8a07`
 
-Released application for this milestone: Sites version 216 from application commit `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`
+Released application for this milestone: Sites version 218 from application commit `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,9 +18,9 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Let a household or self-declared accredited adviser download one readable, useful and brand-agnostic home energy plan through a fast browser-native attachment response that never invokes print preview or blocks on project saving, photo processing or evidence upload.
+Give a household or self-declared accredited adviser one elegant, brand-consistent home energy report in PDF and email, with clear first actions, readable plain language and a layout that feels appropriate for a high-end customer platform.
 
-The optional professional-review declaration and bounded everyday comfort actions remain unchanged. Public and signed-in plans project the same privacy-filtered report into one edge-generated A4 PDF. The click synchronously submits a normal same-origin form and receives an attachment, without saving the project, preparing pending photos, uploading evidence, starting a client PDF worker, creating a Blob URL or calling a browser print API.
+The release keeps the proven browser-native, non-mutating PDF attachment path and replaces only the report presentation layer. PDF, responsive email HTML and plain text now use one shared privacy-filtered report design and copy contract. The first page leads with a branded cover and home snapshot, the next section makes the first three unfinished actions obvious, and later sections separate the roadmap, everyday comfort ideas, plan confidence, professional attribution, trade checks and privacy.
 
 ## Current user outcomes
 
@@ -32,25 +32,26 @@ The optional professional-review declaration and bounded everyday comfort action
 - Public and signed-in plans show a separate `Helpful things you can try now` section rather than mixing behavioural advice into the ordered upgrade roadmap.
 - Controlled helpful actions cover appliance controls and timers, moisture and ventilation, personal warmth such as layers, slippers and electric throws, safe seasonal airflow, window coverings and landscaping, and renter-friendly or bounded do-it-yourself options.
 - Positive-only triggers prevent cold-weather, cooling or renter-specific advice from appearing when the recorded facts do not support it.
-- Email, public PDF and signed-in PDF use the same privacy-filtered document projection.
+- Email, public PDF and signed-in PDF use the same privacy-filtered document projection, customer wording and section order.
 - Public and signed-in PDF actions use one browser-native attachment request with a short duplicate-click guard and no account mutation.
-- Long adviser names, references and notes wrap safely in the A4 report.
-- The PDF format version is `2026-07-29-native-response-pdf-v2`; the plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, the document remains `2026-07-29-plan-document-v2`, and the concise report remains `2026-07-29-concise-report-v2`.
+- PDF and email use the site's deep navy, teal, green, mint and warm warning palette with editorial serif headings and readable sans-serif body copy.
+- The report leads with the home snapshot and first three unfinished actions, then separates later work, everyday actions, climate context, plan confidence, professional attribution, trade checks and privacy.
+- Allowlisted guide labels are real same-origin PDF annotations; raw URLs are not drawn into the report.
+- Long adviser names, references and notes wrap safely, and a fully completed plan uses an explicit completion state instead of an empty priority section.
+- The PDF format version is `2026-07-29-premium-report-pdf-v3`, the report version is `2026-07-29-premium-report-v3`, and the shared design version is `2026-07-29-premium-report-v1`. The plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, and the document remains `2026-07-29-plan-document-v2`.
 
 ## Current in scope
 
-- Extend the existing owner-scoped adviser profile with a bounded optional professional review.
-- Allow only the two controlled professional roles used by the customer report.
-- Require the current declaration version at the server boundary and reject stale, missing or incomplete declarations.
-- Reset the declaration when advice-affecting household or adviser inputs change.
-- Keep the professional review explicitly self-declared; do not represent it as an AEA credential or accreditation check.
-- Derive a deterministic, capped everyday-action set from the same controlled home, tenure, room and equipment facts used by the advisor.
-- Keep everyday actions separate from the ordered roadmap, quotes, permissions and installer matching.
-- Reuse the same normalized report contract for inline email HTML, plain text, public PDF and signed-in PDF.
-- Generate customer-plan PDFs from a bounded same-origin edge route and return a standard attachment response.
+- Add one shared design and plain-language copy contract for PDF, responsive email HTML and plain text.
+- Give page one a strong branded cover, prepared date, summary and compact two-column home snapshot.
+- Highlight the first three unfinished actions before the remaining ordered roadmap.
+- Keep recommendation cards together across A4 page breaks and give every content page a section header plus page count.
+- Use standard built-in PDF fonts so the edge response remains small and avoids browser font or worker dependencies.
+- Render guide text as customer-friendly labels with real same-origin annotations and no raw visible URL.
+- Keep email table based, inline styled, 640 px wide on desktop and stacked at narrow widths with no remote images.
+- Lead confidence and professional sections with the practical customer result while retaining the exact self-declared and household evidence boundaries.
+- Preserve the bounded same-origin PDF route, response limits, no-store headers and synchronous native form download.
 - Keep project saving, pending-photo preparation and evidence upload entirely outside the PDF action.
-- Exclude account HTML from shared edge caching so a fresh customer navigation receives the current application shell.
-- Remove iframe, `srcdoc`, `contentWindow`, `afterprint` and customer-plan `window.print()` paths.
 - Preserve existing email ownership, confirmation, idempotency, provider acceptance and rate-limit controls.
 - Preserve legacy edited plan ordering, removals, custom steps and earlier plan versions through the existing conflict boundary.
 - Make no schema or migration change for this milestone.
@@ -62,7 +63,7 @@ The optional professional-review declaration and bounded everyday comfort action
 - A formal NatHERS assessment, NatHERS certificate, energy rating, equipment sizing or legal approval.
 - Brands, provider ranking, current market prices, savings promises or finance advice.
 - Automated image interpretation or a requirement to photograph an unsafe area.
-- Revision comparison or restore, scheduled seasonal reminders and bulk evidence-library actions. These are forward work.
+- The legacy on-page `/plan/print` preview redesign, dedicated Gmail and Outlook inbox testing, tagged-PDF accessibility, guided photo capture and revision restore. These are forward work.
 - A server-side browser, print service or persisted PDF object. The edge route generates response bytes in memory and does not store the PDF.
 - Real customer, trade, wholesaler or assessor account creation.
 - A release-test email or mutation of a working-demo project.
@@ -94,7 +95,9 @@ The optional professional-review declaration and bounded everyday comfort action
 - Email HTML, plain text, public PDF and signed-in PDF use the same normalized report projection and content hierarchy.
 - Customer-plan delivery has no native print, iframe, `afterprint`, client worker, Blob URL or synthetic-link path and performs no project or evidence mutation.
 - Account and project HTML is excluded from shared caching and returns `private, no-store, max-age=0`.
-- Representative maximum-content, long-professional-note and Unicode A4 reports wrap safely and retain readable card contrast.
+- Representative maximum-content, long-professional-note and Unicode A4 reports wrap safely, keep cards together and retain readable contrast.
+- PDF annotations are same-origin, raw URLs remain hidden, and fully completed plans have no empty priority section.
+- Desktop and 375 px email renders retain the same hierarchy with no horizontal overflow or external image dependency.
 - Type checking, lint, focused tests, the full validation gate, all migrations, the production build, diff hygiene, GitHub provenance and Sites provenance pass.
 - Desktop, signed-in and narrow-viewport live checks show no horizontal overflow or unreadable plan content.
 
@@ -108,6 +111,7 @@ Stop the affected path when:
 - a self-declared adviser could be represented as credential-verified or endorsed by AEA;
 - changed home or adviser details could retain an earlier professional declaration;
 - a customer-plan action could invoke native print, process a pending photo, save or upload customer data, or rely on a delayed synthetic download;
+- a PDF page could clip content, split an action card, orphan a heading, draw a raw URL or use unreadably small body text;
 - behavioural advice could contradict the known tenure, comfort or equipment facts;
 - a question would require unsafe inspection or encourage blocking required ventilation;
 - an email would be sent or a working-demo project would be saved during release verification;
@@ -121,32 +125,33 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-plan-pdf.test.mjs test/customer-project-advisor-ui.test.mjs test/site-navigation.test.mjs test/site-performance.test.mjs
+node --test test/customer-plan-sharing.test.mjs test/customer-plan-pdf.test.mjs test/customer-project-advisor-ui.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused PDF, customer-project UI, navigation and account-cache set: 45 of 45 passed;
+- focused report, PDF and customer-project UI set: 33 of 33 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 820 tests, 818 passed, 2 intentionally skipped and 0 failed;
+- complete suite: 822 tests, 820 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
 - migration verification: all 84 migrations passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub and Sites managed source branch: exact application SHA `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`;
-- Sites application version: 216, deployment `appgdep_6a69f763e0b08191b6ac8539e0828d84`, public, environment revision 19;
-- the local Chrome-channel action completed in 139 ms; the live custom-domain action completed in 1,906 ms and made exactly one `POST /api/customer-plan-pdf` request;
-- the live action created `home-energy-plan-2026-07-29.pdf`; independent parsing confirmed a valid 6,532-byte, unencrypted three-page A4 document with no alert or page error;
-- live `/account` and `/account/projects/new` HTML returned `private, no-store, max-age=0`, and the post-deployment Sites error-only log query returned zero events;
+- GitHub and Sites managed source branch: exact application SHA `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`;
+- Sites application version: 218, deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`, public, environment revision 19;
+- one representative maximum-content, professional-review report produced an unencrypted eight-page A4 PDF with no JavaScript, 13 same-origin guide annotations, no raw visible URL and no blank or clipped page;
+- the matching email rendered at 760 px desktop and 375 px mobile widths with one shared hierarchy, clean stacking and no remote images;
+- the live custom-domain action emitted one download event, recovered the `Download PDF` button, opened no dialog and produced no browser error;
+- the post-deployment Sites error-only log query returned zero events;
 - no real account or project was created, no working-demo record was saved, no email was sent and no provider delivery path was exercised.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`
-- Sites application version: 216
-- Sites application deployment: `appgdep_6a69f763e0b08191b6ac8539e0828d84`
+- Application commit: `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`
+- Sites application version: 218
+- Sites application deployment: `appgdep_6a6a11c02e088191bb27cc302c8b35af`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 84
@@ -157,7 +162,11 @@ Observed results:
 
 `npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the PDF feature and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PLAN-DIRECT-PDF-06`
+## Prior released milestone: `CUSTOMER-PLAN-NATIVE-PDF-07`
+
+The prior release established the reliable non-mutating browser-native PDF attachment path. Its exact application commit was `8cdec99bcd2d1cb9f2ec0dc18c87a71860412642`, first deployed as Sites version 216 through deployment `appgdep_6a69f763e0b08191b6ac8539e0828d84`. Its delivery mechanism remains active underneath the premium report presentation.
+
+## Earlier released milestone: `CUSTOMER-PLAN-DIRECT-PDF-06`
 
 The prior direct-PDF release used a client worker and produced a valid PDF from the public planner. Its exact application commit was `d5c675a5ceffa6e924df033e8cb8b505bb4d6336`, first deployed as Sites version 214 through deployment `appgdep_6a69e79a91548191987f12631559cb1f`. The signed-in action was not exercised during that release and later failed the product-owner operational check: it saved the project and could process or upload pending evidence before generating the PDF, then relied on a delayed hidden-link click. It is superseded by `CUSTOMER-PLAN-NATIVE-PDF-07`.
 
@@ -475,8 +484,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
-2. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
-3. **Seasonal private outcome reminders:** let a household schedule private comfort, usage and cost check-ins and view trends without claiming causal savings or measured building performance.
-4. **Evidence-library controls:** add bounded bulk retag, delete, sharing-scope and completeness controls while keeping private-plan material owner-only by default.
-5. **Advisor-rule scenario QA:** exercise the controlled advisor rules against representative NatHERS learner-guide cases before the deferred household and experienced-assessor pilot, without representing the result as a NatHERS assessment.
+1. **Premium on-page report preview:** align the legacy `/plan/print` preview with the shared premium PDF and email hierarchy without changing the native download path.
+2. **Controlled email-client acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
+3. **Accessible PDF structure:** add document landmarks, reading-order and assistive-technology checks while preserving the lightweight edge renderer.
+4. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
+5. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
