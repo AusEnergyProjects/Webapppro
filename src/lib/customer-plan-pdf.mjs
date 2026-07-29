@@ -1,7 +1,7 @@
-import fontkit from "@pdf-lib/fontkit";
 import {
   PDFDocument,
   PageSizes,
+  StandardFonts,
   rgb,
 } from "pdf-lib";
 import {
@@ -9,7 +9,7 @@ import {
 } from "./customer-plan-document.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-29-direct-download-pdf-v1";
+  "2026-07-29-native-response-pdf-v2";
 
 const [PAGE_WIDTH, PAGE_HEIGHT] = PageSizes.A4;
 const MARGIN = 42;
@@ -17,6 +17,19 @@ const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
 const CONTENT_BOTTOM = 50;
 const CARD_GAP = 10;
 const CONTINUATION_MINIMUM_SPACE = 120;
+const FONT_FALLBACKS = new Map([
+  ["\u2010", "-"],
+  ["\u2011", "-"],
+  ["\u2012", "-"],
+  ["\u2013", "-"],
+  ["\u2014", "-"],
+  ["\u2018", "'"],
+  ["\u2019", "'"],
+  ["\u201c", "\""],
+  ["\u201d", "\""],
+  ["\u2022", "-"],
+  ["\u2026", "..."],
+]);
 
 const palette = {
   navyDark: rgb(0.018, 0.122, 0.184),
@@ -44,15 +57,6 @@ function normalizedText(value, maximum = 8_000) {
   return Array.from(supplied).slice(0, maximum).join("");
 }
 
-function requiredFontBytes(value, label) {
-  if (value instanceof Uint8Array) return value;
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-  }
-  throw new TypeError(`${label} must be supplied as font bytes.`);
-}
-
 function requiredReport(value) {
   if (
     !value
@@ -64,6 +68,20 @@ function requiredReport(value) {
     throw new TypeError(
       "A normalized privacy-filtered customer plan report is required.",
     );
+  }
+  for (const [field, maximum] of [
+    ["planningSnapshot", 12],
+    ["actions", 40],
+    ["everydayActions", 12],
+    ["questions", 12],
+    ["decisionBasis", 24],
+    ["beforeTrade", 24],
+  ]) {
+    if (!Array.isArray(value[field]) || value[field].length > maximum) {
+      throw new TypeError(
+        "A bounded privacy-filtered customer plan report is required.",
+      );
+    }
   }
   return value;
 }
@@ -106,19 +124,22 @@ function wrapText(font, size, value, maximumWidth, supportedCharacters) {
     const codePoint = character.codePointAt(0);
     if (supportedCharacters.has(codePoint)) return character;
     const decomposed = character.normalize("NFD");
+    const approximation = decomposed.replace(/\p{Mark}/gu, "");
     if (
-      decomposed !== character
-      && Array.from(decomposed).every((part) =>
+      approximation
+      && approximation !== character
+      && Array.from(approximation).every((part) =>
         supportedCharacters.has(part.codePointAt(0))
       )
     ) {
-      return decomposed;
+      return approximation;
     }
-    throw new Error(
-      `The supplied PDF font does not support U+${
-        codePoint.toString(16).toUpperCase().padStart(4, "0")
-      }.`,
-    );
+    const fallback = FONT_FALLBACKS.get(character) || "?";
+    return Array.from(fallback).every((part) =>
+      supportedCharacters.has(part.codePointAt(0))
+    )
+      ? fallback
+      : "";
   }).join("");
 
   const lines = [];
@@ -182,22 +203,11 @@ function appendLineGroup(target, lines, gapBefore = 0) {
 
 export async function createCustomerPlanPdfBytes(
   suppliedReport,
-  {
-    regularFontBytes,
-    boldFontBytes,
-  } = {},
 ) {
   const report = requiredReport(suppliedReport);
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const regular = await pdf.embedFont(
-    requiredFontBytes(regularFontBytes, "regularFontBytes"),
-    { subset: true },
-  );
-  const bold = await pdf.embedFont(
-    requiredFontBytes(boldFontBytes, "boldFontBytes"),
-    { subset: true },
-  );
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const fontCharacters = new Map([
     [regular, new Set(regular.getCharacterSet())],
     [bold, new Set(bold.getCharacterSet())],

@@ -4,6 +4,7 @@ import { syncCertificatePriceHistory } from "../src/lib/certificate-prices-serve
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
+const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
 const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
 const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
 
@@ -11,6 +12,13 @@ type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
 function secureResponse(response: Response, request: Request) {
   const headers = new Headers(response.headers);
+  const pathname = new URL(request.url).pathname;
+  if (
+    (pathname === "/account" || pathname.startsWith("/account/"))
+    && (headers.get("content-type") || "").includes("text/html")
+  ) {
+    headers.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
+  }
   headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
@@ -38,6 +46,9 @@ function isCacheablePageRequest(request: Request) {
   if (request.method !== "GET") return false;
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return false;
+  if (url.pathname === "/account" || url.pathname.startsWith("/account/")) {
+    return false;
+  }
   return (request.headers.get("accept") || "").includes("text/html");
 }
 

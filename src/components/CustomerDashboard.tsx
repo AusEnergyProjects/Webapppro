@@ -1904,7 +1904,7 @@ function ProjectEditor({
     }
   }
 
-  async function downloadPlanPdf() {
+  function downloadPlanPdf() {
     if (activePdfDownload.current) return;
     const blocker = planShareBlocker();
     if (blocker) {
@@ -1914,15 +1914,14 @@ function ProjectEditor({
     activePdfDownload.current = true;
     setPdfBusy(true);
     setValidationError("");
-    setStatus("Saving the exact plan before preparing your PDF...");
     try {
-      await savePlanForSharing();
-      setStatus("Preparing your PDF download...");
       const report = createCustomerPlanReportView(
         shareablePlanDocument,
       );
-      await downloadCustomerPlanPdf(report);
-      setStatus("Your PDF download has started.");
+      downloadCustomerPlanPdf(report);
+      setStatus(
+        "PDF download requested. Your private draft and evidence were not changed.",
+      );
     } catch (error) {
       setStatus("");
       setValidationError(
@@ -1930,10 +1929,14 @@ function ProjectEditor({
           ? error.message
           : "The PDF could not be prepared.",
       );
-    } finally {
       activePdfDownload.current = false;
       setPdfBusy(false);
+      return;
     }
+    window.setTimeout(() => {
+      activePdfDownload.current = false;
+      setPdfBusy(false);
+    }, 1_500);
   }
 
   async function submitProject() {
@@ -2849,9 +2852,9 @@ function ProjectEditor({
                 <button
                   type="button"
                   disabled={shareBusy || pdfBusy}
-                  onClick={() => void downloadPlanPdf()}
+                  onClick={downloadPlanPdf}
                 >
-                  {pdfBusy ? "Preparing PDF..." : "Download PDF"}
+                  {pdfBusy ? "Starting download..." : "Download PDF"}
                 </button>
                 {(planEdited || planSnapshotConflict) && (
                   <button

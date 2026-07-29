@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -21,21 +20,6 @@ const EVERYDAY_ACTION_IDS = [
   "seasonal-window-and-landscape",
   "renter-friendly-diy-boundary",
 ];
-const fontBytes = {
-  regularFontBytes: fs.readFileSync(
-    new URL(
-      "../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf",
-      import.meta.url,
-    ),
-  ),
-  boldFontBytes: fs.readFileSync(
-    new URL(
-      "../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf",
-      import.meta.url,
-    ),
-  ),
-};
-
 function reportDocument(overrides = {}) {
   return {
     heading: "Your independent home energy plan",
@@ -108,7 +92,7 @@ function assertEveryPageIsA4(pdf) {
 
 test("direct plan PDF bytes load as an A4 document with useful metadata", async () => {
   const report = normalizedReport();
-  const bytes = await createCustomerPlanPdfBytes(report, fontBytes);
+  const bytes = await createCustomerPlanPdfBytes(report);
 
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -168,7 +152,7 @@ test("direct plan PDF accepts common adviser names, temperatures and smart punct
     },
   };
 
-  const bytes = await createCustomerPlanPdfBytes(unicodeReport, fontBytes);
+  const bytes = await createCustomerPlanPdfBytes(unicodeReport);
   const pdf = await PDFDocument.load(bytes);
 
   assertEveryPageIsA4(pdf);
@@ -214,9 +198,8 @@ test("maximum bounded roadmap produces a complete multi-page A4 PDF", async () =
 
   const minimalBytes = await createCustomerPlanPdfBytes(
     normalizedReport({ everydayActions: [], actions: actions.slice(0, 1) }),
-    fontBytes,
   );
-  const maximumBytes = await createCustomerPlanPdfBytes(maximumReport, fontBytes);
+  const maximumBytes = await createCustomerPlanPdfBytes(maximumReport);
   const pdf = await PDFDocument.load(maximumBytes);
 
   assertEveryPageIsA4(pdf);

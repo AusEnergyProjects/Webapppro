@@ -1,79 +1,37 @@
 import type {
-  CustomerPlanPdfWorkerRequest,
-  CustomerPlanPdfWorkerResponse,
   CustomerPlanReportView,
 } from "./customer-plan-report";
 
-const PDF_GENERATION_TIMEOUT_MS = 45_000;
-const PDF_URL_REVOKE_DELAY_MS = 30_000;
+const MAX_REPORT_BYTES = 96_000;
+const DOWNLOAD_FORM_REMOVE_DELAY_MS = 1_000;
 
-function generateCustomerPlanPdf(
+export function downloadCustomerPlanPdf(
   report: CustomerPlanReportView,
-): Promise<{ bytes: ArrayBuffer; fileName: string }> {
-  const worker = new Worker(
-    new URL("./customer-plan-pdf.worker.ts", import.meta.url),
-    { type: "module", name: "customer-plan-pdf" },
-  );
-  const id = crypto.randomUUID();
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return false;
-      settled = true;
-      window.clearTimeout(timeout);
-      worker.terminate();
-      return true;
-    };
-    const timeout = window.setTimeout(() => {
-      if (!finish()) return;
-      reject(new Error("The PDF took too long to prepare. Please try again."));
-    }, PDF_GENERATION_TIMEOUT_MS);
-
-    worker.addEventListener(
-      "message",
-      (event: MessageEvent<CustomerPlanPdfWorkerResponse>) => {
-        if (event.data.id !== id || !finish()) return;
-        if (!event.data.ok) {
-          reject(new Error(event.data.error));
-          return;
-        }
-        resolve({
-          bytes: event.data.bytes,
-          fileName: event.data.fileName,
-        });
-      },
+): void {
+  const serializedReport = JSON.stringify(report);
+  if (
+    new TextEncoder().encode(serializedReport).byteLength > MAX_REPORT_BYTES
+  ) {
+    throw new Error(
+      "This plan is too large to download. Remove some custom steps and try again.",
     );
-    worker.addEventListener("error", () => {
-      if (!finish()) return;
-      reject(new Error("The PDF generator could not be started."));
-    });
-
-    const request: CustomerPlanPdfWorkerRequest = { id, report };
-    worker.postMessage(request);
-  });
-}
-
-export async function downloadCustomerPlanPdf(
-  report: CustomerPlanReportView,
-): Promise<{ fileName: string; sizeBytes: number }> {
-  const generated = await generateCustomerPlanPdf(report);
-  const blob = new Blob([generated.bytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement("a");
-  anchor.href = url;
-  anchor.download = generated.fileName;
-  anchor.rel = "noopener";
-  anchor.hidden = true;
-  window.document.body.append(anchor);
-  try {
-    anchor.click();
-  } catch (error) {
-    URL.revokeObjectURL(url);
-    throw error;
-  } finally {
-    anchor.remove();
   }
-  window.setTimeout(() => URL.revokeObjectURL(url), PDF_URL_REVOKE_DELAY_MS);
-  return { fileName: generated.fileName, sizeBytes: blob.size };
+  const form = window.document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/customer-plan-pdf";
+  form.acceptCharset = "UTF-8";
+  form.hidden = true;
+  form.setAttribute("aria-hidden", "true");
+  const input = window.document.createElement("input");
+  input.type = "hidden";
+  input.name = "report";
+  input.value = serializedReport;
+  form.append(input);
+  window.document.body.append(form);
+  try {
+    form.submit();
+  } catch (error) {
+    throw error;
+  }
+  window.setTimeout(() => form.remove(), DOWNLOAD_FORM_REMOVE_DELAY_MS);
 }

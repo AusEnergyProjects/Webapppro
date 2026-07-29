@@ -56,21 +56,3 @@ export type CustomerPlanReportView = {
   privacyNote: string;
   adviceBoundary: string;
 };
-
-export type CustomerPlanPdfWorkerRequest = {
-  id: string;
-  report: CustomerPlanReportView;
-};
-
-export type CustomerPlanPdfWorkerResponse =
-  | {
-    id: string;
-    ok: true;
-    bytes: ArrayBuffer;
-    fileName: string;
-  }
-  | {
-    id: string;
-    ok: false;
-    error: string;
-  };

@@ -15,8 +15,8 @@ const planShareDialog = read("../src/components/CustomerPlanShareDialog.tsx");
 const planDocument = read("../src/lib/customer-plan-document.mjs");
 const planPdf = read("../src/lib/customer-plan-pdf.mjs");
 const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
-const planPdfWorker = read("../src/lib/customer-plan-pdf.worker.ts");
 const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
+const planPdfRoute = read("../src/app/api/customer-plan-pdf/route.ts");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 
 test("the customer project wizard exposes every stage as an accessible button", () => {
@@ -206,19 +206,24 @@ test("everyday actions stay outside the ordered roadmap in account and report vi
   assert.match(projectPlan, /everydayActions,\s*everydayActionsBoundary:[\s\S]{0,100}\s*items,/);
 });
 
-test("plan email and direct PDF actions use one saved privacy-filtered report without native print", () => {
+test("plan email saves before delivery while PDF download is mutation-free and browser native", () => {
   const downloadPlanSource = dashboard.match(
-    /async function downloadPlanPdf\(\)[\s\S]*?async function submitProject\(\)/,
+    /function downloadPlanPdf\(\)[\s\S]*?async function submitProject\(\)/,
   )?.[0] || "";
   assert.match(dashboard, /Email this plan/);
   assert.match(dashboard, /Download PDF/);
-  assert.match(dashboard, /await savePlanForSharing\(\)/);
+  assert.match(dashboard, /const projectId = await savePlanForSharing\(\)/);
   assert.match(dashboard, /customer-project-plan-email/);
   assert.match(dashboard, /consentConfirmed: true/);
   assert.match(dashboard, /key=\{shareRequestId \|\| "plan-share"\}/);
+  assert.doesNotMatch(
+    downloadPlanSource,
+    /savePlanForSharing|onSave|onUploadEvidence/,
+  );
+  assert.match(downloadPlanSource, /downloadCustomerPlanPdf\(report\)/);
   assert.match(
     downloadPlanSource,
-    /await savePlanForSharing\(\);[\s\S]*await downloadCustomerPlanPdf\(/,
+    /Your private draft and evidence were not changed/,
   );
   assert.match(
     downloadPlanSource,
@@ -226,33 +231,20 @@ test("plan email and direct PDF actions use one saved privacy-filtered report wi
   );
   assert.match(planPdf, /export async function createCustomerPlanPdfBytes\(/);
   assert.match(planPdf, /export function customerPlanPdfFileName\(report/);
-  assert.match(
+  assert.match(planPdfClient, /export function downloadCustomerPlanPdf\(/);
+  assert.match(planPdfClient, /createElement\("form"\)/);
+  assert.match(planPdfClient, /form\.method = "POST"/);
+  assert.match(planPdfClient, /form\.action = "\/api\/customer-plan-pdf"/);
+  assert.match(planPdfClient, /input\.name = "report"/);
+  assert.match(planPdfClient, /form\.submit\(\)/);
+  assert.doesNotMatch(
     planPdfClient,
-    /export async function downloadCustomerPlanPdf\(/,
+    /new Worker|new Blob|createObjectURL|anchor\.click/,
   );
-  assert.match(planPdfClient, /new Worker\(/);
-  assert.match(planPdfClient, /customer-plan-pdf\.worker\.ts/);
-  assert.match(planPdfClient, /worker\.postMessage\(request\)/);
-  assert.match(planPdfClient, /worker\.terminate\(\)/);
-  assert.match(
-    planPdfClient,
-    /new Blob\(\[generated\.bytes\], \{ type: "application\/pdf" \}\)/,
-  );
-  assert.match(planPdfClient, /URL\.createObjectURL\(blob\)/);
-  assert.match(planPdfClient, /anchor\.download = generated\.fileName/);
-  assert.match(planPdfClient, /window\.document\.body\.append\(anchor\)/);
-  assert.match(planPdfClient, /anchor\.click\(\)/);
-  assert.match(planPdfClient, /anchor\.remove\(\)/);
-  assert.match(planPdfClient, /URL\.revokeObjectURL\(url\)/);
-  assert.match(
-    planPdfWorker,
-    /createCustomerPlanPdfBytes\(report, fontBytes\)/,
-  );
-  assert.match(planPdfWorker, /DejaVuSans\.ttf\?url/);
-  assert.match(planPdfWorker, /DejaVuSans-Bold\.ttf\?url/);
-  assert.doesNotMatch(planPdfWorker, /\.woff2?\?url/);
-  assert.match(planPdfWorker, /customerPlanPdfFileName\(report\)/);
-  assert.match(planPdfWorker, /workerScope\.postMessage\(response, \[bytes\]\)/);
+  assert.match(planPdfRoute, /createCustomerPlanPdfBytes\(report\)/);
+  assert.match(planPdfRoute, /Content-Disposition/);
+  assert.match(planPdfRoute, /application\/pdf/);
+  assert.match(planPdfRoute, /"Cache-Control": "no-store"/);
   assert.match(planPdfButton, /downloadCustomerPlanPdf\(report\)/);
   assert.match(planPdfButton, /if \(downloadingRef\.current\) return/);
   assert.match(planPdfButton, /downloadingRef\.current = true/);
@@ -272,7 +264,6 @@ test("plan email and direct PDF actions use one saved privacy-filtered report wi
     /afterprint|createElement\("iframe"\)|srcdoc/,
   );
   assert.doesNotMatch(planPdfClient, /(?:window|contentWindow)\.print\(\)/);
-  assert.doesNotMatch(planPdfWorker, /(?:window|contentWindow)\.print\(\)/);
   assert.doesNotMatch(planPdfButton, /(?:window|contentWindow)\.print\(\)/);
   assert.doesNotMatch(planPdfClient, /createElement\("iframe"\)|srcdoc/);
   assert.doesNotMatch(dashboard, /<CustomerPlanPrintReport(?:\s|>)/);
