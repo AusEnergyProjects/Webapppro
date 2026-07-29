@@ -140,6 +140,38 @@ Make the public planner, signed-in project builder and customer report use one c
 
 All acceptance gates above are met for the released application source. No real account or project was created, no working-demo record was saved, and no release check sent an email.
 
+## Released milestone: CUSTOMER-PLAN-PRO-PRINT-05
+
+Release status: application commit `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` is validated, pushed to GitHub and the Sites managed source branch, and first deployed as public Sites version 212 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a69c4f838bc8191a0e050da219ab4a6` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Add a bounded self-declared professional-review path, useful everyday comfort guidance and a reliable privacy-filtered print lifecycle without implying AEA credential verification, a formal assessment, product endorsement or measured savings.
+
+### In scope
+
+- Let a person preparing the plan self-declare one of the two controlled adviser roles and record a name, accreditation scheme or body, reference and bounded professional notes.
+- Require a current explicit declaration and invalidate it whenever relevant household, room, plan or adviser details change.
+- Keep AEA credential, accreditation, evidence and observation verification explicitly out of the report claim.
+- Preserve household-supplied report wording when no current professional declaration exists.
+- Derive a bounded, deterministic and product-neutral set of helpful actions covering controls and timers, moisture and ventilation, personal warmth, seasonal airflow, windows and landscaping, and renter-friendly or bounded do-it-yourself options.
+- Keep helpful actions separate from the ordered roadmap, quotes, permissions and installer matching.
+- Use the same privacy-filtered projection for email HTML, plain text, standalone print and signed-in print.
+- Replace account-page printing with one temporary isolated print frame, one-active-print guarding and complete cancellation, timeout, `afterprint`, exit and unmount cleanup.
+- Preserve earlier plan versions, edited ordering, removals and custom steps through the existing conflict boundary.
+
+### Acceptance gate
+
+- A household-only plan never claims professional review.
+- A stale, missing or incomplete professional declaration is rejected, and relevant edits require a fresh confirmation.
+- A professional report names the self-declared adviser while clearly disclaiming AEA verification or endorsement.
+- Helpful actions do not contradict recorded tenure, hot or cold concerns, or known equipment.
+- Long professional details wrap in accessible semantic A4 report sections.
+- The account print path does not call top-level `window.print()`, print application chrome, allow concurrent jobs or leave temporary report frames behind.
+- Focused regressions, the full validation gate, all 84 migrations, production build, source provenance and responsive live checks pass.
+
+All acceptance gates above are met for the released application source. A representative six-page A4 report was inspected locally. No working-demo record was saved, no release email was sent and the live print dialog was not opened.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions

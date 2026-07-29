@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 29 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-EVIDENCE-04`
+Milestone ID: `CUSTOMER-PLAN-PRO-PRINT-05`
 
-Implementation baseline: `1ffc2352638c4dbf27726c531c605aa57085d398`
+Implementation baseline: `3d9907c1573812be0f8673787fce9923ee8f4cff`
 
-Released application for this milestone: Sites version 210 from application commit `6540ee671e64dbfdf80592283a1954b2ff482355`
+Released application for this milestone: Sites version 212 from application commit `ee75aadfd6800c01b92532b2d376a4a1e33c9d74`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,41 +18,43 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make it easy for a household to describe what the home has, understand what is still unknown, correct missing details before sharing, and receive one concise independent plan without learning an internal evidence model.
+Let a household or self-declared accredited adviser prepare one readable, useful and brand-agnostic home energy plan without turning general guidance into a credential check, NatHERS assessment, product endorsement or savings promise.
 
-The public planner and signed-in project builder now use one categorized fourteen-question home-detail taxonomy. The shared report, email dialog and print surface explain household answers in plain language and state that they have not been professionally checked.
+The signed-in builder now supports an optional professional-review declaration that is invalidated whenever the relevant home answers or adviser details change. Public and signed-in plans also include a separate set of bounded everyday comfort and energy actions. The account print path now renders an isolated privacy-filtered report in a temporary print frame instead of printing the full application page, removing the Chrome lock-up path reported by the product owner.
 
 ## Current user outcomes
 
-- A household can choose several main goals and record owner or renter tenure, approval context, budget and staging separately.
-- Home questions are grouped into comfort, insulation, windows and shading, draughts and ventilation, heating and cooling, hot water and cooking, and solar, battery and electric vehicle.
-- Roof, wall and underfloor insulation distinguish no known insulation, limited or older insulation, better-performing insulation, applicable dwelling constraints and `Not sure`.
-- Window questions distinguish glazing quality, basic roller or Venetian blinds, mixed coverings, and close-fitting honeycomb or thermal blinds or heavy curtains with pelmets.
-- A customer can mark every unanswered home question `Not sure` in one action rather than guessing.
-- The email dialog reports the exact answered and remaining question counts and takes the customer directly back to the home details.
-- The same concise privacy-filtered projection drives email, browser print and Save as PDF.
-- Plan steps can be moved by drag, touch or keyboard controls, removed, or supplemented with bounded home-specific steps.
-- New files remain private to the plan unless the customer explicitly marks them for installer sharing.
-- A customer can review bounded plan revisions and private outcome check-ins without representing an observation as measured savings or professional verification.
+- A customer can continue to prepare the plan as household-supplied information with no professional claim.
+- A person preparing the plan can self-declare one of the two controlled adviser roles and record a name, accreditation scheme or body, reference and bounded professional notes.
+- The preparer must explicitly confirm a current self-declaration before the report identifies the home answers as reviewed by the named self-declared adviser.
+- Changing a goal, home answer, room profile, plan input or adviser detail removes the declaration and requires a fresh confirmation.
+- The customer report identifies the self-declared adviser while stating that Australian Energy Assessments did not independently verify the person, accreditation, reference or observations.
+- Public and signed-in plans show a separate `Helpful things you can try now` section rather than mixing behavioural advice into the ordered upgrade roadmap.
+- Controlled helpful actions cover appliance controls and timers, moisture and ventilation, personal warmth such as layers, slippers and electric throws, safe seasonal airflow, window coverings and landscaping, and renter-friendly or bounded do-it-yourself options.
+- Positive-only triggers prevent cold-weather, cooling or renter-specific advice from appearing when the recorded facts do not support it.
+- Email, standalone print and signed-in print use the same privacy-filtered document projection.
+- The signed-in print action uses one temporary off-screen frame, prevents concurrent print attempts and cleans up on load failure, timeout, cancellation, `afterprint`, unmount and exit.
+- Long adviser names, references and notes wrap safely in the A4 report.
 
 ## Current in scope
 
-- Share one `HomeFeatureIntake` and one canonical normalizer across public and signed-in planning.
-- Keep fourteen question-level readiness states while preserving the wider controlled advisor fact model.
-- Treat explicit `Not sure` as authoritative over stale photo or document source labels.
-- Keep plan and report generation brand, provider and service agnostic.
-- Use one server-derived document projection for the email HTML, plain text, public print and signed-in print actions.
-- Keep plan-email ownership, confirmation, idempotency, provider acceptance and rate-limit boundaries from the prior release.
-- Add explicit `private-plan` and `allocated-installers` evidence scopes with confirmation-gated installer sharing.
-- Strip JPEG, PNG and WebP metadata before any accepted image category is stored.
-- Add bounded plan revisions and outcome check-ins through `0083_customer_plan_evidence_history.sql`.
-- Use atomic revision numbering and per-project read and retention limits.
-- Preserve legacy plan versions and edited-plan compatibility.
+- Extend the existing owner-scoped adviser profile with a bounded optional professional review.
+- Allow only the two controlled professional roles used by the customer report.
+- Require the current declaration version at the server boundary and reject stale, missing or incomplete declarations.
+- Reset the declaration when advice-affecting household or adviser inputs change.
+- Keep the professional review explicitly self-declared; do not represent it as an AEA credential or accreditation check.
+- Derive a deterministic, capped everyday-action set from the same controlled home, tenure, room and equipment facts used by the advisor.
+- Keep everyday actions separate from the ordered roadmap, quotes, permissions and installer matching.
+- Reuse the same report document for inline email HTML, plain text, public print and signed-in print.
+- Replace top-level account-page printing with an isolated temporary-frame lifecycle that cannot leave a hidden report mounted.
+- Preserve existing email ownership, confirmation, idempotency, provider acceptance and rate-limit controls.
+- Preserve legacy edited plan ordering, removals, custom steps and earlier plan versions through the existing conflict boundary.
+- Make no schema or migration change for this milestone.
 
 ## Current out of scope
 
 - The deferred household and experienced-assessor field pilot.
-- Professional review, evidence verification, an authenticated assessor identity or remote assessor access.
+- Independent credential or accreditation verification, an authenticated assessor identity, remote assessor access or evidence verification by AEA.
 - A formal NatHERS assessment, NatHERS certificate, energy rating, equipment sizing or legal approval.
 - Brands, provider ranking, current market prices, savings promises or finance advice.
 - Automated image interpretation or a requirement to photograph an unsafe area.
@@ -64,27 +66,32 @@ The public planner and signed-in project builder now use one categorized fourtee
 
 ## Current privacy and safety boundaries
 
-- Household answers and linked files are not represented as assessor-authored, reviewed or verified.
+- Household answers and linked files remain household-supplied unless a current professional self-declaration is explicitly confirmed.
+- A self-declared professional review never claims that AEA verified the adviser, accreditation, reference, evidence or observations.
+- The declared adviser name, scheme or body, reference and notes enter the customer report only while the current declaration remains valid.
+- Advice-affecting household or adviser changes invalidate the declaration instead of silently carrying an earlier professional claim forward.
 - `Not sure` is a valid answer and never requires unsafe inspection.
 - No question tells a person to climb a roof, enter a roof space, disturb insulation, remove an electrical cover or block required ventilation.
 - New files use `private-plan` scope by default. Only files explicitly moved to `allocated-installers` with current consent can reach an allocated verified installer.
 - Fact-link edits do not silently renew withdrawn installer-sharing consent.
 - Installer matching excludes private files, and the installer preview counts only files marked for quoting.
-- Email and print exclude exact location, account identity, project labels, filenames, private notes, room names and routines, review text and custom plan wording.
+- Email and print exclude exact location, account identity, project labels, filenames, private customer notes, room names and routines, customer-review text and custom plan wording.
+- The optional self-declared adviser details and professional notes are the only review attribution intentionally projected into the customer report.
 - The report is independent general guidance, not a site assessment, quote, permission decision or savings promise.
 
 ## Current acceptance criteria
 
-- Public `/plan` and the signed-in builder render and normalize the same home-detail categories and options.
-- Multiple goals, tenure, approval, budget and home details survive the public-to-account handoff.
-- Answered, `Not sure` and unanswered counts are derived from the same fourteen-question contract.
-- The report contains no `customer-selected source` wording and does not put evidence readiness into the ordered recommendation list.
-- Email and print use the same concise projection and the email dialog exposes a direct `Review home details` correction path.
-- Private-plan files cannot enter installer responses, and installer-visible copy never says that every upload is shared.
-- Concurrent plan revisions cannot claim the same revision number; history responses and retention are bounded.
-- Every accepted image type is metadata-stripped regardless of evidence category.
+- Household-only reports retain household-supplied wording and make no professional claim.
+- A complete current adviser declaration changes only the intended attribution and professional-note sections.
+- Missing, stale or incomplete declarations fail at the server boundary, and advice-affecting changes require renewed confirmation.
+- Professional report copy names the self-declared adviser and clearly disclaims AEA credential and evidence verification.
+- Everyday actions are deterministic, bounded, product-neutral and separate from the ordered upgrade plan.
+- Cold, hot, tenure and equipment triggers do not produce contradictory advice.
+- Email HTML, plain text, standalone print and signed-in print use the same document projection and content hierarchy.
+- The signed-in print path has no top-level `window.print()` call, one active print at a time and idempotent cleanup.
+- A representative maximum-content A4 report wraps long professional text and does not split action cards.
 - Type checking, lint, focused tests, the full validation gate, all migrations, the production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Desktop, signed-in and 390 by 844 live checks show no horizontal overflow or unreadable report content.
+- Desktop, signed-in and narrow-viewport live checks show no horizontal overflow or unreadable plan content.
 
 ## Current stop conditions
 
@@ -92,7 +99,11 @@ Stop the affected path when:
 
 - a private file, note, room routine or exact location could enter shared or installer output;
 - a fact-link edit could silently grant or renew sharing consent;
-- a household answer would be represented as professional verification;
+- a household answer would be represented as professionally checked without a current explicit adviser declaration;
+- a self-declared adviser could be represented as credential-verified or endorsed by AEA;
+- changed home or adviser details could retain an earlier professional declaration;
+- the account print path could print application chrome, allow overlapping print jobs or leak a temporary report frame;
+- behavioural advice could contradict the known tenure, comfort or equipment facts;
 - a question would require unsafe inspection or encourage blocking required ventilation;
 - an email would be sent or a working-demo project would be saved during release verification;
 - legacy edited plan state or plan-version provenance would be lost;
@@ -105,41 +116,44 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-advisor-contract.test.mjs test/direct-trade-enquiry.test.mjs test/customer-plan-evidence-history.test.mjs test/customer-plan-sharing.test.mjs
+node --experimental-strip-types --test test/customer-advisor-contract.test.mjs test/customer-home-feature-taxonomy.test.mjs test/customer-plan-sharing.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- final focused privacy and report set: 27 of 27 passed;
+- final focused professional-review, print, report and compatibility set: 70 of 70 passed;
+- final print-lifecycle subset rerun within the focused set: 17 of 17 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 803 tests, 801 passed, 2 intentionally skipped and 0 failed;
+- complete suite: 816 tests, 814 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
 - migration verification: all 84 migrations passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub and Sites managed source branch: exact application SHA `6540ee671e64dbfdf80592283a1954b2ff482355`;
-- Sites application version: 210, deployment `appgdep_6a695ca742d081918d73196751713f98`, public, environment revision 19;
-- local desktop and 390 px public-plan checks passed without horizontal overflow;
-- a three-page, 137,415-byte representative A4 PDF was rendered and visually inspected without clipped content;
-- live public `/plan`, `/plan/print` and the signed-in five-step builder were inspected after deployment;
-- the signed-in email dialog displayed `12 questions still need an answer`, `2 answered, 0 marked Not sure` and a working `Review home details` path;
-- the signed-in privacy preview labelled only installer-scoped files as `Files shared for quoting`;
-- no real account or project was created, no working-demo record was saved, no email was sent and no provider delivery path was exercised.
+- GitHub and Sites managed source branch: exact application SHA `ee75aadfd6800c01b92532b2d376a4a1e33c9d74`;
+- Sites application version: 212, deployment `appgdep_6a69c4f838bc8191a0e050da219ab4a6`, public, environment revision 19;
+- public desktop and narrow-viewport computed checks passed without horizontal overflow;
+- signed-in Goals and Plan stages exposed the professional declaration, helpful actions, email and print controls without horizontal overflow;
+- a representative maximum-content six-page A4 PDF rendered in about half a second and was visually inspected without clipped content, split action cards, dark artifacts or application chrome;
+- no real account or project was created, no working-demo record was saved, no email was sent, the live print dialog was not opened and no provider delivery path was exercised.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `6540ee671e64dbfdf80592283a1954b2ff482355`
-- Sites application version: 210
-- Sites application deployment: `appgdep_6a695ca742d081918d73196751713f98`
+- Application commit: `ee75aadfd6800c01b92532b2d376a4a1e33c9d74`
+- Sites application version: 212
+- Sites application deployment: `appgdep_6a69c4f838bc8191a0e050da219ab4a6`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 84
 - Immutable audit changes: none
 - Working-demo data changed during live verification: none
 
-## Prior released milestone: `CUSTOMER-PLAN-DECISION-03`
+## Prior released milestone: `CUSTOMER-PLAN-EVIDENCE-04`
+
+The prior release established the shared categorized fourteen-question home-detail taxonomy, explicit `Not sure` handling, private-by-default evidence scope, bounded plan history and one concise privacy-filtered report across email and print. Its exact application commit was `6540ee671e64dbfdf80592283a1954b2ff482355`, first deployed as Sites version 210 through deployment `appgdep_6a695ca742d081918d73196751713f98`.
+
+## Earlier released milestone: `CUSTOMER-PLAN-DECISION-03`
 
 ### Milestone outcome
 
