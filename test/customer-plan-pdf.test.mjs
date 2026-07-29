@@ -100,8 +100,8 @@ function assertEveryPageIsA4(pdf) {
   }
 }
 
-function extractedPdfText(pdf) {
-  const text = [];
+function decodedPdfContent(pdf) {
+  const content = [];
   for (const page of pdf.getPages()) {
     const contents = page.node.lookup(PDFName.of("Contents"));
     const references = contents instanceof PDFArray
@@ -113,10 +113,18 @@ function extractedPdfText(pdf) {
       const decoded = Buffer.from(
         decodePDFRawStream(stream).getBytes(),
       ).toString("latin1");
-      for (const match of decoded.matchAll(/<([0-9a-f]+)>\s*Tj/gi)) {
-        text.push(Buffer.from(match[1], "hex").toString("latin1"));
-      }
+      content.push(decoded);
     }
+  }
+  return content.join("\n");
+}
+
+function extractedPdfText(pdf) {
+  const text = [];
+  for (const match of decodedPdfContent(pdf).matchAll(
+    /<([0-9a-f]+)>\s*Tj/gi,
+  )) {
+    text.push(Buffer.from(match[1], "hex").toString("latin1"));
   }
   return text.join(" ");
 }
@@ -219,7 +227,7 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-07-30-tech-presentation-pdf-v1",
+    "2026-07-30-tech-presentation-pdf-v2",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -236,6 +244,9 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   assert.equal(pdf.getCreator(), "Australian Energy Assessments");
   assert.match(pdf.getKeywords() || "", /home energy plan/i);
   assert.match(pdf.getKeywords() || "", new RegExp(CUSTOMER_PLAN_PDF_VERSION));
+  const content = decodedPdfContent(pdf);
+  assert.match(content, /\bW\s+n\b/, "rounded panels should use clipping paths");
+  assert.match(content, /\bc\b/, "rounded panels should use curved corners");
 });
 
 test("direct plan PDF keeps friendly guide labels clickable", async () => {

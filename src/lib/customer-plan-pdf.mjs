@@ -1,8 +1,16 @@
 import {
+  appendBezierCurve,
+  clip,
+  closePath,
+  endPath,
+  lineTo,
+  moveTo,
   PDFDocument,
   PDFName,
   PDFString,
   PageSizes,
+  popGraphicsState,
+  pushGraphicsState,
   StandardFonts,
   rgb,
 } from "pdf-lib";
@@ -12,15 +20,134 @@ import {
 import {
   AEA_BRANDMARK_PNG_DATA_URI,
 } from "./aea-brand-assets.mjs";
+import {
+  customerPlanReportLayout,
+} from "./customer-plan-report-design.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-30-tech-presentation-pdf-v1";
+  "2026-07-30-tech-presentation-pdf-v2";
 
 const [PAGE_WIDTH, PAGE_HEIGHT] = PageSizes.A4;
 const MARGIN = 44;
 const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
 const CONTENT_BOTTOM = 52;
-const CARD_GAP = 12;
+const PDF_LAYOUT = customerPlanReportLayout.pdf;
+const CARD_GAP = PDF_LAYOUT.cardGap;
+
+const ARC_CONTROL = 0.5522847498307936;
+
+function roundedRectanglePath(x, y, width, height, radius) {
+  const safeRadius = Math.max(
+    0,
+    Math.min(radius, width / 2, height / 2),
+  );
+  const control = safeRadius * ARC_CONTROL;
+  return [
+    moveTo(x + safeRadius, y),
+    lineTo(x + width - safeRadius, y),
+    appendBezierCurve(
+      x + width - safeRadius + control,
+      y,
+      x + width,
+      y + safeRadius - control,
+      x + width,
+      y + safeRadius,
+    ),
+    lineTo(x + width, y + height - safeRadius),
+    appendBezierCurve(
+      x + width,
+      y + height - safeRadius + control,
+      x + width - safeRadius + control,
+      y + height,
+      x + width - safeRadius,
+      y + height,
+    ),
+    lineTo(x + safeRadius, y + height),
+    appendBezierCurve(
+      x + safeRadius - control,
+      y + height,
+      x,
+      y + height - safeRadius + control,
+      x,
+      y + height - safeRadius,
+    ),
+    lineTo(x, y + safeRadius),
+    appendBezierCurve(
+      x,
+      y + safeRadius - control,
+      x + safeRadius - control,
+      y,
+      x + safeRadius,
+      y,
+    ),
+    closePath(),
+  ];
+}
+
+function withRoundedClip(target, {
+  x,
+  y,
+  width,
+  height,
+  radius = PDF_LAYOUT.panelRadius,
+}, draw) {
+  target.pushOperators(
+    pushGraphicsState(),
+    ...roundedRectanglePath(x, y, width, height, radius),
+    clip(),
+    endPath(),
+  );
+  draw();
+  target.pushOperators(popGraphicsState());
+}
+
+function drawRoundedRectangle(target, {
+  x,
+  y,
+  width,
+  height,
+  radius = PDF_LAYOUT.panelRadius,
+  color,
+  opacity,
+  borderColor,
+  borderOpacity,
+  borderWidth = 0,
+}) {
+  const safeBorder = borderColor
+    ? Math.max(0, Math.min(borderWidth, width / 4, height / 4))
+    : 0;
+  withRoundedClip(target, { x, y, width, height, radius }, () => {
+    target.drawRectangle({
+      x,
+      y,
+      width,
+      height,
+      color: safeBorder ? borderColor : color,
+      opacity: safeBorder ? borderOpacity : opacity,
+    });
+  });
+  if (!safeBorder) return;
+  const innerX = x + safeBorder;
+  const innerY = y + safeBorder;
+  const innerWidth = width - (safeBorder * 2);
+  const innerHeight = height - (safeBorder * 2);
+  withRoundedClip(target, {
+    x: innerX,
+    y: innerY,
+    width: innerWidth,
+    height: innerHeight,
+    radius: Math.max(0, radius - safeBorder),
+  }, () => {
+    target.drawRectangle({
+      x: innerX,
+      y: innerY,
+      width: innerWidth,
+      height: innerHeight,
+      color,
+      opacity,
+    });
+  });
+}
 
 const palette = Object.freeze({
   navy: rgb(0.024, 0.204, 0.282),
@@ -345,11 +472,12 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }) {
     const tile = compact ? 31 : 46;
     const logoSize = compact ? 22 : 34;
-    page.drawRectangle({
+    drawRoundedRectangle(page, {
       x,
       y: lockupY,
       width: tile,
       height: tile,
+      radius: compact ? 7 : PDF_LAYOUT.badgeRadius,
       color: palette.white,
       opacity: 0.09,
       borderColor: palette.aqua,
@@ -680,22 +808,24 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const metricWidth = (CONTENT_WIDTH - (metricGap * 2)) / 3;
     metrics.forEach((metric, index) => {
       const metricX = MARGIN + (index * (metricWidth + metricGap));
-      page.drawRectangle({
+      drawRoundedRectangle(page, {
         x: metricX,
         y: 112,
         width: metricWidth,
         height: 102,
+        radius: PDF_LAYOUT.panelRadius,
         color: palette.white,
         opacity: 0.08,
         borderColor: index === 0 ? palette.teal : palette.electricBlue,
         borderWidth: index === 0 ? 1.5 : 0.8,
         borderOpacity: 0.64,
       });
-      page.drawRectangle({
+      drawRoundedRectangle(page, {
         x: metricX,
         y: 208,
         width: metricWidth,
         height: 6,
+        radius: 3,
         color: index === 0 ? palette.teal : palette.electricBlue,
         opacity: index === 0 ? 1 : 0.76,
       });
@@ -764,11 +894,12 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       + (introLines.length ? 4 + measureLines(introLines) : 0)
       + 14;
     ensureSpace(height);
-    page.drawRectangle({
+    drawRoundedRectangle(page, {
       x: MARGIN,
       y: y + 4,
       width: 28,
       height: 3,
+      radius: 1.5,
       color: palette.teal,
     });
     y -= 6;
@@ -801,42 +932,54 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     });
     const leadHeight = Math.max(
       86,
-      29 + measureLines(leadLabelLines) + 6 + measureLines(leadValueLines),
+      36
+        + measureLines(leadLabelLines)
+        + PDF_LAYOUT.labelTitleGap
+        + measureLines(leadValueLines),
     );
     ensureSpace(leadHeight + 12);
     const leadBottom = y - leadHeight;
-    drawHorizontalGradient(page, {
-      x: MARGIN,
-      gradientY: leadBottom,
-      width: CONTENT_WIDTH,
-      height: leadHeight,
-      from: gradients.signal.from,
-      to: gradients.signal.to,
-      steps: 36,
-    });
-    page.drawCircle({
-      x: PAGE_WIDTH - MARGIN - 8,
-      y: leadBottom + 10,
-      size: 80,
-      color: palette.electricBlue,
-      opacity: 0.11,
-    });
-    page.drawRectangle({
+    withRoundedClip(page, {
       x: MARGIN,
       y: leadBottom,
-      width: 6,
+      width: CONTENT_WIDTH,
       height: leadHeight,
+      radius: PDF_LAYOUT.panelRadius,
+    }, () => {
+      drawHorizontalGradient(page, {
+        x: MARGIN,
+        gradientY: leadBottom,
+        width: CONTENT_WIDTH,
+        height: leadHeight,
+        from: gradients.signal.from,
+        to: gradients.signal.to,
+        steps: 36,
+      });
+      page.drawCircle({
+        x: PAGE_WIDTH - MARGIN - 8,
+        y: leadBottom + 10,
+        size: 80,
+        color: palette.electricBlue,
+        opacity: 0.11,
+      });
+    });
+    drawRoundedRectangle(page, {
+      x: MARGIN + 7,
+      y: leadBottom + 10,
+      width: 6,
+      height: leadHeight - 20,
+      radius: 3,
       color: palette.teal,
     });
-    let leadCursor = y - 20;
+    let leadCursor = y - 22;
     leadCursor = drawLines(leadLabelLines, {
-      x: MARGIN + 20,
+      x: MARGIN + 24,
       startY: leadCursor,
       characterSpacing: 0.6,
     });
-    leadCursor -= 6;
+    leadCursor -= PDF_LAYOUT.labelTitleGap;
     drawLines(leadValueLines, {
-      x: MARGIN + 20,
+      x: MARGIN + 24,
       startY: leadCursor,
     });
     y = leadBottom - 12;
@@ -869,7 +1012,10 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       });
       const rowHeight = Math.max(
         ...prepared.map(({ labelLines, valueLines }) =>
-          26 + measureLines(labelLines) + 5 + measureLines(valueLines)
+          32
+            + measureLines(labelLines)
+            + PDF_LAYOUT.labelTitleGap
+            + measureLines(valueLines)
         ),
         72,
       );
@@ -877,29 +1023,31 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       prepared.forEach(({ labelLines, valueLines }, pairIndex) => {
         const x = MARGIN + (pairIndex * (currentCellWidth + cellGap));
         const bottom = y - rowHeight;
-        page.drawRectangle({
+        drawRoundedRectangle(page, {
           x,
           y: bottom,
           width: currentCellWidth,
           height: rowHeight,
+          radius: PDF_LAYOUT.compactRadius,
           color: palette.paper,
           borderColor: palette.line,
           borderWidth: 0.8,
         });
-        page.drawRectangle({
-          x,
+        drawRoundedRectangle(page, {
+          x: x + 12,
           y: y - 4,
-          width: currentCellWidth,
+          width: currentCellWidth - 24,
           height: 4,
+          radius: 2,
           color: pairIndex === 0 ? palette.electricBlue : palette.teal,
         });
-        let cursor = y - 17;
+        let cursor = y - 20;
         cursor = drawLines(labelLines, {
           x: x + 14,
           startY: cursor,
           characterSpacing: 0.5,
         });
-        cursor -= 5;
+        cursor -= PDF_LAYOUT.labelTitleGap;
         drawLines(valueLines, { x: x + 14, startY: cursor });
       });
       y -= rowHeight + cellGap;
@@ -910,14 +1058,22 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const height = 76;
     ensureSpace(height + CARD_GAP);
     const bottom = y - height;
-    drawHorizontalGradient(page, {
+    withRoundedClip(page, {
       x: MARGIN,
-      gradientY: bottom,
+      y: bottom,
       width: CONTENT_WIDTH,
       height,
-      from: gradients.header.from,
-      to: gradients.signal.to,
-      steps: 36,
+      radius: PDF_LAYOUT.panelRadius,
+    }, () => {
+      drawHorizontalGradient(page, {
+        x: MARGIN,
+        gradientY: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        from: gradients.header.from,
+        to: gradients.signal.to,
+        steps: 36,
+      });
     });
     const signals = planComplete
       ? [
@@ -993,7 +1149,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       : tone === "cream"
         ? palette.creamText
         : palette.body;
-    const innerWidth = CONTENT_WIDTH - 36;
+    const innerWidth = CONTENT_WIDTH - (PDF_LAYOUT.panelPaddingX * 2);
     const eyebrowLines = eyebrow
       ? linesFor(normalizedText(eyebrow).toUpperCase(), {
         font: bold,
@@ -1032,69 +1188,92 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       },
     ));
     const contentHeight = measureLines(eyebrowLines)
-      + (eyebrowLines.length && titleLines.length ? 4 : 0)
+      + (
+        eyebrowLines.length && titleLines.length
+          ? PDF_LAYOUT.labelTitleGap
+          : 0
+      )
       + measureLines(titleLines)
-      + (bodyLines.length && (titleLines.length || eyebrowLines.length) ? 5 : 0)
+      + (
+        bodyLines.length && (titleLines.length || eyebrowLines.length)
+          ? PDF_LAYOUT.titleBodyGap
+          : 0
+      )
       + measureLines(bodyLines)
-      + (bulletLines.length ? 5 : 0)
+      + (bulletLines.length ? PDF_LAYOUT.titleBodyGap : 0)
       + measureLines(bulletLines);
-    const height = Math.max(58, contentHeight + 30);
+    const height = Math.max(
+      64,
+      contentHeight + (PDF_LAYOUT.panelPaddingY * 2),
+    );
     ensureSpace(height + CARD_GAP);
     const bottom = y - height;
     if (tone === "dark") {
-      drawHorizontalGradient(page, {
-        x: MARGIN,
-        gradientY: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        from: gradients.header.from,
-        to: gradients.signal.to,
-        steps: 36,
-      });
-    } else {
-      page.drawRectangle({
+      withRoundedClip(page, {
         x: MARGIN,
         y: bottom,
         width: CONTENT_WIDTH,
         height,
+        radius: PDF_LAYOUT.panelRadius,
+      }, () => {
+        drawHorizontalGradient(page, {
+          x: MARGIN,
+          gradientY: bottom,
+          width: CONTENT_WIDTH,
+          height,
+          from: gradients.header.from,
+          to: gradients.signal.to,
+          steps: 36,
+        });
+      });
+    } else {
+      drawRoundedRectangle(page, {
+        x: MARGIN,
+        y: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        radius: PDF_LAYOUT.panelRadius,
         color: fill,
         borderColor: border,
         borderWidth: 0.8,
       });
     }
-    page.drawRectangle({
-      x: MARGIN,
-      y: bottom,
+    drawRoundedRectangle(page, {
+      x: MARGIN + 7,
+      y: bottom + 10,
       width: 5,
-      height,
+      height: height - 20,
+      radius: 2.5,
       color: tone === "cream" ? palette.creamLine : palette.teal,
     });
-    let cursor = y - 18;
+    let cursor = y - PDF_LAYOUT.panelPaddingY;
     if (eyebrowLines.length) {
       cursor = drawLines(eyebrowLines, {
-        x: MARGIN + 18,
+        x: MARGIN + PDF_LAYOUT.panelPaddingX,
         startY: cursor,
         characterSpacing: 0.55,
       });
     }
     if (titleLines.length) {
-      if (eyebrowLines.length) cursor -= 4;
+      if (eyebrowLines.length) cursor -= PDF_LAYOUT.labelTitleGap;
       cursor = drawLines(titleLines, {
-        x: MARGIN + 18,
+        x: MARGIN + PDF_LAYOUT.panelPaddingX,
         startY: cursor,
       });
     }
     if (bodyLines.length) {
-      if (titleLines.length || eyebrowLines.length) cursor -= 5;
+      if (titleLines.length || eyebrowLines.length) {
+        cursor -= PDF_LAYOUT.titleBodyGap;
+      }
       cursor = drawLines(bodyLines, {
-        x: MARGIN + 18,
+        x: MARGIN + PDF_LAYOUT.panelPaddingX,
         startY: cursor,
       });
     }
     if (bulletLines.length) {
-      cursor -= 5;
+      cursor -= PDF_LAYOUT.titleBodyGap;
       drawLines(bulletLines, {
-        x: MARGIN + 22,
+        x: MARGIN + PDF_LAYOUT.panelPaddingX + 4,
         startY: cursor,
       });
     }
@@ -1147,63 +1326,82 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       })
       : [];
     const contentHeight = measureLines(stageLines)
-      + 4
+      + PDF_LAYOUT.labelTitleGap
       + measureLines(titleLines)
-      + 5
+      + PDF_LAYOUT.titleBodyGap
       + measureLines(bodyLines)
-      + (linkLines.length ? 8 + measureLines(linkLines) : 0);
-    const height = Math.max(86, contentHeight + 30);
+      + (
+        linkLines.length
+          ? PDF_LAYOUT.bodyLinkGap + measureLines(linkLines)
+          : 0
+      );
+    const height = Math.max(
+      96,
+      contentHeight + (PDF_LAYOUT.panelPaddingY * 2),
+    );
     ensureSpace(height + CARD_GAP, priority ? "Start here" : "Your plan");
     const bottom = y - height;
     if (priority) {
-      drawHorizontalGradient(page, {
-        x: MARGIN,
-        gradientY: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        from: gradients.priority.from,
-        to: gradients.priority.to,
-        steps: 38,
-      });
-      page.drawCircle({
-        x: PAGE_WIDTH - MARGIN - 8,
-        y: bottom + 8,
-        size: 64,
-        color: palette.electricBlue,
-        opacity: 0.1,
-      });
-    } else {
-      page.drawRectangle({
+      withRoundedClip(page, {
         x: MARGIN,
         y: bottom,
         width: CONTENT_WIDTH,
         height,
+        radius: PDF_LAYOUT.panelRadius,
+      }, () => {
+        drawHorizontalGradient(page, {
+          x: MARGIN,
+          gradientY: bottom,
+          width: CONTENT_WIDTH,
+          height,
+          from: gradients.priority.from,
+          to: gradients.priority.to,
+          steps: 38,
+        });
+        page.drawCircle({
+          x: PAGE_WIDTH - MARGIN - 8,
+          y: bottom + 8,
+          size: 64,
+          color: palette.electricBlue,
+          opacity: 0.1,
+        });
+      });
+    } else {
+      drawRoundedRectangle(page, {
+        x: MARGIN,
+        y: bottom,
+        width: CONTENT_WIDTH,
+        height,
+        radius: PDF_LAYOUT.panelRadius,
         color: palette.paper,
         borderColor: palette.line,
         borderWidth: 0.8,
       });
-      page.drawRectangle({
-        x: MARGIN,
+      drawRoundedRectangle(page, {
+        x: MARGIN + 12,
         y: y - 4,
-        width: CONTENT_WIDTH,
+        width: CONTENT_WIDTH - 24,
         height: 4,
+        radius: 2,
         color: palette.electricBlue,
       });
     }
     if (priority) {
-      page.drawRectangle({
-        x: MARGIN,
-        y: bottom,
+      drawRoundedRectangle(page, {
+        x: MARGIN + 7,
+        y: bottom + 10,
         width: 5,
-        height,
+        height: height - 20,
+        radius: 2.5,
         color: palette.teal,
       });
     }
-    page.drawRectangle({
+    drawRoundedRectangle(page, {
       x: MARGIN + 16,
       y: y - 58,
       width: numberWidth,
       height: 40,
+      radius: PDF_LAYOUT.badgeRadius,
       color: action?.completed
         ? palette.greenDark
         : priority
@@ -1223,18 +1421,18 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       font: bold,
       color: palette.white,
     });
-    let cursor = y - 19;
+    let cursor = y - PDF_LAYOUT.panelPaddingY;
     cursor = drawLines(stageLines, {
       x: innerX,
       startY: cursor,
       characterSpacing: 0.45,
     });
-    cursor -= 4;
+    cursor -= PDF_LAYOUT.labelTitleGap;
     cursor = drawLines(titleLines, { x: innerX, startY: cursor });
-    cursor -= 5;
+    cursor -= PDF_LAYOUT.titleBodyGap;
     cursor = drawLines(bodyLines, { x: innerX, startY: cursor });
     if (linkLines.length) {
-      cursor -= 8;
+      cursor -= PDF_LAYOUT.bodyLinkGap;
       const linkTop = cursor;
       cursor = drawLines(linkLines, { x: innerX, startY: cursor });
       const linkWidth = Math.min(
@@ -1261,7 +1459,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   function drawEverydayGrid(actions) {
-    const gap = 10;
+    const gap = 12;
     const cellWidth = (CONTENT_WIDTH - gap) / 2;
     for (let index = 0; index < actions.length; index += 2) {
       const pair = actions.slice(index, index + 2);
@@ -1271,7 +1469,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
           {
             font: bold,
             size: 6.8,
-            width: cellWidth - 32,
+            width: cellWidth - 36,
             lineHeight: 9,
             color: palette.oceanBlue,
           },
@@ -1279,14 +1477,14 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         const titleLines = linesFor(action?.title, {
           font: bold,
           size: 12.7,
-          width: cellWidth - 32,
+          width: cellWidth - 36,
           lineHeight: 15.5,
           color: palette.navy,
         });
         const bodyLines = linesFor(action?.description, {
           font: regular,
           size: 9.6,
-          width: cellWidth - 32,
+          width: cellWidth - 36,
           lineHeight: 13.7,
           color: palette.body,
         });
@@ -1295,32 +1493,34 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       const rowHeight = Math.max(
         ...prepared.map(({ labelLines, titleLines, bodyLines }) =>
           measureLines(labelLines)
-            + 5
+            + PDF_LAYOUT.labelTitleGap
             + measureLines(titleLines)
-            + 6
+            + PDF_LAYOUT.titleBodyGap
             + measureLines(bodyLines)
-            + 30
+            + (PDF_LAYOUT.panelPaddingY * 2)
         ),
-        112,
+        122,
       );
       ensureSpace(rowHeight + gap, "Quick comfort wins");
       const bottom = y - rowHeight;
       prepared.forEach((card, pairIndex) => {
         const x = MARGIN + (pairIndex * (cellWidth + gap));
-        page.drawRectangle({
+        drawRoundedRectangle(page, {
           x,
           y: bottom,
           width: cellWidth,
           height: rowHeight,
+          radius: PDF_LAYOUT.compactRadius,
           color: palette.paper,
           borderColor: palette.line,
           borderWidth: 0.7,
         });
-        page.drawRectangle({
-          x,
+        drawRoundedRectangle(page, {
+          x: x + 12,
           y: y - 5,
-          width: cellWidth,
+          width: cellWidth - 24,
           height: 5,
+          radius: 2.5,
           color: pairIndex === 0 ? palette.teal : palette.electricBlue,
         });
         page.drawCircle({
@@ -1330,20 +1530,20 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
           color: pairIndex === 0 ? palette.teal : palette.electricBlue,
           opacity: 0.18,
         });
-        let cursor = y - 20;
+        let cursor = y - PDF_LAYOUT.panelPaddingY;
         cursor = drawLines(card.labelLines, {
-          x: x + 16,
+          x: x + 18,
           startY: cursor,
           characterSpacing: 0.45,
         });
-        cursor -= 5;
+        cursor -= PDF_LAYOUT.labelTitleGap;
         cursor = drawLines(card.titleLines, {
-          x: x + 16,
+          x: x + 18,
           startY: cursor,
         });
-        cursor -= 6;
+        cursor -= PDF_LAYOUT.titleBodyGap;
         drawLines(card.bodyLines, {
-          x: x + 16,
+          x: x + 18,
           startY: cursor,
         });
       });

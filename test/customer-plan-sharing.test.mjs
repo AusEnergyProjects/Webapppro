@@ -331,6 +331,10 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.doesNotMatch(html, /<img src=x/);
   assert.match(html, /Australian Energy Assessments/);
   assert.equal(CUSTOMER_PLAN_EMAIL_SUBJECT, "Your home energy plan is ready");
+  assert.equal(
+    CUSTOMER_PLAN_REPORT_DESIGN_VERSION,
+    "2026-07-30-tech-presentation-design-v2",
+  );
   assert.match(
     html,
     new RegExp(`x-aea-report-design" content="${CUSTOMER_PLAN_REPORT_DESIGN_VERSION}`),
@@ -341,6 +345,15 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.match(html, /29 July 2026/);
   assert.match(html, /@media only screen and \(max-width: 680px\)/);
   assert.match(html, /\.snapshot-cell \{ display: block !important/);
+  assert.match(
+    html,
+    /\.snapshot-cell \{[^}]*margin-bottom: 12px !important/,
+  );
+  assert.match(html, /border-radius:22px;overflow:hidden/);
+  assert.match(html, /border-radius:20px;overflow:hidden/);
+  assert.match(html, /border-radius:16px;overflow:hidden/);
+  assert.match(html, /padding-top:40px/);
+  assert.match(html, /margin:0 0 16px;border-collapse:separate/);
   assert.doesNotMatch(html, /width="145"/);
   assert.doesNotMatch(html, /<ul\b/i);
   const reportImages = html.match(/<img\b[^>]*>/gi) || [];

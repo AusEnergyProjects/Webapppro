@@ -1,5 +1,5 @@
 export const CUSTOMER_PLAN_REPORT_DESIGN_VERSION =
-  "2026-07-30-tech-presentation-design-v1";
+  "2026-07-30-tech-presentation-design-v2";
 
 export const customerPlanReportColors = Object.freeze({
   navy: "#063448",
@@ -22,6 +22,35 @@ export const customerPlanReportColors = Object.freeze({
   cream: "#fff7e5",
   creamLine: "#e8c66f",
   creamText: "#6d5315",
+});
+
+export const customerPlanReportLayout = Object.freeze({
+  pdf: Object.freeze({
+    panelRadius: 10,
+    compactRadius: 8,
+    badgeRadius: 9,
+    cardGap: 14,
+    labelTitleGap: 7,
+    titleBodyGap: 9,
+    bodyLinkGap: 11,
+    panelPaddingX: 20,
+    panelPaddingY: 20,
+  }),
+  email: Object.freeze({
+    shellRadius: 22,
+    featureRadius: 20,
+    tileRadius: 16,
+    insetRadius: 12,
+    badgeRadius: 10,
+    sectionGap: 40,
+    mobileSectionGap: 32,
+    tileGap: 16,
+    labelTitleGap: 8,
+    titleBodyGap: 10,
+    bodyLinkGap: 14,
+    tilePaddingX: 22,
+    tilePaddingY: 20,
+  }),
 });
 
 export const customerPlanReportCopy = Object.freeze({

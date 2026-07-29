@@ -18,6 +18,7 @@ import {
   customerPlanReadinessPresentation,
   customerPlanReportColors,
   customerPlanReportCopy,
+  customerPlanReportLayout,
 } from "./customer-plan-report-design.mjs";
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
 export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-premium-report-v3";
@@ -25,6 +26,8 @@ export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
 export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
 export const AEA_BRANDMARK_PUBLIC_URL =
   `${CUSTOMER_PLAN_PUBLIC_ORIGIN}/api/aea-brandmark`;
+
+const emailLayout = customerPlanReportLayout.email;
 
 const allowedGuideHrefs = new Set([
   "/guides/batteries",
@@ -808,10 +811,10 @@ function htmlBulletRows(items, { color = "#365467" } = {}) {
 
 function htmlSectionHeading(eyebrow, title, intro = "") {
   return `
-    <div style="width:38px;height:4px;margin:0 0 11px;background-color:#20d8c1;font-size:0;line-height:0;">&nbsp;</div>
-    <div style="margin:0 0 7px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878b7;">${escapeHtml(eyebrow)}</div>
+    <div style="width:38px;height:4px;margin:0 0 13px;border-radius:999px;background-color:#20d8c1;font-size:0;line-height:0;">&nbsp;</div>
+    <div style="margin:0 0 ${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878b7;">${escapeHtml(eyebrow)}</div>
     <h2 style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:29px;line-height:34px;font-weight:800;letter-spacing:-.5px;color:#063448;">${escapeHtml(title)}</h2>
-    ${intro ? `<p style="margin:10px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#637a87;">${escapeHtml(intro)}</p>` : ""}`;
+    ${intro ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#637a87;">${escapeHtml(intro)}</p>` : ""}`;
 }
 
 function htmlActionCard(action, priority = false) {
@@ -824,19 +827,35 @@ function htmlActionCard(action, priority = false) {
   const labelColor = priority ? "#74f1d7" : "#0878b7";
   const linkColor = priority ? "#74f1d7" : "#047857";
   const surface = priority
-    ? "background-color:#063448;background-image:linear-gradient(135deg,#031f38 0%,#05677b 100%);border:1px solid #20d8c1;border-top:6px solid #20d8c1;"
-    : "background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;";
+    ? "border:1px solid #20d8c1;border-top:6px solid #20d8c1;"
+    : "border:1px solid #c9dfe5;border-top:5px solid #00a9e8;";
+  const cellSurface = priority
+    ? "background-color:#063448;background-image:linear-gradient(135deg,#031f38 0%,#05677b 100%);"
+    : "background-color:#f8fcfd;";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px;${surface}">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 ${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;${surface}">
       <tr>
-        <td width="58" valign="top" style="padding:18px 0 18px 18px;">
-          <div style="width:40px;padding:10px 0;border-radius:12px;background-color:${action.completed ? "#047857" : priority ? "#00a9e8" : "#063448"};font-family:Arial,Helvetica,sans-serif;font-size:${action.completed ? "11px" : "13px"};line-height:20px;font-weight:700;text-align:center;color:#ffffff;">${escapeHtml(number)}</div>
+        <td width="62" valign="top" style="padding:${emailLayout.tilePaddingY}px 0 ${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;${cellSurface}border-radius:${emailLayout.tileRadius}px 0 0 ${emailLayout.tileRadius}px;">
+          <div style="width:40px;padding:10px 0;border-radius:${emailLayout.badgeRadius}px;background-color:${action.completed ? "#047857" : priority ? "#00a9e8" : "#063448"};font-family:Arial,Helvetica,sans-serif;font-size:${action.completed ? "11px" : "13px"};line-height:20px;font-weight:700;text-align:center;color:#ffffff;">${escapeHtml(number)}</div>
         </td>
-        <td valign="top" style="padding:18px 18px 18px 14px;">
+        <td valign="top" style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px ${emailLayout.tilePaddingY}px 16px;${cellSurface}border-radius:0 ${emailLayout.tileRadius}px ${emailLayout.tileRadius}px 0;">
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${labelColor};">${escapeHtml(priority ? `Start here | ${action.stage}` : action.stage)}</div>
-          <h3 style="margin:6px 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:${priority ? "22px" : "19px"};line-height:${priority ? "27px" : "24px"};font-weight:800;letter-spacing:-.25px;color:${titleColor};">${escapeHtml(action.title)}</h3>
+          <h3 style="margin:${emailLayout.labelTitleGap}px 0 ${emailLayout.titleBodyGap}px;font-family:Arial,Helvetica,sans-serif;font-size:${priority ? "22px" : "19px"};line-height:${priority ? "27px" : "24px"};font-weight:800;letter-spacing:-.25px;color:${titleColor};">${escapeHtml(action.title)}</h3>
           <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${bodyColor};">${escapeHtml(action.description)}</p>
-          ${guideHref ? `<p style="margin:13px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;"><a href="${escapeHtml(guideHref)}" style="font-weight:700;color:${linkColor};text-decoration:underline;">${escapeHtml(action.guideLabel || customerPlanReportCopy.guideLabel)}</a></p>` : ""}
+          ${guideHref ? `<p style="margin:${emailLayout.bodyLinkGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;"><a href="${escapeHtml(guideHref)}" style="font-weight:700;color:${linkColor};text-decoration:underline;">${escapeHtml(action.guideLabel || customerPlanReportCopy.guideLabel)}</a></p>` : ""}
+        </td>
+      </tr>
+    </table>`;
+}
+
+function htmlEverydayActionTile(action, isLast = false) {
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 ${isLast ? 0 : emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border:1px solid rgba(116,241,215,.28);border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#084a60;background-image:linear-gradient(135deg,#073c55 0%,#087388 100%);">
+      <tr>
+        <td style="padding:18px 20px;border-radius:${emailLayout.tileRadius}px;background-color:#084a60;background-image:linear-gradient(135deg,#073c55 0%,#087388 100%);">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(action.category)}</div>
+          <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:25px;font-weight:800;color:#ffffff;">${escapeHtml(action.title)}</div>
+          <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(action.description)}</p>
         </td>
       </tr>
     </table>`;
@@ -874,7 +893,7 @@ export function customerPlanDocumentHtml(document) {
       : report.actions.length
         ? `${report.planTitle}. Every current step is marked complete.`
         : `${report.planTitle}. Your home energy planning summary is ready.`;
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -888,10 +907,10 @@ export function customerPlanDocumentHtml(document) {
         .outer-pad { padding: 0 !important; }
         .hero-pad { padding: 28px 22px !important; }
         .body-pad { padding: 26px 18px !important; }
-        .snapshot-cell { display: block !important; width: auto !important; }
+        .snapshot-cell { display: block !important; width: auto !important; margin-bottom: 12px !important; }
         .snapshot-spacer { display: none !important; }
         .hero-title { font-size: 34px !important; line-height: 39px !important; }
-        .section-pad { padding-top: 34px !important; }
+        .section-pad { padding-top: ${emailLayout.mobileSectionGap}px !important; }
       }
     </style>
   </head>
@@ -899,14 +918,14 @@ export function customerPlanDocumentHtml(document) {
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background-color:${customerPlanReportColors.navyDeep};">
       <tr><td class="outer-pad" align="center" style="padding:30px 12px;">
-        <table class="email-shell" role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background-color:${customerPlanReportColors.canvas};border:1px solid #0b526b;">
+        <table class="email-shell" role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.shellRadius}px;overflow:hidden;background-color:${customerPlanReportColors.canvas};border:1px solid #0b526b;">
           <tr>
-            <td class="hero-pad" style="padding:38px 40px 40px;background-color:${customerPlanReportColors.navy};background-image:linear-gradient(135deg,#00152b 0%,#055b74 100%);border-bottom:7px solid ${customerPlanReportColors.teal};color:#ffffff;">
+            <td class="hero-pad" style="padding:38px 40px 40px;border-radius:${emailLayout.shellRadius}px ${emailLayout.shellRadius}px 0 0;background-color:${customerPlanReportColors.navy};background-image:linear-gradient(135deg,#00152b 0%,#055b74 100%);border-bottom:7px solid ${customerPlanReportColors.teal};color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td width="50" valign="middle" style="width:50px;">
-                    <div style="width:42px;height:42px;border:1px solid rgba(116,241,215,.55);background-color:rgba(255,255,255,.08);text-align:center;">
-                      <img src="${AEA_BRANDMARK_PUBLIC_URL}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;margin:5px;border:0;">
+                    <div style="width:42px;height:42px;border:1px solid rgba(116,241,215,.55);border-radius:${emailLayout.badgeRadius}px;background-color:rgba(255,255,255,.08);text-align:center;">
+                      <img src="${AEA_BRANDMARK_PUBLIC_URL}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;margin:5px;border:0;border-radius:7px;">
                     </div>
                   </td>
                   <td valign="middle">
@@ -927,10 +946,10 @@ export function customerPlanDocumentHtml(document) {
             <td class="body-pad" style="padding:36px 40px 44px;background-color:${customerPlanReportColors.canvas};">
               ${htmlSectionHeading(copy.snapshotEyebrow, copy.snapshotTitle)}
               ${leadSnapshot ? `
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#058794 100%);border-left:6px solid #20d8c1;">
-                <tr><td style="padding:20px 22px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:20px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#058794 100%);border-left:6px solid #20d8c1;">
+                <tr><td style="padding:22px 24px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#058794 100%);">
                   <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(leadSnapshot.label)}</div>
-                  <div style="margin-top:7px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:27px;font-weight:700;color:#ffffff;">${escapeHtml(leadSnapshot.value)}</div>
+                  <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:27px;font-weight:700;color:#ffffff;">${escapeHtml(leadSnapshot.value)}</div>
                 </td></tr>
               </table>` : ""}
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:11px;">
@@ -939,20 +958,20 @@ export function customerPlanDocumentHtml(document) {
                   const second = remainingSnapshots[(rowIndex * 2) + 1];
                   return `
                   <tr>
-                    <td class="snapshot-cell" width="49%" valign="top" style="padding:16px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #00a9e8;">
+                    <td class="snapshot-cell" width="49%" valign="top" style="padding:18px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #00a9e8;">
                       <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(first.label)}</div>
-                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(first.value)}</div>
+                      <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(first.value)}</div>
                     </td>
                     <td class="snapshot-spacer" width="2%" style="font-size:0;line-height:0;">&nbsp;</td>
-                    ${second ? `<td class="snapshot-cell" width="49%" valign="top" style="padding:16px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #20d8c1;">
+                    ${second ? `<td class="snapshot-cell" width="49%" valign="top" style="padding:18px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #20d8c1;">
                       <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(second.label)}</div>
-                      <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(second.value)}</div>
+                      <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(second.value)}</div>
                     </td>` : `<td class="snapshot-cell" width="49%">&nbsp;</td>`}
                   </tr>
                   <tr><td colspan="3" height="10" style="height:10px;font-size:0;line-height:0;">&nbsp;</td></tr>`;
                 }).join("")}
               </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:3px;background-color:#00152b;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:6px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#00152b;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);">
                 <tr>
                   ${reportSignals.map(([value, label], index) => `
                   <td width="33%" valign="middle" style="padding:16px 18px;border-left:${index ? "1px solid rgba(116,241,215,.3)" : "0"};">
@@ -963,14 +982,14 @@ export function customerPlanDocumentHtml(document) {
               </table>
 
               ${report.priorityActions.length ? `
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.startEyebrow, copy.startTitle, copy.startIntro)}
                 <div style="height:16px;font-size:0;line-height:0;">&nbsp;</div>
                 ${report.priorityActions.map((action) => htmlActionCard(action, true)).join("")}
               </div>` : ""}
 
               ${report.laterActions.length ? `
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(
                   report.priorityActions.length
                     ? copy.roadmapEyebrow
@@ -987,87 +1006,87 @@ export function customerPlanDocumentHtml(document) {
               </div>` : ""}
 
               ${report.everydayActions.length ? `
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.everydayEyebrow, copy.everydayTitle, copy.everydayIntro)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#056779 100%);border-top:6px solid #20d8c1;">
-                  <tr><td style="padding:9px 18px 18px;">
-                    ${report.everydayActions.map((action) => `
-                    <div style="padding-top:12px;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(action.category)}</div>
-                      <div style="margin-top:3px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;font-weight:800;color:#ffffff;">${escapeHtml(action.title)}</div>
-                      <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(action.description)}</p>
-                    </div>`).join("")}
-                    <p style="margin:14px 0 0;padding-top:12px;border-top:1px solid rgba(116,241,215,.32);font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.everydayActionsBoundary)}</p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#056779 100%);border-top:6px solid #20d8c1;">
+                  <tr><td style="padding:20px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#04314a 0%,#056779 100%);">
+                    ${report.everydayActions.map((action, index) =>
+                      htmlEverydayActionTile(
+                        action,
+                        index === report.everydayActions.length - 1,
+                      )
+                    ).join("")}
+                    <p style="margin:18px 4px 0;padding-top:16px;border-top:1px solid rgba(116,241,215,.32);font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.everydayActionsBoundary)}</p>
                   </td></tr>
                 </table>
               </div>` : ""}
 
               ${report.climate ? `
-              <div class="section-pad" style="padding-top:34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);border-bottom:6px solid #20d8c1;">
-                  <tr><td style="padding:22px 24px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);border-bottom:6px solid #20d8c1;">
+                  <tr><td style="padding:24px 26px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.climateEyebrow)}</div>
-                    <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(report.climate.label || "Your local planning context")}</div>
-                    ${report.climate.summary ? `<p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.climate.summary)}</p>` : ""}
+                    <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(report.climate.label || "Your local planning context")}</div>
+                    ${report.climate.summary ? `<p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.climate.summary)}</p>` : ""}
                   </td></tr>
                 </table>
               </div>` : ""}
 
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.readinessEyebrow, "How confident is this plan?")}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};border:1px solid ${report.questions.length ? "#e8c66f" : "#74f1d7"};border-top:5px solid ${report.questions.length ? "#e8c66f" : "#20d8c1"};">
-                  <tr><td style="padding:20px 22px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};border:1px solid ${report.questions.length ? "#e8c66f" : "#74f1d7"};border-top:5px solid ${report.questions.length ? "#e8c66f" : "#20d8c1"};">
+                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:${report.questions.length ? "#6d5315" : "#063448"};">${escapeHtml(readiness.title)}</div>
-                    <p style="margin:8px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${report.questions.length ? "#6d5315" : "#365467"};">${escapeHtml(readiness.body)}</p>
+                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${report.questions.length ? "#6d5315" : "#365467"};">${escapeHtml(readiness.body)}</p>
                     ${report.questions.length ? htmlBulletRows(report.questions.map((question) => `${question.prompt}: ${question.whyItMatters}`), { color: "#6d5315" }) : ""}
                   </td></tr>
                 </table>
                 ${professional ? `
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
-                  <tr><td style="padding:20px 22px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
+                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(professional.eyebrow)}</div>
-                    <div style="margin-top:5px;font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:#063448;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.title)}</div>
-                    <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml([professional.role, professional.scheme, professional.reference].filter(Boolean).join(" | "))}</p>
-                    ${professional.notes ? `<div style="margin-top:13px;padding:13px 15px;background-color:#e8f7f5;border-left:4px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#063448;">Adviser note</strong><br>${escapeHtml(professional.notes)}</div>` : ""}
-                    <p style="margin:11px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#637a87;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
+                    <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:#063448;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.title)}</div>
+                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml([professional.role, professional.scheme, professional.reference].filter(Boolean).join(" | "))}</p>
+                    ${professional.notes ? `<div style="margin-top:${emailLayout.tileGap}px;padding:15px 17px;border-radius:${emailLayout.insetRadius}px;background-color:#e8f7f5;border-left:4px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#063448;">Adviser note</strong><br>${escapeHtml(professional.notes)}</div>` : ""}
+                    <p style="margin:14px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#637a87;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
                   </td></tr>
                 </table>` : ""}
               </div>
 
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.whyEyebrow, copy.whyTitle)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#e8f7f5;border-left:5px solid #20d8c1;border-top:1px solid #c9dfe5;">
-                  <tr><td style="padding:12px 20px 19px;">${htmlBulletRows(report.decisionBasis)}</td></tr>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#e8f7f5;border-left:5px solid #20d8c1;border-top:1px solid #c9dfe5;">
+                  <tr><td style="padding:14px 20px 21px;border-radius:${emailLayout.tileRadius}px;background-color:#e8f7f5;">${htmlBulletRows(report.decisionBasis)}</td></tr>
                 </table>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#fff7e5;border:1px solid #e8c66f;">
-                  <tr><td style="padding:18px 20px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#fff7e5;border:1px solid #e8c66f;">
+                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:#fff7e5;">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#6d5315;">When to review this plan</div>
-                    <p style="margin:7px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#6d5315;">${escapeHtml(report.changeBoundary)}</p>
+                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#6d5315;">${escapeHtml(report.changeBoundary)}</p>
                   </td></tr>
                 </table>
               </div>
 
-              <div class="section-pad" style="padding-top:34px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.tradeEyebrow, copy.tradeTitle)}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
-                  <tr><td style="padding:12px 20px 19px;">${htmlBulletRows(report.beforeTrade)}</td></tr>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
+                  <tr><td style="padding:14px 20px 21px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;">${htmlBulletRows(report.beforeTrade)}</td></tr>
                 </table>
               </div>
 
-              <div class="section-pad" style="padding-top:34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);border-bottom:6px solid #20d8c1;">
-                  <tr><td style="padding:24px;">
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);border-bottom:6px solid #20d8c1;">
+                  <tr><td style="padding:26px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.privacyEyebrow)}</div>
-                    <div style="margin-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(copy.privacyTitle)}</div>
-                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.privacyNote)}</p>
-                    <p style="margin:9px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.adviceBoundary)}</p>
+                    <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(copy.privacyTitle)}</div>
+                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.privacyNote)}</p>
+                    <p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b9d6e0;">${escapeHtml(report.adviceBoundary)}</p>
                   </td></tr>
                 </table>
               </div>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 40px;background-color:#00152b;border-top:2px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#b9d6e0;">
+            <td style="padding:20px 40px;border-radius:0 0 ${emailLayout.shellRadius}px ${emailLayout.shellRadius}px;background-color:#00152b;border-top:2px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#b9d6e0;">
               Prepared ${escapeHtml(report.displayDate || report.preparedDate)} from the saved plan. ${escapeHtml(copy.footer)}.
             </td>
           </tr>
@@ -1076,6 +1095,10 @@ export function customerPlanDocumentHtml(document) {
     </table>
   </body>
 </html>`;
+  return html
+    .replace(/>\s+</g, "><")
+    .replace(/\r?\n\s*/g, "")
+    .trim();
 }
 
 export function customerPlanDocumentText(document) {
