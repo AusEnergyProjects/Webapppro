@@ -292,6 +292,35 @@ Make the customer PDF and email feel like one distinctive, high-end technical pr
 
 All listed acceptance gates are met. Delivered rendering in Gmail and Outlook remains explicitly unverified and is the second forward step below. The release check did not create or save a project, upload evidence, send an email, mutate customer data or use native print.
 
+## Released milestone: CUSTOMER-PLAN-SPACING-10
+
+Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 222 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Give every customer PDF and email section deliberate breathing room and soft, brand-consistent corners without changing the advice, evidence, privacy or download contracts.
+
+### In scope
+
+- Centralise the PDF and email spacing and radius scale in the shared report design module.
+- Use clipped cubic-Bezier rounded paths for PDF gradients, panels, snapshot cells, number badges and comfort tiles so backgrounds cannot retain square corners.
+- Apply consistent label-to-title, title-to-body and body-to-link gaps plus measured panel padding to every repeated PDF card.
+- Give responsive email a 40 px desktop and 32 px mobile section rhythm, 16 px tile spacing, 20 px content padding and 16 to 22 px radii.
+- Separate each everyday-action item into its own rounded email tile instead of one cramped uninterrupted block.
+- Add mobile snapshot separation and keep the maximum-content email below the existing 60,000-byte guard by removing transport-only whitespace.
+- Preserve the exact AEA mark, normalized customer facts, evidence boundary, same-origin links, native PDF attachment, provider controls and zero project or evidence mutation.
+- Make no schema, migration, account, customer, trade, wholesaler, project or evidence-data change.
+
+### Acceptance gate
+
+- A representative seven-page A4 report renders every page with readable internal spacing, rounded clipping, no overlap, no clipped content and clear footer separation.
+- Repeated PDF action, snapshot, information and comfort cards share one measured spacing and rounding system.
+- Desktop email inspection shows separated rounded action and comfort tiles; narrow-width regression checks retain stacked snapshot gaps and reduced mobile section spacing.
+- Maximum-content email remains below 60,000 bytes and preserves exactly one occurrence of each action and evidence boundary.
+- Focused tests, the complete validation gate, all 84 migrations, the production build, GitHub provenance, Sites provenance, live public route checks and the post-deployment error query pass.
+
+All listed acceptance gates are met. The release check used a synthetic in-memory report, did not send email, create or save an account project, upload evidence, mutate working-demo data or invoke native print. Delivered Gmail and Outlook acceptance remains explicitly unverified and stays as the second forward step below.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions

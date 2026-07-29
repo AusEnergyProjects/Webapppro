@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 30 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
+Milestone ID: `CUSTOMER-PLAN-SPACING-10`
 
-Implementation baseline: `a92e18b9ea79b53eaf6eda8665f37ec02c861972`
+Implementation baseline: `6fe4d9e92aba20e576376a4fef4e296bb8bc3dc1`
 
-Released application for this milestone: Sites version 220 from application commit `f401575a5bf463b85c7688424db0b99dddd220c5`
+Released application for this milestone: Sites version 222 from application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,9 +18,9 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Give a household or self-declared accredited adviser one distinctive, high-end technical home energy presentation in PDF and email, with the exact AEA mark, easy-to-scan priorities, truthful completion status and readable plain language.
+Give a household or self-declared accredited adviser one distinctive, high-end technical home energy presentation in PDF and email, with the exact AEA mark, easy-to-scan priorities, truthful completion status, readable plain language, deliberate spacing and soft brand-consistent corners.
 
-The release keeps the proven browser-native, non-mutating PDF attachment path and the shared privacy-filtered report projection. It replaces the temporary initials tile with the exact AEA navigation mark, strengthens the cover, plan signals, snapshot and action hierarchy, retains the exact household or self-declared professional evidence boundary once, and gives a fully completed plan an honest all-complete state with zero work left to plan.
+The release keeps the proven browser-native, non-mutating PDF attachment path and the shared privacy-filtered report projection. It retains the exact AEA navigation mark and technical hierarchy while applying one measured spacing scale to every repeated card, clipping PDF gradients to rounded paths, separating email comfort advice into individual rounded tiles and retaining the exact household or self-declared professional evidence boundary once.
 
 ## Current user outcomes
 
@@ -35,17 +35,24 @@ The release keeps the proven browser-native, non-mutating PDF attachment path an
 - Email, public PDF and signed-in PDF use the same privacy-filtered document projection, customer wording and section order.
 - Public and signed-in PDF actions use one browser-native attachment request with a short duplicate-click guard and no account mutation.
 - PDF and email use the site's deep navy, electric blue, teal, aqua, green, mint and warm warning palette with readable technical hierarchy and customer-scale body copy.
+- PDF information, priority, roadmap, snapshot and comfort cards use one measured spacing scale with rounded clipped backgrounds, inset accents and soft number badges.
+- Email sections use consistent desktop and mobile breathing room, rounded outer and feature panels, 16 px tile gaps and separate nested comfort-advice tiles.
+- Mobile snapshot cells retain a visible 12 px gap instead of touching when stacked.
 - The exact 96 by 96 AEA navigation mark is embedded directly in the PDF and served to email from `https://compare.ausenergyassessments.com/api/aea-brandmark`.
 - The report leads with a stronger branded cover, plan signals and one lead home fact, then separates the remaining snapshot, first unfinished actions, later work, everyday ideas, climate context, plan confidence, professional attribution, trade checks and privacy.
 - Allowlisted guide labels are real same-origin PDF annotations; raw URLs are not drawn into the report.
 - Long adviser names, references and notes wrap safely, and a fully completed plan reports every current step complete and zero left to plan instead of inventing a next action.
 - The exact household-supplied or self-declared professional evidence boundary appears once in the PDF and is not weakened or duplicated.
-- The PDF format version is `2026-07-30-tech-presentation-pdf-v1`, the shared design version is `2026-07-30-tech-presentation-design-v1`, and the report version remains `2026-07-29-premium-report-v3`. The plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, and the document remains `2026-07-29-plan-document-v2`.
+- The PDF format version is `2026-07-30-tech-presentation-pdf-v2`, the shared design version is `2026-07-30-tech-presentation-design-v2`, and the report version remains `2026-07-29-premium-report-v3`. The plan remains `2026-07-29-adviser-print-comfort-v3`, the adviser profile remains `2026-07-29-advisor-profile-v4`, the declaration remains `2026-07-29-self-declared-adviser-v1`, and the document remains `2026-07-29-plan-document-v2`.
 
 ## Current in scope
 
 - Share one exact AEA brandmark source between live navigation, the PDF and the immutable public PNG endpoint used by email.
 - Apply one technical visual system to the PDF and responsive email without changing the normalized report facts.
+- Centralise PDF and email spacing, padding and radius tokens instead of allowing local one-off geometry to drift.
+- Clip gradient-backed PDF panels to curved cubic-Bezier paths and use the same rounded primitive for opaque panels and badges.
+- Keep email presentation-table compatibility while rounding the shell, feature panels, normal tiles and adviser inset.
+- Remove transport-only HTML whitespace so the richer maximum-content email stays below the existing 60,000-byte guard.
 - Give the cover stronger brand lockup, plan signals and completion-aware counts.
 - Lead the home snapshot with one readable primary fact and keep the remaining facts compact.
 - Highlight the first three unfinished actions before the remaining ordered roadmap, or show all steps complete with zero left to plan.
@@ -100,6 +107,9 @@ The release keeps the proven browser-native, non-mutating PDF attachment path an
 - Customer-plan delivery has no native print, iframe, `afterprint`, client worker, Blob URL or synthetic-link path and performs no project or evidence mutation.
 - Account and project HTML is excluded from shared caching and returns `private, no-store, max-age=0`.
 - Representative maximum-content, long-professional-note and Unicode A4 reports wrap safely, keep cards together and retain readable contrast.
+- Every repeated PDF panel measures the same internal gaps it draws, clips gradient corners and preserves footer clearance across page breaks.
+- Email uses 40 px desktop and 32 px mobile section spacing, 16 px tile gaps, rounded presentation-table surfaces and a visible mobile snapshot gap.
+- Maximum-content email remains below 60,000 bytes without dropping content or weakening inline client-safe styles.
 - PDF annotations are same-origin, raw URLs remain hidden, and fully completed plans have no empty priority section.
 - The PDF contains the exact AEA mark without a runtime image fetch, and email references only the exact first-party HTTPS mark endpoint.
 - The household or professional evidence boundary appears exactly once in the PDF.
@@ -145,23 +155,23 @@ Observed results:
 - type checking and warning-free lint: passed;
 - migration verification: all 84 migrations passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub and Sites managed source branch: exact application SHA `f401575a5bf463b85c7688424db0b99dddd220c5`;
-- Sites application version: 220, deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`, public, environment revision 19;
-- one representative household report produced a 41,925-byte, unencrypted nine-page A4 PDF with no JavaScript; all pages were rendered and visually inspected;
-- page 2 contains the exact household-supplied evidence boundary once;
-- a completed-plan cover and second page were inspected with `16 STEPS COMPLETE` and `0 LEFT TO PLAN`;
+- GitHub and Sites managed source branch: exact application SHA `e74c2d95889a381cb3bb434607bc6584e54cf722`;
+- Sites application version: 222, deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`, public, environment revision 19;
+- one synthetic representative report produced a 47,059-byte seven-page A4 PDF; all seven pages were rendered and visually inspected for card spacing, rounded clipping, section transitions and footer clearance;
+- the matching 42,249-byte email was served only from a local loopback preview and inspected through its priority, roadmap, comfort, climate, confidence, trade and privacy sections;
+- automated regressions confirm the narrow-width mobile snapshot gap, reduced mobile section spacing, rounded shell and tiles, and the maximum-content 60,000-byte cap;
 - live `GET /api/aea-brandmark` returned `200`, `image/png`, `Cache-Control: public, max-age=31536000, immutable`, 3,595 bytes and a valid PNG signature, and the browser showed the exact 96 by 96 mark;
 - live `/plan` returned `200`, 54,406 bytes and was visually inspected;
-- Sites logs recorded the new logo and plan requests with outcome `ok` and status `200`;
+- the post-deployment Sites error-only query returned zero events;
 - no email was sent, no customer, project or other data was mutated, and native print was not invoked; and
-- browser security blocked the local-file email render, so delivered Gmail and Outlook acceptance remains unverified and is retained as the second next step.
+- delivered Gmail and Outlook acceptance remains unverified and is retained as the second next step.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `f401575a5bf463b85c7688424db0b99dddd220c5`
-- Sites application version: 220
-- Sites application deployment: `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`
+- Application commit: `e74c2d95889a381cb3bb434607bc6584e54cf722`
+- Sites application version: 222
+- Sites application deployment: `appgdep_6a6a8887a0048191b7eb1706e742ad28`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 84
@@ -172,9 +182,13 @@ Observed results:
 
 `npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the PDF feature and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PLAN-PREMIUM-REPORT-08`
+## Prior released milestone: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 
-The prior release established the shared premium PDF, responsive email HTML and plain-text hierarchy while retaining the reliable non-mutating native attachment path. Its exact application commit was `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`, first deployed as Sites version 218 through deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`. Documentation-only child `a92e18b9ea79b53eaf6eda8665f37ec02c861972` was recorded as historical Sites version 219 without changing that executable application. The shared report projection and privacy boundaries remain active underneath the version 220 technical presentation.
+The prior release established the exact-brand technical presentation, truthful completed-plan signals and single household or professional evidence boundary. Its exact application commit was `f401575a5bf463b85c7688424db0b99dddd220c5`, first deployed as Sites version 220 through deployment `appgdep_6a6a265a51108191bdc8ae6a4eefbf8f`. Those contracts remain active underneath the version 222 spacing and rounded-surface refinement.
+
+## Earlier released milestone: `CUSTOMER-PLAN-PREMIUM-REPORT-08`
+
+The earlier release established the shared premium PDF, responsive email HTML and plain-text hierarchy while retaining the reliable non-mutating native attachment path. Its exact application commit was `fb6cacf8b0309a3fc26b40a43da5b025050d22d2`, first deployed as Sites version 218 through deployment `appgdep_6a6a11c02e088191bb27cc302c8b35af`. Documentation-only child `a92e18b9ea79b53eaf6eda8665f37ec02c861972` was recorded as historical Sites version 219 without changing that executable application. The shared report projection and privacy boundaries remain active underneath the later technical presentation and spacing releases.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-NATIVE-PDF-07`
 
