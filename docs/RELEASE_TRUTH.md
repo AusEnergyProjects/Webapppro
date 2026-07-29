@@ -28,10 +28,11 @@ This is the only current implementation and release-status document. The [dated 
 | Independent customer plan application source | `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 208 |
 | Customer plan evidence and history application source | `6540ee671e64dbfdf80592283a1954b2ff482355` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 210 |
 | Professional review, print and comfort application source | `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 212 |
-| Current executable application identity | Sites version 212 from `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a69c4f838bc8191a0e050da219ab4a6`; saved-version provenance, public deployment, environment revision 19 and live public plus signed-in checks verified on 29 July 2026 |
+| Direct customer-plan PDF application source | `d5c675a5ceffa6e924df033e8cb8b505bb4d6336` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 214 |
+| Current executable application identity | Sites version 214 from `d5c675a5ceffa6e924df033e8cb8b505bb4d6336` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a69e79a91548191987f12631559cb1f`; saved-version provenance, public deployment, environment revision 19 and live public download verified on 29 July 2026 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release and professional-review, print and comfort release are production. Sites version 212 is the exact executable customer-plan application source. A later documentation-only Sites checkpoint may package those unchanged application bits; it is an operational publication checkpoint, not a new application identity, and its exact source, saved version and deployment remain provider-record evidence. The live public planner and signed-in working-demo project builder were verified after deployment without saving a project, sending an email or opening the live print dialog. A representative local A4 report was rendered separately for print validation. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release, professional-review and direct-PDF releases are production. Sites version 214 is the exact executable customer-plan application source. A later documentation-only Sites checkpoint may package those unchanged application bits; it is an operational publication checkpoint, not a new application identity, and its exact source, saved version and deployment remain provider-record evidence. The live public planner and download route were verified without creating or saving an account project, sending an email or invoking native print. The resulting production PDF was parsed separately for file-format, A4, metadata and JavaScript checks. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
 
 ## Current product model
 
@@ -159,10 +160,26 @@ The release:
 - adds a deterministic, capped and product-neutral `Helpful things you can try now` section to public, signed-in, email and print outputs;
 - covers moisture and ventilation, personal warmth, safe seasonal airflow, appliance controls and timers, window coverings and landscaping, and renter-friendly or bounded do-it-yourself options only when the recorded facts support them;
 - keeps helpful actions separate from the ordered upgrade roadmap, quotes, permissions and installer matching;
-- replaces top-level account-page printing with one isolated privacy-filtered temporary-frame lifecycle, including single-print guarding, cancellation, timeout, unmount, `afterprint` and idempotent cleanup boundaries; and
+- replaced top-level account-page printing with one isolated privacy-filtered temporary-frame lifecycle, including single-print guarding, cancellation, timeout, unmount, `afterprint` and idempotent cleanup boundaries; this historical mitigation later proved insufficient when the product owner reproduced a Chrome freeze and is superseded by the direct-PDF release; and
 - wraps long adviser names, references and notes and preserves semantic report section headings in A4 output.
 
 The current plan version is `2026-07-29-adviser-print-comfort-v3`, the advisor profile version is `2026-07-29-advisor-profile-v4`, the professional declaration version is `2026-07-29-self-declared-adviser-v1`, the document version is `2026-07-29-plan-document-v2`, and the concise report version is `2026-07-29-concise-report-v2`. No schema or migration changed. Earlier plan versions remain accepted through the existing edited-plan conflict boundary.
+
+## Direct customer plan PDF download fix
+
+`CUSTOMER-PLAN-DIRECT-PDF-06` is deployed from exact application commit `d5c675a5ceffa6e924df033e8cb8b505bb4d6336`, first saved and published as Sites version 214 through deployment `appgdep_6a69e79a91548191987f12631559cb1f`.
+
+The release:
+
+- replaces public and signed-in customer-plan browser printing with one shared direct-PDF download contract;
+- projects only the normalized privacy-filtered report into the PDF, while the account path continues to save the exact plan before generation and the public path remains non-mutating;
+- generates A4 bytes in a dedicated lazy worker so font embedding and layout do not block the page;
+- uses `pdf-lib`, fontkit and locally bundled DejaVu Sans TrueType fonts, preserves supported Unicode and fails explicitly for unsupported glyphs;
+- downloads an `application/pdf` Blob through a privacy-safe filename with duplicate-generation guards and bounded worker, Blob and object-URL cleanup;
+- removes customer-plan iframe, `srcdoc`, `contentWindow`, `afterprint` and `window.print()` paths; and
+- makes no schema or migration change.
+
+The PDF format version is `2026-07-29-direct-download-pdf-v1`. The plan version remains `2026-07-29-adviser-print-comfort-v3`, the advisor profile remains `2026-07-29-advisor-profile-v4`, the professional declaration remains `2026-07-29-self-declared-adviser-v1`, the document remains `2026-07-29-plan-document-v2`, and the concise report remains `2026-07-29-concise-report-v2`.
 
 ## Local validation evidence
 
@@ -195,6 +212,10 @@ Public desktop and narrow-viewport computed checks found no horizontal overflow 
 
 The post-release Sites error-only query returned three informational canceled `/api/electricity-plans` health-monitor invocations and no exception message attributable to the newly checked release routes. This does not prove an end-to-end electricity-plan provider result and remains an operational monitor observation. No real account was created or used.
 
+Exact application commit `d5c675a5ceffa6e924df033e8cb8b505bb4d6336` passes 40 of 40 focused PDF, customer-project UI and navigation tests. The complete `npm.cmd run validate` gate passes on the exact source: type checking, warning-free lint, 31 of 31 integration tests, the full 820-test suite with 818 passed and 2 intentionally skipped, all 84 migrations against fresh SQLite and Cloudflare D1 paths, and the Vinext production build. `git diff --check` passed. GitHub and the Sites managed source branch both contain the exact application SHA. Sites saved version 214 reports that SHA as its source and deployment `appgdep_6a69e79a91548191987f12631559cb1f` succeeded with environment revision 19.
+
+A maximum-content seven-page A4 PDF with long adviser content and six everyday actions was rendered and visually inspected without clipped text, unreadable contrast or application chrome. Live public verification confirmed the exact `Preview and download PDF` route, one enabled `Download PDF` action, no native-print copy, no alert and no JavaScript dialog. The production action created a 29,002-byte three-page PDF. Independent parsing confirmed the `%PDF-` signature, A4 `595.28 × 841.89` page boxes, expected title and author, readable first-page text, no encryption and no embedded JavaScript. No project or account record was created or saved, no evidence was uploaded, no email was sent and no provider delivery path was exercised.
+
 The 29 July 2026 `npm.cmd run audit:links` result is not green: 166 of 169 destinations were reachable or accepted, 16 were separately classified as automation-blocked, and 3 provider or network probes failed or timed out. Those failures do not change the source validation result and remain external evidence gaps.
 
 The product owner stated on 28 July 2026 that the environment contains working-demo data only and no real customer, trade or wholesaler accounts. Existing field-pilot recruitment code remains an inactive future workflow and was not activated or populated by this release. Migration `0079_trade_abn_access_gate.sql` adds only the reviewed-ABN projection, indexes and append-only decision ledger. It is deployed and performs no row deletion, column removal, table drop or provider cleanup. Deployed forward contract migration `0080_retire_legacy_trade_commercial_data.sql` uses that explicit authorisation to remove only retired commercial fields, tables and Stripe/Square integration rows after the reviewed-ABN application became live. Its preservation test retains account identities, jobs, quotes, invoices, accounting, calendar and ABN review records. Sites environment revision 19 contains zero Stripe or Square keys after the 16 observed retired keys were removed. Deployment and worker-log evidence is clean, but independent direct querying of the managed live D1 schema and rows remains unavailable; external provider registrations also remain unknown.
@@ -225,7 +246,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions and isolated responsive printing. Those capabilities are live in Sites version 212 alongside the earlier owner Database Console.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions and off-main-thread direct PDF downloads that avoid browser print APIs. Those capabilities are live in Sites version 214 alongside the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 

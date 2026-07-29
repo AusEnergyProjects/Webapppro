@@ -170,7 +170,37 @@ Add a bounded self-declared professional-review path, useful everyday comfort gu
 - The account print path does not call top-level `window.print()`, print application chrome, allow concurrent jobs or leave temporary report frames behind.
 - Focused regressions, the full validation gate, all 84 migrations, production build, source provenance and responsive live checks pass.
 
-All acceptance gates above are met for the released application source. A representative six-page A4 report was inspected locally. No working-demo record was saved, no release email was sent and the live print dialog was not opened.
+The source-level gates above passed for Sites version 212 and a representative six-page A4 report was inspected locally. Later product-owner use reproduced a Chrome freeze. The temporary-frame browser-print mechanism therefore did not meet the operational reliability outcome and is superseded by `CUSTOMER-PLAN-DIRECT-PDF-06`. No working-demo record was saved, no release email was sent and the live print dialog was not opened during the version 212 verification.
+
+## Released milestone: CUSTOMER-PLAN-DIRECT-PDF-06
+
+Release status: application commit `d5c675a5ceffa6e924df033e8cb8b505bb4d6336` is validated, pushed to GitHub and the Sites managed source branch, and first deployed as public Sites version 214 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a69e79a91548191987f12631559cb1f` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Replace every customer-plan browser-print path with a direct, privacy-filtered PDF download that does not invoke Chrome's native print system.
+
+### In scope
+
+- Use one normalized report contract for the public planner and signed-in customer project.
+- Generate the PDF in a dedicated lazy worker so layout and font work do not block the page.
+- Use `pdf-lib`, fontkit and locally bundled DejaVu Sans TrueType fonts for deterministic A4 output.
+- Preserve supported Unicode and fail explicitly for an unsupported glyph instead of silently changing customer or adviser text.
+- Download an `application/pdf` Blob with a privacy-safe filename and bounded object-URL cleanup.
+- Keep account generation behind the existing exact-plan save boundary while public generation remains non-mutating.
+- Remove the customer-plan iframe, `srcdoc`, `contentWindow`, `afterprint` and `window.print()` mechanisms.
+- Make no schema or migration change.
+
+### Acceptance gate
+
+- Public and account plan surfaces use the same PDF renderer and privacy-filtered report model.
+- Normal, long-professional-note and maximum-content reports produce valid A4 PDFs without clipped sections or unreadable contrast.
+- Unicode adviser text, safe filenames, report metadata, page numbering, link boundaries and object-URL cleanup are covered by regression tests.
+- No customer-plan action can open native print, print application chrome, mount a report iframe or leave a concurrent generation job.
+- The complete validation gate, all 84 migrations, production build, GitHub provenance and Sites saved-version provenance pass.
+- A production `/plan/print` download creates a valid unencrypted three-page A4 PDF with the expected title and no embedded JavaScript.
+
+All acceptance gates above are met for the released application source. No account or project was created, no working-demo record was saved, no email was sent and no provider delivery path was exercised during live verification.
 
 ## Forward phases
 
