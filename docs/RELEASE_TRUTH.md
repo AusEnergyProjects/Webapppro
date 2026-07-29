@@ -26,10 +26,11 @@ This is the only current implementation and release-status document. The [dated 
 | Pre-context documentation checkpoint | `0a82a992e162087eb5ac76b4227dee3a505eae5b` | Documentation-only child of the home-advisor application; pushed to GitHub and live as Sites version 205 before this milestone |
 | Advisor context and admin stability application source | `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 206 |
 | Independent customer plan application source | `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 208 |
-| Current executable application identity | Sites version 208 from `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a6943bcb758819196c764370a2b683a`; saved-version provenance, public deployment, environment revision 19 and live public checks verified on 29 July 2026 |
+| Customer plan evidence and history application source | `6540ee671e64dbfdf80592283a1954b2ff482355` | Validated, pushed to GitHub and Sites managed `main`; first saved and deployed as Sites version 210 |
+| Current executable application identity | Sites version 210 from `6540ee671e64dbfdf80592283a1954b2ff482355` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a695ca742d081918d73196751713f98`; saved-version provenance, public deployment, environment revision 19 and live public plus signed-in checks verified on 29 July 2026 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release and independent customer-plan release are production. Sites version 208 is the exact executable customer-plan application source. A later documentation-only Sites checkpoint may package those unchanged application bits; it is an operational publication checkpoint, not a new application identity, and its exact source, saved version and deployment remain provider-record evidence. The live public plan, preparation guide and print view were verified after deployment. No real or new account was created, no working-demo data changed and no release check sent an email. Earlier signed-in working-demo verification established the customer and owner boundaries for the prior release; earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release and customer plan evidence-and-history release are production. Sites version 210 is the exact executable customer-plan application source. A later documentation-only Sites checkpoint may package those unchanged application bits; it is an operational publication checkpoint, not a new application identity, and its exact source, saved version and deployment remain provider-record evidence. The live public planner, print report and signed-in working-demo project builder were verified after deployment without saving a project or sending an email. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
 
 ## Current product model
 
@@ -122,6 +123,27 @@ The release:
 
 The current plan version is `2026-07-29-decision-support-advisor`. Legacy edited ordering, removals and private custom steps remain protected by the existing conflict boundary. Private review and custom content cannot enter installer opportunities, permission exports or independent shared output.
 
+## Customer plan evidence and history release
+
+`CUSTOMER-PLAN-EVIDENCE-04` is deployed from exact application commit `6540ee671e64dbfdf80592283a1954b2ff482355`, first saved and published as Sites version 210 through deployment `appgdep_6a695ca742d081918d73196751713f98`.
+
+The release:
+
+- uses one categorized fourteen-question home-detail intake in public `/plan` and the signed-in project builder;
+- supports several main goals, owner or renter tenure, approval context, budget and staging as separate decisions;
+- distinguishes roof, wall and underfloor insulation condition plus glazing, basic blinds, higher-performing coverings and external shade in plain language;
+- derives answered, `Not sure` and unanswered counts from the same authoritative question contract;
+- adds one action to mark every unanswered home question `Not sure` and one email-dialog action to review missing details;
+- uses one concise privacy-filtered projection for inline email HTML, plain text, public print, signed-in print and browser Save as PDF;
+- keeps plan steps reorderable, removable and open to bounded home-specific additions;
+- makes every new upload `private-plan` by default and requires explicit `allocated-installers` scope plus current consent before an allocated verified installer can view it;
+- strips JPEG, PNG and WebP metadata before any accepted image category is stored;
+- makes fact-link edits independent from installer-sharing consent;
+- adds bounded owner-scoped plan revisions and private outcome check-ins with atomic revision numbering and retention limits; and
+- prevents private file counts, private notes, filenames, exact location, room routines and custom plan text from entering installer or shared report output.
+
+The current plan version is `2026-07-29-home-feature-taxonomy-v2`, the advisor profile version is `2026-07-29-advisor-profile-v3`, the document version is `2026-07-29-plan-document-v1`, and the concise report version is `2026-07-29-concise-report-v1`. Forward migration `0083_customer_plan_evidence_history.sql` adds evidence fact links and sharing scope plus private revision and outcome tables without rewriting applied history. The prior `2026-07-15`, `2026-07-29-home-advisor`, `2026-07-29-evidence-climate-advisor` and `2026-07-29-decision-support-advisor` plan versions remain accepted legacy inputs through the existing edited-plan conflict boundary. Household answers and linked files are not represented as professionally reviewed or verified, no NatHERS claim is made, and no price or savings outcome is guaranteed.
+
 ## Local validation evidence
 
 The last complete shared-worktree validation was recorded before the release was split into compatible expansion, application activation and contract cleanup:
@@ -142,6 +164,10 @@ Desktop visual inspection confirmed readable project-guide contrast. A 390 by 84
 Exact application commit `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e` passes 51 of 51 focused plan, privacy, provider, accessibility and navigation regressions. The complete `npm.cmd run validate` gate passes on the exact source: type checking, warning-free lint, 31 of 31 integration tests, the full 784-test suite with 782 passed and 2 intentionally skipped, all 83 migrations against fresh SQLite and Cloudflare D1 paths, and the Vinext production build. `git diff --check` passes. Independent privacy, security, accessibility, print and release reviews were closed before publication. Sites version 208 has matching saved-source provenance and environment revision 19.
 
 Live public verification confirmed the reconciled seven-part `/plan` intake, multiple goals, owner-or-renter first, separate shared-property approval, current home facts, budget, pace, optional state, bounded questions and controlled rationales. The guide text renders as `rgb(185, 204, 215)` on the navy canvas without horizontal overflow. The live print route contains the ordered plan, decision questions, guide links and browser Print or Save as PDF action. A representative four-page A4 output was inspected without clipped cards, dark artifacts or application chrome. Required Sites delivery and limiter configuration names are present, but secret values were not read or reproduced. The authenticated email path was not exercised against a real recipient; ownership, privacy, idempotency, rate-limit and provider behavior are covered by automated regressions. No real account was created or used and no demo data changed.
+
+Exact application commit `6540ee671e64dbfdf80592283a1954b2ff482355` passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, the full 803-test suite with 801 passed and 2 intentionally skipped, all 84 migrations against fresh SQLite and Cloudflare D1 paths, and the Vinext production build. A final focused privacy, report and compatibility set passed 27 of 27 tests. `git diff --check` passed. Independent taxonomy, evidence, privacy and final-diff reviews were closed before commit. GitHub and the Sites managed source branch both resolve to the exact application SHA. Sites saved version 210 reports that SHA as its source and deployment `appgdep_6a695ca742d081918d73196751713f98` succeeded with environment revision 19.
+
+Local desktop and 390 by 844 planner checks found no horizontal overflow. A representative three-page, 137,415-byte A4 PDF was rendered and inspected without clipped content or application chrome. Live public `/plan` and `/plan/print` checks confirmed the categorized home questions, several goals, renter guidance, concise readiness language, ordered actions and readable desktop plus 390 px report layouts. Signed-in working-demo inspection confirmed five clickable builder steps, the same categorized taxonomy, `Not sure` bulk completion, budget, email and PDF actions, reorder and remove controls, the email-dialog `Review home details` correction path and the installer-only file count. The temporary project title existed only in unsaved browser state. No project was saved, no evidence was uploaded, no email was sent and no real customer, trade, wholesaler or assessor account was created. Live email-provider delivery and live authorization-denial mutation paths were deliberately not exercised; ownership, rate-limit, consent, privacy and provider-acceptance boundaries are covered by automated regressions.
 
 The post-release Sites error-only query returned three informational canceled `/api/electricity-plans` health-monitor invocations and no exception message attributable to the newly checked release routes. This does not prove an end-to-end electricity-plan provider result and remains an operational monitor observation. No real account was created or used.
 
@@ -175,7 +201,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability and independent customer-plan sharing. Those capabilities are live in Sites version 208 alongside the earlier owner Database Console.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope and bounded plan history. Those capabilities are live in Sites version 210 alongside the earlier owner Database Console.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 

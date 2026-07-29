@@ -78,17 +78,19 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /only current implementation and release-status document/);
   assert.match(releaseTruth, /## Advisor context and admin stability release/);
   assert.match(releaseTruth, /## Independent customer plan release/);
-  assert.match(releaseTruth, /Sites version 208 from `e82481b2b4dfca61ef3c4aa4d9c3d0d1c725000e`/);
+  assert.match(releaseTruth, /## Customer plan evidence and history release/);
+  assert.match(releaseTruth, /Sites version 210 from `6540ee671e64dbfdf80592283a1954b2ff482355`/);
   assert.match(roadmap, /contains only approved forward work and measurable gates/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-ADVISOR-CONTEXT-02/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-DECISION-03/);
+  assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-EVIDENCE-04/);
   assert.match(handover, /Status: released implementation milestone/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-DECISION-03`/);
-  assert.match(handover, /Sites application version: 208/);
-  assert.match(roadmap, /1\. \*\*Evidence-to-fact linking:/);
-  assert.match(handover, /1\. \*\*Evidence-to-fact linking:/);
-  assert.match(roadmap, /5\. \*\*Deferred household and assessor usability pilot:/);
-  assert.match(handover, /5\. \*\*Deferred household and assessor usability pilot:/);
+  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-EVIDENCE-04`/);
+  assert.match(handover, /Sites application version: 210/);
+  assert.match(roadmap, /1\. \*\*Guided safe photo capture:/);
+  assert.match(handover, /1\. \*\*Guided safe photo capture:/);
+  assert.match(roadmap, /5\. \*\*Advisor-rule scenario QA:/);
+  assert.match(handover, /5\. \*\*Advisor-rule scenario QA:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

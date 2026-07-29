@@ -109,6 +109,37 @@ Make the plan explainable, question-led, privately reviewable and shareable as o
 
 All acceptance gates above are met for the released application source. No real account was created and no release check sent an email.
 
+## Released milestone: CUSTOMER-PLAN-EVIDENCE-04
+
+Release status: application commit `6540ee671e64dbfdf80592283a1954b2ff482355` is validated, pushed to GitHub and the Sites managed source branch, and first deployed as public Sites version 210 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a695ca742d081918d73196751713f98` succeeded with environment revision 19.
+
+### Outcome
+
+Make the public planner, signed-in project builder and customer report use one clear home-detail taxonomy, replace internal evidence-source language with household answers and linked evidence, and give customers a direct path to complete missing details before emailing or printing a plan.
+
+### In scope
+
+- Use the same categorized fourteen-question home-detail intake in public `/plan` and the signed-in project builder.
+- Support multiple household goals, owner or renter tenure, a planning budget boundary and explicit `Not sure` answers.
+- Distinguish no, limited or older, and well-performing roof, wall and underfloor insulation without asking for unsafe inspection.
+- Distinguish single, mixed and stronger glazing plus basic blinds, mixed coverings and close-fitting honeycomb, thermal-blind or heavy-curtain-with-pelmet options.
+- Show answered, `Not sure` and unanswered counts in plain language, with one action to mark remaining questions `Not sure` and one report-dialog action to review the missing details.
+- Generate one concise privacy-filtered report for email, browser print and Save as PDF.
+- Keep plan steps removable, keyboard or touch reorderable and open to bounded home-specific additions.
+- Store new evidence as private-plan material by default, require explicit installer-sharing scope and consent, strip image metadata, and exclude private files from installer opportunity output.
+- Persist bounded private plan revisions and outcome check-ins through forward migration `0083_customer_plan_evidence_history.sql`.
+
+### Acceptance gate
+
+- Equivalent public and signed-in choices normalize to the same canonical home facts and recommendation sequence.
+- The report never asks a customer to select an internal evidence source and never represents a household answer or linked file as professionally checked.
+- Private-plan files remain owner-only and the installer preview counts only files explicitly marked for installer sharing.
+- Concurrent revisions use an atomic number, history reads and retention are bounded, and legacy plan-version metadata is preserved.
+- Email and print use the same privacy-filtered projection and expose no private project labels, exact address, filenames, notes, room routines or custom plan text.
+- The complete validation gate, all 84 migrations, production build, source provenance, desktop, signed-in and 390 px live checks pass.
+
+All acceptance gates above are met for the released application source. No real account or project was created, no working-demo record was saved, and no release check sent an email.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -208,11 +239,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Evidence-to-fact linking:** let a household link an existing private upload to one controlled fact, while preserving distinct available, linked, reviewed and verified states.
-2. **Plan revision history:** show bounded before-and-after plan versions, changed inputs, ordering and removals with an explicit restore action.
-3. **Household co-decision access:** design consent, revocation and read-or-comment permissions for one invited household collaborator without exposing installer contact controls.
-4. **Outcome check-ins:** record comfort, usage and cost observations after a completed step without claiming causal savings or measured building performance.
-5. **Deferred household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys only after the four feature-optimisation steps above are ready.
+1. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
+2. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
+3. **Seasonal private outcome reminders:** let a household schedule private comfort, usage and cost check-ins and view trends without claiming causal savings or measured building performance.
+4. **Evidence-library controls:** add bounded bulk retag, delete, sharing-scope and completeness controls while keeping private-plan material owner-only by default.
+5. **Advisor-rule scenario QA:** exercise the controlled advisor rules against representative NatHERS learner-guide cases before the deferred household and experienced-assessor pilot, without representing the result as a NatHERS assessment.
 
 ## Global stop conditions
 
