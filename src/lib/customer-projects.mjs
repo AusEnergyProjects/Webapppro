@@ -5,17 +5,24 @@ import {
   postcodeMatchesState,
   residentialStateFromPostcode,
 } from "./australian-postcodes.mjs";
+import {
+  addPlanDecisionSupport,
+  createNextBestQuestions,
+  normalizeCustomerReviewItems,
+  privateCustomPlanGuidance,
+} from "./customer-plan-decision-support.mjs";
 
 export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-29-evidence-climate-advisor";
+export const CUSTOMER_PLAN_VERSION = "2026-07-29-decision-support-advisor";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
+  "2026-07-29-evidence-climate-advisor",
 ];
-export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v1";
+export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v2";
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
@@ -461,11 +468,16 @@ export function normalizeCustomerAdvisorProfile(raw = {}, context = {}) {
     });
 
   const climate = derivePlanningClimateProfile(context.postcode, context.addressState);
+  const reviewItems = normalizeCustomerReviewItems(supplied.reviewItems, {
+    allowedFactKeys: [...advisorFactKeys],
+    allowedPlanItemIds: context.allowedPlanItemIds,
+  });
   return {
     version: CUSTOMER_ADVISOR_PROFILE_VERSION,
     factEvidence,
     rooms,
     permissionItems,
+    reviewItems,
     ...(climate ? { climate } : {}),
   };
 }
@@ -1137,7 +1149,7 @@ function createAdvisorPlan({
     item.id === "renter-friendly-actions");
   const remainingContextual = orderedContextual.filter((item) =>
     item.id !== "renter-friendly-actions");
-  const items = [
+  const baseItems = [
     urgent,
     portableRenter,
     authority,
@@ -1145,6 +1157,26 @@ function createAdvisorPlan({
     ...generated,
     support,
   ].filter(Boolean);
+  const items = addPlanDecisionSupport(baseItems, {
+    goalLabels: selectedGoals.map((goal) =>
+      label(customerProjectOptions.goals, goal)),
+    situation,
+    approvalContext,
+    budgetLabel: label(customerProjectOptions.budgets, budgetRange),
+    factEvidence: advisorProfile.factEvidence,
+    factLabels: customerAdvisorOptions.factKeys,
+    climateLabel: advisorProfile.climate?.label || "",
+    roomCount: advisorProfile.rooms.length,
+  });
+  const nextQuestions = createNextBestQuestions({
+    items,
+    factEvidence: advisorProfile.factEvidence,
+    situation,
+    approvalContext,
+    budgetRange,
+    roomCount: advisorProfile.rooms.length,
+    goals: selectedGoals,
+  });
   const title = selectedGoals.length > 1
     ? "Your priorities, ordered into one home energy plan"
     : selectedGoals[0] === "replace-now"
@@ -1168,6 +1200,7 @@ function createAdvisorPlan({
     title,
     summary: `This is ${paceLabel}. It is independent guidance, not a product endorsement, quote or savings promise.`,
     items,
+    nextQuestions,
   };
 }
 
@@ -1190,7 +1223,16 @@ function normalisePlanSnapshot(rawSnapshot, generatedPlan) {
     return { ok: true, plan: generatedPlan };
   }
   if (LEGACY_CUSTOMER_PLAN_VERSIONS.has(version)) {
-    return { ok: true, plan: generatedPlan };
+    if (!Array.isArray(rawSnapshot.items)) {
+      return { ok: true, plan: generatedPlan };
+    }
+    return {
+      ok: true,
+      plan: {
+        ...generatedPlan,
+        items: preserveEditedPlanItems(rawSnapshot.items, generatedPlan.items),
+      },
+    };
   }
   if (version !== CUSTOMER_PLAN_VERSION || !Array.isArray(rawSnapshot.items)) {
     return invalid();
@@ -1218,6 +1260,7 @@ function normalisePlanSnapshot(rawSnapshot, generatedPlan) {
         text: note,
         href: "",
         action: "",
+        guidance: privateCustomPlanGuidance(),
       });
     }
     seen.add(id);
@@ -1241,7 +1284,7 @@ function prepareCustomerProjectPlan(input = {}) {
       : "none";
   const features = list(input.features || input.existingFeatures, homeFeatures, 24);
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
-  const advisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
+  const baseAdvisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
     postcode: input.postcode,
     addressState: input.addressState,
     householdSituation: situation,
@@ -1254,9 +1297,18 @@ function prepareCustomerProjectPlan(input = {}) {
     approvalContext,
     features,
     budgetRange,
-    advisorProfile,
+    advisorProfile: baseAdvisorProfile,
   });
   const snapshot = normalisePlanSnapshot(input.planSnapshot, generatedPlan);
+  const advisorProfile = normalizeCustomerAdvisorProfile(baseAdvisorProfile, {
+    postcode: input.postcode,
+    addressState: input.addressState,
+    householdSituation: situation,
+    approvalContext,
+    allowedPlanItemIds: snapshot.ok
+      ? snapshot.plan.items.map((item) => item.id)
+      : generatedPlan.items.map((item) => item.id),
+  });
   return { ...snapshot, generatedPlan, advisorProfile };
 }
 
@@ -1303,6 +1355,7 @@ export function preserveEditedPlanItems(editedItems = [], currentItems = []) {
         text: note,
         href: "",
         action: "",
+        guidance: privateCustomPlanGuidance(),
       }];
     });
 }

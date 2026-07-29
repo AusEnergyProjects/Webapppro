@@ -35,6 +35,10 @@ const sections = [
     body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. Electricity interval files selected in the comparison tool are processed in the browser unless the page clearly asks for a deliberate upload or save action.",
   },
   {
+    title: "Emailing a home energy plan",
+    body: "When a signed-in household chooses to email a plan, the nominated recipient address is sent to our email delivery provider for that requested delivery. The shareable plan is generated from controlled planning information and deliberately excludes the exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text. The household must confirm that the nominated recipient is appropriate before sending.",
+  },
+  {
     title: "Storage, security and retention",
     body: "Access is limited by account role and job ownership. Sensitive provider credentials are encrypted or stored as protected runtime secrets and are not placed in customer records. Information is retained only while needed for the service, security, dispute, accounting and legal obligations, then deleted or de-identified where practical.",
   },
@@ -50,7 +54,7 @@ export default function PrivacyPage() {
       <TLinkHeader active="dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 20 July 2026</span>
+          <span>Effective 29 July 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments and TLink

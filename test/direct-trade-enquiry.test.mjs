@@ -110,13 +110,18 @@ test("the customer dashboard supports guided, saved and separately managed proje
 });
 
 test("comparison handoffs prefill only controlled project planning choices", () => {
-  assert.match(newProjectRoute, /goal: typeof query\.goal === "string"/);
-  assert.match(newProjectRoute, /pace: typeof query\.pace === "string"/);
-  assert.match(newProjectRoute, /situation: typeof query\.situation === "string"/);
-  assert.match(newProjectRoute, /features: values\(query\.feature\)/);
-  assert.match(newProjectRoute, /categories: values\(query\.category\)/);
-  assert.match(newProjectRoute, /postcode: typeof query\.postcode === "string"/);
-  assert.doesNotMatch(newProjectRoute, /query\.(?:email|phone|name|address|notes|nmi|meter)/i);
+  assert.match(newProjectRoute, /const goals = values\(query\.goal, 10\)\.filter/);
+  assert.match(newProjectRoute, /goalOptions\.has\(item\)/);
+  assert.match(newProjectRoute, /pace: controlledValue\(query\.pace/);
+  assert.match(newProjectRoute, /situation: controlledValue\(/);
+  assert.match(newProjectRoute, /features: values\(query\.feature, 24\)\.filter/);
+  assert.match(newProjectRoute, /categories: values\(query\.category, 12\)\.filter/);
+  assert.match(newProjectRoute, /postcode: postcode &&/);
+  assert.match(newProjectRoute, /\.test\(postcode\) \? postcode : undefined/);
+  assert.doesNotMatch(
+    newProjectRoute,
+    /query\.(?:email|phone|name|address(?:$|[^A-Za-z])|notes|nmi|meter)/im,
+  );
 });
 
 test("project postcodes are checked before installer allocation", () => {

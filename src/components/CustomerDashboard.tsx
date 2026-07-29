@@ -28,12 +28,20 @@ import {
   platformQuoteOptions as rawPlatformQuoteOptions,
   preserveEditedPlanItems,
 } from "@/lib/customer-projects.mjs";
+import {
+  customerReviewOptions as rawCustomerReviewOptions,
+} from "@/lib/customer-plan-decision-support.mjs";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
+import {
+  CustomerPlanPrintReport,
+  CustomerPlanShareDialog,
+} from "./CustomerPlanShareDialog";
 import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
+import { createCustomerPlanDocument } from "@/lib/customer-plan-document.mjs";
 
 type DashboardView =
   | "overview"
@@ -53,6 +61,12 @@ type PermissionClassification =
   | "permission-needed"
   | "fixed-or-shared"
   | "not-sure";
+type CustomerReviewKind =
+  | "question"
+  | "customer-recorded-feedback"
+  | "proposed-change";
+type CustomerReviewTargetType = "fact" | "plan-item" | "general";
+type CustomerReviewStatus = "open" | "answered" | "accepted" | "declined";
 type PermissionPackSectionKey =
   | "portable"
   | "owner-agent"
@@ -89,6 +103,14 @@ type CustomerAdvisorProfile = {
     title: string;
     classification: PermissionClassification;
     note: string;
+  }>;
+  reviewItems: Array<{
+    id: string;
+    kind: CustomerReviewKind;
+    targetType: CustomerReviewTargetType;
+    targetId: string;
+    text: string;
+    status: CustomerReviewStatus;
   }>;
   climate?: PlanningClimateProfile;
 };
@@ -134,6 +156,10 @@ const customerAdvisorOptions = rawCustomerAdvisorOptions as {
   comfortConcerns: Option[];
   usePeriods: Option[];
   permissionClasses: Option[];
+};
+const customerReviewOptions = rawCustomerReviewOptions as {
+  kinds: Option[];
+  statuses: Option[];
 };
 const homeFeatureGroups = [
   {
@@ -294,6 +320,19 @@ type CustomerPlanItem = {
   text: string;
   href: string;
   action: string;
+  guidance?: {
+    basedOn: string[];
+    stillUncertain: string[];
+    reconsiderIf: string[];
+  };
+};
+type CustomerPlanQuestion = {
+  id: string;
+  prompt: string;
+  whyItMatters: string;
+  targetStep: number;
+  targetAnchor: string;
+  notSureAllowed: true;
 };
 
 type CustomerProject = {
@@ -329,6 +368,7 @@ type CustomerProject = {
     title?: string;
     summary?: string;
     items?: CustomerPlanItem[];
+    nextQuestions?: CustomerPlanQuestion[];
   };
   completedPlanItems: string[];
   status: string;
@@ -501,6 +541,7 @@ function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
       })),
       rooms: [],
       permissionItems: [],
+      reviewItems: [],
     },
     privateNotes: "",
     planSnapshot: {},
@@ -511,8 +552,12 @@ function projectDefaultsWithSelection(
   profile: CustomerProfile | null,
   selection?: {
     goal?: string;
+    goals?: string[];
     pace?: string;
     situation?: string;
+    approvalContext?: string;
+    budgetRange?: string;
+    addressState?: string;
     features?: string[];
     categories?: string[];
     postcode?: string;
@@ -522,8 +567,12 @@ function projectDefaultsWithSelection(
   if (!selection) return draft;
   return {
     ...draft,
-    goal: selection.goal || draft.goal,
-    goals: selection.goal ? [selection.goal] : draft.goals,
+    goal: selection.goals?.[0] || selection.goal || draft.goal,
+    goals: selection.goals?.length
+      ? selection.goals
+      : selection.goal
+        ? [selection.goal]
+        : draft.goals,
     pace: selection.pace || draft.pace,
     householdSituation: ["owner", "renter"].includes(
       selection.situation || "",
@@ -533,6 +582,13 @@ function projectDefaultsWithSelection(
     existingFeatures: selection.features || draft.existingFeatures,
     serviceCategories: selection.categories || draft.serviceCategories,
     postcode: selection.postcode || draft.postcode,
+    addressState: selection.addressState || draft.addressState,
+    budgetRange: selection.budgetRange || draft.budgetRange,
+    propertyContext: {
+      ...draft.propertyContext,
+      approvalContext:
+        selection.approvalContext || draft.propertyContext.approvalContext,
+    },
   };
 }
 
@@ -822,6 +878,15 @@ function ProjectEditor({
   const [validationError, setValidationError] = useState("");
   const [savedId, setSavedId] = useState(existingId || "");
   const [customPlanItem, setCustomPlanItem] = useState("");
+  const [reviewKind, setReviewKind] =
+    useState<CustomerReviewKind>("question");
+  const [reviewTarget, setReviewTarget] = useState("general");
+  const [reviewText, setReviewText] = useState("");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
+  const [shareError, setShareError] = useState("");
+  const [shareRequestId, setShareRequestId] = useState("");
   const draggedPlanItem = useRef("");
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
@@ -929,7 +994,23 @@ function ProjectEditor({
       title: advisorPlan.title,
       summary: advisorPlan.summary,
       items: visiblePlanItems,
+      nextQuestions: advisorPlan.nextQuestions as CustomerPlanQuestion[],
     },
+  });
+  const shareablePlanDocument = createCustomerPlanDocument({
+    goal: draft.goals[0] || "",
+    goals: JSON.stringify(draft.goals),
+    pace: draft.pace,
+    postcode: draft.postcode,
+    address_state: draft.addressState,
+    property_type: draft.propertyType,
+    household_situation: draft.householdSituation,
+    existing_features: JSON.stringify(draft.existingFeatures),
+    budget_range: draft.budgetRange,
+    property_context: JSON.stringify(draft.propertyContext),
+    advisor_profile: JSON.stringify(draft.advisorProfile),
+    plan_snapshot: JSON.stringify(draftWithPlan().planSnapshot),
+    completed_plan_items: "[]",
   });
 
   const invalidateStepsFrom = (firstStep: number) => {
@@ -1229,6 +1310,100 @@ function ProjectEditor({
     setCustomPlanItem("");
   };
 
+  const addReviewItem = () => {
+    const text = reviewText.trim();
+    if (!text) {
+      setValidationError("Write the private question or feedback before recording it.");
+      return;
+    }
+    if (draft.advisorProfile.reviewItems.length >= 20) {
+      setValidationError("Up to 20 private review items can be kept in one project.");
+      return;
+    }
+    const [targetTypeValue, ...targetParts] = reviewTarget.split(":");
+    const targetType = (
+      ["fact", "plan-item"].includes(targetTypeValue)
+        ? targetTypeValue
+        : "general"
+    ) as CustomerReviewTargetType;
+    const targetId = targetType === "general"
+      ? "general"
+      : targetParts.join(":");
+    updateAdvisorProfile(
+      (profile) => ({
+        ...profile,
+        reviewItems: [
+          ...profile.reviewItems,
+          {
+            id: `review-${crypto.randomUUID()}`,
+            kind: reviewKind,
+            targetType,
+            targetId,
+            text: text.slice(0, 500),
+            status: "open",
+          },
+        ],
+      }),
+      false,
+    );
+    setReviewText("");
+    setStatus(
+      "Recorded privately by you. It is not treated as assessor-authored or verified.",
+    );
+  };
+
+  const updateReviewItem = (
+    id: string,
+    update: Partial<CustomerAdvisorProfile["reviewItems"][number]>,
+  ) =>
+    updateAdvisorProfile(
+      (profile) => ({
+        ...profile,
+        reviewItems: profile.reviewItems.map((item) =>
+          item.id === id ? { ...item, ...update } : item,
+        ),
+      }),
+      false,
+    );
+
+  const removeReviewItem = (id: string) =>
+    updateAdvisorProfile(
+      (profile) => ({
+        ...profile,
+        reviewItems: profile.reviewItems.filter((item) => item.id !== id),
+      }),
+      false,
+    );
+
+  const addAcceptedReviewToPlan = (
+    item: CustomerAdvisorProfile["reviewItems"][number],
+  ) => {
+    const planItemId = `custom-review-${item.id}`
+      .replace(/[^a-z0-9:_-]/gi, "-")
+      .slice(0, 80);
+    if (visiblePlanItems.some((entry) => entry.id === planItemId)) {
+      setStatus("That accepted proposal is already a private plan step.");
+      return;
+    }
+    updatePlanItems([
+      ...visiblePlanItems,
+      {
+        id: planItemId,
+        stage: "Recorded by you",
+        title: item.text.slice(0, 160),
+        text: "Added as a private step after your explicit confirmation. This wording has not been professionally verified.",
+        href: "",
+        action: "",
+        guidance: {
+          basedOn: ["A private proposed change you recorded and explicitly added."],
+          stillUncertain: ["This private wording has not been assessed or verified."],
+          reconsiderIf: ["New evidence or your priorities change."],
+        },
+      },
+    ]);
+    setStatus("The accepted proposal was added as a private plan step.");
+  };
+
   useEffect(() => {
     const protect = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -1241,6 +1416,24 @@ function ProjectEditor({
     setValidationError("");
     setStep(nextStep);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openPlanQuestion(question: CustomerPlanQuestion) {
+    setValidationError("");
+    setStep(question.targetStep);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = window.document.getElementById(question.targetAnchor);
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (
+          target instanceof HTMLInputElement
+          || target instanceof HTMLSelectElement
+          || target instanceof HTMLButtonElement
+        ) {
+          target.focus();
+        }
+      });
+    });
   }
 
   function validate(nextStep: number) {
@@ -1327,6 +1520,122 @@ function ProjectEditor({
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  function planShareBlocker() {
+    if (planInputsChanged) {
+      return "Refresh the advisor suggestions or confirm that you want to keep the edited steps before sharing.";
+    }
+    if (planSnapshotConflict) {
+      return "Reset the advisor suggestions from the older plan version before sharing.";
+    }
+    if (
+      !draft.title.trim()
+      || !/^\d{4}$/.test(draft.postcode)
+      || !draft.addressState
+      || !draft.householdSituation
+      || !draft.goals.length
+    ) {
+      return "Complete the home details and choose at least one goal before sharing the plan.";
+    }
+    return "";
+  }
+
+  async function savePlanForSharing() {
+    const blocker = planShareBlocker();
+    if (blocker) throw new Error(blocker);
+    const id = await onSave(draftWithPlan(), savedId || undefined);
+    setSavedId(id);
+    setDirty(false);
+    setStatus("Plan saved to your private account.");
+    return id;
+  }
+
+  function openShareDialog() {
+    const blocker = planShareBlocker();
+    if (blocker) {
+      setValidationError(blocker);
+      return;
+    }
+    setShareError("");
+    setShareStatus("");
+    setShareRequestId(crypto.randomUUID());
+    setShareDialogOpen(true);
+  }
+
+  async function emailPlan(recipient: string) {
+    setShareBusy(true);
+    setShareError("");
+    setShareStatus("Saving the exact plan before requesting delivery...");
+    try {
+      const projectId = await savePlanForSharing();
+      const currentUser = firebaseAuth.currentUser;
+      if (!currentUser) throw new Error("Sign in again to email this plan.");
+      const token = await currentUser.getIdToken();
+      const response = await fetch("/api/customer-project-plan-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          projectId,
+          recipient,
+          consentConfirmed: true,
+          requestId: shareRequestId,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(
+          result.error || "The plan email request could not be accepted.",
+        );
+      }
+      setShareStatus(
+        result.message
+        || "Accepted for delivery. Inbox delivery has not been confirmed.",
+      );
+    } catch (error) {
+      setShareStatus("");
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "The plan email request could not be accepted.",
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function printPlan() {
+    const blocker = planShareBlocker();
+    if (blocker) {
+      setValidationError(blocker);
+      return;
+    }
+    setShareBusy(true);
+    setValidationError("");
+    try {
+      await savePlanForSharing();
+      const previousTitle = window.document.title;
+      window.document.title = "Independent home energy plan - Australian Energy Assessments";
+      const restoreTitle = () => {
+        window.document.title = previousTitle;
+      };
+      window.addEventListener("afterprint", restoreTitle, { once: true });
+      window.requestAnimationFrame(() => {
+        window.print();
+        window.setTimeout(restoreTitle, 1000);
+      });
+    } catch (error) {
+      setValidationError(
+        error instanceof Error
+          ? error.message
+          : "The plan could not be prepared for printing.",
+      );
+    } finally {
+      setShareBusy(false);
     }
   }
 
@@ -1573,6 +1882,7 @@ function ProjectEditor({
                     key={value}
                   >
                     <input
+                      id={`customer-situation-${value}`}
                       type="radio"
                       name="customer-situation"
                       checked={draft.householdSituation === value}
@@ -1650,6 +1960,7 @@ function ProjectEditor({
                 hint="This can apply whether you own or rent, especially for apartments, units and some townhouses."
               >
                 <select
+                  id="customer-approval-context"
                   value={draft.propertyContext.approvalContext}
                   onChange={(event) =>
                     setPropertyContext(
@@ -1775,6 +2086,7 @@ function ProjectEditor({
                       <label key={factKey}>
                         <span>{label}</span>
                         <select
+                          id={`advisor-fact-${factKey}`}
                           value={source}
                           onChange={(event) =>
                             updateFactEvidence(
@@ -1811,7 +2123,7 @@ function ProjectEditor({
                     sent to installers.
                   </p>
                 </div>
-                <button type="button" onClick={addRoom}>
+                <button id="customer-add-room" type="button" onClick={addRoom}>
                   Add a room
                 </button>
               </header>
@@ -1935,6 +2247,7 @@ function ProjectEditor({
                 </p>
               </div>
               <select
+                id="customer-budget-range"
                 aria-label="Private planning budget"
                 value={draft.budgetRange}
                 onChange={(event) => set("budgetRange", event.target.value)}
@@ -2005,6 +2318,42 @@ function ProjectEditor({
                 <small>{planningClimate.disclaimer}</small>
               </aside>
             )}
+            {(advisorPlan.nextQuestions as CustomerPlanQuestion[]).length > 0 && (
+              <section
+                className="customer-next-questions"
+                aria-labelledby="customer-next-questions-title"
+              >
+                <header>
+                  <span>Best next information</span>
+                  <h3 id="customer-next-questions-title">
+                    Up to three questions that could change the plan
+                  </h3>
+                  <p>
+                    Not sure is a valid answer. These questions reuse your
+                    existing private inputs and never require unsafe inspection.
+                  </p>
+                </header>
+                <ol>
+                  {(advisorPlan.nextQuestions as CustomerPlanQuestion[]).map(
+                    (question) => (
+                      <li key={question.id}>
+                        <div>
+                          <strong>{question.prompt}</strong>
+                          <p>{question.whyItMatters}</p>
+                          <small>Not sure is allowed</small>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openPlanQuestion(question)}
+                        >
+                          Review this answer
+                        </button>
+                      </li>
+                    ),
+                  )}
+                </ol>
+              </section>
+            )}
             {planInputsChanged && (
               <div className="customer-plan-change-warning" role="status">
                 <strong>Your edited plan is preserved</strong>
@@ -2058,24 +2407,43 @@ function ProjectEditor({
                 Drag steps into your preferred order, use the arrow buttons on
                 touch or keyboard, or remove anything that does not apply.
               </p>
-              {(planEdited || planSnapshotConflict) && (
+              <div className="customer-plan-toolbar-actions">
                 <button
                   type="button"
-                  onClick={() => {
-                    setPlanItems(
-                      advisorPlan.items as CustomerPlanItem[],
-                    );
-                    setPlanEdited(false);
-                    setPlanInputsChanged(false);
-                    setPlanSnapshotConflict(false);
-                    invalidateStepsFrom(3);
-                    setDirty(true);
-                    setValidationError("");
-                  }}
+                  className="primary"
+                  disabled={!emailVerified || shareBusy}
+                  onClick={openShareDialog}
                 >
-                  Reset advisor suggestions
+                  {emailVerified
+                    ? "Email this plan"
+                    : "Verify email to send"}
                 </button>
-              )}
+                <button
+                  type="button"
+                  disabled={shareBusy}
+                  onClick={() => void printPlan()}
+                >
+                  Print or save PDF
+                </button>
+                {(planEdited || planSnapshotConflict) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanItems(
+                        advisorPlan.items as CustomerPlanItem[],
+                      );
+                      setPlanEdited(false);
+                      setPlanInputsChanged(false);
+                      setPlanSnapshotConflict(false);
+                      invalidateStepsFrom(3);
+                      setDirty(true);
+                      setValidationError("");
+                    }}
+                  >
+                    Reset advisor suggestions
+                  </button>
+                )}
+              </div>
             </div>
             <ol className="customer-roadmap-preview">
               {visiblePlanItems.map((item, index) => (
@@ -2100,6 +2468,37 @@ function ProjectEditor({
                         <a href={item.href} target="_blank" rel="noreferrer">
                           {item.action}
                         </a>
+                      )}
+                      {item.guidance && (
+                        <details className="customer-plan-rationale">
+                          <summary>Why this is in your plan</summary>
+                          <div>
+                            <section>
+                              <strong>Based on</strong>
+                              <ul>
+                                {item.guidance.basedOn.map((reason) => (
+                                  <li key={reason}>{reason}</li>
+                                ))}
+                              </ul>
+                            </section>
+                            <section>
+                              <strong>Still uncertain</strong>
+                              <ul>
+                                {item.guidance.stillUncertain.map((reason) => (
+                                  <li key={reason}>{reason}</li>
+                                ))}
+                              </ul>
+                            </section>
+                            <section>
+                              <strong>Could change if</strong>
+                              <ul>
+                                {item.guidance.reconsiderIf.map((reason) => (
+                                  <li key={reason}>{reason}</li>
+                                ))}
+                              </ul>
+                            </section>
+                          </div>
+                        </details>
                       )}
                     </div>
                     <div className="customer-plan-item-actions">
@@ -2167,6 +2566,143 @@ function ProjectEditor({
                 Add to plan
               </button>
             </div>
+            <section
+              className="customer-review-workspace"
+              aria-labelledby="customer-review-title"
+            >
+              <header>
+                <div>
+                  <span>Private review worksheet</span>
+                  <h3 id="customer-review-title">
+                    Record questions and feedback without changing the plan
+                  </h3>
+                  <p>
+                    Everything here is labelled Recorded by you. It does not
+                    claim that an assessor authored, approved or verified the
+                    wording, and it is excluded from shared plan documents.
+                  </p>
+                </div>
+                <small>
+                  {draft.advisorProfile.reviewItems.length} of 20 recorded
+                </small>
+              </header>
+              <div className="customer-review-compose">
+                <label>
+                  <span>What are you recording?</span>
+                  <select
+                    value={reviewKind}
+                    onChange={(event) =>
+                      setReviewKind(event.target.value as CustomerReviewKind)
+                    }
+                  >
+                    {customerReviewOptions.kinds.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>What does it relate to?</span>
+                  <select
+                    value={reviewTarget}
+                    onChange={(event) => setReviewTarget(event.target.value)}
+                  >
+                    <option value="general">The overall plan</option>
+                    <optgroup label="Home facts">
+                      {customerAdvisorOptions.factKeys.map(
+                        ([factKey, factLabel]) => (
+                          <option value={`fact:${factKey}`} key={factKey}>
+                            {factLabel}
+                          </option>
+                        ),
+                      )}
+                    </optgroup>
+                    <optgroup label="Plan steps">
+                      {visiblePlanItems.map((item) => (
+                        <option
+                          value={`plan-item:${item.id}`}
+                          key={item.id}
+                        >
+                          {item.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+                <label className="customer-review-text">
+                  <span>Recorded by you</span>
+                  <textarea
+                    value={reviewText}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Example: Ask whether the window frames should be repaired before choosing coverings or glazing."
+                    onChange={(event) => setReviewText(event.target.value)}
+                  />
+                </label>
+                <button type="button" onClick={addReviewItem}>
+                  Record privately
+                </button>
+              </div>
+              {draft.advisorProfile.reviewItems.length > 0 ? (
+                <div className="customer-review-list">
+                  {draft.advisorProfile.reviewItems.map((item) => (
+                    <article key={item.id}>
+                      <div>
+                        <span>Recorded by you</span>
+                        <strong>
+                          {optionLabel(customerReviewOptions.kinds, item.kind)}
+                        </strong>
+                        <p>{item.text}</p>
+                      </div>
+                      <label>
+                        <span>Status</span>
+                        <select
+                          value={item.status}
+                          onChange={(event) =>
+                            updateReviewItem(item.id, {
+                              status: event.target
+                                .value as CustomerReviewStatus,
+                            })
+                          }
+                        >
+                          {customerReviewOptions.statuses.map(
+                            ([value, label]) => (
+                              <option value={value} key={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <div className="customer-review-actions">
+                        {item.kind === "proposed-change"
+                          && item.status === "accepted" && (
+                            <button
+                              type="button"
+                              onClick={() => addAcceptedReviewToPlan(item)}
+                            >
+                              Add as private plan step
+                            </button>
+                          )}
+                        <button
+                          type="button"
+                          className="remove"
+                          onClick={() => removeReviewItem(item.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="customer-review-empty">
+                  No review items recorded. This worksheet is optional and
+                  remains private to your signed-in project.
+                </p>
+              )}
+            </section>
             <section
               className="customer-permission-pack"
               aria-labelledby="permission-pack-title"
@@ -2788,7 +3324,7 @@ function ProjectEditor({
                 ? "Save changes"
                 : "Save private draft"}
           </button>
-          <small>
+          <small role="status" aria-live="polite">
             {dirty
               ? "Changes not yet saved"
               : savedId
@@ -2836,6 +3372,19 @@ function ProjectEditor({
           )}
         </div>
       </footer>
+      <CustomerPlanShareDialog
+        key={shareRequestId || "plan-share"}
+        open={shareDialogOpen}
+        defaultRecipient={firebaseAuth.currentUser?.email || ""}
+        busy={shareBusy}
+        status={shareStatus}
+        error={shareError}
+        onClose={() => {
+          if (!shareBusy) setShareDialogOpen(false);
+        }}
+        onSubmit={emailPlan}
+      />
+      <CustomerPlanPrintReport document={shareablePlanDocument} />
     </section>
   );
 }
@@ -4009,8 +4558,12 @@ export function CustomerDashboard({
   initialEdit?: boolean;
   initialPlannerSelection?: {
     goal?: string;
+    goals?: string[];
     pace?: string;
     situation?: string;
+    approvalContext?: string;
+    budgetRange?: string;
+    addressState?: string;
     features?: string[];
     categories?: string[];
     postcode?: string;
@@ -4619,6 +5172,8 @@ export function CustomerDashboard({
                         rooms: editing.advisorProfile?.rooms || [],
                         permissionItems:
                           editing.advisorProfile?.permissionItems || [],
+                        reviewItems:
+                          editing.advisorProfile?.reviewItems || [],
                       },
                       privateNotes: editing.privateNotes,
                       planSnapshot: editing.planSnapshot,

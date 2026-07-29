@@ -11,6 +11,9 @@ const styles = read("../src/app/globals.css");
 const projectPreparationGuide = read("../src/app/guides/project-preparation/page.tsx");
 const projectPlan = read("../src/lib/customer-projects.mjs");
 const homePlan = read("../src/lib/home-energy-plan.mjs");
+const planShareDialog = read("../src/components/CustomerPlanShareDialog.tsx");
+const planDocument = read("../src/lib/customer-plan-document.mjs");
+const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 
 test("the customer project wizard exposes every stage as an accessible button", () => {
   assert.match(dashboard, /\["Home", "Goals", "Your plan", "Work", "Privacy"\]/);
@@ -109,6 +112,59 @@ test("the customer can reorder, remove and add private plan steps", () => {
   assert.match(dashboard, /preserveEditedPlanItems\(/);
   assert.match(dashboard, /if \(planEdited\) setPlanInputsChanged\(true\)/);
   assert.match(dashboard, /if \(planInputsChanged\)/);
+});
+
+test("recommendations explain uncertainty and next questions return to controlled inputs", () => {
+  assert.match(dashboard, /Why this is in your plan/);
+  assert.match(dashboard, />Based on</);
+  assert.match(dashboard, />Still uncertain</);
+  assert.match(dashboard, />Could change if</);
+  assert.match(dashboard, /Up to three questions that could change the plan/);
+  assert.match(dashboard, /Not sure is allowed/);
+  assert.match(dashboard, /openPlanQuestion\(question\)/);
+  assert.match(dashboard, /getElementById\(question\.targetAnchor\)/);
+  assert.match(dashboard, /id=\{`advisor-fact-\$\{factKey\}`\}/);
+  assert.match(dashboard, /id="customer-add-room"/);
+});
+
+test("the private review worksheet never represents authenticated assessor authorship", () => {
+  assert.match(dashboard, /Private review worksheet/);
+  assert.match(dashboard, /Everything here is labelled Recorded by you/);
+  assert.match(dashboard, /does not[\s\S]{0,100}assessor authored, approved or verified/);
+  assert.match(dashboard, /customer-recorded-feedback/);
+  assert.match(dashboard, /Add as private plan step/);
+  assert.match(dashboard, /item\.status === "accepted"/);
+  assert.match(dashboard, /after your explicit confirmation/);
+  assert.doesNotMatch(dashboard, /Verified by assessor|Assessor approved/);
+});
+
+test("plan email and print actions use one saved privacy-filtered report", () => {
+  assert.match(dashboard, /Email this plan/);
+  assert.match(dashboard, /Print or save PDF/);
+  assert.match(dashboard, /await savePlanForSharing\(\)/);
+  assert.match(dashboard, /customer-project-plan-email/);
+  assert.match(dashboard, /consentConfirmed: true/);
+  assert.match(dashboard, /key=\{shareRequestId \|\| "plan-share"\}/);
+  assert.match(dashboard, /CustomerPlanPrintReport document=\{shareablePlanDocument\}/);
+  assert.match(planShareDialog, /role="dialog"/);
+  assert.match(planShareDialog, /aria-modal="true"/);
+  assert.match(planShareDialog, /event\.key === "Escape"/);
+  assert.match(planShareDialog, /returnFocusRef/);
+  assert.match(planShareDialog, /PrintReport/);
+  assert.match(planShareDialog, /href=\{action\.guideHref\}/);
+  assert.match(planDocument, /customerPlanDocumentHtml/);
+  assert.match(planDocument, /customerPlanDocumentText/);
+  assert.match(planEmailRoute, /status: "accepted"/);
+  assert.doesNotMatch(planEmailRoute, /delivered successfully|email was delivered/i);
+});
+
+test("draft save state and plan sharing controls are readable and phone safe", () => {
+  assert.match(dashboard, /<small role="status" aria-live="polite">/);
+  assert.match(styles, /\.customer-editor-actions small \{ color: #4b6258; font-size: \.7rem; font-weight: 700/);
+  assert.match(styles, /\.customer-plan-dialog-backdrop/);
+  assert.match(styles, /@page \{ margin: 12mm; size: A4; \}/);
+  assert.match(styles, /\.customer-plan-print-roadmap > ol > li[\s\S]{0,180}break-inside: avoid/);
+  assert.match(styles, /\.customer-plan-toolbar-actions,[\s\S]{0,80}width: 100%/);
 });
 
 test("quote preparation is simpler, safer and keeps errors beside the action", () => {

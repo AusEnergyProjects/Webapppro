@@ -76,7 +76,36 @@ Keep the expanded administrator notification case open through its audited read-
 - Installer opportunities contain only controlled aggregates and retain the existing exact-postcode privacy boundary.
 - Focused tests, all migrations, the complete validation gate, production build, source provenance and live responsive checks pass.
 
-All acceptance gates above are met for the released application source. The next approved milestone is the household and assessor usability pilot.
+All acceptance gates above are met for the released application source.
+
+## Active milestone: CUSTOMER-PLAN-DECISION-03
+
+Release status: implementation and validation in progress from documentation checkpoint `ad67936d7fdd849d055f355ebbcffe0e496dfb12`. The field pilot is deferred until the feature-optimisation sequence below is complete.
+
+### Outcome
+
+Make the plan explainable, question-led, privately reviewable and shareable as one independent report, while reconciling the public quick planner with the signed-in advisor.
+
+### In scope
+
+- Controlled `Based on`, `Still uncertain` and `Could change if` guidance on every canonical plan item.
+- At most three safe next questions linked back to existing controlled inputs, with `Not sure` always valid.
+- A bounded customer-owned private review worksheet that never represents authenticated assessor authorship.
+- Explicit customer confirmation before an accepted private proposal becomes a private plan step.
+- One shared privacy-filtered document projection for server-generated inline HTML and plain-text email plus A4 print or browser PDF.
+- Verified owner-scoped email delivery with one confirmed recipient, idempotency and a fail-closed five-attempt hourly limit.
+- Current canonical goals, tenure, approval, budget, features, rationale and next questions in public `/plan` and its print view.
+- Reinforced dark-canvas guide contrast and a readable live draft status.
+
+### Acceptance gate
+
+- Private review text cannot reach installer opportunities, permission exports or the shared plan.
+- Shared output excludes exact location, account identity, project labels, private notes, room names and routines, evidence filenames, meter data and custom plan wording.
+- The delivery endpoint rejects unverified, inactive, wrong-owner, malformed, unconfirmed, over-limit and unavailable-provider requests.
+- No release test sends a real email.
+- Public and signed-in inputs use the same canonical plan engine.
+- A4 print, desktop, keyboard and 390 px checks pass.
+- The full validation gate, source provenance, GitHub push and Sites deployment reconcile.
 
 ## Forward phases
 
@@ -177,11 +206,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys, then repair priority accessibility and comprehension friction.
-2. **Recommendation rationale and uncertainty:** show why each item appears, which controlled inputs support it, what remains unknown and what could change its order.
-3. **Adaptive next-best-question guidance:** ask at most three material unanswered questions at a time, retain `Not sure`, and avoid unsafe inspection.
-4. **Customer-owned assessor review and clarification:** keep customer reports separate from authored assessor observations and customer-approved proposed changes.
-5. **Decision-ready independent plan brief:** provide an accessible, brand-agnostic printable or downloadable brief with private location and notes excluded by default.
+1. **Evidence-to-fact linking:** let a household link an existing private upload to one controlled fact, while preserving distinct available, linked, reviewed and verified states.
+2. **Plan revision history:** show bounded before-and-after plan versions, changed inputs, ordering and removals with an explicit restore action.
+3. **Household co-decision access:** design consent, revocation and read-or-comment permissions for one invited household collaborator without exposing installer contact controls.
+4. **Outcome check-ins:** record comfort, usage and cost observations after a completed step without claiming causal savings or measured building performance.
+5. **Deferred household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys only after the four feature-optimisation steps above are ready.
 
 ## Global stop conditions
 

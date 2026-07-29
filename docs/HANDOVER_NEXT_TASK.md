@@ -1,20 +1,119 @@
 # Next task handover
 
-Status: released milestone with the next recommendation recorded below
+Status: active implementation milestone
 
 Prepared: 29 July 2026
 
-Milestone ID: `CUSTOMER-ADVISOR-CONTEXT-02`
+Milestone ID: `CUSTOMER-PLAN-DECISION-03`
 
-Implementation baseline: `0a82a992e162087eb5ac76b4227dee3a505eae5b`
+Implementation baseline: `ad67936d7fdd849d055f355ebbcffe0e496dfb12`
 
-Deployed application before this milestone: Sites version 205 from `0a82a992e162087eb5ac76b4227dee3a505eae5b`
+Deployed application before this milestone: Sites version 206 from application commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`
 
-Released application: `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`, first deployed as Sites version 206
+Current source checkpoint: documentation child `ad67936d7fdd849d055f355ebbcffe0e496dfb12`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns current implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. A later documentation-only Sites checkpoint does not become a new executable application release: application identity remains commit `7e772ace2dc8fa26a05863e1fa865d58e4fdbd77`, Sites version 206 and deployment `appgdep_6a68ff2f45d08191aec1274c14168407`; the Sites saved-version record owns the exact publication identity of any documentation-only child.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. The household and assessor field pilot is deliberately deferred until the four further feature-optimisation steps recorded below are ready and released.
+
+## Current milestone outcome
+
+Turn the current household plan into a decision-ready, independently useful document without implying a site assessment, authenticated assessor review or savings guarantee.
+
+The milestone completes the four post-context product priorities:
+
+1. explain why each controlled plan item appears, what remains unknown and what could change its position;
+2. show no more than three safe, material next questions, with `Not sure` always valid;
+3. add a private customer-owned review worksheet that clearly labels feedback as `Recorded by you`; and
+4. produce one privacy-filtered independent plan brief for accessible preview, email and A4 print or browser PDF.
+
+It also removes the visible product drift reported in the same customer journey:
+
+- reinforce readable project-preparation guide paragraphs on the navy canvas;
+- make the draft save-status message readable and announce changes accessibly;
+- replace the stale public `/plan` recommendation contract with the current canonical advisor options and generator; and
+- provide an accessible email-recipient dialog plus `Print or save PDF` action from the signed-in plan step.
+
+## Current user outcomes
+
+- A household can understand the controlled evidence behind each recommendation without being shown a false numerical confidence score.
+- At most three unanswered questions identify the next information that could materially change safety, permission or plan order.
+- A customer can privately record questions, feedback they heard and proposed changes without the system claiming that an assessor authored or verified them.
+- Accepting a recorded proposal does not silently change the plan. A customer must explicitly add it as a private plan step.
+- A verified signed-in customer can save the exact current draft, enter one confirmed recipient and request one independently useful plan email.
+- The email response says `Accepted for delivery`; it does not claim inbox delivery.
+- The same privacy-filtered document appears in a high-contrast A4 print view that supports printing or the browser's Save as PDF action.
+- The public quick planner uses the same canonical goals, tenure, approval, budget, home-feature and recommendation boundaries as the signed-in advisor.
+- Private project labels, exact location, room routines, filenames, account contact data, private notes, customer review text and arbitrary permission text do not enter the independent brief.
+
+## Current in scope
+
+- Bump the versioned customer plan contract while preserving edited legacy plans through the existing conflict boundary.
+- Add bounded, controlled rationale and next-question derivation.
+- Extend the existing owner-scoped advisor-profile JSON with at most twenty private review items.
+- Keep review kinds, targets and statuses allowlisted and text capped at 500 characters.
+- Add a shared privacy-filtered plan-document projection with escaped inline HTML and plain text.
+- Add authenticated, owner-scoped email delivery with explicit recipient confirmation, strict single-address validation, idempotency and a fail-closed five-attempt hourly rate limit.
+- Reuse the configured email delivery provider. Do not add a new provider or send a release-test email to a real address.
+- Add an accessible modal with focus management, Escape close, focus return and live status.
+- Add an A4 print surface generated from the same saved plan projection.
+- Reconcile the public quick planner and account handoff with the current canonical plan engine.
+- Add focused domain, privacy, route, provider, accessibility, responsive and contrast regression tests.
+
+## Current out of scope
+
+- The deferred household or experienced-assessor field pilot.
+- Remote assessor invitations, authenticated assessor identity, external editing, access tokens or reviewer credentials.
+- Professional evidence review, verification or a claim that an attachment has been assessed.
+- A formal NatHERS assessment, NatHERS certificate, energy rating, equipment sizing or legal approval.
+- Brands, provider ranking, current market prices, savings promises or finance advice.
+- A server-side browser or a binary PDF generation dependency. A4 print plus browser Save as PDF is the bounded PDF path.
+- Real customer, trade, wholesaler or assessor account creation.
+- Installer opportunity, direct-contact, payment or subscription changes.
+- Changes to the immutable dated audit.
+- Netlify deployment.
+
+## Current privacy and safety boundaries
+
+- Guidance and next questions are derived only from controlled inputs and fixed internal guide destinations.
+- `Not sure` is useful evidence and never blocks saving or submission.
+- Questions must not ask a person to climb a roof, enter a roof space, remove electrical covers, block required ventilation or perform unsafe inspection.
+- Review text remains customer-owned private project data. It never enters installer opportunity output, permission packs, email, print or public planner URLs.
+- Only the owning active customer can read or write the saved plan used for delivery.
+- Email delivery accepts one normalized address, requires a verified account and explicit confirmation, and fails closed when rate-limit storage or provider configuration is unavailable.
+- Custom plan text and private plan notes are omitted from the independent brief. The brief reports omitted counts without copying the wording.
+- The report is an independent home energy plan prepared from customer selections. It is not a completed site assessment, quote, legal permission decision or savings promise.
+
+## Current acceptance criteria
+
+- Every canonical generated plan item has bounded `Based on`, `Still uncertain` and `Could change if` guidance.
+- Next questions are deterministic, unique, fixed-destination, safe and capped at three.
+- Review-item normalization enforces kinds, targets, statuses, length and count; invalid targets do not create an assessor identity or verification state.
+- Submitted-project locking and duplicate-before-revision behaviour remain intact.
+- Review text cannot enter installer opportunity, permission-pack or independent-brief output.
+- The plan email API rejects missing consent, unverified identity, inactive account, wrong ownership, archived projects, multiple or malformed recipients, oversized bodies, unavailable rate limiting and unavailable provider configuration.
+- No automated test or live release check sends an email to a real address.
+- The print surface uses the exact saved ordering and controlled current plan content, is keyboard reachable and renders on A4 without the application shell.
+- The public `/plan` and signed-in advisor produce the same canonical item sequence for equivalent controlled input.
+- Project-preparation paragraphs and the draft status meet readable contrast and mobile layout requirements.
+- Focused tests, the full validation gate, all migrations, production build, diff hygiene, source provenance and desktop plus 390 px live checks pass.
+
+## Current stop conditions
+
+Stop the affected path when:
+
+- actual remote assessor access or identity is required;
+- arbitrary review, project or permission text could escape into installer or shared output;
+- an accepted review changes the plan without a second explicit customer action;
+- an unsafe question or blocking guess would be introduced;
+- legacy edited plan items would be lost during version regeneration;
+- provider configuration, rate-limit storage or source provenance cannot be verified;
+- a change would create or use a real account for release testing;
+- the release commit, GitHub branch, Sites source, archive and saved version do not reconcile;
+- a change would alter the immutable dated audit; or
+- a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
+
+## Prior released milestone: `CUSTOMER-ADVISOR-CONTEXT-02`
 
 ## Milestone outcome
 
@@ -176,8 +275,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys, then repair priority accessibility and comprehension friction.
-2. **Recommendation rationale and uncertainty:** show why each item appears, which controlled inputs support it, what remains unknown and what could change its order.
-3. **Adaptive next-best-question guidance:** ask at most three material unanswered questions at a time, retain `Not sure`, and avoid unsafe inspection.
-4. **Customer-owned assessor review and clarification:** keep customer reports separate from authored assessor observations and customer-approved proposed changes.
-5. **Decision-ready independent plan brief:** provide an accessible, brand-agnostic printable or downloadable brief with private location and notes excluded by default.
+1. **Evidence-to-fact linking:** let a household link an existing private upload to one controlled fact, while preserving distinct available, linked, reviewed and verified states.
+2. **Plan revision history:** show bounded before-and-after plan versions, changed inputs, ordering and removals with an explicit restore action.
+3. **Household co-decision access:** design consent, revocation and read-or-comment permissions for one invited household collaborator without exposing installer contact controls.
+4. **Outcome check-ins:** record comfort, usage and cost observations after a completed step without claiming causal savings or measured building performance.
+5. **Deferred household and assessor usability pilot:** run representative owner, renter and experienced-assessor journeys only after the four feature-optimisation steps above are ready.

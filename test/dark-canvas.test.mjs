@@ -15,6 +15,7 @@ test("canvas headings and footer remain readable on the dark background", () => 
   assert.match(css, /--canvas-text: #f4fbff/);
   assert.match(css, /--canvas-muted: #b9ccd7/);
   assert.match(css, /\.guide-section-heading h2 \{ color: var\(--canvas-text\)/);
+  assert.match(css, /\.guide-page \.guide-section > p \{ color: #b9ccd7; \}/);
   assert.match(css, /footer \{ border-top: 1px solid rgba\(132, 190, 202, \.26\); color: #a9c2ce/);
   assert.match(css, /footer a \{ color: #6ee7b7/);
 });

@@ -31,8 +31,9 @@ const project = {
 };
 
 test("important home facts keep an explicit allowlisted source without inferred validation", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-evidence-climate-advisor");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-29-decision-support-advisor");
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-home-advisor"));
+  assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-evidence-climate-advisor"));
   assert.deepEqual(
     customerAdvisorOptions.evidenceSources.find(([value]) => value === "photo-supported"),
     ["photo-supported", "Photo available for review"],

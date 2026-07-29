@@ -198,8 +198,10 @@ test("a valid plan snapshot persists removals, order and bounded custom notes", 
       items: [{ id: "brief", title: "Legacy brief", text: "Legacy" }],
     },
   });
-  assert.ok(legacy.items.length > 1);
+  assert.equal(legacy.items.length, 1);
   assert.equal(legacy.items.some((item) => item.id === "brief"), false);
+  assert.match(legacy.items[0].id, /^custom-retained-/);
+  assert.equal(legacy.items[0].title, "Legacy brief");
 });
 
 test("keeping edited steps converts superseded advice into valid private items", () => {

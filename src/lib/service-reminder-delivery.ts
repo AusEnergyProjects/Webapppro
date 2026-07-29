@@ -12,6 +12,7 @@ export type ReminderProviderMessage = {
   recipient: string;
   subject: string;
   body: string;
+  html?: string;
   idempotencyKey: string;
   callbackUrl: string;
   messageType?: string;
@@ -89,6 +90,7 @@ export async function sendServiceReminderProviderMessage(
         to: [input.recipient],
         subject: input.subject,
         text: input.body,
+        html: input.html || undefined,
         reply_to: values.RESEND_REPLY_TO || undefined,
         attachments: input.attachments?.map((attachment) => ({
           filename: attachment.filename,
