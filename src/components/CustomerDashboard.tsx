@@ -26,6 +26,7 @@ import {
   createCustomerProjectPlan,
   customerAdvisorOptions as rawCustomerAdvisorOptions,
   customerProjectOptions as rawCustomerProjectOptions,
+  deriveCustomerProjectPriorities,
   derivePlanningClimateProfile,
   platformQuoteOptions as rawPlatformQuoteOptions,
   preserveEditedPlanItems,
@@ -384,6 +385,14 @@ type CustomerProject = {
     summary?: string;
     items?: CustomerPlanItem[];
     nextQuestions?: CustomerPlanQuestion[];
+    serviceCategories?: string[];
+    propertyContext?: {
+      storeys: string;
+      ageBand: string;
+      floorArea: string;
+      roofType: string;
+      switchboard: string;
+    };
   };
   planRevision: number;
   completedPlanItems: string[];
@@ -1018,7 +1027,9 @@ function ProjectEditor({
         pace: draft.pace,
         householdSituation: draft.householdSituation,
         approvalContext: draft.propertyContext.approvalContext,
+        propertyContext: draft.propertyContext,
         existingFeatures: draft.existingFeatures,
+        serviceCategories: draft.serviceCategories,
         budgetRange: draft.budgetRange,
         postcode: draft.postcode,
         addressState: draft.addressState,
@@ -1032,8 +1043,9 @@ function ProjectEditor({
       draft.goal,
       draft.pace,
       draft.householdSituation,
-      draft.propertyContext.approvalContext,
+      draft.propertyContext,
       draft.existingFeatures,
+      draft.serviceCategories,
       draft.budgetRange,
       draft.postcode,
       draft.addressState,
@@ -1048,7 +1060,9 @@ function ProjectEditor({
       pace: initial.pace,
       householdSituation: initial.householdSituation,
       approvalContext: initial.propertyContext.approvalContext,
+      propertyContext: initial.propertyContext,
       existingFeatures: initial.existingFeatures,
+      serviceCategories: initial.serviceCategories,
       budgetRange: initial.budgetRange,
       postcode: initial.postcode,
       addressState: initial.addressState,
@@ -1109,6 +1123,7 @@ function ProjectEditor({
   const draftWithPlan = (): ProjectDraft => ({
     ...draft,
     goal: draft.goals[0] || "",
+    priorities: deriveCustomerProjectPriorities(draft.goals),
     advisorProfile: {
       ...draft.advisorProfile,
       version: CUSTOMER_ADVISOR_PROFILE_VERSION,
@@ -1120,6 +1135,14 @@ function ProjectEditor({
       summary: advisorPlan.summary,
       items: visiblePlanItems,
       nextQuestions: advisorPlan.nextQuestions as CustomerPlanQuestion[],
+      serviceCategories: draft.serviceCategories,
+      propertyContext: {
+        storeys: draft.propertyContext.storeys,
+        ageBand: draft.propertyContext.ageBand,
+        floorArea: draft.propertyContext.floorArea,
+        roofType: draft.propertyContext.roofType,
+        switchboard: draft.propertyContext.switchboard,
+      },
     },
   });
   const shareablePlanDocument = createCustomerPlanDocument(
@@ -1132,6 +1155,7 @@ function ProjectEditor({
       property_type: draft.propertyType,
       household_situation: draft.householdSituation,
       existing_features: JSON.stringify(draft.existingFeatures),
+      service_categories: JSON.stringify(draft.serviceCategories),
       budget_range: draft.budgetRange,
       property_context: JSON.stringify(draft.propertyContext),
       advisor_profile: JSON.stringify(draft.advisorProfile),
@@ -1191,6 +1215,7 @@ function ProjectEditor({
       key === "addressState" ||
       key === "householdSituation" ||
       key === "existingFeatures" ||
+      key === "serviceCategories" ||
       key === "budgetRange"
     ) {
       if (planEdited) setPlanInputsChanged(true);
@@ -1209,11 +1234,11 @@ function ProjectEditor({
       key === "goal" ||
       key === "pace" ||
       key === "existingFeatures" ||
+      key === "serviceCategories" ||
       key === "budgetRange"
     ) {
       invalidateStepsFrom(2);
     } else if (
-      key === "serviceCategories" ||
       key === "priorities" ||
       key === "projectStage" ||
       key === "timing"
@@ -1243,7 +1268,7 @@ function ProjectEditor({
     setValidationError("");
   };
   const toggle = (
-    key: "existingFeatures" | "serviceCategories" | "priorities",
+    key: "existingFeatures" | "serviceCategories",
     value: string,
   ) =>
     set(
@@ -1260,8 +1285,11 @@ function ProjectEditor({
     if (key === "approvalContext") {
       if (planEdited) setPlanInputsChanged(true);
       invalidateStepsFrom(1);
-    } else {
+    } else if (key === "accessConstraints") {
       invalidateStepsFrom(4);
+    } else {
+      if (planEdited) setPlanInputsChanged(true);
+      invalidateStepsFrom(2);
     }
   };
   const toggleAccessConstraint = (value: string) =>
@@ -1757,6 +1785,21 @@ function ProjectEditor({
       );
       return false;
     }
+    if (
+      step === 2 &&
+      ![
+        draft.propertyContext.storeys,
+        draft.propertyContext.ageBand,
+        draft.propertyContext.floorArea,
+        draft.propertyContext.roofType,
+        draft.propertyContext.switchboard,
+      ].every(Boolean)
+    ) {
+      setValidationError(
+        "Choose an answer for home height, age, floor area, roof covering and switchboard type. Not sure is a valid answer.",
+      );
+      return false;
+    }
     if (step === 2 && professionalReviewError) {
       showProfessionalReviewError();
       return false;
@@ -1769,25 +1812,11 @@ function ProjectEditor({
     }
     if (
       step === 4 &&
-      (!draft.serviceCategories.length || !draft.priorities.length)
+      !draft.serviceCategories.length
     ) {
+      openStep(2);
       setValidationError(
-        "Choose at least one type of work and one priority before reviewing the enquiry.",
-      );
-      return false;
-    }
-    if (
-      step === 4 &&
-      ![
-        draft.propertyContext.storeys,
-        draft.propertyContext.ageBand,
-        draft.propertyContext.floorArea,
-        draft.propertyContext.roofType,
-        draft.propertyContext.switchboard,
-      ].every(Boolean)
-    ) {
-      setValidationError(
-        "Choose an answer for home height, age, floor area, roof type and switchboard. Not sure is a valid answer.",
+        "Choose at least one type of work in Plan details before reviewing the enquiry.",
       );
       return false;
     }
@@ -2061,9 +2090,11 @@ function ProjectEditor({
       showProfessionalReviewError();
       return;
     }
-    if (!draft.serviceCategories.length || !draft.priorities.length) {
-      openStep(4);
-      setValidationError("Choose the work and priorities before submitting.");
+    if (!draft.serviceCategories.length) {
+      openStep(2);
+      setValidationError(
+        "Choose at least one type of work in Plan details before submitting.",
+      );
       return;
     }
     if (
@@ -2075,7 +2106,7 @@ function ProjectEditor({
         draft.propertyContext.switchboard,
       ].every(Boolean)
     ) {
-      openStep(4);
+      openStep(2);
       setValidationError(
         "Complete the five property questions before requesting responses. Not sure is a valid answer.",
       );
@@ -2173,11 +2204,8 @@ function ProjectEditor({
       && draft.addressState
       && draft.householdSituation,
     ),
-    draft.goals.length > 0,
-    !planSnapshotConflict && !planInputsChanged,
     Boolean(
-      draft.serviceCategories.length
-      && draft.priorities.length
+      draft.goals.length
       && [
         draft.propertyContext.storeys,
         draft.propertyContext.ageBand,
@@ -2185,6 +2213,10 @@ function ProjectEditor({
         draft.propertyContext.roofType,
         draft.propertyContext.switchboard,
       ].every(Boolean),
+    ),
+    !planSnapshotConflict && !planInputsChanged,
+    Boolean(
+      draft.serviceCategories.length
     ),
     false,
   ];
@@ -2219,7 +2251,7 @@ function ProjectEditor({
       >
         <div style={{ width: `${completedStepCount * 20}%` }} />
         <ol>
-          {["Home", "Goals", "Your plan", "Work", "Privacy"].map(
+          {["Home", "Plan details", "Your roadmap", "Quote prep", "Privacy"].map(
             (label, index) => (
               <li
                 className={
@@ -2395,10 +2427,11 @@ function ProjectEditor({
           <section className="customer-editor-step">
             <div className="customer-step-heading">
               <span>Step 2</span>
-              <h2>Tell the advisor what matters and what you know</h2>
+              <h2>Tell us what should shape your roadmap</h2>
               <p>
-                Choose every goal that matters. Not sure is useful information,
-                and nothing is sent to an installer yet.
+                Choose your goals and add the home details you safely know.
+                These answers can change what comes first. Not sure is always
+                a valid answer.
               </p>
             </div>
             <fieldset className="customer-choice-group">
@@ -2423,6 +2456,152 @@ function ProjectEditor({
                 )}
               </div>
             </fieldset>
+            <section
+              id="customer-roadmap-home-basics"
+              className="customer-roadmap-input-panel"
+              aria-labelledby="customer-roadmap-home-basics-title"
+            >
+              <header>
+                <span>Home planning context</span>
+                <h3 id="customer-roadmap-home-basics-title">
+                  Home details that can change the roadmap
+                </h3>
+                <p>
+                  These broad details guide the order, checks and quote
+                  preparation. They do not calculate equipment size, cost or
+                  savings.
+                </p>
+              </header>
+              <div className="customer-field-grid customer-property-context-grid">
+                <Field
+                  label="How many storeys?"
+                  hint="Helps flag safe access and possible scaffolding."
+                >
+                  <select
+                    id="customer-property-storeys"
+                    value={draft.propertyContext.storeys}
+                    onChange={(event) =>
+                      setPropertyContext("storeys", event.target.value)
+                    }
+                  >
+                    <option value="">Choose one</option>
+                    {customerProjectOptions.storeys.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="When was the home built?"
+                  hint="Helps identify construction details worth checking. It does not assume what insulation or wiring exists."
+                >
+                  <select
+                    id="customer-property-age"
+                    value={draft.propertyContext.ageBand}
+                    onChange={(event) =>
+                      setPropertyContext("ageBand", event.target.value)
+                    }
+                  >
+                    <option value="">Choose one</option>
+                    {customerProjectOptions.ageBands.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Approximate floor area"
+                  hint="Provides broad scale only. It is not enough to size equipment."
+                >
+                  <select
+                    id="customer-property-floor-area"
+                    value={draft.propertyContext.floorArea}
+                    onChange={(event) =>
+                      setPropertyContext("floorArea", event.target.value)
+                    }
+                  >
+                    <option value="">Choose one</option>
+                    {customerProjectOptions.floorAreas.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Main roof covering"
+                  hint="Changes solar, insulation and safe roof-access questions."
+                >
+                  <select
+                    id="customer-property-roof"
+                    value={draft.propertyContext.roofType}
+                    onChange={(event) =>
+                      setPropertyContext("roofType", event.target.value)
+                    }
+                  >
+                    <option value="">Choose one</option>
+                    {customerProjectOptions.roofTypes.map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Switchboard type"
+                  hint="Changes when electrical capacity and licensed safety checks should happen."
+                >
+                  <select
+                    id="customer-property-switchboard"
+                    value={draft.propertyContext.switchboard}
+                    onChange={(event) =>
+                      setPropertyContext("switchboard", event.target.value)
+                    }
+                  >
+                    <option value="">Choose one</option>
+                    {customerProjectOptions.switchboards.map(
+                      ([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </Field>
+              </div>
+              <div className="customer-question-help-grid">
+                <details className="customer-question-help">
+                  <summary>Home height and floor area</summary>
+                  <p>
+                    Count the main levels above ground. For floor area, a broad
+                    estimate from a plan, listing or memory is enough.
+                  </p>
+                </details>
+                <details className="customer-question-help">
+                  <summary>Roof covering</summary>
+                  <p>
+                    Choose the main visible roof covering, such as metal or
+                    tiles. A safely taken exterior or satellite image can help.
+                  </p>
+                </details>
+                <details className="customer-question-help">
+                  <summary>Switchboard</summary>
+                  <p>
+                    A front photo with the normal door open is enough. Never
+                    remove the internal panel or touch wiring.
+                  </p>
+                </details>
+                <details className="customer-question-help">
+                  <summary>Not sure is a useful answer</summary>
+                  <p>
+                    Not sure tells the advisor or trade what to confirm instead
+                    of encouraging a guess.
+                  </p>
+                </details>
+              </div>
+            </section>
             <section className="customer-choice-group">
               <h3>What describes the home today?</h3>
               <p className="customer-choice-help">
@@ -2470,6 +2649,38 @@ function ProjectEditor({
                 </p>
               </div>
             </details>
+            <fieldset
+              id="customer-considered-work"
+              className="customer-choice-group customer-considered-work"
+            >
+              <legend>Work you are already considering, optional</legend>
+              <p className="customer-choice-help">
+                Select anything already on your mind. It can add the relevant
+                neutral checks to the roadmap, but it does not commit you to a
+                quote, product or trade.
+              </p>
+              <div className="customer-choice-grid">
+                {customerProjectOptions.serviceCategories.map(
+                  ([value, label]: [string, string]) => (
+                    <label
+                      className={
+                        draft.serviceCategories.includes(value)
+                          ? "selected"
+                          : ""
+                      }
+                      key={value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={draft.serviceCategories.includes(value)}
+                        onChange={() => toggle("serviceCategories", value)}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ),
+                )}
+              </div>
+            </fieldset>
             <section
               id="customer-professional-review"
               className={`customer-professional-review${
@@ -2813,10 +3024,79 @@ function ProjectEditor({
         {step === 3 && (
           <section className="customer-editor-step">
             <div className="customer-step-heading">
-              <span>Step 3</span>
+              <span>Your home energy roadmap</span>
               <h2>{advisorPlan.title}</h2>
-              <p>{advisorPlan.summary}</p>
+              <p>
+                Built from your goals, home details, considered work, budget
+                and preferred pace. The order can change when you update those
+                answers or add better evidence. {advisorPlan.summary}
+              </p>
             </div>
+            <section
+              className="customer-roadmap-basis"
+              aria-labelledby="customer-roadmap-basis-title"
+            >
+              <header>
+                <span>What shaped this roadmap</span>
+                <h3 id="customer-roadmap-basis-title">
+                  Your answers are carried into the plan
+                </h3>
+              </header>
+              <dl>
+                <div>
+                  <dt>Goals</dt>
+                  <dd>{goalLabels.join(", ") || "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Home and tenure</dt>
+                  <dd>
+                    {propertyLabel},{" "}
+                    {optionLabel(
+                      customerProjectOptions.situations,
+                      draft.householdSituation,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Home details</dt>
+                  <dd>{homeContextLabels.join(", ") || "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Current home answers</dt>
+                  <dd>
+                    {answeredHomeQuestionCount} of{" "}
+                    {homeFeatureQuestions.length} categories answered
+                  </dd>
+                </div>
+                <div>
+                  <dt>Work being considered</dt>
+                  <dd>
+                    {categoryLabels.join(", ")
+                      || "No work type selected yet"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Budget and pace</dt>
+                  <dd>
+                    {optionLabel(
+                      customerProjectOptions.budgets,
+                      draft.budgetRange,
+                    )},{" "}
+                    {optionLabel(
+                      customerProjectOptions.paces,
+                      draft.pace,
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              {notSureHomeQuestionCount > 0 && (
+                <p>
+                  {notSureHomeQuestionCount} home answer
+                  {notSureHomeQuestionCount === 1 ? "" : "s"} remain Not sure.
+                  They stay visible as things to check, not reasons to guess.
+                </p>
+              )}
+            </section>
             {planningClimate && (
               <aside className="customer-climate-profile">
                 <div>
@@ -3412,123 +3692,28 @@ function ProjectEditor({
           <section className="customer-editor-step">
             <div className="customer-step-heading">
               <span>Step 4</span>
-              <h2>Prepare a clear, safe scope for possible quotes</h2>
+              <h2>Prepare for quotes, only if you want them</h2>
               <p>
-                Simple facts and useful photos can reduce guesswork. Choose Not
-                sure when you do not know and never access an unsafe area.
+                Your roadmap is already complete. Add timing, site constraints
+                and safe evidence only if you may request prices later.
               </p>
             </div>
-            <div className="customer-field-grid customer-property-context-grid">
-              <Field label="Home height">
-                <select
-                  value={draft.propertyContext.storeys}
-                  onChange={(event) =>
-                    setPropertyContext("storeys", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.storeys.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Approximate home age">
-                <select
-                  value={draft.propertyContext.ageBand}
-                  onChange={(event) =>
-                    setPropertyContext("ageBand", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.ageBands.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Approximate floor area">
-                <select
-                  value={draft.propertyContext.floorArea}
-                  onChange={(event) =>
-                    setPropertyContext("floorArea", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.floorAreas.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Main roof type">
-                <select
-                  id="customer-property-roof"
-                  value={draft.propertyContext.roofType}
-                  onChange={(event) =>
-                    setPropertyContext("roofType", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.roofTypes.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Switchboard">
-                <select
-                  id="customer-property-switchboard"
-                  value={draft.propertyContext.switchboard}
-                  onChange={(event) =>
-                    setPropertyContext("switchboard", event.target.value)
-                  }
-                >
-                  <option value="">Choose one</option>
-                  {customerProjectOptions.switchboards.map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <div className="customer-question-help-grid">
-              <details className="customer-question-help">
-                <summary>? Home height and floor area</summary>
+            <section className="customer-quote-work-summary">
+              <div>
+                <span>From your plan details</span>
+                <h3>Work you may want priced</h3>
                 <p>
-                  Count the main levels above ground. For floor area, a broad
-                  estimate from a plan, listing or memory is enough.
+                  {categoryLabels.length
+                    ? categoryLabels.join(", ")
+                    : "No work type selected yet. You can keep using the roadmap without requesting quotes."}
                 </p>
-              </details>
-              <details className="customer-question-help">
-                <summary>? Roof type</summary>
-                <p>
-                  Choose the main visible roof covering, such as metal or
-                  tiles. A safely taken exterior or satellite image can help.
-                </p>
-              </details>
-              <details className="customer-question-help">
-                <summary>? Switchboard</summary>
-                <p>
-                  A front photo with the normal door open is enough. Never
-                  remove the internal panel or touch wiring.
-                </p>
-              </details>
-              <details className="customer-question-help">
-                <summary>? Not sure</summary>
-                <p>
-                  Not sure is a valid answer. It tells the advisor or trade what
-                  to confirm instead of encouraging a guess.
-                </p>
-              </details>
-            </div>
+              </div>
+              <button type="button" onClick={() => openStep(2)}>
+                Review work choices
+              </button>
+            </section>
             <fieldset className="customer-choice-group">
-              <legend>Site constraints a trade should know, optional</legend>
+              <legend>What should a trade know before quoting? Optional</legend>
               <div className="customer-choice-grid">
                 {customerProjectOptions.accessConstraints.map(
                   ([value, label]) => (
@@ -3553,52 +3738,9 @@ function ProjectEditor({
                 )}
               </div>
             </fieldset>
-            <fieldset className="customer-choice-group">
-              <legend>Types of work you may want quoted</legend>
-              <div className="customer-choice-grid">
-                {customerProjectOptions.serviceCategories.map(
-                  ([value, label]: [string, string]) => (
-                    <label
-                      className={
-                        draft.serviceCategories.includes(value)
-                          ? "selected"
-                          : ""
-                      }
-                      key={value}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={draft.serviceCategories.includes(value)}
-                        onChange={() => toggle("serviceCategories", value)}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ),
-                )}
-              </div>
-            </fieldset>
-            <fieldset className="customer-choice-group">
-              <legend>Priorities</legend>
-              <div className="customer-choice-grid">
-                {customerProjectOptions.priorities.map(
-                  ([value, label]: [string, string]) => (
-                    <label
-                      className={
-                        draft.priorities.includes(value) ? "selected" : ""
-                      }
-                      key={value}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={draft.priorities.includes(value)}
-                        onChange={() => toggle("priorities", value)}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ),
-                )}
-              </div>
-            </fieldset>
+            <h3 className="customer-quote-readiness-title">
+              How ready are you?
+            </h3>
             <div className="customer-field-grid">
               <Field label="Project stage">
                 <select
@@ -3782,7 +3924,7 @@ function ProjectEditor({
               </small>
             </section>
             <Field
-              label="Private project notes"
+              label="Questions or reminders for yourself"
               optional="never shared with trades"
               hint="Use this for questions, product ideas or reminders. Do not store passwords, identity documents, bills or meter identifiers."
             >
@@ -3857,16 +3999,6 @@ function ProjectEditor({
                   <div>
                     <dt>Work</dt>
                     <dd>{categoryLabels.join(", ") || "Choose work types"}</dd>
-                  </div>
-                  <div>
-                    <dt>Priorities</dt>
-                    <dd>
-                      {draft.priorities
-                        .map((item) =>
-                          optionLabel(customerProjectOptions.priorities, item),
-                        )
-                        .join(", ") || "Choose priorities"}
-                    </dd>
                   </div>
                   <div>
                     <dt>Site considerations</dt>

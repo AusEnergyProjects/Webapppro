@@ -46,7 +46,7 @@ const baseProject = {
   pace: "staged",
   existingFeatures: [],
   serviceCategories: ["heating-cooling"],
-  priorities: ["comfort"],
+  priorities: [],
   projectStage: "ready-for-pricing",
   timing: "within_3_months",
   budgetRange: "5_15k",
@@ -68,6 +68,7 @@ test("trade requests require structured property context and keep it anonymised"
       accessConstraints: ["limited_parking"],
     },
   });
+  assert.deepEqual(complete.project.priorities, ["lower-bills"]);
   assert.equal(submissionReadiness(complete.project).ok, true);
   const opportunity = buildAnonymizedOpportunity(complete.project, "project-1");
   assert.match(opportunity.summary, /two storeys/);

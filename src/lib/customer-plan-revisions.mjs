@@ -1,11 +1,24 @@
 import {
+  customerProjectOptions,
   normalizeCustomerProject,
   reconcileCompletedPlanItems,
 } from "./customer-projects.mjs";
 
 const MAX_GOALS = 10;
 const MAX_HOME_FEATURES = 40;
+const MAX_SERVICE_CATEGORIES = 12;
 const MAX_PLAN_ITEMS = 40;
+const ROADMAP_PROPERTY_KEYS = [
+  "storeys",
+  "ageBand",
+  "floorArea",
+  "roofType",
+  "switchboard",
+];
+const REVISION_SERVICE_CATEGORIES = new Set([
+  ...customerProjectOptions.serviceCategories.map(([value]) => value),
+  "insulation-draughts",
+]);
 
 function boundedText(value, maximum) {
   return typeof value === "string"
@@ -48,6 +61,15 @@ function planItems(value) {
   }).map((item, index) => ({ ...item, position: index + 1 }));
 }
 
+function propertyContextProjection(value) {
+  const supplied = value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+  return Object.fromEntries(
+    ROADMAP_PROPERTY_KEYS.map((key) => [key, boundedText(supplied[key], 40)]),
+  );
+}
+
 export function customerPlanRevisionProjection(value = {}) {
   const supplied = value && typeof value === "object" && !Array.isArray(value)
     ? value
@@ -57,6 +79,12 @@ export function customerPlanRevisionProjection(value = {}) {
     && !Array.isArray(supplied.planSnapshot)
     ? supplied.planSnapshot
     : {};
+  const hasRoadmapInputs = Boolean(
+    snapshot.propertyContext
+    && typeof snapshot.propertyContext === "object"
+    && !Array.isArray(snapshot.propertyContext)
+    && Array.isArray(snapshot.serviceCategories),
+  );
   return {
     revisionNumber: Number.isInteger(Number(supplied.revisionNumber))
       ? Math.max(0, Number(supplied.revisionNumber))
@@ -73,6 +101,13 @@ export function customerPlanRevisionProjection(value = {}) {
     ),
     pace: boundedText(supplied.pace, 40),
     budgetRange: boundedText(supplied.budgetRange, 40),
+    hasRoadmapInputs,
+    propertyContext: propertyContextProjection(snapshot.propertyContext),
+    serviceCategories: boundedList(
+      snapshot.serviceCategories,
+      MAX_SERVICE_CATEGORIES,
+      80,
+    ).filter((value) => REVISION_SERVICE_CATEGORIES.has(value)),
     planSnapshot: {
       version: boundedText(snapshot.version, 80),
       items: planItems(snapshot.items),
@@ -152,6 +187,23 @@ export function compareCustomerPlanRevisions(fromValue, toValue) {
       from: from.budgetRange,
       to: to.budgetRange,
     },
+    propertyContext: {
+      changed:
+        JSON.stringify(from.propertyContext)
+        !== JSON.stringify(to.propertyContext),
+      from: from.propertyContext,
+      to: to.propertyContext,
+    },
+    serviceCategories: {
+      added: listDifference(
+        to.serviceCategories,
+        from.serviceCategories,
+      ),
+      removed: listDifference(
+        from.serviceCategories,
+        to.serviceCategories,
+      ),
+    },
     planVersion: {
       changed: from.planVersion !== to.planVersion,
       from: from.planVersion,
@@ -168,6 +220,9 @@ export function compareCustomerPlanRevisions(fromValue, toValue) {
       + result.homeFeatures.removed.length
       + Number(result.pace.changed)
       + Number(result.budgetRange.changed)
+      + Number(result.propertyContext.changed)
+      + result.serviceCategories.added.length
+      + result.serviceCategories.removed.length
       + Number(result.planVersion.changed)
       + result.steps.added.length
       + result.steps.removed.length
@@ -223,6 +278,15 @@ export function prepareCustomerPlanRevisionRestore(
     existingFeatures: revision.homeFeatures,
     pace: revision.pace,
     budgetRange: revision.budgetRange,
+    propertyContext: revision.hasRoadmapInputs
+      ? {
+          ...(currentProject?.propertyContext || {}),
+          ...revision.propertyContext,
+        }
+      : currentProject?.propertyContext,
+    serviceCategories: revision.hasRoadmapInputs
+      ? revision.serviceCategories
+      : currentProject?.serviceCategories,
     planSnapshot: storedRevision?.planSnapshot,
   });
   if (!normalized.ok || !normalized.project) {

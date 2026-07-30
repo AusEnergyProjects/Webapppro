@@ -71,8 +71,16 @@ const row = {
   property_type: "house",
   household_situation: "renter",
   existing_features: JSON.stringify(["draughty", "single-glazing"]),
+  service_categories: JSON.stringify(["glazing", "draught-proofing"]),
   budget_range: "under_2k",
-  property_context: JSON.stringify({ approvalContext: "not_sure" }),
+  property_context: JSON.stringify({
+    storeys: "two",
+    ageBand: "pre_1960",
+    floorArea: "100_199",
+    roofType: "metal",
+    switchboard: "older_fuses",
+    approvalContext: "not_sure",
+  }),
   advisor_profile: JSON.stringify({
     factEvidence: [
       { factKey: "glazing", source: "customer-reported" },
@@ -179,6 +187,50 @@ test("shareable plan is server-derived, ordered and excludes private project con
   ]) {
     assert.doesNotMatch(serialized, new RegExp(privateValue));
   }
+});
+
+test("the customer report shows the five home basics and considered work without duplicate priorities", () => {
+  const document = createCustomerPlanDocument(row, {
+    preparedAt: "2026-07-29T10:00:00.000Z",
+  });
+  const report = createCustomerPlanReportView(document);
+  const snapshot = new Map(
+    report.planningSnapshot.map((item) => [item.label, item.value]),
+  );
+
+  const homeDetails = snapshot.get("Home details");
+  assert.equal(typeof homeDetails, "string");
+  for (const expected of [
+    "Two storeys",
+    "Built before 1960",
+    "100 to 199 m2",
+    "Metal roof",
+    "Older fuse board",
+  ]) {
+    assert.match(homeDetails, new RegExp(expected));
+  }
+  assert.equal(
+    snapshot.get("Work being considered"),
+    "Glazing, Draught-proofing",
+  );
+
+  const html = customerPlanDocumentHtml(document);
+  const text = customerPlanDocumentText(document);
+  for (const expected of [
+    "Home details",
+    "Two storeys",
+    "Built before 1960",
+    "100 to 199 m2",
+    "Metal roof",
+    "Older fuse board",
+    "Work being considered",
+    "Glazing, Draught-proofing",
+  ]) {
+    assert.match(html, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(text, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(html, />Priorities</);
+  assert.doesNotMatch(text, /^Priorities:/m);
 });
 
 test("plans without a valid professional review retain the exact household evidence boundary", () => {
@@ -519,7 +571,7 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
   // The premium email keeps client-safe inline typography on every repeated
   // action card. The cap retains bounded headroom while still catching
   // duplicated sections or unbounded per-action detail.
-  assert.ok(html.length < 60_000, `HTML length was ${html.length}`);
+  assert.ok(html.length < 66_000, `HTML length was ${html.length}`);
   assert.ok(text.length < 12_500, `text length was ${text.length}`);
   assert.equal(
     text.split(report.changeBoundary).length - 1,

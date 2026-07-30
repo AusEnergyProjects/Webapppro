@@ -98,7 +98,7 @@ test("project normalization keeps notes private and rejects uncontrolled selecti
     goal: "lower-bills",
     pace: "staged",
     serviceCategories: ["solar", "not-a-service"],
-    priorities: ["lower-bills", "not-a-priority"],
+    priorities: ["replace-failed", "not-a-priority"],
     projectStage: "ready-for-pricing",
     timing: "within_3_months",
     privateNotes: "Jamie, 0400 000 000, call after 6pm",

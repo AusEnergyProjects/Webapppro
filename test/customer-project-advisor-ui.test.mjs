@@ -20,8 +20,19 @@ const planPdfRoute = read("../src/app/api/customer-plan-pdf/route.ts");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 const photoCapture = read("../src/components/CustomerProjectPhotoCapture.tsx");
 
+function wizardStepSource(step, nextStep) {
+  const start = dashboard.indexOf(`{step === ${step} && (`);
+  const end = dashboard.indexOf(`{step === ${nextStep} && (`, start + 1);
+  assert.notEqual(start, -1, `Step ${step} source should exist`);
+  assert.notEqual(end, -1, `Step ${nextStep} source should follow Step ${step}`);
+  return dashboard.slice(start, end);
+}
+
 test("the customer project wizard exposes every stage as an accessible button", () => {
-  assert.match(dashboard, /\["Home", "Goals", "Your plan", "Work", "Privacy"\]/);
+  assert.match(
+    dashboard,
+    /\["Home", "Plan details", "Your roadmap", "Quote prep", "Privacy"\]/,
+  );
   assert.match(dashboard, /aria-current=\{step === index \+ 1 \? "step"/);
   assert.match(dashboard, /onClick=\{\(\) => openStep\(index \+ 1\)\}/);
   assert.match(dashboard, /<nav[\s\S]{0,100}aria-label="Project builder steps"/);
@@ -39,6 +50,43 @@ test("advisor intake supports multiple goals, tenure, budget and detailed home f
   assert.match(dashboard, /Do not enter a roof space, remove a cover or guess/);
   assert.match(dashboard, /goal: "",\s*goals: \[\]/);
   assert.match(dashboard, /priorities: \[\]/);
+});
+
+test("roadmap inputs are completed before the plan and quote preparation is not duplicated", () => {
+  const goalsStep = wizardStepSource(2, 3);
+  const planStep = wizardStepSource(3, 4);
+  const quoteStep = wizardStepSource(4, 5);
+
+  assert.match(goalsStep, /Main goals, choose all that apply/);
+  for (const field of [
+    "How many storeys?",
+    "When was the home built?",
+    "Approximate floor area",
+    "Main roof covering",
+    "Switchboard type",
+  ]) {
+    assert.ok(goalsStep.includes(field), `${field} should be in Step 2`);
+    assert.ok(!quoteStep.includes(field), `${field} should not be in Step 4`);
+  }
+  assert.match(goalsStep, /customerProjectOptions\.serviceCategories\.map/);
+  assert.match(goalsStep, /consider/i);
+  assert.doesNotMatch(quoteStep, /customerProjectOptions\.serviceCategories\.map/);
+  assert.doesNotMatch(quoteStep, /<legend>Priorities<\/legend>/);
+  assert.doesNotMatch(quoteStep, /toggle\("priorities", value\)/);
+
+  assert.match(quoteStep, /Prepare for quotes, only if you want them/);
+  assert.match(quoteStep, /What should a trade know before quoting\? Optional/);
+  assert.match(quoteStep, /Project stage/);
+  assert.match(quoteStep, /Timing/);
+  assert.match(quoteStep, /Add useful photos or documents/);
+
+  assert.match(planStep, /customer-roadmap-preview/);
+  assert.match(dashboard, /propertyContext:\s*draft\.propertyContext/);
+  assert.match(dashboard, /serviceCategories:\s*draft\.serviceCategories/);
+  assert.doesNotMatch(
+    dashboard,
+    /Choose at least one type of work and one priority before reviewing the enquiry/,
+  );
 });
 
 test("home answers and linked evidence remain distinct and never claim verification", () => {
@@ -130,6 +178,10 @@ test("recommendations explain uncertainty and next questions return to controlle
   assert.match(dashboard, /target\?\.querySelector<HTMLElement>/);
   assert.match(dashboard, /id="customer-property-roof"/);
   assert.match(dashboard, /id="customer-property-switchboard"/);
+  assert.match(
+    wizardStepSource(2, 3),
+    /id="customer-property-roof"[\s\S]*id="customer-property-switchboard"/,
+  );
   assert.match(dashboard, /HomeFeatureIntake/);
   assert.match(dashboard, /Mark remaining questions Not sure/);
   assert.doesNotMatch(dashboard, /updateFactEvidence/);

@@ -112,6 +112,126 @@ test("advisor plans combine goals, property evidence, renting and a bounded budg
   assert.doesNotMatch(JSON.stringify(plan), /Renshade|Duck film/i);
 });
 
+test("home basics and considered work are bounded inputs to the neutral roadmap", () => {
+  const plan = createCustomerProjectPlan({
+    goals: ["improve-comfort"],
+    pace: "staged",
+    situation: "owner",
+    features: ["single-glazing"],
+    budgetRange: "2_10k",
+    propertyContext: {
+      storeys: "two",
+      ageBand: "pre_1960",
+      floorArea: "100_199",
+      roofType: "metal",
+      switchboard: "older_fuses",
+      approvalContext: "none",
+      accessConstraints: ["stairs"],
+      unsafeContext: "must not persist",
+    },
+    serviceCategories: ["solar", "glazing", "not-a-service"],
+  });
+
+  assert.deepEqual(plan.propertyContext, {
+    storeys: "two",
+    ageBand: "pre_1960",
+    floorArea: "100_199",
+    roofType: "metal",
+    switchboard: "older_fuses",
+  });
+  assert.deepEqual(plan.serviceCategories, ["solar", "glazing"]);
+
+  const homeContext = plan.items.find(
+    (item) => item.id === "home-planning-context",
+  );
+  assert.ok(homeContext);
+  assert.match(
+    `${homeContext.title} ${homeContext.text}`,
+    /two storeys/i,
+  );
+  assert.match(
+    `${homeContext.title} ${homeContext.text}`,
+    /built before 1960/i,
+  );
+  assert.match(
+    `${homeContext.title} ${homeContext.text}`,
+    /100 to 199 m2/i,
+  );
+  assert.match(`${homeContext.title} ${homeContext.text}`, /metal roof/i);
+  assert.match(
+    `${homeContext.title} ${homeContext.text}`,
+    /older fuse board/i,
+  );
+
+  const consideredWork = plan.items.filter((item) =>
+    item.guidance?.basedOn?.some((basis) => /consider/i.test(basis))
+  );
+  assert.equal(consideredWork.length, 2);
+  assert.deepEqual(
+    consideredWork.map((item) => item.id).sort(),
+    ["solar", "windows-glazing"],
+  );
+  const consideredCopy = JSON.stringify(consideredWork);
+  assert.match(consideredCopy, /Rooftop solar/i);
+  assert.match(consideredCopy, /Glazing/i);
+  assert.doesNotMatch(consideredCopy, /quote selected|recommended installer/i);
+});
+
+test("legacy installer priorities are derived from goals and conflicting client choices are ignored", () => {
+  const normalized = normalizeCustomerProject({
+    ...baseProject,
+    goals: [
+      "replace-now",
+      "prepare-renovation",
+      "improve-resilience",
+      "move-from-gas",
+      "improve-comfort",
+      "lower-bills",
+    ],
+    priorities: ["not-a-priority", "replace-failed"],
+  });
+  assert.equal(normalized.ok, true);
+  assert.deepEqual(normalized.project.priorities, [
+    "lower-bills",
+    "comfort",
+    "move-from-gas",
+    "resilience",
+    "future-ready",
+    "replace-failed",
+  ]);
+
+  const oneGoal = normalizeCustomerProject({
+    ...baseProject,
+    goals: ["lower-bills"],
+    priorities: ["replace-failed", "comfort"],
+  });
+  assert.equal(oneGoal.ok, true);
+  assert.deepEqual(oneGoal.project.priorities, ["lower-bills"]);
+});
+
+test("installer readiness does not ask the household to repeat its goals as priorities", () => {
+  const normalized = normalizeCustomerProject({
+    ...baseProject,
+    goals: ["improve-comfort"],
+    priorities: [],
+    propertyContext: {
+      storeys: "single",
+      ageBand: "1960_1999",
+      floorArea: "100_199",
+      roofType: "tile",
+      switchboard: "not_sure",
+    },
+  });
+  assert.equal(normalized.ok, true);
+  assert.equal(
+    submissionReadiness({
+      ...normalized.project,
+      priorities: [],
+    }).ok,
+    true,
+  );
+});
+
 test("everyday actions are deterministic, bounded and separate from the ordered upgrade plan", () => {
   const input = {
     goals: [

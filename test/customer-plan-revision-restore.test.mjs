@@ -168,6 +168,17 @@ test("revision comparison is deterministic, bounded and explains each roadmap ch
     homeFeatures: Array.from({ length: 80 }, (_, index) => `feature-${index}`),
     planSnapshot: {
       version: "bounded",
+      propertyContext: {
+        storeys: "two",
+        ageBand: "pre_1960",
+        floorArea: "100_199",
+        roofType: "metal",
+        switchboard: "older_fuses",
+        approvalContext: "strata",
+        accessConstraints: ["stairs", "unsafe"],
+        privateCanary: "must not survive",
+      },
+      serviceCategories: ["solar", "glazing", "not-a-service"],
       items: Array.from({ length: 80 }, (_, index) => ({
         id: `step-${index}`,
         title: `Step ${index}`,
@@ -179,6 +190,18 @@ test("revision comparison is deterministic, bounded and explains each roadmap ch
   assert.equal(projected.homeFeatures.length, 40);
   assert.equal(projected.planSnapshot.items.length, 40);
   assert.equal(projected.planSnapshot.items[0].text.length, 900);
+  assert.equal(projected.hasRoadmapInputs, true);
+  assert.deepEqual(projected.propertyContext, {
+    storeys: "two",
+    ageBand: "pre_1960",
+    floorArea: "100_199",
+    roofType: "metal",
+    switchboard: "older_fuses",
+  });
+  assert.deepEqual(
+    projected.serviceCategories,
+    ["solar", "glazing"],
+  );
 });
 
 test("restore preparation reuses canonical legacy normalisation and reconciles completion", () => {
@@ -198,7 +221,15 @@ test("restore preparation reuses canonical legacy normalisation and reconciles c
     projectStage: "exploring",
     timing: "planning",
     budgetRange: "under_2k",
-    propertyContext: { approvalContext: "none" },
+    propertyContext: {
+      storeys: "single",
+      ageBand: "1960_1999",
+      floorArea: "under_100",
+      roofType: "tile",
+      switchboard: "modern_breakers",
+      approvalContext: "none",
+      accessConstraints: [],
+    },
     privateNotes: "Private household note",
     advisorProfile: {},
   };
@@ -210,6 +241,16 @@ test("restore preparation reuses canonical legacy normalisation and reconciles c
     existingFeatures: ["double-glazing"],
     pace: "whole-home",
     budgetRange: "10k_plus",
+    serviceCategories: ["solar", "glazing"],
+    propertyContext: {
+      storeys: "two",
+      ageBand: "pre_1960",
+      floorArea: "100_199",
+      roofType: "metal",
+      switchboard: "older_fuses",
+      approvalContext: "strata",
+      accessConstraints: ["stairs"],
+    },
   };
   const targetPlan = createCustomerProjectPlan(restoredInputs);
   const canonicalStep = targetPlan.items[0];
@@ -262,6 +303,37 @@ test("restore preparation reuses canonical legacy normalisation and reconciles c
     [canonicalStep.id, "custom:budget-note"].sort(),
   );
   assert.equal(prepared.project.privateNotes, currentProject.privateNotes);
+  assert.deepEqual(
+    prepared.project.serviceCategories,
+    currentProject.serviceCategories,
+  );
+  assert.deepEqual(
+    prepared.project.propertyContext,
+    currentProject.propertyContext,
+  );
+
+  const contextual = prepareCustomerPlanRevisionRestore(currentProject, {
+    revisionNumber: 6,
+    planVersion: CUSTOMER_PLAN_VERSION,
+    goals: restoredInputs.goals,
+    homeFeatures: restoredInputs.existingFeatures,
+    pace: restoredInputs.pace,
+    budgetRange: restoredInputs.budgetRange,
+    planSnapshot: targetPlan,
+  });
+  assert.equal(contextual.ok, true);
+  assert.deepEqual(
+    contextual.project.serviceCategories,
+    restoredInputs.serviceCategories,
+  );
+  assert.deepEqual(
+    contextual.project.propertyContext,
+    {
+      ...restoredInputs.propertyContext,
+      approvalContext: currentProject.propertyContext.approvalContext,
+      accessConstraints: currentProject.propertyContext.accessConstraints,
+    },
+  );
 
   const unsafe = prepareCustomerPlanRevisionRestore(currentProject, {
     revisionNumber: 3,
@@ -344,6 +416,13 @@ test("the restore route is owner scoped, draft only, confirmed and CAS protected
     /UPDATE customer_projects SET([\s\S]*?)WHERE id = \? AND firebase_uid = \?/,
   );
   assert.ok(restoreUpdate);
+  for (const restoredRoadmapColumn of [
+    "service_categories",
+    "priorities",
+    "property_context",
+  ]) {
+    assert.match(restoreUpdate[1], new RegExp(restoredRoadmapColumn));
+  }
   for (const unrelatedColumn of [
     "title",
     "home_nickname",
@@ -351,11 +430,8 @@ test("the restore route is owner scoped, draft only, confirmed and CAS protected
     "address_state",
     "property_type",
     "household_situation",
-    "service_categories",
-    "priorities",
     "project_stage",
     "timing",
-    "property_context",
     "private_notes",
     "advisor_profile",
   ]) {

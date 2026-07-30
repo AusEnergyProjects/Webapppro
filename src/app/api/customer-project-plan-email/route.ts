@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
   const project = await db.prepare(`SELECT
       id, goal, goals, pace, postcode, address_state, property_type,
-      household_situation, existing_features, budget_range, property_context,
+      household_situation, existing_features, service_categories, budget_range, property_context,
       advisor_profile, plan_snapshot, completed_plan_items, status, archived_at
     FROM customer_projects
     WHERE id = ? AND firebase_uid = ? AND archived_at = ''

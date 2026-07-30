@@ -16,13 +16,14 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-29-adviser-print-comfort-v3";
+export const CUSTOMER_PLAN_VERSION = "2026-07-30-roadmap-context-v4";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
   "2026-07-29-evidence-climate-advisor",
   "2026-07-29-decision-support-advisor",
   "2026-07-29-home-feature-taxonomy-v2",
+  "2026-07-29-adviser-print-comfort-v3",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v4";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -1790,6 +1791,200 @@ function normaliseGoals(raw) {
   return goals.has(raw.goal) ? [raw.goal] : [];
 }
 
+const customerGoalPriorityRules = new Map([
+  ["lower-bills", ["lower-bills"]],
+  ["improve-comfort", ["comfort"]],
+  ["healthier-home", ["comfort"]],
+  ["renter-friendly", ["comfort"]],
+  ["reduce-emissions", ["move-from-gas"]],
+  ["move-from-gas", ["move-from-gas"]],
+  ["improve-resilience", ["resilience"]],
+  ["add-solar-storage", ["future-ready"]],
+  ["prepare-renovation", ["future-ready"]],
+  ["replace-now", ["replace-failed"]],
+]);
+
+export function deriveCustomerProjectPriorities(goalValues = []) {
+  const selectedGoals = list(goalValues, goals, 10);
+  const selectedPriorities = new Set(
+    selectedGoals.flatMap((goal) => customerGoalPriorityRules.get(goal) || []),
+  );
+  return customerProjectOptions.priorities
+    .map(([value]) => value)
+    .filter((value) => selectedPriorities.has(value));
+}
+
+function plannerRecommendation({ goal, features = [], id }) {
+  return createHomeEnergyPlan({
+    goal,
+    pace: "staged",
+    situation: "owner",
+    features,
+  }).items.find((item) => item.id === id) || null;
+}
+
+function serviceCategoryRecommendation(category) {
+  if (category === "assessment") {
+    return plannerRecommendation({
+      goal: "prepare-renovation",
+      id: "assessment",
+    });
+  }
+  if (category === "solar") {
+    return plannerRecommendation({
+      goal: "add-solar-storage",
+      id: "solar",
+    });
+  }
+  if (category === "battery") {
+    return plannerRecommendation({
+      goal: "add-solar-storage",
+      features: ["solar"],
+      id: "battery",
+    });
+  }
+  if (category === "heating-cooling") {
+    return plannerRecommendation({
+      goal: "improve-comfort",
+      id: "heating",
+    });
+  }
+  if (category === "hot-water") {
+    return plannerRecommendation({
+      goal: "move-from-gas",
+      id: "hot-water",
+    });
+  }
+  if (category === "draught-proofing") return advisorRecommendations.draughts;
+  if (category === "insulation") return advisorRecommendations.insulation;
+  if (category === "glazing") return advisorRecommendations.windows;
+  if (category === "window-coverings") {
+    return {
+      ...advisorRecommendations.shading,
+      title: "Compare close-fitting window coverings and suitable external shade",
+      text: "Record which windows cause summer heat or winter heat loss, their orientation and the coverings already fitted. Compare fit, edge gaps, honeycomb or thermal blinds, heavy curtains with pelmets and suitable external shade before assuming glazing replacement is needed.",
+    };
+  }
+  if (category === "ev-charging") {
+    return plannerRecommendation({
+      goal: "lower-bills",
+      features: ["ev"],
+      id: "ev",
+    });
+  }
+  if (category === "other") {
+    return {
+      id: "considered-other-work",
+      stage: "Clarify before quoting",
+      title: "Define the other home energy work you are considering",
+      text: "Record the problem to solve, the rooms or services affected and what a useful outcome would look like. Keep the scope product and brand neutral until site conditions, safety, permissions and suitable trade capability are confirmed.",
+      href: "/guides/project-preparation",
+      action: "Review project preparation guidance",
+    };
+  }
+  return null;
+}
+
+function propertyContextRecommendation(
+  propertyContext,
+  selectedGoals,
+  selectedServices,
+) {
+  const context = propertyContext && typeof propertyContext === "object"
+    ? propertyContext
+    : {};
+  const fields = [
+    ["storeys", customerProjectOptions.storeys],
+    ["ageBand", customerProjectOptions.ageBands],
+    ["floorArea", customerProjectOptions.floorAreas],
+    ["roofType", customerProjectOptions.roofTypes],
+    ["switchboard", customerProjectOptions.switchboards],
+  ];
+  if (!fields.some(([key]) => typeof context[key] === "string" && context[key])) {
+    return null;
+  }
+  const recorded = fields.map(([key, options]) =>
+    label(options, context[key], "Not recorded"));
+  const electricalWork = selectedGoals.some((goal) =>
+    ["move-from-gas", "add-solar-storage", "replace-now"].includes(goal))
+    || selectedServices.some((category) =>
+      ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"]
+        .includes(category));
+  const roofWork = selectedGoals.includes("add-solar-storage")
+    || selectedServices.some((category) =>
+      ["solar", "insulation"].includes(category));
+  const unknownFields = fields
+    .filter(([key]) => !context[key] || context[key] === "not_sure")
+    .map(([key]) => ({
+      storeys: "home height",
+      ageBand: "home age",
+      floorArea: "floor area",
+      roofType: "roof covering",
+      switchboard: "switchboard type",
+    })[key]);
+  let title = "Use the home basics to confirm access, scale and enabling work";
+  let stage = "Check the scope before quoting";
+  const notes = [];
+  if (context.switchboard === "older_fuses" && electricalWork) {
+    title = "Check electrical enabling work before equipment quotes";
+    stage = "Confirm electrical capacity early";
+    notes.push(
+      "Because an older fuse board was recorded, ask a licensed electrician to confirm capacity and protective devices before electrical equipment, solar, storage or charging work is priced.",
+    );
+  } else if (
+    (context.switchboard === "not_sure" || !context.switchboard)
+    && electricalWork
+  ) {
+    title = "Confirm the switchboard before electrical upgrades are priced";
+    notes.push(
+      "Use a safe front-on photo or an existing record so a licensed electrician can confirm the electrical checks and possible enabling work.",
+    );
+  }
+  if ((context.roofType === "not_sure" || !context.roofType) && roofWork) {
+    if (title === "Use the home basics to confirm access, scale and enabling work") {
+      title = "Confirm the roof before solar or roof-insulation quotes";
+    }
+    notes.push(
+      "Confirm the main roof covering, condition and safe access before roof-mounted solar or roof-insulation work is scoped.",
+    );
+  } else if (roofWork && context.roofType && context.roofType !== "not_sure") {
+    notes.push(
+      "The recorded roof covering changes mounting, access and condition questions for solar or roof-insulation work.",
+    );
+  }
+  if (["pre_1960", "1960_1999"].includes(context.ageBand)) {
+    notes.push(
+      "Use the recorded age only to prompt checks of the actual construction and services. It does not prove what insulation, wiring or other materials are present.",
+    );
+  }
+  if (
+    ["two", "three_plus"].includes(context.storeys)
+    || ["200_299", "300_plus"].includes(context.floorArea)
+  ) {
+    notes.push(
+      "Height and floor area can change safe access, zoning and site-specific sizing questions.",
+    );
+  }
+  if (!notes.length) {
+    notes.push(
+      "Home height and floor area provide broad scale. Home age, roof covering and switchboard type guide the checks needed before fixed work.",
+    );
+  }
+  if (unknownFields.length) {
+    notes.push(
+      `Still to confirm: ${unknownFields.join(", ")}. Not sure remains a valid planning answer.`,
+    );
+  }
+  return {
+    id: "home-planning-context",
+    stage,
+    title,
+    text: `Recorded planning context: ${recorded.join(", ")}. ${notes.join(" ")}`,
+    href: "/guides/project-preparation",
+    action: "Review how home details affect the scope",
+  };
+}
+
 function roomComfortPlanning(rooms = []) {
   const concernValues = [...new Set(rooms.flatMap((room) => room.concerns))];
   const useValues = [...new Set(rooms.flatMap((room) => room.usePeriods))];
@@ -1848,7 +2043,9 @@ function createAdvisorPlan({
   situation,
   approvalContext,
   features,
+  serviceCategories: selectedServices,
   budgetRange,
+  propertyContext,
   advisorProfile,
 }) {
   const plannerFeatures = features.filter((item) => legacyPlannerFeatures.has(item));
@@ -1888,9 +2085,17 @@ function createAdvisorPlan({
   const support = pull("support");
   pull("brief");
   const contextual = [];
+  const workLabelsByItem = {};
   const addContext = (item) => {
     if (item && !contextual.some((existing) => existing.id === item.id)) contextual.push(item);
   };
+  addContext(
+    propertyContextRecommendation(
+      propertyContext,
+      selectedGoals,
+      selectedServices,
+    ),
+  );
   if (advisorProfile.climate) {
     addContext({
       id: "climate-sequence",
@@ -1951,11 +2156,25 @@ function createAdvisorPlan({
     pull("hot-water");
     addContext(advisorRecommendations.electricHotWater);
   }
+  for (const category of selectedServices) {
+    const recommendation = serviceCategoryRecommendation(category);
+    if (!recommendation) continue;
+    pull(recommendation.id);
+    addContext(recommendation);
+    const workLabel = label(customerProjectOptions.serviceCategories, category);
+    workLabelsByItem[recommendation.id] = [
+      ...new Set([
+        ...(workLabelsByItem[recommendation.id] || []),
+        workLabel,
+      ]),
+    ];
+  }
   if (budgetRange === "under_2k") addContext(advisorRecommendations.lowBudget);
   if (budgetRange === "2_10k") addContext(advisorRecommendations.mediumBudget);
   if (budgetRange === "10k_plus") addContext(advisorRecommendations.largerBudget);
   const climateOrder = roomComfort.daytimeHeat
     ? [
+        "home-planning-context",
         "room-comfort-profile",
         "climate-sequence",
         "moisture-ventilation",
@@ -1966,6 +2185,7 @@ function createAdvisorPlan({
       ]
     : roomComfort.overnightCold
       ? [
+          "home-planning-context",
           "room-comfort-profile",
           "moisture-ventilation",
           "draught-proofing",
@@ -1978,6 +2198,7 @@ function createAdvisorPlan({
         advisorProfile.climate?.code,
       )
     ? [
+        "home-planning-context",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
@@ -1987,6 +2208,7 @@ function createAdvisorPlan({
         "insulation-review",
       ]
     : [
+        "home-planning-context",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
@@ -2025,6 +2247,7 @@ function createAdvisorPlan({
     factLabels: customerAdvisorOptions.factKeys,
     climateLabel: advisorProfile.climate?.label || "",
     roomCount: advisorProfile.rooms.length,
+    workLabelsByItem,
   });
   const nextQuestions = createNextBestQuestions({
     items,
@@ -2062,6 +2285,14 @@ function createAdvisorPlan({
     situation,
     approvalContext,
     features,
+    serviceCategories: selectedServices,
+    propertyContext: {
+      storeys: propertyContext.storeys,
+      ageBand: propertyContext.ageBand,
+      floorArea: propertyContext.floorArea,
+      roofType: propertyContext.roofType,
+      switchboard: propertyContext.switchboard,
+    },
     title,
     summary: `This is ${paceLabel}. It is independent guidance, not a product endorsement, quote or savings promise.`,
     everydayActions,
@@ -2152,6 +2383,13 @@ function prepareCustomerProjectPlan(input = {}) {
   const features = normalizeHomeFeatureSelections(
     input.features || input.existingFeatures,
   );
+  const selectedServices = normaliseServiceCategories(input.serviceCategories);
+  const propertyContext = buildInstallerPropertyContext({
+    ...(input.propertyContext && typeof input.propertyContext === "object"
+      ? input.propertyContext
+      : {}),
+    approvalContext,
+  });
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
   const baseAdvisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
     postcode: input.postcode,
@@ -2159,7 +2397,7 @@ function prepareCustomerProjectPlan(input = {}) {
     householdSituation: situation,
     approvalContext,
     homeFeatures: features,
-    propertyContext: input.propertyContext,
+    propertyContext,
   });
   const generatedPlan = createAdvisorPlan({
     selectedGoals,
@@ -2167,7 +2405,9 @@ function prepareCustomerProjectPlan(input = {}) {
     situation,
     approvalContext,
     features,
+    serviceCategories: selectedServices,
     budgetRange,
+    propertyContext,
     advisorProfile: baseAdvisorProfile,
   });
   const snapshot = normalisePlanSnapshot(input.planSnapshot, generatedPlan);
@@ -2177,7 +2417,7 @@ function prepareCustomerProjectPlan(input = {}) {
     householdSituation: situation,
     approvalContext,
     homeFeatures: features,
-    propertyContext: input.propertyContext,
+    propertyContext,
     allowedPlanItemIds: snapshot.ok
       ? snapshot.plan.items.map((item) => item.id)
       : generatedPlan.items.map((item) => item.id),
@@ -2205,6 +2445,7 @@ export function preserveEditedPlanItems(editedItems = [], currentItems = []) {
       const derivedAdvisorItem = [
         "climate-sequence",
         "room-comfort-profile",
+        "home-planning-context",
       ].includes(item.id);
       if (currentItem && !derivedAdvisorItem && !seen.has(currentItem.id)) {
         seen.add(currentItem.id);
@@ -2263,6 +2504,7 @@ export function normalizeCustomerProject(raw = {}) {
     situation: householdSituation,
     approvalContext: propertyContext.approvalContext,
     features: existingFeatures,
+    serviceCategories: raw.serviceCategories,
     budgetRange,
     postcode,
     addressState,
@@ -2284,7 +2526,9 @@ export function normalizeCustomerProject(raw = {}) {
     pace: safePace,
     existingFeatures,
     serviceCategories: normaliseServiceCategories(raw.serviceCategories),
-    priorities: list(raw.priorities, priorities, 6),
+    priorities: selectedGoals.length
+      ? deriveCustomerProjectPriorities(selectedGoals)
+      : list(raw.priorities, priorities, 6),
     projectStage: stages.has(raw.projectStage) ? raw.projectStage : "exploring",
     timing: timings.has(raw.timing) ? raw.timing : "planning",
     budgetRange,
@@ -2303,7 +2547,6 @@ export function normalizeCustomerProject(raw = {}) {
 export function submissionReadiness(project) {
   if (!project.goals?.length) return { ok: false, error: "Choose at least one goal before requesting installer responses." };
   if (!project.serviceCategories?.length) return { ok: false, error: "Choose at least one type of work before requesting installer responses." };
-  if (!project.priorities?.length) return { ok: false, error: "Choose at least one project priority." };
   const context = project.propertyContext || {};
   if (![context.storeys, context.ageBand, context.floorArea, context.roofType, context.switchboard].every(Boolean)) {
     return { ok: false, error: "Complete the property details before requesting installer responses. Choose Not sure where needed." };
@@ -2318,7 +2561,6 @@ export function buildAnonymizedOpportunity(project, projectId) {
     ? categoryLabels.join(", ").toLowerCase()
     : "home energy planning support";
   const installerCategories = [...new Set(categories)];
-  const priorityLabels = project.priorities.map((item) => label(customerProjectOptions.priorities, item));
   const selectedGoals = Array.isArray(project.goals)
     ? project.goals.filter(Boolean)
     : project.goal
@@ -2326,7 +2568,6 @@ export function buildAnonymizedOpportunity(project, projectId) {
       : [];
   const goalLabels = selectedGoals.map((item) => label(customerProjectOptions.goals, item));
   const goalSummary = goalLabels.length ? goalLabels.join(", ").toLowerCase() : "not selected";
-  const prioritySummary = priorityLabels.length ? priorityLabels.join(", ").toLowerCase() : "not selected";
   const propertyLabel = label(customerProjectOptions.propertyTypes, project.propertyType, "Home");
   const stageLabel = label(customerProjectOptions.stages, project.projectStage, "Planning");
   const paceLabel = project.pace === "whole-home" ? "coordinated whole-home" : project.pace === "one-step" ? "single next-step" : "staged";
@@ -2382,7 +2623,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     serviceCategories: installerCategories,
     priority: project.timing === "urgent" ? "urgent" : "standard",
     timing: project.timing,
-    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Priorities: ${prioritySummary}. Advisor planning context: ${advisorContext}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
+    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Advisor planning context: ${advisorContext}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
     sourceReference: `customer-project:${projectId}`,
   };
 }

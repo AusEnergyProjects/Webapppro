@@ -99,7 +99,7 @@ test("room follow-up returns keyboard focus to the add-room control", () => {
   );
 });
 
-test("roof and switchboard questions return to their controlled work-step fields", () => {
+test("roof and switchboard questions return to the roadmap intake before the plan", () => {
   const questions = createNextBestQuestions({
     items: [{ id: "solar" }],
     factEvidence: [
@@ -122,12 +122,12 @@ test("roof and switchboard questions return to their controlled work-step fields
     [
       {
         id: "fact-roof",
-        targetStep: 4,
+        targetStep: 2,
         targetAnchor: "customer-property-roof",
       },
       {
         id: "fact-switchboard",
-        targetStep: 4,
+        targetStep: 2,
         targetAnchor: "customer-property-switchboard",
       },
     ],

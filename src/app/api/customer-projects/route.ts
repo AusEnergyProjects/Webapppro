@@ -758,10 +758,13 @@ async function customerProjectMutation(
     );
     const nextGoals = JSON.stringify(project.goals);
     const nextFeatures = JSON.stringify(project.existingFeatures);
+    const nextServices = JSON.stringify(project.serviceCategories);
+    const nextPropertyContext = JSON.stringify(project.propertyContext);
     const nextPlan = JSON.stringify(project.planSnapshot);
     const roadmapChanged = (
       String(current.goals || "[]") !== nextGoals
       || String(current.existing_features || "[]") !== nextFeatures
+      || String(current.service_categories || "[]") !== nextServices
       || String(current.pace || "") !== project.pace
       || String(current.budget_range || "") !== project.budgetRange
       || String(current.plan_snapshot || "{}") !== nextPlan
@@ -795,8 +798,8 @@ async function customerProjectMutation(
             )`)
           .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
             project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
-            JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-            project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+            nextServices, JSON.stringify(project.priorities), project.projectStage,
+            project.timing, project.budgetRange, nextPropertyContext, project.privateNotes,
             nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems),
             nextPlanRevision, now, id, user.uid, expectedPlanRevision, currentUpdatedAt,
             revisionId, id, user.uid),
@@ -826,8 +829,8 @@ async function customerProjectMutation(
           AND plan_revision = ? AND updated_at = ?`)
         .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
           project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
-          JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-          project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+          nextServices, JSON.stringify(project.priorities), project.projectStage,
+          project.timing, project.budgetRange, nextPropertyContext, project.privateNotes,
           nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems),
           now, id, user.uid, expectedPlanRevision, currentUpdatedAt)
         .run();
@@ -897,11 +900,16 @@ async function customerProjectMutation(
     const restored = prepared.project;
     const nextGoals = JSON.stringify(restored.goals);
     const nextFeatures = JSON.stringify(restored.existingFeatures);
+    const nextServices = JSON.stringify(restored.serviceCategories);
+    const nextPriorities = JSON.stringify(restored.priorities);
+    const nextPropertyContext = JSON.stringify(restored.propertyContext);
     const nextPlan = JSON.stringify(restored.planSnapshot);
     const nextCompleted = JSON.stringify(prepared.completedPlanItems || []);
     if (
       String(current.goals || "[]") === nextGoals
       && String(current.existing_features || "[]") === nextFeatures
+      && String(current.service_categories || "[]") === nextServices
+      && String(current.property_context || "{}") === nextPropertyContext
       && String(current.pace || "") === restored.pace
       && String(current.budget_range || "") === restored.budgetRange
       && String(current.plan_snapshot || "{}") === nextPlan
@@ -925,7 +933,8 @@ async function customerProjectMutation(
           restored.pace, restored.budgetRange, nextPlan, sourceRevisionNumber, now,
           id, user.uid, expectedPlanRevision, currentUpdatedAt),
       db.prepare(`UPDATE customer_projects SET goal = ?, goals = ?, pace = ?, existing_features = ?,
-        budget_range = ?, plan_snapshot = ?, completed_plan_items = ?, plan_revision = ?, updated_at = ?
+        service_categories = ?, priorities = ?, budget_range = ?, property_context = ?,
+        plan_snapshot = ?, completed_plan_items = ?, plan_revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = 'draft'
           AND plan_revision = ? AND updated_at = ?
           AND EXISTS (
@@ -934,7 +943,8 @@ async function customerProjectMutation(
               AND revision_number = ? AND restored_from_revision = ?
           )`)
         .bind(restored.goal, nextGoals, restored.pace, nextFeatures,
-          restored.budgetRange, nextPlan, nextCompleted, nextPlanRevision, now,
+          nextServices, nextPriorities, restored.budgetRange,
+          nextPropertyContext, nextPlan, nextCompleted, nextPlanRevision, now,
           id, user.uid, expectedPlanRevision, currentUpdatedAt,
           revisionId, id, user.uid,
           nextPlanRevision, sourceRevisionNumber),

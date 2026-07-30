@@ -23,6 +23,7 @@ export const customerReviewOptions = {
 const ITEM_FACTS = {
   "climate-sequence": [],
   "room-comfort-profile": [],
+  "home-planning-context": ["roof", "switchboard"],
   authority: [],
   assessment: [],
   compare: [],
@@ -128,11 +129,11 @@ const FACT_TARGET_QUESTIONS = {
 
 const FACT_TARGET_OVERRIDES = {
   roof: {
-    targetStep: 4,
+    targetStep: 2,
     targetAnchor: "customer-property-roof",
   },
   switchboard: {
-    targetStep: 4,
+    targetStep: 2,
     targetAnchor: "customer-property-switchboard",
   },
 };
@@ -199,6 +200,15 @@ function guidanceForItem(item, context) {
     );
   } else if (item.id.includes("budget") && context.budgetLabel) {
     basedOn.push(`Your private planning range is ${context.budgetLabel.toLowerCase()}.`);
+  }
+  const selectedWork = context.workLabelsByItem
+    && Array.isArray(context.workLabelsByItem[item.id])
+    ? context.workLabelsByItem[item.id]
+    : [];
+  if (selectedWork.length) {
+    basedOn.push(
+      `Work you are considering includes ${selectedWork.join(", ").toLowerCase()}.`,
+    );
   }
   basedOn.push(...knownFacts, goalSummary(context.goalLabels));
 

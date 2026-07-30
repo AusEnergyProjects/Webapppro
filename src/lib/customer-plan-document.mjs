@@ -338,6 +338,7 @@ export function createCustomerPlanDocument(
 ) {
   const goals = parsedArray(row.goals);
   const existingFeatures = parsedArray(row.existing_features);
+  const serviceCategories = parsedArray(row.service_categories);
   const propertyContext = parsedObject(row.property_context);
   const sourceAdvisorProfile = parsedObject(row.advisor_profile);
   const advisorProfile = safeAdvisorProfile(sourceAdvisorProfile);
@@ -355,6 +356,7 @@ export function createCustomerPlanDocument(
       addressState: boundedText(row.address_state, 4),
       householdSituation: boundedText(row.household_situation, 40),
       approvalContext: boundedText(propertyContext.approvalContext, 40),
+      propertyContext,
     },
   );
   const storedSnapshot = parsedObject(row.plan_snapshot);
@@ -369,6 +371,8 @@ export function createCustomerPlanDocument(
     situation: boundedText(row.household_situation, 40),
     approvalContext: boundedText(propertyContext.approvalContext, 40),
     features: existingFeatures,
+    serviceCategories,
+    propertyContext,
     budgetRange: boundedText(row.budget_range, 40),
     postcode: boundedText(row.postcode, 4),
     addressState: boundedText(row.address_state, 4),
@@ -461,6 +465,37 @@ export function createCustomerPlanDocument(
       state: customerProjectOptions.states.includes(row.address_state)
         ? row.address_state
         : "Not recorded",
+      homeDetails: [
+        optionLabel(
+          customerProjectOptions.storeys,
+          propertyContext.storeys,
+          "Home height not recorded",
+        ),
+        optionLabel(
+          customerProjectOptions.ageBands,
+          propertyContext.ageBand,
+          "Home age not recorded",
+        ),
+        optionLabel(
+          customerProjectOptions.floorAreas,
+          propertyContext.floorArea,
+          "Floor area not recorded",
+        ),
+        optionLabel(
+          customerProjectOptions.roofTypes,
+          propertyContext.roofType,
+          "Roof covering not recorded",
+        ),
+        optionLabel(
+          customerProjectOptions.switchboards,
+          propertyContext.switchboard,
+          "Switchboard type not recorded",
+        ),
+      ],
+      consideredWork: serviceCategories
+        .map((category) =>
+          optionLabel(customerProjectOptions.serviceCategories, category))
+        .filter(Boolean),
     },
     climate: climate
       ? {
@@ -692,6 +727,12 @@ export function createCustomerPlanReportView(document) {
     ? document.overview
     : {};
   const goals = boundedStringList(overview.goals, 10, 120);
+  const homeDetails = boundedStringList(overview.homeDetails, 5, 120);
+  const consideredWork = boundedStringList(
+    overview.consideredWork,
+    12,
+    120,
+  );
   const planningSnapshot = [
     {
       label: "Goals",
@@ -704,6 +745,14 @@ export function createCustomerPlanReportView(document) {
         boundedText(overview.tenure, 100),
         boundedText(overview.state, 20),
       ].filter(Boolean).join(", ") || "Not recorded",
+    },
+    {
+      label: "Home details",
+      value: homeDetails.join(", ") || "Not recorded",
+    },
+    {
+      label: "Work being considered",
+      value: consideredWork.join(", ") || "No work type selected yet",
     },
     {
       label: "Approval context",

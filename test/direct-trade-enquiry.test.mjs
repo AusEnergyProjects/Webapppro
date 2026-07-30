@@ -95,7 +95,7 @@ test("installer matching masks location and releases contact only through exact 
 
 test("the customer dashboard supports guided, saved and separately managed projects", () => {
   assert.match(customerDashboard, /aria-label="Project builder steps"/);
-  assert.match(customerDashboard, /\["Home", "Goals", "Your plan", "Work", "Privacy"\]/);
+  assert.match(customerDashboard, /\["Home", "Plan details", "Your roadmap", "Quote prep", "Privacy"\]/);
   assert.match(customerDashboard, /Answer one small step at a time/);
   assert.match(customerDashboard, /Build more than one project/);
   assert.match(customerDashboard, /fetch\("\/api\/customer-projects"/);
