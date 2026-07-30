@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 30 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-TRUST-11`
+Milestone ID: `CUSTOMER-PROJECT-CLEANUP-12`
 
-Implementation baseline: `c2599eb5bedb11b1648da2b4a60e11b242cb2abb`
+Implementation baseline: `23594c2b61dec855aeba0a10ba5a28eb3aeaf692`
 
-Released application for this milestone: Sites version 224 from application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`
+Released application for this milestone: Sites version 227 from application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,118 +18,74 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make the customer plan easier to review, safer to support with photos, recoverable after edits and more dependable across browser preview, PDF and email.
+Make saved-project controls clean and compact, and let customers permanently remove an unused private draft through a deliberate, accessible and server-protected action.
 
-The release adds one shared premium on-page report renderer, a signed-in accessible preview dialog, a complete second action bar after the last plan step, guided private photo capture, immutable plan revision comparison and restore, a tagged-PDF foundation and an adaptive email-only compatibility boundary. It preserves the established product-neutral advice, household or self-declared professional evidence boundary and non-mutating PDF download path.
+The release adds a quiet `Delete draft` action beside `Continue project`, an accessible confirmation dialog, and an authenticated owner-scoped deletion contract that refuses submitted or linked projects. It also repairs the oversized project-detail control column and keeps the primary dashboard labels readable. Existing plan, report, evidence, privacy and trade-handover contracts remain unchanged.
 
 ## Current user outcomes
 
-- The public `/plan/print` page and the signed-in preview dialog use the same privacy-filtered premium report renderer as PDF and email.
-- A signed-in customer can open the full report without leaving the project editor; focus remains inside the dialog, Escape closes it and focus returns to the triggering control.
-- `Preview full report`, `Email this plan`, `Download PDF` and the conditional `Reset advisor suggestions` control appear after the final plan step as well as above the ordered plan.
-- Both action bars use the same handlers, busy-state protection and customer-visible outcomes.
-- Optional guided photo capture explains what each image helps a trade assess, requires three safety and privacy confirmations and keeps a 12-photo bound.
-- Camera capture prefers the rear-facing device camera, shows a local preview and uses the existing private evidence upload path.
-- Customers can compare bounded saved plan revisions and see changes to goals, home facts, pace, budget, plan version and ordered steps.
-- Restoring an earlier revision is draft-only, requires an explicit confirmation and changes only the roadmap fields.
-- Restore deliberately preserves project identity, address, work categories, private notes, adviser details, evidence, permissions, quotes and installer activity.
-- A stale browser tab cannot silently overwrite a newer revision; unsaved local edits remain visible until the customer explicitly chooses to load the latest saved version.
-- Public and signed-in PDF actions retain the browser-native attachment request and do not save a project, process a pending photo or upload evidence.
-- PDF format `2026-07-30-tagged-plan-pdf-v3` adds document language, reading order, structural landmarks, link objects and decorative artifacts.
-- The tag structure is a foundation only and is not represented as PDF/UA conformance.
-- Email remains table based and client conservative; extreme content is adaptively shortened only in the email projection below an 88,000-byte HTML cap.
-- Any shortened wording or omitted email-only steps or tips is disclosed in both HTML and plain text, while the full saved plan and PDF remain unchanged.
-- The success response says the provider accepted the message and explicitly avoids claiming inbox delivery.
-- Household-only and self-declared adviser reports retain the existing evidence wording, independent guidance and privacy exclusions.
+- Draft project cards show compact `Delete draft` and `Continue project` controls in one aligned desktop row.
+- Narrow screens receive two equal-width touch controls instead of a cramped or uneven footer.
+- Active and completed workflows never expose permanent deletion.
+- The confirmation explains that deletion is permanent, focuses `Keep draft` first, traps keyboard focus and returns focus when cancelled.
+- Deletion cannot be triggered through the existing PATCH action surface or by supplying an object key from the browser.
+- A stale draft or a project linked to enquiry, quote, contact, appointment, arrival or handover activity is retained.
+- Project-detail controls remain at the top of their card and no longer stretch through the full roadmap height.
 
 ## Current in scope
 
-- Reuse one semantic `CustomerPlanReportPreview` for the public preview and signed-in modal.
-- Keep the preview read-only and privacy filtered; guide links open safely in a separate tab.
-- Duplicate the complete applicable plan action bar after the final ordered item.
-- Add deterministic guided photo categories, confirmation gates, local preview and the existing owner-scoped private upload path.
-- Separate photo and document upload choices instead of presenting duplicate generic file controls.
-- Add `0084_customer_plan_revision_restore.sql`, immutable snapshots, bounded retention and owner-scoped revision endpoints.
-- Compare normalized roadmap fields, including plan-version-only changes, and protect every save, submit, milestone and restore path with a revision token.
-- Restore only draft roadmap fields and explicitly preserve all customer identity, evidence, access and commercial workflow records.
-- Add a valid tagged-PDF foundation without unsupported list-role claims or a PDF/UA statement.
-- Keep the full report model authoritative while adapting only extreme email rendering and disclosing every email-only omission.
-- Preserve first-party branding, same-origin guide links, no-store headers, browser-native PDF delivery and existing email ownership, confirmation, idempotency and rate-limit controls.
+- Compact dashboard project actions and project-detail control sizing.
+- Draft-only delete visibility and customer-facing confirmation.
+- Same-origin Firebase authentication, active-account and owner checks.
+- Exact plan-revision and update-time conflict protection.
+- Linked-lifecycle refusal before and after the internal deletion lock.
+- Server-selected R2 object cleanup and owner-scoped dependent-record cleanup.
+- Retry-safe internal `deleting` state that remains presented as a private draft.
+- Focused UI, accessibility, source-contract and server-boundary regressions.
 
 ## Current out of scope
 
 - The deferred household and experienced-assessor field pilot.
-- Independent credential or accreditation verification, an authenticated assessor identity, remote assessor access or evidence verification by AEA.
-- A formal NatHERS assessment, NatHERS certificate, energy rating, equipment sizing or legal approval.
-- Brands, provider ranking, current market prices, savings promises or finance advice.
-- Automated image interpretation or a requirement to photograph an unsafe area.
-- Delivered-client acceptance in controlled Gmail and Outlook inboxes.
-- Independent tagged-PDF accessibility or PDF/UA conformance certification.
-- Photo redaction, resumable upload, automated image analysis or a requirement to photograph an unsafe area.
-- Revision labels, free-form revision notes, selective field restore or revision export.
-- Before-and-after outcome tracking or savings measurement.
-- A server-side browser, print service or persisted PDF object. The edge route generates response bytes in memory and does not store the PDF.
-- Real customer, trade, wholesaler or assessor account creation.
-- A release-test email or mutation of a working-demo project.
+- Permanent deletion of submitted, matching, withdrawn, completed or linked projects.
+- A bulk delete, administrator delete or restoration service after confirmed permanent deletion.
+- Changes to plan content, reporting, evidence sharing, trade matching or account creation.
+- A destructive live test against any working-demo project.
+- The existing five forward product steps recorded below.
 - Changes to the immutable dated audit or a Netlify deployment.
 
 ## Current privacy and safety boundaries
 
-- Household answers and linked files remain household-supplied unless a current professional self-declaration is explicitly confirmed.
-- A self-declared professional review never claims that AEA verified the adviser, accreditation, reference, evidence or observations.
-- The declared adviser name, scheme or body, reference and notes enter the customer report only while the current declaration remains valid.
-- Advice-affecting household or adviser changes invalidate the declaration instead of silently carrying an earlier professional claim forward.
-- `Not sure` is a valid answer and never requires unsafe inspection.
-- No question tells a person to climb a roof, enter a roof space, disturb insulation, remove an electrical cover or block required ventilation.
-- Guided photo capture requires the customer to confirm safe ground-level access, avoidance of private or identifying material and no opening or removal of covers before camera or file selection is enabled.
-- Meter-box guidance permits only a safely accessible closed exterior; it never asks the customer to open a switchboard or meter enclosure.
-- New files use `private-plan` scope by default. Only files explicitly moved to `allocated-installers` with current consent can reach an allocated verified installer.
-- Fact-link edits do not silently renew withdrawn installer-sharing consent.
-- Installer matching excludes private files, and the installer preview counts only files marked for quoting.
-- Email and print exclude exact location, account identity, project labels, filenames, private customer notes, room names and routines, customer-review text and custom plan wording.
-- The optional self-declared adviser details and professional notes are the only review attribution intentionally projected into the customer report.
-- Revision save, compare and restore operations require the signed-in project owner and a matching revision token.
-- Restore changes only the private roadmap projection and cannot alter evidence, sharing, installer, quote or account records.
-- The report is independent general guidance, not a site assessment, quote, permission decision or savings promise.
+- The server derives the customer identity from the verified Firebase token and scopes every lookup and delete to that owner.
+- The browser supplies only the project ID, explicit confirmation, plan revision and last-updated token.
+- Evidence object keys are selected inside the server and never accepted from or returned to the customer delete request.
+- Any submission, opportunity, quote, contact release, appointment notification, arrival or handover evidence blocks permanent deletion.
+- An internal lock prevents concurrent edits and a second lifecycle check catches links created during the deletion boundary.
+- R2 failure restores the retryable draft. D1 failure never reports success and retains a retryable private state.
+- Existing household-answer, evidence-sharing, adviser, report and product-neutral guidance boundaries are unchanged.
 
 ## Current acceptance criteria
 
-- Public and signed-in previews use the same normalized privacy-filtered report content and premium hierarchy.
-- The signed-in preview dialog traps forward and reverse Tab navigation, closes with Escape, locks background scroll and restores focus.
-- Top and bottom plan action bars expose the same applicable controls and use the same busy-state protection.
-- Guided photo capture remains optional, requires every safety and privacy confirmation and caps the pending set at 12.
-- Photo categories, prompts and evidence links are deterministic and do not infer insulation or equipment facts from an unrelated image.
-- Revision history is immutable, bounded and owner scoped.
-- Comparison reports goals, home facts, pace, budget, plan version and step additions, removals, moves and changes.
-- Restore is draft-only, confirmation gated and limited to roadmap fields.
-- A typed `PLAN_REVISION_CONFLICT` triggers the explicit reload workflow; unrelated 409 business errors preserve their server message.
-- Edits made while a save is in flight remain dirty and cannot be falsely reported as saved.
-- PDF format `2026-07-30-tagged-plan-pdf-v3` contains document language, a structure tree, reading-order references, link objects and artifacts while making no PDF/UA claim.
-- The representative eight-page A4 PDF remains readable, unencrypted, JavaScript-free and free of clipping or overlap.
-- Worst-case email remains below 88,000 HTML bytes, discloses email-only shortening or omission and leaves the saved plan and PDF unchanged.
-- Automated HTML retains responsive layout and the Outlook-hidden preheader; delivered Gmail and Outlook rendering remains a controlled follow-up rather than a release claim.
-- Type checking, lint, 31 integration tests, the complete 850-test suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Live `/plan`, `/plan/print` and `/api/health` checks pass without using a signed-in customer project.
+- Draft cards expose compact aligned delete and continue actions; non-draft cards do not expose deletion.
+- Mobile controls remain equal-width, readable and at least 44 px high.
+- The confirmation is a labelled modal with safe initial focus, Tab containment, Escape cancellation, background scroll lock and busy-state dismissal protection.
+- The delete endpoint is same-origin, authenticated, active-account, owner, confirmation and stale-write protected.
+- Linked customer or trade lifecycle records prevent deletion.
+- Dependent private evidence, plan-revision, outcome and project-specific consent rows are owner scoped and the project record is deleted last.
+- Type checking, warning-free lint, 31 integration tests, the complete 863-test suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
+- Live signed-in inspection confirms the dashboard, dialog and project-detail layouts without confirming a deletion.
+- Live `/api/health` returns HTTP `200`.
 
 ## Current stop conditions
 
 Stop the affected path when:
 
-- a private file, note, room routine or exact location could enter shared or installer output;
-- a fact-link edit could silently grant or renew sharing consent;
-- a household answer would be represented as professionally checked without a current explicit adviser declaration;
-- a self-declared adviser could be represented as credential-verified or endorsed by AEA;
-- changed home or adviser details could retain an earlier professional declaration;
-- a customer-plan action could invoke native print, process a pending photo, save or upload customer data, or rely on a delayed synthetic download;
-- a PDF page could clip content, split an action card, orphan a heading, draw a raw URL or use unreadably small body text;
-- behavioural advice could contradict the known tenure, comfort or equipment facts;
-- a question would require unsafe inspection or encourage blocking required ventilation;
-- a photo flow could enable capture before every safety and privacy confirmation, exceed its bound or default evidence to installer-visible scope;
-- a stale revision could overwrite newer saved work, discard unsaved local edits without an explicit customer choice or restore a non-roadmap record;
-- a tagged PDF could claim conformance that has not been independently tested;
-- an email-only compatibility fallback could alter the saved plan or PDF, omit content without notice or claim inbox delivery;
-- an email would be sent or a working-demo project would be saved during release verification;
-- legacy edited plan state or plan-version provenance would be lost;
+- permanent deletion could appear for a non-draft project;
+- a delete could be triggered through PATCH or without explicit confirmation;
+- the server could accept a client-selected object key or act outside the authenticated owner;
+- a stale project could be deleted after newer edits;
+- any linked enquiry, quote, contact, appointment, arrival or handover record could be removed;
+- storage or database failure could be reported as success;
+- a live verification step would confirm deletion of a working-demo project;
 - the release commit, GitHub branch, Sites source, archive, saved version and deployment do not reconcile;
 - the immutable audit would change; or
 - a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
@@ -139,34 +95,36 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-plan-email-compatibility.test.mjs test/customer-plan-evidence-history.test.mjs test/customer-plan-pdf.test.mjs test/customer-plan-preview.test.mjs test/customer-plan-report-preview-dialog.test.mjs test/customer-plan-revision-restore.test.mjs test/customer-plan-revision-ui.test.mjs test/customer-plan-sharing.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-guided-photos.test.mjs test/customer-property-arrivals.test.mjs
+node --experimental-strip-types --test test/customer-plan-revision-restore.test.mjs test/direct-trade-enquiry.test.mjs test/customer-project-draft-deletion-server.test.mjs
+node --experimental-strip-types --test test/customer-project-compact-controls-css.test.mjs test/customer-project-draft-delete-ui.test.mjs test/customer-draft-delete-dialog-accessibility.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused preview, PDF, email, evidence, revision, photo and customer-project set: 73 of 73 passed;
+- focused server, revision and enquiry regression set: 23 of 23 passed;
+- focused layout, UI and accessibility regression set: 7 of 7 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 850 tests, 848 passed, 2 intentionally skipped and 0 failed;
+- complete suite: 863 tests, 861 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
 - migration verification: all 85 migrations through `0084_customer_plan_revision_restore.sql` passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub and Sites managed source branch: exact application SHA `bc427d295b3106907904a3c0b7bf9f2945561cd1`;
-- Sites application version: 224, deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`, public, environment revision 19;
-- one synthetic representative report produced a 60,177-byte eight-page tagged A4 PDF; all eight pages were rendered and visually inspected for readable hierarchy, rounded surfaces, clipping, overlap and footer clearance;
-- the representative responsive email was served only from a local loopback preview and inspected at desktop and 375 px widths without horizontal overflow;
-- the maximum-length compatibility fixture produced 62,289 HTML bytes and 9,143 plain-text bytes, retained the full saved plan and PDF and disclosed the email-only six-step/two-tip projection;
-- live `/plan` and `/plan/print` loaded with no captured console errors or horizontal overflow, and live `/api/health` returned `{"ok":true,"service":"aea-energy"}`;
-- no email was sent, no customer, project or other data was mutated, and native print was not invoked; and
-- delivered Gmail and Outlook acceptance and independent PDF accessibility conformance remain unverified.
+- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `da35ce60295d6c7150cddd9b35e33fcf64c8521b`;
+- Sites application version: 227, deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`, public, environment revision 19;
+- Sites version 226 from `9ecde96f8975f322be35283747cb7fe93b2579f9` was an intermediate deployment superseded after live visual QA found an older link-colour selector hiding the primary action label;
+- live signed-in dashboard inspection showed four draft-only delete controls, readable aligned primary actions and no delete action on the installer-matching project;
+- the confirmation dialog was opened and cancelled with `Keep draft`; the safe action held initial focus and no delete request was sent;
+- live project-detail inspection showed compact top-aligned controls instead of full-column stretched buttons;
+- live `/api/health` returned HTTP `200` and `{"ok":true,"service":"aea-energy"}`; and
+- no demo project, evidence record, email, account or other working-demo data was created, edited or deleted.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `bc427d295b3106907904a3c0b7bf9f2945561cd1`
-- Sites application version: 224
-- Sites application deployment: `appgdep_6a6b151c0178819185e4d57c1cbf75c2`
+- Application commit: `da35ce60295d6c7150cddd9b35e33fcf64c8521b`
+- Sites application version: 227
+- Sites application deployment: `appgdep_6a6b22db21c48191a2dedbdbf05274ef`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 85
@@ -177,9 +135,13 @@ Observed results:
 
 `npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the PDF feature and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PLAN-SPACING-10`
+## Prior released milestone: `CUSTOMER-PLAN-TRUST-11`
 
-The prior release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 224.
+The prior release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 227.
+
+## Earlier released milestone: `CUSTOMER-PLAN-SPACING-10`
+
+The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 227.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 

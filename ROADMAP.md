@@ -353,6 +353,38 @@ Make the customer plan easier to review, safer to support with photos, recoverab
 
 All listed acceptance gates are met. Release verification used only synthetic report data and read-only public routes. It did not send an email, create or save an account project, upload evidence, mutate working-demo data or invoke native print. Delivered Gmail and Outlook rendering and independent PDF accessibility conformance remain explicitly unverified.
 
+## Released milestone: CUSTOMER-PROJECT-CLEANUP-12
+
+Release status: application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 227 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Make saved-project actions clean, compact and easy to understand, and let a customer permanently remove an unused private draft without exposing active projects or linked trade workflows to deletion.
+
+### In scope
+
+- Keep dashboard project actions aligned in one compact row with a quiet `Delete draft` control beside the primary `Continue project` action.
+- Show permanent deletion only for private drafts. Active, withdrawn and completed project cards retain their existing lifecycle controls.
+- Require a clear, accessible confirmation dialog with `Keep draft` focused first, keyboard focus containment, Escape cancellation and an explicit irreversible-action warning.
+- Require same-origin authentication, an active owning customer account, an exact current revision and timestamp, and a server-forced delete action.
+- Refuse permanent deletion when a project has submission, opportunity, quote, contact-release, appointment, arrival or handover activity.
+- Remove owner-scoped private evidence objects and dependent draft records before deleting the project record, while retaining a retryable draft if cleanup cannot complete safely.
+- Keep project-detail controls content-sized and top-aligned instead of stretching each button through the height of a long roadmap.
+- Preserve readable primary-action labels across the older project-footer selector and the new compact button treatment.
+
+### Acceptance gates
+
+- Draft cards show one compact destructive action beside the primary continue action on desktop and equal-width controls on narrow screens.
+- Non-draft cards never expose permanent deletion.
+- The confirmation dialog has a labelled modal boundary, safe initial focus, keyboard containment and no accidental dismissal while deletion is running.
+- The delete request is owner scoped, confirmation gated, stale-write protected and refuses every linked customer or trade lifecycle.
+- Private evidence object keys remain server selected and are never accepted from or returned to the browser.
+- Type checking, lint, 31 integration tests, the complete 863-test suite, all 85 migrations, the production build, diff hygiene, GitHub provenance and Sites provenance pass.
+- Live signed-in inspection confirms readable aligned dashboard actions, the safe confirmation dialog and compact project-detail controls.
+- Live `/api/health` returns `200` without changing customer or project data.
+
+All listed acceptance gates are met. Live verification used the existing working-demo account only to inspect the dashboard, open and cancel the confirmation dialog, and view a saved project. No draft was confirmed for deletion, no project was edited and no working-demo data was changed.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions

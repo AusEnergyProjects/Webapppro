@@ -86,6 +86,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Technical customer plan presentation release/);
   assert.match(releaseTruth, /## Customer plan spacing and rounded-surface release/);
   assert.match(releaseTruth, /## Customer plan trust, evidence and revision release/);
+  assert.match(releaseTruth, /## Customer project cleanup release/);
   assert.match(releaseTruth, /Customer plan evidence and history application source.*Sites version 210/);
   assert.match(releaseTruth, /Professional review, print and comfort application source \| `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` \|[\s\S]{0,150}Sites version 212/);
   assert.match(releaseTruth, /Premium report documentation checkpoint \| `a92e18b9ea79b53eaf6eda8665f37ec02c861972` \|[\s\S]{0,180}Sites version 219/);
@@ -94,6 +95,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /Spacing release documentation checkpoint \| `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` \|[\s\S]{0,180}Sites version 223/);
   assert.match(releaseTruth, /Sites version 224 from `bc427d295b3106907904a3c0b7bf9f2945561cd1`/);
   assert.match(releaseTruth, /appgdep_6a6b151c0178819185e4d57c1cbf75c2/);
+  assert.match(releaseTruth, /Sites version 227 from `da35ce60295d6c7150cddd9b35e33fcf64c8521b`/);
+  assert.match(releaseTruth, /appgdep_6a6b22db21c48191a2dedbdbf05274ef/);
   assert.match(releaseTruth, /0084_customer_plan_revision_restore\.sql/);
   assert.match(releaseTruth, /2026-07-30-tagged-plan-pdf-v3/);
   assert.match(releaseTruth, /https:\/\/compare\.ausenergyassessments\.com\/api\/aea-brandmark/);
@@ -114,13 +117,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-TECH-PRESENTATION-09/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-SPACING-10/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-TRUST-11/);
+  assert.match(roadmap, /## Released milestone: CUSTOMER-PROJECT-CLEANUP-12/);
   assert.match(roadmap, /Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`[\s\S]{0,250}Sites version 222/);
   assert.match(roadmap, /Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`[\s\S]{0,250}Sites version 224/);
+  assert.match(roadmap, /Release status: application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`[\s\S]{0,250}Sites version 227/);
   assert.match(handover, /Status: released implementation milestone/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-TRUST-11`/);
-  assert.match(handover, /Released application for this milestone: Sites version 224 from application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`/);
-  assert.match(handover, /Sites application version: 224/);
-  assert.match(handover, /appgdep_6a6b151c0178819185e4d57c1cbf75c2/);
+  assert.match(handover, /Milestone ID: `CUSTOMER-PROJECT-CLEANUP-12`/);
+  assert.match(handover, /Released application for this milestone: Sites version 227 from application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`/);
+  assert.match(handover, /Sites application version: 227/);
+  assert.match(handover, /appgdep_6a6b22db21c48191a2dedbdbf05274ef/);
   assert.match(handover, /2026-07-30-tagged-plan-pdf-v3/);
   assert.match(handover, /0084_customer_plan_revision_restore\.sql/);
   assert.match(handover, /Sites version 219/);
