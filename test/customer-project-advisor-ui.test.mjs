@@ -19,6 +19,9 @@ const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx"
 const planPdfRoute = read("../src/app/api/customer-plan-pdf/route.ts");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 const photoCapture = read("../src/components/CustomerProjectPhotoCapture.tsx");
+const installerRequestDialog = read(
+  "../src/components/CustomerInstallerRequestDialog.tsx",
+);
 
 function wizardStepSource(step, nextStep) {
   const start = dashboard.indexOf(`{step === ${step} && (`);
@@ -33,8 +36,10 @@ test("the customer project wizard exposes every stage as an accessible button", 
     dashboard,
     /\["Home", "Plan details", "Your roadmap", "Quote prep", "Privacy"\]/,
   );
-  assert.match(dashboard, /aria-current=\{step === index \+ 1 \? "step"/);
-  assert.match(dashboard, /onClick=\{\(\) => openStep\(index \+ 1\)\}/);
+  assert.match(dashboard, /aria-current=\{active \? "step" : undefined\}/);
+  assert.match(dashboard, /aria-label=\{`\$\{label\}\$\{complete \? ", complete"/);
+  assert.match(dashboard, /\{complete && !active \? "✓" : stepNumber\}/);
+  assert.match(dashboard, /onClick=\{\(\) => openStep\(stepNumber\)\}/);
   assert.match(dashboard, /<nav[\s\S]{0,100}aria-label="Project builder steps"/);
 });
 
@@ -261,7 +266,7 @@ test("everyday actions stay outside the ordered roadmap in account and report vi
 
 test("plan email saves before delivery while PDF download is mutation-free and browser native", () => {
   const downloadPlanSource = dashboard.match(
-    /function downloadPlanPdf\(\)[\s\S]*?async function submitProject\(\)/,
+    /function downloadPlanPdf\(\)[\s\S]*?function openInstallerRequest\(\)/,
   )?.[0] || "";
   assert.match(dashboard, /Email this plan/);
   assert.match(dashboard, /Download PDF/);
@@ -387,14 +392,118 @@ test("quote preparation is simpler, safer and keeps errors beside the action", (
   assert.match(dashboard, /Site considerations/);
   assert.match(styles, /\.customer-project-editor textarea \{[\s\S]*background: #fff/);
   assert.match(styles, /\.customer-action-error \{/);
+  assert.match(dashboard, /<CustomerInstallerRequestDialog/);
+  assert.match(dashboard, /onClick=\{openInstallerRequest\}/);
+  assert.match(dashboard, /onSubmit=\{completeInstallerRequest\}/);
+  const installerRequestSource = dashboard.match(
+    /async function completeInstallerRequest\([\s\S]*?const propertyLabel/,
+  )?.[0] || "";
+  assert.doesNotMatch(installerRequestSource, /setStatus\(/);
+  assert.match(installerRequestSource, /throw new Error\(describeEditorError\(/);
+  assert.match(installerRequestDialog, /role="alert"/);
 });
 
-test("preview navigation reports completed work instead of the open stage", () => {
+test("preview navigation reports saved readiness instead of transient click history", () => {
   assert.match(dashboard, /completedStepCount \* 20/);
-  assert.match(dashboard, /completedSteps\.has\(index \+ 1\)/);
+  assert.match(dashboard, /stepIsComplete\(index \+ 1\)/);
+  assert.match(
+    dashboard,
+    /stepReadiness\[stepNumber - 1\][\s\S]{0,180}completedSteps\.has\(stepNumber\)[\s\S]{0,100}Boolean\(savedId\) && stepNumber <= 2/,
+  );
   assert.match(dashboard, /setCompletedSteps\(\(current\) => new Set\(current\)\.add\(step\)\)/);
+  assert.match(
+    dashboard,
+    /if \(nextStep !== step && isStepReady\(step\)\)[\s\S]{0,120}new Set\(current\)\.add\(step\)/,
+  );
+  assert.match(
+    dashboard,
+    /draft\.serviceCategories\.length[\s\S]{0,100}!professionalReviewError/,
+  );
   assert.doesNotMatch(dashboard, /step \* 20/);
   assert.doesNotMatch(dashboard, /step > index \+ 1/);
+});
+
+test("both installer request entry points use one revision-safe completion flow", () => {
+  assert.equal((dashboard.match(/<CustomerInstallerRequestDialog/g) || []).length, 2);
+  assert.doesNotMatch(dashboard, /key=\{`installer-request-\$\{profile\.updatedAt\}`\}/);
+  assert.match(
+    dashboard,
+    /method: "PATCH"[\s\S]{0,240}expectedUpdatedAt: account\.profile\.updatedAt/,
+  );
+  assert.match(dashboard, /onSaveRequestProfile\(contact, saved\.id\)/);
+  assert.match(
+    dashboard,
+    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,/,
+  );
+  assert.match(
+    dashboard,
+    /onRequestInstallerResponses\(\s*project\.id,\s*project\.planRevision,/,
+  );
+  assert.match(
+    dashboard,
+    /\["matching", "quote_review"\]\.includes\(recovered\.status\)/,
+  );
+  const editorStart = dashboard.indexOf(
+    "async function completeInstallerRequest",
+  );
+  const editorEnd = dashboard.indexOf("const propertyLabel", editorStart);
+  const editorCompletion = dashboard.slice(editorStart, editorEnd);
+  assert.ok(editorStart >= 0 && editorEnd > editorStart);
+  assert.ok(
+    editorCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
+      < editorCompletion.indexOf("const saved = await onSave("),
+    "the editor must reconcile an uncertain submit before saving the draft",
+  );
+  assert.match(editorCompletion, /installerContactFingerprint\(contact\)/);
+  assert.match(editorCompletion, /contactFingerprint,/);
+  assert.match(
+    editorCompletion,
+    /await onSaveRequestProfile\(\s*contact,\s*uncertainSubmit\.projectId,\s*true,/,
+  );
+  assert.match(
+    editorCompletion,
+    /Any plan or evidence-sharing changes made after the network interruption were not applied/,
+  );
+
+  const detailSectionStart = dashboard.indexOf("function ProjectDetail");
+  const detailStart = dashboard.indexOf(
+    "async function completeInstallerRequest",
+    detailSectionStart,
+  );
+  const detailEnd = dashboard.indexOf("\n\n  return (", detailStart);
+  const detailCompletion = dashboard.slice(detailStart, detailEnd);
+  assert.ok(detailStart >= 0 && detailEnd > detailStart);
+  assert.ok(
+    detailCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
+      < detailCompletion.indexOf("await onSaveRequestProfile(contact, project.id)"),
+    "the detail view must reconcile an uncertain submit before saving contact",
+  );
+  assert.match(
+    detailCompletion,
+    /await onSaveRequestProfile\(\s*contact,\s*uncertainSubmit\.projectId,\s*true,/,
+  );
+  assert.match(
+    dashboard,
+    /confirmSubmittedProjectContactUpdate:\s*allowSubmittedProjectContactUpdate/,
+  );
+  assert.match(
+    dashboard,
+    /The dialog retains its uncertain[\s\S]{0,100}reconcile status before any retry/,
+  );
+  assert.match(
+    installerRequestDialog,
+    /The latest saved contact details are now shown\. Review them, then submit again\./,
+  );
+  assert.match(
+    dashboard,
+    /throw new CustomerInstallerRequestProfileConflictError\(\{/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /disabled=\{busy \|\| !project\.contactReady\}/,
+  );
+  assert.match(dashboard, /window\.history\.replaceState\(\{\}, "", "\/account"\)/);
+  assert.match(dashboard, /projectListHeadingRef\.current\?\.focus\(\)/);
 });
 
 test("roadmap preparation links explain requirements instead of opening another project", () => {

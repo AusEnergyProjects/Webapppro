@@ -28,6 +28,36 @@ test("draft saves carry the current plan revision token", () => {
   assert.match(dashboard, /onReloadLatest/);
   assert.match(dashboard, /editGeneration\.current/);
   assert.match(dashboard, /noNewerEdits/);
+  assert.match(dashboard, /createRequestId\.current \|\|= crypto\.randomUUID\(\)/);
+  assert.match(dashboard, /\{ \.\.\.draft, clientCreateId \}/);
+  assert.match(dashboard, /result\.created === false/);
+  assert.match(dashboard, /canUpdateReplayedCustomerDraft\(savedProject\)/);
+  assert.match(
+    dashboard,
+    /expectedPlanRevision: savedProject\.planRevision/,
+  );
+  assert.match(
+    dashboard,
+    /expectedUpdatedAt: savedProject\.updatedAt/,
+  );
+  const updateBranch = route.slice(
+    route.indexOf('action === "update"'),
+    route.indexOf('action === "restore_plan_revision"'),
+  );
+  assert.match(updateBranch, /expectedUpdatedAtProvided/);
+  assert.match(
+    updateBranch,
+    /expectedUpdatedAt !== currentUpdatedAt/,
+  );
+  assert.ok(
+    updateBranch.indexOf("expectedUpdatedAt !== currentUpdatedAt")
+      < updateBranch.indexOf("normalizeCustomerProject(raw)"),
+    "the server must reject a changed replay snapshot before normalizing or updating it",
+  );
+  assert.match(
+    updateBranch,
+    /AND plan_revision = \? AND updated_at = \?/,
+  );
   assert.match(
     dashboard,
     /disabled=\{!emailVerified \|\| busy \|\| shareBusy \|\| pdfBusy\}/,
@@ -48,5 +78,8 @@ test("history compares meaningful changes and restores only after confirmation",
   assert.match(dashboard, /action === "restore_plan_revision"/);
   assert.match(dashboard, /confirmRestore: true/);
   assert.match(dashboard, /expectedPlanRevision: project\.planRevision/);
-  assert.match(dashboard, /expectedPlanRevision: saved\.planRevision/);
+  assert.match(
+    dashboard,
+    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,/,
+  );
 });

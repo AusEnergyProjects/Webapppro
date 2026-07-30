@@ -87,6 +87,21 @@ test("customer projects are owner scoped and support separate saved roadmaps", (
   assert.match(projectsRoute, /MAX_CUSTOMER_PROJECTS/);
 });
 
+test("new customer project creation is retry safe", () => {
+  assert.match(projectsRoute, /const clientCreateId = cleanId\(raw\.clientCreateId\)/);
+  assert.match(projectsRoute, /UUID_PATTERN\.test\(clientCreateId\)/);
+  assert.match(projectsRoute, /id: clientCreateId,[\s\S]{0,80}created: false/);
+  assert.match(
+    projectsRoute,
+    /\$\{clientCreateId \? "INSERT OR IGNORE" : "INSERT"\} INTO customer_projects/,
+  );
+  assert.match(
+    projectsRoute,
+    /const revisionId = clientCreateId \? `\$\{id\}:created` : crypto\.randomUUID\(\)/,
+  );
+  assert.match(projectsRoute, /created \? 201 : 200/);
+});
+
 test("project normalization keeps notes private and rejects uncontrolled selections", () => {
   const result = normalizeCustomerProject({
     title: "My exact project name",

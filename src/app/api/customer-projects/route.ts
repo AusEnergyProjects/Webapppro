@@ -37,6 +37,8 @@ const PLAN_REVISION_READ_LIMIT = 20;
 const PLAN_REVISION_RETENTION_LIMIT = 50;
 const OUTCOME_CHECKIN_READ_LIMIT = 24;
 const OUTCOME_CHECKIN_RETENTION_LIMIT = 48;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function json(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -449,15 +451,16 @@ export async function POST(request: Request) {
   let raw: Record<string, unknown>;
   try { raw = await request.json() as Record<string, unknown>; }
   catch { return json({ ok: false, error: "Invalid project details." }, 400); }
+  const clientCreateId = cleanId(raw.clientCreateId);
+  if (clientCreateId && !UUID_PATTERN.test(clientCreateId)) {
+    return json({ ok: false, error: "Refresh this project before saving it." }, 400);
+  }
   const db = getD1();
   const account = await db.prepare(`SELECT account_status, COALESCE(is_synthetic, 0) is_synthetic,
     phone, address_line_1, suburb, postcode, address_state FROM customer_accounts WHERE firebase_uid = ?`)
     .bind(user.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete your private household profile first." }, 404);
   if (account.account_status !== "active") return json({ ok: false, error: "This customer account is not active." }, 403);
-  const count = await db.prepare("SELECT COUNT(*) count FROM customer_projects WHERE firebase_uid = ? AND status != 'archived'")
-    .bind(user.uid).first<{ count: number }>();
-  if (Number(count?.count || 0) >= MAX_CUSTOMER_PROJECTS) return json({ ok: false, error: "Archive an older project before creating another one." }, 409);
   const normalized = normalizeCustomerProject(raw);
   if (!normalized.ok) return json({ ok: false, error: normalized.error }, 400);
   const project = normalized.project;
@@ -466,29 +469,63 @@ export async function POST(request: Request) {
   if (!postcodeMatchesState(project.postcode, project.addressState)) {
     return json({ ok: false, error: "The project postcode does not match the selected state or territory." }, 400);
   }
-  const id = crypto.randomUUID();
+  if (clientCreateId) {
+    const existing = await db.prepare(
+      "SELECT firebase_uid FROM customer_projects WHERE id = ?",
+    ).bind(clientCreateId).first<{ firebase_uid: string }>();
+    if (existing) {
+      if (existing.firebase_uid !== user.uid) {
+        return json({ ok: false, error: "Refresh this project before saving it." }, 409);
+      }
+      return json({
+        ok: true,
+        id: clientCreateId,
+        created: false,
+        projects: await projectsForOwner(user.uid),
+      });
+    }
+  }
+  const count = await db.prepare("SELECT COUNT(*) count FROM customer_projects WHERE firebase_uid = ? AND status != 'archived'")
+    .bind(user.uid).first<{ count: number }>();
+  if (Number(count?.count || 0) >= MAX_CUSTOMER_PROJECTS) return json({ ok: false, error: "Archive an older project before creating another one." }, 409);
+  const id = clientCreateId || crypto.randomUUID();
   const now = new Date().toISOString();
   const storedPlan = JSON.stringify(project.planSnapshot);
-  await db.batch([
-    db.prepare(`INSERT INTO customer_projects
+  const revisionId = clientCreateId ? `${id}:created` : crypto.randomUUID();
+  const insertResults = await db.batch([
+    db.prepare(`${clientCreateId ? "INSERT OR IGNORE" : "INSERT"} INTO customer_projects
       (id, firebase_uid, title, home_nickname, postcode, address_state, property_type, household_situation,
        goal, goals, pace, existing_features, service_categories, priorities, project_stage, timing, budget_range,
-        property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
+         property_context, private_notes, advisor_profile, plan_snapshot, completed_plan_items, status, opportunity_id, submitted_at, archived_at, is_synthetic, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', '', '', '', ?, ?, ?)`)
       .bind(id, user.uid, project.title, project.homeNickname, project.postcode, project.addressState,
         project.propertyType, project.householdSituation, project.goal, JSON.stringify(project.goals), project.pace,
         JSON.stringify(project.existingFeatures), JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities),
         project.projectStage, project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
         JSON.stringify(project.advisorProfile), storedPlan, Number(account.is_synthetic || 0), now, now),
-    db.prepare(`INSERT INTO customer_project_plan_revisions
+    db.prepare(`${clientCreateId ? "INSERT OR IGNORE" : "INSERT"} INTO customer_project_plan_revisions
       (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
        home_features, pace, budget_range, plan_snapshot, created_at)
       VALUES (?, ?, ?, 1, 'created', ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), id, user.uid, String(project.planSnapshot?.version || ""),
+      .bind(revisionId, id, user.uid, String(project.planSnapshot?.version || ""),
         JSON.stringify(project.goals), JSON.stringify(project.existingFeatures), project.pace,
         project.budgetRange, storedPlan, now),
   ]);
-  return json({ ok: true, id, projects: await projectsForOwner(user.uid) }, 201);
+  const created = Number(insertResults[0]?.meta.changes || 0) === 1;
+  if (!created) {
+    const existing = await db.prepare(
+      "SELECT firebase_uid FROM customer_projects WHERE id = ?",
+    ).bind(id).first<{ firebase_uid: string }>();
+    if (!existing || existing.firebase_uid !== user.uid) {
+      return json({ ok: false, error: "Refresh this project before saving it." }, 409);
+    }
+  }
+  return json({
+    ok: true,
+    id,
+    created,
+    projects: await projectsForOwner(user.uid),
+  }, created ? 201 : 200);
 }
 
 export async function PATCH(request: Request) {
@@ -738,11 +775,26 @@ async function customerProjectMutation(
     const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
     const currentPlanRevision = Number(current.plan_revision || 1);
     const currentUpdatedAt = String(current.updated_at || "");
+    const expectedUpdatedAtProvided = Object.prototype.hasOwnProperty.call(
+      raw,
+      "expectedUpdatedAt",
+    );
+    const expectedUpdatedAt = typeof raw.expectedUpdatedAt === "string"
+      ? raw.expectedUpdatedAt.trim().slice(0, 40)
+      : "";
     if (!expectedPlanRevision) {
       return json({ ok: false, error: "Refresh this project before saving it again." }, 400);
     }
     if (expectedPlanRevision !== currentPlanRevision) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before saving.");
+    }
+    if (
+      expectedUpdatedAtProvided
+      && (!expectedUpdatedAt || expectedUpdatedAt !== currentUpdatedAt)
+    ) {
+      return planRevisionConflict(
+        "This draft changed in another tab. Review the latest version before saving.",
+      );
     }
     const normalized = normalizeCustomerProject(raw);
     if (!normalized.ok) return json({ ok: false, error: normalized.error }, 400);
