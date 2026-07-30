@@ -45,6 +45,7 @@ import { HomeFeatureIntake } from "./HomeFeatureIntake";
 import { CustomerProjectPhotoCapture } from "./CustomerProjectPhotoCapture";
 import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
 import { CustomerPlanRevisionHistory } from "./CustomerPlanRevisionHistory";
+import { CustomerDraftDeleteDialog } from "./CustomerDraftDeleteDialog";
 import {
   CustomerPlanShareDialog,
 } from "./CustomerPlanShareDialog";
@@ -5321,7 +5322,7 @@ function ProjectDetail({
                 an approved transfer.
               </small>
             ) : (
-              ["draft", "withdrawn", "completed"].includes(project.status) && (
+              ["withdrawn", "completed"].includes(project.status) && (
                 <button
                   type="button"
                   onClick={() => void onAction("archive")}
@@ -5392,6 +5393,13 @@ export function CustomerDashboard({
   );
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [draftToDelete, setDraftToDelete] =
+    useState<CustomerProject | null>(null);
+  const [deleteDraftBusy, setDeleteDraftBusy] = useState(false);
+  const [deleteDraftError, setDeleteDraftError] = useState("");
+  const [deleteDraftReturnFocus, setDeleteDraftReturnFocus] =
+    useState<HTMLButtonElement | null>(null);
+  const projectListHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(
     () =>
@@ -5504,6 +5512,51 @@ export function CustomerDashboard({
     }
     setProjects(result.projects || []);
     return result;
+  }
+
+  async function deleteDraftProject() {
+    if (!user || !draftToDelete || deleteDraftBusy) return;
+    setDeleteDraftBusy(true);
+    setDeleteDraftError("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/customer-projects", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: draftToDelete.id,
+          confirmDelete: true,
+          expectedPlanRevision: draftToDelete.planRevision,
+          expectedUpdatedAt: draftToDelete.updatedAt,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(
+          result.error
+          || "This draft could not be deleted. Refresh the dashboard and try again.",
+        );
+      }
+      const deletedTitle = draftToDelete.title;
+      setProjects(result.projects || []);
+      setDraftToDelete(null);
+      setStatus(`Draft "${deletedTitle}" was permanently deleted.`);
+      window.requestAnimationFrame(() => {
+        projectListHeadingRef.current?.focus();
+        setDeleteDraftReturnFocus(null);
+      });
+    } catch (error) {
+      setDeleteDraftError(
+        error instanceof Error
+          ? error.message
+          : "This draft could not be deleted. Try again.",
+      );
+    } finally {
+      setDeleteDraftBusy(false);
+    }
   }
 
   async function saveProject(
@@ -6144,7 +6197,9 @@ export function CustomerDashboard({
                 <section className="customer-project-list-panel">
                   <div className="customer-panel-heading">
                     <span>My projects</span>
-                    <h2>Continue where you left off</h2>
+                    <h2 ref={projectListHeadingRef} tabIndex={-1}>
+                      Continue where you left off
+                    </h2>
                     <p>
                       Each saved plan and price enquiry stays separate in your
                       free account.
@@ -6193,18 +6248,39 @@ export function CustomerDashboard({
                                 steps complete
                               </small>
                             </div>
-                            <footer>
+                            <footer className="customer-project-card-footer">
                               <small>
                                 Updated{" "}
                                 {new Date(project.updatedAt).toLocaleDateString(
                                   "en-AU",
                                 )}
                               </small>
-                              <a href={`/account/projects/${project.id}`}>
-                                {project.status === "draft"
-                                  ? "Continue project"
-                                  : "Open project"}
-                              </a>
+                              <div className="customer-project-card-actions">
+                                {project.status === "draft" && (
+                                  <button
+                                    className="customer-project-card-delete"
+                                    type="button"
+                                    aria-label={`Delete draft ${project.title}`}
+                                    onClick={(event) => {
+                                      setDeleteDraftReturnFocus(
+                                        event.currentTarget,
+                                      );
+                                      setDeleteDraftError("");
+                                      setDraftToDelete(project);
+                                    }}
+                                  >
+                                    Delete draft
+                                  </button>
+                                )}
+                                <a
+                                  className="customer-project-card-open"
+                                  href={`/account/projects/${project.id}`}
+                                >
+                                  {project.status === "draft"
+                                    ? "Continue project"
+                                    : "Open project"}
+                                </a>
+                              </div>
                             </footer>
                           </article>
                         ))}
@@ -6268,6 +6344,22 @@ export function CustomerDashboard({
           )}
         </>
       )}
+      <CustomerDraftDeleteDialog
+        open={Boolean(draftToDelete)}
+        projectTitle={draftToDelete?.title || ""}
+        busy={deleteDraftBusy}
+        error={deleteDraftError}
+        returnFocus={deleteDraftReturnFocus}
+        onCancel={() => {
+          if (deleteDraftBusy) return;
+          setDeleteDraftError("");
+          setDraftToDelete(null);
+          window.requestAnimationFrame(() => {
+            setDeleteDraftReturnFocus(null);
+          });
+        }}
+        onConfirm={() => void deleteDraftProject()}
+      />
       <SiteFooter>
         Customer accounts, saved roadmaps and project enquiries remain free.
         Installer responses are indicative until the complete property,

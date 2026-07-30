@@ -1,0 +1,146 @@
+.backdrop {
+  align-items: center;
+  background: rgba(0, 16, 30, 0.78);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 1250;
+}
+
+.dialog {
+  background: #fff;
+  border: 1px solid #c9dcd5;
+  border-radius: 1.25rem;
+  box-shadow: 0 28px 80px rgba(0, 10, 24, 0.5);
+  color: #15241f;
+  max-width: 31rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.header {
+  background:
+    radial-gradient(circle at 92% -50%, rgba(46, 211, 196, 0.24), transparent 48%),
+    linear-gradient(125deg, #062d3d, #0a5f5d);
+  border-bottom: 3px solid #20d8c1;
+  color: #fff;
+  padding: 1.35rem 1.5rem 1.25rem;
+}
+
+.header span {
+  color: #6ee7b7;
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  color: #fff;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(1.3rem, 4vw, 1.75rem);
+  line-height: 1.15;
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.body {
+  padding: 1.35rem 1.5rem;
+}
+
+.body > p:first-child {
+  color: #4b6258;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.error {
+  background: #fff0ed;
+  border: 1px solid #e7b8b0;
+  border-radius: 0.7rem;
+  color: #8d2e24;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.85rem;
+}
+
+.actions {
+  align-items: center;
+  background: #f3f8f6;
+  border-top: 1px solid #d8e5e0;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 1rem 1.5rem 1.25rem;
+}
+
+.actions button {
+  background: #fff;
+  border: 1px solid #b8cdc4;
+  border-radius: 0.75rem;
+  color: #315e50;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 850;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.9rem;
+}
+
+.actions .deleteButton {
+  background: #9b352c;
+  border-color: #9b352c;
+  color: #fff;
+}
+
+.actions button:hover:not(:disabled) {
+  background: #e9f5f0;
+  border-color: #74aa95;
+}
+
+.actions .deleteButton:hover:not(:disabled) {
+  background: #7f271f;
+  border-color: #7f271f;
+}
+
+.actions button:focus-visible {
+  outline: 3px solid rgba(18, 166, 106, 0.34);
+  outline-offset: 2px;
+}
+
+.actions .deleteButton:focus-visible {
+  outline-color: rgba(155, 53, 44, 0.34);
+}
+
+.actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 480px) {
+  .backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .dialog {
+    border-bottom: 0;
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+
+  .header,
+  .body {
+    padding-left: 1.15rem;
+    padding-right: 1.15rem;
+  }
+
+  .actions {
+    padding-left: 1.15rem;
+    padding-right: 1.15rem;
+  }
+}

@@ -1,6 +1,8 @@
-import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import {
+  getCustomerProjectEvidenceBucket as getEvidenceBucket,
+} from "@/lib/customer-project-evidence-bucket";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
@@ -25,12 +27,6 @@ const FACT_KEYS = new Set(
   (customerAdvisorOptions.factKeys as Array<[string, string]>).map(([value]) => value),
 );
 
-type EvidenceBucket = {
-  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
-  get(key: string): Promise<{ body: BodyInit; httpMetadata?: { contentType?: string } } | null>;
-  delete(key: string): Promise<void>;
-};
-
 type EvidenceRecord = {
   id: string;
   project_id: string;
@@ -54,12 +50,6 @@ function json(body: object, status = 200) {
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
-}
-
-function getEvidenceBucket() {
-  const bucket = (env as unknown as { EVIDENCE?: EvidenceBucket }).EVIDENCE;
-  if (!bucket) throw new Error("Project evidence storage is unavailable.");
-  return bucket;
 }
 
 function safeFileName(value: string) {

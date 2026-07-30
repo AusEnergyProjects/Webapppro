@@ -26,6 +26,7 @@ import {
 import {
   prepareCustomerPlanRevisionRestore,
 } from "@/lib/customer-plan-revisions.mjs";
+import { deleteCustomerProjectEvidenceObjects } from "@/lib/customer-project-evidence-bucket";
 import { parseArrivalWindows, selectedArrivalWindow } from "@/lib/customer-project-arrivals.mjs";
 
 export const runtime = "edge";
@@ -87,7 +88,8 @@ function projectShape(
   contactReady: boolean,
   evidenceSharingConsent: boolean,
 ) {
-  const status = String(row.status);
+  const storedStatus = String(row.status);
+  const status = storedStatus === "deleting" ? "draft" : storedStatus;
   const responseCount = Number(progress?.response_count || 0);
   const quoteCount = quotes.length;
   const displayStatus = status === "matching" && quoteCount
@@ -276,7 +278,8 @@ async function projectsForOwner(firebaseUid: string) {
   const account = await db.prepare(`SELECT display_name, email, phone, address_line_1, address_line_2,
     suburb, postcode, address_state FROM customer_accounts WHERE firebase_uid = ?`)
     .bind(firebaseUid).first<Record<string, unknown>>();
-  const rows = await db.prepare("SELECT * FROM customer_projects WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100")
+  const rows = await db.prepare(`SELECT * FROM customer_projects
+    WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100`)
     .bind(firebaseUid).all<Record<string, unknown>>();
   const opportunityIds = rows.results.map((row: Record<string, unknown>) => String(row.opportunity_id || "")).filter(Boolean);
   const projectIds = rows.results.map((row: Record<string, unknown>) => String(row.id));
@@ -489,6 +492,17 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  return customerProjectMutation(request);
+}
+
+export async function DELETE(request: Request) {
+  return customerProjectMutation(request, "delete_draft");
+}
+
+async function customerProjectMutation(
+  request: Request,
+  forcedAction = "",
+) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const user = await identity(request);
   if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
@@ -496,7 +510,11 @@ export async function PATCH(request: Request) {
   let raw: Record<string, unknown>;
   try { raw = await request.json() as Record<string, unknown>; }
   catch { return json({ ok: false, error: "Invalid project update." }, 400); }
-  const action = typeof raw.action === "string" ? raw.action : "update";
+  const requestedAction = typeof raw.action === "string" ? raw.action : "update";
+  const action = forcedAction || requestedAction;
+  if (!forcedAction && action === "delete_draft") {
+    return json({ ok: false, error: "Choose a valid project action." }, 400);
+  }
   const id = cleanId(raw.id);
   if (!id) return json({ ok: false, error: "Choose a valid project." }, 400);
   const db = getD1();
@@ -512,8 +530,210 @@ export async function PATCH(request: Request) {
   const current = await ownedProject(user.uid, id);
   if (!current) return json({ ok: false, error: "Project not found." }, 404);
   const now = new Date().toISOString();
+  if (current.status === "deleting" && action !== "delete_draft") {
+    return json({
+      ok: false,
+      error: "This draft is already being deleted. Wait for that cleanup to finish.",
+    }, 409);
+  }
 
-  if (action === "update") {
+  if (action === "delete_draft") {
+    if (raw.confirmDelete !== true) {
+      return json({
+        ok: false,
+        error: "Confirm that you want to permanently delete this draft.",
+      }, 400);
+    }
+    const resumingDeletion = current.status === "deleting";
+    if (!["draft", "deleting"].includes(String(current.status))) {
+      return json({
+        ok: false,
+        error: "Only a private draft can be permanently deleted. Close or archive an active project instead.",
+      }, 409);
+    }
+    const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
+    const expectedUpdatedAt = typeof raw.expectedUpdatedAt === "string"
+      ? raw.expectedUpdatedAt.trim().slice(0, 40)
+      : "";
+    if (!expectedPlanRevision || !expectedUpdatedAt) {
+      return json({
+        ok: false,
+        error: "Refresh this draft before deleting it.",
+      }, 400);
+    }
+    if (
+      expectedPlanRevision !== Number(current.plan_revision || 1)
+      || expectedUpdatedAt !== String(current.updated_at || "")
+    ) {
+      return json({
+        ok: false,
+        code: "PROJECT_DELETE_CONFLICT",
+        error: "This draft changed after you opened it. Review the latest version before deleting it.",
+      }, 409);
+    }
+    if (current.opportunity_id || current.submitted_at) {
+      return json({
+        ok: false,
+        error: "This project already has enquiry activity and cannot be permanently deleted.",
+      }, 409);
+    }
+    const hasLinkedLifecycle = async () => {
+      const lifecycle = await db.prepare(`SELECT
+        EXISTS (SELECT 1 FROM customer_project_quotes WHERE project_id = ?) linked_quotes,
+        EXISTS (SELECT 1 FROM customer_project_contact_releases WHERE project_id = ?) linked_contact_releases,
+        EXISTS (SELECT 1 FROM customer_project_contact_release_events WHERE project_id = ?) linked_contact_events,
+        EXISTS (SELECT 1 FROM customer_project_arrival_proposals WHERE project_id = ?) linked_arrivals,
+        EXISTS (SELECT 1 FROM customer_project_arrival_events WHERE project_id = ?) linked_arrival_events,
+        EXISTS (SELECT 1 FROM appointment_notification_events WHERE project_id = ?) linked_appointment_events,
+        EXISTS (SELECT 1 FROM trade_handover_packs WHERE customer_project_id = ?) linked_handovers,
+        EXISTS (
+          SELECT 1 FROM trade_opportunities
+          WHERE id = ? OR source_reference = ?
+        ) linked_opportunities`)
+        .bind(
+          id,
+          id,
+          id,
+          id,
+          id,
+          id,
+          id,
+          String(current.opportunity_id || ""),
+          `customer-project:${id}`,
+        )
+        .first<Record<string, unknown>>();
+      return Boolean(
+        lifecycle
+        && Object.values(lifecycle).some((value) => Number(value || 0) > 0),
+      );
+    };
+    if (await hasLinkedLifecycle()) {
+      return json({
+        ok: false,
+        error: "This project is linked to enquiry, appointment or handover activity and cannot be permanently deleted.",
+      }, 409);
+    }
+
+    let deletionLockedAt = expectedUpdatedAt;
+    if (!resumingDeletion) {
+      deletionLockedAt = now === expectedUpdatedAt
+        ? new Date(Date.now() + 1).toISOString()
+        : now;
+      const locked = await db.prepare(`UPDATE customer_projects
+        SET status = 'deleting', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+          AND opportunity_id = '' AND submitted_at = ''
+          AND plan_revision = ? AND updated_at = ?`)
+        .bind(
+          deletionLockedAt,
+          id,
+          user.uid,
+          expectedPlanRevision,
+          expectedUpdatedAt,
+        )
+        .run();
+      if (Number(locked.meta.changes || 0) !== 1) {
+        return json({
+          ok: false,
+          code: "PROJECT_DELETE_CONFLICT",
+          error: "This draft changed after you opened it. Review the latest version before deleting it.",
+        }, 409);
+      }
+    }
+
+    const restoreDeletionLock = async () => {
+      await db.prepare(`UPDATE customer_projects
+        SET status = 'draft', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'deleting'
+          AND plan_revision = ? AND updated_at = ?`)
+        .bind(
+          expectedUpdatedAt,
+          id,
+          user.uid,
+          expectedPlanRevision,
+          deletionLockedAt,
+        )
+        .run();
+    };
+    if (await hasLinkedLifecycle()) {
+      await restoreDeletionLock();
+      return json({
+        ok: false,
+        error: "This project became linked to enquiry, appointment or handover activity and was not deleted.",
+      }, 409);
+    }
+    const evidenceRows = await db.prepare(`SELECT object_key
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ?`)
+      .bind(id, user.uid)
+      .all<Record<string, unknown>>();
+    try {
+      await deleteCustomerProjectEvidenceObjects(
+        evidenceRows.results.map((item) => String(item.object_key || "")),
+      );
+    } catch {
+      await restoreDeletionLock();
+      return json({
+        ok: false,
+        error: "The draft's uploaded files could not be removed. The draft record was kept so you can try again.",
+      }, 503);
+    }
+
+    const ownedLockedDraft = `EXISTS (
+      SELECT 1 FROM customer_projects
+      WHERE id = ? AND firebase_uid = ? AND status = 'deleting'
+        AND opportunity_id = '' AND submitted_at = ''
+        AND plan_revision = ? AND updated_at = ?
+    )`;
+    let deletionResults;
+    try {
+      deletionResults = await db.batch([
+        db.prepare(`DELETE FROM customer_project_evidence_events
+          WHERE project_id = ? AND customer_uid = ? AND ${ownedLockedDraft}`)
+          .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
+        db.prepare(`DELETE FROM customer_project_evidence
+          WHERE project_id = ? AND customer_uid = ? AND ${ownedLockedDraft}`)
+          .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
+        db.prepare(`DELETE FROM customer_project_plan_revisions
+          WHERE project_id = ? AND customer_uid = ? AND ${ownedLockedDraft}`)
+          .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
+        db.prepare(`DELETE FROM customer_project_outcome_checkins
+          WHERE project_id = ? AND customer_uid = ? AND ${ownedLockedDraft}`)
+          .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
+        db.prepare(`DELETE FROM customer_consent_receipts
+          WHERE project_id = ? AND firebase_uid = ? AND ${ownedLockedDraft}`)
+          .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
+        db.prepare(`DELETE FROM customer_projects
+          WHERE id = ? AND firebase_uid = ? AND status = 'deleting'
+            AND opportunity_id = '' AND submitted_at = ''
+            AND plan_revision = ? AND updated_at = ?`)
+          .bind(
+            id,
+            user.uid,
+            expectedPlanRevision,
+            deletionLockedAt,
+          ),
+      ]);
+    } catch {
+      await restoreDeletionLock();
+      return json({
+        ok: false,
+        error: "The draft could not be deleted safely. It was kept so you can try again.",
+      }, 503);
+    }
+    if (
+      Number(
+        deletionResults[deletionResults.length - 1]?.meta.changes || 0,
+      ) !== 1
+    ) {
+      await restoreDeletionLock();
+      return json({
+        ok: false,
+        code: "PROJECT_DELETE_CONFLICT",
+        error: "This draft changed while it was being deleted. Refresh and try again.",
+      }, 409);
+    }
+  } else if (action === "update") {
     if (current.status !== "draft") return json({ ok: false, error: "Submitted projects are locked. Duplicate this project to revise its installer scope." }, 409);
     const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
     const currentPlanRevision = Number(current.plan_revision || 1);
