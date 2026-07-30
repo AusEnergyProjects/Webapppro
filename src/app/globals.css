@@ -3192,6 +3192,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .customer-project-card-actions > button { align-items: center; border-radius: 10px; display: inline-flex; font: inherit; font-size: .7rem; font-weight: 900; justify-content: center; line-height: 1.2; min-height: 44px; padding: 10px 13px; text-decoration: none; }
 .customer-project-card-actions > a,
 .customer-project-card-open { background: #08794c; border: 1px solid #08794c; color: #fff; }
+.customer-project-list > article > footer .customer-project-card-open { color: #fff; }
 .customer-project-card-actions > button,
 .customer-project-card-delete { background: #fff; border: 1px solid #d9a7a2; color: #8b342c; cursor: pointer; }
 .customer-project-card-actions > a:hover,

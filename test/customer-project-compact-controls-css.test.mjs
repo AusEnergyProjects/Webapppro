@@ -49,6 +49,10 @@ test("project cards expose a compact desktop action row and equal mobile control
   );
   assert.match(
     styles,
+    /\.customer-project-list > article > footer \.customer-project-card-open\s*\{[^}]*color:\s*#fff;/s,
+  );
+  assert.match(
+    styles,
     /@media \(max-width:\s*560px\)[\s\S]*?\.customer-project-card-actions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*width:\s*100%;/s,
   );
   assert.match(
