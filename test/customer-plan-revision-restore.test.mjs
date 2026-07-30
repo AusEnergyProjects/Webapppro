@@ -512,6 +512,18 @@ test("submit and progress mutations share the restore concurrency token", () => 
   );
   assert.match(submitBranch, /submitResults\[0\]\?\.meta\.changes/);
   assert.match(submitBranch, /submitResults\[1\]\?\.meta\.changes/);
+  assert.match(
+    submitBranch,
+    /Number\(submitResults\[0\]\?\.meta\.changes \|\| 0\) < 1/,
+  );
+  assert.match(
+    submitBranch,
+    /Number\(submitResults\[1\]\?\.meta\.changes \|\| 0\) < 1/,
+  );
+  assert.doesNotMatch(
+    submitBranch,
+    /Number\(submitResults\[[01]\]\?\.meta\.changes \|\| 0\) !== 1/,
+  );
 
   assert.match(toggleBranch, /cleanPlanRevision\(raw\.expectedPlanRevision\)/);
   assert.match(toggleBranch, /expectedPlanRevision !== currentPlanRevision/);

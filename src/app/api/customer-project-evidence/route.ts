@@ -214,22 +214,6 @@ export async function POST(request: Request) {
     }
     return json({ ok: true, duplicate: true, evidence: publicRecord(existing) });
   }
-  if (captureSlot) {
-    const occupied = await getD1().prepare(`SELECT *
-      FROM customer_project_evidence
-      WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
-        AND status = 'active'`)
-      .bind(projectId, user.uid, captureSlot)
-      .first<EvidenceRecord>();
-    if (occupied) {
-      return json({
-        ok: false,
-        code: "CAPTURE_SLOT_OCCUPIED",
-        error: "This photo prompt already has a saved photo. Choose retake to replace it.",
-        evidence: publicRecord(occupied),
-      }, 409);
-    }
-  }
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   if (!hasAllowedSignature(fileBytes, file.type)) return json({ ok: false, error: "The file contents do not match the selected photo or document type." }, 400);
   const storedBytes = file.type.startsWith("image/")
@@ -374,22 +358,6 @@ export async function POST(request: Request) {
         code: "IDEMPOTENCY_MISMATCH",
         error: "This upload reference was already used for a different file.",
       }, 409);
-    }
-    if (captureSlot) {
-      const occupied = await getD1().prepare(`SELECT *
-        FROM customer_project_evidence
-        WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
-          AND status = 'active'`)
-        .bind(projectId, user.uid, captureSlot)
-        .first<EvidenceRecord>();
-      if (occupied) {
-        return json({
-          ok: false,
-          code: "CAPTURE_SLOT_OCCUPIED",
-          error: "This photo prompt already has a saved photo. Choose retake to replace it.",
-          evidence: publicRecord(occupied),
-        }, 409);
-      }
     }
     throw error;
   }

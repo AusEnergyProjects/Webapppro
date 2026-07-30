@@ -2401,9 +2401,6 @@ export const customerProjectEvidence = sqliteTable("customer_project_evidence", 
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("customer_project_evidence_client_idx").on(table.customerUid, table.projectId, table.clientUploadId),
-  uniqueIndex("customer_project_evidence_capture_slot_idx")
-    .on(table.customerUid, table.projectId, table.captureSlot)
-    .where(sql`${table.status} = 'active' AND ${table.captureSlot} <> ''`),
   index("customer_project_evidence_project_idx").on(table.customerUid, table.projectId, table.status, table.createdAt),
 ]);
 
@@ -2437,9 +2434,6 @@ export const customerProjectEvidenceUploadSessions = sqliteTable("customer_proje
   uniqueIndex("customer_project_evidence_upload_owner_client_idx")
     .on(table.customerUid, table.projectId, table.clientUploadId),
   uniqueIndex("customer_project_evidence_upload_staging_idx").on(table.stagingObjectKey),
-  uniqueIndex("customer_project_evidence_upload_capture_slot_idx")
-    .on(table.customerUid, table.projectId, table.captureSlot)
-    .where(sql`${table.replacementEvidenceId} = '' AND ${table.captureSlot} <> '' AND ${table.status} IN ('initiated','uploading','completing')`),
   uniqueIndex("customer_project_evidence_upload_replacement_idx")
     .on(table.customerUid, table.projectId, table.replacementEvidenceId)
     .where(sql`${table.replacementEvidenceId} <> '' AND ${table.status} IN ('initiated','uploading','completing')`),

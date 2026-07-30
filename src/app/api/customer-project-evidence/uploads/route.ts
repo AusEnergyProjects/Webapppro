@@ -325,30 +325,6 @@ async function initiate(
     }, 400);
   }
 
-  if (!replacement && captureSlot) {
-    const occupied = await getD1().prepare(`SELECT *
-      FROM customer_project_evidence
-      WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
-        AND status = 'active'`)
-      .bind(projectId, user.uid, captureSlot)
-      .first<CustomerEvidenceRecord>();
-    if (
-      occupied
-      && (
-        occupied.client_upload_id !== clientUploadId
-        || occupied.category !== category
-        || occupied.content_type !== contentType
-      )
-    ) {
-      return json({
-        ok: false,
-        code: "CAPTURE_SLOT_OCCUPIED",
-        error: "This photo prompt already has a saved photo. Choose retake to replace it.",
-        evidence: publicCustomerEvidence(occupied),
-      }, 409);
-    }
-  }
-
   const metadata = {
     projectId,
     clientUploadId,
@@ -520,10 +496,27 @@ async function initiate(
         upload: await sessionPayload(raced),
       });
     }
+    if (replacementEvidenceId) {
+      const racedReplacement = await getD1().prepare(`SELECT *
+        FROM customer_project_evidence_upload_sessions
+        WHERE customer_uid = ? AND project_id = ?
+          AND replacement_evidence_id = ?
+          AND status IN ('initiated', 'uploading', 'completing')
+        LIMIT 1`)
+        .bind(user.uid, projectId, replacementEvidenceId)
+        .first<CustomerEvidenceUploadSession>();
+      if (racedReplacement) {
+        return json({
+          ok: false,
+          code: "UPLOAD_ALREADY_IN_PROGRESS",
+          error: "A replacement upload is already in progress for this saved photo. Resume or abandon it before starting another.",
+        }, 409);
+      }
+    }
     return json({
       ok: false,
       code: "UPLOAD_ALREADY_IN_PROGRESS",
-      error: "A photo upload is already in progress for this prompt. Resume or abandon it before starting another.",
+      error: "This photo upload could not be started safely. Choose the photo again.",
     }, 409);
   }
 
@@ -1219,24 +1212,6 @@ async function complete(
     }
     if (evidenceWriteChanged === 1) {
       // The transactional write committed even though the response was lost.
-    } else if (!replacement && session.capture_slot) {
-      const occupied = await getD1().prepare(`SELECT *
-        FROM customer_project_evidence
-        WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
-          AND status = 'active'`)
-        .bind(session.project_id, user.uid, session.capture_slot)
-        .first<CustomerEvidenceRecord>();
-      if (occupied) {
-        await bucket.delete(session.staging_object_key);
-        await markUnusableSession(session, "conflict", "capture_slot_occupied");
-        return json({
-          ok: false,
-          code: "CAPTURE_SLOT_OCCUPIED",
-          error: "This photo prompt already has a saved photo. Choose retake to replace it.",
-          evidence: publicCustomerEvidence(occupied),
-        }, 409);
-      }
-      throw error;
     } else {
       throw error;
     }

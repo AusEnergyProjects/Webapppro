@@ -5,8 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
-const migration = read(
+const resumableMigration = read(
   "../drizzle/0085_customer_evidence_resumable_retake.sql",
+);
+const multiPhotoMigration = read(
+  "../drizzle/0086_customer_evidence_multi_photo_prompts.sql",
 );
 const schema = read("../db/schema.ts");
 const evidenceRoute = read(
@@ -24,11 +27,13 @@ const evidenceBucket = read(
 );
 
 function applyMigration(db) {
-  for (const statement of migration
-    .split("--> statement-breakpoint")
-    .map((item) => item.trim())
-    .filter(Boolean)) {
-    db.exec(statement);
+  for (const migration of [resumableMigration, multiPhotoMigration]) {
+    for (const statement of migration
+      .split("--> statement-breakpoint")
+      .map((item) => item.trim())
+      .filter(Boolean)) {
+      db.exec(statement);
+    }
   }
 }
 
@@ -120,13 +125,29 @@ test("migration preserves evidence while making new evidence private by default"
       WHERE id = 'new-private'`).get().sharing_scope,
     "private-plan",
   );
-  assert.throws(
+  assert.doesNotThrow(
     () => db.exec(`INSERT INTO customer_project_evidence
       (id, project_id, customer_uid, client_upload_id, category, capture_slot,
        file_name, content_type, size_bytes, object_key, created_at, updated_at)
       VALUES ('duplicate-slot', 'project-1', 'owner-1', 'upload-duplicate-slot',
         'property-photo', 'prompt:switchboard', 'switchboard-2.jpg',
         'image/jpeg', 100, 'object/duplicate-slot',
+        '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z')`),
+  );
+  assert.equal(
+    db.prepare(`SELECT COUNT(*) total FROM customer_project_evidence
+      WHERE project_id = 'project-1' AND customer_uid = 'owner-1'
+        AND capture_slot = 'prompt:switchboard' AND status = 'active'`)
+      .get().total,
+    2,
+  );
+  assert.throws(
+    () => db.exec(`INSERT INTO customer_project_evidence
+      (id, project_id, customer_uid, client_upload_id, category, capture_slot,
+       file_name, content_type, size_bytes, object_key, created_at, updated_at)
+      VALUES ('duplicate-client', 'project-1', 'owner-1',
+        'upload-new-private', 'property-photo', 'prompt:roof',
+        'roof.jpg', 'image/jpeg', 100, 'object/duplicate-client',
         '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z')`),
     /UNIQUE constraint failed/,
   );
@@ -139,6 +160,46 @@ test("migration preserves evidence while making new evidence private by default"
       'upload-replacement-slot', 'property-photo', 'prompt:switchboard',
       'switchboard-3.jpg', 'image/jpeg', 100, 'object/replacement-slot',
       '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z')`));
+  assert.doesNotThrow(() => db.exec(`INSERT INTO customer_project_evidence_upload_sessions
+    (id, project_id, customer_uid, client_upload_id, metadata_hash,
+     capture_slot, staging_object_key, upload_id, content_type, size_bytes,
+     category, part_size_bytes, evidence_id, expires_at, created_at, updated_at)
+    VALUES
+      ('same-prompt-1', 'project-1', 'owner-1', 'client-same-prompt-1',
+       'hash-same-prompt-1', 'prompt:roof', 'staging/same-prompt-1',
+       'upload-same-prompt-1', 'image/jpeg', 100, 'property-photo', 5242880,
+       'evidence-same-prompt-1', '2026-07-31T00:00:00.000Z',
+       '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z'),
+      ('same-prompt-2', 'project-1', 'owner-1', 'client-same-prompt-2',
+       'hash-same-prompt-2', 'prompt:roof', 'staging/same-prompt-2',
+       'upload-same-prompt-2', 'image/jpeg', 100, 'property-photo', 5242880,
+       'evidence-same-prompt-2', '2026-07-31T00:00:00.000Z',
+       '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z')`));
+  db.exec(`INSERT INTO customer_project_evidence_upload_sessions
+    (id, project_id, customer_uid, client_upload_id, metadata_hash,
+     capture_slot, replacement_evidence_id, staging_object_key, upload_id,
+     content_type, size_bytes, category, part_size_bytes, evidence_id,
+     expires_at, created_at, updated_at)
+    VALUES ('replacement-1', 'project-1', 'owner-1', 'client-replacement-1',
+      'hash-replacement-1', 'prompt:switchboard', 'replacement-slot',
+      'staging/replacement-1', 'upload-replacement-1', 'image/jpeg', 100,
+      'property-photo', 5242880, 'replacement-slot',
+      '2026-07-31T00:00:00.000Z', '2026-07-30T00:00:00.000Z',
+      '2026-07-30T00:00:00.000Z')`);
+  assert.throws(
+    () => db.exec(`INSERT INTO customer_project_evidence_upload_sessions
+      (id, project_id, customer_uid, client_upload_id, metadata_hash,
+       capture_slot, replacement_evidence_id, staging_object_key, upload_id,
+       content_type, size_bytes, category, part_size_bytes, evidence_id,
+       expires_at, created_at, updated_at)
+      VALUES ('replacement-2', 'project-1', 'owner-1',
+        'client-replacement-2', 'hash-replacement-2', 'prompt:switchboard',
+        'replacement-slot', 'staging/replacement-2', 'upload-replacement-2',
+        'image/jpeg', 100, 'property-photo', 5242880, 'replacement-slot',
+        '2026-07-31T00:00:00.000Z', '2026-07-30T00:00:00.000Z',
+        '2026-07-30T00:00:00.000Z')`),
+    /UNIQUE constraint failed/,
+  );
   db.close();
 });
 
@@ -234,7 +295,8 @@ test("resumable photo storage is owner scoped, bounded and metadata stripped", (
   assert.match(uploadRoute, /resumeMultipartUpload/);
   assert.match(uploadRoute, /metadataHash/);
   assert.match(uploadRoute, /IDEMPOTENCY_MISMATCH/);
-  assert.match(uploadRoute, /CAPTURE_SLOT_OCCUPIED/);
+  assert.doesNotMatch(uploadRoute, /CAPTURE_SLOT_OCCUPIED/);
+  assert.doesNotMatch(evidenceRoute, /CAPTURE_SLOT_OCCUPIED/);
   assert.match(uploadRoute, /EVIDENCE_REVISION_CONFLICT/);
   assert.match(uploadRoute, /expectedEvidenceRevision/);
   assert.match(uploadRoute, /status = 'abandoned'/);
@@ -306,14 +368,22 @@ test("metadata updates, retakes and removals use revision compare and swap", () 
     uploadRoute,
     /AND status = 'active' AND revision = \? AND object_key = \?/,
   );
-  assert.match(schema, /customer_project_evidence_capture_slot_idx/);
+  assert.doesNotMatch(schema, /customer_project_evidence_capture_slot_idx/);
+  assert.doesNotMatch(
+    schema,
+    /customer_project_evidence_upload_capture_slot_idx/,
+  );
   assert.match(schema, /customerProjectEvidenceUploadSessions/);
   assert.match(schema, /customerProjectEvidenceUploadParts/);
 });
 
 test("new customer evidence copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(
-    migration + evidenceRoute + uploadRoute + evidenceContract,
+    resumableMigration
+      + multiPhotoMigration
+      + evidenceRoute
+      + uploadRoute
+      + evidenceContract,
     /\u2013|\u2014/,
   );
 });

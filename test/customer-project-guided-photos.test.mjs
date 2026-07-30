@@ -67,8 +67,9 @@ test("customer meter-box guidance keeps the enclosure closed", () => {
 
 test("capture interface blocks inputs behind explicit safety and privacy checks", () => {
   assert.match(component, /Before opening the camera, confirm all three/);
-  assert.match(component, /const canChoose = ready/);
-  assert.match(component, /disabled=\{!canChoose\}/);
+  assert.match(component, /const canAdd = ready && remainingSlots > 0/);
+  assert.match(component, /disabled=\{!canAdd\}/);
+  assert.match(component, /disabled=\{!ready \|\| replacementLocked\}/);
   assert.match(component, /capture="environment"/);
   assert.match(component, /never enter a roof space or crawl under a home/);
   assert.match(component, /No people, mail, street numbers, number plates, bills, NMI/);
@@ -76,16 +77,31 @@ test("capture interface blocks inputs behind explicit safety and privacy checks"
   assert.match(component, /save privately first/);
 });
 
-test("each guided prompt keeps its pending or saved photo in place", () => {
+test("each guided prompt keeps every pending and saved photo in place", () => {
+  assert.match(component, /function evidenceByCaptureSlot/);
   assert.match(component, /pendingBySlot/);
   assert.match(component, /storedBySlot/);
+  assert.doesNotMatch(
+    component,
+    /new Map\(pendingEvidence\.map\(\(item\) => \[item\.captureSlot, item\]\)\)/,
+  );
+  assert.match(component, /promptStored\.map/);
+  assert.match(component, /pendingAdditions\.map/);
+  assert.match(component, /Add another photo/);
+  assert.match(component, /Choose another photo/);
+  assert.match(component, /photos"} in this section/);
   assert.match(component, /Ready to save with this plan/);
-  assert.match(component, /Saved privately in this photo spot/);
+  assert.match(component, /Saved privately in this photo section/);
   assert.match(component, /Location and camera metadata removed/);
-  assert.match(component, /Retake photo/);
+  assert.match(component, /Retake this photo/);
+  assert.match(component, /Retake selected photo/);
   assert.match(component, /Choose replacement/);
   assert.match(component, /replaceEvidenceId: stored\.id/);
   assert.match(component, /expectedEvidenceRevision: stored\.revision/);
+  assert.match(component, /replacePendingId: pending\.id/);
+  assert.match(componentStyles, /\.photoList\s*\{/);
+  assert.match(componentStyles, /\.photoItem\s*\{/);
+  assert.match(componentStyles, /\.limitNote\s*\{/);
 });
 
 test("saved photos from earlier work selections remain visible and actionable", () => {
@@ -97,10 +113,14 @@ test("saved photos from earlier work selections remain visible and actionable", 
     component,
     /storedEvidence\.filter\([\s\S]*!guideSlots\.has\(item\.captureSlot\)/,
   );
+  assert.match(
+    component,
+    /pendingEvidence\.filter\([\s\S]*!guideSlots\.has\(item\.captureSlot\)/,
+  );
   assert.match(component, /Saved from an earlier selection/);
   assert.match(
     component,
-    /earlierStoredEvidence\.map\(\(stored\)[\s\S]*StoredPhotoPreview[\s\S]*stored\.fileName/,
+    /earlierSlots\.map\(\(captureSlot\)[\s\S]*slotStored\.map\(\(stored, index\)/,
   );
   assert.match(
     component,
@@ -114,7 +134,7 @@ test("saved photos from earlier work selections remain visible and actionable", 
 test("generic other evidence and PDFs are not duplicated in the guided fallback", () => {
   const earlierFilter = component.slice(
     component.indexOf("const earlierStoredEvidence = useMemo"),
-    component.indexOf("\n\n  const choose =", component.indexOf(
+    component.indexOf("\n\n  const chooseNew =", component.indexOf(
       "const earlierStoredEvidence = useMemo",
     )),
   );
@@ -129,6 +149,43 @@ test("generic other evidence and PDFs are not duplicated in the guided fallback"
     /item\.contentType\.startsWith\("image\/"\)/,
   );
   assert.match(earlierFilter, /!guideSlots\.has\(item\.captureSlot\)/);
+});
+
+test("new same-prompt photos append while exact pending replacements stay bounded", () => {
+  const addEvidence = dashboard.slice(
+    dashboard.indexOf("const addEvidence = ("),
+    dashboard.indexOf("const removePendingEvidence"),
+  );
+  assert.match(addEvidence, /replacePendingId/);
+  assert.match(
+    addEvidence,
+    /item\.replaceEvidenceId === preset\.replaceEvidenceId/,
+  );
+  assert.match(
+    addEvidence,
+    /!item\.replaceEvidenceId[\s\S]*item\.id !== replacePendingId/,
+  );
+  assert.match(
+    addEvidence,
+    /item\.id !== replacePendingId/,
+  );
+  assert.doesNotMatch(
+    addEvidence,
+    /item\.captureSlot !== preset\?\.captureSlot/,
+  );
+  assert.match(
+    dashboard,
+    /pendingEvidence\.filter\([\s\S]*\(item\) => !item\.replaceEvidenceId/,
+  );
+});
+
+test("repeated photo controls remain contextual and quota feedback stays adjacent", () => {
+  assert.match(component, /aria-label=\{`Remove \$\{evidence\.fileName\} from \$\{contextLabel\}`\}/);
+  assert.match(component, /aria-label=\{`Retake \$\{contextLabel\}`\}/);
+  assert.match(component, /aria-label=\{`Change selected \$\{contextLabel\}`\}/);
+  assert.match(component, /aria-live="polite"/);
+  assert.match(component, /All 12 file spaces are used/);
+  assert.match(component, /Replace or remove a photo to add/);
 });
 
 test("private draft and sharing saves keep unconfirmed installer files dirty", () => {

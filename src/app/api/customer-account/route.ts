@@ -309,7 +309,10 @@ export async function PATCH(request: Request) {
       confirmSubmittedProjectContactUpdate ? 1 : 0,
     )
     .run();
-  if (Number(updated.meta.changes || 0) !== 1) {
+  // D1 reports sqlite3_total_changes(), which also counts the delete and
+  // insert performed by the customer search-index trigger. A successful
+  // contact update can therefore report more than one changed row.
+  if (Number(updated.meta.changes || 0) < 1) {
     const [latestAccount, latestProject] = await Promise.all([
       db.prepare("SELECT updated_at FROM customer_accounts WHERE firebase_uid = ?")
         .bind(user.uid)

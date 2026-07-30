@@ -10,8 +10,11 @@ import styles from "./CustomerProjectPhotoCapture.module.css";
 export type GuidedPendingEvidence = {
   id: string;
   file: File;
+  category: string;
   captureSlot: string;
+  factKeys: string[];
   replaceEvidenceId?: string;
+  expectedEvidenceRevision?: number;
   uploadProgress?: number;
   uploadStatus?: "queued" | "uploading" | "finalising" | "failed";
   uploadError?: string;
@@ -35,7 +38,19 @@ type EvidencePreset = {
   factKeys: string[];
   replaceEvidenceId?: string;
   expectedEvidenceRevision?: number;
+  replacePendingId?: string;
 };
+
+function evidenceByCaptureSlot<T extends { captureSlot: string }>(items: T[]) {
+  const grouped = new Map<string, T[]>();
+  items.forEach((item) => {
+    if (!item.captureSlot) return;
+    const current = grouped.get(item.captureSlot) || [];
+    current.push(item);
+    grouped.set(item.captureSlot, current);
+  });
+  return grouped;
+}
 
 function PendingPhotoPreview({ file }: { file: File }) {
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
@@ -109,6 +124,102 @@ function StoredPhotoPreview({
   );
 }
 
+function PendingEvidencePreview({
+  pending,
+  replacing,
+  contextLabel,
+  onRemove,
+}: {
+  pending: GuidedPendingEvidence;
+  replacing: boolean;
+  contextLabel: string;
+  onRemove: () => void;
+}) {
+  const uploadLocked = ["uploading", "finalising"].includes(
+    pending.uploadStatus || "",
+  );
+  return (
+    <div
+      className={`${styles.preview} ${styles.pendingPreview}`}
+      role="status"
+      aria-live="polite"
+    >
+      <PendingPhotoPreview file={pending.file} />
+      <span>
+        <strong>
+          {pending.uploadStatus === "uploading"
+            ? `Saving securely ${Math.round(pending.uploadProgress || 0)}%`
+            : pending.uploadStatus === "finalising"
+              ? "Finishing the private save"
+              : pending.uploadStatus === "failed"
+                ? "Save interrupted"
+                : replacing
+                  ? "Replacement ready to save"
+                  : "Ready to save with this plan"}
+        </strong>
+        <small>{pending.file.name}</small>
+        {pending.uploadError ? (
+          <small className={styles.previewError}>
+            {pending.uploadError} Select Save changes to retry.
+          </small>
+        ) : replacing ? (
+          <small>The current saved photo stays in place until this one saves.</small>
+        ) : null}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={uploadLocked}
+        aria-label={`Cancel selected photo for ${contextLabel}`}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function StoredEvidencePreview({
+  evidence,
+  contextLabel,
+  removeDisabled,
+  onLoad,
+  onRemove,
+}: {
+  evidence: GuidedStoredEvidence;
+  contextLabel: string;
+  removeDisabled: boolean;
+  onLoad: (evidence: GuidedStoredEvidence) => Promise<Blob>;
+  onRemove: () => void;
+}) {
+  return (
+    <div className={`${styles.preview} ${styles.savedPreview}`}>
+      <StoredPhotoPreview evidence={evidence} onLoad={onLoad} />
+      <span>
+        <strong>Saved privately in this photo section</strong>
+        <small>{evidence.fileName}</small>
+        <small>
+          {evidence.privacyStatus === "metadata-stripped"
+            ? "Location and camera metadata removed"
+            : "Protected inside your signed-in plan"}
+        </small>
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removeDisabled}
+        title={
+          removeDisabled
+            ? "Cancel the replacement before removing this saved photo"
+            : undefined
+        }
+        aria-label={`Remove ${evidence.fileName} from ${contextLabel}`}
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
 export function CustomerProjectPhotoCapture({
   serviceCategories,
   remainingSlots,
@@ -139,11 +250,11 @@ export function CustomerProjectPhotoCapture({
   });
   const ready = checks.safe && checks.relevant && checks.private;
   const pendingBySlot = useMemo(
-    () => new Map(pendingEvidence.map((item) => [item.captureSlot, item])),
+    () => evidenceByCaptureSlot(pendingEvidence),
     [pendingEvidence],
   );
   const storedBySlot = useMemo(
-    () => new Map(storedEvidence.map((item) => [item.captureSlot, item])),
+    () => evidenceByCaptureSlot(storedEvidence),
     [storedEvidence],
   );
   const guideSlots = useMemo(
@@ -160,28 +271,34 @@ export function CustomerProjectPhotoCapture({
     ),
     [guideSlots, storedEvidence],
   );
+  const earlierPendingEvidence = useMemo(
+    () => pendingEvidence.filter(
+      (item) =>
+        Boolean(item.captureSlot)
+        && !item.captureSlot.startsWith("other:")
+        && item.file.type.startsWith("image/")
+        && !guideSlots.has(item.captureSlot),
+    ),
+    [guideSlots, pendingEvidence],
+  );
+  const earlierSlots = useMemo(
+    () => [...new Set([
+      ...earlierStoredEvidence.map((item) => item.captureSlot),
+      ...earlierPendingEvidence.map((item) => item.captureSlot),
+    ])],
+    [earlierPendingEvidence, earlierStoredEvidence],
+  );
 
-  const choose = (item: CustomerProjectPhotoGuideItem, files: FileList | null) => {
+  const chooseNew = (
+    item: CustomerProjectPhotoGuideItem,
+    files: FileList | null,
+  ) => {
     const file = files?.[0];
-    const pending = pendingBySlot.get(item.id);
-    const stored = storedBySlot.get(item.id);
-    if (
-      !file
-      || !ready
-      || (remainingSlots < 1 && !pending && !stored)
-    ) {
-      return;
-    }
+    if (!file || !ready || remainingSlots < 1) return;
     onAdd([file], {
       category: item.evidenceCategory,
       captureSlot: item.id,
       factKeys: item.factKeys,
-      ...(stored
-        ? {
-            replaceEvidenceId: stored.id,
-            expectedEvidenceRevision: stored.revision,
-          }
-        : {}),
     });
   };
   const chooseStoredReplacement = (
@@ -196,6 +313,27 @@ export function CustomerProjectPhotoCapture({
       factKeys: stored.factKeys,
       replaceEvidenceId: stored.id,
       expectedEvidenceRevision: stored.revision,
+    });
+  };
+  const choosePendingReplacement = (
+    pending: GuidedPendingEvidence,
+    files: FileList | null,
+  ) => {
+    const file = files?.[0];
+    if (
+      !file
+      || !ready
+      || ["uploading", "finalising"].includes(pending.uploadStatus || "")
+    ) {
+      return;
+    }
+    onAdd([file], {
+      category: pending.category,
+      captureSlot: pending.captureSlot,
+      factKeys: pending.factKeys,
+      replaceEvidenceId: pending.replaceEvidenceId,
+      expectedEvidenceRevision: pending.expectedEvidenceRevision,
+      replacePendingId: pending.id,
     });
   };
 
@@ -276,9 +414,16 @@ export function CustomerProjectPhotoCapture({
 
       <div className={styles.cards}>
         {guide.map((item) => {
-          const pending = pendingBySlot.get(item.id);
-          const stored = storedBySlot.get(item.id);
-          const canChoose = ready && (remainingSlots > 0 || Boolean(pending || stored));
+          const promptPending = pendingBySlot.get(item.id) || [];
+          const promptStored = storedBySlot.get(item.id) || [];
+          const storedIds = new Set(promptStored.map((stored) => stored.id));
+          const pendingAdditions = promptPending.filter(
+            (pending) =>
+              !pending.replaceEvidenceId
+              || !storedIds.has(pending.replaceEvidenceId),
+          );
+          const photoCount = promptStored.length + pendingAdditions.length;
+          const canAdd = ready && remainingSlots > 0;
           return (
             <article className={styles.card} key={item.id}>
               <div className={styles.cardTop}>
@@ -301,101 +446,191 @@ export function CustomerProjectPhotoCapture({
                 </div>
               </details>
 
-              {pending ? (
-                <div
-                  className={`${styles.preview} ${styles.pendingPreview}`}
-                  role="status"
-                >
-                  <PendingPhotoPreview file={pending.file} />
-                  <span>
-                    <strong>
-                      {pending.uploadStatus === "uploading"
-                        ? `Saving securely ${Math.round(pending.uploadProgress || 0)}%`
-                        : pending.uploadStatus === "finalising"
-                          ? "Finishing the private save"
-                          : pending.uploadStatus === "failed"
-                            ? "Save interrupted"
-                            : stored
-                              ? "Replacement ready to save"
-                              : "Ready to save with this plan"}
-                    </strong>
-                    <small>{pending.file.name}</small>
-                    {pending.uploadError && (
-                      <small className={styles.previewError}>
-                        {pending.uploadError} Select Save changes to retry.
-                      </small>
-                    )}
-                    {!pending.uploadError && stored && (
-                      <small>The current saved photo stays in place until this one saves.</small>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemovePending(pending.id)}
-                    disabled={["uploading", "finalising"].includes(
+              {photoCount > 0 && (
+                <>
+                  <p className={styles.photoCount}>
+                    {photoCount} {photoCount === 1 ? "photo" : "photos"} in this section
+                  </p>
+                  <div
+                    className={styles.photoList}
+                    role="list"
+                    aria-label={`Photos for ${item.label}`}
+                  >
+                    {promptStored.map((stored, index) => {
+                    const replacement = promptPending.find(
+                      (pending) => pending.replaceEvidenceId === stored.id,
+                    );
+                    const replacementLocked = replacement
+                      ? ["uploading", "finalising"].includes(
+                          replacement.uploadStatus || "",
+                        )
+                      : false;
+                    const contextLabel = `${item.label}, photo ${index + 1}`;
+                    return (
+                      <div
+                        className={styles.photoItem}
+                        role="listitem"
+                        key={stored.id}
+                      >
+                        <StoredEvidencePreview
+                          evidence={stored}
+                          contextLabel={contextLabel}
+                          removeDisabled={Boolean(replacement)}
+                          onLoad={onLoadStoredPreview}
+                          onRemove={() => onRemoveStored(stored)}
+                        />
+                        {replacement && (
+                          <PendingEvidencePreview
+                            pending={replacement}
+                            replacing
+                            contextLabel={contextLabel}
+                            onRemove={() => onRemovePending(replacement.id)}
+                          />
+                        )}
+                        <div className={styles.actions}>
+                          <label
+                            aria-disabled={!ready || replacementLocked}
+                            aria-label={`Retake ${contextLabel}`}
+                          >
+                            Retake this photo
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              capture="environment"
+                              disabled={!ready || replacementLocked}
+                              onChange={(event) => {
+                                chooseStoredReplacement(stored, event.target.files);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <label
+                            aria-disabled={!ready || replacementLocked}
+                            aria-label={`Choose a replacement for ${contextLabel}`}
+                          >
+                            Choose replacement
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              disabled={!ready || replacementLocked}
+                              onChange={(event) => {
+                                chooseStoredReplacement(stored, event.target.files);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                    })}
+                    {pendingAdditions.map((pending, index) => {
+                    const pendingLocked = ["uploading", "finalising"].includes(
                       pending.uploadStatus || "",
-                    )}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : stored ? (
-                <div className={`${styles.preview} ${styles.savedPreview}`}>
-                  <StoredPhotoPreview
-                    evidence={stored}
-                    onLoad={onLoadStoredPreview}
-                  />
-                  <span>
-                    <strong>Saved privately in this photo spot</strong>
-                    <small>{stored.fileName}</small>
-                    <small>
-                      {stored.privacyStatus === "metadata-stripped"
-                        ? "Location and camera metadata removed"
-                        : "Protected inside your signed-in plan"}
-                    </small>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveStored(stored)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ) : null}
+                    );
+                    const contextLabel = `${item.label}, photo ${
+                      promptStored.length + index + 1
+                    }`;
+                    return (
+                      <div
+                        className={styles.photoItem}
+                        role="listitem"
+                        key={pending.id}
+                      >
+                        <PendingEvidencePreview
+                          pending={pending}
+                          replacing={Boolean(pending.replaceEvidenceId)}
+                          contextLabel={contextLabel}
+                          onRemove={() => onRemovePending(pending.id)}
+                        />
+                        <div className={styles.actions}>
+                          <label
+                            aria-disabled={!ready || pendingLocked}
+                            aria-label={`Retake selected ${contextLabel}`}
+                          >
+                            Retake selected photo
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              capture="environment"
+                              disabled={!ready || pendingLocked}
+                              onChange={(event) => {
+                                choosePendingReplacement(pending, event.target.files);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <label
+                            aria-disabled={!ready || pendingLocked}
+                            aria-label={`Change selected ${contextLabel}`}
+                          >
+                            Choose replacement
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              disabled={!ready || pendingLocked}
+                              onChange={(event) => {
+                                choosePendingReplacement(pending, event.target.files);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                    })}
+                  </div>
+                </>
+              )}
 
               <div className={styles.actions}>
-                <label aria-disabled={!canChoose}>
-                  {pending || stored ? "Retake photo" : "Take photo"}
+                <label
+                  aria-disabled={!canAdd}
+                  aria-label={`${
+                    photoCount ? "Add another photo to" : "Take a photo for"
+                  } ${item.label}`}
+                >
+                  {photoCount ? "Add another photo" : "Take photo"}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     capture="environment"
-                    disabled={!canChoose}
+                    disabled={!canAdd}
                     onChange={(event) => {
-                      choose(item, event.target.files);
+                      chooseNew(item, event.target.files);
                       event.target.value = "";
                     }}
                   />
                 </label>
-                <label aria-disabled={!canChoose}>
-                  {pending || stored ? "Choose replacement" : "Choose existing"}
+                <label
+                  aria-disabled={!canAdd}
+                  aria-label={`${
+                    photoCount ? "Choose another photo for" : "Choose a photo for"
+                  } ${item.label}`}
+                >
+                  {photoCount ? "Choose another photo" : "Choose existing"}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    disabled={!canChoose}
+                    disabled={!canAdd}
                     onChange={(event) => {
-                      choose(item, event.target.files);
+                      chooseNew(item, event.target.files);
                       event.target.value = "";
                     }}
                   />
                 </label>
               </div>
+              {ready && remainingSlots < 1 && (
+                <p className={styles.limitNote} role="status">
+                  All 12 file spaces are used. Replace or remove a photo to add
+                  another.
+                </p>
+              )}
             </article>
           );
         })}
       </div>
 
-      {earlierStoredEvidence.length > 0 && (
+      {earlierSlots.length > 0 && (
         <section
           className={styles.earlierSelection}
           aria-labelledby="earlier-selection-title"
@@ -413,106 +648,167 @@ export function CustomerProjectPhotoCapture({
             </p>
           </div>
           <div className={styles.earlierSelectionList}>
-            {earlierStoredEvidence.map((stored) => {
-              const pending = pendingBySlot.get(stored.captureSlot);
+            {earlierSlots.map((captureSlot) => {
+              const slotStored = earlierStoredEvidence.filter(
+                (stored) => stored.captureSlot === captureSlot,
+              );
+              const slotPending = earlierPendingEvidence.filter(
+                (pending) => pending.captureSlot === captureSlot,
+              );
+              const storedIds = new Set(slotStored.map((stored) => stored.id));
+              const pendingAdditions = slotPending.filter(
+                (pending) =>
+                  !pending.replaceEvidenceId
+                  || !storedIds.has(pending.replaceEvidenceId),
+              );
+              const photoCount = slotStored.length + pendingAdditions.length;
               return (
-                <article className={styles.earlierSelectionItem} key={stored.id}>
-                  <div className={`${styles.preview} ${styles.savedPreview}`}>
-                    <StoredPhotoPreview
-                      evidence={stored}
-                      onLoad={onLoadStoredPreview}
-                    />
-                    <span>
-                      <strong>Saved privately with this plan</strong>
-                      <small>{stored.fileName}</small>
-                      <small>
-                        {stored.privacyStatus === "metadata-stripped"
-                          ? "Location and camera metadata removed"
-                          : "Protected inside your signed-in plan"}
-                      </small>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveStored(stored)}
-                      disabled={Boolean(pending)}
-                      title={
-                        pending
-                          ? "Cancel the replacement before removing this saved photo"
-                          : undefined
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  {pending && (
-                    <div
-                      className={`${styles.preview} ${styles.pendingPreview}`}
-                      role="status"
-                    >
-                      <PendingPhotoPreview file={pending.file} />
-                      <span>
-                        <strong>
-                          {pending.uploadStatus === "uploading"
-                            ? `Saving replacement ${Math.round(
-                                pending.uploadProgress || 0,
-                              )}%`
-                            : pending.uploadStatus === "finalising"
-                              ? "Finishing the private save"
-                              : pending.uploadStatus === "failed"
-                                ? "Save interrupted"
-                                : "Replacement ready to save"}
-                        </strong>
-                        <small>{pending.file.name}</small>
-                        {pending.uploadError ? (
-                          <small className={styles.previewError}>
-                            {pending.uploadError} Select Save changes to retry.
-                          </small>
-                        ) : (
-                          <small>
-                            The current saved photo stays in place until this one
-                            saves.
-                          </small>
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onRemovePending(pending.id)}
-                        disabled={["uploading", "finalising"].includes(
-                          pending.uploadStatus || "",
-                        )}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-
-                  <div className={styles.actions}>
-                    <label aria-disabled={!ready}>
-                      Retake photo
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        capture="environment"
-                        disabled={!ready}
-                        onChange={(event) => {
-                          chooseStoredReplacement(stored, event.target.files);
-                          event.target.value = "";
-                        }}
-                      />
-                    </label>
-                    <label aria-disabled={!ready}>
-                      Choose replacement
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={!ready}
-                        onChange={(event) => {
-                          chooseStoredReplacement(stored, event.target.files);
-                          event.target.value = "";
-                        }}
-                      />
-                    </label>
+                <article
+                  className={styles.earlierSelectionItem}
+                  key={captureSlot}
+                  aria-label={`${photoCount} ${
+                    photoCount === 1 ? "photo" : "photos"
+                  } from an earlier selection`}
+                >
+                  <p className={styles.photoCount}>
+                    {photoCount} {photoCount === 1 ? "photo" : "photos"} in this
+                    saved section
+                  </p>
+                  <div className={styles.photoList} role="list">
+                    {slotStored.map((stored, index) => {
+                      const replacement = slotPending.find(
+                        (pending) => pending.replaceEvidenceId === stored.id,
+                      );
+                      const replacementLocked = replacement
+                        ? ["uploading", "finalising"].includes(
+                            replacement.uploadStatus || "",
+                          )
+                        : false;
+                      const contextLabel = `earlier selection, photo ${index + 1}`;
+                      return (
+                        <div
+                          className={styles.photoItem}
+                          role="listitem"
+                          key={stored.id}
+                        >
+                          <StoredEvidencePreview
+                            evidence={stored}
+                            contextLabel={contextLabel}
+                            removeDisabled={Boolean(replacement)}
+                            onLoad={onLoadStoredPreview}
+                            onRemove={() => onRemoveStored(stored)}
+                          />
+                          {replacement && (
+                            <PendingEvidencePreview
+                              pending={replacement}
+                              replacing
+                              contextLabel={contextLabel}
+                              onRemove={() => onRemovePending(replacement.id)}
+                            />
+                          )}
+                          <div className={styles.actions}>
+                            <label
+                              aria-disabled={!ready || replacementLocked}
+                              aria-label={`Retake ${contextLabel}`}
+                            >
+                              Retake this photo
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                capture="environment"
+                                disabled={!ready || replacementLocked}
+                                onChange={(event) => {
+                                  chooseStoredReplacement(
+                                    stored,
+                                    event.target.files,
+                                  );
+                                  event.target.value = "";
+                                }}
+                              />
+                            </label>
+                            <label
+                              aria-disabled={!ready || replacementLocked}
+                              aria-label={`Choose a replacement for ${contextLabel}`}
+                            >
+                              Choose replacement
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                disabled={!ready || replacementLocked}
+                                onChange={(event) => {
+                                  chooseStoredReplacement(
+                                    stored,
+                                    event.target.files,
+                                  );
+                                  event.target.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {pendingAdditions.map((pending, index) => {
+                      const pendingLocked = ["uploading", "finalising"].includes(
+                        pending.uploadStatus || "",
+                      );
+                      const contextLabel = `earlier selection, photo ${
+                        slotStored.length + index + 1
+                      }`;
+                      return (
+                        <div
+                          className={styles.photoItem}
+                          role="listitem"
+                          key={pending.id}
+                        >
+                          <PendingEvidencePreview
+                            pending={pending}
+                            replacing={Boolean(pending.replaceEvidenceId)}
+                            contextLabel={contextLabel}
+                            onRemove={() => onRemovePending(pending.id)}
+                          />
+                          <div className={styles.actions}>
+                            <label
+                              aria-disabled={!ready || pendingLocked}
+                              aria-label={`Retake selected ${contextLabel}`}
+                            >
+                              Retake selected photo
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                capture="environment"
+                                disabled={!ready || pendingLocked}
+                                onChange={(event) => {
+                                  choosePendingReplacement(
+                                    pending,
+                                    event.target.files,
+                                  );
+                                  event.target.value = "";
+                                }}
+                              />
+                            </label>
+                            <label
+                              aria-disabled={!ready || pendingLocked}
+                              aria-label={`Change selected ${contextLabel}`}
+                            >
+                              Choose replacement
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                disabled={!ready || pendingLocked}
+                                onChange={(event) => {
+                                  choosePendingReplacement(
+                                    pending,
+                                    event.target.files,
+                                  );
+                                  event.target.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </article>
               );

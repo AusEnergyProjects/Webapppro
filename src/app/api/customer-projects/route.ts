@@ -1242,8 +1242,8 @@ async function customerProjectMutation(
     }
     const submitResults = await db.batch(submitStatements);
     if (
-      Number(submitResults[0]?.meta.changes || 0) !== 1
-      || Number(submitResults[1]?.meta.changes || 0) !== 1
+      Number(submitResults[0]?.meta.changes || 0) < 1
+      || Number(submitResults[1]?.meta.changes || 0) < 1
     ) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
     }

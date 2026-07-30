@@ -228,6 +228,38 @@
   outline-offset: 3px;
 }
 
+.photoList {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.photoCount {
+  color: #315f57;
+  font-size: 0.76rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.photoItem {
+  background: #f8fcfb;
+  border: 1px solid #d9e9e5;
+  border-radius: 0.95rem;
+  padding: 0.65rem;
+}
+
+.photoItem .preview {
+  margin-top: 0;
+}
+
+.photoItem .preview + .preview {
+  margin-top: 0.5rem;
+}
+
+.photoItem .actions {
+  margin-top: 0.55rem;
+}
+
 .preview {
   align-items: center;
   background: #e7fbf5;
@@ -306,6 +338,17 @@
   white-space: normal !important;
 }
 
+.limitNote {
+  background: #fff7e3;
+  border: 1px solid #efd18b;
+  border-radius: 0.75rem;
+  color: #6e4b06;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin: 0.55rem 0 0;
+  padding: 0.6rem 0.7rem;
+}
+
 .earlierSelection {
   background: #f4f9f8;
   border: 1px solid #c9dfda;
@@ -359,16 +402,8 @@
   padding: 0.65rem;
 }
 
-.earlierSelectionItem .preview {
-  margin-top: 0;
-}
-
-.earlierSelectionItem .preview + .preview {
-  margin-top: 0.5rem;
-}
-
-.earlierSelectionItem .actions {
-  margin-top: 0.55rem;
+.earlierSelectionItem > .photoCount {
+  margin-bottom: 0.55rem;
 }
 
 @media (max-width: 760px) {

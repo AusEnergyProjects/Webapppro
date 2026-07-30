@@ -1550,24 +1550,33 @@ function ProjectEditor({
       | "factKeys"
       | "replaceEvidenceId"
       | "expectedEvidenceRevision"
-    >,
+    > & { replacePendingId?: string },
   ) => {
     if (!files?.length) return;
     const incoming = Array.from(files);
-    const replacingPendingSlot = preset?.captureSlot
-      && pendingEvidence.some((item) => item.captureSlot === preset.captureSlot);
+    const replacePendingId =
+      preset?.replacePendingId
+      || (
+        preset?.replaceEvidenceId
+          ? pendingEvidence.find(
+              (item) => item.replaceEvidenceId === preset.replaceEvidenceId,
+            )?.id
+          : ""
+      );
     const availableSlots = Math.max(
       0,
       12
         - storedEvidenceCount
         - pendingEvidence.filter(
-          (item) => item.captureSlot !== preset?.captureSlot,
+          (item) =>
+            !item.replaceEvidenceId
+            && item.id !== replacePendingId,
         ).length,
     );
     const next = incoming
       .slice(
         0,
-        preset?.replaceEvidenceId || replacingPendingSlot
+        preset?.replaceEvidenceId || replacePendingId
           ? 1
           : availableSlots,
       )
@@ -1595,7 +1604,7 @@ function ProjectEditor({
       });
     setPendingEvidence((current) => [
       ...current.filter(
-        (item) => !preset?.captureSlot || item.captureSlot !== preset.captureSlot,
+        (item) => item.id !== replacePendingId,
       ),
       ...next,
     ]);

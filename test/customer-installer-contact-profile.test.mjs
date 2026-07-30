@@ -122,7 +122,19 @@ test("profile contact update uses revision CAS and changes only contact and deri
     postcode text NOT NULL,
     address_state text NOT NULL,
     status text NOT NULL
-  );`);
+  );
+  CREATE TABLE customer_search (
+    entity_id text PRIMARY KEY NOT NULL,
+    postcode text NOT NULL,
+    state text NOT NULL
+  );
+  CREATE TRIGGER customer_search_update
+  AFTER UPDATE OF postcode, address_state ON customer_accounts
+  BEGIN
+    DELETE FROM customer_search WHERE entity_id = old.firebase_uid;
+    INSERT INTO customer_search(entity_id, postcode, state)
+    VALUES (new.firebase_uid, new.postcode, new.address_state);
+  END;`);
   const originalUpdatedAt = "2026-07-30T00:00:00.000Z";
   db.prepare(`INSERT INTO customer_accounts VALUES
     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -147,8 +159,11 @@ test("profile contact update uses revision CAS and changes only contact and deri
     );
   db.prepare("INSERT INTO customer_projects VALUES (?, ?, ?, ?, ?)")
     .run("project-1", "owner-1", "3000", "VIC", "draft");
+  db.prepare("INSERT INTO customer_search VALUES (?, ?, ?)")
+    .run("owner-1", "2000", "NSW");
 
   const nextUpdatedAt = "2026-07-30T00:00:01.000Z";
+  const totalChangesBefore = db.prepare("SELECT total_changes() total").get().total;
   const changed = db.prepare(updateSql).run(
     "0400 000 000",
     "12 Example Street",
@@ -163,7 +178,13 @@ test("profile contact update uses revision CAS and changes only contact and deri
     "owner-1",
     0,
   );
+  const totalChangesAfter = db.prepare("SELECT total_changes() total").get().total;
   assert.equal(changed.changes, 1);
+  assert.equal(
+    totalChangesAfter - totalChangesBefore,
+    3,
+    "D1 includes the search trigger delete and insert in meta.changes",
+  );
   assert.deepEqual(
     {
       ...db.prepare(`SELECT phone, address_line_1, address_line_2, suburb,
@@ -286,7 +307,11 @@ test("revision conflicts are structured and successful responses return the full
     /expectedUpdatedAt !== String\(account\.updated_at \|\| ""\)/,
   );
   assert.match(route, /code: "PROFILE_REVISION_CONFLICT"/);
-  assert.match(patchRoute, /Number\(updated\.meta\.changes \|\| 0\) !== 1/);
+  assert.match(patchRoute, /Number\(updated\.meta\.changes \|\| 0\) < 1/);
+  assert.doesNotMatch(
+    patchRoute,
+    /Number\(updated\.meta\.changes \|\| 0\) !== 1/,
+  );
   for (const key of [
     "displayName",
     "phone",
