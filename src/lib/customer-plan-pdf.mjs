@@ -23,9 +23,12 @@ import {
 import {
   customerPlanReportLayout,
 } from "./customer-plan-report-design.mjs";
+import {
+  createCustomerPlanPdfTagger,
+} from "./customer-plan-pdf-tags.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-30-tech-presentation-pdf-v2";
+  "2026-07-30-tagged-plan-pdf-v3";
 
 const [PAGE_WIDTH, PAGE_HEIGHT] = PageSizes.A4;
 const MARGIN = 44;
@@ -365,6 +368,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     .filter((action) => action.completed)
     .length;
   const pdf = await PDFDocument.create();
+  const pdfTags = createCustomerPlanPdfTagger(pdf);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const brandmark = await pdf.embedPng(AEA_BRANDMARK_PNG_DATA_URI);
@@ -526,7 +530,10 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     }
   }
 
-  pdf.setTitle(normalizedText(report.heading, 180));
+  pdf.setLanguage("en-AU");
+  pdf.setTitle(normalizedText(report.heading, 180), {
+    showInWindowTitleBar: true,
+  });
   pdf.setAuthor("Australian Energy Assessments");
   pdf.setSubject("Independent home energy planning roadmap");
   pdf.setCreator("Australian Energy Assessments");
@@ -544,79 +551,101 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     pdf.setModificationDate(metadataDate);
   }
 
-  function addLinkAnnotation({ x, y: linkY, width, height, href }) {
+  function addLinkAnnotation({
+    x,
+    y: linkY,
+    width,
+    height,
+    href,
+    label = "",
+    structure = null,
+  }) {
     const safeHref = absoluteGuideHref(href);
-    if (!safeHref || width <= 0 || height <= 0) return;
-    const annotation = pdf.context.register(pdf.context.obj({
+    if (!safeHref || width <= 0 || height <= 0) return null;
+    const annotation = pdf.context.obj({
       Type: PDFName.of("Annot"),
       Subtype: PDFName.of("Link"),
       Rect: [x, linkY, x + width, linkY + height],
       Border: [0, 0, 0],
+      Contents: PDFString.of(normalizedText(label, 180)),
       A: {
         Type: PDFName.of("Action"),
         S: PDFName.of("URI"),
         URI: PDFString.of(safeHref),
       },
-    }));
-    page.node.addAnnot(annotation);
+    });
+    const annotationRef = pdf.context.register(annotation);
+    page.node.addAnnot(annotationRef);
+    if (structure) {
+      pdfTags.associateAnnotation(
+        page,
+        structure,
+        annotation,
+        annotationRef,
+      );
+    }
+    return annotationRef;
   }
 
   function addContentPage(section = "") {
     pageSection = normalizedText(section, 80);
     page = pdf.addPage(PageSizes.A4);
     pages.push(page);
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_WIDTH,
-      height: PAGE_HEIGHT,
-      color: palette.canvas,
-    });
-    drawHorizontalGradient(page, {
-      x: 0,
-      gradientY: PAGE_HEIGHT - 60,
-      width: PAGE_WIDTH,
-      height: 60,
-      from: gradients.header.from,
-      to: gradients.header.to,
-      steps: 34,
-    });
-    page.drawCircle({
-      x: PAGE_WIDTH - 38,
-      y: PAGE_HEIGHT - 4,
-      size: 82,
-      color: palette.electricBlue,
-      opacity: 0.13,
-    });
-    page.drawRectangle({
-      x: 0,
-      y: PAGE_HEIGHT - 64,
-      width: PAGE_WIDTH,
-      height: 4,
-      color: palette.teal,
-    });
-    drawBrandLockup({
-      x: MARGIN,
-      lockupY: PAGE_HEIGHT - 47,
-      compact: true,
-    });
-    if (pageSection) {
-      const safeSection = fontSafeText(
-        pageSection.toUpperCase(),
-        bold,
-        supportedCharacters.get(bold),
-      );
-      page.drawText(`SECTION | ${safeSection}`, {
-        x: PAGE_WIDTH
-          - MARGIN
-          - bold.widthOfTextAtSize(`SECTION | ${safeSection}`, 7),
-        y: PAGE_HEIGHT - 29,
-        size: 7,
-        font: bold,
-        color: palette.aqua,
-        characterSpacing: 0.55,
+    pdfTags.registerPage(page);
+    pdfTags.artifact(page, () => {
+      page.drawRectangle({
+        x: 0,
+        y: 0,
+        width: PAGE_WIDTH,
+        height: PAGE_HEIGHT,
+        color: palette.canvas,
       });
-    }
+      drawHorizontalGradient(page, {
+        x: 0,
+        gradientY: PAGE_HEIGHT - 60,
+        width: PAGE_WIDTH,
+        height: 60,
+        from: gradients.header.from,
+        to: gradients.header.to,
+        steps: 34,
+      });
+      page.drawCircle({
+        x: PAGE_WIDTH - 38,
+        y: PAGE_HEIGHT - 4,
+        size: 82,
+        color: palette.electricBlue,
+        opacity: 0.13,
+      });
+      page.drawRectangle({
+        x: 0,
+        y: PAGE_HEIGHT - 64,
+        width: PAGE_WIDTH,
+        height: 4,
+        color: palette.teal,
+      });
+      drawBrandLockup({
+        x: MARGIN,
+        lockupY: PAGE_HEIGHT - 47,
+        compact: true,
+      });
+      if (pageSection) {
+        const safeSection = fontSafeText(
+          pageSection.toUpperCase(),
+          bold,
+          supportedCharacters.get(bold),
+        );
+        page.drawText(`SECTION | ${safeSection}`, {
+          x: PAGE_WIDTH
+            - MARGIN
+            - bold.widthOfTextAtSize(`SECTION | ${safeSection}`, 7),
+          y: PAGE_HEIGHT - 29,
+          size: 7,
+          font: bold,
+          color: palette.aqua,
+          characterSpacing: 0.55,
+        });
+      }
+    });
     y = PAGE_HEIGHT - 89;
   }
 
@@ -624,54 +653,57 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     pageSection = "";
     page = pdf.addPage(PageSizes.A4);
     pages.push(page);
-    drawHorizontalGradient(page, {
-      x: 0,
-      gradientY: 0,
-      width: PAGE_WIDTH,
-      height: PAGE_HEIGHT,
-      from: gradients.hero.from,
-      to: gradients.hero.to,
-      steps: 56,
-    });
-    page.drawCircle({
-      x: PAGE_WIDTH - 34,
-      y: PAGE_HEIGHT - 92,
-      size: 178,
-      color: palette.electricBlue,
-      opacity: 0.12,
-    });
-    page.drawCircle({
-      x: PAGE_WIDTH - 112,
-      y: PAGE_HEIGHT - 160,
-      size: 112,
-      color: palette.teal,
-      opacity: 0.09,
-    });
-    page.drawCircle({
-      x: 30,
-      y: 28,
-      size: 138,
-      color: palette.oceanBlue,
-      opacity: 0.13,
-    });
-    page.drawLine({
-      start: { x: PAGE_WIDTH - 250, y: PAGE_HEIGHT },
-      end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 250 },
-      thickness: 1,
-      color: palette.aqua,
-      opacity: 0.22,
-    });
-    page.drawLine({
-      start: { x: PAGE_WIDTH - 186, y: PAGE_HEIGHT },
-      end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 186 },
-      thickness: 4,
-      color: palette.electricBlue,
-      opacity: 0.13,
-    });
-    drawBrandLockup({
-      x: MARGIN,
-      lockupY: PAGE_HEIGHT - 92,
-      date: report.displayDate || preparedDate,
+    pdfTags.registerPage(page);
+    pdfTags.artifact(page, () => {
+      drawHorizontalGradient(page, {
+        x: 0,
+        gradientY: 0,
+        width: PAGE_WIDTH,
+        height: PAGE_HEIGHT,
+        from: gradients.hero.from,
+        to: gradients.hero.to,
+        steps: 56,
+      });
+      page.drawCircle({
+        x: PAGE_WIDTH - 34,
+        y: PAGE_HEIGHT - 92,
+        size: 178,
+        color: palette.electricBlue,
+        opacity: 0.12,
+      });
+      page.drawCircle({
+        x: PAGE_WIDTH - 112,
+        y: PAGE_HEIGHT - 160,
+        size: 112,
+        color: palette.teal,
+        opacity: 0.09,
+      });
+      page.drawCircle({
+        x: 30,
+        y: 28,
+        size: 138,
+        color: palette.oceanBlue,
+        opacity: 0.13,
+      });
+      page.drawLine({
+        start: { x: PAGE_WIDTH - 250, y: PAGE_HEIGHT },
+        end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 250 },
+        thickness: 1,
+        color: palette.aqua,
+        opacity: 0.22,
+      });
+      page.drawLine({
+        start: { x: PAGE_WIDTH - 186, y: PAGE_HEIGHT },
+        end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 186 },
+        thickness: 4,
+        color: palette.electricBlue,
+        opacity: 0.13,
+      });
+      drawBrandLockup({
+        x: MARGIN,
+        lockupY: PAGE_HEIGHT - 92,
+        date: report.displayDate || preparedDate,
+      });
     });
 
     const eyebrowLines = linesFor(
@@ -684,9 +716,17 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         color: palette.teal,
       },
     );
-    drawLines(eyebrowLines, {
-      startY: PAGE_HEIGHT - 151,
-      characterSpacing: 0.9,
+    pdfTags.beginSection(
+      copy.heroTitle || "Your home energy roadmap",
+    );
+    pdfTags.mark(page, "P", () => {
+      drawLines(eyebrowLines, {
+        startY: PAGE_HEIGHT - 151,
+        characterSpacing: 0.9,
+      });
+    }, {
+      actualText: copy.heroEyebrow
+        || "Your personalised home energy plan",
     });
     const titleLines = linesFor(
       copy.heroTitle || "Your home energy roadmap",
@@ -698,8 +738,13 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         color: palette.white,
       },
     ).slice(0, 3);
-    const titleBottom = drawLines(titleLines, {
-      startY: PAGE_HEIGHT - 182,
+    let titleBottom = PAGE_HEIGHT - 182;
+    pdfTags.mark(page, "H1", () => {
+      titleBottom = drawLines(titleLines, {
+        startY: PAGE_HEIGHT - 182,
+      });
+    }, {
+      actualText: copy.heroTitle || "Your home energy roadmap",
     });
     const planTitleLines = linesFor(report.planTitle, {
       font: bold,
@@ -708,8 +753,13 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       lineHeight: 23,
       color: palette.aqua,
     }).slice(0, 2);
-    const planTitleBottom = drawLines(planTitleLines, {
-      startY: titleBottom - 12,
+    let planTitleBottom = titleBottom - 12;
+    pdfTags.mark(page, "H2", () => {
+      planTitleBottom = drawLines(planTitleLines, {
+        startY: titleBottom - 12,
+      });
+    }, {
+      actualText: report.planTitle,
     });
     const summaryLines = linesFor(report.summary, {
       font: regular,
@@ -718,56 +768,66 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       lineHeight: 16.5,
       color: palette.heroBody,
     }).slice(0, 4);
-    drawLines(summaryLines, {
-      startY: planTitleBottom - 8,
+    pdfTags.mark(page, "P", () => {
+      drawLines(summaryLines, {
+        startY: planTitleBottom - 8,
+      });
+    }, {
+      actualText: report.summary,
     });
 
-    page.drawLine({
-      start: { x: MARGIN, y: 303 },
-      end: { x: PAGE_WIDTH - MARGIN, y: 303 },
-      thickness: 1.2,
-      color: palette.aqua,
-      opacity: 0.48,
-    });
-    const route = [
-      ["01", "UNDERSTAND"],
-      ["02", "PRIORITISE"],
-      ["03", "TAKE ACTION"],
-    ];
-    route.forEach(([number, label], index) => {
-      const routeX = MARGIN + (index * ((CONTENT_WIDTH - 22) / 3));
-      page.drawCircle({
-        x: routeX + 9,
-        y: 303,
-        size: 9,
-        color: index === 0 ? palette.teal : palette.oceanBlue,
-        borderColor: palette.aqua,
-        borderWidth: 0.8,
+    pdfTags.artifact(page, () => {
+      page.drawLine({
+        start: { x: MARGIN, y: 303 },
+        end: { x: PAGE_WIDTH - MARGIN, y: 303 },
+        thickness: 1.2,
+        color: palette.aqua,
+        opacity: 0.48,
       });
-      page.drawText(number, {
-        x: routeX + 3.7,
-        y: 299.8,
-        size: 5.5,
-        font: bold,
-        color: palette.white,
-      });
-      page.drawText(label, {
-        x: routeX,
-        y: 278,
-        size: 7.2,
-        font: bold,
-        color: palette.heroBody,
-        characterSpacing: 0.8,
+      const route = [
+        ["01", "UNDERSTAND"],
+        ["02", "PRIORITISE"],
+        ["03", "TAKE ACTION"],
+      ];
+      route.forEach(([number, label], index) => {
+        const routeX = MARGIN + (index * ((CONTENT_WIDTH - 22) / 3));
+        page.drawCircle({
+          x: routeX + 9,
+          y: 303,
+          size: 9,
+          color: index === 0 ? palette.teal : palette.oceanBlue,
+          borderColor: palette.aqua,
+          borderWidth: 0.8,
+        });
+        page.drawText(number, {
+          x: routeX + 3.7,
+          y: 299.8,
+          size: 5.5,
+          font: bold,
+          color: palette.white,
+        });
+        page.drawText(label, {
+          x: routeX,
+          y: 278,
+          size: 7.2,
+          font: bold,
+          color: palette.heroBody,
+          characterSpacing: 0.8,
+        });
       });
     });
 
-    page.drawText("YOUR PLAN AT A GLANCE", {
-      x: MARGIN,
-      y: 236,
-      size: 7.8,
-      font: bold,
-      color: palette.teal,
-      characterSpacing: 1,
+    pdfTags.mark(page, "H2", () => {
+      page.drawText("YOUR PLAN AT A GLANCE", {
+        x: MARGIN,
+        y: 236,
+        size: 7.8,
+        font: bold,
+        color: palette.teal,
+        characterSpacing: 1,
+      });
+    }, {
+      actualText: "Your plan at a glance",
     });
     const metrics = planComplete
       ? [
@@ -808,54 +868,62 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const metricWidth = (CONTENT_WIDTH - (metricGap * 2)) / 3;
     metrics.forEach((metric, index) => {
       const metricX = MARGIN + (index * (metricWidth + metricGap));
-      drawRoundedRectangle(page, {
-        x: metricX,
-        y: 112,
-        width: metricWidth,
-        height: 102,
-        radius: PDF_LAYOUT.panelRadius,
-        color: palette.white,
-        opacity: 0.08,
-        borderColor: index === 0 ? palette.teal : palette.electricBlue,
-        borderWidth: index === 0 ? 1.5 : 0.8,
-        borderOpacity: 0.64,
+      pdfTags.artifact(page, () => {
+        drawRoundedRectangle(page, {
+          x: metricX,
+          y: 112,
+          width: metricWidth,
+          height: 102,
+          radius: PDF_LAYOUT.panelRadius,
+          color: palette.white,
+          opacity: 0.08,
+          borderColor: index === 0 ? palette.teal : palette.electricBlue,
+          borderWidth: index === 0 ? 1.5 : 0.8,
+          borderOpacity: 0.64,
+        });
+        drawRoundedRectangle(page, {
+          x: metricX,
+          y: 208,
+          width: metricWidth,
+          height: 6,
+          radius: 3,
+          color: index === 0 ? palette.teal : palette.electricBlue,
+          opacity: index === 0 ? 1 : 0.76,
+        });
       });
-      drawRoundedRectangle(page, {
-        x: metricX,
-        y: 208,
-        width: metricWidth,
-        height: 6,
-        radius: 3,
-        color: index === 0 ? palette.teal : palette.electricBlue,
-        opacity: index === 0 ? 1 : 0.76,
-      });
-      page.drawText(metric.value, {
-        x: metricX + 16,
-        y: 158,
-        size: 30,
-        font: bold,
-        color: palette.white,
-      });
-      page.drawText(metric.label, {
-        x: metricX + 16,
-        y: 133,
-        size: 6.8,
-        font: bold,
-        color: palette.heroBody,
-        characterSpacing: 0.65,
+      pdfTags.mark(page, "P", () => {
+        page.drawText(metric.value, {
+          x: metricX + 16,
+          y: 158,
+          size: 30,
+          font: bold,
+          color: palette.white,
+        });
+        page.drawText(metric.label, {
+          x: metricX + 16,
+          y: 133,
+          size: 6.8,
+          font: bold,
+          color: palette.heroBody,
+          characterSpacing: 0.65,
+        });
+      }, {
+        actualText: `${metric.value} ${metric.label}`,
       });
     });
-    page.drawText(
-      "INDEPENDENT | BRAND NEUTRAL | BUILT AROUND YOUR HOME",
-      {
-        x: MARGIN,
-        y: 58,
-        size: 7,
-        font: bold,
-        color: palette.aqua,
-        characterSpacing: 0.72,
-      },
-    );
+    pdfTags.artifact(page, () => {
+      page.drawText(
+        "INDEPENDENT | BRAND NEUTRAL | BUILT AROUND YOUR HOME",
+        {
+          x: MARGIN,
+          y: 58,
+          size: 7,
+          font: bold,
+          color: palette.aqua,
+          characterSpacing: 0.72,
+        },
+      );
+    });
     y = 0;
   }
 
@@ -894,21 +962,32 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       + (introLines.length ? 4 + measureLines(introLines) : 0)
       + 14;
     ensureSpace(height);
-    drawRoundedRectangle(page, {
-      x: MARGIN,
-      y: y + 4,
-      width: 28,
-      height: 3,
-      radius: 1.5,
-      color: palette.teal,
+    pdfTags.artifact(page, () => {
+      drawRoundedRectangle(page, {
+        x: MARGIN,
+        y: y + 4,
+        width: 28,
+        height: 3,
+        radius: 1.5,
+        color: palette.teal,
+      });
     });
     y -= 6;
-    y = drawLines(eyebrowLines, { startY: y, characterSpacing: 0.65 });
+    pdfTags.mark(page, "P", () => {
+      y = drawLines(eyebrowLines, {
+        startY: y,
+        characterSpacing: 0.65,
+      });
+    }, { actualText: eyebrow });
     y -= 12;
-    y = drawLines(titleLines, { startY: y });
+    pdfTags.mark(page, "H2", () => {
+      y = drawLines(titleLines, { startY: y });
+    }, { actualText: title });
     if (introLines.length) {
       y -= 4;
-      y = drawLines(introLines, { startY: y });
+      pdfTags.mark(page, "P", () => {
+        y = drawLines(introLines, { startY: y });
+      }, { actualText: intro });
     }
     y -= 14;
   }
@@ -939,49 +1018,55 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     );
     ensureSpace(leadHeight + 12);
     const leadBottom = y - leadHeight;
-    withRoundedClip(page, {
-      x: MARGIN,
-      y: leadBottom,
-      width: CONTENT_WIDTH,
-      height: leadHeight,
-      radius: PDF_LAYOUT.panelRadius,
-    }, () => {
-      drawHorizontalGradient(page, {
+    pdfTags.artifact(page, () => {
+      withRoundedClip(page, {
         x: MARGIN,
-        gradientY: leadBottom,
         width: CONTENT_WIDTH,
+        y: leadBottom,
         height: leadHeight,
-        from: gradients.signal.from,
-        to: gradients.signal.to,
-        steps: 36,
+        radius: PDF_LAYOUT.panelRadius,
+      }, () => {
+        drawHorizontalGradient(page, {
+          x: MARGIN,
+          gradientY: leadBottom,
+          width: CONTENT_WIDTH,
+          height: leadHeight,
+          from: gradients.signal.from,
+          to: gradients.signal.to,
+          steps: 36,
+        });
+        page.drawCircle({
+          x: PAGE_WIDTH - MARGIN - 8,
+          y: leadBottom + 10,
+          size: 80,
+          color: palette.electricBlue,
+          opacity: 0.11,
+        });
       });
-      page.drawCircle({
-        x: PAGE_WIDTH - MARGIN - 8,
+      drawRoundedRectangle(page, {
+        x: MARGIN + 7,
         y: leadBottom + 10,
-        size: 80,
-        color: palette.electricBlue,
-        opacity: 0.11,
+        width: 6,
+        height: leadHeight - 20,
+        radius: 3,
+        color: palette.teal,
       });
-    });
-    drawRoundedRectangle(page, {
-      x: MARGIN + 7,
-      y: leadBottom + 10,
-      width: 6,
-      height: leadHeight - 20,
-      radius: 3,
-      color: palette.teal,
     });
     let leadCursor = y - 22;
-    leadCursor = drawLines(leadLabelLines, {
-      x: MARGIN + 24,
-      startY: leadCursor,
-      characterSpacing: 0.6,
-    });
+    pdfTags.mark(page, "P", () => {
+      leadCursor = drawLines(leadLabelLines, {
+        x: MARGIN + 24,
+        startY: leadCursor,
+        characterSpacing: 0.6,
+      });
+    }, { actualText: lead?.label });
     leadCursor -= PDF_LAYOUT.labelTitleGap;
-    drawLines(leadValueLines, {
-      x: MARGIN + 24,
-      startY: leadCursor,
-    });
+    pdfTags.mark(page, "P", () => {
+      drawLines(leadValueLines, {
+        x: MARGIN + 24,
+        startY: leadCursor,
+      });
+    }, { actualText: lead?.value });
     y = leadBottom - 12;
 
     const cellGap = 10;
@@ -1021,34 +1106,41 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       );
       ensureSpace(rowHeight + cellGap);
       prepared.forEach(({ labelLines, valueLines }, pairIndex) => {
+        const item = pair[pairIndex];
         const x = MARGIN + (pairIndex * (currentCellWidth + cellGap));
         const bottom = y - rowHeight;
-        drawRoundedRectangle(page, {
-          x,
-          y: bottom,
-          width: currentCellWidth,
-          height: rowHeight,
-          radius: PDF_LAYOUT.compactRadius,
-          color: palette.paper,
-          borderColor: palette.line,
-          borderWidth: 0.8,
-        });
-        drawRoundedRectangle(page, {
-          x: x + 12,
-          y: y - 4,
-          width: currentCellWidth - 24,
-          height: 4,
-          radius: 2,
-          color: pairIndex === 0 ? palette.electricBlue : palette.teal,
+        pdfTags.artifact(page, () => {
+          drawRoundedRectangle(page, {
+            x,
+            y: bottom,
+            width: currentCellWidth,
+            height: rowHeight,
+            radius: PDF_LAYOUT.compactRadius,
+            color: palette.paper,
+            borderColor: palette.line,
+            borderWidth: 0.8,
+          });
+          drawRoundedRectangle(page, {
+            x: x + 12,
+            y: y - 4,
+            width: currentCellWidth - 24,
+            height: 4,
+            radius: 2,
+            color: pairIndex === 0 ? palette.electricBlue : palette.teal,
+          });
         });
         let cursor = y - 20;
-        cursor = drawLines(labelLines, {
-          x: x + 14,
-          startY: cursor,
-          characterSpacing: 0.5,
-        });
+        pdfTags.mark(page, "P", () => {
+          cursor = drawLines(labelLines, {
+            x: x + 14,
+            startY: cursor,
+            characterSpacing: 0.5,
+          });
+        }, { actualText: item?.label });
         cursor -= PDF_LAYOUT.labelTitleGap;
-        drawLines(valueLines, { x: x + 14, startY: cursor });
+        pdfTags.mark(page, "P", () => {
+          drawLines(valueLines, { x: x + 14, startY: cursor });
+        }, { actualText: item?.value });
       });
       y -= rowHeight + cellGap;
     }
@@ -1058,21 +1150,23 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     const height = 76;
     ensureSpace(height + CARD_GAP);
     const bottom = y - height;
-    withRoundedClip(page, {
-      x: MARGIN,
-      y: bottom,
-      width: CONTENT_WIDTH,
-      height,
-      radius: PDF_LAYOUT.panelRadius,
-    }, () => {
-      drawHorizontalGradient(page, {
+    pdfTags.artifact(page, () => {
+      withRoundedClip(page, {
         x: MARGIN,
-        gradientY: bottom,
         width: CONTENT_WIDTH,
+        y: bottom,
         height,
-        from: gradients.header.from,
-        to: gradients.signal.to,
-        steps: 36,
+        radius: PDF_LAYOUT.panelRadius,
+      }, () => {
+        drawHorizontalGradient(page, {
+          x: MARGIN,
+          gradientY: bottom,
+          width: CONTENT_WIDTH,
+          height,
+          from: gradients.header.from,
+          to: gradients.signal.to,
+          steps: 36,
+        });
       });
     });
     const signals = planComplete
@@ -1090,28 +1184,34 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     signals.forEach(([value, label], index) => {
       const columnX = MARGIN + (columnWidth * index);
       if (index > 0) {
-        page.drawLine({
-          start: { x: columnX, y: bottom + 15 },
-          end: { x: columnX, y: y - 15 },
-          thickness: 0.7,
-          color: palette.aqua,
-          opacity: 0.32,
+        pdfTags.artifact(page, () => {
+          page.drawLine({
+            start: { x: columnX, y: bottom + 15 },
+            end: { x: columnX, y: y - 15 },
+            thickness: 0.7,
+            color: palette.aqua,
+            opacity: 0.32,
+          });
         });
       }
-      page.drawText(value, {
-        x: columnX + 18,
-        y: bottom + 34,
-        size: 22,
-        font: bold,
-        color: palette.white,
-      });
-      page.drawText(label, {
-        x: columnX + 18,
-        y: bottom + 18,
-        size: 6.5,
-        font: bold,
-        color: palette.aqua,
-        characterSpacing: 0.55,
+      pdfTags.mark(page, "P", () => {
+        page.drawText(value, {
+          x: columnX + 18,
+          y: bottom + 34,
+          size: 22,
+          font: bold,
+          color: palette.white,
+        });
+        page.drawText(label, {
+          x: columnX + 18,
+          y: bottom + 18,
+          size: 6.5,
+          font: bold,
+          color: palette.aqua,
+          characterSpacing: 0.55,
+        });
+      }, {
+        actualText: `${value} ${label}`,
       });
     });
     y = bottom - CARD_GAP;
@@ -1208,74 +1308,84 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     );
     ensureSpace(height + CARD_GAP);
     const bottom = y - height;
-    if (tone === "dark") {
-      withRoundedClip(page, {
-        x: MARGIN,
-        y: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        radius: PDF_LAYOUT.panelRadius,
-      }, () => {
-        drawHorizontalGradient(page, {
+    pdfTags.artifact(page, () => {
+      if (tone === "dark") {
+        withRoundedClip(page, {
           x: MARGIN,
-          gradientY: bottom,
+          width: CONTENT_WIDTH,
+          y: bottom,
+          height,
+          radius: PDF_LAYOUT.panelRadius,
+        }, () => {
+          drawHorizontalGradient(page, {
+            x: MARGIN,
+            gradientY: bottom,
+            width: CONTENT_WIDTH,
+            height,
+            from: gradients.header.from,
+            to: gradients.signal.to,
+            steps: 36,
+          });
+        });
+      } else {
+        drawRoundedRectangle(page, {
+          x: MARGIN,
+          y: bottom,
           width: CONTENT_WIDTH,
           height,
-          from: gradients.header.from,
-          to: gradients.signal.to,
-          steps: 36,
+          radius: PDF_LAYOUT.panelRadius,
+          color: fill,
+          borderColor: border,
+          borderWidth: 0.8,
         });
-      });
-    } else {
+      }
       drawRoundedRectangle(page, {
-        x: MARGIN,
-        y: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        radius: PDF_LAYOUT.panelRadius,
-        color: fill,
-        borderColor: border,
-        borderWidth: 0.8,
+        x: MARGIN + 7,
+        y: bottom + 10,
+        width: 5,
+        height: height - 20,
+        radius: 2.5,
+        color: tone === "cream" ? palette.creamLine : palette.teal,
       });
-    }
-    drawRoundedRectangle(page, {
-      x: MARGIN + 7,
-      y: bottom + 10,
-      width: 5,
-      height: height - 20,
-      radius: 2.5,
-      color: tone === "cream" ? palette.creamLine : palette.teal,
     });
     let cursor = y - PDF_LAYOUT.panelPaddingY;
     if (eyebrowLines.length) {
-      cursor = drawLines(eyebrowLines, {
-        x: MARGIN + PDF_LAYOUT.panelPaddingX,
-        startY: cursor,
-        characterSpacing: 0.55,
-      });
+      pdfTags.mark(page, "P", () => {
+        cursor = drawLines(eyebrowLines, {
+          x: MARGIN + PDF_LAYOUT.panelPaddingX,
+          startY: cursor,
+          characterSpacing: 0.55,
+        });
+      }, { actualText: eyebrow });
     }
     if (titleLines.length) {
       if (eyebrowLines.length) cursor -= PDF_LAYOUT.labelTitleGap;
-      cursor = drawLines(titleLines, {
-        x: MARGIN + PDF_LAYOUT.panelPaddingX,
-        startY: cursor,
-      });
+      pdfTags.mark(page, "H3", () => {
+        cursor = drawLines(titleLines, {
+          x: MARGIN + PDF_LAYOUT.panelPaddingX,
+          startY: cursor,
+        });
+      }, { actualText: title });
     }
     if (bodyLines.length) {
       if (titleLines.length || eyebrowLines.length) {
         cursor -= PDF_LAYOUT.titleBodyGap;
       }
-      cursor = drawLines(bodyLines, {
-        x: MARGIN + PDF_LAYOUT.panelPaddingX,
-        startY: cursor,
-      });
+      pdfTags.mark(page, "P", () => {
+        cursor = drawLines(bodyLines, {
+          x: MARGIN + PDF_LAYOUT.panelPaddingX,
+          startY: cursor,
+        });
+      }, { actualText: body });
     }
     if (bulletLines.length) {
       cursor -= PDF_LAYOUT.titleBodyGap;
-      drawLines(bulletLines, {
-        x: MARGIN + PDF_LAYOUT.panelPaddingX + 4,
-        startY: cursor,
-      });
+      pdfTags.mark(page, "P", () => {
+        drawLines(bulletLines, {
+          x: MARGIN + PDF_LAYOUT.panelPaddingX + 4,
+          startY: cursor,
+        });
+      }, { actualText: bullets.join("\n") });
     }
     y = bottom - CARD_GAP;
   }
@@ -1341,111 +1451,125 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     );
     ensureSpace(height + CARD_GAP, priority ? "Start here" : "Your plan");
     const bottom = y - height;
-    if (priority) {
-      withRoundedClip(page, {
-        x: MARGIN,
-        y: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        radius: PDF_LAYOUT.panelRadius,
-      }, () => {
-        drawHorizontalGradient(page, {
+    pdfTags.artifact(page, () => {
+      if (priority) {
+        withRoundedClip(page, {
           x: MARGIN,
-          gradientY: bottom,
+          width: CONTENT_WIDTH,
+          y: bottom,
+          height,
+          radius: PDF_LAYOUT.panelRadius,
+        }, () => {
+          drawHorizontalGradient(page, {
+            x: MARGIN,
+            gradientY: bottom,
+            width: CONTENT_WIDTH,
+            height,
+            from: gradients.priority.from,
+            to: gradients.priority.to,
+            steps: 38,
+          });
+          page.drawCircle({
+            x: PAGE_WIDTH - MARGIN - 8,
+            y: bottom + 8,
+            size: 64,
+            color: palette.electricBlue,
+            opacity: 0.1,
+          });
+        });
+      } else {
+        drawRoundedRectangle(page, {
+          x: MARGIN,
+          y: bottom,
           width: CONTENT_WIDTH,
           height,
-          from: gradients.priority.from,
-          to: gradients.priority.to,
-          steps: 38,
+          radius: PDF_LAYOUT.panelRadius,
+          color: palette.paper,
+          borderColor: palette.line,
+          borderWidth: 0.8,
         });
-        page.drawCircle({
-          x: PAGE_WIDTH - MARGIN - 8,
-          y: bottom + 8,
-          size: 64,
+        drawRoundedRectangle(page, {
+          x: MARGIN + 12,
+          y: y - 4,
+          width: CONTENT_WIDTH - 24,
+          height: 4,
+          radius: 2,
           color: palette.electricBlue,
-          opacity: 0.1,
         });
-      });
-    } else {
+      }
+      if (priority) {
+        drawRoundedRectangle(page, {
+          x: MARGIN + 7,
+          y: bottom + 10,
+          width: 5,
+          height: height - 20,
+          radius: 2.5,
+          color: palette.teal,
+        });
+      }
       drawRoundedRectangle(page, {
-        x: MARGIN,
-        y: bottom,
-        width: CONTENT_WIDTH,
-        height,
-        radius: PDF_LAYOUT.panelRadius,
-        color: palette.paper,
-        borderColor: palette.line,
-        borderWidth: 0.8,
+        x: MARGIN + 16,
+        y: y - 58,
+        width: numberWidth,
+        height: 40,
+        radius: PDF_LAYOUT.badgeRadius,
+        color: action?.completed
+          ? palette.greenDark
+          : priority
+            ? palette.electricBlue
+            : palette.navy,
       });
-      drawRoundedRectangle(page, {
-        x: MARGIN + 12,
-        y: y - 4,
-        width: CONTENT_WIDTH - 24,
-        height: 4,
-        radius: 2,
-        color: palette.electricBlue,
-      });
-    }
-    if (priority) {
-      drawRoundedRectangle(page, {
-        x: MARGIN + 7,
-        y: bottom + 10,
-        width: 5,
-        height: height - 20,
-        radius: 2.5,
-        color: palette.teal,
-      });
-    }
-    drawRoundedRectangle(page, {
-      x: MARGIN + 16,
-      y: y - 58,
-      width: numberWidth,
-      height: 40,
-      radius: PDF_LAYOUT.badgeRadius,
-      color: action?.completed
-        ? palette.greenDark
-        : priority
-          ? palette.electricBlue
-          : palette.navy,
     });
     const safeNumber = fontSafeText(
       numberLabel,
       bold,
       supportedCharacters.get(bold),
     );
-    page.drawText(safeNumber, {
-      x: MARGIN + 16
-        + ((numberWidth - bold.widthOfTextAtSize(safeNumber, 9)) / 2),
-      y: y - 42,
-      size: 9,
-      font: bold,
-      color: palette.white,
-    });
+    pdfTags.mark(page, "Span", () => {
+      page.drawText(safeNumber, {
+        x: MARGIN + 16
+          + ((numberWidth - bold.widthOfTextAtSize(safeNumber, 9)) / 2),
+        y: y - 42,
+        size: 9,
+        font: bold,
+        color: palette.white,
+      });
+    }, { actualText: numberLabel });
     let cursor = y - PDF_LAYOUT.panelPaddingY;
-    cursor = drawLines(stageLines, {
-      x: innerX,
-      startY: cursor,
-      characterSpacing: 0.45,
-    });
+    pdfTags.mark(page, "P", () => {
+      cursor = drawLines(stageLines, {
+        x: innerX,
+        startY: cursor,
+        characterSpacing: 0.45,
+      });
+    }, { actualText: stageText });
     cursor -= PDF_LAYOUT.labelTitleGap;
-    cursor = drawLines(titleLines, { x: innerX, startY: cursor });
+    pdfTags.mark(page, "H3", () => {
+      cursor = drawLines(titleLines, { x: innerX, startY: cursor });
+    }, { actualText: action?.title });
     cursor -= PDF_LAYOUT.titleBodyGap;
-    cursor = drawLines(bodyLines, { x: innerX, startY: cursor });
+    pdfTags.mark(page, "P", () => {
+      cursor = drawLines(bodyLines, { x: innerX, startY: cursor });
+    }, { actualText: action?.description });
     if (linkLines.length) {
       cursor -= PDF_LAYOUT.bodyLinkGap;
       const linkTop = cursor;
-      cursor = drawLines(linkLines, { x: innerX, startY: cursor });
+      const linkStructure = pdfTags.mark(page, "Link", () => {
+        cursor = drawLines(linkLines, { x: innerX, startY: cursor });
+      }, { actualText: linkLabel });
       const linkWidth = Math.min(
         innerWidth,
         Math.max(...linkLines.map((line) =>
           line.font.widthOfTextAtSize(line.text, line.size)
         )),
       );
-      page.drawLine({
-        start: { x: innerX, y: linkTop - 2 },
-        end: { x: innerX + linkWidth, y: linkTop - 2 },
-        thickness: 0.5,
-        color: priority ? palette.aqua : palette.greenDark,
+      pdfTags.artifact(page, () => {
+        page.drawLine({
+          start: { x: innerX, y: linkTop - 2 },
+          end: { x: innerX + linkWidth, y: linkTop - 2 },
+          thickness: 0.5,
+          color: priority ? palette.aqua : palette.greenDark,
+        });
       });
       addLinkAnnotation({
         x: innerX,
@@ -1453,6 +1577,8 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         width: linkWidth,
         height: measureLines(linkLines) + 6,
         href: safeHref,
+        label: linkLabel,
+        structure: linkStructure,
       });
     }
     y = bottom - CARD_GAP;
@@ -1488,7 +1614,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
           lineHeight: 13.7,
           color: palette.body,
         });
-        return { labelLines, titleLines, bodyLines };
+        return { action, labelLines, titleLines, bodyLines };
       });
       const rowHeight = Math.max(
         ...prepared.map(({ labelLines, titleLines, bodyLines }) =>
@@ -1505,47 +1631,55 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       const bottom = y - rowHeight;
       prepared.forEach((card, pairIndex) => {
         const x = MARGIN + (pairIndex * (cellWidth + gap));
-        drawRoundedRectangle(page, {
-          x,
-          y: bottom,
-          width: cellWidth,
-          height: rowHeight,
-          radius: PDF_LAYOUT.compactRadius,
-          color: palette.paper,
-          borderColor: palette.line,
-          borderWidth: 0.7,
-        });
-        drawRoundedRectangle(page, {
-          x: x + 12,
-          y: y - 5,
-          width: cellWidth - 24,
-          height: 5,
-          radius: 2.5,
-          color: pairIndex === 0 ? palette.teal : palette.electricBlue,
-        });
-        page.drawCircle({
-          x: x + cellWidth - 16,
-          y: y - 18,
-          size: 10,
-          color: pairIndex === 0 ? palette.teal : palette.electricBlue,
-          opacity: 0.18,
+        pdfTags.artifact(page, () => {
+          drawRoundedRectangle(page, {
+            x,
+            y: bottom,
+            width: cellWidth,
+            height: rowHeight,
+            radius: PDF_LAYOUT.compactRadius,
+            color: palette.paper,
+            borderColor: palette.line,
+            borderWidth: 0.7,
+          });
+          drawRoundedRectangle(page, {
+            x: x + 12,
+            y: y - 5,
+            width: cellWidth - 24,
+            height: 5,
+            radius: 2.5,
+            color: pairIndex === 0 ? palette.teal : palette.electricBlue,
+          });
+          page.drawCircle({
+            x: x + cellWidth - 16,
+            y: y - 18,
+            size: 10,
+            color: pairIndex === 0 ? palette.teal : palette.electricBlue,
+            opacity: 0.18,
+          });
         });
         let cursor = y - PDF_LAYOUT.panelPaddingY;
-        cursor = drawLines(card.labelLines, {
-          x: x + 18,
-          startY: cursor,
-          characterSpacing: 0.45,
-        });
+        pdfTags.mark(page, "P", () => {
+          cursor = drawLines(card.labelLines, {
+            x: x + 18,
+            startY: cursor,
+            characterSpacing: 0.45,
+          });
+        }, { actualText: card.action?.category });
         cursor -= PDF_LAYOUT.labelTitleGap;
-        cursor = drawLines(card.titleLines, {
-          x: x + 18,
-          startY: cursor,
-        });
+        pdfTags.mark(page, "H3", () => {
+          cursor = drawLines(card.titleLines, {
+            x: x + 18,
+            startY: cursor,
+          });
+        }, { actualText: card.action?.title });
         cursor -= PDF_LAYOUT.titleBodyGap;
-        drawLines(card.bodyLines, {
-          x: x + 18,
-          startY: cursor,
-        });
+        pdfTags.mark(page, "P", () => {
+          drawLines(card.bodyLines, {
+            x: x + 18,
+            startY: cursor,
+          });
+        }, { actualText: card.action?.description });
       });
       y = bottom - gap;
     }
@@ -1553,6 +1687,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
 
   addCoverPage();
   addContentPage(copy.snapshotEyebrow || "Home snapshot");
+  pdfTags.beginSection(copy.snapshotTitle || "Your plan in one view");
   drawSectionHeading(
     copy.snapshotEyebrow || "Your home at a glance",
     copy.snapshotTitle || "Your plan in one view",
@@ -1567,6 +1702,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   pageSection = priorityActions.length
     ? copy.startEyebrow || "Start here"
     : copy.completedEyebrow || "Plan progress";
+  pdfTags.beginSection("Plan confidence");
   drawInfoPanel({
     eyebrow: copy.readinessEyebrow || "Before you spend",
     title: readiness.title,
@@ -1578,6 +1714,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     if (pages.length === 1 || y < 500) {
       addContentPage(copy.startEyebrow || "Start here");
     }
+    pdfTags.beginSection(
+      copy.startTitle || "Start with these three moves",
+    );
     drawSectionHeading(
       copy.startEyebrow || "Start here",
       copy.startTitle || "Start with these three moves",
@@ -1590,6 +1729,11 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     pageSection = priorityActions.length
       ? copy.roadmapEyebrow || "Your plan"
       : copy.completedEyebrow || "Plan progress";
+    pdfTags.beginSection(
+      priorityActions.length
+        ? copy.roadmapTitle || "Build the rest of your roadmap"
+        : copy.completedTitle || "Plan progress",
+    );
     drawSectionHeading(
       priorityActions.length
         ? copy.roadmapEyebrow || "Your step-by-step plan"
@@ -1604,6 +1748,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
 
   pageSection = copy.everydayEyebrow || "Easy things to try";
   if (report.everydayActions.length) {
+    pdfTags.beginSection(
+      copy.everydayTitle || "Comfort wins you can try this week",
+    );
     ensureSpace(240, copy.everydayEyebrow || "Quick comfort wins");
     drawSectionHeading(
       copy.everydayEyebrow || "Easy things to try",
@@ -1618,6 +1765,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   if (report.climate) {
+    pdfTags.beginSection(
+      copy.climateEyebrow || "Planning for your climate",
+    );
     drawInfoPanel({
       eyebrow: copy.climateEyebrow || "Planning for your climate",
       title: report.climate.label,
@@ -1627,6 +1777,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pageSection = "Plan checks";
+  pdfTags.beginSection(copy.whyTitle || "How your priorities were chosen");
   drawSectionHeading(
     copy.whyEyebrow || "Why this order",
     copy.whyTitle || "How your priorities were chosen",
@@ -1658,6 +1809,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
 
   const professional = report.professionalPresentation;
   if (professional) {
+    pdfTags.beginSection("Professional review");
     drawInfoPanel({
       eyebrow: professional.eyebrow,
       title: professional.title,
@@ -1673,6 +1825,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pageSection = copy.tradeEyebrow || "Before you book a trade";
+  pdfTags.beginSection(
+    copy.tradeTitle || "Three checks that protect your budget",
+  );
   ensureSpace(330, pageSection);
   drawSectionHeading(
     copy.tradeEyebrow || "Before you book a trade",
@@ -1682,6 +1837,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     bullets: report.beforeTrade,
     tone: "mint",
   });
+  pdfTags.beginSection(
+    copy.privacyTitle || "Useful detail without exposing private information",
+  );
   drawInfoPanel({
     eyebrow: copy.privacyEyebrow || "Private by design",
     title: copy.privacyTitle
@@ -1693,6 +1851,9 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   });
 
   const closingAction = planComplete ? null : priorityActions[0];
+  pdfTags.beginSection(
+    closingAction?.title || "Plan progress",
+  );
   drawInfoPanel({
     eyebrow: closingAction ? "Your next move" : "Plan progress",
     title: closingAction?.title
@@ -1706,45 +1867,48 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   });
 
   pages.forEach((currentPage, index) => {
-    currentPage.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_WIDTH,
-      height: 40,
-      color: palette.navyDeep,
-      opacity: index === 0 ? 0.34 : 1,
-    });
-    currentPage.drawRectangle({
-      x: 0,
-      y: 40,
-      width: PAGE_WIDTH,
-      height: 2,
-      color: index === 0 ? palette.aqua : palette.teal,
-      opacity: 0.82,
-    });
-    currentPage.drawText(
-      fontSafeText(
-        copy.footer || "Independent, product-neutral home energy guidance",
-        regular,
-        supportedCharacters.get(regular),
-      ),
-      {
-        x: MARGIN,
+    pdfTags.artifact(currentPage, () => {
+      currentPage.drawRectangle({
+        x: 0,
+        y: 0,
+        width: PAGE_WIDTH,
+        height: 40,
+        color: palette.navyDeep,
+        opacity: index === 0 ? 0.34 : 1,
+      });
+      currentPage.drawRectangle({
+        x: 0,
+        y: 40,
+        width: PAGE_WIDTH,
+        height: 2,
+        color: index === 0 ? palette.aqua : palette.teal,
+        opacity: 0.82,
+      });
+      currentPage.drawText(
+        fontSafeText(
+          copy.footer || "Independent, product-neutral home energy guidance",
+          regular,
+          supportedCharacters.get(regular),
+        ),
+        {
+          x: MARGIN,
+          y: 17,
+          size: 7,
+          font: regular,
+          color: palette.heroBody,
+        },
+      );
+      const pageLabel = `Page ${index + 1} of ${pages.length}`;
+      currentPage.drawText(pageLabel, {
+        x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(pageLabel, 7),
         y: 17,
         size: 7,
-        font: regular,
-        color: palette.heroBody,
-      },
-    );
-    const pageLabel = `Page ${index + 1} of ${pages.length}`;
-    currentPage.drawText(pageLabel, {
-      x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(pageLabel, 7),
-      y: 17,
-      size: 7,
-      font: bold,
-      color: palette.aqua,
+        font: bold,
+        color: palette.aqua,
+      });
     });
   });
 
+  pdfTags.finalize();
   return pdf.save();
 }

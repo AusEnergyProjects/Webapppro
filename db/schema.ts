@@ -2261,6 +2261,7 @@ export const customerProjects = sqliteTable("customer_projects", {
   privateNotes: text("private_notes").notNull().default(""),
   advisorProfile: text("advisor_profile").notNull().default("{}"),
   planSnapshot: text("plan_snapshot").notNull().default("{}"),
+  planRevision: integer("plan_revision").notNull().default(1),
   completedPlanItems: text("completed_plan_items").notNull().default("[]"),
   status: text("status").notNull().default("draft"),
   opportunityId: text("opportunity_id").notNull().default(""),
@@ -2427,6 +2428,7 @@ export const customerProjectPlanRevisions = sqliteTable("customer_project_plan_r
   pace: text("pace").notNull().default(""),
   budgetRange: text("budget_range").notNull().default(""),
   planSnapshot: text("plan_snapshot").notNull().default("{}"),
+  restoredFromRevision: integer("restored_from_revision").notNull().default(0),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("customer_project_plan_revisions_number_idx").on(table.projectId, table.revisionNumber),

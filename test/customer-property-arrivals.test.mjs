@@ -28,6 +28,9 @@ const workOrderRoute = read("../src/app/api/trade-work-orders/route.ts");
 const scheduleRoute = read("../src/app/api/trade-schedule/route.ts");
 const tradeProfileRoute = read("../src/app/api/trade-profile/route.ts");
 const customerUi = read("../src/components/CustomerDashboard.tsx");
+const customerPhotoCapture = read(
+  "../src/components/CustomerProjectPhotoCapture.tsx",
+);
 const customerPhotoUpload = read("../src/lib/customer-photo-upload.ts");
 const installerUi = read("../src/components/DirectTradeDashboard.tsx");
 const arrivalUi = read("../src/components/InstallerArrivalWindows.tsx");
@@ -200,23 +203,27 @@ test("only an accepted installer can propose windows or convert the platform lea
   assert.doesNotMatch(installerUi, /Book site visit/);
 });
 
-test("customer devices use one clear evidence upload with safe photo guidance", () => {
+test("customer devices use guided safe capture plus separate supporting evidence", () => {
+  assert.match(customerUi, /<CustomerProjectPhotoCapture/);
+  assert.equal((customerUi.match(/type="file"/g) || []).length, 2);
+  assert.match(customerUi, /Add another safe photo/);
+  assert.match(customerUi, /Add a supporting document/);
+  assert.match(customerPhotoCapture, /capture="environment"/);
   assert.match(
-    customerUi,
-    /multiple[\s\S]{0,100}accept="image\/jpeg,image\/png,image\/webp,application\/pdf"/,
+    customerPhotoCapture,
+    /Before opening the camera, confirm all three/,
   );
-  assert.doesNotMatch(customerUi, /capture="environment"/);
-  assert.equal((customerUi.match(/type="file"/g) || []).length, 1);
-  assert.match(customerUi, /Recommended photo and document checklist/);
-  assert.match(customerUi, /switchboard front/i);
-  assert.match(customerUi, /wall-to-fence clearance/i);
-  assert.match(customerUi, /NMI, account number, name and\s+address removed/);
+  assert.match(customerPhotoCapture, /leave electrical\s+covers in place/);
+  assert.match(
+    customerPhotoCapture,
+    /No people, mail, street numbers, number plates, bills, NMI/,
+  );
   assert.match(customerUi, /prepareEvidenceUpload/);
   assert.match(customerPhotoUpload, /MAX_PREPARED_CUSTOMER_PHOTO_BYTES = 640 \* 1024/);
   assert.match(customerPhotoUpload, /maximumDimension = 1920/);
   assert.match(
     customerUi,
-    /Files stay private to your plan unless you\s+explicitly choose installer quoting access/,
+    /Files stay private to your plan unless you explicitly\s+choose installer quoting access/,
   );
   assert.match(
     customerUi,

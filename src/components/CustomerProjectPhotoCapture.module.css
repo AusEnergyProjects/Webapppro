@@ -1,0 +1,278 @@
+.guide {
+  display: grid;
+  gap: 1rem;
+}
+
+.intro {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.intro span,
+.cardTop span {
+  color: #047858;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intro h4 {
+  color: #032c3b;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  line-height: 1.15;
+  margin: 0.22rem 0 0.4rem;
+}
+
+.intro p {
+  color: #405d59;
+  margin: 0;
+  max-width: 52rem;
+}
+
+.intro > strong {
+  background: #dff9f1;
+  border-radius: 999px;
+  color: #075c47;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  padding: 0.55rem 0.8rem;
+}
+
+.safety {
+  background:
+    linear-gradient(135deg, rgba(17, 206, 166, 0.12), rgba(92, 211, 244, 0.08)),
+    #f8fffd;
+  border: 1px solid #b6ddd4;
+  border-radius: 1.2rem;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 1rem;
+}
+
+.safety legend {
+  color: #032c3b;
+  font-weight: 800;
+  padding: 0 0.35rem;
+}
+
+.safety label {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #d3e5e1;
+  border-radius: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.72rem;
+}
+
+.safety input {
+  accent-color: #0baa7d;
+  flex: 0 0 auto;
+  margin-top: 0.16rem;
+}
+
+.safety span {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.safety strong {
+  color: #083d3a;
+  font-size: 0.9rem;
+}
+
+.safety small {
+  color: #52706b;
+  line-height: 1.42;
+}
+
+.locked {
+  background: #fff7e3;
+  border: 1px solid #efd18b;
+  border-radius: 0.8rem;
+  color: #6e4b06;
+  font-size: 0.86rem;
+  margin: 0;
+  padding: 0.72rem 0.85rem;
+}
+
+.cards {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #cde2dd;
+  border-radius: 1.15rem;
+  box-shadow: 0 12px 28px rgba(3, 44, 59, 0.07);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.cardTop {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.cardTop small {
+  color: #657d79;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.card h5 {
+  color: #062f3c;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.06rem;
+  line-height: 1.25;
+  margin: 0.45rem 0 0.35rem;
+}
+
+.card > p {
+  color: #496761;
+  font-size: 0.84rem;
+  line-height: 1.48;
+  margin: 0 0 0.7rem;
+}
+
+.card details {
+  border-top: 1px solid #e0ebe8;
+  margin: auto 0 0;
+  padding-top: 0.62rem;
+}
+
+.card summary {
+  color: #08785b;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.examples {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.examples p {
+  background: #f3f8f7;
+  border-radius: 0.7rem;
+  color: #4c6863;
+  display: grid;
+  font-size: 0.77rem;
+  gap: 0.15rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.6rem;
+}
+
+.examples strong {
+  color: #063f3a;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.48rem;
+  margin-top: 0.8rem;
+}
+
+.actions label {
+  align-items: center;
+  background: #08785b;
+  border: 1px solid #08785b;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-height: 44px;
+  padding: 0.54rem 0.72rem;
+}
+
+.actions label + label {
+  background: #fff;
+  color: #08785b;
+}
+
+.actions label[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.actions input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.actions label:focus-within {
+  outline: 3px solid #55e6cb;
+  outline-offset: 3px;
+}
+
+.preview {
+  align-items: center;
+  background: #e7fbf5;
+  border-radius: 0.8rem;
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+  padding: 0.55rem;
+}
+
+.preview img {
+  border-radius: 0.6rem;
+  height: 3rem;
+  object-fit: cover;
+  width: 3rem;
+}
+
+.preview span {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.preview strong {
+  color: #086047;
+  font-size: 0.78rem;
+}
+
+.preview small {
+  color: #55716b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .intro {
+    display: grid;
+  }
+
+  .intro > strong {
+    justify-self: start;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}

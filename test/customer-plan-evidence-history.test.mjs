@@ -102,7 +102,15 @@ test("roadmap revisions and outcome check-ins stay in the owner project contract
   assert.match(projectsRoute, /ENERGY_OUTCOMES/);
   assert.match(projectsRoute, /customer_project_outcome_checkins/);
   assert.match(projectsRoute, /ROW_NUMBER\(\) OVER \(\s*PARTITION BY project_id/);
-  assert.match(projectsRoute, /COALESCE\(MAX\(revision_number\), 0\) \+ 1/);
+  assert.match(projectsRoute, /cleanPlanRevision\(raw\.expectedPlanRevision\)/);
+  assert.match(projectsRoute, /const nextPlanRevision = currentPlanRevision \+ 1/);
+  assert.match(
+    projectsRoute,
+    /status = 'draft'\s+AND plan_revision = \?/,
+  );
+  assert.match(projectsRoute, /restored_from_revision/);
+  assert.match(projectsRoute, /results\[0\]\?\.meta\.changes/);
+  assert.match(projectsRoute, /results\[1\]\?\.meta\.changes/);
   assert.doesNotMatch(projectsRoute, /SELECT MAX\(revision_number\) revision_number/);
   assert.match(projectsRoute, /PLAN_REVISION_RETENTION_LIMIT/);
   assert.match(projectsRoute, /OUTCOME_CHECKIN_RETENTION_LIMIT/);

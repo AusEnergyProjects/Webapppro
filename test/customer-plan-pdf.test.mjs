@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   PDFArray,
+  PDFBool,
   PDFDict,
   PDFDocument,
   PDFName,
+  PDFNumber,
   PDFRawStream,
   decodePDFRawStream,
 } from "pdf-lib";
@@ -129,6 +131,26 @@ function extractedPdfText(pdf) {
   return text.join(" ");
 }
 
+function documentStructureRoles(pdf, structureRoot) {
+  const roles = [];
+
+  function visit(value) {
+    const resolved = pdf.context.lookup(value);
+    if (resolved instanceof PDFArray) {
+      for (const child of resolved.asArray()) visit(child);
+      return;
+    }
+    if (!(resolved instanceof PDFDict)) return;
+    const role = resolved.get(PDFName.of("S"));
+    if (role instanceof PDFName) roles.push(role.decodeText());
+    const kids = resolved.get(PDFName.of("K"));
+    if (kids) visit(kids);
+  }
+
+  visit(structureRoot.get(PDFName.of("K")));
+  return roles;
+}
+
 test("the shared report brandmark is the exact 96px AEA PNG", () => {
   assert.match(AEA_BRANDMARK_PNG_DATA_URI, /^data:image\/png;base64,/);
   const png = Buffer.from(
@@ -227,7 +249,7 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-07-30-tech-presentation-pdf-v2",
+    "2026-07-30-tagged-plan-pdf-v3",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -247,6 +269,86 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   const content = decodedPdfContent(pdf);
   assert.match(content, /\bW\s+n\b/, "rounded panels should use clipping paths");
   assert.match(content, /\bc\b/, "rounded panels should use curved corners");
+});
+
+test("direct plan PDF exposes a bounded tagged-document foundation", async () => {
+  const pdf = await PDFDocument.load(
+    await createCustomerPlanPdfBytes(normalizedReport()),
+  );
+  const language = pdf.catalog.get(PDFName.of("Lang"));
+  const markInfo = pdf.catalog.lookup(PDFName.of("MarkInfo"), PDFDict);
+  const structureRoot = pdf.catalog.lookup(
+    PDFName.of("StructTreeRoot"),
+    PDFDict,
+  );
+  const parentTree = structureRoot.lookup(
+    PDFName.of("ParentTree"),
+    PDFDict,
+  );
+  const parentTreeNumbers = parentTree.lookup(PDFName.of("Nums"), PDFArray);
+  const documentKids = structureRoot.lookup(PDFName.of("K"), PDFArray);
+  const documentElement = pdf.context.lookup(
+    documentKids.get(0),
+    PDFDict,
+  );
+  const documentSections = documentElement.lookup(
+    PDFName.of("K"),
+    PDFArray,
+  );
+  const structureRoles = documentStructureRoles(pdf, structureRoot);
+
+  assert.equal(language.decodeText(), "en-AU");
+  assert.equal(
+    markInfo.lookup(PDFName.of("Marked"), PDFBool).asBoolean(),
+    true,
+  );
+  assert.equal(
+    documentElement.lookup(PDFName.of("S"), PDFName).decodeText(),
+    "Document",
+  );
+  assert.ok(documentSections.size() >= 5);
+  assert.ok(parentTreeNumbers.size() >= pdf.getPageCount() * 2);
+
+  const pageParentKeys = [];
+  for (const page of pdf.getPages()) {
+    pageParentKeys.push(
+      page.node.lookup(PDFName.of("StructParents"), PDFNumber).asNumber(),
+    );
+    assert.equal(
+      page.node.lookup(PDFName.of("Tabs"), PDFName).decodeText(),
+      "S",
+    );
+  }
+  const indexedParentKeys = [];
+  for (let index = 0; index < parentTreeNumbers.size(); index += 2) {
+    indexedParentKeys.push(
+      parentTreeNumbers.lookup(index, PDFNumber).asNumber(),
+    );
+  }
+  for (const parentKey of pageParentKeys) {
+    assert.ok(indexedParentKeys.includes(parentKey));
+  }
+
+  const content = decodedPdfContent(pdf);
+  assert.match(content, /\/Artifact\s+BMC/);
+  assert.match(content, /\/H1\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/);
+  assert.match(content, /\/H2\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/);
+  assert.match(content, /\/P\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/);
+  assert.match(content, /\/Span\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/);
+  assert.match(content, /\bEMC\b/);
+  assert.ok(structureRoles.includes("P"));
+  assert.ok(structureRoles.includes("Span"));
+  assert.deepEqual(
+    structureRoles.filter((role) =>
+      ["L", "LI", "Lbl", "LBody"].includes(role)
+    ),
+    [],
+    "visual bullets and standalone step badges must not claim list semantics",
+  );
+  assert.doesNotMatch(
+    content,
+    /\/(?:L|LI|Lbl|LBody)\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/,
+  );
 });
 
 test("direct plan PDF keeps friendly guide labels clickable", async () => {
@@ -277,6 +379,14 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
       const annotation = pdf.context.lookup(reference, PDFDict);
       const action = annotation.lookup(PDFName.of("A"), PDFDict);
       urls.push(action.get(PDFName.of("URI")).decodeText());
+      assert.match(
+        annotation.get(PDFName.of("Contents")).decodeText(),
+        /guidance/i,
+      );
+      assert.ok(
+        annotation.lookup(PDFName.of("StructParent"), PDFNumber).asNumber()
+          >= 0,
+      );
     }
   }
 

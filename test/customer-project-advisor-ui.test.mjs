@@ -18,6 +18,7 @@ const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
 const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
 const planPdfRoute = read("../src/app/api/customer-plan-pdf/route.ts");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
+const photoCapture = read("../src/components/CustomerProjectPhotoCapture.tsx");
 
 test("the customer project wizard exposes every stage as an accessible button", () => {
   assert.match(dashboard, /\["Home", "Goals", "Your plan", "Work", "Privacy"\]/);
@@ -318,8 +319,12 @@ test("quote preparation is simpler, safer and keeps errors beside the action", (
   assert.match(installerDashboard, /Approval context/);
   assert.match(installerDashboard, /Site considerations/);
   assert.match(dashboard, /Not sure is a valid answer/);
-  assert.match(dashboard, /Recommended photo and document checklist/);
-  assert.equal((dashboard.match(/type="file"/g) || []).length, 1);
+  assert.doesNotMatch(dashboard, /Recommended photo and document checklist/);
+  assert.match(dashboard, /<CustomerProjectPhotoCapture/);
+  assert.equal((dashboard.match(/type="file"/g) || []).length, 2);
+  assert.match(photoCapture, /Before opening the camera, confirm all three/);
+  assert.match(photoCapture, /capture="environment"/);
+  assert.match(photoCapture, /Photos are optional/);
   assert.match(dashboard, /customer-action-error/);
   assert.match(dashboard, /storedInstallerEvidenceCount \+ pendingInstallerEvidenceCount > 0/);
   assert.match(dashboard, /sharingScope === "private-plan"/);

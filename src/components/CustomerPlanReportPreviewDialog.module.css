@@ -1,0 +1,113 @@
+.backdrop {
+  align-items: flex-start;
+  background: rgba(0, 16, 30, 0.84);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: auto;
+  padding: clamp(0.5rem, 2vw, 1.4rem);
+  position: fixed;
+  z-index: 1200;
+}
+
+.dialog {
+  background: #eaf5f8;
+  border: 1px solid rgba(73, 237, 207, 0.42);
+  border-radius: 1.5rem;
+  box-shadow: 0 36px 90px rgba(0, 12, 28, 0.58);
+  max-width: 82rem;
+  min-height: calc(100vh - 2.8rem);
+  overflow: hidden;
+  width: 100%;
+}
+
+.toolbar {
+  align-items: center;
+  background:
+    radial-gradient(circle at 86% -60%, rgba(66, 216, 224, 0.42), transparent 45%),
+    linear-gradient(118deg, #001c34, #063b4b 58%, #096f70);
+  border-bottom: 3px solid #25e1c4;
+  color: #fff;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem clamp(1rem, 3vw, 2rem);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.toolbar span {
+  color: #62f6d8;
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.toolbar h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+  line-height: 1.1;
+  margin: 0.18rem 0;
+}
+
+.toolbar p {
+  color: #c9e7ed;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.toolbar button {
+  background: #fff;
+  border: 0;
+  border-radius: 999px;
+  color: #023343;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-weight: 850;
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+}
+
+.toolbar button:focus-visible {
+  outline: 3px solid #5df5db;
+  outline-offset: 3px;
+}
+
+.viewport {
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: clamp(0.65rem, 2vw, 1.5rem);
+}
+
+@media (max-width: 620px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .dialog {
+    border: 0;
+    border-radius: 0;
+    min-height: 100vh;
+  }
+
+  .toolbar {
+    align-items: flex-start;
+  }
+
+  .toolbar p {
+    display: none;
+  }
+
+  .toolbar button {
+    font-size: 0.78rem;
+    min-height: 2.45rem;
+    padding: 0.58rem 0.75rem;
+  }
+
+  .viewport {
+    padding: 0.4rem;
+  }
+}

@@ -42,6 +42,9 @@ import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
 import { HomeFeatureIntake } from "./HomeFeatureIntake";
+import { CustomerProjectPhotoCapture } from "./CustomerProjectPhotoCapture";
+import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
+import { CustomerPlanRevisionHistory } from "./CustomerPlanRevisionHistory";
 import {
   CustomerPlanShareDialog,
 } from "./CustomerPlanShareDialog";
@@ -153,6 +156,9 @@ const resetProfessionalReviewDeclaration = (
 ) => resetCustomerProfessionalReviewDeclaration(
   profile,
 ) as CustomerAdvisorProfile;
+
+const PROJECT_REVISION_CONFLICT_MESSAGE =
+  "This plan was updated in another tab. Your unsaved edits are still here.";
 
 const customerProjectOptions = rawCustomerProjectOptions as {
   goals: Option[];
@@ -378,6 +384,7 @@ type CustomerProject = {
     items?: CustomerPlanItem[];
     nextQuestions?: CustomerPlanQuestion[];
   };
+  planRevision: number;
   completedPlanItems: string[];
   status: string;
   displayStatus: string;
@@ -421,6 +428,7 @@ type CustomerProject = {
       summary?: string;
       items?: CustomerPlanItem[];
     };
+    restoredFromRevision: number;
     createdAt: string;
   }>;
   outcomeCheckins: Array<{
@@ -902,21 +910,29 @@ function ProfileForm({
 function ProjectEditor({
   initial,
   existingId,
+  existingPlanRevision,
   storedEvidence,
   evidenceSharingConsent,
   emailVerified,
   onCancel,
+  onReloadLatest,
   onSave,
   onUploadEvidence,
   onSubmit,
 }: {
   initial: ProjectDraft;
   existingId?: string;
+  existingPlanRevision?: number;
   storedEvidence: CustomerProject["evidence"];
   evidenceSharingConsent: boolean;
   emailVerified: boolean;
   onCancel: () => void;
-  onSave: (draft: ProjectDraft, id?: string) => Promise<string>;
+  onReloadLatest: () => void;
+  onSave: (
+    draft: ProjectDraft,
+    id?: string,
+    expectedPlanRevision?: number,
+  ) => Promise<{ id: string; planRevision: number }>;
   onUploadEvidence: (
     projectId: string,
     evidence: PendingProjectEvidence[],
@@ -927,6 +943,7 @@ function ProjectEditor({
     evidence: PendingProjectEvidence[],
     confirmInstallerPhotoSharing: boolean,
     id?: string,
+    expectedPlanRevision?: number,
   ) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<ProjectDraft>(initial);
@@ -936,6 +953,9 @@ function ProjectEditor({
   const [status, setStatus] = useState("");
   const [validationError, setValidationError] = useState("");
   const [savedId, setSavedId] = useState(existingId || "");
+  const [savedPlanRevision, setSavedPlanRevision] = useState(
+    existingPlanRevision || 0,
+  );
   const [customPlanItem, setCustomPlanItem] = useState("");
   const [reviewKind, setReviewKind] =
     useState<CustomerReviewKind>("question");
@@ -946,9 +966,12 @@ function ProjectEditor({
   const [shareStatus, setShareStatus] = useState("");
   const [shareError, setShareError] = useState("");
   const [shareRequestId, setShareRequestId] = useState("");
+  const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const draggedPlanItem = useRef("");
   const activePdfDownload = useRef(false);
+  const editGeneration = useRef(0);
+  const [revisionConflict, setRevisionConflict] = useState(false);
   const [pendingEvidence, setPendingEvidence] = useState<
     PendingProjectEvidence[]
   >([]);
@@ -1130,6 +1153,22 @@ function ProjectEditor({
     ));
   };
 
+  const markDirty = () => {
+    editGeneration.current += 1;
+    setDirty(true);
+  };
+
+  const describeEditorError = (error: unknown, fallback: string) => {
+    if (
+      error instanceof Error
+      && error.message === PROJECT_REVISION_CONFLICT_MESSAGE
+    ) {
+      setRevisionConflict(true);
+      return `${PROJECT_REVISION_CONFLICT_MESSAGE} Review them, then choose whether to load the latest saved version.`;
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+
   const set = <K extends keyof ProjectDraft>(
     key: K,
     value: ProjectDraft[K],
@@ -1180,7 +1219,7 @@ function ProjectEditor({
     ) {
       invalidateStepsFrom(4);
     }
-    setDirty(true);
+    markDirty();
     setStatus("");
     setValidationError("");
   };
@@ -1198,7 +1237,7 @@ function ProjectEditor({
     }));
     if (planEdited) setPlanInputsChanged(true);
     invalidateStepsFrom(2);
-    setDirty(true);
+    markDirty();
     setStatus("");
     setValidationError("");
   };
@@ -1248,7 +1287,7 @@ function ProjectEditor({
     });
     if (affectsAdvice && planEdited) setPlanInputsChanged(true);
     if (affectsAdvice) invalidateStepsFrom(2);
-    setDirty(true);
+    markDirty();
     setStatus("");
     setValidationError("");
   };
@@ -1411,9 +1450,13 @@ function ProjectEditor({
       }),
       false,
     );
-  const addEvidence = (files: FileList | null) => {
+  const addEvidence = (
+    files: FileList | File[] | null,
+    preset?: Pick<PendingProjectEvidence, "category" | "factKeys">,
+  ) => {
     if (!files?.length) return;
-    const next = [...files]
+    const incoming = Array.from(files);
+    const next = incoming
       .slice(
         0,
         Math.max(
@@ -1425,15 +1468,17 @@ function ProjectEditor({
          id: crypto.randomUUID(),
          file,
          category:
-           file.type.startsWith("image/")
+           preset?.category
+           || (file.type.startsWith("image/")
              ? "property-photo"
-             : "supporting-document",
-         factKeys: [],
+             : "supporting-document"),
+         factKeys: preset?.factKeys || [],
          sharingScope: "private-plan" as const,
-       }));
+        }));
     setPendingEvidence((current) => [...current, ...next]);
+    markDirty();
     setStatus(
-      next.length < files.length
+      next.length < incoming.length
         ? "Up to 12 files can be added to one project. Remove one to choose another."
         : "Files selected. Private files save with your plan when you email or print it; installer-shared files upload only after you confirm an enquiry.",
     );
@@ -1443,7 +1488,7 @@ function ProjectEditor({
     setPendingEvidence((current) =>
       current.map((item) => (item.id === id ? { ...item, category } : item)),
     );
-    setDirty(true);
+    markDirty();
   };
 
   const updateEvidenceFact = (id: string, factKey: string) => {
@@ -1454,7 +1499,7 @@ function ProjectEditor({
           : item,
       ),
     );
-    setDirty(true);
+    markDirty();
   };
 
   const updateEvidenceSharingScope = (
@@ -1466,7 +1511,7 @@ function ProjectEditor({
         item.id === id ? { ...item, sharingScope } : item,
       ),
     );
-    setDirty(true);
+    markDirty();
   };
 
   const updatePlanItems = (items: CustomerPlanItem[]) => {
@@ -1474,8 +1519,18 @@ function ProjectEditor({
     setPlanEdited(true);
     setPlanSnapshotConflict(false);
     invalidateStepsFrom(3);
-    setDirty(true);
+    markDirty();
     setStatus("");
+    setValidationError("");
+  };
+
+  const resetAdvisorSuggestions = () => {
+    setPlanItems(advisorPlan.items as CustomerPlanItem[]);
+    setPlanEdited(false);
+    setPlanInputsChanged(false);
+    setPlanSnapshotConflict(false);
+    invalidateStepsFrom(3);
+    markDirty();
     setValidationError("");
   };
 
@@ -1759,19 +1814,27 @@ function ProjectEditor({
       );
       return;
     }
+    const saveGeneration = editGeneration.current;
     setBusy(true);
     setStatus("Saving your draft...");
     try {
-      const id = await onSave(draftWithPlan(), savedId || undefined);
-      setSavedId(id);
-      setDirty(false);
-      setStatus("Draft saved to your private account.");
-    } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "The draft could not be saved.",
+      const saved = await onSave(
+        draftWithPlan(),
+        savedId || undefined,
+        savedId ? savedPlanRevision : undefined,
       );
+      setSavedId(saved.id);
+      setSavedPlanRevision(saved.planRevision);
+      const noNewerEdits = editGeneration.current === saveGeneration;
+      if (noNewerEdits) setDirty(false);
+      setRevisionConflict(false);
+      setStatus(
+        noNewerEdits
+          ? "Draft saved to your private account."
+          : "Draft saved. Changes made while it was saving are still unsaved.",
+      );
+    } catch (error) {
+      setStatus(describeEditorError(error, "The draft could not be saved."));
     } finally {
       setBusy(false);
     }
@@ -1800,7 +1863,13 @@ function ProjectEditor({
   async function savePlanForSharing() {
     const blocker = planShareBlocker();
     if (blocker) throw new Error(blocker);
-    const id = await onSave(draftWithPlan(), savedId || undefined);
+    const saveGeneration = editGeneration.current;
+    const saved = await onSave(
+      draftWithPlan(),
+      savedId || undefined,
+      savedId ? savedPlanRevision : undefined,
+    );
+    const id = saved.id;
     const privatePlanEvidence = pendingEvidence.filter(
       (item) => item.sharingScope === "private-plan",
     );
@@ -1819,11 +1888,16 @@ function ProjectEditor({
       ]);
     }
     setSavedId(id);
-    setDirty(false);
+    setSavedPlanRevision(saved.planRevision);
+    const noNewerEdits = editGeneration.current === saveGeneration;
+    if (noNewerEdits) setDirty(false);
+    setRevisionConflict(false);
     setStatus(
-      privatePlanEvidence.length
-        ? "Plan and its private supporting evidence saved to your account."
-        : "Plan saved to your private account.",
+      noNewerEdits
+        ? privatePlanEvidence.length
+          ? "Plan and its private supporting evidence saved to your account."
+          : "Plan saved to your private account."
+        : "Plan copy saved. Changes made while it was saving are still unsaved.",
     );
     return id;
   }
@@ -1838,6 +1912,16 @@ function ProjectEditor({
     setShareStatus("");
     setShareRequestId(crypto.randomUUID());
     setShareDialogOpen(true);
+  }
+
+  function openReportPreview() {
+    const blocker = planShareBlocker();
+    if (blocker) {
+      setValidationError(blocker);
+      return;
+    }
+    setValidationError("");
+    setReportPreviewOpen(true);
   }
 
   function reviewHomeDetailsBeforeSharing() {
@@ -1888,17 +1972,16 @@ function ProjectEditor({
           result.error || "The plan email request could not be accepted.",
         );
       }
-      setShareStatus(
-        result.message
-        || "Accepted for delivery. Inbox delivery has not been confirmed.",
-      );
+       setShareStatus(
+         result.message
+         || "Accepted by the email provider. Inbox delivery has not been confirmed.",
+       );
     } catch (error) {
       setShareStatus("");
-      setShareError(
-        error instanceof Error
-          ? error.message
-          : "The plan email request could not be accepted.",
-      );
+      setShareError(describeEditorError(
+        error,
+        "The plan email request could not be accepted.",
+      ));
     } finally {
       setShareBusy(false);
     }
@@ -2012,6 +2095,7 @@ function ProjectEditor({
       );
       return;
     }
+    const saveGeneration = editGeneration.current;
     setBusy(true);
     setStatus("Creating the anonymised installer scope...");
     try {
@@ -2020,15 +2104,16 @@ function ProjectEditor({
         pendingEvidence,
         confirmInstallerPhotoSharing,
         savedId || undefined,
+        savedId ? savedPlanRevision : undefined,
       );
-      setDirty(false);
+      if (editGeneration.current === saveGeneration) setDirty(false);
+      setRevisionConflict(false);
       setPendingEvidence([]);
     } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "The enquiry could not be submitted.",
-      );
+      setStatus(describeEditorError(
+        error,
+        "The enquiry could not be submitted.",
+      ));
     } finally {
       setBusy(false);
     }
@@ -2163,6 +2248,26 @@ function ProjectEditor({
         <p className="customer-editor-status" role="alert">
           {status}
         </p>
+      )}
+      {revisionConflict && (
+        <section className="customer-plan-conflict-warning" role="alert">
+          <strong>A newer saved version is available</strong>
+          <p>
+            Your unsaved edits are still on this screen. Review them first.
+            Loading the latest saved version will discard only these unsaved
+            edits.
+          </p>
+          <button
+            type="button"
+            disabled={busy || shareBusy || pdfBusy}
+            onClick={() => {
+              setRevisionConflict(false);
+              onReloadLatest();
+            }}
+          >
+            Discard my unsaved edits and load the latest saved version
+          </button>
+        </section>
       )}
       <div className="customer-editor-body">
         {step === 1 && (
@@ -2783,7 +2888,7 @@ function ProjectEditor({
                       setPlanInputsChanged(false);
                       setPlanSnapshotConflict(false);
                       invalidateStepsFrom(3);
-                      setDirty(true);
+    markDirty();
                       setValidationError("");
                     }}
                   >
@@ -2801,7 +2906,7 @@ function ProjectEditor({
                       setPlanEdited(true);
                       setPlanInputsChanged(false);
                       invalidateStepsFrom(3);
-                      setDirty(true);
+                      markDirty();
                       setValidationError("");
                     }}
                   >
@@ -2841,8 +2946,15 @@ function ProjectEditor({
               <div className="customer-plan-toolbar-actions">
                 <button
                   type="button"
+                  disabled={busy || shareBusy || pdfBusy}
+                  onClick={openReportPreview}
+                >
+                  Preview full report
+                </button>
+                <button
+                  type="button"
                   className="primary"
-                  disabled={!emailVerified || shareBusy || pdfBusy}
+                  disabled={!emailVerified || busy || shareBusy || pdfBusy}
                   onClick={openShareDialog}
                 >
                   {emailVerified
@@ -2851,7 +2963,7 @@ function ProjectEditor({
                 </button>
                 <button
                   type="button"
-                  disabled={shareBusy || pdfBusy}
+                  disabled={busy || shareBusy || pdfBusy}
                   onClick={downloadPlanPdf}
                 >
                   {pdfBusy ? "Starting download..." : "Download PDF"}
@@ -2859,17 +2971,8 @@ function ProjectEditor({
                 {(planEdited || planSnapshotConflict) && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setPlanItems(
-                        advisorPlan.items as CustomerPlanItem[],
-                      );
-                      setPlanEdited(false);
-                      setPlanInputsChanged(false);
-                      setPlanSnapshotConflict(false);
-                      invalidateStepsFrom(3);
-                      setDirty(true);
-                      setValidationError("");
-                    }}
+                    disabled={busy || shareBusy || pdfBusy}
+                    onClick={resetAdvisorSuggestions}
                   >
                     Reset advisor suggestions
                   </button>
@@ -3261,6 +3364,47 @@ function ProjectEditor({
                 the privacy check.
               </p>
             </div>
+            <div className="customer-plan-toolbar customer-plan-toolbar-bottom">
+              <p>
+                Finished reviewing the roadmap? Preview it, email it or download
+                a PDF without scrolling back to the top.
+              </p>
+              <div className="customer-plan-toolbar-actions">
+                <button
+                  type="button"
+                  disabled={busy || shareBusy || pdfBusy}
+                  onClick={openReportPreview}
+                >
+                  Preview full report
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!emailVerified || busy || shareBusy || pdfBusy}
+                  onClick={openShareDialog}
+                >
+                  {emailVerified
+                    ? "Email this plan"
+                    : "Verify email to send"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || shareBusy || pdfBusy}
+                  onClick={downloadPlanPdf}
+                >
+                  {pdfBusy ? "Starting download..." : "Download PDF"}
+                </button>
+                {(planEdited || planSnapshotConflict) && (
+                  <button
+                    type="button"
+                    disabled={busy || shareBusy || pdfBusy}
+                    onClick={resetAdvisorSuggestions}
+                  >
+                    Reset advisor suggestions
+                  </button>
+                )}
+              </div>
+            </div>
           </section>
         )}
         {step === 4 && (
@@ -3487,72 +3631,66 @@ function ProjectEditor({
             <section
               className="customer-project-evidence-picker"
               aria-labelledby="project-evidence-title"
-            >
-              <header>
-                <div>
-                  <span>Optional property evidence</span>
-                  <h3 id="project-evidence-title">
-                    Add useful photos or documents
-                  </h3>
+              >
+                <header>
+                  <div>
+                    <span>Optional property evidence</span>
+                    <h3 id="project-evidence-title">
+                      Add useful photos or documents
+                    </h3>
                     <p>
-                      Use this one upload area for existing files or a phone
-                      camera. Files stay private to your plan unless you
-                      explicitly choose installer quoting access.
+                      Start with a guided photo or add a supporting document.
+                      Files stay private to your plan unless you explicitly
+                      choose installer quoting access.
                     </p>
+                  </div>
+                  <strong>{pendingEvidence.length} selected</strong>
+                </header>
+                <CustomerProjectPhotoCapture
+                  serviceCategories={draft.serviceCategories}
+                  remainingSlots={
+                    12 - storedEvidenceCount - pendingEvidence.length
+                  }
+                  onAdd={(files, preset) => addEvidence(files, preset)}
+                />
+                <div className="customer-project-evidence-secondary">
+                  <div>
+                    <span>Other evidence</span>
+                    <h4>Add a photo or a supporting PDF</h4>
+                    <p>
+                      Use this when the guided cards do not cover something
+                      useful and home-specific.
+                    </p>
+                  </div>
+                  <div className="customer-project-evidence-actions">
+                    <label>
+                      <span>Add another safe photo</span>
+                      <small>JPEG, PNG or WebP, up to 8 MB</small>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) => {
+                          addEvidence(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <label>
+                      <span>Add a supporting document</span>
+                      <small>PDF only, up to 8 MB</small>
+                      <input
+                        type="file"
+                        multiple
+                        accept="application/pdf"
+                        onChange={(event) => {
+                          addEvidence(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <strong>{pendingEvidence.length} selected</strong>
-              </header>
-              <div className="customer-project-evidence-actions">
-                <label>
-                  <span>Add photos or documents</span>
-                  <small>JPEG, PNG, WebP or PDF, up to 8 MB each</small>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={(event) => {
-                      addEvidence(event.target.files);
-                      event.target.value = "";
-                    }}
-                  />
-                </label>
-              </div>
-              <details className="customer-photo-checklist">
-                <summary>Recommended photo and document checklist</summary>
-                <ul>
-                  <li>Switchboard front with its ordinary door open</li>
-                  <li>
-                    Hot-water system, rating label and wall-to-fence clearance
-                  </li>
-                  <li>
-                    Heating or cooling units, outlets and accessible labels
-                  </li>
-                  <li>
-                    Representative windows, glazing edges, curtains, blinds,
-                    shutters and external shading
-                  </li>
-                  <li>
-                    Visible draught gaps, vents, chimneys or evaporative outlets
-                  </li>
-                  <li>
-                    Roof or ceiling access hatch photographed safely from the
-                    room
-                  </li>
-                  <li>
-                    Cropped satellite roof screenshot showing roof form, shade
-                    and existing panels without an address marker
-                  </li>
-                  <li>
-                    Energy-use summary with the NMI, account number, name and
-                    address removed
-                  </li>
-                </ul>
-                <p>
-                  Wide photos show context and close photos show labels. Never
-                  climb onto a roof, enter a roof space or remove an electrical
-                  cover for this form.
-                </p>
-              </details>
               {pendingEvidence.length > 0 && (
                 <ul>
                   {pendingEvidence.map((item) => (
@@ -3855,6 +3993,11 @@ function ProjectEditor({
         onReviewHomeDetails={reviewHomeDetailsBeforeSharing}
         onSubmit={emailPlan}
       />
+      <CustomerPlanReportPreviewDialog
+        open={reportPreviewOpen}
+        report={createCustomerPlanReportView(shareablePlanDocument)}
+        onClose={() => setReportPreviewOpen(false)}
+      />
     </section>
   );
 }
@@ -4104,6 +4247,7 @@ function ProjectDetail({
                         void onAction("toggle_milestone", {
                           itemId: item.id,
                           complete: !complete,
+                          expectedPlanRevision: project.planRevision,
                         })
                       }
                       disabled={busy}
@@ -4136,26 +4280,21 @@ function ProjectDetail({
                   into this history.
                 </p>
               </div>
-              <ol>
-                {project.planRevisions.slice(0, 8).map((revision) => (
-                  <li key={revision.id}>
-                    <div>
-                      <strong>Version {revision.revisionNumber}</strong>
-                      <small>
-                        {new Date(revision.createdAt).toLocaleString("en-AU")}
-                      </small>
-                    </div>
-                    <span>
-                      {revision.planSnapshot.items?.length || 0} ordered steps
-                      {" | "}
-                      {optionLabel(
-                        customerProjectOptions.budgets,
-                        revision.budgetRange,
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+              <CustomerPlanRevisionHistory
+                project={project}
+                busy={busy}
+                goalOptions={customerProjectOptions.goals}
+                homeFeatureOptions={customerProjectOptions.homeFeatures}
+                paceOptions={customerProjectOptions.paces}
+                budgetOptions={customerProjectOptions.budgets}
+                onRestore={(sourceRevisionNumber) =>
+                  onAction("restore_plan_revision", {
+                    sourceRevisionNumber,
+                    expectedPlanRevision: project.planRevision,
+                    confirmRestore: true,
+                  })
+                }
+              />
             </section>
           )}
           {project.advisorProfile.climate && (
@@ -5225,6 +5364,7 @@ export function CustomerDashboard({
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [projectConflictVersion, setProjectConflictVersion] = useState(0);
   const [account, setAccount] = useState<AccountResult>({
     profile: null,
     emailVerified: false,
@@ -5345,18 +5485,49 @@ export function CustomerDashboard({
       body: JSON.stringify(body),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok)
+    if (!response.ok || !result.ok) {
+      if (
+        response.status === 409
+        && result.code === "PLAN_REVISION_CONFLICT"
+      ) {
+        const refreshedResponse = await fetch("/api/customer-projects", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const refreshed = await refreshedResponse.json().catch(() => ({}));
+        if (refreshedResponse.ok && refreshed.ok) {
+          setProjects(refreshed.projects || []);
+        }
+        throw new Error(PROJECT_REVISION_CONFLICT_MESSAGE);
+      }
       throw new Error(result.error || "The project could not be updated.");
+    }
     setProjects(result.projects || []);
     return result;
   }
 
-  async function saveProject(draft: ProjectDraft, id?: string) {
+  async function saveProject(
+    draft: ProjectDraft,
+    id?: string,
+    expectedPlanRevision?: number,
+  ) {
+    if (id && !expectedPlanRevision) {
+      throw new Error("Refresh this project before saving it again.");
+    }
     const result = await projectRequest(
       id ? "PATCH" : "POST",
-      id ? { ...draft, id, action: "update" } : draft,
+      id
+        ? { ...draft, id, action: "update", expectedPlanRevision }
+        : draft,
     );
-    return id || String(result.id);
+    const savedId = id || String(result.id);
+    const savedProject = (result.projects || []).find(
+      (project: CustomerProject) => project.id === savedId,
+    );
+    return {
+      id: savedId,
+      planRevision: Number(savedProject?.planRevision || 1),
+    };
   }
 
   async function uploadProjectEvidence(
@@ -5402,8 +5573,10 @@ export function CustomerDashboard({
     evidence: PendingProjectEvidence[],
     confirmInstallerPhotoSharing: boolean,
     id?: string,
+    expectedPlanRevision?: number,
   ) {
-    const projectId = await saveProject(draft, id);
+    const saved = await saveProject(draft, id, expectedPlanRevision);
+    const projectId = saved.id;
     await uploadProjectEvidence(
       projectId,
       evidence,
@@ -5413,6 +5586,7 @@ export function CustomerDashboard({
       id: projectId,
       action: "submit",
       confirmInstallerPhotoSharing,
+      expectedPlanRevision: saved.planRevision,
     });
     setSelectedId(projectId);
     setEditingId("");
@@ -5479,6 +5653,10 @@ export function CustomerDashboard({
       else if (action === "record_outcome")
         setStatus(
           "Private progress check-in saved. It is not shared with installers or presented as verified savings.",
+        );
+      else if (action === "restore_plan_revision")
+        setStatus(
+          `Version ${String(result.restoredFromRevision || "")} restored as new current version ${String(result.planRevision || "")}. Private notes, evidence and installer activity were not changed.`,
         );
       else setStatus("Project updated.");
     } catch (error) {
@@ -5852,7 +6030,7 @@ export function CustomerDashboard({
           )}
           {view === "editor" ? (
             <ProjectEditor
-              key={editing?.id || "new"}
+              key={`${editing?.id || "new"}:${projectConflictVersion}`}
               initial={
                 editing
                   ? {
@@ -5900,6 +6078,7 @@ export function CustomerDashboard({
                     )
               }
               existingId={editing?.id}
+              existingPlanRevision={editing?.planRevision}
               storedEvidence={editing?.evidence || []}
               evidenceSharingConsent={Boolean(
                 editing?.evidenceSharingConsent,
@@ -5909,6 +6088,9 @@ export function CustomerDashboard({
                 setView("overview");
                 setEditingId("");
               }}
+              onReloadLatest={() =>
+                setProjectConflictVersion((current) => current + 1)
+              }
               onSave={saveProject}
               onUploadEvidence={uploadProjectEvidence}
               onSubmit={submitProject}

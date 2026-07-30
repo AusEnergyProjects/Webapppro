@@ -188,7 +188,8 @@ export async function POST(request: Request) {
     {
       ok: true,
       status: "accepted",
-      message: "Accepted for delivery.",
+      message:
+        "Accepted by the email provider. Inbox delivery has not been confirmed.",
     },
     202,
   );

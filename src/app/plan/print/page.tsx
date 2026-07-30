@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { CustomerPlanPrintReport } from "@/components/CustomerPlanShareDialog";
+import {
+  CustomerPlanReportPreview,
+} from "@/components/CustomerPlanReportPreview";
 import {
   DownloadCustomerPlanPdfButton,
 } from "@/components/DownloadCustomerPlanPdfButton";
@@ -182,7 +184,7 @@ export default async function PrintableHomeEnergyPlanPage({
         <a href={`/plan?${returnParams.toString()}`}>Return to planner</a>
         <span>{context.join(" | ")}</span>
       </nav>
-      <CustomerPlanPrintReport report={report} />
+      <CustomerPlanReportPreview report={report} />
     </main>
   );
 }

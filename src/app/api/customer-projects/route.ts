@@ -23,6 +23,9 @@ import {
   customerContactReadiness,
   submissionReadiness,
 } from "@/lib/customer-projects.mjs";
+import {
+  prepareCustomerPlanRevisionRestore,
+} from "@/lib/customer-plan-revisions.mjs";
 import { parseArrivalWindows, selectedArrivalWindow } from "@/lib/customer-project-arrivals.mjs";
 
 export const runtime = "edge";
@@ -38,6 +41,14 @@ function json(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function planRevisionConflict(error: string) {
+  return json({
+    ok: false,
+    code: "PLAN_REVISION_CONFLICT",
+    error,
+  }, 409);
+}
+
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -45,6 +56,15 @@ function sameOrigin(request: Request) {
 
 function cleanId(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 180) : "";
+}
+
+function cleanPlanRevision(value: unknown) {
+  return typeof value === "number"
+    && Number.isSafeInteger(value)
+    && value >= 1
+    && value <= 1_000_000
+    ? value
+    : 0;
 }
 
 async function identity(request: Request) {
@@ -117,6 +137,7 @@ function projectShape(
     ),
     planSnapshot: parseStoredJson(row.plan_snapshot, {}),
     completedPlanItems: parseStoredJson(row.completed_plan_items, []),
+    planRevision: Number(row.plan_revision || 1),
     status,
     displayStatus,
     submittedAt: row.submitted_at,
@@ -194,6 +215,7 @@ function projectShape(
       pace: revision.pace,
       budgetRange: revision.budget_range,
       planSnapshot: parseStoredJson(revision.plan_snapshot, {}),
+      restoredFromRevision: Number(revision.restored_from_revision || 0),
       createdAt: revision.created_at,
     })),
     outcomeCheckins: outcomeCheckins.map((checkin) => ({
@@ -222,6 +244,31 @@ function projectShape(
 async function ownedProject(firebaseUid: string, id: string) {
   return getD1().prepare("SELECT * FROM customer_projects WHERE id = ? AND firebase_uid = ?")
     .bind(id, firebaseUid).first<Record<string, unknown>>();
+}
+
+function storedProjectDraft(row: Record<string, unknown>) {
+  return {
+    title: row.title,
+    homeNickname: row.home_nickname,
+    postcode: row.postcode,
+    addressState: row.address_state,
+    propertyType: row.property_type,
+    householdSituation: row.household_situation,
+    goal: row.goal,
+    goals: parseStoredJson(row.goals, []),
+    pace: row.pace,
+    existingFeatures: parseStoredJson(row.existing_features, []),
+    serviceCategories: parseStoredJson(row.service_categories, []),
+    priorities: parseStoredJson(row.priorities, []),
+    projectStage: row.project_stage,
+    timing: row.timing,
+    budgetRange: row.budget_range,
+    propertyContext: parseStoredJson(row.property_context, {}),
+    privateNotes: row.private_notes,
+    advisorProfile: parseStoredJson(row.advisor_profile, {}),
+    planSnapshot: parseStoredJson(row.plan_snapshot, {}),
+    completedPlanItems: parseStoredJson(row.completed_plan_items, []),
+  };
 }
 
 async function projectsForOwner(firebaseUid: string) {
@@ -277,7 +324,7 @@ async function projectsForOwner(firebaseUid: string) {
     .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
   const planRevisionRows = projectIds.length ? await db.prepare(`WITH ranked_revisions AS (
       SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
-        pace, budget_range, plan_snapshot, created_at,
+        pace, budget_range, plan_snapshot, restored_from_revision, created_at,
         ROW_NUMBER() OVER (
           PARTITION BY project_id
           ORDER BY revision_number DESC, created_at DESC, id DESC
@@ -286,7 +333,7 @@ async function projectsForOwner(firebaseUid: string) {
       WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
     )
     SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
-      pace, budget_range, plan_snapshot, created_at
+      pace, budget_range, plan_snapshot, restored_from_revision, created_at
     FROM ranked_revisions WHERE row_rank <= ${PLAN_REVISION_READ_LIMIT}
     ORDER BY project_id, revision_number DESC`)
     .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
@@ -453,12 +500,30 @@ export async function PATCH(request: Request) {
   const id = cleanId(raw.id);
   if (!id) return json({ ok: false, error: "Choose a valid project." }, 400);
   const db = getD1();
+  const account = await db.prepare(
+    "SELECT account_status FROM customer_accounts WHERE firebase_uid = ?",
+  ).bind(user.uid).first<Record<string, unknown>>();
+  if (!account) {
+    return json({ ok: false, error: "Complete your private household profile first." }, 404);
+  }
+  if (account.account_status !== "active") {
+    return json({ ok: false, error: "This customer account is not active." }, 403);
+  }
   const current = await ownedProject(user.uid, id);
   if (!current) return json({ ok: false, error: "Project not found." }, 404);
   const now = new Date().toISOString();
 
   if (action === "update") {
     if (current.status !== "draft") return json({ ok: false, error: "Submitted projects are locked. Duplicate this project to revise its installer scope." }, 409);
+    const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
+    const currentPlanRevision = Number(current.plan_revision || 1);
+    const currentUpdatedAt = String(current.updated_at || "");
+    if (!expectedPlanRevision) {
+      return json({ ok: false, error: "Refresh this project before saving it again." }, 400);
+    }
+    if (expectedPlanRevision !== currentPlanRevision) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before saving.");
+    }
     const normalized = normalizeCustomerProject(raw);
     if (!normalized.ok) return json({ ok: false, error: normalized.error }, 400);
     const project = normalized.project;
@@ -481,40 +546,214 @@ export async function PATCH(request: Request) {
       || String(current.budget_range || "") !== project.budgetRange
       || String(current.plan_snapshot || "{}") !== nextPlan
     );
-    const statements = [
-      db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
-        property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
-        priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
-        advisor_profile = ?, completed_plan_items = ?, updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
-        .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
-          project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
-          JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
-          project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
-          nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems), now, id, user.uid),
-    ];
     if (roadmapChanged) {
-      statements.push(db.prepare(`INSERT INTO customer_project_plan_revisions
-        (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
-         home_features, pace, budget_range, plan_snapshot, created_at)
-        SELECT ?, ?, ?, COALESCE(MAX(revision_number), 0) + 1, 'saved', ?, ?, ?, ?, ?, ?, ?
-        FROM customer_project_plan_revisions
-        WHERE project_id = ? AND customer_uid = ?`)
-        .bind(crypto.randomUUID(), id, user.uid,
-          String(project.planSnapshot?.version || ""), nextGoals, nextFeatures,
-          project.pace, project.budgetRange, nextPlan, now, id, user.uid));
-      statements.push(db.prepare(`DELETE FROM customer_project_plan_revisions
+      const nextPlanRevision = currentPlanRevision + 1;
+      const revisionId = crypto.randomUUID();
+      const results = await db.batch([
+        db.prepare(`INSERT INTO customer_project_plan_revisions
+          (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
+           home_features, pace, budget_range, plan_snapshot, restored_from_revision, created_at)
+          SELECT ?, ?, ?, ?, 'saved', ?, ?, ?, ?, ?, ?, 0, ?
+          WHERE EXISTS (
+            SELECT 1 FROM customer_projects
+            WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+              AND plan_revision = ? AND updated_at = ?
+          )`)
+          .bind(revisionId, id, user.uid, nextPlanRevision,
+            String(project.planSnapshot?.version || ""), nextGoals, nextFeatures,
+            project.pace, project.budgetRange, nextPlan, now,
+            id, user.uid, expectedPlanRevision, currentUpdatedAt),
+        db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
+          property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
+          priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
+          advisor_profile = ?, completed_plan_items = ?, plan_revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+            AND plan_revision = ? AND updated_at = ?
+            AND EXISTS (
+              SELECT 1 FROM customer_project_plan_revisions
+              WHERE id = ? AND project_id = ? AND customer_uid = ?
+            )`)
+          .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
+            project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
+            JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
+            project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+            nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems),
+            nextPlanRevision, now, id, user.uid, expectedPlanRevision, currentUpdatedAt,
+            revisionId, id, user.uid),
+        db.prepare(`DELETE FROM customer_project_plan_revisions
         WHERE project_id = ? AND customer_uid = ? AND id NOT IN (
           SELECT id FROM customer_project_plan_revisions
           WHERE project_id = ? AND customer_uid = ?
           ORDER BY revision_number DESC, created_at DESC, id DESC
           LIMIT ${PLAN_REVISION_RETENTION_LIMIT}
-        )`).bind(id, user.uid, id, user.uid));
+        ) AND EXISTS (
+          SELECT 1 FROM customer_project_plan_revisions
+          WHERE id = ? AND project_id = ? AND customer_uid = ?
+        )`).bind(id, user.uid, id, user.uid, revisionId, id, user.uid),
+      ]);
+      if (
+        Number(results[0]?.meta.changes || 0) !== 1
+        || Number(results[1]?.meta.changes || 0) !== 1
+      ) {
+        return planRevisionConflict("This plan changed in another tab. Review the latest version before saving.");
+      }
+    } else {
+      const updated = await db.prepare(`UPDATE customer_projects SET title = ?, home_nickname = ?, postcode = ?, address_state = ?,
+        property_type = ?, household_situation = ?, goal = ?, goals = ?, pace = ?, existing_features = ?, service_categories = ?,
+        priorities = ?, project_stage = ?, timing = ?, budget_range = ?, property_context = ?, private_notes = ?, plan_snapshot = ?,
+        advisor_profile = ?, completed_plan_items = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+          AND plan_revision = ? AND updated_at = ?`)
+        .bind(project.title, project.homeNickname, project.postcode, project.addressState, project.propertyType,
+          project.householdSituation, project.goal, nextGoals, project.pace, nextFeatures,
+          JSON.stringify(project.serviceCategories), JSON.stringify(project.priorities), project.projectStage,
+          project.timing, project.budgetRange, JSON.stringify(project.propertyContext), project.privateNotes,
+          nextPlan, JSON.stringify(project.advisorProfile), JSON.stringify(completedPlanItems),
+          now, id, user.uid, expectedPlanRevision, currentUpdatedAt)
+        .run();
+      if (Number(updated.meta.changes || 0) !== 1) {
+        return planRevisionConflict("This plan changed in another tab. Review the latest version before saving.");
+      }
     }
-    await db.batch(statements);
+  } else if (action === "restore_plan_revision") {
+    if (current.status !== "draft") {
+      return json({ ok: false, error: "Submitted projects are locked. Restore an earlier plan only in a private draft." }, 409);
+    }
+    if (raw.confirmRestore !== true) {
+      return json({ ok: false, error: "Confirm that you want to restore this saved plan as a new version." }, 400);
+    }
+    const sourceRevisionNumber = cleanPlanRevision(raw.sourceRevisionNumber);
+    const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
+    const currentPlanRevision = Number(current.plan_revision || 1);
+    const currentUpdatedAt = String(current.updated_at || "");
+    if (!sourceRevisionNumber || !expectedPlanRevision) {
+      return json({ ok: false, error: "Choose a valid saved plan version and try again." }, 400);
+    }
+    if (expectedPlanRevision !== currentPlanRevision) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before restoring.");
+    }
+    if (sourceRevisionNumber === currentPlanRevision) {
+      return json({ ok: false, error: "That saved version is already the current plan." }, 409);
+    }
+    const sourceRevision = await db.prepare(`SELECT revision_number, plan_version, goals, home_features,
+      pace, budget_range, plan_snapshot
+      FROM customer_project_plan_revisions
+      WHERE project_id = ? AND customer_uid = ? AND revision_number = ?`)
+      .bind(id, user.uid, sourceRevisionNumber)
+      .first<Record<string, unknown>>();
+    if (!sourceRevision) {
+      return json({ ok: false, error: "That saved plan version is no longer available." }, 404);
+    }
+    const storedGoals = parseStoredJson(sourceRevision.goals, null);
+    const storedHomeFeatures = parseStoredJson(sourceRevision.home_features, null);
+    const storedPlanSnapshot = parseStoredJson(sourceRevision.plan_snapshot, null);
+    if (
+      !Array.isArray(storedGoals)
+      || !Array.isArray(storedHomeFeatures)
+      || !storedPlanSnapshot
+      || typeof storedPlanSnapshot !== "object"
+      || Array.isArray(storedPlanSnapshot)
+    ) {
+      return json({ ok: false, error: "That saved plan version could not be restored safely." }, 409);
+    }
+    const prepared = prepareCustomerPlanRevisionRestore(
+      storedProjectDraft(current),
+      {
+        revisionNumber: Number(sourceRevision.revision_number),
+        planVersion: sourceRevision.plan_version,
+        goals: storedGoals,
+        homeFeatures: storedHomeFeatures,
+        pace: sourceRevision.pace,
+        budgetRange: sourceRevision.budget_range,
+        planSnapshot: storedPlanSnapshot,
+      },
+    );
+    if (!prepared.ok || !("project" in prepared) || !prepared.project) {
+      const error = "error" in prepared
+        ? prepared.error
+        : "That saved plan version could not be restored safely.";
+      return json({ ok: false, error }, 409);
+    }
+    const restored = prepared.project;
+    const nextGoals = JSON.stringify(restored.goals);
+    const nextFeatures = JSON.stringify(restored.existingFeatures);
+    const nextPlan = JSON.stringify(restored.planSnapshot);
+    const nextCompleted = JSON.stringify(prepared.completedPlanItems || []);
+    if (
+      String(current.goals || "[]") === nextGoals
+      && String(current.existing_features || "[]") === nextFeatures
+      && String(current.pace || "") === restored.pace
+      && String(current.budget_range || "") === restored.budgetRange
+      && String(current.plan_snapshot || "{}") === nextPlan
+    ) {
+      return json({ ok: false, error: "That saved version already matches the current plan." }, 409);
+    }
+    const nextPlanRevision = currentPlanRevision + 1;
+    const revisionId = crypto.randomUUID();
+    const results = await db.batch([
+      db.prepare(`INSERT INTO customer_project_plan_revisions
+        (id, project_id, customer_uid, revision_number, event_type, plan_version, goals,
+         home_features, pace, budget_range, plan_snapshot, restored_from_revision, created_at)
+        SELECT ?, ?, ?, ?, 'restored', ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM customer_projects
+          WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+            AND plan_revision = ? AND updated_at = ?
+        )`)
+        .bind(revisionId, id, user.uid, nextPlanRevision,
+          String(restored.planSnapshot?.version || ""), nextGoals, nextFeatures,
+          restored.pace, restored.budgetRange, nextPlan, sourceRevisionNumber, now,
+          id, user.uid, expectedPlanRevision, currentUpdatedAt),
+      db.prepare(`UPDATE customer_projects SET goal = ?, goals = ?, pace = ?, existing_features = ?,
+        budget_range = ?, plan_snapshot = ?, completed_plan_items = ?, plan_revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+          AND plan_revision = ? AND updated_at = ?
+          AND EXISTS (
+            SELECT 1 FROM customer_project_plan_revisions
+            WHERE id = ? AND project_id = ? AND customer_uid = ?
+              AND revision_number = ? AND restored_from_revision = ?
+          )`)
+        .bind(restored.goal, nextGoals, restored.pace, nextFeatures,
+          restored.budgetRange, nextPlan, nextCompleted, nextPlanRevision, now,
+          id, user.uid, expectedPlanRevision, currentUpdatedAt,
+          revisionId, id, user.uid,
+          nextPlanRevision, sourceRevisionNumber),
+      db.prepare(`DELETE FROM customer_project_plan_revisions
+        WHERE project_id = ? AND customer_uid = ? AND id NOT IN (
+          SELECT id FROM customer_project_plan_revisions
+          WHERE project_id = ? AND customer_uid = ?
+          ORDER BY revision_number DESC, created_at DESC, id DESC
+          LIMIT ${PLAN_REVISION_RETENTION_LIMIT}
+        ) AND EXISTS (
+          SELECT 1 FROM customer_project_plan_revisions
+          WHERE id = ? AND project_id = ? AND customer_uid = ?
+        )`).bind(id, user.uid, id, user.uid, revisionId, id, user.uid),
+    ]);
+    if (
+      Number(results[0]?.meta.changes || 0) !== 1
+      || Number(results[1]?.meta.changes || 0) !== 1
+    ) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before restoring.");
+    }
+    return json({
+      ok: true,
+      id,
+      restoredFromRevision: sourceRevisionNumber,
+      planRevision: nextPlanRevision,
+      projects: await projectsForOwner(user.uid),
+    });
   } else if (action === "submit") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
+    const currentPlanRevision = Number(current.plan_revision || 1);
+    const currentUpdatedAt = String(current.updated_at || "");
+    if (!expectedPlanRevision) {
+      return json({ ok: false, error: "Refresh this project before requesting installer responses." }, 400);
+    }
+    if (expectedPlanRevision !== currentPlanRevision) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
+    }
     const evidenceCount = await db.prepare(`SELECT COUNT(*) count
       FROM customer_project_evidence
       WHERE project_id = ? AND customer_uid = ? AND status = 'active'
@@ -573,35 +812,38 @@ export async function PATCH(request: Request) {
     const opportunityId = `customer-project:${id}`;
     const submittedAt = now;
     const submitStatements = [
+      db.prepare(`UPDATE customer_projects
+        SET status = 'matching', opportunity_id = ?, submitted_at = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+          AND plan_revision = ? AND updated_at = ?
+          AND NOT EXISTS (SELECT 1 FROM trade_opportunities WHERE id = ?)`)
+        .bind(opportunityId, submittedAt, submittedAt, id, user.uid,
+          expectedPlanRevision, currentUpdatedAt, opportunityId),
       db.prepare(`INSERT INTO trade_opportunities
         (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
          source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, '', 'customer-platform', ?, ?, ?)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, '', 'customer-platform', ?, ?, ?
+        FROM customer_projects
+        WHERE id = ? AND firebase_uid = ? AND status = 'matching'
+          AND opportunity_id = ? AND submitted_at = ?
+          AND plan_revision = ? AND updated_at = ?
         ON CONFLICT(id) DO NOTHING`)
         .bind(opportunityId, opportunity.title, opportunity.projectType, opportunity.postcode, opportunity.state,
           JSON.stringify(opportunity.serviceCategories), opportunity.priority, opportunity.timing, opportunity.summary,
-          opportunity.sourceReference, DEFAULT_CONTACT_LIMIT, DEFAULT_CONNECTED_INSTALLERS, opportunityExpiry(), Number(current.is_synthetic || 0), submittedAt, submittedAt),
-      db.prepare(`UPDATE customer_projects SET status = 'matching', opportunity_id = ?, submitted_at = ?, updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = 'draft'`).bind(opportunityId, submittedAt, submittedAt, id, user.uid),
+          opportunity.sourceReference, DEFAULT_CONTACT_LIMIT, DEFAULT_CONNECTED_INSTALLERS, opportunityExpiry(),
+          Number(current.is_synthetic || 0), submittedAt, submittedAt,
+          id, user.uid, opportunityId, submittedAt, expectedPlanRevision, submittedAt),
       db.prepare(`INSERT INTO customer_consent_receipts
         (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-        VALUES (?, ?, ?, 'anonymized_installer_matching', ?, ?, '', ?) ON CONFLICT(id) DO NOTHING`)
-        .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_NOTICE_VERSION, submittedAt, submittedAt),
-      adminNotificationStatement(db, {
-        eventKey: `customer-enquiry:${id}`,
-        eventType: "customer.enquiry_submitted",
-        category: "customer",
-        priority: "high",
-        title: "Customer enquiry submitted",
-        summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
-        entityType: "customer_project",
-        entityId: id,
-        actorType: "customer",
-        actorUid: user.uid,
-        requiresAction: true,
-        metadata: { opportunityId, state: opportunity.state, serviceCategories: opportunity.serviceCategories },
-        occurredAt: submittedAt,
-      }),
+        SELECT ?, ?, ?, 'anonymized_installer_matching', ?, ?, '', ?
+        FROM customer_projects
+        WHERE id = ? AND firebase_uid = ? AND status = 'matching'
+          AND opportunity_id = ? AND submitted_at = ?
+          AND plan_revision = ? AND updated_at = ?
+        ON CONFLICT(id) DO NOTHING`)
+        .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_NOTICE_VERSION,
+          submittedAt, submittedAt, id, user.uid, opportunityId, submittedAt,
+          expectedPlanRevision, submittedAt),
     ];
     if (
       Number(evidenceCount?.count || 0) > 0
@@ -611,14 +853,40 @@ export async function PATCH(request: Request) {
       submitStatements.push(
         db.prepare(`INSERT INTO customer_consent_receipts
           (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-          VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+          SELECT ?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?
+          FROM customer_projects
+          WHERE id = ? AND firebase_uid = ? AND status = 'matching'
+            AND opportunity_id = ? AND submitted_at = ?
+            AND plan_revision = ? AND updated_at = ?
           ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
             granted_at = excluded.granted_at, withdrawn_at = ''`)
           .bind(`customer-evidence-share:${id}`, user.uid, id,
-            CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, submittedAt, submittedAt),
+            CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, submittedAt, submittedAt,
+            id, user.uid, opportunityId, submittedAt, expectedPlanRevision, submittedAt),
       );
     }
-    await db.batch(submitStatements);
+    const submitResults = await db.batch(submitStatements);
+    if (
+      Number(submitResults[0]?.meta.changes || 0) !== 1
+      || Number(submitResults[1]?.meta.changes || 0) !== 1
+    ) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
+    }
+    await createAdminNotification({
+      eventKey: `customer-enquiry:${id}`,
+      eventType: "customer.enquiry_submitted",
+      category: "customer",
+      priority: "high",
+      title: "Customer enquiry submitted",
+      summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
+      entityType: "customer_project",
+      entityId: id,
+      actorType: "customer",
+      actorUid: user.uid,
+      requiresAction: true,
+      metadata: { opportunityId, state: opportunity.state, serviceCategories: opportunity.serviceCategories },
+      occurredAt: submittedAt,
+    });
     await dispatchAdminNotificationDeliveries();
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
   } else if (action === "release_contact") {
@@ -779,14 +1047,28 @@ export async function PATCH(request: Request) {
     ]);
   } else if (action === "toggle_milestone") {
     if (current.status === "archived") return json({ ok: false, error: "Restore or duplicate this project before changing its roadmap." }, 409);
+    const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
+    const currentPlanRevision = Number(current.plan_revision || 1);
+    if (!expectedPlanRevision) {
+      return json({ ok: false, error: "Refresh this project before changing its roadmap." }, 400);
+    }
+    if (expectedPlanRevision !== currentPlanRevision) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before changing its progress.");
+    }
     const plan = parseStoredJson(current.plan_snapshot, { items: [] });
     const allowed = new Set(Array.isArray(plan.items) ? plan.items.map((item: Record<string, unknown>) => String(item.id)) : []);
     const itemId = cleanId(raw.itemId);
     if (!allowed.has(itemId)) return json({ ok: false, error: "Choose a valid roadmap step." }, 400);
     const completed = new Set<string>(parseStoredJson(current.completed_plan_items, []));
     if (raw.complete === true) completed.add(itemId); else completed.delete(itemId);
-    await db.prepare("UPDATE customer_projects SET completed_plan_items = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-      .bind(JSON.stringify([...completed]), now, id, user.uid).run();
+    const toggled = await db.prepare(`UPDATE customer_projects
+      SET completed_plan_items = ?, updated_at = ?
+      WHERE id = ? AND firebase_uid = ? AND plan_revision = ? AND updated_at = ?`)
+      .bind(JSON.stringify([...completed]), now, id, user.uid,
+        expectedPlanRevision, String(current.updated_at || "")).run();
+    if (Number(toggled.meta.changes || 0) !== 1) {
+      return planRevisionConflict("This plan changed in another tab. Review the latest version before changing its progress.");
+    }
   } else if (action === "duplicate") {
     const count = await db.prepare("SELECT COUNT(*) count FROM customer_projects WHERE firebase_uid = ? AND status != 'archived'")
       .bind(user.uid).first<{ count: number }>();

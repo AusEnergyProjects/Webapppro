@@ -618,7 +618,10 @@ test("email route enforces verified ownership, durable rate limiting and honest 
     /normalized\.value\.projectId\}:\$\{normalized\.value\.recipient\}:\$\{normalized\.value\.requestId\}/,
   );
   assert.match(route, /status: "accepted"/);
-  assert.match(route, /Accepted for delivery\./);
+  assert.match(
+    route,
+    /Accepted by the email provider\. Inbox delivery has not been confirmed\./,
+  );
   assert.match(route, /status NOT IN \('withdrawn', 'archived'\)/);
   assert.doesNotMatch(route, /SELECT \* FROM customer_projects/);
 });

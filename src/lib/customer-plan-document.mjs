@@ -798,6 +798,197 @@ export function createCustomerPlanReportView(document) {
   };
 }
 
+const CUSTOMER_PLAN_EMAIL_HTML_MAX_BYTES = 88_000;
+const CUSTOMER_PLAN_EMAIL_PROFILES = [
+  {
+    actionCount: 24,
+    actionDescription: 260,
+    actionStage: 70,
+    actionTitle: 140,
+    everydayCount: 6,
+    everydayDescription: 240,
+    everydayTitle: 140,
+    generalBody: 420,
+    professionalNotes: 640,
+  },
+  {
+    actionCount: 18,
+    actionDescription: 220,
+    actionStage: 60,
+    actionTitle: 120,
+    everydayCount: 5,
+    everydayDescription: 200,
+    everydayTitle: 120,
+    generalBody: 360,
+    professionalNotes: 480,
+  },
+  {
+    actionCount: 12,
+    actionDescription: 180,
+    actionStage: 50,
+    actionTitle: 110,
+    everydayCount: 4,
+    everydayDescription: 170,
+    everydayTitle: 110,
+    generalBody: 300,
+    professionalNotes: 360,
+  },
+  {
+    actionCount: 6,
+    actionDescription: 140,
+    actionStage: 44,
+    actionTitle: 96,
+    everydayCount: 2,
+    everydayDescription: 140,
+    everydayTitle: 96,
+    generalBody: 240,
+    professionalNotes: 240,
+  },
+];
+
+function emailText(value, maximum) {
+  const source = String(value || "").trim();
+  const characters = Array.from(source);
+  if (characters.length <= maximum) {
+    return { value: source, shortened: false };
+  }
+  const candidate = characters.slice(0, Math.max(1, maximum - 3)).join("");
+  const lastSpace = candidate.lastIndexOf(" ");
+  const prefix = lastSpace >= Math.floor(maximum / 2)
+    ? candidate.slice(0, lastSpace)
+    : candidate;
+  return {
+    value: `${prefix.trimEnd()}...`,
+    shortened: true,
+  };
+}
+
+function createCustomerPlanEmailProjection(report, profile) {
+  let shortened = false;
+  const trim = (value, maximum) => {
+    const result = emailText(value, maximum);
+    shortened ||= result.shortened;
+    return result.value;
+  };
+  const actions = report.actions
+    .slice(0, profile.actionCount)
+    .map((action) => ({
+      ...action,
+      stage: trim(action.stage, profile.actionStage),
+      title: trim(action.title, profile.actionTitle),
+      description: trim(action.description, profile.actionDescription),
+      guideLabel: trim(action.guideLabel, 80),
+    }));
+  const everydayActions = report.everydayActions
+    .slice(0, profile.everydayCount)
+    .map((action) => ({
+      ...action,
+      category: trim(action.category, 70),
+      title: trim(action.title, profile.everydayTitle),
+      description: trim(
+        action.description,
+        profile.everydayDescription,
+      ),
+    }));
+  const professionalPresentation = report.professionalPresentation
+    ? {
+      ...report.professionalPresentation,
+      title: trim(report.professionalPresentation.title, 140),
+      role: trim(report.professionalPresentation.role, 100),
+      scheme: trim(report.professionalPresentation.scheme, 120),
+      reference: trim(report.professionalPresentation.reference, 80),
+      notes: trim(
+        report.professionalPresentation.notes,
+        profile.professionalNotes,
+      ),
+      boundary: trim(
+        report.professionalPresentation.boundary,
+        profile.generalBody,
+      ),
+    }
+    : null;
+  const projected = {
+    ...report,
+    heading: trim(report.heading, 160),
+    planTitle: trim(report.planTitle, 160),
+    summary: trim(report.summary, profile.generalBody),
+    planningSnapshot: report.planningSnapshot.map((item) => ({
+      label: trim(item.label, 80),
+      value: trim(item.value, profile.generalBody),
+    })),
+    climate: report.climate
+      ? {
+        label: trim(report.climate.label, 140),
+        summary: trim(report.climate.summary, profile.generalBody),
+      }
+      : null,
+    readinessPresentation: {
+      title: trim(report.readinessPresentation.title, 180),
+      body: trim(report.readinessPresentation.body, profile.generalBody),
+    },
+    professionalPresentation,
+    questions: report.questions.map((question) => ({
+      ...question,
+      prompt: trim(question.prompt, 180),
+      whyItMatters: trim(question.whyItMatters, 240),
+    })),
+    decisionBasis: report.decisionBasis.map((item) =>
+      trim(item, profile.generalBody)
+    ),
+    everydayActions,
+    everydayActionsBoundary: trim(
+      report.everydayActionsBoundary,
+      profile.generalBody,
+    ),
+    actions,
+    priorityActions: actions.filter((action) => action.priority),
+    laterActions: actions.filter((action) => !action.priority),
+    privacyNote: trim(report.privacyNote, profile.generalBody),
+    adviceBoundary: trim(report.adviceBoundary, profile.generalBody),
+  };
+  const notices = [];
+  const omittedActions = report.actions.length - actions.length;
+  if (omittedActions > 0) {
+    notices.push(
+      `This email shows the first ${actions.length} of ${report.actions.length} plan steps. The remaining ${omittedActions} step${omittedActions === 1 ? "" : "s"} remain in your saved plan and downloadable PDF.`,
+    );
+  }
+  const omittedEveryday = report.everydayActions.length
+    - everydayActions.length;
+  if (omittedEveryday > 0) {
+    notices.push(
+      `This email shows ${everydayActions.length} of ${report.everydayActions.length} optional comfort tips. The remaining ${omittedEveryday} tip${omittedEveryday === 1 ? "" : "s"} remain in your saved plan and downloadable PDF.`,
+    );
+  }
+  if (shortened) {
+    notices.push(
+      "Some longer wording was shortened for email readability. Your saved plan and downloadable PDF keep the complete wording.",
+    );
+  }
+  return { report: projected, notices };
+}
+
+function utf8ByteLength(value) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function createCustomerPlanEmailRendering(document) {
+  const sourceReport = createCustomerPlanReportView(document);
+  let fallback = null;
+  for (const profile of CUSTOMER_PLAN_EMAIL_PROFILES) {
+    const projection = createCustomerPlanEmailProjection(sourceReport, profile);
+    const html = renderCustomerPlanDocumentHtml(
+      projection.report,
+      projection.notices,
+    );
+    fallback = { ...projection, html };
+    if (utf8ByteLength(html) <= CUSTOMER_PLAN_EMAIL_HTML_MAX_BYTES) {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 function htmlBulletRows(items, { color = "#365467" } = {}) {
   if (!items.length) return "";
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${
@@ -861,8 +1052,7 @@ function htmlEverydayActionTile(action, isLast = false) {
     </table>`;
 }
 
-export function customerPlanDocumentHtml(document) {
-  const report = createCustomerPlanReportView(document);
+function renderCustomerPlanDocumentHtml(report, notices = []) {
   const copy = report.copy;
   const readiness = report.readinessPresentation;
   const professional = report.professionalPresentation;
@@ -915,7 +1105,7 @@ export function customerPlanDocumentHtml(document) {
     </style>
   </head>
   <body style="margin:0;padding:0;background-color:${customerPlanReportColors.navyDeep};color:${customerPlanReportColors.text};font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
+    <div style="display:none!important;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;mso-hide:all;">${escapeHtml(preheader)}</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background-color:${customerPlanReportColors.navyDeep};">
       <tr><td class="outer-pad" align="center" style="padding:30px 12px;">
         <table class="email-shell" role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.shellRadius}px;overflow:hidden;background-color:${customerPlanReportColors.canvas};border:1px solid #0b526b;">
@@ -1004,6 +1194,16 @@ export function customerPlanDocumentHtml(document) {
                 <div style="height:16px;font-size:0;line-height:0;">&nbsp;</div>
                 ${report.laterActions.map((action) => htmlActionCard(action, false)).join("")}
               </div>` : ""}
+
+              ${notices.length ? `
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#fff7e5;border:1px solid #e8c66f;border-left:5px solid #e8c66f;">
+                <tr>
+                  <td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:#fff7e5;">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#6d5315;">Email copy boundary</div>
+                    ${notices.map((notice) => `<p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#6d5315;">${escapeHtml(notice)}</p>`).join("")}
+                  </td>
+                </tr>
+              </table>` : ""}
 
               ${report.everydayActions.length ? `
               <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
@@ -1101,8 +1301,11 @@ export function customerPlanDocumentHtml(document) {
     .trim();
 }
 
-export function customerPlanDocumentText(document) {
-  const report = createCustomerPlanReportView(document);
+export function customerPlanDocumentHtml(document) {
+  return createCustomerPlanEmailRendering(document).html;
+}
+
+function renderCustomerPlanDocumentText(report, notices = []) {
   const copy = report.copy;
   const professional = report.professionalPresentation;
   const lines = [
@@ -1161,6 +1364,9 @@ export function customerPlanDocumentText(document) {
         );
       }
     }
+  }
+  if (notices.length) {
+    lines.push("", "EMAIL COPY BOUNDARY", ...notices);
   }
   if (report.everydayActions.length) {
     lines.push(
@@ -1230,4 +1436,12 @@ export function customerPlanDocumentText(document) {
     report.adviceBoundary,
   );
   return lines.filter((line, index) => line !== "" || lines[index - 1] !== "").join("\n").trim();
+}
+
+export function customerPlanDocumentText(document) {
+  const rendering = createCustomerPlanEmailRendering(document);
+  return renderCustomerPlanDocumentText(
+    rendering.report,
+    rendering.notices,
+  );
 }
