@@ -2,13 +2,13 @@
 
 Status: released implementation milestone
 
-Prepared: 30 July 2026
+Prepared: 31 July 2026
 
-Milestone ID: `CUSTOMER-INSTALLER-REQUEST-14`
+Milestone ID: `CUSTOMER-PLAN-DURABILITY-15`
 
-Implementation baseline: `f4dbde8b742ece96e44f5a941f26bc712b0f82f8`
+Implementation baseline: `8a3a38c2e68de30f77720be0800acf6119fb32f0`
 
-Released application for this milestone: Sites version 230 from application commit `2607cc53f2e4c79546701e29d3d182fde4670952`
+Released application for this milestone: Sites version 232 from application commit `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,71 +18,78 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make the final installer-response request simple and local to the action: show completed project stages clearly, collect any missing private contact details in one dialog, save them safely, submit from the same place and reconcile uncertain retries without duplicates.
+Make plan completion durable and understandable: keep guided photos visible where customers added them, preserve safe resumable evidence handling, make deletion recoverable, turn plan history into a useful comparison and check-in tool, submit installer requests from one confirmation, and deliver worker-safe accessible PDF and email reports.
 
-The release retains the authoritative roadmap and quote-preparation structure from version 229. It adds truthful completed-step styling, a reusable private installer-request dialog, an owner-scoped profile update and idempotent request recovery. Existing working-demo projects remain compatible and are not silently assigned contact details or a new request.
+Implementation commit `e74278c8b62c569541ea84b5a431917d03a1c13a` completed the product slice. Its first saved Sites version 231 failed before public activation because a private Next Fontkit bundle referenced `__dirname`; version 230 remained live. Corrective child `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d` replaces that private boundary with public `@pdf-lib/fontkit`, adds a post-build Sites bundle audit and is the sole current executable source in version 232.
 
 ## Current user outcomes
 
-- A valid saved `Plan details` stage shows a green check and an accessible `complete` label instead of appearing grey or disabled.
-- `Request private installer responses` opens a focused `Where should the installer work?` dialog at the action.
-- The dialog asks only for phone number, service street address, optional unit detail and suburb; project postcode and state are shown read-only and saved from the owned project.
-- The privacy explanation remains beside the fields: name, phone and street address stay withheld during matching until the existing named contact-release approval.
-- Missing-field and request errors remain inside the dialog rather than requiring a scroll to a page-top message.
-- A successful request has a dedicated confirmation state and a direct route back to the customer overview.
-- If the browser loses a response, retry logic reconciles the exact request and project revision before any additional save or submit.
+- A newly selected guided photo immediately shows a local preview, filename and saving state in the exact card where it was added.
+- A saved photo stays visible after reload with replace and remove controls; if work choices change, the photo remains visible under a clearly labelled earlier-selection group.
+- Guided evidence is not silently duplicated as generic evidence.
+- A draft that is being deleted cannot still look active, accept new uploads or open through a stale continue link; recoverable cleanup can be finished from the dashboard.
+- Customers can compare two plain-language roadmap versions, download a private-safe comparison, record private before-and-after observations and restore an earlier roadmap only as a new draft version.
+- Missing private contact details save and the installer request submits from one confirmation, with one bounded authoritative conflict recovery rather than a second customer step.
+- PDF and email delivery retain the premium visual hierarchy, embedded fonts, semantic lists and links. Unsupported scripts receive a clear fail-before-save response rather than corrupted visible text.
 
 ## Current in scope
 
-- Completed and current stage semantics, contrast and check marks.
-- One accessible request dialog with focus containment, safe dismissal and busy-state protection.
-- Private customer contact capture and exact-revision profile update.
-- Project-derived postcode and state.
-- Idempotent request creation and bounded uncertain-response reconciliation.
-- Explicit recovery-only contact update for an already submitted project.
-- Focused account, profile, request-dialog, recovery, revision and customer-project regressions.
+- In-place pending and saved guided-photo previews, save or upload status, replacement, cancellation and removal.
+- Stable capture slots, metadata stripping, resumable multipart private evidence uploads and compare-and-swap retake or removal.
+- Retained guided evidence after work choices change, without duplicating generic evidence or supporting PDFs.
+- Durable `deleting` state, frozen evidence writes, retryable D1 and R2 cleanup, and deletion-aware dashboard and direct-route behavior.
+- Plain-language revision history, two-version comparison, privacy-filtered export, private outcome check-ins and guarded draft-only restore.
+- One-confirmation private-profile save and installer request with a single bounded conflict recovery.
+- Embedded Liberation Sans, tagged-document foundations, semantic lists and links, WCAG AA small-copy colours and fail-before-save unsupported-text handling.
+- Public worker-safe `@pdf-lib/fontkit` plus a production bundle guard against `__dirname` and the private Next Fontkit marker.
+- Migration `0085_customer_evidence_resumable_retake.sql` and the focused evidence, deletion, history, request, email and PDF regressions.
 
 ## Current out of scope
 
 - The deferred household and experienced-assessor field pilot.
-- Changing the existing private-evidence upload, installer allocation, quote-review or named contact-release boundaries.
-- Creating a new profile when the signed-in customer does not already have an active one.
-- Exposing contact details to installers during matching.
-- Backfilling working-demo profiles or submitting a live working-demo request during verification.
-- New schema migrations or provider configuration.
-- The existing five forward product steps recorded below.
+- Real Gmail or Outlook desktop delivery acceptance and independent assistive-technology or PDF/UA conformance.
+- Customer-visible crop, blur, redaction or annotation.
+- Restoring a browser `File` object after a full reload without customer reselection.
+- Rendering CJK, Arabic, Devanagari, Vietnamese or other scripts not covered by the current embedded fonts.
+- Editable revision names or private revision notes.
+- New provider configuration, live installer-request submission or mutation of working-demo evidence during release verification.
+- The five forward product steps recorded below.
 - Changes to the immutable dated audit or a Netlify deployment.
 
 ## Current privacy and safety boundaries
 
-- The contact update requires same-origin Firebase authentication, an active account, project ownership, explicit private-profile confirmation and the exact current profile revision.
-- The server derives postcode and state from the project; the browser cannot substitute another service region through this path.
-- Only phone, address lines, suburb, derived postcode and derived state change. Consent, name, account settings, property type and tenure remain untouched.
-- Matching and quote-review projects allow a contact update only for explicit uncertain-submit recovery and only against the observed profile revision.
-- Request creation uses an opaque client identifier and exact project update token so retry reconciliation cannot silently duplicate a request or apply stale plan edits.
-- Contact details remain private platform data until the customer separately approves a named installer contact handover.
-- Existing roadmap, private evidence, adviser declaration and product-neutral guidance boundaries remain unchanged.
+- Evidence remains same-origin authenticated, owner scoped, private by default and unavailable to installers unless the customer explicitly marks it for the existing allocated-installer sharing boundary.
+- Image metadata is stripped before durable storage; uploads remain bounded to 12 files of 8 MB and expired sessions cannot revive a deleted or deleting project.
+- Retake and removal require the exact observed evidence revision so a stale browser cannot overwrite a newer file.
+- Deletion freezes new evidence writes before cleanup and never treats a partially cleaned project as active again.
+- Comparison exports exclude exact address, room names, evidence filenames, private notes and custom roadmap wording.
+- Restoring a roadmap cannot replace project identity, private notes, evidence, quotes, installer activity or contact-release state.
+- Contact details remain private platform data until the customer separately approves a named installer handover.
+- A PDF with unsupported text fails before save and does not emit replacement characters or a partially corrupted document.
 
 ## Current acceptance criteria
 
-- A completed saved Step 2 is visibly green, uses a check mark and announces `Plan details, complete`.
-- The request action opens one labelled dialog containing the missing private contact fields and privacy explanation.
-- Profile updates are authenticated, owner scoped, active-account scoped, project derived and compare-and-swap protected.
-- Request creation is idempotent, and an uncertain retry checks authoritative server state before another save or submission.
-- Recovery cannot overwrite plan or evidence edits that became locked when an earlier request succeeded.
-- Focused regressions pass 44 of 44; type checking, warning-free lint, 31 integration tests, the full suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Live signed-in inspection confirms the completed-step styling and dialog without entering contact details or submitting a request.
+- Pending, saved and earlier-selection guided photos remain visible in the matching guided-photo section with accurate state and controls.
+- Resumable sessions, stable capture slots, stale-revision rejection and deleting-project upload denial pass focused server and UI regressions.
+- Deleting projects stay excluded from active totals, recommendations, continue links and editable detail routes until cleanup finishes.
+- Version comparison, export, private check-ins and restore preserve all excluded private and installer state.
+- Profile save and request submission use one confirmation and one bounded authoritative conflict recovery without replaying project, evidence or request writes.
+- Focused PDF and email correction tests pass 18 of 18; type checking, warning-free lint, 31 integration tests, 914 total tests with 912 passed and 2 intentionally skipped, all 86 migrations, the Vinext production build, bundle audit and diff hygiene pass.
+- Every page of the nine-page tagged-PDF audit is visually clean and contains no clipping, overlap, missing glyph, harsh corner or footer defect.
+- GitHub, Sites managed source, saved version 232 and the public deployment resolve to exact corrective application commit `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`.
+- Live signed-in inspection loads the saved roadmap, comparison and check-in UI and shows a selected working-demo photo directly beneath its matching guided prompt without mutating it.
 
 ## Current stop conditions
 
 Stop the affected path when:
 
-- a private contact update could change fields beyond the bounded contact and derived service-location contract;
-- postcode or state could come from browser input rather than the owned project;
-- a stale profile or project revision could be accepted;
-- an uncertain retry could create a second request, apply newly locked plan edits or discard an unresolved recovery marker;
-- a matching or quote-review project could accept a normal contact-edit path outside explicit recovery;
-- live verification would enter or save working-demo contact details or submit an installer request;
+- an evidence write could cross owners, bypass the private default, exceed the upload limits, retain unsafe metadata or resume after deletion starts;
+- a stale retake, removal, deletion cleanup, profile update or request could overwrite newer state;
+- deleting a draft could expose it as active, silently abandon private objects or allow a normal edit route;
+- a comparison export or restore could include or overwrite excluded private or installer state;
+- an unsupported script could produce corrupted or partially saved customer output;
+- a generated Sites server bundle contains `__dirname` or the private Next Fontkit marker;
+- live verification would replace or remove a working-demo photo, save profile data or submit an installer request;
 - the release commit, GitHub branch, Sites source, archive, saved version and deployment do not reconcile;
 - the immutable audit would change; or
 - a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
@@ -92,59 +99,69 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-accounts.test.mjs test/customer-installer-contact-profile.test.mjs test/customer-installer-request-dialog.test.mjs test/customer-installer-request-recovery.test.mjs test/customer-plan-revision-ui.test.mjs test/customer-project-advisor-ui.test.mjs
+node --test test/customer-plan-pdf.test.mjs
+npm.cmd run audit:sites-server-bundle
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused installer-request, profile, recovery, project and UI regression set: 44 of 44 passed;
+- implementation commit: `e74278c8b62c569541ea84b5a431917d03a1c13a`;
+- failed non-live Sites version 231: saved identity `appgprj_6a550c378000819185caf094173422bb~appgver_7a589f567528819189cf033456193bda`, deployment `appgdep_6a6bcf5c0f7c8191b877d27581f9d82e`, failure `__dirname is not defined`; it never became public and version 230 remained live;
+- corrective and current executable application: `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`;
+- focused PDF and email correction set: 18 of 18 passed;
 - integration suite: 31 of 31 passed;
-- complete test suite: passed;
+- complete test suite: 914 total, 912 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
-- migration verification: all 85 migrations through `0084_customer_plan_revision_restore.sql` passed against fresh SQLite and Cloudflare D1 paths;
-- Vinext production build and `git diff --check`: passed;
-- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `2607cc53f2e4c79546701e29d3d182fde4670952`;
-- release archive: `aea-sites-2607cc5.tar.gz`, 6,471,181 bytes, SHA-256 `4A8A79645C5F3C27D07B7069B481DD013EBB0E739FA83A16263783E3027EBE91`;
-- Sites application version: 230, deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`, public, environment revision 19;
-- live signed-in Step 2 inspection showed `Plan details, complete` with a green check and accessible completion state;
-- the request action opened the centred private-details dialog with phone, street address, optional unit detail, suburb, project postcode and state;
-- browser-side required-field guidance remained in the dialog; and
-- no working-demo contact detail, profile revision, project, evidence record or installer request was created or changed.
+- migration verification: all 86 migrations through `0085_customer_evidence_resumable_retake.sql` passed against fresh SQLite and Cloudflare D1 paths;
+- PDF audit: nine visually clean pages, tagged-document foundation present, document format `2026-07-31-tagged-plan-pdf-v6`, unsupported scripts fail before save;
+- Vinext production build, the Sites bundle audit and `git diff --check`: passed with no `__dirname` or private Next Fontkit marker;
+- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`;
+- local release archive: `aea-sites-7e1f0a8.tar.gz`, 7,085,796 bytes, SHA-256 `9555352A7F723A615F2D97E2BFEE736DCD6D491C4189B5E100D179D7CB121974`;
+- Sites stored archive: 311 files, 27,760,640 bytes, content hash `sha256:e48b4226de4114a1c68ab45ed29021778470a3333b477a44131f07b080e5f2f0`;
+- Sites application version 232: saved identity `appgprj_6a550c378000819185caf094173422bb~appgver_0476874df3f081919c8e4c4acb4fd0f8`, production deployment `appgdep_6a6bd28a71888191be19f89db9b82ca5`, environment revision 19;
+- live signed-in inspection loaded the saved roadmap, two-version comparison, privacy-filtered export action and private check-in UI;
+- a selected working-demo photo remained visibly named with `Added privately to this draft` in its matching guided card; and
+- no working-demo photo, project, profile or installer request was saved, replaced, removed or submitted. The post-deployment Sites Worker error-only query returned zero events.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `2607cc53f2e4c79546701e29d3d182fde4670952`
-- Sites application version: 230
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_52a74079cae481918a86072452749e99`
-- Sites production deployment: `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`
+- Implementation commit: `e74278c8b62c569541ea84b5a431917d03a1c13a`
+- Corrective and current executable application commit: `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`
+- Sites application version: 232
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_0476874df3f081919c8e4c4acb4fd0f8`
+- Sites production deployment: `appgdep_6a6bd28a71888191be19f89db9b82ca5`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
-- D1 migration count: 85
+- D1 migration count: 86
 - Immutable audit changes: none
 - Working-demo data changed during live verification: none
 
 ## Known release risk
 
-`npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the roadmap-context release and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
+The last recorded exact production-only `npm audit --omit=dev` result reports six existing advisories: one low and five high. The package installation used for the worker-safe Fontkit correction reported 23 advisories across the full development tree, but no automatic audit fix was run and that broad count is not substituted for a fresh production-only audit. Dependency remediation remains a separate bounded patch with the complete validation and live-release gates.
+
+## Prior released milestone: `CUSTOMER-INSTALLER-REQUEST-14`
+
+The prior release established explicit completed-stage styling and the focused private installer-request dialog with protected recovery. Its exact application commit was `2607cc53f2e4c79546701e29d3d182fde4670952`, deployed as Sites version 230 through deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`. Documentation baseline `8a3a38c2e68de30f77720be0800acf6119fb32f0` recorded that checkpoint. Those contracts remain active underneath version 232.
 
 ## Prior released milestone: `CUSTOMER-ROADMAP-CONTEXT-13`
 
-The prior release established the authoritative pre-roadmap home and work context, goal-derived priorities, `What shaped this roadmap` summary and non-duplicated quote-preparation stage. Its exact application commit was `0db488f325a79e22d126aace75647715b59c96f9`, deployed as Sites version 229 through deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`. Documentation-only child `f4dbde8b742ece96e44f5a941f26bc712b0f82f8` recorded that checkpoint without changing the executable application. Those contracts remain active underneath version 230.
+The prior release established the authoritative pre-roadmap home and work context, goal-derived priorities, `What shaped this roadmap` summary and non-duplicated quote-preparation stage. Its exact application commit was `0db488f325a79e22d126aace75647715b59c96f9`, deployed as Sites version 229 through deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`. Documentation-only child `f4dbde8b742ece96e44f5a941f26bc712b0f82f8` recorded that checkpoint without changing the executable application. Those contracts remain active underneath version 232.
 
 ## Earlier released milestone: `CUSTOMER-PROJECT-CLEANUP-12`
 
-The earlier release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 230.
+The earlier release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 232.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TRUST-11`
 
-The earlier release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 229.
+The earlier release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore through `0084_customer_plan_revision_restore.sql`, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 232.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-SPACING-10`
 
-The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 229.
+The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 232.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 
@@ -476,8 +493,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Controlled Gmail and Outlook inbox acceptance:** verify the responsive report in dedicated non-customer Gmail and Outlook test inboxes without using a real customer address.
-2. **Independent PDF accessibility conformance audit:** test the tagged structure, reading order, links and assistive-technology behavior without claiming PDF/UA until independently verified.
-3. **Photo retake, redaction and resumable upload queue:** let customers safely replace, redact and resume guided evidence uploads without weakening private-plan defaults.
-4. **Revision labels, notes and selective comparison or export:** make bounded plan history easier to understand and share without broadening restore scope.
-5. **Outcome check-ins and before-and-after progress evidence:** help households record completed improvements and observed comfort or usage changes without creating savings promises.
+1. **Real Outlook desktop and assistive-technology acceptance:** verify the delivered report in Outlook desktop's Word rendering engine and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
+2. **Visible photo redaction and persistent resumable queue:** add customer-visible crop, blur, redaction or annotation controls and restore resumable upload state across a full page reload without exposing private evidence.
+3. **Pan-Unicode PDF font coverage and fallback:** add approved font coverage or deterministic fallback for CJK, Arabic, Devanagari, Vietnamese and other supported customer scripts while retaining fail-before-save for anything still unsupported.
+4. **Editable revision labels, notes and richer history sharing:** let customers name revisions, add bounded private context and share or export selected comparisons without broadening restore or installer-access scope.
+5. **Pilot readiness telemetry and deferred field test:** define privacy-safe completion, upload, PDF, email and request telemetry, then run the household and experienced-assessor field test only when the product owner resumes the pilot.

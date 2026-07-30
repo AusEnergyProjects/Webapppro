@@ -449,6 +449,40 @@ Make the final installer-response request obvious and recoverable: show complete
 
 All listed acceptance gates are met. Live verification used the existing working-demo draft only to inspect the completed step, open the request dialog, trigger browser-side required-field guidance and close the dialog. No phone number, address, profile revision, project, evidence item or installer request was created or changed.
 
+## Released milestone: CUSTOMER-PLAN-DURABILITY-15
+
+Release status: corrective application commit `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 232 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_0476874df3f081919c8e4c4acb4fd0f8` and deployment `appgdep_6a6bd28a71888191be19f89db9b82ca5` report the exact commit and environment revision 19. Sites version 231 from implementation commit `e74278c8b62c569541ea84b5a431917d03a1c13a` failed before public activation with `__dirname is not defined`; it never became public and version 230 remained live until the corrected version 232 deployment succeeded.
+
+### Outcome
+
+Make plan completion durable and understandable: keep guided photos visible where customers added them, preserve safe resumable evidence handling, make deletion recoverable, turn plan history into a useful comparison and check-in tool, submit installer requests from one confirmation, and deliver worker-safe accessible PDF and email reports.
+
+### In scope
+
+- Show an immediate preview, filename and save state inside the exact guided-photo card, then retain the saved preview after reload with replace and remove controls.
+- Preserve guided evidence if later work selections change, without duplicating generic evidence or supporting PDFs.
+- Use stable capture slots, metadata stripping, resumable multipart private uploads and compare-and-swap retake or removal.
+- Keep draft deletion in a durable `deleting` state, freeze new uploads, retry incomplete D1 or R2 cleanup and suppress normal continue or edit actions until cleanup finishes.
+- Replace opaque revision numbers with plain-language labels, two-version comparison, a privacy-filtered summary export, private outcome check-ins and guarded draft-only restore.
+- Save the latest private profile and submit an installer request from one confirmation, with one bounded authoritative conflict recovery and no replay of project, evidence or request writes.
+- Embed Liberation Sans, preserve the tagged-document foundation, semantic lists and links, and fail before save with a clear response when a script is not yet supported.
+- Use the public worker-safe `@pdf-lib/fontkit` boundary and fail the production build if a private Next Fontkit marker or `__dirname` enters the Sites server bundle.
+
+### Acceptance gates
+
+- Guided selected and saved photos remain visible in the matching card, including replacement, removal and changed-work-selection states.
+- Upload sessions are owner scoped, bounded to 12 files of 8 MB each, expire safely and cannot revive evidence after deletion starts.
+- Draft deletion is recoverable without exposing a deleting project as an active or recommended project.
+- Version comparison, privacy-filtered export, private check-in and draft-only restore preserve project identity, notes, evidence, quotes and installer state.
+- Installer request submission uses one confirmation and one bounded conflict recovery without duplicate or stale writes.
+- The focused PDF and email correction set passes 18 of 18; the complete release gate passes 31 of 31 integration tests, 914 total tests with 912 passed and 2 intentionally skipped, and all 86 migrations through `0085_customer_evidence_resumable_retake.sql`.
+- The nine-page tagged-PDF audit is visually clean, unsupported scripts fail before save, the Vinext build passes and the final Sites server bundle contains neither `__dirname` nor the private Next Fontkit marker.
+- GitHub, Sites managed source, saved-version provenance and the public deployment all resolve to corrective commit `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`.
+- Live signed-in inspection loads the saved roadmap, two-version comparison and private check-in UI. A selected working-demo photo remains visibly named with `Added privately to this draft` inside its matching guided card. No photo, project, profile or installer request was saved, replaced, removed or submitted during verification.
+- The post-deployment Sites Worker error-only query returns zero events.
+
+All listed acceptance gates are met. The failed version 231 remains historical non-live evidence only. Version 232 is the sole current executable source for this milestone.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -548,11 +582,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Controlled Gmail and Outlook inbox acceptance:** verify the responsive report in dedicated non-customer Gmail and Outlook test inboxes without using a real customer address.
-2. **Independent PDF accessibility conformance audit:** test the tagged structure, reading order, links and assistive-technology behavior without claiming PDF/UA until independently verified.
-3. **Photo retake, redaction and resumable upload queue:** let customers safely replace, redact and resume guided evidence uploads without weakening private-plan defaults.
-4. **Revision labels, notes and selective comparison or export:** make bounded plan history easier to understand and share without broadening restore scope.
-5. **Outcome check-ins and before-and-after progress evidence:** help households record completed improvements and observed comfort or usage changes without creating savings promises.
+1. **Real Outlook desktop and assistive-technology acceptance:** verify the delivered report in Outlook desktop's Word rendering engine and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
+2. **Visible photo redaction and persistent resumable queue:** add customer-visible crop, blur, redaction or annotation controls and restore resumable upload state across a full page reload without exposing private evidence.
+3. **Pan-Unicode PDF font coverage and fallback:** add approved font coverage or deterministic fallback for CJK, Arabic, Devanagari, Vietnamese and other supported customer scripts while retaining fail-before-save for anything still unsupported.
+4. **Editable revision labels, notes and richer history sharing:** let customers name revisions, add bounded private context and share or export selected comparisons without broadening restore or installer-access scope.
+5. **Pilot readiness telemetry and deferred field test:** define privacy-safe completion, upload, PDF, email and request telemetry, then run the household and experienced-assessor field test only when the product owner resumes the pilot.
 
 ## Global stop conditions
 
