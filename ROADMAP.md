@@ -290,7 +290,7 @@ Make the customer PDF and email feel like one distinctive, high-end technical pr
 - Focused tests, the complete validation gate, all 84 migrations, the production build, GitHub provenance, Sites provenance and relevant live logs pass.
 - Release verification sends no email, mutates no customer or project data and invokes no native print.
 
-All listed acceptance gates are met. Delivered rendering in Gmail and Outlook remains explicitly unverified and is the second forward step below. The release check did not create or save a project, upload evidence, send an email, mutate customer data or use native print.
+All listed acceptance gates are met. Delivered rendering in Gmail and Outlook remained explicitly unverified at this historical checkpoint. The release check did not create or save a project, upload evidence, send an email, mutate customer data or use native print.
 
 ## Released milestone: CUSTOMER-PLAN-SPACING-10
 
@@ -319,7 +319,39 @@ Give every customer PDF and email section deliberate breathing room and soft, br
 - Maximum-content email remains below 60,000 bytes and preserves exactly one occurrence of each action and evidence boundary.
 - Focused tests, the complete validation gate, all 84 migrations, the production build, GitHub provenance, Sites provenance, live public route checks and the post-deployment error query pass.
 
-All listed acceptance gates are met. The release check used a synthetic in-memory report, did not send email, create or save an account project, upload evidence, mutate working-demo data or invoke native print. Delivered Gmail and Outlook acceptance remains explicitly unverified and stays as the second forward step below.
+All listed acceptance gates are met. The release check used a synthetic in-memory report, did not send email, create or save an account project, upload evidence, mutate working-demo data or invoke native print. Delivered Gmail and Outlook acceptance remained explicitly unverified at this historical checkpoint.
+
+## Released milestone: CUSTOMER-PLAN-TRUST-11
+
+Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 224 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Make the customer plan easier to review, safer to support with photos, recoverable after edits and more dependable across browser preview, PDF and email, while keeping every customer-facing delivery action available at both the top and bottom of the ordered plan.
+
+### In scope
+
+- Replace the legacy print-preview presentation with the same privacy-filtered premium report hierarchy used by PDF and email, and open that report in an accessible signed-in preview dialog.
+- Repeat the complete `Preview full report`, `Email this plan`, `Download PDF` and conditional `Reset advisor suggestions` action set below the last plan step so customers do not need to scroll back to the top.
+- Add optional guided photo capture with deterministic categories, three explicit safety and privacy confirmations, a 12-photo limit, local preview and the existing private D1/R2 evidence path.
+- Add immutable, owner-scoped plan revisions with bounded retention, meaningful field-by-field comparison, explicit restore confirmation, draft-only restore and optimistic revision conflict protection.
+- Preserve customer identity, address, work categories, private notes, adviser details, evidence, sharing permissions, quotes and installer activity when an earlier roadmap revision is restored.
+- Add a tagged-PDF foundation with document language, reading order, structural landmarks, link objects and decorative artifacts without claiming PDF/UA conformance.
+- Keep the full saved plan and PDF model unchanged while adaptively limiting only extreme email rendering below an 88,000-byte cap, with explicit HTML and plain-text notices for any shortened or omitted email-only content.
+- Use honest provider wording: provider acceptance is recorded, but inbox delivery is not claimed.
+- Add migration `0084_customer_plan_revision_restore.sql` and keep all new write paths owner scoped.
+
+### Acceptance gate
+
+- The premium public preview renders at desktop and narrow widths without horizontal overflow, and signed-in preview controls retain focus trapping, Escape close, body scroll lock and focus restoration.
+- Top and bottom signed-in plan action bars expose the same relevant actions, handlers and busy-state protection.
+- Guided photos never ask a customer to climb, enter a roof space, remove a cover or expose a meter box; real customer evidence is not used for release verification.
+- Revision comparison detects goals, home facts, pace, budget, plan version, added, removed, moved and changed steps; stale-tab conflicts preserve unsaved local edits until the customer explicitly reloads.
+- The tagged PDF remains a valid, readable, non-encrypted A4 document with no JavaScript and no unsupported list-semantics claim.
+- Worst-case email HTML remains below the compatibility cap with truthful truncation notices and no change to the saved plan or PDF.
+- Type checking, lint, 31 integration tests, the complete 850-test suite, all 85 migrations, the production build, GitHub provenance, Sites provenance and live public route checks pass.
+
+All listed acceptance gates are met. Release verification used only synthetic report data and read-only public routes. It did not send an email, create or save an account project, upload evidence, mutate working-demo data or invoke native print. Delivered Gmail and Outlook rendering and independent PDF accessibility conformance remain explicitly unverified.
 
 ## Forward phases
 
@@ -420,11 +452,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Premium on-page report preview:** align the legacy `/plan/print` preview with the shared premium PDF and email hierarchy without changing the native download path.
-2. **Controlled Gmail/Outlook acceptance:** verify the responsive report in dedicated Gmail and Outlook test inboxes, add honest provider acceptance visibility and never use a real customer address.
-3. **Accessible/tagged PDF structure:** add document landmarks, reading order and assistive-technology checks while preserving the lightweight edge renderer.
-4. **Guided safe photo capture:** place optional, safety-bounded photo guidance beside the relevant home questions without asking anyone to climb, enter a roof space or remove a cover.
-5. **Revision comparison and restore:** show exactly what changed between bounded plan revisions and require an explicit customer action to restore an earlier version.
+1. **Controlled Gmail and Outlook inbox acceptance:** verify the responsive report in dedicated non-customer Gmail and Outlook test inboxes without using a real customer address.
+2. **Independent PDF accessibility conformance audit:** test the tagged structure, reading order, links and assistive-technology behavior without claiming PDF/UA until independently verified.
+3. **Photo retake, redaction and resumable upload queue:** let customers safely replace, redact and resume guided evidence uploads without weakening private-plan defaults.
+4. **Revision labels, notes and selective comparison or export:** make bounded plan history easier to understand and share without broadening restore scope.
+5. **Outcome check-ins and before-and-after progress evidence:** help households record completed improvements and observed comfort or usage changes without creating savings promises.
 
 ## Global stop conditions
 

@@ -85,11 +85,17 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Premium customer plan PDF and email report/);
   assert.match(releaseTruth, /## Technical customer plan presentation release/);
   assert.match(releaseTruth, /## Customer plan spacing and rounded-surface release/);
+  assert.match(releaseTruth, /## Customer plan trust, evidence and revision release/);
   assert.match(releaseTruth, /Customer plan evidence and history application source.*Sites version 210/);
   assert.match(releaseTruth, /Professional review, print and comfort application source \| `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` \|[\s\S]{0,150}Sites version 212/);
   assert.match(releaseTruth, /Premium report documentation checkpoint \| `a92e18b9ea79b53eaf6eda8665f37ec02c861972` \|[\s\S]{0,180}Sites version 219/);
-  assert.match(releaseTruth, /Sites version 222 from `e74c2d95889a381cb3bb434607bc6584e54cf722`/);
+  assert.match(releaseTruth, /Customer-plan spacing and rounded-surface application source \| `e74c2d95889a381cb3bb434607bc6584e54cf722` \|[\s\S]{0,180}Sites version 222/);
   assert.match(releaseTruth, /appgdep_6a6a8887a0048191b7eb1706e742ad28/);
+  assert.match(releaseTruth, /Spacing release documentation checkpoint \| `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` \|[\s\S]{0,180}Sites version 223/);
+  assert.match(releaseTruth, /Sites version 224 from `bc427d295b3106907904a3c0b7bf9f2945561cd1`/);
+  assert.match(releaseTruth, /appgdep_6a6b151c0178819185e4d57c1cbf75c2/);
+  assert.match(releaseTruth, /0084_customer_plan_revision_restore\.sql/);
+  assert.match(releaseTruth, /2026-07-30-tagged-plan-pdf-v3/);
   assert.match(releaseTruth, /https:\/\/compare\.ausenergyassessments\.com\/api\/aea-brandmark/);
   assert.match(releaseTruth, /2026-07-30-tech-presentation-pdf-v2/);
   assert.match(releaseTruth, /2026-07-30-tech-presentation-design-v2/);
@@ -107,16 +113,16 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-PREMIUM-REPORT-08/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-TECH-PRESENTATION-09/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-SPACING-10/);
+  assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-TRUST-11/);
   assert.match(roadmap, /Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`[\s\S]{0,250}Sites version 222/);
+  assert.match(roadmap, /Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`[\s\S]{0,250}Sites version 224/);
   assert.match(handover, /Status: released implementation milestone/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-SPACING-10`/);
-  assert.match(handover, /Released application for this milestone: Sites version 222 from application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`/);
-  assert.match(handover, /Sites application version: 222/);
-  assert.match(handover, /appgdep_6a6a8887a0048191b7eb1706e742ad28/);
-  assert.match(handover, /https:\/\/compare\.ausenergyassessments\.com\/api\/aea-brandmark/);
-  assert.match(handover, /2026-07-30-tech-presentation-pdf-v2/);
-  assert.match(handover, /2026-07-30-tech-presentation-design-v2/);
-  assert.match(handover, /2026-07-29-premium-report-v3/);
+  assert.match(handover, /Milestone ID: `CUSTOMER-PLAN-TRUST-11`/);
+  assert.match(handover, /Released application for this milestone: Sites version 224 from application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`/);
+  assert.match(handover, /Sites application version: 224/);
+  assert.match(handover, /appgdep_6a6b151c0178819185e4d57c1cbf75c2/);
+  assert.match(handover, /2026-07-30-tagged-plan-pdf-v3/);
+  assert.match(handover, /0084_customer_plan_revision_restore\.sql/);
   assert.match(handover, /Sites version 219/);
 
   const nextFivePattern =
@@ -127,11 +133,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Premium on-page report preview:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Controlled Gmail\/Outlook acceptance:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Accessible\/tagged PDF structure:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Guided safe photo capture:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Revision comparison and restore:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Controlled Gmail and Outlook inbox acceptance:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Independent PDF accessibility conformance audit:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Photo retake, redaction and resumable upload queue:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Revision labels, notes and selective comparison or export:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Outcome check-ins and before-and-after progress evidence:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {
