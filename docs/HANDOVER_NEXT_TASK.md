@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 30 July 2026
 
-Milestone ID: `CUSTOMER-PROJECT-CLEANUP-12`
+Milestone ID: `CUSTOMER-ROADMAP-CONTEXT-13`
 
-Implementation baseline: `23594c2b61dec855aeba0a10ba5a28eb3aeaf692`
+Implementation baseline: `563a4d805d9c6443096d5c73317ec18fc56f041e`
 
-Released application for this milestone: Sites version 227 from application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`
+Released application for this milestone: Sites version 229 from application commit `0db488f325a79e22d126aace75647715b59c96f9`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,74 +18,72 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make saved-project controls clean and compact, and let customers permanently remove an unused private draft through a deliberate, accessible and server-protected action.
+Collect the home details and work choices that can change a recommendation before the roadmap is generated, show customers exactly what shaped the roadmap, and remove the repeated priority questions from quote preparation.
 
-The release adds a quiet `Delete draft` action beside `Continue project`, an accessible confirmation dialog, and an authenticated owner-scoped deletion contract that refuses submitted or linked projects. It also repairs the oversized project-detail control column and keeps the primary dashboard labels readable. Existing plan, report, evidence, privacy and trade-handover contracts remain unchanged.
+The release makes selected goals authoritative for priority derivation, moves five bounded home basics and optional work types into `Plan details`, carries those inputs into the saved roadmap, revisions, PDF and email, and limits `Quote prep` to information needed only if a customer wants prices. Existing working-demo drafts remain compatible and are not silently assigned new answers.
 
 ## Current user outcomes
 
-- Draft project cards show compact `Delete draft` and `Continue project` controls in one aligned desktop row.
-- Narrow screens receive two equal-width touch controls instead of a cramped or uneven footer.
-- Active and completed workflows never expose permanent deletion.
-- The confirmation explains that deletion is permanent, focuses `Keep draft` first, traps keyboard focus and returns focus when cancelled.
-- Deletion cannot be triggered through the existing PATCH action surface or by supplying an object key from the browser.
-- A stale draft or a project linked to enquiry, quote, contact, appointment, arrival or handover activity is retained.
-- Project-detail controls remain at the top of their card and no longer stretch through the full roadmap height.
+- `Plan details` asks for home height, approximate age, floor area, roof type and switchboard state before the roadmap is built, with `Not sure` available for every field.
+- Customers can optionally identify the work they are already considering before recommendation sequencing.
+- The detailed home-fact categories, room profile, budget, pace and optional professional-adviser context remain in the same pre-roadmap stage.
+- `Your roadmap` begins with a concise `What shaped this roadmap` summary covering goals, tenure, home basics, current home answers, work choices and budget or pace.
+- Roadmap steps, saved revisions, restored revisions, PDF and email use the same bounded home and work context.
+- `Quote prep` shows the chosen work as a read-only summary with a route back to `Plan details`; it no longer repeats the goals as a second priority selector.
+- Legacy working-demo drafts render unknown new fields truthfully and preserve current context when an older revision is restored.
 
 ## Current in scope
 
-- Compact dashboard project actions and project-detail control sizing.
-- Draft-only delete visibility and customer-facing confirmation.
-- Same-origin Firebase authentication, active-account and owner checks.
-- Exact plan-revision and update-time conflict protection.
-- Linked-lifecycle refusal before and after the internal deletion lock.
-- Server-selected R2 object cleanup and owner-scoped dependent-record cleanup.
-- Retry-safe internal `deleting` state that remains presented as a private draft.
-- Focused UI, accessibility, source-contract and server-boundary regressions.
+- Step labels and information architecture for Home, Plan details, Your roadmap, Quote prep and Privacy.
+- Five bounded home basics, their safe explanatory hints and explicit unknown states.
+- Optional considered-work selection before roadmap generation.
+- Goal-derived compatibility priorities without trusting a conflicting client priority payload.
+- Canonical roadmap generation, display summary, plan snapshots, bounded revision comparison and restore.
+- Shared PDF, responsive email and installer-opportunity projections.
+- Focused UI, accessibility, document, decision-support, revision, taxonomy and server-contract regressions.
 
 ## Current out of scope
 
 - The deferred household and experienced-assessor field pilot.
-- Permanent deletion of submitted, matching, withdrawn, completed or linked projects.
-- A bulk delete, administrator delete or restoration service after confirmed permanent deletion.
-- Changes to plan content, reporting, evidence sharing, trade matching or account creation.
-- A destructive live test against any working-demo project.
+- Changing the existing private-evidence upload, consent, quote-request or trade-matching boundaries.
+- Requiring a customer to know any home basic when `Not sure` is accurate.
+- Treating a customer-selected home answer, photo or document as professional verification.
+- Editing or backfilling working-demo projects during live verification.
+- New schema migrations or provider configuration.
 - The existing five forward product steps recorded below.
 - Changes to the immutable dated audit or a Netlify deployment.
 
 ## Current privacy and safety boundaries
 
-- The server derives the customer identity from the verified Firebase token and scopes every lookup and delete to that owner.
-- The browser supplies only the project ID, explicit confirmation, plan revision and last-updated token.
-- Evidence object keys are selected inside the server and never accepted from or returned to the customer delete request.
-- Any submission, opportunity, quote, contact release, appointment notification, arrival or handover evidence blocks permanent deletion.
-- An internal lock prevents concurrent edits and a second lifecycle check catches links created during the deletion boundary.
-- R2 failure restores the retryable draft. D1 failure never reports success and retains a retryable private state.
-- Existing household-answer, evidence-sharing, adviser, report and product-neutral guidance boundaries are unchanged.
+- The five added home basics are bounded planning context, not a NatHERS rating, site inspection, equipment-sizing result or professional verification.
+- `Not sure` remains a complete and safe answer; the workflow never encourages unsafe access to roofs, switchboards or concealed spaces.
+- Goals remain the authoritative customer priority input. A conflicting client compatibility-priority payload cannot alter the server-generated plan.
+- Shareable reports exclude exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.
+- Revision restore brings back only bounded roadmap inputs and ordered steps; current approval and access context remains current.
+- Existing authentication, owner scoping, private evidence, adviser declaration, contact-release and product-neutral guidance boundaries remain unchanged.
 
 ## Current acceptance criteria
 
-- Draft cards expose compact aligned delete and continue actions; non-draft cards do not expose deletion.
-- Mobile controls remain equal-width, readable and at least 44 px high.
-- The confirmation is a labelled modal with safe initial focus, Tab containment, Escape cancellation, background scroll lock and busy-state dismissal protection.
-- The delete endpoint is same-origin, authenticated, active-account, owner, confirmation and stale-write protected.
-- Linked customer or trade lifecycle records prevent deletion.
-- Dependent private evidence, plan-revision, outcome and project-specific consent rows are owner scoped and the project record is deleted last.
-- Type checking, warning-free lint, 31 integration tests, the complete 863-test suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Live signed-in inspection confirms the dashboard, dialog and project-detail layouts without confirming a deletion.
+- Step 2 contains goals, five home basics, detailed home facts, considered work, rooms, budget and pace before any recommendation is presented.
+- Step 3 states what shaped the roadmap and reflects the exact saved context without exposing private details.
+- Step 4 contains quote-preparation facts and evidence only, with no duplicate priority selector.
+- The server derives compatibility priorities from goals and uses home basics plus considered work in canonical plan generation.
+- Plan revisions include the new bounded context and work choices; legacy revisions preserve the current values instead of erasing them.
+- PDF and email projections include compact home-detail and considered-work summaries.
+- Focused regressions, type checking, warning-free lint, 31 integration tests, the complete 868-test suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
+- Live signed-in inspection confirms Steps 2, 3 and 4 on an existing working-demo draft without saving it.
 - Live `/api/health` returns HTTP `200`.
 
 ## Current stop conditions
 
 Stop the affected path when:
 
-- permanent deletion could appear for a non-draft project;
-- a delete could be triggered through PATCH or without explicit confirmation;
-- the server could accept a client-selected object key or act outside the authenticated owner;
-- a stale project could be deleted after newer edits;
-- any linked enquiry, quote, contact, appointment, arrival or handover record could be removed;
-- storage or database failure could be reported as success;
-- a live verification step would confirm deletion of a working-demo project;
+- a client-supplied priority could override goal-derived server behavior;
+- a new home fact lacked a clear `Not sure` path or encouraged unsafe inspection;
+- quote-only access or evidence detail entered the roadmap or shareable report;
+- restoring an older revision could erase newer bounded context or overwrite current approval and access context;
+- legacy working-demo projects could be silently assigned an answer;
+- a live verification step would save or change a working-demo project;
 - the release commit, GitHub branch, Sites source, archive, saved version and deployment do not reconcile;
 - the immutable audit would change; or
 - a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
@@ -95,36 +93,36 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-plan-revision-restore.test.mjs test/direct-trade-enquiry.test.mjs test/customer-project-draft-deletion-server.test.mjs
-node --experimental-strip-types --test test/customer-project-compact-controls-css.test.mjs test/customer-project-draft-delete-ui.test.mjs test/customer-draft-delete-dialog-accessibility.test.mjs
+node --experimental-strip-types --test test/customer-accounts.test.mjs test/customer-advisor-contract.test.mjs test/customer-home-feature-taxonomy.test.mjs test/customer-plan-decision-support.test.mjs test/customer-plan-revision-restore.test.mjs test/customer-plan-sharing.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused server, revision and enquiry regression set: 23 of 23 passed;
-- focused layout, UI and accessibility regression set: 7 of 7 passed;
+- focused workflow, document, revision, taxonomy and enquiry regression set: 85 of 85 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 863 tests, 861 passed, 2 intentionally skipped and 0 failed;
+- complete suite: 868 tests, 866 passed, 2 intentionally skipped and 0 failed;
 - type checking and warning-free lint: passed;
 - migration verification: all 85 migrations through `0084_customer_plan_revision_restore.sql` passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `da35ce60295d6c7150cddd9b35e33fcf64c8521b`;
-- Sites application version: 227, deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`, public, environment revision 19;
-- Sites version 226 from `9ecde96f8975f322be35283747cb7fe93b2579f9` was an intermediate deployment superseded after live visual QA found an older link-colour selector hiding the primary action label;
-- live signed-in dashboard inspection showed four draft-only delete controls, readable aligned primary actions and no delete action on the installer-matching project;
-- the confirmation dialog was opened and cancelled with `Keep draft`; the safe action held initial focus and no delete request was sent;
-- live project-detail inspection showed compact top-aligned controls instead of full-column stretched buttons;
-- live `/api/health` returned HTTP `200` and `{"ok":true,"service":"aea-energy"}`; and
+- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `0db488f325a79e22d126aace75647715b59c96f9`;
+- release archive: `aea-sites-0db488f.tar.gz`, 6,464,162 bytes, SHA-256 `F786B36378B6D9E2912527C2D146600610D1FE52CAC79CCD969E35E7D8FD9C73`;
+- Sites application version: 229, deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`, public, environment revision 19;
+- live signed-in Step 2 inspection showed goals, five home basics, detailed categories, considered work, room profile, budget and pace before the roadmap;
+- live signed-in Step 3 inspection showed `What shaped this roadmap` with the expected six bounded summary groups;
+- live signed-in Step 4 inspection showed only quote preparation and a read-only selected-work summary, with no repeated priority selector;
+- live `/api/health` returned HTTP `200`, `Cache-Control: no-store` and `{"ok":true,"service":"aea-energy"}`;
+- the recent Sites worker error-only query returned zero events; and
 - no demo project, evidence record, email, account or other working-demo data was created, edited or deleted.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `da35ce60295d6c7150cddd9b35e33fcf64c8521b`
-- Sites application version: 227
-- Sites application deployment: `appgdep_6a6b22db21c48191a2dedbdbf05274ef`
+- Application commit: `0db488f325a79e22d126aace75647715b59c96f9`
+- Sites application version: 229
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_30775c8a4d588191ad13dee5fa5e3954`
+- Sites production deployment: `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 85
@@ -133,15 +131,19 @@ Observed results:
 
 ## Known release risk
 
-`npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the PDF feature and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
+`npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the roadmap-context release and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PLAN-TRUST-11`
+## Prior released milestone: `CUSTOMER-PROJECT-CLEANUP-12`
 
-The prior release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 227.
+The prior release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 229.
+
+## Earlier released milestone: `CUSTOMER-PLAN-TRUST-11`
+
+The earlier release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 229.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-SPACING-10`
 
-The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 227.
+The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing that executable application. Those visual contracts remain active underneath version 229.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 

@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 29 July 2026
+Last reconciled: 30 July 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -384,6 +384,38 @@ Make saved-project actions clean, compact and easy to understand, and let a cust
 - Live `/api/health` returns `200` without changing customer or project data.
 
 All listed acceptance gates are met. Live verification used the existing working-demo account only to inspect the dashboard, open and cancel the confirmation dialog, and view a saved project. No draft was confirmed for deletion, no project was edited and no working-demo data was changed.
+
+## Released milestone: CUSTOMER-ROADMAP-CONTEXT-13
+
+Release status: application commit `0db488f325a79e22d126aace75647715b59c96f9` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 229 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Collect the small set of home and work details that can change a recommendation before the roadmap is generated, explain what shaped the roadmap, and reserve the later work stage for optional quote preparation.
+
+### In scope
+
+- Rename the customer stages to Home, Plan details, Your roadmap, Quote prep and Privacy.
+- Place goals, home height, approximate age, floor area, roof type, switchboard state, detailed home facts, optional considered work, room profiles, budget and pace before roadmap generation.
+- Give each added home basic a safe explanation and explicit `Not sure` answer.
+- Derive compatibility priorities from the selected goals on the server instead of trusting a separate client priority payload.
+- Use the bounded home and work context in canonical plan steps, the on-page `What shaped this roadmap` summary, saved snapshots, revisions, PDF and email.
+- Preserve current values when restoring a legacy revision that predates the new context fields.
+- Keep quote preparation focused on project stage, timing, access constraints, optional photos or documents, and private notes.
+- Remove the duplicate priority selector from quote preparation and privacy review.
+
+### Acceptance gates
+
+- Step 2 collects every recommendation-shaping input before Step 3 shows a roadmap.
+- Step 3 clearly identifies the goals, tenure, home basics, current home answers, work choices and budget or pace that shaped the result.
+- Step 4 shows selected work read-only and contains no second priority questionnaire.
+- New and restored plan revisions preserve the correct bounded context without replacing current approval or access state.
+- PDF and email contain the same compact home-detail and considered-work context.
+- Type checking, lint, 31 integration tests, the complete 868-test suite, all 85 migrations, the production build, diff hygiene, GitHub provenance and Sites provenance pass.
+- Live signed-in inspection confirms Steps 2, 3 and 4 without saving or changing the working-demo project.
+- Live `/api/health` returns `200` and the recent Sites worker error-only query returns zero events.
+
+All listed acceptance gates are met. The production inspection used an existing working-demo draft only to navigate the five stages and inspect rendered content. No answer, project, evidence item, email, account or other demo data was created or changed.
 
 ## Forward phases
 
