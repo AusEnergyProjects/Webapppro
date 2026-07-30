@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
+    "build": "vinext build && npm run audit:sites-server-bundle",
     "audit:links": "node scripts/audit-links.mjs",
     "audit:customer-plan-pdf": "node scripts/audit-customer-plan-pdf.mjs",
+    "audit:sites-server-bundle": "node scripts/audit-sites-server-bundle.mjs",
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "start": "vinext start",
     "lint": "eslint",
@@ -19,6 +20,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "drizzle-orm": "^0.45.2",
     "fflate": "0.7.4",
     "firebase": "^12.16.0",

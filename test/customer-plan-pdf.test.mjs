@@ -44,6 +44,10 @@ const PDF_ROUTE_SOURCE = readFileSync(
   new URL("../src/app/api/customer-plan-pdf/route.ts", import.meta.url),
   "utf8",
 );
+const PDF_SOURCE = readFileSync(
+  new URL("../src/lib/customer-plan-pdf.mjs", import.meta.url),
+  "utf8",
+);
 const createPdf = (report) => createCustomerPlanPdfBytes(report, PDF_FONTS);
 const professionalReviewInput = (overrides = {}) => ({
   enabled: true,
@@ -329,6 +333,15 @@ test("direct plan PDF preserves the exact household and self-declared review bou
   assert.equal(
     professionalText.split(professionalBoundary).length - 1,
     1,
+  );
+});
+
+test("direct plan PDF uses PDF Lib's public worker-safe Fontkit boundary", () => {
+  assert.match(PDF_SOURCE, /import fontkit from "@pdf-lib\/fontkit"/);
+  assert.match(PDF_SOURCE, /pdf\.registerFontkit\(fontkit\)/);
+  assert.doesNotMatch(
+    PDF_SOURCE,
+    /next\/dist\/compiled\/@next\/font\/dist\/fontkit/,
   );
 });
 

@@ -14,7 +14,7 @@ import {
   pushGraphicsState,
   rgb,
 } from "pdf-lib";
-import nextFontkitModule from "next/dist/compiled/@next/font/dist/fontkit/index.js";
+import fontkit from "@pdf-lib/fontkit";
 import {
   CUSTOMER_PLAN_PUBLIC_ORIGIN,
 } from "./customer-plan-document.mjs";
@@ -462,10 +462,7 @@ export async function createCustomerPlanPdfBytes(
   const completedCount = report.actions
     .filter((action) => action.completed)
     .length;
-  const fontkitCreate =
-    typeof nextFontkitModule === "function"
-      ? nextFontkitModule
-      : nextFontkitModule?.default;
+  const fontkitCreate = fontkit?.create;
   if (typeof fontkitCreate !== "function") {
     throw new TypeError("The embedded PDF font engine is unavailable.");
   }
@@ -484,7 +481,7 @@ export async function createCustomerPlanPdfBytes(
     sharedFontCharacterSet(regularCharacters, boldCharacters),
   );
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit({ create: fontkitCreate });
+  pdf.registerFontkit(fontkit);
   const pdfTags = createCustomerPlanPdfTagger(pdf);
   const regular = await pdf.embedFont(fontBytes.regular, { subset: false });
   const bold = await pdf.embedFont(fontBytes.bold, { subset: false });
