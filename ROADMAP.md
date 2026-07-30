@@ -417,6 +417,38 @@ Collect the small set of home and work details that can change a recommendation 
 
 All listed acceptance gates are met. The production inspection used an existing working-demo draft only to navigate the five stages and inspect rendered content. No answer, project, evidence item, email, account or other demo data was created or changed.
 
+## Released milestone: CUSTOMER-INSTALLER-REQUEST-14
+
+Release status: application commit `2607cc53f2e4c79546701e29d3d182fde4670952` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 230 at `https://compare.ausenergyassessments.com`. Deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602` succeeded with environment revision 19. The field pilot remains deferred.
+
+### Outcome
+
+Make the final installer-response request obvious and recoverable: show completed project stages as completed, collect any missing private contact details in the action itself, save them safely and make retrying a request resistant to duplicate or uncertain submissions.
+
+### In scope
+
+- Show every valid saved builder stage with a green completion state and accessible `complete` label while keeping the current step distinct.
+- Replace the distant page-top missing-contact message with a focused `Where should the installer work?` dialog beside the request action.
+- Collect phone number, service street address, optional unit detail and suburb while deriving postcode and state from the owned project.
+- Save only the private contact and derived location fields to the active owning customer profile under an exact revision check.
+- Keep name, email, phone and precise address withheld from installers until the existing named contact-release boundary is approved.
+- Submit the request from the same dialog, show a clear success state and offer a direct return to the customer overview.
+- Use a client request identifier, exact project revision and recovery fingerprint so a lost response can be reconciled without duplicating a request or silently applying stale edits.
+- Preserve an unresolved recovery marker when the server state cannot be reconciled safely.
+
+### Acceptance gates
+
+- A completed saved `Plan details` stage renders with a green check and an accessible completion label instead of looking disabled.
+- The installer-response action opens one labelled, keyboard-contained modal with the missing fields and privacy explanation in context.
+- Private contact updates are same-origin authenticated, owner scoped, active-account scoped, project derived and compare-and-swap protected.
+- Request creation is idempotent and an uncertain retry checks authoritative server state before any additional save or submission.
+- Existing matching or quote-review projects accept only an explicit recovery update against the observed private-profile revision.
+- Focused installer-request, profile, recovery, project and UI regressions pass 44 of 44; the complete release gate, all 85 migrations and the production build pass.
+- GitHub, Sites managed source, saved-version provenance and the deployed application all resolve to the exact application commit.
+- Signed-in production inspection confirms the green completed step and the focused missing-information dialog without saving profile data or creating a request.
+
+All listed acceptance gates are met. Live verification used the existing working-demo draft only to inspect the completed step, open the request dialog, trigger browser-side required-field guidance and close the dialog. No phone number, address, profile revision, project, evidence item or installer request was created or changed.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions

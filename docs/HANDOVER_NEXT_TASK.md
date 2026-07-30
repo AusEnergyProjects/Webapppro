@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 30 July 2026
 
-Milestone ID: `CUSTOMER-ROADMAP-CONTEXT-13`
+Milestone ID: `CUSTOMER-INSTALLER-REQUEST-14`
 
-Implementation baseline: `563a4d805d9c6443096d5c73317ec18fc56f041e`
+Implementation baseline: `f4dbde8b742ece96e44f5a941f26bc712b0f82f8`
 
-Released application for this milestone: Sites version 229 from application commit `0db488f325a79e22d126aace75647715b59c96f9`
+Released application for this milestone: Sites version 230 from application commit `2607cc53f2e4c79546701e29d3d182fde4670952`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,72 +18,71 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Collect the home details and work choices that can change a recommendation before the roadmap is generated, show customers exactly what shaped the roadmap, and remove the repeated priority questions from quote preparation.
+Make the final installer-response request simple and local to the action: show completed project stages clearly, collect any missing private contact details in one dialog, save them safely, submit from the same place and reconcile uncertain retries without duplicates.
 
-The release makes selected goals authoritative for priority derivation, moves five bounded home basics and optional work types into `Plan details`, carries those inputs into the saved roadmap, revisions, PDF and email, and limits `Quote prep` to information needed only if a customer wants prices. Existing working-demo drafts remain compatible and are not silently assigned new answers.
+The release retains the authoritative roadmap and quote-preparation structure from version 229. It adds truthful completed-step styling, a reusable private installer-request dialog, an owner-scoped profile update and idempotent request recovery. Existing working-demo projects remain compatible and are not silently assigned contact details or a new request.
 
 ## Current user outcomes
 
-- `Plan details` asks for home height, approximate age, floor area, roof type and switchboard state before the roadmap is built, with `Not sure` available for every field.
-- Customers can optionally identify the work they are already considering before recommendation sequencing.
-- The detailed home-fact categories, room profile, budget, pace and optional professional-adviser context remain in the same pre-roadmap stage.
-- `Your roadmap` begins with a concise `What shaped this roadmap` summary covering goals, tenure, home basics, current home answers, work choices and budget or pace.
-- Roadmap steps, saved revisions, restored revisions, PDF and email use the same bounded home and work context.
-- `Quote prep` shows the chosen work as a read-only summary with a route back to `Plan details`; it no longer repeats the goals as a second priority selector.
-- Legacy working-demo drafts render unknown new fields truthfully and preserve current context when an older revision is restored.
+- A valid saved `Plan details` stage shows a green check and an accessible `complete` label instead of appearing grey or disabled.
+- `Request private installer responses` opens a focused `Where should the installer work?` dialog at the action.
+- The dialog asks only for phone number, service street address, optional unit detail and suburb; project postcode and state are shown read-only and saved from the owned project.
+- The privacy explanation remains beside the fields: name, phone and street address stay withheld during matching until the existing named contact-release approval.
+- Missing-field and request errors remain inside the dialog rather than requiring a scroll to a page-top message.
+- A successful request has a dedicated confirmation state and a direct route back to the customer overview.
+- If the browser loses a response, retry logic reconciles the exact request and project revision before any additional save or submit.
 
 ## Current in scope
 
-- Step labels and information architecture for Home, Plan details, Your roadmap, Quote prep and Privacy.
-- Five bounded home basics, their safe explanatory hints and explicit unknown states.
-- Optional considered-work selection before roadmap generation.
-- Goal-derived compatibility priorities without trusting a conflicting client priority payload.
-- Canonical roadmap generation, display summary, plan snapshots, bounded revision comparison and restore.
-- Shared PDF, responsive email and installer-opportunity projections.
-- Focused UI, accessibility, document, decision-support, revision, taxonomy and server-contract regressions.
+- Completed and current stage semantics, contrast and check marks.
+- One accessible request dialog with focus containment, safe dismissal and busy-state protection.
+- Private customer contact capture and exact-revision profile update.
+- Project-derived postcode and state.
+- Idempotent request creation and bounded uncertain-response reconciliation.
+- Explicit recovery-only contact update for an already submitted project.
+- Focused account, profile, request-dialog, recovery, revision and customer-project regressions.
 
 ## Current out of scope
 
 - The deferred household and experienced-assessor field pilot.
-- Changing the existing private-evidence upload, consent, quote-request or trade-matching boundaries.
-- Requiring a customer to know any home basic when `Not sure` is accurate.
-- Treating a customer-selected home answer, photo or document as professional verification.
-- Editing or backfilling working-demo projects during live verification.
+- Changing the existing private-evidence upload, installer allocation, quote-review or named contact-release boundaries.
+- Creating a new profile when the signed-in customer does not already have an active one.
+- Exposing contact details to installers during matching.
+- Backfilling working-demo profiles or submitting a live working-demo request during verification.
 - New schema migrations or provider configuration.
 - The existing five forward product steps recorded below.
 - Changes to the immutable dated audit or a Netlify deployment.
 
 ## Current privacy and safety boundaries
 
-- The five added home basics are bounded planning context, not a NatHERS rating, site inspection, equipment-sizing result or professional verification.
-- `Not sure` remains a complete and safe answer; the workflow never encourages unsafe access to roofs, switchboards or concealed spaces.
-- Goals remain the authoritative customer priority input. A conflicting client compatibility-priority payload cannot alter the server-generated plan.
-- Shareable reports exclude exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.
-- Revision restore brings back only bounded roadmap inputs and ordered steps; current approval and access context remains current.
-- Existing authentication, owner scoping, private evidence, adviser declaration, contact-release and product-neutral guidance boundaries remain unchanged.
+- The contact update requires same-origin Firebase authentication, an active account, project ownership, explicit private-profile confirmation and the exact current profile revision.
+- The server derives postcode and state from the project; the browser cannot substitute another service region through this path.
+- Only phone, address lines, suburb, derived postcode and derived state change. Consent, name, account settings, property type and tenure remain untouched.
+- Matching and quote-review projects allow a contact update only for explicit uncertain-submit recovery and only against the observed profile revision.
+- Request creation uses an opaque client identifier and exact project update token so retry reconciliation cannot silently duplicate a request or apply stale plan edits.
+- Contact details remain private platform data until the customer separately approves a named installer contact handover.
+- Existing roadmap, private evidence, adviser declaration and product-neutral guidance boundaries remain unchanged.
 
 ## Current acceptance criteria
 
-- Step 2 contains goals, five home basics, detailed home facts, considered work, rooms, budget and pace before any recommendation is presented.
-- Step 3 states what shaped the roadmap and reflects the exact saved context without exposing private details.
-- Step 4 contains quote-preparation facts and evidence only, with no duplicate priority selector.
-- The server derives compatibility priorities from goals and uses home basics plus considered work in canonical plan generation.
-- Plan revisions include the new bounded context and work choices; legacy revisions preserve the current values instead of erasing them.
-- PDF and email projections include compact home-detail and considered-work summaries.
-- Focused regressions, type checking, warning-free lint, 31 integration tests, the complete 868-test suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
-- Live signed-in inspection confirms Steps 2, 3 and 4 on an existing working-demo draft without saving it.
-- Live `/api/health` returns HTTP `200`.
+- A completed saved Step 2 is visibly green, uses a check mark and announces `Plan details, complete`.
+- The request action opens one labelled dialog containing the missing private contact fields and privacy explanation.
+- Profile updates are authenticated, owner scoped, active-account scoped, project derived and compare-and-swap protected.
+- Request creation is idempotent, and an uncertain retry checks authoritative server state before another save or submission.
+- Recovery cannot overwrite plan or evidence edits that became locked when an earlier request succeeded.
+- Focused regressions pass 44 of 44; type checking, warning-free lint, 31 integration tests, the full suite, all 85 migrations, the Vinext production build, diff hygiene, GitHub provenance and Sites provenance pass.
+- Live signed-in inspection confirms the completed-step styling and dialog without entering contact details or submitting a request.
 
 ## Current stop conditions
 
 Stop the affected path when:
 
-- a client-supplied priority could override goal-derived server behavior;
-- a new home fact lacked a clear `Not sure` path or encouraged unsafe inspection;
-- quote-only access or evidence detail entered the roadmap or shareable report;
-- restoring an older revision could erase newer bounded context or overwrite current approval and access context;
-- legacy working-demo projects could be silently assigned an answer;
-- a live verification step would save or change a working-demo project;
+- a private contact update could change fields beyond the bounded contact and derived service-location contract;
+- postcode or state could come from browser input rather than the owned project;
+- a stale profile or project revision could be accepted;
+- an uncertain retry could create a second request, apply newly locked plan edits or discard an unresolved recovery marker;
+- a matching or quote-review project could accept a normal contact-edit path outside explicit recovery;
+- live verification would enter or save working-demo contact details or submit an installer request;
 - the release commit, GitHub branch, Sites source, archive, saved version and deployment do not reconcile;
 - the immutable audit would change; or
 - a legal, privacy, regulated-service or account-ownership decision requires an authorised human.
@@ -93,36 +92,34 @@ Stop the affected path when:
 The exact application source passed:
 
 ```powershell
-node --experimental-strip-types --test test/customer-accounts.test.mjs test/customer-advisor-contract.test.mjs test/customer-home-feature-taxonomy.test.mjs test/customer-plan-decision-support.test.mjs test/customer-plan-revision-restore.test.mjs test/customer-plan-sharing.test.mjs test/customer-project-advisor-ui.test.mjs test/customer-project-advisor.test.mjs test/customer-property-arrivals.test.mjs test/direct-trade-enquiry.test.mjs
+node --experimental-strip-types --test test/customer-accounts.test.mjs test/customer-installer-contact-profile.test.mjs test/customer-installer-request-dialog.test.mjs test/customer-installer-request-recovery.test.mjs test/customer-plan-revision-ui.test.mjs test/customer-project-advisor-ui.test.mjs
 npm.cmd run validate
 git diff --check
 ```
 
 Observed results:
 
-- focused workflow, document, revision, taxonomy and enquiry regression set: 85 of 85 passed;
+- focused installer-request, profile, recovery, project and UI regression set: 44 of 44 passed;
 - integration suite: 31 of 31 passed;
-- complete suite: 868 tests, 866 passed, 2 intentionally skipped and 0 failed;
+- complete test suite: passed;
 - type checking and warning-free lint: passed;
 - migration verification: all 85 migrations through `0084_customer_plan_revision_restore.sql` passed against fresh SQLite and Cloudflare D1 paths;
 - Vinext production build and `git diff --check`: passed;
-- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `0db488f325a79e22d126aace75647715b59c96f9`;
-- release archive: `aea-sites-0db488f.tar.gz`, 6,464,162 bytes, SHA-256 `F786B36378B6D9E2912527C2D146600610D1FE52CAC79CCD969E35E7D8FD9C73`;
-- Sites application version: 229, deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`, public, environment revision 19;
-- live signed-in Step 2 inspection showed goals, five home basics, detailed categories, considered work, room profile, budget and pace before the roadmap;
-- live signed-in Step 3 inspection showed `What shaped this roadmap` with the expected six bounded summary groups;
-- live signed-in Step 4 inspection showed only quote preparation and a read-only selected-work summary, with no repeated priority selector;
-- live `/api/health` returned HTTP `200`, `Cache-Control: no-store` and `{"ok":true,"service":"aea-energy"}`;
-- the recent Sites worker error-only query returned zero events; and
-- no demo project, evidence record, email, account or other working-demo data was created, edited or deleted.
+- GitHub `main`, the working branch and Sites managed `main`: exact application SHA `2607cc53f2e4c79546701e29d3d182fde4670952`;
+- release archive: `aea-sites-2607cc5.tar.gz`, 6,471,181 bytes, SHA-256 `4A8A79645C5F3C27D07B7069B481DD013EBB0E739FA83A16263783E3027EBE91`;
+- Sites application version: 230, deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`, public, environment revision 19;
+- live signed-in Step 2 inspection showed `Plan details, complete` with a green check and accessible completion state;
+- the request action opened the centred private-details dialog with phone, street address, optional unit detail, suburb, project postcode and state;
+- browser-side required-field guidance remained in the dialog; and
+- no working-demo contact detail, profile revision, project, evidence record or installer request was created or changed.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Application commit: `0db488f325a79e22d126aace75647715b59c96f9`
-- Sites application version: 229
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_30775c8a4d588191ad13dee5fa5e3954`
-- Sites production deployment: `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`
+- Application commit: `2607cc53f2e4c79546701e29d3d182fde4670952`
+- Sites application version: 230
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_52a74079cae481918a86072452749e99`
+- Sites production deployment: `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
 - D1 migration count: 85
@@ -133,9 +130,13 @@ Observed results:
 
 `npm audit --omit=dev` reports six existing production-dependency advisories: one low and five high. The current direct dependencies include Next 16.2.10 and `react-server-dom-webpack` 19.2.6; the audit proposes updates to Next 16.2.12 and `react-server-dom-webpack` 19.2.8. This was not introduced by the roadmap-context release and must be handled as a separate bounded dependency patch with the complete validation and live-release gates.
 
-## Prior released milestone: `CUSTOMER-PROJECT-CLEANUP-12`
+## Prior released milestone: `CUSTOMER-ROADMAP-CONTEXT-13`
 
-The prior release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 229.
+The prior release established the authoritative pre-roadmap home and work context, goal-derived priorities, `What shaped this roadmap` summary and non-duplicated quote-preparation stage. Its exact application commit was `0db488f325a79e22d126aace75647715b59c96f9`, deployed as Sites version 229 through deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`. Documentation-only child `f4dbde8b742ece96e44f5a941f26bc712b0f82f8` recorded that checkpoint without changing the executable application. Those contracts remain active underneath version 230.
+
+## Earlier released milestone: `CUSTOMER-PROJECT-CLEANUP-12`
+
+The earlier release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 230.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TRUST-11`
 
