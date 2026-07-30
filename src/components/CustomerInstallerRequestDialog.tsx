@@ -17,18 +17,6 @@ export type CustomerInstallerRequestContact = {
   suburb: string;
 };
 
-export class CustomerInstallerRequestProfileConflictError extends Error {
-  readonly contact: CustomerInstallerRequestContact;
-
-  constructor(contact: CustomerInstallerRequestContact) {
-    super(
-      "Your profile changed in another tab. The latest saved contact details are now shown. Review them, then submit again.",
-    );
-    this.name = "CustomerInstallerRequestProfileConflictError";
-    this.contact = contact;
-  }
-}
-
 export type CustomerInstallerRequestDialogProps = {
   open: boolean;
   initialContact: CustomerInstallerRequestContact;
@@ -79,6 +67,17 @@ function OpenCustomerInstallerRequestDialog({
   const evidenceRef = useRef<HTMLInputElement>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const submittingRef = useRef(false);
+  const initialFocusField = useRef<ContactField>(
+    !initialContact.phone.trim()
+      ? "phone"
+      : !initialContact.addressLine1.trim()
+        ? "addressLine1"
+        : !initialContact.suburb.trim()
+          ? "suburb"
+          : installerEvidenceConfirmationRequired
+            ? "evidence"
+            : "",
+  );
   const [contact, setContact] =
     useState<CustomerInstallerRequestContact>(initialContact);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
@@ -98,15 +97,16 @@ function OpenCustomerInstallerRequestDialog({
         ? window.document.activeElement
         : null;
     const focusFrame = window.requestAnimationFrame(() => {
-      const firstMissing = !initialContact.phone.trim()
-        ? phoneRef.current
-        : !initialContact.addressLine1.trim()
-          ? addressLine1Ref.current
-          : !initialContact.suburb.trim()
-            ? suburbRef.current
-            : installerEvidenceConfirmationRequired
-              ? evidenceRef.current
-              : submitButtonRef.current;
+      const firstMissing =
+        initialFocusField.current === "phone"
+          ? phoneRef.current
+          : initialFocusField.current === "addressLine1"
+            ? addressLine1Ref.current
+            : initialFocusField.current === "suburb"
+              ? suburbRef.current
+              : initialFocusField.current === "evidence"
+                ? evidenceRef.current
+                : submitButtonRef.current;
       firstMissing?.focus();
     });
 
@@ -117,12 +117,7 @@ function OpenCustomerInstallerRequestDialog({
       window.document.body.style.overflow = previousOverflow;
       if (returnTarget?.isConnected) returnTarget.focus();
     };
-  }, [
-    initialContact.addressLine1,
-    initialContact.phone,
-    initialContact.suburb,
-    installerEvidenceConfirmationRequired,
-  ]);
+  }, []);
 
   useEffect(() => {
     if (!complete) return;
@@ -260,9 +255,6 @@ function OpenCustomerInstallerRequestDialog({
       }
       setComplete(true);
     } catch (caught) {
-      if (caught instanceof CustomerInstallerRequestProfileConflictError) {
-        setContact(caught.contact);
-      }
       setError(errorMessage(caught));
     } finally {
       submittingRef.current = false;

@@ -16,6 +16,7 @@ const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const opportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const emailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 const dashboard = read("../src/components/CustomerDashboard.tsx");
+const historyProgress = read("../src/components/CustomerPlanHistoryProgress.tsx");
 
 test("the additive migration preserves legacy evidence scope and creates private history tables", () => {
   const db = new DatabaseSync(":memory:");
@@ -118,9 +119,12 @@ test("roadmap revisions and outcome check-ins stay in the owner project contract
     projectsRoute,
     /COALESCE\(CAST\(json_extract\(plan_snapshot, '\$\.version'\) AS text\), ''\)/,
   );
-  assert.match(dashboard, /Private plan history/);
-  assert.match(dashboard, /Private progress check-in/);
-  assert.match(dashboard, /not a verified savings or causation claim/);
+  assert.match(historyProgress, /Private plan history/);
+  assert.match(historyProgress, /Save private check-in/);
+  assert.match(
+    historyProgress,
+    /do not prove that a roadmap[\s\S]*caused a change/i,
+  );
   assert.match(dashboard, /Home fact supported by|Home fact supported/i);
   assert.match(dashboard, /Private to my plan/);
 });

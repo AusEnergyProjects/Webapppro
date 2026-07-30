@@ -21,6 +21,10 @@ const STRUCTURE_ROLES = new Set([
   "Link",
   "Figure",
   "Span",
+  "L",
+  "LI",
+  "Lbl",
+  "LBody",
 ]);
 
 function structureRole(value) {
@@ -111,6 +115,30 @@ export function createCustomerPlanPdfTagger(pdf) {
     documentKids.push(ref);
     currentSection = { ref, kids };
     return currentSection;
+  }
+
+  function beginContainer(role, {
+    parent = currentSection,
+    title = "",
+  } = {}) {
+    assertOpen();
+    const safeRole = structureRole(role);
+    const parentRef = parent?.ref || documentRef;
+    const parentKids = parent?.kids || documentKids;
+    const kids = PDFArray.withContext(context);
+    const element = context.obj({
+      Type: PDFName.of("StructElem"),
+      S: PDFName.of(safeRole),
+      P: parentRef,
+      K: kids,
+    });
+    const safeTitle = optionalText(title, 180);
+    if (safeTitle) {
+      element.set(PDFName.of("T"), PDFHexString.fromText(safeTitle));
+    }
+    const ref = context.register(element);
+    parentKids.push(ref);
+    return { element, ref, kids };
   }
 
   function mark(page, role, draw, {
@@ -231,6 +259,7 @@ export function createCustomerPlanPdfTagger(pdf) {
   return {
     artifact,
     associateAnnotation,
+    beginContainer,
     beginSection,
     finalize,
     mark,

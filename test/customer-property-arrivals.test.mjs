@@ -230,7 +230,11 @@ test("customer devices use guided safe capture plus separate supporting evidence
     customerUi,
     /each file marked for installer sharing/,
   );
-  assert.match(customerUi, /pendingEvidence\.length > 0/);
+  assert.match(customerUi, /pendingEvidence=\{pendingEvidence\}/);
+  assert.match(
+    customerUi,
+    /pendingEvidence\.some\(\s*\(item\) =>\s*!item\.captureSlot \|\| item\.captureSlot\.startsWith\("other:"\),\s*\)/,
+  );
   assert.match(customerRoute, /purpose = 'installer_evidence_sharing'/);
   assert.match(customerRoute, /Number\(evidenceCount\?\.count \|\| 0\) > 0/);
   assert.match(customerRoute, /confirmInstallerPhotoSharing !== true/);

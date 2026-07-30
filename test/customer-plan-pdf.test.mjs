@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   PDFArray,
@@ -17,13 +18,44 @@ import {
   AEA_BRANDMARK_PNG_DATA_URI,
 } from "../src/lib/aea-brand-assets.mjs";
 import {
+  CUSTOMER_PLAN_PDF_CONTRAST_COLORS,
   CUSTOMER_PLAN_PDF_VERSION,
+  CustomerPlanPdfUnsupportedTextError,
   createCustomerPlanPdfBytes,
   customerPlanPdfFileName,
 } from "../src/lib/customer-plan-pdf.mjs";
+import {
+  CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+} from "../src/lib/customer-projects.mjs";
 
 const A4_WIDTH_POINTS = 595.28;
 const A4_HEIGHT_POINTS = 841.89;
+const PDF_FONTS = {
+  regular: readFileSync(new URL(
+    "../public/fonts/LiberationSans-Regular.ttf",
+    import.meta.url,
+  )),
+  bold: readFileSync(new URL(
+    "../public/fonts/LiberationSans-Bold.ttf",
+    import.meta.url,
+  )),
+};
+const PDF_ROUTE_SOURCE = readFileSync(
+  new URL("../src/app/api/customer-plan-pdf/route.ts", import.meta.url),
+  "utf8",
+);
+const createPdf = (report) => createCustomerPlanPdfBytes(report, PDF_FONTS);
+const professionalReviewInput = (overrides = {}) => ({
+  enabled: true,
+  role: "accredited-energy-adviser",
+  adviserName: "Alex Example",
+  accreditationScheme: "Example accreditation scheme",
+  accreditationReference: "ACC-123456",
+  notes: "",
+  declarationAccepted: true,
+  declarationVersion: CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
+  ...overrides,
+});
 const EVERYDAY_ACTION_IDS = [
   "moisture-safe-routine",
   "personal-warmth-first",
@@ -102,9 +134,34 @@ function assertEveryPageIsA4(pdf) {
   }
 }
 
-function decodedPdfContent(pdf) {
-  const content = [];
+function relativeLuminance(hex) {
+  const channels = hex.match(/[0-9a-f]{2}/gi).map((value) =>
+    Number.parseInt(value, 16) / 255
+  ).map((value) =>
+    value <= 0.04045
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4
+  );
+  return (
+    (0.2126 * channels[0])
+    + (0.7152 * channels[1])
+    + (0.0722 * channels[2])
+  );
+}
+
+function contrastRatio(foreground, background) {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
+function decodedPdfPageContents(pdf) {
+  const pageContent = [];
   for (const page of pdf.getPages()) {
+    const content = [];
     const contents = page.node.lookup(PDFName.of("Contents"));
     const references = contents instanceof PDFArray
       ? Array.from({ length: contents.size() }, (_, index) => contents.get(index))
@@ -117,18 +174,77 @@ function decodedPdfContent(pdf) {
       ).toString("latin1");
       content.push(decoded);
     }
+    pageContent.push(content.join("\n"));
   }
-  return content.join("\n");
+  return pageContent;
+}
+
+function decodedPdfContent(pdf) {
+  return decodedPdfPageContents(pdf).join("\n");
+}
+
+function extractedPdfPageTexts(pdf) {
+  const pageTexts = pdf.getPages().map(() => []);
+  const pageIndexes = new Map(
+    pdf.getPages().map((page, index) => [page.ref.toString(), index]),
+  );
+  const structureRoot = pdf.catalog.lookup(
+    PDFName.of("StructTreeRoot"),
+    PDFDict,
+  );
+
+  function visit(value, inheritedPageIndex = null) {
+    const resolved = pdf.context.lookup(value);
+    if (resolved instanceof PDFArray) {
+      for (const child of resolved.asArray()) {
+        visit(child, inheritedPageIndex);
+      }
+      return;
+    }
+    if (!(resolved instanceof PDFDict)) return;
+
+    const pageReference = resolved.get(PDFName.of("Pg"));
+    const pageIndex = pageReference
+      ? pageIndexes.get(pageReference.toString()) ?? inheritedPageIndex
+      : inheritedPageIndex;
+    const actualText = resolved.get(PDFName.of("ActualText"));
+    if (
+      pageIndex !== null
+      && actualText
+      && typeof actualText.decodeText === "function"
+    ) {
+      pageTexts[pageIndex].push(actualText.decodeText());
+    }
+
+    const kids = resolved.get(PDFName.of("K"));
+    if (kids) visit(kids, pageIndex);
+  }
+
+  visit(structureRoot.get(PDFName.of("K")));
+  return pageTexts.map((parts) => parts.join(" "));
 }
 
 function extractedPdfText(pdf) {
-  const text = [];
-  for (const match of decodedPdfContent(pdf).matchAll(
-    /<([0-9a-f]+)>\s*Tj/gi,
-  )) {
-    text.push(Buffer.from(match[1], "hex").toString("latin1"));
+  return extractedPdfPageTexts(pdf).join(" ");
+}
+
+function decodedToUnicodeCMaps(pdf) {
+  const streams = new Set();
+  const decoded = [];
+  for (const page of pdf.getPages()) {
+    const resources = page.node.lookup(PDFName.of("Resources"), PDFDict);
+    const fonts = resources.lookup(PDFName.of("Font"), PDFDict);
+    for (const key of fonts.keys()) {
+      const font = fonts.lookup(key, PDFDict);
+      const toUnicode = font.lookup(PDFName.of("ToUnicode"), PDFRawStream);
+      if (streams.has(toUnicode)) continue;
+      streams.add(toUnicode);
+      decoded.push(
+        Buffer.from(decodePDFRawStream(toUnicode).getBytes()).toString("ascii"),
+      );
+    }
   }
-  return text.join(" ");
+  return decoded;
 }
 
 function documentStructureRoles(pdf, structureRoot) {
@@ -194,22 +310,14 @@ test("direct plan PDF preserves the exact household and self-declared review bou
       message: "All questions addressed.",
       boundary: professionalBoundary,
     },
-    professionalReview: {
-      adviserName: "Alex Example",
-      roleLabel: "Accredited energy adviser",
-      accreditationScheme: "Example scheme",
-      accreditationReference: "ACC-123456",
-      notes: "",
-      boundary:
-        "This professional status is self-declared. Australian Energy Assessments has not checked the adviser's identity, credentials or observations.",
-    },
+    professionalReview: professionalReviewInput(),
   });
 
   const householdPdf = await PDFDocument.load(
-    await createCustomerPlanPdfBytes(householdReport),
+    await createPdf(householdReport),
   );
   const professionalPdf = await PDFDocument.load(
-    await createCustomerPlanPdfBytes(professionalReport),
+    await createPdf(professionalReport),
   );
   const householdText = extractedPdfText(householdPdf);
   const professionalText = extractedPdfText(professionalPdf);
@@ -232,7 +340,7 @@ test("completed-plan PDF reports progress without inventing a next step", async 
     })),
   });
   const pdf = await PDFDocument.load(
-    await createCustomerPlanPdfBytes(completedReport),
+    await createPdf(completedReport),
   );
   const text = extractedPdfText(pdf);
 
@@ -245,11 +353,11 @@ test("completed-plan PDF reports progress without inventing a next step", async 
 
 test("direct plan PDF bytes load as an A4 document with useful metadata", async () => {
   const report = normalizedReport();
-  const bytes = await createCustomerPlanPdfBytes(report);
+  const bytes = await createPdf(report);
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-07-30-tagged-plan-pdf-v3",
+    "2026-07-31-tagged-plan-pdf-v6",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -271,14 +379,37 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   assert.match(content, /\bc\b/, "rounded panels should use curved corners");
 });
 
+test("direct plan PDF small blue and muted copy meets WCAG AA contrast", () => {
+  for (const foreground of [
+    CUSTOMER_PLAN_PDF_CONTRAST_COLORS.oceanBlue,
+    CUSTOMER_PLAN_PDF_CONTRAST_COLORS.muted,
+  ]) {
+    for (const background of [
+      CUSTOMER_PLAN_PDF_CONTRAST_COLORS.paper,
+      CUSTOMER_PLAN_PDF_CONTRAST_COLORS.canvas,
+    ]) {
+      const ratio = contrastRatio(foreground, background);
+      assert.ok(
+        ratio >= 4.5,
+        `${foreground} on ${background} only reached ${ratio.toFixed(2)}:1`,
+      );
+    }
+  }
+});
+
 test("direct plan PDF exposes a bounded tagged-document foundation", async () => {
   const pdf = await PDFDocument.load(
-    await createCustomerPlanPdfBytes(normalizedReport()),
+    await createPdf(normalizedReport()),
   );
   const language = pdf.catalog.get(PDFName.of("Lang"));
   const markInfo = pdf.catalog.lookup(PDFName.of("MarkInfo"), PDFDict);
   const structureRoot = pdf.catalog.lookup(
     PDFName.of("StructTreeRoot"),
+    PDFDict,
+  );
+  const metadata = pdf.catalog.lookup(PDFName.of("Metadata"), PDFRawStream);
+  const viewerPreferences = pdf.catalog.lookup(
+    PDFName.of("ViewerPreferences"),
     PDFDict,
   );
   const parentTree = structureRoot.lookup(
@@ -299,6 +430,13 @@ test("direct plan PDF exposes a bounded tagged-document foundation", async () =>
 
   assert.equal(language.decodeText(), "en-AU");
   assert.equal(
+    viewerPreferences.lookup(
+      PDFName.of("DisplayDocTitle"),
+      PDFBool,
+    ).asBoolean(),
+    true,
+  );
+  assert.equal(
     markInfo.lookup(PDFName.of("Marked"), PDFBool).asBoolean(),
     true,
   );
@@ -308,8 +446,22 @@ test("direct plan PDF exposes a bounded tagged-document foundation", async () =>
   );
   assert.ok(documentSections.size() >= 5);
   assert.ok(parentTreeNumbers.size() >= pdf.getPageCount() * 2);
+  assert.equal(
+    metadata.dict.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
+    "XML",
+  );
+  assert.match(
+    new TextDecoder().decode(metadata.contents),
+    /<dc:language>[\s\S]*<rdf:li>en-AU<\/rdf:li>/,
+  );
+  assert.doesNotMatch(
+    new TextDecoder().decode(metadata.contents),
+    /pdfuaid:/i,
+    "the technical foundation must not claim unverified PDF/UA conformance",
+  );
 
   const pageParentKeys = [];
+  let embeddedFontCount = 0;
   for (const page of pdf.getPages()) {
     pageParentKeys.push(
       page.node.lookup(PDFName.of("StructParents"), PDFNumber).asNumber(),
@@ -318,7 +470,29 @@ test("direct plan PDF exposes a bounded tagged-document foundation", async () =>
       page.node.lookup(PDFName.of("Tabs"), PDFName).decodeText(),
       "S",
     );
+    const resources = page.node.lookup(PDFName.of("Resources"), PDFDict);
+    const fonts = resources.lookup(PDFName.of("Font"), PDFDict);
+    for (const key of fonts.keys()) {
+      const font = fonts.lookup(key, PDFDict);
+      assert.equal(
+        font.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
+        "Type0",
+      );
+      font.lookup(PDFName.of("ToUnicode"), PDFRawStream);
+      const descendants = font.lookup(
+        PDFName.of("DescendantFonts"),
+        PDFArray,
+      );
+      const descendant = pdf.context.lookup(descendants.get(0), PDFDict);
+      const descriptor = descendant.lookup(
+        PDFName.of("FontDescriptor"),
+        PDFDict,
+      );
+      descriptor.lookup(PDFName.of("FontFile2"), PDFRawStream);
+      embeddedFontCount += 1;
+    }
   }
+  assert.ok(embeddedFontCount >= 2);
   const indexedParentKeys = [];
   for (let index = 0; index < parentTreeNumbers.size(); index += 2) {
     indexedParentKeys.push(
@@ -338,16 +512,19 @@ test("direct plan PDF exposes a bounded tagged-document foundation", async () =>
   assert.match(content, /\bEMC\b/);
   assert.ok(structureRoles.includes("P"));
   assert.ok(structureRoles.includes("Span"));
-  assert.deepEqual(
-    structureRoles.filter((role) =>
-      ["L", "LI", "Lbl", "LBody"].includes(role)
-    ),
-    [],
-    "visual bullets and standalone step badges must not claim list semantics",
-  );
-  assert.doesNotMatch(
+  for (const role of ["L", "LI", "Lbl", "LBody"]) {
+    assert.ok(
+      structureRoles.includes(role),
+      `the tagged report must expose the ${role} list role`,
+    );
+  }
+  assert.match(
     content,
-    /\/(?:L|LI|Lbl|LBody)\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/,
+    /\/Lbl\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/,
+  );
+  assert.match(
+    content,
+    /\/LBody\s+<<\s*\/MCID\s+\d+\s*>>\s+BDC/,
   );
 });
 
@@ -365,7 +542,7 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
       guideHref: "/guides/heating",
     }],
   });
-  const bytes = await createCustomerPlanPdfBytes(report);
+  const bytes = await createPdf(report);
   const pdf = await PDFDocument.load(bytes);
   const urls = [];
 
@@ -418,29 +595,93 @@ test("direct plan PDF filename is fixed, dated and independent of private fields
 });
 
 test("direct plan PDF accepts common adviser names, temperatures and smart punctuation", async () => {
-  const unicodeReport = {
-    ...normalizedReport(),
-    professionalReview: {
-      role: "accredited-energy-adviser",
-      roleLabel: "Accredited energy adviser",
-      adviserName: "José Māori",
-      accreditationScheme: "Example accreditation scheme",
-      accreditationReference: "ACC-123456",
-      notes: "José Māori recorded 22 °C – smart “quotes”.",
-      statement:
-        "These home details were reviewed by José Māori, who declares they are an accredited energy adviser.",
-      readinessBoundary:
-        "The named adviser declares these details were professionally checked.",
-      boundary:
-        "Australian Energy Assessments has not independently verified the adviser identity, accreditation, reference or home observations.",
-    },
-  };
+  const adviserName = "José Māori";
+  const professionalNote =
+    "José Māori recorded 22 °C – smart “quotes” and a €120 allowance.";
+  const unicodeReport = normalizedReport({
+    professionalReview: professionalReviewInput({
+      adviserName,
+      notes: professionalNote,
+    }),
+  });
 
-  const bytes = await createCustomerPlanPdfBytes(unicodeReport);
+  const bytes = await createPdf(unicodeReport);
   const pdf = await PDFDocument.load(bytes);
+  const taggedText = extractedPdfText(pdf);
+  const toUnicode = decodedToUnicodeCMaps(pdf).join("\n").toUpperCase();
 
   assertEveryPageIsA4(pdf);
   assert.ok(bytes.length > 0);
+  assert.match(taggedText, new RegExp(adviserName, "u"));
+  assert.match(taggedText, /22 °C – smart “quotes” and a €120 allowance\./u);
+  for (const unicodeDestination of [
+    "00E9",
+    "0101",
+    "00B0",
+    "2013",
+    "201C",
+    "201D",
+    "20AC",
+  ]) {
+    assert.match(
+      toUnicode,
+      new RegExp(`<${unicodeDestination}>`),
+      `the embedded ToUnicode map must expose U+${unicodeDestination}`,
+    );
+  }
+});
+
+test("direct plan PDF rejects unsupported scripts instead of corrupting visible text", async () => {
+  const unsupportedExamples = [
+    ["CJK", "张"],
+    ["Arabic", "م"],
+    ["Devanagari", "प"],
+    ["Vietnamese", "ệ"],
+  ];
+
+  for (const [script, character] of unsupportedExamples) {
+    const report = normalizedReport({
+      professionalReview: professionalReviewInput({
+        adviserName: `Alex ${character}`,
+        notes: `Professional note containing ${character}.`,
+      }),
+    });
+    await assert.rejects(
+      createPdf(report),
+      (error) => {
+        assert.ok(
+          error instanceof CustomerPlanPdfUnsupportedTextError,
+          `${script} text should raise the explicit font-coverage error`,
+        );
+        assert.equal(error.code, "CUSTOMER_PLAN_PDF_UNSUPPORTED_TEXT");
+        assert.ok(
+          error.unsupportedCharacters.includes(character),
+          `${script} unsupported character should be identified`,
+        );
+        assert.doesNotMatch(
+          error.message,
+          new RegExp(character, "u"),
+          "the error message must not echo customer or adviser text",
+        );
+        return true;
+      },
+    );
+  }
+});
+
+test("PDF route returns a clear unsupported-text response", () => {
+  assert.match(
+    PDF_ROUTE_SOURCE,
+    /error instanceof CustomerPlanPdfUnsupportedTextError/,
+  );
+  assert.match(
+    PDF_ROUTE_SOURCE,
+    /cannot display some characters in this plan yet/,
+  );
+  assert.match(
+    PDF_ROUTE_SOURCE,
+    /before downloading\.",\s*422/,
+  );
 });
 
 test("maximum bounded roadmap produces a complete multi-page A4 PDF", async () => {
@@ -455,38 +696,42 @@ test("maximum bounded roadmap produces a complete multi-page A4 PDF", async () =
     guideLabel: `Open guide ${index + 1}`,
     guideHref: `/guides/maximum-${index + 1}`,
   }));
-  const maximumReport = {
-    ...normalizedReport({
-      planTitle: "Maximum bounded home energy roadmap",
-      actions,
-    }),
-    professionalReview: {
-      role: "accredited-energy-adviser",
-      roleLabel: "Accredited energy adviser",
-      adviserName: "Alex Example",
-      accreditationScheme: "Example accreditation scheme",
-      accreditationReference: "ACC-123456",
+  const maximumReport = normalizedReport({
+    planTitle: "Maximum bounded home energy roadmap",
+    actions,
+    professionalReview: professionalReviewInput({
       notes:
         "The adviser checked the supplied home details and recorded a bounded professional note.",
-      statement:
-        "These home details were reviewed by Alex Example, who declares they are an accredited energy adviser.",
-      readinessBoundary:
-        "The named adviser declares these details were professionally checked.",
-      boundary:
-        "Australian Energy Assessments has not independently verified the adviser identity, accreditation, reference or home observations.",
-    },
-  };
+    }),
+  });
   assert.equal(maximumReport.actions.length, 40);
   assert.equal(maximumReport.everydayActions.length, 6);
   assert.ok(maximumReport.professionalReview);
 
-  const minimalBytes = await createCustomerPlanPdfBytes(
+  const minimalBytes = await createPdf(
     normalizedReport({ everydayActions: [], actions: actions.slice(0, 1) }),
   );
-  const maximumBytes = await createCustomerPlanPdfBytes(maximumReport);
+  const maximumBytes = await createPdf(maximumReport);
   const pdf = await PDFDocument.load(maximumBytes);
+  const pageTexts = extractedPdfPageTexts(pdf);
+  const roadmapHeadingPage = pageTexts.find((text) =>
+    text.includes("Build the rest of your roadmap")
+  );
+  const decisionHeadingPage = pageTexts.find((text) =>
+    text.includes("How your priorities were chosen")
+  );
 
   assertEveryPageIsA4(pdf);
+  assert.match(
+    roadmapHeadingPage || "",
+    /Maximum roadmap action 01/,
+    "the roadmap heading must stay with its first action card",
+  );
+  assert.match(
+    decisionHeadingPage || "",
+    /The sequence reflects the goals, home context, budget and pace/,
+    "the rationale heading must stay with its first information panel",
+  );
   assert.ok(
     pdf.getPageCount() >= 8,
     `maximum report rendered only ${pdf.getPageCount()} pages`,

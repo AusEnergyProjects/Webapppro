@@ -5,15 +5,16 @@ import {
   endPath,
   lineTo,
   moveTo,
+  PDFBool,
   PDFDocument,
   PDFName,
   PDFString,
   PageSizes,
   popGraphicsState,
   pushGraphicsState,
-  StandardFonts,
   rgb,
 } from "pdf-lib";
+import nextFontkitModule from "next/dist/compiled/@next/font/dist/fontkit/index.js";
 import {
   CUSTOMER_PLAN_PUBLIC_ORIGIN,
 } from "./customer-plan-document.mjs";
@@ -28,7 +29,25 @@ import {
 } from "./customer-plan-pdf-tags.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-30-tagged-plan-pdf-v3";
+  "2026-07-31-tagged-plan-pdf-v6";
+export const CUSTOMER_PLAN_PDF_CONTRAST_COLORS = Object.freeze({
+  oceanBlue: "#006da6",
+  muted: "#536c78",
+  paper: "#f8fcfd",
+  canvas: "#eaf4f7",
+});
+export class CustomerPlanPdfUnsupportedTextError extends TypeError {
+  constructor(unsupportedCharacters = []) {
+    super(
+      "The customer plan contains text the embedded PDF fonts cannot display.",
+    );
+    this.name = "CustomerPlanPdfUnsupportedTextError";
+    this.code = "CUSTOMER_PLAN_PDF_UNSUPPORTED_TEXT";
+    this.unsupportedCharacters = Array.from(
+      new Set(unsupportedCharacters),
+    ).slice(0, 24);
+  }
+}
 
 const [PAGE_WIDTH, PAGE_HEIGHT] = PageSizes.A4;
 const MARGIN = 44;
@@ -38,6 +57,16 @@ const PDF_LAYOUT = customerPlanReportLayout.pdf;
 const CARD_GAP = PDF_LAYOUT.cardGap;
 
 const ARC_CONTROL = 0.5522847498307936;
+
+function pdfColor(value) {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
+  if (!match) throw new TypeError(`Invalid PDF colour: ${value}`);
+  return rgb(
+    Number.parseInt(match[1], 16) / 255,
+    Number.parseInt(match[2], 16) / 255,
+    Number.parseInt(match[3], 16) / 255,
+  );
+}
 
 function roundedRectanglePath(x, y, width, height, radius) {
   const safeRadius = Math.max(
@@ -157,7 +186,7 @@ const palette = Object.freeze({
   navyDeep: rgb(0.004, 0.082, 0.145),
   inkSoft: rgb(0.043, 0.322, 0.42),
   electricBlue: rgb(0, 0.663, 0.91),
-  oceanBlue: rgb(0.031, 0.471, 0.718),
+  oceanBlue: pdfColor(CUSTOMER_PLAN_PDF_CONTRAST_COLORS.oceanBlue),
   green: rgb(0.063, 0.725, 0.506),
   greenDark: rgb(0.016, 0.471, 0.341),
   teal: rgb(0.125, 0.847, 0.757),
@@ -165,11 +194,11 @@ const palette = Object.freeze({
   mint: rgb(0.91, 0.969, 0.961),
   mintStrong: rgb(0.843, 0.953, 0.933),
   white: rgb(1, 1, 1),
-  paper: rgb(0.973, 0.988, 0.992),
-  canvas: rgb(0.918, 0.957, 0.969),
+  paper: pdfColor(CUSTOMER_PLAN_PDF_CONTRAST_COLORS.paper),
+  canvas: pdfColor(CUSTOMER_PLAN_PDF_CONTRAST_COLORS.canvas),
   text: rgb(0.031, 0.165, 0.227),
   body: rgb(0.212, 0.329, 0.404),
-  muted: rgb(0.388, 0.478, 0.529),
+  muted: pdfColor(CUSTOMER_PLAN_PDF_CONTRAST_COLORS.muted),
   line: rgb(0.788, 0.875, 0.898),
   cream: rgb(1, 0.969, 0.898),
   creamLine: rgb(0.91, 0.776, 0.435),
@@ -197,20 +226,6 @@ const gradients = Object.freeze({
     to: Object.freeze([5, 105, 123]),
   }),
 });
-
-const FONT_FALLBACKS = new Map([
-  ["\u2010", "-"],
-  ["\u2011", "-"],
-  ["\u2012", "-"],
-  ["\u2013", "-"],
-  ["\u2014", "-"],
-  ["\u2018", "'"],
-  ["\u2019", "'"],
-  ["\u201c", "\""],
-  ["\u201d", "\""],
-  ["\u2022", "-"],
-  ["\u2026", "..."],
-]);
 
 function normalizedText(value, maximum = 8_000) {
   const supplied = String(value ?? "")
@@ -251,9 +266,99 @@ function requiredReport(value) {
   return value;
 }
 
+function requiredFontBytes(value, label) {
+  const bytes = value instanceof Uint8Array
+    ? value
+    : value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : null;
+  if (!bytes || bytes.byteLength < 10_000 || bytes.byteLength > 2_000_000) {
+    throw new TypeError(`A valid embedded ${label} font is required.`);
+  }
+  return bytes;
+}
+
+function requiredPdfFonts(value) {
+  const supplied =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : {};
+  return {
+    regular: requiredFontBytes(supplied.regular, "regular"),
+    bold: requiredFontBytes(supplied.bold, "bold"),
+  };
+}
+
+function embeddedFontCharacterSet(fontkitCreate, bytes, label) {
+  try {
+    const font = fontkitCreate(bytes);
+    const characterSet = new Set(font?.characterSet || []);
+    if (!characterSet.size) throw new Error("EMPTY_FONT_CHARACTER_SET");
+    return characterSet;
+  } catch {
+    throw new TypeError(`The embedded ${label} font could not be read.`);
+  }
+}
+
+function sharedFontCharacterSet(regularCharacters, boldCharacters) {
+  return new Set(
+    [...regularCharacters].filter((codePoint) =>
+      boldCharacters.has(codePoint)
+    ),
+  );
+}
+
+function reportTextValues(value, output = [], seen = new Set(), depth = 0) {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+  if (!value || typeof value !== "object" || depth > 10) return output;
+  if (seen.has(value)) return output;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      reportTextValues(item, output, seen, depth + 1);
+    }
+    return output;
+  }
+  for (const item of Object.values(value)) {
+    reportTextValues(item, output, seen, depth + 1);
+  }
+  return output;
+}
+
+function assertReportFontCoverage(report, supportedCharacters) {
+  const unsupportedCharacters = new Set();
+  for (const value of reportTextValues(report)) {
+    for (const character of Array.from(normalizedText(value))) {
+      if (
+        character !== "\n"
+        && !supportedCharacters.has(character.codePointAt(0))
+      ) {
+        unsupportedCharacters.add(character);
+      }
+    }
+  }
+  if (unsupportedCharacters.size) {
+    throw new CustomerPlanPdfUnsupportedTextError(
+      [...unsupportedCharacters],
+    );
+  }
+}
+
 function reportDate(value) {
   const supplied = normalizedText(value, 20);
   return /^\d{4}-\d{2}-\d{2}$/.test(supplied) ? supplied : "";
+}
+
+function xmlText(value, maximum = 500) {
+  return normalizedText(value, maximum)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 export function customerPlanPdfFileName(report) {
@@ -295,34 +400,20 @@ function splitLongToken(font, size, token, maximumWidth) {
   return pieces;
 }
 
-function fontSafeText(value, font, supportedCharacters) {
-  return Array.from(normalizedText(value)).map((character) => {
-    if (character === "\n") return character;
-    const codePoint = character.codePointAt(0);
-    if (supportedCharacters.has(codePoint)) return character;
-    const approximation = character
-      .normalize("NFD")
-      .replace(/\p{Mark}/gu, "");
-    if (
-      approximation
-      && approximation !== character
-      && Array.from(approximation).every((part) =>
-        supportedCharacters.has(part.codePointAt(0))
-      )
-    ) {
-      return approximation;
-    }
-    const fallback = FONT_FALLBACKS.get(character) || "?";
-    return Array.from(fallback).every((part) =>
-      supportedCharacters.has(part.codePointAt(0))
-    )
-      ? fallback
-      : "";
-  }).join("");
+function fontSafeText(value, supportedCharacters) {
+  const supplied = normalizedText(value);
+  const unsupportedCharacters = Array.from(supplied).filter((character) =>
+    character !== "\n"
+    && !supportedCharacters.has(character.codePointAt(0))
+  );
+  if (unsupportedCharacters.length) {
+    throw new CustomerPlanPdfUnsupportedTextError(unsupportedCharacters);
+  }
+  return supplied;
 }
 
 function wrapText(font, size, value, maximumWidth, supportedCharacters) {
-  const supplied = fontSafeText(value, font, supportedCharacters);
+  const supplied = fontSafeText(value, supportedCharacters);
   const lines = [];
   for (const paragraph of supplied.split("\n")) {
     const words = paragraph.trim().split(/\s+/).filter(Boolean);
@@ -353,8 +444,12 @@ function wrapText(font, size, value, maximumWidth, supportedCharacters) {
   return lines;
 }
 
-export async function createCustomerPlanPdfBytes(suppliedReport) {
+export async function createCustomerPlanPdfBytes(
+  suppliedReport,
+  suppliedFonts,
+) {
   const report = requiredReport(suppliedReport);
+  const fontBytes = requiredPdfFonts(suppliedFonts);
   const copy = report.copy || {};
   const priorityActions = Array.isArray(report.priorityActions)
     ? report.priorityActions
@@ -367,16 +462,38 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   const completedCount = report.actions
     .filter((action) => action.completed)
     .length;
+  const fontkitCreate =
+    typeof nextFontkitModule === "function"
+      ? nextFontkitModule
+      : nextFontkitModule?.default;
+  if (typeof fontkitCreate !== "function") {
+    throw new TypeError("The embedded PDF font engine is unavailable.");
+  }
+  const regularCharacters = embeddedFontCharacterSet(
+    fontkitCreate,
+    fontBytes.regular,
+    "regular",
+  );
+  const boldCharacters = embeddedFontCharacterSet(
+    fontkitCreate,
+    fontBytes.bold,
+    "bold",
+  );
+  assertReportFontCoverage(
+    report,
+    sharedFontCharacterSet(regularCharacters, boldCharacters),
+  );
   const pdf = await PDFDocument.create();
+  pdf.registerFontkit({ create: fontkitCreate });
   const pdfTags = createCustomerPlanPdfTagger(pdf);
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdf.embedFont(fontBytes.regular, { subset: false });
+  const bold = await pdf.embedFont(fontBytes.bold, { subset: false });
   const brandmark = await pdf.embedPng(AEA_BRANDMARK_PNG_DATA_URI);
   const supportedCharacters = new Map(
-    [regular, bold].map((font) => [
-      font,
-      new Set(font.getCharacterSet()),
-    ]),
+    [
+      [regular, regularCharacters],
+      [bold, boldCharacters],
+    ],
   );
   const pages = [];
   let page;
@@ -514,7 +631,6 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     if (date) {
       const safeDate = fontSafeText(
         date,
-        regular,
         supportedCharacters.get(regular),
       );
       page.drawText(safeDate, {
@@ -531,6 +647,10 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pdf.setLanguage("en-AU");
+  pdf.catalog.set(
+    PDFName.of("ViewerPreferences"),
+    pdf.context.obj({ DisplayDocTitle: PDFBool.True }),
+  );
   pdf.setTitle(normalizedText(report.heading, 180), {
     showInWindowTitleBar: true,
   });
@@ -550,6 +670,38 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     pdf.setCreationDate(metadataDate);
     pdf.setModificationDate(metadataDate);
   }
+  const xmpDate = preparedDate
+    ? `${preparedDate}T00:00:00.000Z`
+    : "";
+  const xmpMetadata = `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+      xmlns:dc="http://purl.org/dc/elements/1.1/"
+      xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
+      xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+      <dc:format>application/pdf</dc:format>
+      <dc:language><rdf:Bag><rdf:li>en-AU</rdf:li></rdf:Bag></dc:language>
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">${xmlText(report.heading, 180)}</rdf:li></rdf:Alt></dc:title>
+      <dc:creator><rdf:Seq><rdf:li>Australian Energy Assessments</rdf:li></rdf:Seq></dc:creator>
+      <pdf:Producer>Australian Energy Assessments</pdf:Producer>
+      <xmp:CreatorTool>Australian Energy Assessments</xmp:CreatorTool>
+      ${xmpDate ? `<xmp:CreateDate>${xmpDate}</xmp:CreateDate><xmp:ModifyDate>${xmpDate}</xmp:ModifyDate>` : ""}
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+  const metadataStream = pdf.context.stream(
+    new TextEncoder().encode(xmpMetadata),
+    {
+      Type: PDFName.of("Metadata"),
+      Subtype: PDFName.of("XML"),
+    },
+  );
+  pdf.catalog.set(
+    PDFName.of("Metadata"),
+    pdf.context.register(metadataStream),
+  );
 
   function addLinkAnnotation({
     x,
@@ -631,7 +783,6 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       if (pageSection) {
         const safeSection = fontSafeText(
           pageSection.toUpperCase(),
-          bold,
           supportedCharacters.get(bold),
         );
         page.drawText(`SECTION | ${safeSection}`, {
@@ -1277,16 +1428,26 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         color: bodyColor,
       })
       : [];
-    const bulletLines = bullets.flatMap((item) => linesFor(
-      `- ${normalizedText(item)}`,
-      {
-        font: regular,
-        size: 9.5,
-        width: innerWidth - 5,
-        lineHeight: 13.5,
-        color: bodyColor,
-      },
-    ));
+    const bulletEntries = bullets.map((item) => ({
+      actualText: normalizedText(item),
+      lines: linesFor(
+        normalizedText(item),
+        {
+          font: regular,
+          size: 9.5,
+          width: innerWidth - 18,
+          lineHeight: 13.5,
+          color: bodyColor,
+        },
+      ),
+    }));
+    const bulletContentHeight = bulletEntries.reduce(
+      (total, entry, index) =>
+        total
+        + measureLines(entry.lines)
+        + (index > 0 ? 4 : 0),
+      0,
+    );
     const contentHeight = measureLines(eyebrowLines)
       + (
         eyebrowLines.length && titleLines.length
@@ -1300,8 +1461,8 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
           : 0
       )
       + measureLines(bodyLines)
-      + (bulletLines.length ? PDF_LAYOUT.titleBodyGap : 0)
-      + measureLines(bulletLines);
+      + (bulletEntries.length ? PDF_LAYOUT.titleBodyGap : 0)
+      + bulletContentHeight;
     const height = Math.max(
       64,
       contentHeight + (PDF_LAYOUT.panelPaddingY * 2),
@@ -1378,14 +1539,36 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
         });
       }, { actualText: body });
     }
-    if (bulletLines.length) {
+    if (bulletEntries.length) {
       cursor -= PDF_LAYOUT.titleBodyGap;
-      pdfTags.mark(page, "P", () => {
-        drawLines(bulletLines, {
-          x: MARGIN + PDF_LAYOUT.panelPaddingX + 4,
-          startY: cursor,
+      const list = pdfTags.beginContainer("L", {
+        title: title || eyebrow || "Information list",
+      });
+      bulletEntries.forEach((entry, index) => {
+        if (index > 0) cursor -= 4;
+        const item = pdfTags.beginContainer("LI", { parent: list });
+        pdfTags.mark(page, "Lbl", () => {
+          page.drawText("\u2022", {
+            x: MARGIN + PDF_LAYOUT.panelPaddingX + 4,
+            y: cursor,
+            size: 9.5,
+            font: bold,
+            color: bodyColor,
+          });
+        }, {
+          actualText: "\u2022",
+          parent: item,
         });
-      }, { actualText: bullets.join("\n") });
+        pdfTags.mark(page, "LBody", () => {
+          cursor = drawLines(entry.lines, {
+            x: MARGIN + PDF_LAYOUT.panelPaddingX + 18,
+            startY: cursor,
+          });
+        }, {
+          actualText: entry.actualText,
+          parent: item,
+        });
+      });
     }
     y = bottom - CARD_GAP;
   }
@@ -1522,7 +1705,6 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     });
     const safeNumber = fontSafeText(
       numberLabel,
-      bold,
       supportedCharacters.get(bold),
     );
     pdfTags.mark(page, "Span", () => {
@@ -1729,6 +1911,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
     pageSection = priorityActions.length
       ? copy.roadmapEyebrow || "Your plan"
       : copy.completedEyebrow || "Plan progress";
+    ensureSpace(240, pageSection);
     pdfTags.beginSection(
       priorityActions.length
         ? copy.roadmapTitle || "Build the rest of your roadmap"
@@ -1777,6 +1960,7 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
   }
 
   pageSection = "Plan checks";
+  ensureSpace(180, pageSection);
   pdfTags.beginSection(copy.whyTitle || "How your priorities were chosen");
   drawSectionHeading(
     copy.whyEyebrow || "Why this order",
@@ -1887,7 +2071,6 @@ export async function createCustomerPlanPdfBytes(suppliedReport) {
       currentPage.drawText(
         fontSafeText(
           copy.footer || "Independent, product-neutral home energy guidance",
-          regular,
           supportedCharacters.get(regular),
         ),
         {

@@ -39,3 +39,68 @@ export function canUpdateReplayedCustomerDraft(project) {
     && project.createdAt === project.updatedAt,
   );
 }
+
+export function isProvenInstallerProfileRevisionConflict(
+  result,
+  latestProfile,
+  attemptedUpdatedAt,
+) {
+  const conflictUpdatedAt = clean(result?.updatedAt);
+  const latestUpdatedAt = clean(latestProfile?.updatedAt);
+  return Boolean(
+    Number(result?.status) === 409
+    && result?.code === "PROFILE_REVISION_CONFLICT"
+    && conflictUpdatedAt
+    && conflictUpdatedAt !== clean(attemptedUpdatedAt)
+    && latestUpdatedAt === conflictUpdatedAt,
+  );
+}
+
+export async function saveInstallerRequestProfileWithOneConflictRetry({
+  contact,
+  expectedUpdatedAt,
+  save,
+  loadLatest,
+}) {
+  const firstResult = await save(expectedUpdatedAt, contact);
+  if (firstResult?.ok) {
+    return {
+      result: firstResult,
+      latestProfile: null,
+      retried: false,
+    };
+  }
+
+  if (
+    Number(firstResult?.status) !== 409
+    || firstResult?.code !== "PROFILE_REVISION_CONFLICT"
+  ) {
+    return {
+      result: firstResult,
+      latestProfile: null,
+      retried: false,
+    };
+  }
+
+  const latestProfile = await loadLatest();
+  if (
+    !isProvenInstallerProfileRevisionConflict(
+      firstResult,
+      latestProfile,
+      expectedUpdatedAt,
+    )
+  ) {
+    return {
+      result: firstResult,
+      latestProfile,
+      retried: false,
+    };
+  }
+
+  const retryResult = await save(latestProfile.updatedAt, contact);
+  return {
+    result: retryResult,
+    latestProfile,
+    retried: true,
+  };
+}

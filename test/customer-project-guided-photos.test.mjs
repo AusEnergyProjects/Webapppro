@@ -9,6 +9,10 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const component = read("../src/components/CustomerProjectPhotoCapture.tsx");
+const componentStyles = read(
+  "../src/components/CustomerProjectPhotoCapture.module.css",
+);
+const dashboard = read("../src/components/CustomerDashboard.tsx");
 
 test("guided project photos are deterministic, bounded and round-robin project work", () => {
   const categories = ["hot-water", "glazing", "solar", "battery", "insulation"];
@@ -63,10 +67,148 @@ test("customer meter-box guidance keeps the enclosure closed", () => {
 
 test("capture interface blocks inputs behind explicit safety and privacy checks", () => {
   assert.match(component, /Before opening the camera, confirm all three/);
-  assert.match(component, /disabled=\{!ready \|\| remainingSlots < 1\}/);
+  assert.match(component, /const canChoose = ready/);
+  assert.match(component, /disabled=\{!canChoose\}/);
   assert.match(component, /capture="environment"/);
   assert.match(component, /never enter a roof space or crawl under a home/);
   assert.match(component, /No people, mail, street numbers, number plates, bills, NMI/);
   assert.match(component, /Photos are optional/);
   assert.match(component, /save privately first/);
+});
+
+test("each guided prompt keeps its pending or saved photo in place", () => {
+  assert.match(component, /pendingBySlot/);
+  assert.match(component, /storedBySlot/);
+  assert.match(component, /Ready to save with this plan/);
+  assert.match(component, /Saved privately in this photo spot/);
+  assert.match(component, /Location and camera metadata removed/);
+  assert.match(component, /Retake photo/);
+  assert.match(component, /Choose replacement/);
+  assert.match(component, /replaceEvidenceId: stored\.id/);
+  assert.match(component, /expectedEvidenceRevision: stored\.revision/);
+});
+
+test("saved photos from earlier work selections remain visible and actionable", () => {
+  assert.match(
+    component,
+    /const guideSlots = useMemo\([\s\S]*new Set\(guide\.map\(\(item\) => item\.id\)\)/,
+  );
+  assert.match(
+    component,
+    /storedEvidence\.filter\([\s\S]*!guideSlots\.has\(item\.captureSlot\)/,
+  );
+  assert.match(component, /Saved from an earlier selection/);
+  assert.match(
+    component,
+    /earlierStoredEvidence\.map\(\(stored\)[\s\S]*StoredPhotoPreview[\s\S]*stored\.fileName/,
+  );
+  assert.match(
+    component,
+    /const chooseStoredReplacement = \([\s\S]*replaceEvidenceId: stored\.id[\s\S]*expectedEvidenceRevision: stored\.revision/,
+  );
+  assert.match(component, /onRemoveStored\(stored\)/);
+  assert.match(componentStyles, /\.earlierSelection\s*\{/);
+  assert.match(componentStyles, /\.earlierSelectionItem\s*\{/);
+});
+
+test("generic other evidence and PDFs are not duplicated in the guided fallback", () => {
+  const earlierFilter = component.slice(
+    component.indexOf("const earlierStoredEvidence = useMemo"),
+    component.indexOf("\n\n  const choose =", component.indexOf(
+      "const earlierStoredEvidence = useMemo",
+    )),
+  );
+
+  assert.match(earlierFilter, /Boolean\(item\.captureSlot\)/);
+  assert.match(
+    earlierFilter,
+    /!item\.captureSlot\.startsWith\("other:"\)/,
+  );
+  assert.match(
+    earlierFilter,
+    /item\.contentType\.startsWith\("image\/"\)/,
+  );
+  assert.match(earlierFilter, /!guideSlots\.has\(item\.captureSlot\)/);
+});
+
+test("private draft and sharing saves keep unconfirmed installer files dirty", () => {
+  const saveDraft = dashboard.slice(
+    dashboard.indexOf("async function saveDraft()"),
+    dashboard.indexOf("function planShareBlocker()"),
+  );
+  const savePlanForSharing = dashboard.slice(
+    dashboard.indexOf("async function savePlanForSharing()"),
+    dashboard.indexOf("function openShareDialog()"),
+  );
+
+  for (const source of [saveDraft, savePlanForSharing]) {
+    assert.match(
+      source,
+      /pendingInstallerEvidence = pendingEvidence\.filter\([\s\S]*sharingScope === "allocated-installers"/,
+    );
+    assert.match(
+      source,
+      /setDirty\(pendingInstallerEvidence\.length > 0\)/,
+    );
+    assert.match(
+      source,
+      /will not upload until you confirm sharing when requesting responses/,
+    );
+  }
+  assert.match(
+    saveDraft,
+    /storePendingEvidence\(saved\.id, privateEvidence, false\)/,
+  );
+  assert.match(
+    savePlanForSharing,
+    /storePendingEvidence\(id, privatePlanEvidence, false\)/,
+  );
+});
+
+test("stored photo previews keep stable loaders across unrelated renders", () => {
+  assert.match(
+    dashboard,
+    /const loadStoredEvidencePreview = useCallback\([\s\S]*onLoadEvidencePreview\(summary\)[\s\S]*\[onLoadEvidencePreview\]/,
+  );
+  assert.doesNotMatch(
+    dashboard.slice(
+      dashboard.indexOf("const loadStoredEvidencePreview = useCallback"),
+      dashboard.indexOf("const updateEvidenceUploadProgress"),
+    ),
+    /\[onLoadEvidencePreview, visibleStoredEvidence\]/,
+  );
+  assert.match(
+    dashboard,
+    /const loadProjectEvidencePreview = useCallback\([\s\S]*\n    \[user\],\n  \);/,
+  );
+});
+
+test("saved photo deletion changes local state only after confirmed API success", () => {
+  const editorDeletion = dashboard.slice(
+    dashboard.indexOf("const removeStoredEvidence = async"),
+    dashboard.indexOf("const loadStoredEvidencePreview"),
+  );
+  const apiDeletion = dashboard.slice(
+    dashboard.indexOf("async function deleteProjectEvidence"),
+    dashboard.indexOf("async function updateProjectEvidence"),
+  );
+  const detailStart = dashboard.indexOf("function ProjectDetail");
+  const detailDeletion = dashboard.slice(
+    dashboard.indexOf("function confirmEvidenceDeletion", detailStart),
+    dashboard.indexOf("\n\n  return (", detailStart),
+  );
+
+  assert.ok(
+    editorDeletion.indexOf("await onDeleteEvidence(evidence)")
+      < editorDeletion.indexOf("setUploadedEvidence"),
+  );
+  assert.match(apiDeletion, /throw failure/);
+  assert.match(
+    detailDeletion,
+    /window\.confirm\([\s\S]*item\.fileName[\s\S]*cannot be undone/,
+  );
+  assert.ok(
+    detailDeletion.indexOf("window.confirm")
+      < detailDeletion.indexOf("onDeleteEvidence(item)"),
+  );
 });

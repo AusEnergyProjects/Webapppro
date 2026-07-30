@@ -1052,9 +1052,9 @@ function htmlBulletRows(items, { color = "#365467" } = {}) {
 function htmlSectionHeading(eyebrow, title, intro = "") {
   return `
     <div style="width:38px;height:4px;margin:0 0 13px;border-radius:999px;background-color:#20d8c1;font-size:0;line-height:0;">&nbsp;</div>
-    <div style="margin:0 0 ${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878b7;">${escapeHtml(eyebrow)}</div>
+    <div style="margin:0 0 ${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#006da6;">${escapeHtml(eyebrow)}</div>
     <h2 style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:29px;line-height:34px;font-weight:800;letter-spacing:-.5px;color:#063448;">${escapeHtml(title)}</h2>
-    ${intro ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#637a87;">${escapeHtml(intro)}</p>` : ""}`;
+    ${intro ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#536c78;">${escapeHtml(intro)}</p>` : ""}`;
 }
 
 function htmlActionCard(action, priority = false) {
@@ -1064,7 +1064,7 @@ function htmlActionCard(action, priority = false) {
     : String(action.number).padStart(2, "0");
   const titleColor = priority ? "#ffffff" : "#063448";
   const bodyColor = priority ? "#cae8f0" : "#365467";
-  const labelColor = priority ? "#74f1d7" : "#0878b7";
+  const labelColor = priority ? "#74f1d7" : "#006da6";
   const linkColor = priority ? "#74f1d7" : "#047857";
   const surface = priority
     ? "border:1px solid #20d8c1;border-top:6px solid #20d8c1;"
@@ -1133,14 +1133,28 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
         ? `${report.planTitle}. Every current step is marked complete.`
         : `${report.planTitle}. Your home energy planning summary is ready.`;
   const html = `<!doctype html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <meta name="x-apple-disable-message-reformatting">
     <meta name="x-aea-report-design" content="${escapeHtml(report.designVersion)}">
     <title>${escapeHtml(report.heading)}</title>
+    <!--[if mso]>
+    <noscript>
+      <xml>
+        <o:OfficeDocumentSettings>
+          <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+      </xml>
+    </noscript>
+    <![endif]-->
     <style>
+      body, table, td { margin: 0; padding: 0; }
+      table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+      img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
       @media only screen and (max-width: 680px) {
         .email-shell { width: 100% !important; }
         .outer-pad { padding: 0 !important; }
@@ -1153,7 +1167,7 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
       }
     </style>
   </head>
-  <body style="margin:0;padding:0;background-color:${customerPlanReportColors.navyDeep};color:${customerPlanReportColors.text};font-family:Arial,Helvetica,sans-serif;">
+  <body style="margin:0;padding:0;background-color:${customerPlanReportColors.navyDeep};color:${customerPlanReportColors.text};font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
     <div style="display:none!important;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;mso-hide:all;">${escapeHtml(preheader)}</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background-color:${customerPlanReportColors.navyDeep};">
       <tr><td class="outer-pad" align="center" style="padding:30px 12px;">
@@ -1198,12 +1212,12 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
                   return `
                   <tr>
                     <td class="snapshot-cell" width="49%" valign="top" style="padding:18px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #00a9e8;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(first.label)}</div>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#006da6;">${escapeHtml(first.label)}</div>
                       <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(first.value)}</div>
                     </td>
                     <td class="snapshot-spacer" width="2%" style="font-size:0;line-height:0;">&nbsp;</td>
                     ${second ? `<td class="snapshot-cell" width="49%" valign="top" style="padding:18px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:4px solid #20d8c1;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(second.label)}</div>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#006da6;">${escapeHtml(second.label)}</div>
                       <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#082a3a;">${escapeHtml(second.value)}</div>
                     </td>` : `<td class="snapshot-cell" width="49%">&nbsp;</td>`}
                   </tr>
@@ -1272,8 +1286,8 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
 
               ${report.climate ? `
               <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);border-bottom:6px solid #20d8c1;">
-                  <tr><td style="padding:24px 26px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#0878b7 100%);">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#006da6 100%);border-bottom:6px solid #20d8c1;">
+                  <tr><td style="padding:24px 26px;border-radius:${emailLayout.featureRadius}px;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#006da6 100%);">
                     <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(copy.climateEyebrow)}</div>
                     <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;">${escapeHtml(report.climate.label || "Your local planning context")}</div>
                     ${report.climate.summary ? `<p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(report.climate.summary)}</p>` : ""}
@@ -1293,11 +1307,11 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
                 ${professional ? `
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #00a9e8;">
                   <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;">
-                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#0878b7;">${escapeHtml(professional.eyebrow)}</div>
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#006da6;">${escapeHtml(professional.eyebrow)}</div>
                     <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:#063448;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.title)}</div>
                     <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml([professional.role, professional.scheme, professional.reference].filter(Boolean).join(" | "))}</p>
                     ${professional.notes ? `<div style="margin-top:${emailLayout.tileGap}px;padding:15px 17px;border-radius:${emailLayout.insetRadius}px;background-color:#e8f7f5;border-left:4px solid #20d8c1;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#063448;">Adviser note</strong><br>${escapeHtml(professional.notes)}</div>` : ""}
-                    <p style="margin:14px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#637a87;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
+                    <p style="margin:14px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#536c78;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(professional.boundary)}</p>
                   </td></tr>
                 </table>` : ""}
               </div>

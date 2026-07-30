@@ -3,45 +3,29 @@ import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import {
   getCustomerProjectEvidenceBucket as getEvidenceBucket,
 } from "@/lib/customer-project-evidence-bucket";
+import {
+  CUSTOMER_EVIDENCE_ALLOWED_TYPES as ALLOWED_TYPES,
+  CUSTOMER_EVIDENCE_CATEGORIES as CATEGORIES,
+  CUSTOMER_EVIDENCE_MAX_FILE_BYTES as MAX_FILE_BYTES,
+  CUSTOMER_EVIDENCE_MAX_PROJECT_FILES as MAX_PROJECT_FILES,
+  CUSTOMER_EVIDENCE_QUOTING_PHOTO_CATEGORIES as QUOTING_PHOTO_CATEGORIES,
+  CUSTOMER_EVIDENCE_SHARING_SCOPES as SHARING_SCOPES,
+  cleanCustomerEvidenceClientUploadId,
+  cleanCustomerEvidenceId,
+  customerEvidencePrivacyStatus,
+  normaliseCustomerEvidenceCaptureSlot,
+  normaliseCustomerEvidenceFactKeys as normaliseFactKeys,
+  privateCustomerEvidenceName,
+  publicCustomerEvidence as publicRecord,
+  type CustomerEvidenceRecord as EvidenceRecord,
+} from "@/lib/customer-project-evidence";
 import { hasAllowedSignature, sanitiseQuotingPhoto } from "@/lib/private-image-evidence";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
-  customerAdvisorOptions,
 } from "@/lib/customer-projects.mjs";
 
 export const runtime = "edge";
-
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_PROJECT_FILES = 12;
-const ALLOWED_TYPES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-const CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard", "supporting-document", "other"]);
-const QUOTING_PHOTO_CATEGORIES = new Set(["property-photo", "existing-equipment", "switchboard"]);
-const SHARING_SCOPES = new Set(["private-plan", "allocated-installers"]);
-const FACT_KEYS = new Set(
-  (customerAdvisorOptions.factKeys as Array<[string, string]>).map(([value]) => value),
-);
-
-type EvidenceRecord = {
-  id: string;
-  project_id: string;
-  customer_uid: string;
-  client_upload_id: string;
-  category: string;
-  fact_keys: string;
-  sharing_scope: string;
-  file_name: string;
-  content_type: string;
-  size_bytes: number;
-  object_key: string;
-  status: string;
-  created_at: string;
-};
 
 function json(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -56,44 +40,11 @@ function safeFileName(value: string) {
   return value.replace(/[\r\n"\\/]/g, "_").trim().slice(0, 180) || "project-evidence";
 }
 
-function evidenceExtension(contentType: string) {
-  if (contentType === "application/pdf") return "pdf";
-  if (contentType === "image/png") return "png";
-  if (contentType === "image/webp") return "webp";
-  return "jpg";
-}
-
-function privateEvidenceName(category: string, contentType: string, id: string) {
-  return `${category}-${id.slice(0, 8)}.${evidenceExtension(contentType)}`;
-}
-
-function publicRecord(record: EvidenceRecord) {
-  return {
-    id: record.id,
-    category: record.category,
-    factKeys: normaliseFactKeys(record.fact_keys),
-    sharingScope: SHARING_SCOPES.has(record.sharing_scope)
-      ? record.sharing_scope
-      : "allocated-installers",
-    fileName: record.file_name,
-    contentType: record.content_type,
-    sizeBytes: Number(record.size_bytes),
-    createdAt: record.created_at,
-  };
-}
-
-function normaliseFactKeys(value: unknown) {
-  let supplied: unknown = value;
-  if (typeof value === "string") {
-    try { supplied = JSON.parse(value); }
-    catch { supplied = []; }
-  }
-  if (!Array.isArray(supplied)) return [];
-  return [...new Set(
-    supplied
-      .map((item) => String(item || "").trim())
-      .filter((item) => FACT_KEYS.has(item)),
-  )].slice(0, 6);
+function exactArrayBuffer(bytes: Uint8Array) {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
 }
 
 async function identity(request: Request) {
@@ -104,6 +55,15 @@ async function identity(request: Request) {
 async function ownedProject(customerUid: string, projectId: string) {
   return getD1().prepare(`SELECT id, status FROM customer_projects WHERE id = ? AND firebase_uid = ?`)
     .bind(projectId, customerUid).first<{ id: string; status: string }>();
+}
+
+function evidenceRevisionConflict(record: EvidenceRecord) {
+  return json({
+    ok: false,
+    code: "EVIDENCE_REVISION_CONFLICT",
+    error: "This saved file changed in another tab. Review it before trying again.",
+    evidence: publicRecord(record),
+  }, 409);
 }
 
 async function installerCanAccess(installerUid: string, record: EvidenceRecord) {
@@ -140,7 +100,31 @@ export async function GET(request: Request) {
   const user = await identity(request);
   if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
   const url = new URL(request.url);
-  const downloadId = (url.searchParams.get("download") || "").slice(0, 180);
+  const previewId = cleanCustomerEvidenceId(url.searchParams.get("preview"));
+  if (previewId) {
+    const record = await getD1().prepare(`SELECT *
+      FROM customer_project_evidence
+      WHERE id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(previewId, user.uid)
+      .first<EvidenceRecord>();
+    if (!record || !record.content_type.startsWith("image/")) {
+      return json({ ok: false, error: "Saved photo not found." }, 404);
+    }
+    const object = await getEvidenceBucket().get(record.object_key);
+    if (!object) {
+      return json({ ok: false, error: "Stored photo not found." }, 404);
+    }
+    return new Response(object.body, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": `inline; filename="${safeFileName(record.file_name)}"`,
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Content-Type": object.httpMetadata?.contentType || record.content_type,
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+  const downloadId = cleanCustomerEvidenceId(url.searchParams.get("download"));
   if (downloadId) {
     const record = await getD1().prepare(`SELECT * FROM customer_project_evidence WHERE id = ? AND status = 'active'`)
       .bind(downloadId).first<EvidenceRecord>();
@@ -165,7 +149,7 @@ export async function GET(request: Request) {
       },
     });
   }
-  const projectId = (url.searchParams.get("projectId") || "").slice(0, 180);
+  const projectId = cleanCustomerEvidenceId(url.searchParams.get("projectId"));
   if (!projectId || !await ownedProject(user.uid, projectId)) return json({ ok: false, error: "Project not found." }, 404);
   const rows = await getD1().prepare(`SELECT * FROM customer_project_evidence
     WHERE project_id = ? AND customer_uid = ? AND status = 'active' ORDER BY created_at DESC`)
@@ -180,9 +164,12 @@ export async function POST(request: Request) {
   let form: FormData;
   try { form = await request.formData(); }
   catch { return json({ ok: false, error: "The project upload could not be read." }, 400); }
-  const projectId = String(form.get("projectId") || "").trim().slice(0, 180);
+  const projectId = cleanCustomerEvidenceId(form.get("projectId"));
   const category = String(form.get("category") || "").trim();
-  const clientUploadId = String(form.get("clientUploadId") || "").trim().slice(0, 180);
+  const captureSlot = normaliseCustomerEvidenceCaptureSlot(form.get("captureSlot"));
+  const clientUploadId = cleanCustomerEvidenceClientUploadId(
+    form.get("clientUploadId"),
+  );
   const factKeys = normaliseFactKeys(form.get("factKeys"));
   const sharingScope = String(form.get("sharingScope") || "private-plan").trim();
   const confirmInstallerPhotoSharing = form.get("confirmInstallerPhotoSharing") === "true";
@@ -201,8 +188,48 @@ export async function POST(request: Request) {
     return json({ ok: false, error: "Confirm that this file can be shared with the verified installers allocated to this enquiry." }, 400);
   }
   if (!CATEGORIES.has(category)) return json({ ok: false, error: "Choose a valid property evidence category." }, 400);
+  if (QUOTING_PHOTO_CATEGORIES.has(category) && !captureSlot) {
+    return json({
+      ok: false,
+      error: "Choose the guided photo prompt this image answers.",
+    }, 400);
+  }
   if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a PDF, JPEG, PNG or WebP file. Unsupported phone photos must be converted to JPEG first." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "Each file must be no larger than 8 MB." }, 400);
+  const existing = await getD1().prepare(`SELECT * FROM customer_project_evidence
+    WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ? AND status = 'active'`)
+    .bind(projectId, user.uid, clientUploadId).first<EvidenceRecord>();
+  if (existing) {
+    if (
+      existing.category !== category
+      || (existing.capture_slot || "") !== captureSlot
+      || existing.content_type !== file.type
+      || Number(existing.size_bytes) !== file.size
+    ) {
+      return json({
+        ok: false,
+        code: "IDEMPOTENCY_MISMATCH",
+        error: "This upload reference was already used for a different file.",
+      }, 409);
+    }
+    return json({ ok: true, duplicate: true, evidence: publicRecord(existing) });
+  }
+  if (captureSlot) {
+    const occupied = await getD1().prepare(`SELECT *
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
+        AND status = 'active'`)
+      .bind(projectId, user.uid, captureSlot)
+      .first<EvidenceRecord>();
+    if (occupied) {
+      return json({
+        ok: false,
+        code: "CAPTURE_SLOT_OCCUPIED",
+        error: "This photo prompt already has a saved photo. Choose retake to replace it.",
+        evidence: publicRecord(occupied),
+      }, 409);
+    }
+  }
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   if (!hasAllowedSignature(fileBytes, file.type)) return json({ ok: false, error: "The file contents do not match the selected photo or document type." }, 400);
   const storedBytes = file.type.startsWith("image/")
@@ -214,58 +241,180 @@ export async function POST(request: Request) {
       error: "This photo could not be safely stored. Convert it to JPEG and try again.",
     }, 400);
   }
-  const existing = await getD1().prepare(`SELECT * FROM customer_project_evidence
-    WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ? AND status = 'active'`)
-    .bind(projectId, user.uid, clientUploadId).first<EvidenceRecord>();
-  if (existing) {
-    return json({ ok: true, evidence: publicRecord(existing) });
-  }
-  const count = await getD1().prepare(`SELECT COUNT(*) total FROM customer_project_evidence
-    WHERE project_id = ? AND customer_uid = ? AND status = 'active'`).bind(projectId, user.uid).first<{ total: number }>();
-  if (Number(count?.total || 0) >= MAX_PROJECT_FILES) return json({ ok: false, error: "This project already has its maximum of 12 evidence files." }, 409);
 
   const id = crypto.randomUUID();
   const objectKey = `customer-projects/${user.uid}/${projectId}/${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const fileName = privateEvidenceName(category, file.type, id);
+  const fileName = privateCustomerEvidenceName(category, file.type, id);
+  const privacyStatus = customerEvidencePrivacyStatus(file.type);
   const bucket = getEvidenceBucket();
-  await bucket.put(objectKey, storedBytes.buffer, {
+  await bucket.put(objectKey, exactArrayBuffer(storedBytes), {
     httpMetadata: { contentType: file.type },
-    customMetadata: { customerUid: user.uid, projectId, evidenceId: id, sharingScope },
+    customMetadata: {
+      customerUid: user.uid,
+      projectId,
+      evidenceId: id,
+      sharingScope,
+      privacyStatus,
+    },
   });
   try {
     const statements = [
       getD1().prepare(`INSERT INTO customer_project_evidence
-        (id, project_id, customer_uid, client_upload_id, category, fact_keys, sharing_scope,
-         file_name, content_type, size_bytes, object_key, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .bind(id, projectId, user.uid, clientUploadId, category, JSON.stringify(factKeys), sharingScope,
-          fileName, file.type, storedBytes.byteLength, objectKey, now, now),
+        (id, project_id, customer_uid, client_upload_id, category,
+         capture_slot, fact_keys, sharing_scope, file_name, content_type,
+         size_bytes, object_key, privacy_status, revision, status,
+         created_at, updated_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?
+        WHERE (
+          (SELECT COUNT(*) FROM customer_project_evidence
+            WHERE project_id = ? AND customer_uid = ? AND status = 'active')
+          +
+          (SELECT COUNT(*) FROM customer_project_evidence_upload_sessions
+            WHERE project_id = ? AND customer_uid = ?
+              AND replacement_evidence_id = ''
+              AND status IN ('initiated', 'uploading', 'completing'))
+        ) < ?`)
+        .bind(
+          id,
+          projectId,
+          user.uid,
+          clientUploadId,
+          category,
+          captureSlot,
+          JSON.stringify(factKeys),
+          sharingScope,
+          fileName,
+          file.type,
+          storedBytes.byteLength,
+          objectKey,
+          privacyStatus,
+          now,
+          now,
+          projectId,
+          user.uid,
+          projectId,
+          user.uid,
+          MAX_PROJECT_FILES,
+        ),
       getD1().prepare(`INSERT INTO customer_project_evidence_events
         (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
-        VALUES (?, ?, ?, ?, '', 'customer', ?, 'uploaded', ?)`)
-        .bind(crypto.randomUUID(), id, projectId, user.uid, user.uid, now),
-      getD1().prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(now, projectId, user.uid),
+        SELECT ?, id, project_id, customer_uid, '', 'customer', ?,
+          'uploaded', ?
+        FROM customer_project_evidence
+        WHERE id = ? AND project_id = ? AND customer_uid = ?
+          AND status = 'active' AND revision = 1 AND object_key = ?`)
+        .bind(
+          crypto.randomUUID(),
+          user.uid,
+          now,
+          id,
+          projectId,
+          user.uid,
+          objectKey,
+        ),
+      getD1().prepare(`UPDATE customer_projects SET updated_at = ?
+        WHERE id = ? AND firebase_uid = ?
+          AND EXISTS (
+            SELECT 1 FROM customer_project_evidence
+            WHERE id = ? AND project_id = ? AND customer_uid = ?
+              AND status = 'active' AND revision = 1 AND object_key = ?
+          )`)
+        .bind(now, projectId, user.uid, id, projectId, user.uid, objectKey),
     ];
     if (sharingScope === "allocated-installers") {
       statements.push(getD1().prepare(`INSERT INTO customer_consent_receipts
         (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-        VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+        SELECT ?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?
+        FROM customer_project_evidence
+        WHERE id = ? AND project_id = ? AND customer_uid = ?
+          AND status = 'active' AND revision = 1 AND object_key = ?
         ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
           granted_at = excluded.granted_at, withdrawn_at = ''`)
-        .bind(`customer-evidence-share:${projectId}`, user.uid, projectId,
-          CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now));
+        .bind(
+          `customer-evidence-share:${projectId}`,
+          user.uid,
+          projectId,
+          CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
+          now,
+          now,
+          id,
+          projectId,
+          user.uid,
+          objectKey,
+        ));
     }
-    await getD1().batch(statements);
+    const results = await getD1().batch(statements);
+    if (Number(results[0]?.meta.changes || 0) !== 1) {
+      await bucket.delete(objectKey);
+      return json({
+        ok: false,
+        code: "PROJECT_EVIDENCE_LIMIT",
+        error: "This project already has its maximum of 12 evidence files.",
+      }, 409);
+    }
   } catch (error) {
+    const committed = await getD1().prepare(`SELECT *
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND client_upload_id = ?
+        AND status = 'active'`)
+      .bind(projectId, user.uid, clientUploadId)
+      .first<EvidenceRecord>();
+    if (committed?.object_key === objectKey) {
+      return json({
+        ok: true,
+        duplicate: true,
+        evidence: publicRecord(committed),
+      });
+    }
     await bucket.delete(objectKey);
+    if (committed) {
+      return json({
+        ok: false,
+        code: "IDEMPOTENCY_MISMATCH",
+        error: "This upload reference was already used for a different file.",
+      }, 409);
+    }
+    if (captureSlot) {
+      const occupied = await getD1().prepare(`SELECT *
+        FROM customer_project_evidence
+        WHERE project_id = ? AND customer_uid = ? AND capture_slot = ?
+          AND status = 'active'`)
+        .bind(projectId, user.uid, captureSlot)
+        .first<EvidenceRecord>();
+      if (occupied) {
+        return json({
+          ok: false,
+          code: "CAPTURE_SLOT_OCCUPIED",
+          error: "This photo prompt already has a saved photo. Choose retake to replace it.",
+          evidence: publicRecord(occupied),
+        }, 409);
+      }
+    }
     throw error;
   }
-  return json({ ok: true, evidence: publicRecord({ id, project_id: projectId, customer_uid: user.uid,
-    client_upload_id: clientUploadId, category, fact_keys: JSON.stringify(factKeys), sharing_scope: sharingScope,
-    file_name: fileName, content_type: file.type, size_bytes: storedBytes.byteLength, object_key: objectKey,
-    status: "active", created_at: now }) }, 201);
+  return json({
+    ok: true,
+    evidence: publicRecord({
+      id,
+      project_id: projectId,
+      customer_uid: user.uid,
+      client_upload_id: clientUploadId,
+      category,
+      capture_slot: captureSlot,
+      fact_keys: JSON.stringify(factKeys),
+      sharing_scope: sharingScope,
+      file_name: fileName,
+      content_type: file.type,
+      size_bytes: storedBytes.byteLength,
+      object_key: objectKey,
+      privacy_status: privacyStatus,
+      revision: 1,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    }),
+  }, 201);
 }
 
 export async function PATCH(request: Request) {
@@ -278,13 +427,21 @@ export async function PATCH(request: Request) {
   let raw: Record<string, unknown>;
   try { raw = await request.json() as Record<string, unknown>; }
   catch { return json({ ok: false, error: "The evidence update could not be read." }, 400); }
-  const id = String(raw.id || "").trim().slice(0, 180);
+  const id = cleanCustomerEvidenceId(raw.id);
   const sharingScope = String(raw.sharingScope || "").trim();
   const factKeys = normaliseFactKeys(raw.factKeys);
+  const expectedRevision = Number(raw.expectedRevision);
   const record = await getD1().prepare(`SELECT * FROM customer_project_evidence
     WHERE id = ? AND customer_uid = ? AND status = 'active'`)
     .bind(id, user.uid).first<EvidenceRecord>();
   if (!record) return json({ ok: false, error: "Project evidence not found." }, 404);
+  if (
+    !Number.isSafeInteger(expectedRevision)
+    || expectedRevision < 1
+    || expectedRevision !== Number(record.revision || 1)
+  ) {
+    return evidenceRevisionConflict(record);
+  }
   if (!SHARING_SCOPES.has(sharingScope)) return json({ ok: false, error: "Choose a valid evidence sharing setting." }, 400);
   const grantingInstallerAccess = (
     record.sharing_scope !== "allocated-installers"
@@ -294,32 +451,82 @@ export async function PATCH(request: Request) {
     return json({ ok: false, error: "Confirm that this file can be shared with allocated verified installers." }, 400);
   }
   const now = new Date().toISOString();
+  const nextRevision = expectedRevision + 1;
   const statements = [
     getD1().prepare(`UPDATE customer_project_evidence
-      SET fact_keys = ?, sharing_scope = ?, updated_at = ?
-      WHERE id = ? AND customer_uid = ? AND status = 'active'`)
-      .bind(JSON.stringify(factKeys), sharingScope, now, id, user.uid),
+      SET fact_keys = ?, sharing_scope = ?, revision = ?, updated_at = ?
+      WHERE id = ? AND customer_uid = ? AND status = 'active'
+        AND revision = ? AND object_key = ?`)
+      .bind(
+        JSON.stringify(factKeys),
+        sharingScope,
+        nextRevision,
+        now,
+        id,
+        user.uid,
+        expectedRevision,
+        record.object_key,
+      ),
     getD1().prepare(`INSERT INTO customer_project_evidence_events
       (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
-      VALUES (?, ?, ?, ?, '', 'customer', ?, 'metadata_updated', ?)`)
-      .bind(crypto.randomUUID(), id, record.project_id, user.uid, user.uid, now),
+      SELECT ?, id, project_id, customer_uid, '', 'customer', ?,
+        'metadata_updated', ?
+      FROM customer_project_evidence
+      WHERE id = ? AND project_id = ? AND customer_uid = ?
+        AND status = 'active' AND revision = ? AND object_key = ?`)
+      .bind(
+        crypto.randomUUID(),
+        user.uid,
+        now,
+        id,
+        record.project_id,
+        user.uid,
+        nextRevision,
+        record.object_key,
+      ),
   ];
   if (grantingInstallerAccess) {
     statements.push(getD1().prepare(`INSERT INTO customer_consent_receipts
       (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-      VALUES (?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?)
+      SELECT ?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?
+      FROM customer_project_evidence
+      WHERE id = ? AND project_id = ? AND customer_uid = ?
+        AND status = 'active' AND revision = ? AND object_key = ?
       ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
         granted_at = excluded.granted_at, withdrawn_at = ''`)
-      .bind(`customer-evidence-share:${record.project_id}`, user.uid, record.project_id,
-        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, now, now));
+      .bind(
+        `customer-evidence-share:${record.project_id}`,
+        user.uid,
+        record.project_id,
+        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
+        now,
+        now,
+        id,
+        record.project_id,
+        user.uid,
+        nextRevision,
+        record.object_key,
+      ));
   }
-  await getD1().batch(statements);
+  const results = await getD1().batch(statements);
+  if (Number(results[0]?.meta.changes || 0) !== 1) {
+    const latest = await getD1().prepare(`SELECT *
+      FROM customer_project_evidence
+      WHERE id = ? AND customer_uid = ? AND status = 'active'`)
+      .bind(id, user.uid)
+      .first<EvidenceRecord>();
+    return latest
+      ? evidenceRevisionConflict(latest)
+      : json({ ok: false, error: "Project evidence not found." }, 404);
+  }
   return json({
     ok: true,
     evidence: publicRecord({
       ...record,
       fact_keys: JSON.stringify(factKeys),
       sharing_scope: sharingScope,
+      revision: nextRevision,
+      updated_at: now,
     }),
   });
 }
@@ -328,19 +535,120 @@ export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const user = await identity(request);
   if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
-  const id = (new URL(request.url).searchParams.get("id") || "").slice(0, 180);
+  const url = new URL(request.url);
+  const id = cleanCustomerEvidenceId(url.searchParams.get("id"));
+  const expectedRevision = Number(url.searchParams.get("expectedRevision"));
   const record = await getD1().prepare(`SELECT * FROM customer_project_evidence
-    WHERE id = ? AND customer_uid = ? AND status = 'active'`).bind(id, user.uid).first<EvidenceRecord>();
+    WHERE id = ? AND customer_uid = ?`).bind(id, user.uid).first<EvidenceRecord>();
   if (!record) return json({ ok: false, error: "Project evidence not found." }, 404);
-  await getEvidenceBucket().delete(record.object_key);
+  if (record.status === "deleted") {
+    return json({
+      ok: true,
+      deleted: true,
+      id: record.id,
+      revision: Number(record.revision || 1),
+    });
+  }
+  if (
+    !Number.isSafeInteger(expectedRevision)
+    || expectedRevision < 1
+    || !["active", "deleting"].includes(record.status)
+    || (
+      record.status === "active"
+        ? Number(record.revision || 1) !== expectedRevision
+        : Number(record.revision || 1) !== expectedRevision + 1
+    )
+  ) {
+    return evidenceRevisionConflict(record);
+  }
+  const finalisingUpload = await getD1().prepare(`SELECT id
+    FROM customer_project_evidence_upload_sessions
+    WHERE customer_uid = ? AND evidence_id = ? AND status = 'finalising'
+    LIMIT 1`)
+    .bind(user.uid, id)
+    .first();
+  if (finalisingUpload) {
+    return json({
+      ok: false,
+      code: "EVIDENCE_FINALISING",
+      error: "This saved file is still finishing securely. Try removing it again shortly.",
+    }, 409);
+  }
   const now = new Date().toISOString();
-  await getD1().batch([
-    getD1().prepare(`UPDATE customer_project_evidence SET status = 'deleted', updated_at = ?
-      WHERE id = ? AND customer_uid = ? AND status = 'active'`).bind(now, id, user.uid),
+  const deletingRevision = expectedRevision + 1;
+  if (record.status === "active") {
+    const locked = await getD1().prepare(`UPDATE customer_project_evidence
+      SET status = 'deleting', revision = ?, updated_at = ?
+      WHERE id = ? AND customer_uid = ? AND status = 'active'
+        AND revision = ? AND object_key = ?`)
+      .bind(
+        deletingRevision,
+        now,
+        id,
+        user.uid,
+        expectedRevision,
+        record.object_key,
+      )
+      .run();
+    if (Number(locked.meta.changes || 0) !== 1) {
+      const latest = await getD1().prepare(`SELECT *
+        FROM customer_project_evidence WHERE id = ? AND customer_uid = ?`)
+        .bind(id, user.uid)
+        .first<EvidenceRecord>();
+      return latest
+        ? evidenceRevisionConflict(latest)
+        : json({ ok: false, error: "Project evidence not found." }, 404);
+    }
+  }
+  try {
+    await getEvidenceBucket().delete(record.object_key);
+  } catch {
+    return json({
+      ok: false,
+      code: "EVIDENCE_DELETE_RETRY",
+      error: "The saved file could not be removed yet. Try again.",
+    }, 503);
+  }
+  const results = await getD1().batch([
+    getD1().prepare(`UPDATE customer_project_evidence
+      SET status = 'deleted', updated_at = ?
+      WHERE id = ? AND customer_uid = ? AND status = 'deleting'
+        AND revision = ? AND object_key = ?`)
+      .bind(now, id, user.uid, deletingRevision, record.object_key),
     getD1().prepare(`INSERT INTO customer_project_evidence_events
       (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
-      VALUES (?, ?, ?, ?, '', 'customer', ?, 'deleted', ?)`)
-      .bind(crypto.randomUUID(), id, record.project_id, user.uid, user.uid, now),
+      SELECT ?, id, project_id, customer_uid, '', 'customer', ?,
+        'deleted', ?
+      FROM customer_project_evidence
+      WHERE id = ? AND project_id = ? AND customer_uid = ?
+        AND status = 'deleted' AND revision = ? AND object_key = ?`)
+      .bind(
+        crypto.randomUUID(),
+        user.uid,
+        now,
+        id,
+        record.project_id,
+        user.uid,
+        deletingRevision,
+        record.object_key,
+      ),
   ]);
-  return json({ ok: true });
+  if (Number(results[0]?.meta.changes || 0) !== 1) {
+    const latest = await getD1().prepare(`SELECT *
+      FROM customer_project_evidence WHERE id = ? AND customer_uid = ?`)
+      .bind(id, user.uid)
+      .first<EvidenceRecord>();
+    if (latest?.status === "deleted") {
+      return json({
+        ok: true,
+        deleted: true,
+        id,
+        revision: Number(latest.revision || deletingRevision),
+      });
+    }
+    return latest
+      ? evidenceRevisionConflict(latest)
+      : json({ ok: false, error: "Project evidence not found." }, 404);
+  }
+  return json({ ok: true, deleted: true, id, revision: deletingRevision });
 }

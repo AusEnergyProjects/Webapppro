@@ -1,0 +1,550 @@
+.workspace {
+  --history-ink: #052f3a;
+  --history-muted: #56716c;
+  --history-green: #07845f;
+  --history-mint: #20d8be;
+  background:
+    radial-gradient(circle at 94% 4%, rgba(32, 216, 190, 0.14), transparent 28%),
+    linear-gradient(145deg, #f8fcfb 0%, #edf8f4 100%);
+  border: 1px solid #bcdad1;
+  border-radius: 1.5rem;
+  box-shadow: 0 1.2rem 3rem rgba(3, 46, 58, 0.08);
+  color: var(--history-ink);
+  display: grid;
+  gap: 1rem;
+  overflow: hidden;
+  padding: clamp(1rem, 2.5vw, 1.6rem);
+}
+
+.intro {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.intro > div,
+.panelHeading,
+.comparisonHeading,
+.restore > div,
+.progressDivider {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.intro span,
+.panelHeading > span,
+.comparisonHeading > span,
+.restore > div > span,
+.progressDivider > span {
+  color: var(--history-green);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.intro h2,
+.panelHeading h3,
+.comparisonHeading h4,
+.restore h4,
+.progressDivider h4 {
+  color: var(--history-ink);
+  font-family: var(--font-display), Georgia, serif;
+  line-height: 1.16;
+  margin: 0;
+}
+
+.intro h2 {
+  font-size: clamp(1.45rem, 3.2vw, 2rem);
+}
+
+.intro p,
+.panelHeading p,
+.comparisonHeading p,
+.restore p,
+.changeTile p {
+  color: var(--history-muted);
+  line-height: 1.52;
+  margin: 0;
+}
+
+.exportButton,
+.primaryButton,
+.restore button {
+  align-items: center;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.7rem 0.95rem;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.exportButton,
+.restore button {
+  background: #fff;
+  border: 1px solid #8bc6b4;
+  color: #086f55;
+}
+
+.primaryButton {
+  background: linear-gradient(135deg, #087a5b, #10a979);
+  box-shadow: 0 0.7rem 1.4rem rgba(8, 122, 91, 0.18);
+  color: #fff;
+  justify-self: start;
+}
+
+.exportButton:hover:not(:disabled),
+.primaryButton:hover:not(:disabled),
+.restore button:hover:not(:disabled) {
+  box-shadow: 0 0.7rem 1.3rem rgba(7, 132, 95, 0.16);
+  transform: translateY(-1px);
+}
+
+.exportButton:disabled,
+.primaryButton:disabled,
+.restore button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.privacyNote,
+.interpretationNote {
+  border-left: 4px solid var(--history-mint);
+  color: #385d57;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+}
+
+.privacyNote {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 0 0.8rem 0.8rem 0;
+}
+
+.sectionGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel {
+  align-content: start;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d2e5df;
+  border-radius: 1.2rem;
+  box-shadow: 0 0.65rem 1.7rem rgba(6, 57, 65, 0.05);
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: clamp(0.9rem, 2vw, 1.2rem);
+}
+
+.panelHeading {
+  border-bottom: 1px solid #e1ece8;
+  padding-bottom: 0.85rem;
+}
+
+.panelHeading h3 {
+  font-size: 1.25rem;
+}
+
+.panelHeading p {
+  font-size: 0.8rem;
+}
+
+.selectGrid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selectGrid label,
+.progressForm > label {
+  color: #164a43;
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 800;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.selectGrid select,
+.progressForm textarea {
+  background: #fbfdfc;
+  border: 1px solid #bcd5cd;
+  border-radius: 0.8rem;
+  color: var(--history-ink);
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  outline: none;
+  padding: 0.68rem 0.75rem;
+  width: 100%;
+}
+
+.progressForm textarea {
+  line-height: 1.48;
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.selectGrid select:focus,
+.progressForm textarea:focus {
+  border-color: #25aa82;
+  box-shadow: 0 0 0 3px rgba(37, 170, 130, 0.13);
+}
+
+.comparison {
+  background:
+    linear-gradient(135deg, rgba(3, 47, 58, 0.98), rgba(8, 122, 113, 0.96));
+  border-radius: 1rem;
+  color: #fff;
+  display: grid;
+  gap: 0.8rem;
+  overflow: hidden;
+  padding: 0.95rem;
+  position: relative;
+}
+
+.comparison::after {
+  background: rgba(32, 216, 190, 0.14);
+  border-radius: 50%;
+  content: "";
+  height: 7rem;
+  position: absolute;
+  right: -2.4rem;
+  top: -3.2rem;
+  width: 7rem;
+}
+
+.comparisonHeading {
+  position: relative;
+  z-index: 1;
+}
+
+.comparisonHeading > span {
+  color: #5bffe0;
+}
+
+.comparisonHeading h4,
+.comparisonHeading p {
+  color: #fff;
+}
+
+.comparisonHeading h4 {
+  font-size: 1rem;
+}
+
+.comparisonHeading p {
+  font-size: 0.75rem;
+  opacity: 0.82;
+}
+
+.changeGrid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  position: relative;
+  z-index: 1;
+}
+
+.changeTile {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.8rem;
+  padding: 0.7rem;
+}
+
+.changeTile h4 {
+  color: #6fffe4;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.3rem;
+  text-transform: uppercase;
+}
+
+.changeTile p,
+.changeTile li {
+  color: #fff;
+  font-size: 0.74rem;
+}
+
+.changeTile ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.timeline {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline li {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0 0 0.85rem;
+  position: relative;
+}
+
+.timeline li:not(:last-child)::before {
+  background: #b6ddd1;
+  content: "";
+  left: 0.33rem;
+  position: absolute;
+  top: 0.7rem;
+  bottom: 0;
+  width: 2px;
+}
+
+.timelineMarker {
+  background: #13b687;
+  border: 3px solid #dcf7ef;
+  border-radius: 50%;
+  height: 0.72rem;
+  position: relative;
+  width: 0.72rem;
+  z-index: 1;
+}
+
+.timeline li > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.timeline strong,
+.savedCheckins strong {
+  color: #0a453d;
+  font-size: 0.82rem;
+}
+
+.timeline small,
+.savedCheckins small,
+.progressForm small {
+  color: var(--history-muted);
+  font-size: 0.7rem;
+}
+
+.timeline p,
+.savedCheckins p {
+  color: #526d67;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+
+.restore {
+  background: linear-gradient(135deg, #fff9e9, #fff4d4);
+  border: 1px solid #ead18f;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.restore > div > span {
+  color: #8a640d;
+}
+
+.restore h4 {
+  font-size: 0.95rem;
+}
+
+.restore p {
+  font-size: 0.75rem;
+}
+
+.confirmation {
+  align-items: flex-start;
+  color: #5f470f;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.74rem;
+  gap: 0.5rem;
+  line-height: 1.45;
+}
+
+.confirmation input {
+  accent-color: var(--history-green);
+  flex: 0 0 auto;
+  margin-top: 0.18rem;
+}
+
+.progressForm {
+  background: #f2f9f6;
+  border: 1px solid #d2e6df;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.85rem;
+}
+
+.progressForm small {
+  font-weight: 500;
+}
+
+.formError {
+  background: #fff0ed;
+  border: 1px solid #efbeb5;
+  border-radius: 0.7rem;
+  color: #8b2e21;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 0.65rem 0.7rem;
+}
+
+.progressDivider {
+  border-top: 1px solid #e0ece8;
+  padding-top: 0.9rem;
+}
+
+.progressDivider h4 {
+  font-size: 0.95rem;
+}
+
+.outcomeComparison {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.outcomeComparison > div {
+  background: linear-gradient(145deg, #063842, #075d5d);
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem;
+}
+
+.outcomeComparison span {
+  color: #65f4d9;
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.outcomeComparison strong {
+  color: #fff;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.progressChangeList {
+  background: #f4faf7;
+  border: 1px solid #d5e8e1;
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.8rem;
+}
+
+.progressChangeList h4 {
+  color: #0a5f4c;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.progressChangeList ul {
+  color: #365f58;
+  display: grid;
+  font-size: 0.75rem;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.interpretationNote {
+  background: #ecfaf5;
+  border-radius: 0 0.8rem 0.8rem 0;
+}
+
+.savedCheckins {
+  border-top: 1px solid #dfece8;
+  padding-top: 0.75rem;
+}
+
+.savedCheckins summary {
+  color: #087557;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.savedCheckins ol {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+}
+
+.savedCheckins li {
+  background: #f7fbf9;
+  border: 1px solid #d8e7e2;
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+}
+
+.emptyState {
+  background: #f5faf8;
+  border: 1px dashed #b8d5cc;
+  border-radius: 0.85rem;
+  color: #526f69;
+  font-size: 0.76rem;
+  line-height: 1.48;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+@media (max-width: 980px) {
+  .sectionGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exportButton {
+    align-self: flex-start;
+  }
+
+  .selectGrid,
+  .changeGrid,
+  .outcomeComparison,
+  .progressChangeList {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exportButton,
+  .primaryButton,
+  .restore button {
+    transition: none;
+  }
+}

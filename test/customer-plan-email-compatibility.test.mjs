@@ -135,6 +135,30 @@ function styleAttributes(html) {
   );
 }
 
+function relativeLuminance(hex) {
+  const channels = hex.match(/[0-9a-f]{2}/gi).map((value) =>
+    Number.parseInt(value, 16) / 255
+  ).map((value) =>
+    value <= 0.04045
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4
+  );
+  return (
+    (0.2126 * channels[0])
+    + (0.7152 * channels[1])
+    + (0.0722 * channels[2])
+  );
+}
+
+function contrastRatio(foreground, background) {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
 test("true maximum plan email stays below clipping risk with explicit plain text parity", () => {
   const document = maximumEmailDocument();
   const report = createCustomerPlanReportView(document);
@@ -182,7 +206,10 @@ test("email markup uses conservative table layout and inline client fallbacks", 
     /background-image:/i.test(style)
   );
 
-  assert.match(html, /^<!doctype html><html lang="en">/i);
+  assert.match(
+    html,
+    /^<!doctype html><html lang="en" xmlns="http:\/\/www\.w3\.org\/1999\/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">/i,
+  );
   assert.ok(
     presentationTables.length >= 20,
     `only ${presentationTables.length} presentation tables were rendered`,
@@ -202,11 +229,37 @@ test("email markup uses conservative table layout and inline client fallbacks", 
     /<script\b|<form\b|<iframe\b|<video\b|<svg\b|@font-face|position:\s*fixed|display:\s*(?:flex|grid)|var\(--|data:image\//i,
   );
   assert.match(html, /font-family:Arial,Helvetica,sans-serif/);
+  assert.match(html, /<meta name="x-apple-disable-message-reformatting">/);
+  assert.match(html, /<o:PixelsPerInch>96<\/o:PixelsPerInch>/);
+  assert.match(
+    html,
+    /table, td \{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; \}/,
+  );
+  assert.match(html, /-ms-interpolation-mode: bicubic/);
+  assert.match(html, /-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%/);
   assert.doesNotMatch(html, /<ul\b|<ol\b/i);
   assert.match(
     html,
     /display:none!important;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;mso-hide:all;/,
   );
+});
+
+test("email small blue and muted copy meets WCAG AA contrast", () => {
+  const html = customerPlanDocumentHtml(maximumEmailDocument());
+  const foregrounds = ["#006da6", "#536c78"];
+  const backgrounds = ["#eaf4f7", "#f8fcfd"];
+
+  for (const foreground of foregrounds) {
+    assert.match(html, new RegExp(foreground, "i"));
+    for (const background of backgrounds) {
+      const ratio = contrastRatio(foreground, background);
+      assert.ok(
+        ratio >= 4.5,
+        `${foreground} on ${background} only reached ${ratio.toFixed(2)}:1`,
+      );
+    }
+  }
+  assert.doesNotMatch(html, /#0878b7|#637a87/i);
 });
 
 test("email markup keeps one accessible hosted brandmark and trusted links", () => {

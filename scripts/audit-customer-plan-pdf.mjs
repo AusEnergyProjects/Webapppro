@@ -1,0 +1,307 @@
+import assert from "node:assert/strict";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import {
+  PDFArray,
+  PDFBool,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFRawStream,
+  decodePDFRawStream,
+} from "pdf-lib";
+import {
+  createCustomerPlanReportView,
+} from "../src/lib/customer-plan-document.mjs";
+import {
+  CUSTOMER_PLAN_PDF_CONTRAST_COLORS,
+  CustomerPlanPdfUnsupportedTextError,
+  createCustomerPlanPdfBytes,
+} from "../src/lib/customer-plan-pdf.mjs";
+
+function documentStructureRoles(pdf, structureRoot) {
+  const roles = [];
+
+  function visit(value) {
+    const resolved = pdf.context.lookup(value);
+    if (resolved instanceof PDFArray) {
+      for (const child of resolved.asArray()) visit(child);
+      return;
+    }
+    if (!(resolved instanceof PDFDict)) return;
+    const role = resolved.get(PDFName.of("S"));
+    if (role instanceof PDFName) roles.push(role.decodeText());
+    const kids = resolved.get(PDFName.of("K"));
+    if (kids) visit(kids);
+  }
+
+  visit(structureRoot.get(PDFName.of("K")));
+  return roles;
+}
+
+function relativeLuminance(hex) {
+  const channels = hex.match(/[0-9a-f]{2}/gi).map((value) =>
+    Number.parseInt(value, 16) / 255
+  ).map((value) =>
+    value <= 0.04045
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4
+  );
+  return (
+    (0.2126 * channels[0])
+    + (0.7152 * channels[1])
+    + (0.0722 * channels[2])
+  );
+}
+
+function contrastRatio(foreground, background) {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
+const outputPath = path.resolve(
+  process.argv[2]
+    || "synthetic-test-output/customer-plan-accessibility-audit.pdf",
+);
+const pdfFonts = {
+  regular: await readFile(path.resolve(
+    "public/fonts/LiberationSans-Regular.ttf",
+  )),
+  bold: await readFile(path.resolve(
+    "public/fonts/LiberationSans-Bold.ttf",
+  )),
+};
+
+const actions = Array.from({ length: 18 }, (_, index) => ({
+  number: index + 1,
+  id: `synthetic-step-${index + 1}`,
+  stage: index < 3 ? "Confirm the basics" : "Plan ahead",
+  title: `Clear home energy step ${index + 1}`,
+  description:
+    "Confirm what is installed, what the household needs and what a licensed trade must check before work begins.",
+  completed: index % 5 === 0,
+  guideLabel: "Read the independent planning guide",
+  guideHref: "/guides/project-preparation#evidence-first",
+}));
+
+const report = createCustomerPlanReportView({
+  heading: "Your independent home energy plan",
+  planTitle: "A clear, staged roadmap for this home at 22 °C",
+  summary:
+    "Start with the safest useful checks, then spend only where the evidence supports it.",
+  preparedDate: "2026-07-31",
+  overview: {
+    goals: [
+      "Lower energy bills",
+      "Improve winter and summer comfort",
+      "Reduce household emissions",
+    ],
+    propertyType: "Detached house",
+    tenure: "I own the home",
+    approval: "No shared-property approval known",
+    pace: "Stage improvements over time",
+    budget: "$2,000 to $10,000",
+    state: "VIC",
+  },
+  climate: {
+    label: "Cool temperate planning profile",
+    summary:
+      "Prioritise moisture-safe draught control, insulation, window heat loss and efficient heating.",
+  },
+  existingFeatures: [],
+  actions,
+  readiness: {
+    answered: 12,
+    total: 14,
+    notSure: 2,
+    linked: 3,
+    missing: 0,
+    missingLabels: [],
+    message: "Two details are marked Not sure.",
+    boundary:
+      "These details were supplied by the household and have not been professionally checked.",
+  },
+  privacyNote:
+    "Private account details and customer-written notes are not included in this shared copy.",
+  adviceBoundary:
+    "This is independent general guidance, not a quote, rating or savings promise.",
+});
+
+const bytes = await createCustomerPlanPdfBytes(report, pdfFonts);
+await mkdir(path.dirname(outputPath), { recursive: true });
+await writeFile(outputPath, bytes);
+
+const unsupportedScriptGate = [
+  ["CJK", "张"],
+  ["Arabic", "م"],
+  ["Devanagari", "प"],
+  ["Vietnamese", "ệ"],
+];
+for (const [script, character] of unsupportedScriptGate) {
+  await assert.rejects(
+    createCustomerPlanPdfBytes(
+      { ...report, planTitle: `Unsupported ${script} check ${character}` },
+      pdfFonts,
+    ),
+    (error) =>
+      error instanceof CustomerPlanPdfUnsupportedTextError
+      && error.code === "CUSTOMER_PLAN_PDF_UNSUPPORTED_TEXT"
+      && error.unsupportedCharacters.includes(character),
+    `${script} text must fail before a visually corrupted PDF is saved`,
+  );
+}
+
+const pdf = await PDFDocument.load(bytes);
+const language = pdf.catalog.get(PDFName.of("Lang"));
+const markInfo = pdf.catalog.lookup(PDFName.of("MarkInfo"), PDFDict);
+const viewerPreferences = pdf.catalog.lookup(
+  PDFName.of("ViewerPreferences"),
+  PDFDict,
+);
+const structureRoot = pdf.catalog.lookup(
+  PDFName.of("StructTreeRoot"),
+  PDFDict,
+);
+const parentTree = structureRoot.lookup(PDFName.of("ParentTree"), PDFDict);
+const parentTreeNumbers = parentTree.lookup(PDFName.of("Nums"), PDFArray);
+const structureKids = structureRoot.lookup(PDFName.of("K"), PDFArray);
+const documentElement = pdf.context.lookup(
+  structureKids.get(0),
+  PDFDict,
+);
+const metadata = pdf.catalog.lookup(PDFName.of("Metadata"), PDFRawStream);
+const xmp = new TextDecoder().decode(metadata.contents);
+const structureRoles = documentStructureRoles(pdf, structureRoot);
+
+assert.equal(language?.decodeText(), "en-AU");
+assert.equal(
+  markInfo.lookup(PDFName.of("Marked"), PDFBool).asBoolean(),
+  true,
+);
+assert.equal(
+  viewerPreferences.lookup(
+    PDFName.of("DisplayDocTitle"),
+    PDFBool,
+  ).asBoolean(),
+  true,
+);
+assert.equal(
+  documentElement.lookup(PDFName.of("S"), PDFName).decodeText(),
+  "Document",
+);
+assert.ok(parentTreeNumbers.size() >= pdf.getPageCount() * 2);
+assert.equal(
+  metadata.dict.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
+  "XML",
+);
+assert.match(xmp, /<dc:language>[\s\S]*<rdf:li>en-AU<\/rdf:li>/);
+assert.match(xmp, /<dc:title>/);
+assert.doesNotMatch(xmp, /pdfuaid:/i);
+for (const role of ["L", "LI", "Lbl", "LBody"]) {
+  assert.ok(
+    structureRoles.includes(role),
+    `the tagged report must expose the ${role} list role`,
+  );
+}
+assert.equal(pdf.catalog.has(PDFName.of("OpenAction")), false);
+assert.equal(pdf.catalog.has(PDFName.of("AA")), false);
+assert.equal(pdf.catalog.has(PDFName.of("AcroForm")), false);
+for (const foreground of [
+  CUSTOMER_PLAN_PDF_CONTRAST_COLORS.oceanBlue,
+  CUSTOMER_PLAN_PDF_CONTRAST_COLORS.muted,
+]) {
+  for (const background of [
+    CUSTOMER_PLAN_PDF_CONTRAST_COLORS.paper,
+    CUSTOMER_PLAN_PDF_CONTRAST_COLORS.canvas,
+  ]) {
+    assert.ok(contrastRatio(foreground, background) >= 4.5);
+  }
+}
+
+let linkCount = 0;
+let checkedFontResources = 0;
+const embeddedFontPrograms = new Set();
+const toUnicodeCMaps = new Set();
+for (const page of pdf.getPages()) {
+  page.node.lookup(PDFName.of("StructParents"), PDFNumber);
+  assert.equal(
+    page.node.lookup(PDFName.of("Tabs"), PDFName).decodeText(),
+    "S",
+  );
+  const resources = page.node.lookup(PDFName.of("Resources"), PDFDict);
+  const fonts = resources.lookup(PDFName.of("Font"), PDFDict);
+  for (const key of fonts.keys()) {
+    const font = fonts.lookup(key, PDFDict);
+    assert.equal(
+      font.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
+      "Type0",
+    );
+    const toUnicode = font.lookup(PDFName.of("ToUnicode"), PDFRawStream);
+    toUnicodeCMaps.add(
+      Buffer.from(decodePDFRawStream(toUnicode).getBytes()).toString("ascii"),
+    );
+    const descendants = font.lookup(PDFName.of("DescendantFonts"), PDFArray);
+    const descendant = pdf.context.lookup(descendants.get(0), PDFDict);
+    const descriptor = descendant.lookup(
+      PDFName.of("FontDescriptor"),
+      PDFDict,
+    );
+    const fontFileReference = descriptor.get(PDFName.of("FontFile2"));
+    descriptor.lookup(PDFName.of("FontFile2"), PDFRawStream);
+    embeddedFontPrograms.add(fontFileReference.toString());
+    checkedFontResources += 1;
+  }
+  const annotations = page.node.lookupMaybe(
+    PDFName.of("Annots"),
+    PDFArray,
+  );
+  if (!annotations) continue;
+  for (const annotationRef of annotations.asArray()) {
+    const annotation = pdf.context.lookup(annotationRef, PDFDict);
+    assert.equal(
+      annotation.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
+      "Link",
+    );
+    annotation.lookup(PDFName.of("StructParent"), PDFNumber);
+    const action = annotation.lookup(PDFName.of("A"), PDFDict);
+    assert.equal(
+      action.lookup(PDFName.of("S"), PDFName).decodeText(),
+      "URI",
+    );
+    assert.ok(annotation.has(PDFName.of("Contents")));
+    linkCount += 1;
+  }
+}
+assert.ok(linkCount > 0);
+assert.ok(checkedFontResources >= 2);
+assert.ok(embeddedFontPrograms.size >= 2);
+const allToUnicode = Array.from(toUnicodeCMaps).join("\n").toUpperCase();
+for (const unicodeDestination of ["00B0", "2013"]) {
+  assert.match(allToUnicode, new RegExp(`<${unicodeDestination}>`));
+}
+
+process.stdout.write(`${JSON.stringify({
+  artifact: outputPath,
+  bytes: bytes.length,
+  pages: pdf.getPageCount(),
+  tagged: true,
+  language: "en-AU",
+  displayDocumentTitle: true,
+  xmpMetadata: true,
+  checkedFontResources,
+  embeddedFontPrograms: embeddedFontPrograms.size,
+  toUnicodeMaps: toUnicodeCMaps.size,
+  semanticLists: true,
+  structuredLinks: linkCount,
+  activeContent: false,
+  pdfUaClaim: false,
+  unsupportedTextPolicy: "fail-before-save",
+  unsupportedScriptGate: unsupportedScriptGate.map(([script]) => script),
+  claimBoundary:
+    "Automated technical foundation check only; not an independent PDF/UA conformance certification.",
+}, null, 2)}\n`);

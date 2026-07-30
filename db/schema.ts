@@ -2387,18 +2387,80 @@ export const customerProjectEvidence = sqliteTable("customer_project_evidence", 
   customerUid: text("customer_uid").notNull(),
   clientUploadId: text("client_upload_id").notNull(),
   category: text("category").notNull(),
+  captureSlot: text("capture_slot").notNull().default(""),
   factKeys: text("fact_keys").notNull().default("[]"),
-  sharingScope: text("sharing_scope").notNull().default("allocated-installers"),
+  sharingScope: text("sharing_scope").notNull().default("private-plan"),
   fileName: text("file_name").notNull(),
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   objectKey: text("object_key").notNull(),
+  privacyStatus: text("privacy_status").notNull().default("not-recorded"),
+  revision: integer("revision").notNull().default(1),
   status: text("status").notNull().default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("customer_project_evidence_client_idx").on(table.customerUid, table.projectId, table.clientUploadId),
+  uniqueIndex("customer_project_evidence_capture_slot_idx")
+    .on(table.customerUid, table.projectId, table.captureSlot)
+    .where(sql`${table.status} = 'active' AND ${table.captureSlot} <> ''`),
   index("customer_project_evidence_project_idx").on(table.customerUid, table.projectId, table.status, table.createdAt),
+]);
+
+export const customerProjectEvidenceUploadSessions = sqliteTable("customer_project_evidence_upload_sessions", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  clientUploadId: text("client_upload_id").notNull(),
+  metadataHash: text("metadata_hash").notNull(),
+  captureSlot: text("capture_slot").notNull().default(""),
+  replacementEvidenceId: text("replacement_evidence_id").notNull().default(""),
+  replacementObjectKey: text("replacement_object_key").notNull().default(""),
+  expectedEvidenceRevision: integer("expected_evidence_revision").notNull().default(0),
+  stagingObjectKey: text("staging_object_key").notNull(),
+  uploadId: text("upload_id").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  category: text("category").notNull(),
+  factKeys: text("fact_keys").notNull().default("[]"),
+  sharingScope: text("sharing_scope").notNull().default("private-plan"),
+  partSizeBytes: integer("part_size_bytes").notNull(),
+  status: text("status").notNull().default("initiated"),
+  evidenceId: text("evidence_id").notNull(),
+  privacyStatus: text("privacy_status").notNull().default("pending"),
+  expiresAt: text("expires_at").notNull(),
+  completedAt: text("completed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_evidence_upload_owner_client_idx")
+    .on(table.customerUid, table.projectId, table.clientUploadId),
+  uniqueIndex("customer_project_evidence_upload_staging_idx").on(table.stagingObjectKey),
+  uniqueIndex("customer_project_evidence_upload_capture_slot_idx")
+    .on(table.customerUid, table.projectId, table.captureSlot)
+    .where(sql`${table.replacementEvidenceId} = '' AND ${table.captureSlot} <> '' AND ${table.status} IN ('initiated','uploading','completing')`),
+  uniqueIndex("customer_project_evidence_upload_replacement_idx")
+    .on(table.customerUid, table.projectId, table.replacementEvidenceId)
+    .where(sql`${table.replacementEvidenceId} <> '' AND ${table.status} IN ('initiated','uploading','completing')`),
+  index("customer_project_evidence_upload_project_idx")
+    .on(table.customerUid, table.projectId, table.status, table.updatedAt),
+  index("customer_project_evidence_upload_expiry_idx").on(table.status, table.expiresAt),
+]);
+
+export const customerProjectEvidenceUploadParts = sqliteTable("customer_project_evidence_upload_parts", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  partNumber: integer("part_number").notNull(),
+  etag: text("etag").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_evidence_upload_parts_session_part_idx")
+    .on(table.sessionId, table.partNumber),
+  index("customer_project_evidence_upload_parts_session_idx")
+    .on(table.sessionId, table.partNumber),
 ]);
 
 export const customerProjectEvidenceEvents = sqliteTable("customer_project_evidence_events", {

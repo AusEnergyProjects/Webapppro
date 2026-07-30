@@ -46,14 +46,8 @@ test("installer request dialog keeps contact completion private and inline", () 
   assert.match(dialog, /Back to overview/);
   assert.match(dialog, /onClick=\{onComplete\}/);
   assert.match(dialog, /Save details and request responses/);
-  assert.match(
-    dialog,
-    /export class CustomerInstallerRequestProfileConflictError extends Error/,
-  );
-  assert.match(
-    dialog,
-    /caught instanceof CustomerInstallerRequestProfileConflictError[\s\S]{0,100}setContact\(caught\.contact\)/,
-  );
+  assert.doesNotMatch(dialog, /CustomerInstallerRequestProfileConflictError/);
+  assert.doesNotMatch(dialog, /setContact\(caught\.contact\)/);
   assert.match(dialog, /submittingRef\.current \|\| busy/);
   assert.match(dialog, /submittingRef\.current = true/);
   assert.match(dialog, /disabled=\{busy\}/);

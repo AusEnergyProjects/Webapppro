@@ -13,6 +13,7 @@ export function CustomerDraftDeleteDialog({
   projectTitle,
   busy,
   error,
+  recovery,
   returnFocus,
   onCancel,
   onConfirm,
@@ -21,6 +22,7 @@ export function CustomerDraftDeleteDialog({
   projectTitle: string;
   busy: boolean;
   error: string;
+  recovery: boolean;
   returnFocus: HTMLElement | null;
   onCancel: () => void;
   onConfirm: () => void;
@@ -103,14 +105,23 @@ export function CustomerDraftDeleteDialog({
         role="dialog"
       >
         <header className={styles.header}>
-          <span>Delete draft project</span>
-          <h2 id={titleId}>Delete &ldquo;{projectTitle}&rdquo;?</h2>
+          <span>
+            {recovery ? "Finish secure deletion" : "Delete draft project"}
+          </span>
+          <h2 id={titleId}>
+            {recovery ? (
+              <>Finish deleting &ldquo;{projectTitle}&rdquo;?</>
+            ) : (
+              <>Delete &ldquo;{projectTitle}&rdquo;?</>
+            )}
+          </h2>
         </header>
 
         <div className={styles.body}>
           <p id={descriptionId}>
-            This permanently removes this draft and its saved plan from your
-            account. This cannot be undone.
+            {recovery
+              ? "This draft is already locked for deletion. File cleanup paused before it finished. Finish deleting to remove the remaining private files and draft."
+              : "This permanently removes this draft and its saved plan from your account. This cannot be undone."}
           </p>
           {error && (
             <p className={styles.error} role="alert">
@@ -126,7 +137,7 @@ export function CustomerDraftDeleteDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Keep draft
+            {recovery ? "Not now" : "Keep draft"}
           </button>
           <button
             className={styles.deleteButton}
@@ -134,7 +145,11 @@ export function CustomerDraftDeleteDialog({
             disabled={busy}
             onClick={onConfirm}
           >
-            {busy ? "Deleting..." : "Delete draft"}
+            {busy
+              ? "Deleting..."
+              : recovery
+                ? "Finish deleting"
+                : "Delete draft"}
           </button>
         </footer>
       </section>

@@ -4,6 +4,7 @@
 
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -43,13 +44,18 @@ import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
 import { CustomerAppointmentRescheduling } from "./CustomerAppointmentRescheduling";
 import { HomeFeatureIntake } from "./HomeFeatureIntake";
-import { CustomerProjectPhotoCapture } from "./CustomerProjectPhotoCapture";
+import {
+  CustomerProjectPhotoCapture,
+  type GuidedStoredEvidence,
+} from "./CustomerProjectPhotoCapture";
 import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
-import { CustomerPlanRevisionHistory } from "./CustomerPlanRevisionHistory";
+import {
+  CustomerPlanHistoryProgress,
+  type CustomerPlanProgressInput,
+} from "./CustomerPlanHistoryProgress";
 import { CustomerDraftDeleteDialog } from "./CustomerDraftDeleteDialog";
 import {
   CustomerInstallerRequestDialog,
-  CustomerInstallerRequestProfileConflictError,
   type CustomerInstallerRequestContact,
 } from "./CustomerInstallerRequestDialog";
 import {
@@ -61,12 +67,17 @@ import {
   canUpdateReplayedCustomerDraft,
   installerContactFingerprint,
   installerRequestFingerprint,
+  saveInstallerRequestProfileWithOneConflictRetry,
 } from "@/lib/customer-installer-request-recovery.mjs";
 import {
   createCustomerPlanDocument,
   createCustomerPlanReportView,
 } from "@/lib/customer-plan-document.mjs";
 import { downloadCustomerPlanPdf } from "@/lib/customer-plan-pdf-client";
+import {
+  uploadCustomerProjectEvidence,
+  type CustomerEvidenceUploadProgress,
+} from "@/lib/customer-project-evidence-upload-client";
 
 type DashboardView =
   | "overview"
@@ -414,6 +425,7 @@ type CustomerProject = {
   createdAt: string;
   updatedAt: string;
   hasRetainedAssetHistory: boolean;
+  deletionPending?: boolean;
   contactReady: boolean;
   progress: {
     installerCount: number;
@@ -427,12 +439,18 @@ type CustomerProject = {
   evidence: Array<{
     id: string;
     category: string;
+    captureSlot: string;
     factKeys: string[];
     sharingScope: "private-plan" | "allocated-installers";
     fileName: string;
     contentType: string;
     sizeBytes: number;
+    privacyStatus: string;
+    revision: number;
+    previewUrl: string;
+    thumbnailUrl: string;
     createdAt: string;
+    updatedAt: string;
   }>;
   planRevisions: Array<{
     id: string;
@@ -490,8 +508,14 @@ type PendingProjectEvidence = {
   id: string;
   file: File;
   category: string;
+  captureSlot: string;
   factKeys: string[];
   sharingScope: "private-plan" | "allocated-installers";
+  replaceEvidenceId?: string;
+  expectedEvidenceRevision?: number;
+  uploadProgress?: number;
+  uploadStatus?: CustomerEvidenceUploadProgress["status"];
+  uploadError?: string;
 };
 
 type AccountResult = {
@@ -571,18 +595,6 @@ const statusLabels: Record<string, string> = {
   completed: "Complete",
   withdrawn: "Withdrawn",
   archived: "Archived",
-};
-const comfortOutcomeLabels: Record<string, string> = {
-  better: "More comfortable",
-  "about-the-same": "About the same",
-  worse: "Less comfortable",
-  "not-sure": "Not sure yet",
-};
-const energyOutcomeLabels: Record<string, string> = {
-  lower: "Lower energy use or bills",
-  "about-the-same": "About the same",
-  higher: "Higher energy use or bills",
-  "not-checked": "Not checked or not comparable",
 };
 
 function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
@@ -940,6 +952,8 @@ function ProjectEditor({
   onReloadLatest,
   onSave,
   onUploadEvidence,
+  onLoadEvidencePreview,
+  onDeleteEvidence,
   onSaveRequestProfile,
   onCheckInstallerRequestSubmitted,
   onRequestInstallerResponses,
@@ -964,6 +978,16 @@ function ProjectEditor({
     projectId: string,
     evidence: PendingProjectEvidence[],
     confirmInstallerPhotoSharing: boolean,
+    onProgress?: (
+      evidenceId: string,
+      progress: CustomerEvidenceUploadProgress,
+    ) => void,
+  ) => Promise<CustomerProject["evidence"]>;
+  onLoadEvidencePreview: (
+    evidence: GuidedStoredEvidence,
+  ) => Promise<Blob>;
+  onDeleteEvidence: (
+    evidence: CustomerProject["evidence"][number],
   ) => Promise<void>;
   onSaveRequestProfile: (
     contact: CustomerInstallerRequestContact,
@@ -1017,12 +1041,19 @@ function ProjectEditor({
     PendingProjectEvidence[]
   >([]);
   const [uploadedEvidence, setUploadedEvidence] = useState<
-    Array<Pick<PendingProjectEvidence, "factKeys" | "sharingScope">>
+    CustomerProject["evidence"]
   >([]);
   const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
     useState(evidenceSharingConsent);
-  const storedEvidenceCount = storedEvidence.length + uploadedEvidence.length;
-  const storedInstallerEvidenceCount = storedEvidence.filter(
+  const visibleStoredEvidence = useMemo(() => {
+    const merged = new Map(
+      storedEvidence.map((item) => [item.id, item]),
+    );
+    uploadedEvidence.forEach((item) => merged.set(item.id, item));
+    return [...merged.values()];
+  }, [storedEvidence, uploadedEvidence]);
+  const storedEvidenceCount = visibleStoredEvidence.length;
+  const storedInstallerEvidenceCount = visibleStoredEvidence.filter(
     (item) => item.sharingScope === "allocated-installers",
   ).length;
   const pendingInstallerEvidenceCount = pendingEvidence.filter(
@@ -1194,7 +1225,7 @@ function ProjectEditor({
       completed_plan_items: "[]",
     },
     {
-      evidence: [...storedEvidence, ...uploadedEvidence, ...pendingEvidence].map(
+      evidence: [...visibleStoredEvidence, ...pendingEvidence].map(
         (item) => ({
           fact_keys: JSON.stringify(item.factKeys),
           sharing_scope: item.sharingScope,
@@ -1512,35 +1543,128 @@ function ProjectEditor({
     );
   const addEvidence = (
     files: FileList | File[] | null,
-    preset?: Pick<PendingProjectEvidence, "category" | "factKeys">,
+    preset?: Pick<
+      PendingProjectEvidence,
+      | "category"
+      | "captureSlot"
+      | "factKeys"
+      | "replaceEvidenceId"
+      | "expectedEvidenceRevision"
+    >,
   ) => {
     if (!files?.length) return;
     const incoming = Array.from(files);
+    const replacingPendingSlot = preset?.captureSlot
+      && pendingEvidence.some((item) => item.captureSlot === preset.captureSlot);
+    const availableSlots = Math.max(
+      0,
+      12
+        - storedEvidenceCount
+        - pendingEvidence.filter(
+          (item) => item.captureSlot !== preset?.captureSlot,
+        ).length,
+    );
     const next = incoming
       .slice(
         0,
-        Math.max(
-          0,
-          12 - storedEvidenceCount - pendingEvidence.length,
-        ),
+        preset?.replaceEvidenceId || replacingPendingSlot
+          ? 1
+          : availableSlots,
       )
-       .map((file) => ({
-         id: crypto.randomUUID(),
-         file,
-         category:
-           preset?.category
-           || (file.type.startsWith("image/")
-             ? "property-photo"
-             : "supporting-document"),
-         factKeys: preset?.factKeys || [],
-         sharingScope: "private-plan" as const,
-        }));
-    setPendingEvidence((current) => [...current, ...next]);
+      .map((file) => {
+        const id = crypto.randomUUID();
+        return {
+          id,
+          file,
+          category:
+            preset?.category
+            || (file.type.startsWith("image/")
+              ? "property-photo"
+              : "supporting-document"),
+          captureSlot:
+            preset?.captureSlot
+            || (file.type.startsWith("image/") ? `other:${id}` : ""),
+          factKeys: preset?.factKeys || [],
+          sharingScope: "private-plan" as const,
+          replaceEvidenceId: preset?.replaceEvidenceId,
+          expectedEvidenceRevision: preset?.expectedEvidenceRevision,
+          uploadStatus: "queued" as const,
+          uploadProgress: 0,
+          uploadError: "",
+        };
+      });
+    setPendingEvidence((current) => [
+      ...current.filter(
+        (item) => !preset?.captureSlot || item.captureSlot !== preset.captureSlot,
+      ),
+      ...next,
+    ]);
     markDirty();
     setStatus(
       next.length < incoming.length
         ? "Up to 12 files can be added to one project. Remove one to choose another."
-        : "Files selected. Private files save with your plan when you email or print it; installer-shared files upload only after you confirm an enquiry.",
+        : "Photo selected in its matching prompt. Select Save changes to store it privately with this plan.",
+    );
+  };
+
+  const removePendingEvidence = (id: string) => {
+    setPendingEvidence((current) =>
+      current.filter((item) => item.id !== id),
+    );
+    markDirty();
+    setStatus("The unsaved photo was removed from this draft.");
+  };
+
+  const removeStoredEvidence = async (summary: GuidedStoredEvidence) => {
+    const evidence = visibleStoredEvidence.find(
+      (item) => item.id === summary.id,
+    );
+    if (!evidence) return;
+    if (
+      !window.confirm(
+        `Remove "${evidence.fileName}" from this project? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await onDeleteEvidence(evidence);
+      setUploadedEvidence((current) =>
+        current.filter((item) => item.id !== evidence.id),
+      );
+      setStatus("The saved photo was removed from this project.");
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "The saved photo could not be removed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadStoredEvidencePreview = useCallback(
+    (summary: GuidedStoredEvidence) => onLoadEvidencePreview(summary),
+    [onLoadEvidencePreview],
+  );
+
+  const updateEvidenceUploadProgress = (
+    evidenceId: string,
+    progress: CustomerEvidenceUploadProgress,
+  ) => {
+    setPendingEvidence((current) =>
+      current.map((item) =>
+        item.id === evidenceId
+          ? {
+              ...item,
+              uploadStatus: progress.status,
+              uploadProgress: progress.progress,
+              uploadError: progress.error || "",
+            }
+          : item,
+      ),
     );
   };
 
@@ -1897,6 +2021,47 @@ function ProjectEditor({
     return true;
   }
 
+  async function storePendingEvidence(
+    projectId: string,
+    evidence: PendingProjectEvidence[],
+    confirmInstallerSharing: boolean,
+  ) {
+    const stored: CustomerProject["evidence"] = [];
+    for (const item of evidence) {
+      try {
+        const uploaded = await onUploadEvidence(
+          projectId,
+          [item],
+          confirmInstallerSharing,
+          updateEvidenceUploadProgress,
+        );
+        if (!uploaded.length) {
+          throw new Error(`${item.file.name} did not finish saving.`);
+        }
+        stored.push(...uploaded);
+        setUploadedEvidence((current) => {
+          const merged = new Map(current.map((entry) => [entry.id, entry]));
+          uploaded.forEach((entry) => merged.set(entry.id, entry));
+          return [...merged.values()];
+        });
+        setPendingEvidence((current) =>
+          current.filter((entry) => entry.id !== item.id),
+        );
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : `${item.file.name} could not be saved.`;
+        updateEvidenceUploadProgress(item.id, {
+          status: "failed",
+          progress: item.uploadProgress || 0,
+          error: message,
+        });
+        throw error;
+      }
+    }
+    return stored;
+  }
+
   async function saveDraft() {
     if (professionalReviewError) {
       showProfessionalReviewError();
@@ -1930,12 +2095,34 @@ function ProjectEditor({
       );
       setSavedId(saved.id);
       setSavedPlanRevision(saved.planRevision);
+      const privateEvidence = pendingEvidence.filter(
+        (item) => item.sharingScope === "private-plan",
+      );
+      const pendingInstallerEvidence = pendingEvidence.filter(
+        (item) => item.sharingScope === "allocated-installers",
+      );
+      if (privateEvidence.length) {
+        setStatus(
+          `Saving ${privateEvidence.length} selected ${
+            privateEvidence.length === 1 ? "file" : "files"
+          } privately...`,
+        );
+        await storePendingEvidence(saved.id, privateEvidence, false);
+      }
       const noNewerEdits = editGeneration.current === saveGeneration;
-      if (noNewerEdits) setDirty(false);
+      if (noNewerEdits) {
+        setDirty(pendingInstallerEvidence.length > 0);
+      }
       setRevisionConflict(false);
       setStatus(
         noNewerEdits
-          ? "Draft saved to your private account."
+          ? pendingInstallerEvidence.length
+            ? `Draft saved. ${pendingInstallerEvidence.length} ${
+                pendingInstallerEvidence.length === 1 ? "file remains" : "files remain"
+              } selected for installer sharing and will not upload until you confirm sharing when requesting responses.`
+            : privateEvidence.length
+              ? "Draft and selected photos saved privately to your account."
+              : "Draft saved to your private account."
           : "Draft saved. Changes made while it was saving are still unsaved.",
       );
     } catch (error) {
@@ -1981,30 +2168,28 @@ function ProjectEditor({
     const privatePlanEvidence = pendingEvidence.filter(
       (item) => item.sharingScope === "private-plan",
     );
+    const pendingInstallerEvidence = pendingEvidence.filter(
+      (item) => item.sharingScope === "allocated-installers",
+    );
     if (privatePlanEvidence.length) {
-      await onUploadEvidence(id, privatePlanEvidence, false);
-      const uploadedIds = new Set(privatePlanEvidence.map((item) => item.id));
-      setPendingEvidence((current) =>
-        current.filter((item) => !uploadedIds.has(item.id)),
-      );
-      setUploadedEvidence((current) => [
-        ...current,
-        ...privatePlanEvidence.map(({ factKeys, sharingScope }) => ({
-          factKeys,
-          sharingScope,
-        })),
-      ]);
+      await storePendingEvidence(id, privatePlanEvidence, false);
     }
     setSavedId(id);
     setSavedPlanRevision(saved.planRevision);
     const noNewerEdits = editGeneration.current === saveGeneration;
-    if (noNewerEdits) setDirty(false);
+    if (noNewerEdits) {
+      setDirty(pendingInstallerEvidence.length > 0);
+    }
     setRevisionConflict(false);
     setStatus(
       noNewerEdits
-        ? privatePlanEvidence.length
-          ? "Plan and its private supporting evidence saved to your account."
-          : "Plan saved to your private account."
+        ? pendingInstallerEvidence.length
+          ? `Plan saved. ${pendingInstallerEvidence.length} ${
+              pendingInstallerEvidence.length === 1 ? "file remains" : "files remain"
+            } selected for installer sharing and will not upload until you confirm sharing when requesting responses.`
+          : privatePlanEvidence.length
+            ? "Plan and its private supporting evidence saved to your account."
+            : "Plan saved to your private account."
         : "Plan copy saved. Changes made while it was saving are still unsaved.",
     );
     return id;
@@ -2254,7 +2439,7 @@ function ProjectEditor({
       setSavedId(saved.id);
       setSavedPlanRevision(saved.planRevision);
       await onSaveRequestProfile(contact, saved.id);
-      await onUploadEvidence(
+      await storePendingEvidence(
         saved.id,
         pendingEvidence,
         installerPhotoSharing,
@@ -2274,12 +2459,8 @@ function ProjectEditor({
       uncertainInstallerSubmit.current = null;
       if (editGeneration.current === saveGeneration) setDirty(false);
       setRevisionConflict(false);
-      setPendingEvidence([]);
       setConfirmInstallerPhotoSharing(installerPhotoSharing);
     } catch (error) {
-      if (error instanceof CustomerInstallerRequestProfileConflictError) {
-        throw error;
-      }
       throw new Error(describeEditorError(
         error,
         "The enquiry could not be submitted.",
@@ -3913,14 +4094,25 @@ function ProjectEditor({
                       choose installer quoting access.
                     </p>
                   </div>
-                  <strong>{pendingEvidence.length} selected</strong>
+                  <strong>
+                    {storedEvidenceCount} saved, {pendingEvidence.length} ready
+                  </strong>
                 </header>
                 <CustomerProjectPhotoCapture
                   serviceCategories={draft.serviceCategories}
                   remainingSlots={
-                    12 - storedEvidenceCount - pendingEvidence.length
+                    12
+                    - storedEvidenceCount
+                    - pendingEvidence.filter(
+                      (item) => !item.replaceEvidenceId,
+                    ).length
                   }
+                  pendingEvidence={pendingEvidence}
+                  storedEvidence={visibleStoredEvidence}
                   onAdd={(files, preset) => addEvidence(files, preset)}
+                  onRemovePending={removePendingEvidence}
+                  onRemoveStored={(item) => void removeStoredEvidence(item)}
+                  onLoadStoredPreview={loadStoredEvidencePreview}
                 />
                 <div className="customer-project-evidence-secondary">
                   <div>
@@ -3960,9 +4152,18 @@ function ProjectEditor({
                     </label>
                   </div>
                 </div>
-              {pendingEvidence.length > 0 && (
+              {pendingEvidence.some(
+                (item) =>
+                  !item.captureSlot || item.captureSlot.startsWith("other:"),
+              ) && (
                 <ul>
-                  {pendingEvidence.map((item) => (
+                  {pendingEvidence
+                    .filter(
+                      (item) =>
+                        !item.captureSlot
+                        || item.captureSlot.startsWith("other:"),
+                    )
+                    .map((item) => (
                     <li key={item.id}>
                       <span>
                         <strong>{item.file.name}</strong>
@@ -4028,11 +4229,7 @@ function ProjectEditor({
                       </span>
                       <button
                         type="button"
-                        onClick={() =>
-                          setPendingEvidence((current) =>
-                            current.filter((entry) => entry.id !== item.id),
-                          )
-                        }
+                        onClick={() => removePendingEvidence(item.id)}
                       >
                         Remove
                       </button>
@@ -4421,6 +4618,7 @@ function ProjectDetail({
   onDownloadEvidence,
   onDeleteEvidence,
   onUpdateEvidence,
+  onRecordOutcome,
 }: {
   user: User;
   project: CustomerProject;
@@ -4454,6 +4652,10 @@ function ProjectDetail({
     item: CustomerProject["evidence"][number],
     factKeys: string[],
   ) => Promise<void>;
+  onRecordOutcome: (
+    projectId: string,
+    input: CustomerPlanProgressInput,
+  ) => Promise<void>;
 }) {
   const [releaseConfirmations, setReleaseConfirmations] = useState<
     Record<string, boolean>
@@ -4464,9 +4666,6 @@ function ProjectDetail({
   const [preparationConfirmations, setPreparationConfirmations] = useState<
     Record<string, Record<string, boolean>>
   >({});
-  const [comfortOutcome, setComfortOutcome] = useState("not-sure");
-  const [energyOutcome, setEnergyOutcome] = useState("not-checked");
-  const [outcomeNote, setOutcomeNote] = useState("");
   const [installerRequestOpen, setInstallerRequestOpen] = useState(false);
   const uncertainInstallerSubmit = useRef<{
     projectId: string;
@@ -4564,6 +4763,18 @@ function ProjectDetail({
     uncertainInstallerSubmit.current = null;
   }
 
+  function confirmEvidenceDeletion(
+    item: CustomerProject["evidence"][number],
+  ) {
+    const confirmed = window.confirm(
+      `Remove "${item.fileName}" from this project? This permanently removes future portal access and cannot be undone.`,
+    );
+    if (!confirmed) return;
+    void onDeleteEvidence(item).catch(() => {
+      // The dashboard reports the API error beside the project controls.
+    });
+  }
+
   return (
     <section
       className="customer-project-detail"
@@ -4637,32 +4848,34 @@ function ProjectDetail({
             </ol>
           </section>
           {project.planRevisions.length > 0 && (
-            <section className="customer-detail-panel customer-plan-history">
-              <div className="customer-panel-heading">
-                <span>Private plan history</span>
-                <h2>Saved roadmap versions</h2>
-                <p>
-                  A new version is kept only when the roadmap inputs or ordered
-                  steps change. Private notes and contact details are not copied
-                  into this history.
-                </p>
-              </div>
-              <CustomerPlanRevisionHistory
-                project={project}
-                busy={busy}
-                goalOptions={customerProjectOptions.goals}
-                homeFeatureOptions={customerProjectOptions.homeFeatures}
-                paceOptions={customerProjectOptions.paces}
-                budgetOptions={customerProjectOptions.budgets}
-                onRestore={(sourceRevisionNumber) =>
-                  onAction("restore_plan_revision", {
-                    sourceRevisionNumber,
-                    expectedPlanRevision: project.planRevision,
-                    confirmRestore: true,
-                  })
-                }
-              />
-            </section>
+            <CustomerPlanHistoryProgress
+              project={{
+                id: project.id,
+                status: project.status,
+                planRevision: project.planRevision,
+                updatedAt: project.updatedAt,
+                planRevisions: project.planRevisions,
+                outcomeCheckins: project.outcomeCheckins,
+              }}
+              labels={{
+                goals: customerProjectOptions.goals,
+                homeFeatures: customerProjectOptions.homeFeatures,
+                paces: customerProjectOptions.paces,
+                budgets: customerProjectOptions.budgets,
+                serviceCategories: customerProjectOptions.serviceCategories,
+              }}
+              busy={busy}
+              onRecordOutcome={(input) =>
+                onRecordOutcome(project.id, input)
+              }
+              onRestore={(sourceRevisionNumber) =>
+                onAction("restore_plan_revision", {
+                  sourceRevisionNumber,
+                  expectedPlanRevision: project.planRevision,
+                  confirmRestore: true,
+                })
+              }
+            />
           )}
           {project.advisorProfile.climate && (
             <section className="customer-detail-panel customer-detail-climate">
@@ -4740,90 +4953,6 @@ function ProjectDetail({
                     </li>
                   ))}
                 </ul>
-              </details>
-            )}
-          </section>
-          <section className="customer-detail-panel customer-outcome-checkin">
-            <div className="customer-panel-heading">
-              <span>Private progress check-in</span>
-              <h2>What changed after you tried a step?</h2>
-              <p>
-                Record your own observation so the roadmap can be reviewed over
-                time. This is not a verified savings or causation claim.
-              </p>
-            </div>
-            <div className="customer-outcome-fields">
-              <label>
-                <span>Comfort since the last change</span>
-                <select
-                  value={comfortOutcome}
-                  onChange={(event) => setComfortOutcome(event.target.value)}
-                >
-                  {Object.entries(comfortOutcomeLabels).map(([value, label]) => (
-                    <option value={value} key={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Energy use or bills</span>
-                <select
-                  value={energyOutcome}
-                  onChange={(event) => setEnergyOutcome(event.target.value)}
-                >
-                  {Object.entries(energyOutcomeLabels).map(([value, label]) => (
-                    <option value={value} key={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Optional private note</span>
-                <textarea
-                  value={outcomeNote}
-                  maxLength={500}
-                  rows={3}
-                  placeholder="Example: The living room felt less draughty during cold evenings."
-                  onChange={(event) => setOutcomeNote(event.target.value)}
-                />
-              </label>
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void onAction("record_outcome", {
-                  comfortOutcome,
-                  energyOutcome,
-                  note: outcomeNote,
-                })
-              }
-            >
-              Save private check-in
-            </button>
-            {project.outcomeCheckins.length > 0 && (
-              <details>
-                <summary>
-                  Review {project.outcomeCheckins.length} saved check-in
-                  {project.outcomeCheckins.length === 1 ? "" : "s"}
-                </summary>
-                <ol>
-                  {project.outcomeCheckins.map((checkin) => (
-                    <li key={checkin.id}>
-                      <strong>
-                        {comfortOutcomeLabels[checkin.comfortOutcome]
-                          || checkin.comfortOutcome}
-                        {" | "}
-                        {energyOutcomeLabels[checkin.energyOutcome]
-                          || checkin.energyOutcome}
-                      </strong>
-                      <small>
-                        {new Date(checkin.recordedAt).toLocaleString("en-AU")}
-                        {" | "}
-                        {checkin.completedItemIds.length} steps marked complete
-                      </small>
-                      {checkin.note && <p>{checkin.note}</p>}
-                    </li>
-                  ))}
-                </ol>
               </details>
             )}
           </section>
@@ -4981,7 +5110,7 @@ function ProjectDetail({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void onDeleteEvidence(item)}
+                        onClick={() => confirmEvidenceDeletion(item)}
                       >
                         Remove future access
                       </button>
@@ -5916,6 +6045,22 @@ export function CustomerDashboard({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) {
+        if (result.code === "PROJECT_DELETE_CLEANUP_RETRY") {
+          const refreshedResponse = await fetch("/api/customer-projects", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+          const refreshed = await refreshedResponse.json().catch(() => ({}));
+          if (refreshedResponse.ok && refreshed.ok) {
+            const refreshedProjects =
+              (refreshed.projects || []) as CustomerProject[];
+            setProjects(refreshedProjects);
+            const refreshedDraft = refreshedProjects.find(
+              (project) => project.id === draftToDelete.id,
+            );
+            if (refreshedDraft) setDraftToDelete(refreshedDraft);
+          }
+        }
         throw new Error(
           result.error
           || "This draft could not be deleted. Refresh the dashboard and try again.",
@@ -5989,38 +6134,42 @@ export function CustomerDashboard({
     projectId: string,
     evidence: PendingProjectEvidence[],
     confirmInstallerPhotoSharing: boolean,
+    onProgress?: (
+      evidenceId: string,
+      progress: CustomerEvidenceUploadProgress,
+    ) => void,
   ) {
-    if (!evidence.length) return;
+    if (!evidence.length) return [];
     if (!user) throw new Error("Sign in to continue.");
     const token = await user.getIdToken();
+    const stored: CustomerProject["evidence"] = [];
     for (const item of evidence) {
-      const uploadFile = await prepareEvidenceUpload(item);
-      const form = new FormData();
-      form.set("projectId", projectId);
-      form.set("clientUploadId", item.id);
-      form.set("category", item.category);
-      form.set("factKeys", JSON.stringify(item.factKeys));
-      form.set("sharingScope", item.sharingScope);
-      form.set("file", uploadFile);
-      form.set(
-        "confirmInstallerPhotoSharing",
-        String(
-          item.sharingScope === "allocated-installers"
-            && confirmInstallerPhotoSharing,
-        ),
-      );
-      const uploadResponse = await fetch("/api/customer-project-evidence", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      const uploadResult = await uploadResponse.json().catch(() => ({}));
-      if (!uploadResponse.ok || !uploadResult.ok) {
-        throw new Error(
-          uploadResult.error || `${item.file.name} could not be uploaded.`,
-        );
+      try {
+        const uploadFile = await prepareEvidenceUpload(item);
+        const result = await uploadCustomerProjectEvidence({
+          token,
+          projectId,
+          candidate: {
+            ...item,
+            file: uploadFile,
+          },
+          confirmInstallerPhotoSharing,
+          onProgress: (progress) => onProgress?.(item.id, progress),
+        });
+        stored.push(result);
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : `${item.file.name} could not be uploaded.`;
+        onProgress?.(item.id, {
+          status: "failed",
+          progress: item.uploadProgress || 0,
+          error: message,
+        });
+        throw error;
       }
     }
+    return stored;
   }
 
   async function saveInstallerRequestProfile(
@@ -6032,56 +6181,90 @@ export function CustomerDashboard({
       throw new Error("Sign in to save your private contact details.");
     }
     const token = await user.getIdToken();
-    const response = await fetch("/api/customer-account", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        projectId,
-        ...contact,
-        expectedUpdatedAt: account.profile.updatedAt,
-        confirmPrivateProfileSave: true,
-        confirmSubmittedProjectContactUpdate:
-          allowSubmittedProjectContactUpdate,
-      }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) {
-      if (
-        response.status === 409
-        && result.code === "PROFILE_REVISION_CONFLICT"
-      ) {
-        const latestResponse = await fetch("/api/customer-account", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        const latest = await latestResponse.json().catch(() => ({}));
-        if (latestResponse.ok && latest.ok && latest.profile) {
-          const latestProfile = latest.profile as CustomerProfile;
-          setAccount((current) => ({
-            ...current,
-            profile: latestProfile,
-          }));
-          throw new CustomerInstallerRequestProfileConflictError({
-            phone: latestProfile.phone,
-            addressLine1: latestProfile.addressLine1,
-            addressLine2: latestProfile.addressLine2,
-            suburb: latestProfile.suburb,
-          });
-        }
+    type ProfileSaveResult = {
+      ok?: boolean;
+      status: number;
+      code?: string;
+      error?: string;
+      updatedAt?: string;
+      profile?: CustomerProfile;
+    };
+    const patchProfile = async (
+      expectedUpdatedAt: string,
+      submittedContact: CustomerInstallerRequestContact,
+    ): Promise<ProfileSaveResult> => {
+      const response = await fetch("/api/customer-account", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          projectId,
+          ...submittedContact,
+          expectedUpdatedAt,
+          confirmPrivateProfileSave: true,
+          confirmSubmittedProjectContactUpdate:
+            allowSubmittedProjectContactUpdate,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      return {
+        ...result,
+        status: response.status,
+      } as ProfileSaveResult;
+    };
+    const loadLatestProfile = async (): Promise<CustomerProfile> => {
+      const latestResponse = await fetch("/api/customer-account", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const latest = await latestResponse.json().catch(() => ({}));
+      if (!latestResponse.ok || !latest.ok || !latest.profile) {
+        throw new Error(
+          latest.error
+          || "Your latest private profile could not be checked. Try again.",
+        );
+      }
+      const latestProfile = latest.profile as CustomerProfile;
+      setAccount((current) => ({
+        ...current,
+        profile: latestProfile,
+      }));
+      return latestProfile;
+    };
+    // Keep the bounded profile CAS recovery inside this save. The surrounding
+    // project save, evidence upload and installer request must never be replayed.
+    const outcome = await saveInstallerRequestProfileWithOneConflictRetry({
+      contact,
+      expectedUpdatedAt: account.profile.updatedAt,
+      save: patchProfile,
+      loadLatest: loadLatestProfile,
+    }) as {
+      result: ProfileSaveResult;
+      latestProfile: CustomerProfile | null;
+      retried: boolean;
+    };
+    const result = outcome.result;
+    if (!result.ok || !result.profile) {
+      if (result.code === "PROFILE_REVISION_CONFLICT") {
+        throw new Error(
+          outcome.retried
+            ? "Your private profile changed again while these details were saving. Your entries are still here. Check them and try once more."
+            : "Your private profile changed while these details were saving and could not be safely reconciled. Your entries are still here. Check them and try once more.",
+        );
       }
       throw new Error(
         result.error
         || "Your private contact details could not be saved. Try again.",
       );
     }
+    const savedProfile = result.profile;
     setAccount((current) => ({
       ...current,
-      profile: result.profile as CustomerProfile,
+      profile: savedProfile,
     }));
-    return result.profile as CustomerProfile;
+    return savedProfile;
   }
 
   async function checkInstallerRequestSubmitted(projectId: string) {
@@ -6141,6 +6324,72 @@ export function CustomerDashboard({
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => projectListHeadingRef.current?.focus());
     });
+  }
+
+  async function recordProjectOutcome(
+    projectId: string,
+    input: CustomerPlanProgressInput,
+  ) {
+    if (!user) throw new Error("Sign in to save a progress check-in.");
+    setBusy(true);
+    setStatus("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/customer-project-history", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "record_outcome",
+          projectId,
+          ...input,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        if (
+          response.status === 409
+          && result.code === "PLAN_REVISION_CONFLICT"
+        ) {
+          const refreshedResponse = await fetch("/api/customer-projects", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+          const refreshed = await refreshedResponse.json().catch(() => ({}));
+          if (refreshedResponse.ok && refreshed.ok) {
+            setProjects(refreshed.projects || []);
+          }
+        }
+        throw new Error(
+          result.error || "The progress check-in could not be saved.",
+        );
+      }
+      const checkin = result.checkin as CustomerProject["outcomeCheckins"][number];
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === projectId
+            ? {
+                ...project,
+                planRevision: Number(result.planRevision || project.planRevision),
+                updatedAt: String(result.updatedAt || project.updatedAt),
+                outcomeCheckins: [
+                  checkin,
+                  ...project.outcomeCheckins.filter(
+                    (item) => item.id !== checkin.id,
+                  ),
+                ],
+              }
+            : project,
+        ),
+      );
+      setStatus(
+        "Private progress check-in saved. It is not shared with installers or presented as verified savings.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function projectAction(
@@ -6295,16 +6544,42 @@ export function CustomerDashboard({
     }
   }
 
+  const loadProjectEvidencePreview = useCallback(
+    async (item: GuidedStoredEvidence) => {
+      if (!user) throw new Error("Sign in to view this saved photo.");
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/customer-project-evidence?preview=${encodeURIComponent(item.id)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(
+          result.error || "The saved photo preview could not be loaded.",
+        );
+      }
+      return response.blob();
+    },
+    [user],
+  );
+
   async function deleteProjectEvidence(
     item: CustomerProject["evidence"][number],
   ) {
-    if (!user) return;
+    if (!user) {
+      throw new Error("Sign in to remove this saved project file.");
+    }
     setBusy(true);
     setStatus("Removing the project file...");
     try {
       const token = await user.getIdToken();
       const response = await fetch(
-        `/api/customer-project-evidence?id=${encodeURIComponent(item.id)}`,
+        `/api/customer-project-evidence?id=${encodeURIComponent(
+          item.id,
+        )}&expectedRevision=${encodeURIComponent(String(item.revision))}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -6318,11 +6593,11 @@ export function CustomerDashboard({
       await load(user);
       setStatus("Future portal access to that project file has been removed.");
     } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "The project file could not be removed.",
-      );
+      const failure = error instanceof Error
+        ? error
+        : new Error("The project file could not be removed.");
+      setStatus(failure.message);
+      throw failure;
     } finally {
       setBusy(false);
     }
@@ -6347,6 +6622,7 @@ export function CustomerDashboard({
           id: item.id,
           factKeys,
           sharingScope: item.sharingScope,
+          expectedRevision: item.revision,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -6385,9 +6661,19 @@ export function CustomerDashboard({
 
   const selected = projects.find((project) => project.id === selectedId);
   const editing = projects.find((project) => project.id === editingId);
-  const activeProjects = projects.filter((project) =>
-    ["draft", "matching", "quote_review"].includes(project.status),
+  const activeProjects = projects.filter(
+    (project) =>
+      !project.deletionPending
+      && ["draft", "matching", "quote_review"].includes(project.status),
   );
+  const deletionBlockedProject =
+    view === "editor"
+      ? editing?.deletionPending
+        ? editing
+        : null
+      : view === "detail" && selected?.deletionPending
+        ? selected
+        : null;
   const completedSteps = projects.reduce(
     (sum, project) => sum + project.completedPlanItems.length,
     0,
@@ -6575,7 +6861,33 @@ export function CustomerDashboard({
               {status}
             </p>
           )}
-          {view === "editor" ? (
+          {deletionBlockedProject ? (
+            <section
+              className="customer-project-delete-recovery"
+              role="status"
+            >
+              <span>Secure deletion is paused</span>
+              <h1>Finish removing this draft</h1>
+              <p>
+                This draft is locked while its remaining private files are
+                removed. You cannot continue editing it, but you can safely
+                retry the cleanup now.
+              </p>
+              <div>
+                <a href="/account">Return to overview</a>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    setDeleteDraftReturnFocus(event.currentTarget);
+                    setDeleteDraftError("");
+                    setDraftToDelete(deletionBlockedProject);
+                  }}
+                >
+                  Finish deleting
+                </button>
+              </div>
+            </section>
+          ) : view === "editor" ? (
             <ProjectEditor
               key={`${editing?.id || "new"}:${projectConflictVersion}`}
               initial={
@@ -6641,6 +6953,8 @@ export function CustomerDashboard({
               }
               onSave={saveProject}
               onUploadEvidence={uploadProjectEvidence}
+              onLoadEvidencePreview={loadProjectEvidencePreview}
+              onDeleteEvidence={deleteProjectEvidence}
               onSaveRequestProfile={saveInstallerRequestProfile}
               onCheckInstallerRequestSubmitted={checkInstallerRequestSubmitted}
               onRequestInstallerResponses={requestInstallerResponses}
@@ -6665,6 +6979,7 @@ export function CustomerDashboard({
               onDownloadEvidence={downloadProjectEvidence}
               onDeleteEvidence={deleteProjectEvidence}
               onUpdateEvidence={updateProjectEvidence}
+              onRecordOutcome={recordProjectOutcome}
             />
           ) : view === "quotes" ? (
             <CustomerTradeQuotes user={user} />
@@ -6753,6 +7068,15 @@ export function CustomerDashboard({
                                 steps complete
                               </small>
                             </div>
+                            {project.deletionPending && (
+                              <p
+                                className="customer-project-delete-pending"
+                                role="status"
+                              >
+                                File cleanup paused before this draft was fully
+                                removed. Finish deleting to complete it safely.
+                              </p>
+                            )}
                             <footer className="customer-project-card-footer">
                               <small>
                                 Updated{" "}
@@ -6765,7 +7089,11 @@ export function CustomerDashboard({
                                   <button
                                     className="customer-project-card-delete"
                                     type="button"
-                                    aria-label={`Delete draft ${project.title}`}
+                                    aria-label={
+                                      project.deletionPending
+                                        ? `Finish deleting draft ${project.title}`
+                                        : `Delete draft ${project.title}`
+                                    }
                                     onClick={(event) => {
                                       setDeleteDraftReturnFocus(
                                         event.currentTarget,
@@ -6774,17 +7102,21 @@ export function CustomerDashboard({
                                       setDraftToDelete(project);
                                     }}
                                   >
-                                    Delete draft
+                                    {project.deletionPending
+                                      ? "Finish deleting"
+                                      : "Delete draft"}
                                   </button>
                                 )}
-                                <a
-                                  className="customer-project-card-open"
-                                  href={`/account/projects/${project.id}`}
-                                >
-                                  {project.status === "draft"
-                                    ? "Continue project"
-                                    : "Open project"}
-                                </a>
+                                {!project.deletionPending && (
+                                  <a
+                                    className="customer-project-card-open"
+                                    href={`/account/projects/${project.id}`}
+                                  >
+                                    {project.status === "draft"
+                                      ? "Continue project"
+                                      : "Open project"}
+                                  </a>
+                                )}
                               </div>
                             </footer>
                           </article>
@@ -6854,6 +7186,7 @@ export function CustomerDashboard({
         projectTitle={draftToDelete?.title || ""}
         busy={deleteDraftBusy}
         error={deleteDraftError}
+        recovery={Boolean(draftToDelete?.deletionPending)}
         returnFocus={deleteDraftReturnFocus}
         onCancel={() => {
           if (deleteDraftBusy) return;

@@ -299,7 +299,10 @@ test("plan email saves before delivery while PDF download is mutation-free and b
     planPdfClient,
     /new Worker|new Blob|createObjectURL|anchor\.click/,
   );
-  assert.match(planPdfRoute, /createCustomerPlanPdfBytes\(report\)/);
+  assert.match(
+    planPdfRoute,
+    /createCustomerPlanPdfBytes\(\s*report,\s*await embeddedPdfFonts\(request\),\s*\)/,
+  );
   assert.match(planPdfRoute, /Content-Disposition/);
   assert.match(planPdfRoute, /application\/pdf/);
   assert.match(planPdfRoute, /"Cache-Control": "no-store"/);
@@ -387,7 +390,9 @@ test("quote preparation is simpler, safer and keeps errors beside the action", (
   assert.match(dashboard, /sharingScope === "private-plan"/);
   assert.match(dashboard, /homeFeatureQuestions\.length/);
   assert.match(dashboard, /useState\(evidenceSharingConsent\)/);
-  assert.match(dashboard, /form\.set\(\s*"confirmInstallerPhotoSharing"/);
+  assert.match(dashboard, /uploadCustomerProjectEvidence/);
+  assert.match(dashboard, /confirmInstallerPhotoSharing/);
+  assert.match(dashboard, /onLoadStoredPreview=\{loadStoredEvidencePreview\}/);
   assert.match(dashboard, /Generated installer summary/);
   assert.match(dashboard, /Site considerations/);
   assert.match(styles, /\.customer-project-editor textarea \{[\s\S]*background: #fff/);
@@ -428,7 +433,15 @@ test("both installer request entry points use one revision-safe completion flow"
   assert.doesNotMatch(dashboard, /key=\{`installer-request-\$\{profile\.updatedAt\}`\}/);
   assert.match(
     dashboard,
-    /method: "PATCH"[\s\S]{0,240}expectedUpdatedAt: account\.profile\.updatedAt/,
+    /const patchProfile = async \([\s\S]{0,900}method: "PATCH"[\s\S]{0,500}expectedUpdatedAt,/,
+  );
+  assert.match(
+    dashboard,
+    /saveInstallerRequestProfileWithOneConflictRetry\(\{[\s\S]{0,180}contact,[\s\S]{0,120}expectedUpdatedAt: account\.profile\.updatedAt,[\s\S]{0,120}save: patchProfile,[\s\S]{0,120}loadLatest: loadLatestProfile,/,
+  );
+  assert.match(
+    dashboard,
+    /const latestProfile = latest\.profile as CustomerProfile;[\s\S]{0,140}profile: latestProfile,[\s\S]{0,100}return latestProfile;/,
   );
   assert.match(dashboard, /onSaveRequestProfile\(contact, saved\.id\)/);
   assert.match(
@@ -449,6 +462,16 @@ test("both installer request entry points use one revision-safe completion flow"
   const editorEnd = dashboard.indexOf("const propertyLabel", editorStart);
   const editorCompletion = dashboard.slice(editorStart, editorEnd);
   assert.ok(editorStart >= 0 && editorEnd > editorStart);
+  assert.equal((editorCompletion.match(/await onSave\(/g) || []).length, 1);
+  assert.equal(
+    (editorCompletion.match(/await storePendingEvidence\(/g) || []).length,
+    1,
+  );
+  assert.equal(
+    (editorCompletion.match(/await onRequestInstallerResponses\(/g) || [])
+      .length,
+    1,
+  );
   assert.ok(
     editorCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
       < editorCompletion.indexOf("const saved = await onSave("),
@@ -473,6 +496,11 @@ test("both installer request entry points use one revision-safe completion flow"
   const detailEnd = dashboard.indexOf("\n\n  return (", detailStart);
   const detailCompletion = dashboard.slice(detailStart, detailEnd);
   assert.ok(detailStart >= 0 && detailEnd > detailStart);
+  assert.equal(
+    (detailCompletion.match(/await onRequestInstallerResponses\(/g) || [])
+      .length,
+    1,
+  );
   assert.ok(
     detailCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
       < detailCompletion.indexOf("await onSaveRequestProfile(contact, project.id)"),
@@ -490,13 +518,21 @@ test("both installer request entry points use one revision-safe completion flow"
     dashboard,
     /The dialog retains its uncertain[\s\S]{0,100}reconcile status before any retry/,
   );
-  assert.match(
+  assert.doesNotMatch(
     installerRequestDialog,
-    /The latest saved contact details are now shown\. Review them, then submit again\./,
+    /CustomerInstallerRequestProfileConflictError|setContact\(caught\.contact\)/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /CustomerInstallerRequestProfileConflictError/,
   );
   assert.match(
     dashboard,
-    /throw new CustomerInstallerRequestProfileConflictError\(\{/,
+    /Your private profile changed again while these details were saving\. Your entries are still here\./,
+  );
+  assert.match(
+    dashboard,
+    /could not be safely reconciled\. Your entries are still here\./,
   );
   assert.doesNotMatch(
     dashboard,

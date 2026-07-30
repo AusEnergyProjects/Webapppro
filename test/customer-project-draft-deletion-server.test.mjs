@@ -6,6 +6,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const evidenceRoute = read("../src/app/api/customer-project-evidence/route.ts");
 const evidenceBucket = read("../src/lib/customer-project-evidence-bucket.ts");
+const dashboard = read("../src/components/CustomerDashboard.tsx");
 
 test("draft deletion keeps the existing authenticated owner boundary", () => {
   assert.match(
@@ -105,23 +106,42 @@ test("draft deletion refuses every linked customer lifecycle", () => {
   );
 });
 
-test("server-selected R2 objects are removed before owned database children", () => {
+test("draft deletion freezes active uploads before recoverable R2 cleanup", () => {
   assert.match(
     projectsRoute,
     /SELECT object_key[\s\S]*FROM customer_project_evidence[\s\S]*project_id = \? AND customer_uid = \?/,
   );
+  assert.match(
+    projectsRoute,
+    /SET status = 'abandoning'[\s\S]*status IN \('initiated', 'uploading', 'completing', 'finalising'\)/,
+  );
+  assert.match(
+    projectsRoute,
+    /SELECT staging_object_key, upload_id,[\s\S]*replacement_object_key[\s\S]*status = 'abandoning'/,
+  );
+  const uploadFreeze = projectsRoute.indexOf("SET status = 'abandoning'");
   const objectDelete = projectsRoute.indexOf(
     "await deleteCustomerProjectEvidenceObjects(",
   );
   const databaseDelete = projectsRoute.indexOf(
     "deletionResults = await db.batch([",
   );
+  assert.ok(uploadFreeze > 0);
+  assert.ok(objectDelete > uploadFreeze);
   assert.ok(objectDelete > 0);
   assert.ok(databaseDelete > objectDelete);
 
   assert.match(
     evidenceBucket,
     /new Set\(objectKeys\.filter\(Boolean\)\)/,
+  );
+  assert.match(
+    evidenceBucket,
+    /resumeMultipartUpload\(upload\.stagingObjectKey, upload\.uploadId\)[\s\S]*\.abort\(\)/,
+  );
+  assert.match(
+    evidenceBucket,
+    /await bucket\.head\(upload\.stagingObjectKey\)[\s\S]*await bucket\.delete\(upload\.stagingObjectKey\)/,
   );
   assert.match(
     evidenceBucket,
@@ -134,6 +154,10 @@ test("server-selected R2 objects are removed before owned database children", ()
 });
 
 test("database cleanup is owner scoped and deletes the project last", () => {
+  assert.match(
+    projectsRoute,
+    /SET status = 'abandoned', privacy_status = 'not-stored'[\s\S]*status = 'abandoning'/,
+  );
   const childTables = [
     "customer_project_evidence_events",
     "customer_project_evidence",
@@ -178,21 +202,72 @@ test("database cleanup is owner scoped and deletes the project last", () => {
   );
 });
 
-test("storage or database failures restore a retryable draft and never report success", () => {
+test("post-lock cleanup failures retain a durable retry state and never report success", () => {
   assert.match(
     projectsRoute,
-    /const restoreDeletionLock = async \(\) => \{[\s\S]*SET status = 'draft', updated_at = \?/,
+    /const restoreDeletionLock = async \(\) => \{[\s\S]*SET status = 'draft'/,
   );
   assert.match(
     projectsRoute,
-    /catch \{[\s\S]*await restoreDeletionLock\(\);[\s\S]*uploaded files could not be removed[\s\S]*503/,
+    /catch \{[\s\S]*code: "PROJECT_DELETE_CLEANUP_RETRY"[\s\S]*File cleanup did not finish[\s\S]*503/,
   );
   assert.match(
     projectsRoute,
-    /catch \{[\s\S]*await restoreDeletionLock\(\);[\s\S]*could not be deleted safely[\s\S]*503/,
+    /catch \{[\s\S]*code: "PROJECT_DELETE_CLEANUP_RETRY"[\s\S]*Final draft cleanup did not finish[\s\S]*503/,
   );
+  const objectCleanup = projectsRoute.indexOf(
+    "await deleteCustomerProjectEvidenceObjects(",
+  );
+  const cleanupTail = projectsRoute.slice(
+    objectCleanup,
+    projectsRoute.indexOf('} else if (action === "update")'),
+  );
+  assert.doesNotMatch(cleanupTail, /restoreDeletionLock/);
   assert.match(
     projectsRoute,
     /return json\(\{ ok: true, id, projects: await projectsForOwner\(user\.uid\) \}\)/,
+  );
+});
+
+test("a partial cleanup reloads as the same retryable draft", () => {
+  assert.match(
+    projectsRoute,
+    /const status = storedStatus === "deleting" \? "draft" : storedStatus/,
+  );
+  assert.match(
+    projectsRoute,
+    /deletionPending: storedStatus === "deleting"/,
+  );
+  assert.match(
+    projectsRoute,
+    /SELECT \* FROM customer_projects[\s\S]*WHERE firebase_uid = \? ORDER BY/,
+  );
+  const deleteBranch = projectsRoute.slice(
+    projectsRoute.indexOf('if (action === "delete_draft")'),
+    projectsRoute.indexOf('} else if (action === "update")'),
+  );
+  assert.match(
+    deleteBranch,
+    /const deletionLockedAt = expectedUpdatedAt/,
+  );
+  assert.match(
+    deleteBranch,
+    /SET status = 'deleting'\s+WHERE id = \?/,
+  );
+  assert.doesNotMatch(
+    deleteBranch.slice(
+      deleteBranch.indexOf("SET status = 'deleting'"),
+      deleteBranch.indexOf("const restoreDeletionLock"),
+    ),
+    /SET status = 'deleting'\s*,\s*updated_at = \?/,
+  );
+  assert.match(
+    deleteBranch,
+    /const resumingDeletion = current\.status === "deleting"/,
+  );
+  assert.match(dashboard, /deletionPending\?: boolean/);
+  assert.match(
+    dashboard,
+    /project\.deletionPending[\s\S]*Finish deleting/,
   );
 });

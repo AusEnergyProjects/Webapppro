@@ -4,7 +4,8 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dashboard = read("../src/components/CustomerDashboard.tsx");
-const history = read("../src/components/CustomerPlanRevisionHistory.tsx");
+const history = read("../src/components/CustomerPlanHistoryProgress.tsx");
+const historyRoute = read("../src/app/api/customer-project-history/route.ts");
 const route = read("../src/app/api/customer-projects/route.ts");
 
 test("draft saves carry the current plan revision token", () => {
@@ -66,18 +67,26 @@ test("draft saves carry the current plan revision token", () => {
   assert.match(route, /return planRevisionConflict\(/);
 });
 
-test("history compares meaningful changes and restores only after confirmation", () => {
+test("the extracted history workspace compares, exports and restores safely", () => {
   assert.match(history, /compareCustomerPlanRevisions/);
-  assert.match(history, /Goals added after version/);
-  assert.match(history, /Home details removed later/);
-  assert.match(history, /Steps moved later/);
-  assert.match(history, /Advisor plan version changed/);
-  assert.match(history, /Restore this roadmap as a new version/);
+  assert.match(history, /customerPlanRevisionLabel/);
+  assert.match(history, /Goals added/);
+  assert.match(history, /Home details removed/);
+  assert.match(history, /Ordered roadmap/);
+  assert.match(history, /Download selected summary/);
+  assert.match(history, /Restore version/);
   assert.match(history, /private notes,[\s\S]{0,120}evidence/i);
-  assert.match(history, /disabled=\{busy \|\| !confirmed\}/);
+  assert.match(history, /disabled=\{busy \|\| !restoreConfirmed\}/);
+  assert.match(history, /project\.status === "draft"/);
+  assert.match(historyRoute, /expectedPlanRevision/);
+  assert.match(historyRoute, /expectedUpdatedAt/);
+  assert.match(historyRoute, /PLAN_REVISION_CONFLICT/);
+  assert.match(dashboard, /CustomerPlanHistoryProgress/);
+  assert.doesNotMatch(dashboard, /CustomerPlanRevisionHistory/);
   assert.match(dashboard, /action === "restore_plan_revision"/);
   assert.match(dashboard, /confirmRestore: true/);
   assert.match(dashboard, /expectedPlanRevision: project\.planRevision/);
+  assert.match(dashboard, /onRecordOutcome=\{\(input\)/);
   assert.match(
     dashboard,
     /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,/,

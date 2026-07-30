@@ -26,7 +26,10 @@ import {
 import {
   prepareCustomerPlanRevisionRestore,
 } from "@/lib/customer-plan-revisions.mjs";
-import { deleteCustomerProjectEvidenceObjects } from "@/lib/customer-project-evidence-bucket";
+import {
+  deleteCustomerProjectEvidenceObjects,
+  type CustomerProjectEvidenceUploadCleanup,
+} from "@/lib/customer-project-evidence-bucket";
 import { parseArrivalWindows, selectedArrivalWindow } from "@/lib/customer-project-arrivals.mjs";
 
 export const runtime = "edge";
@@ -143,6 +146,7 @@ function projectShape(
     completedPlanItems: parseStoredJson(row.completed_plan_items, []),
     planRevision: Number(row.plan_revision || 1),
     status,
+    deletionPending: storedStatus === "deleting",
     displayStatus,
     submittedAt: row.submitted_at,
     archivedAt: row.archived_at,
@@ -200,6 +204,7 @@ function projectShape(
     evidence: evidence.map((item) => ({
       id: item.id,
       category: item.category,
+      captureSlot: item.capture_slot || "",
       factKeys: parseStoredJson(item.fact_keys, []),
       sharingScope: item.sharing_scope === "private-plan"
         ? "private-plan"
@@ -207,7 +212,16 @@ function projectShape(
       fileName: item.file_name,
       contentType: item.content_type,
       sizeBytes: Number(item.size_bytes || 0),
+      privacyStatus: item.privacy_status || "not-recorded",
+      revision: Number(item.revision || 1),
+      previewUrl: String(item.content_type || "").startsWith("image/")
+        ? `/api/customer-project-evidence?preview=${encodeURIComponent(String(item.id))}`
+        : "",
+      thumbnailUrl: String(item.content_type || "").startsWith("image/")
+        ? `/api/customer-project-evidence?preview=${encodeURIComponent(String(item.id))}`
+        : "",
       createdAt: item.created_at,
+      updatedAt: item.updated_at,
     })),
     planRevisions: planRevisions.map((revision) => ({
       id: revision.id,
@@ -322,8 +336,9 @@ async function projectsForOwner(firebaseUid: string) {
         OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
           WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
     ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, fact_keys, sharing_scope,
-      file_name, content_type, size_bytes, created_at
+  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, capture_slot,
+      fact_keys, sharing_scope, file_name, content_type, size_bytes, privacy_status,
+      revision, created_at, updated_at
     FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
       AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
     .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
@@ -651,24 +666,29 @@ async function customerProjectMutation(
       }, 409);
     }
 
-    let deletionLockedAt = expectedUpdatedAt;
+    const deletionLockedAt = expectedUpdatedAt;
     if (!resumingDeletion) {
-      deletionLockedAt = now === expectedUpdatedAt
-        ? new Date(Date.now() + 1).toISOString()
-        : now;
-      const locked = await db.prepare(`UPDATE customer_projects
-        SET status = 'deleting', updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = 'draft'
-          AND opportunity_id = '' AND submitted_at = ''
-          AND plan_revision = ? AND updated_at = ?`)
-        .bind(
-          deletionLockedAt,
-          id,
-          user.uid,
-          expectedPlanRevision,
-          expectedUpdatedAt,
-        )
-        .run();
+      let locked;
+      try {
+        locked = await db.prepare(`UPDATE customer_projects
+          SET status = 'deleting'
+          WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+            AND opportunity_id = '' AND submitted_at = ''
+            AND plan_revision = ? AND updated_at = ?`)
+          .bind(
+            id,
+            user.uid,
+            expectedPlanRevision,
+            expectedUpdatedAt,
+          )
+          .run();
+      } catch {
+        return json({
+          ok: false,
+          code: "PROJECT_DELETE_CLEANUP_RETRY",
+          error: "Draft deletion could not start. Refresh and try delete again.",
+        }, 503);
+      }
       if (Number(locked.meta.changes || 0) !== 1) {
         return json({
           ok: false,
@@ -680,11 +700,10 @@ async function customerProjectMutation(
 
     const restoreDeletionLock = async () => {
       await db.prepare(`UPDATE customer_projects
-        SET status = 'draft', updated_at = ?
+        SET status = 'draft'
         WHERE id = ? AND firebase_uid = ? AND status = 'deleting'
           AND plan_revision = ? AND updated_at = ?`)
         .bind(
-          expectedUpdatedAt,
           id,
           user.uid,
           expectedPlanRevision,
@@ -699,22 +718,6 @@ async function customerProjectMutation(
         error: "This project became linked to enquiry, appointment or handover activity and was not deleted.",
       }, 409);
     }
-    const evidenceRows = await db.prepare(`SELECT object_key
-      FROM customer_project_evidence
-      WHERE project_id = ? AND customer_uid = ?`)
-      .bind(id, user.uid)
-      .all<Record<string, unknown>>();
-    try {
-      await deleteCustomerProjectEvidenceObjects(
-        evidenceRows.results.map((item) => String(item.object_key || "")),
-      );
-    } catch {
-      await restoreDeletionLock();
-      return json({
-        ok: false,
-        error: "The draft's uploaded files could not be removed. The draft record was kept so you can try again.",
-      }, 503);
-    }
 
     const ownedLockedDraft = `EXISTS (
       SELECT 1 FROM customer_projects
@@ -722,9 +725,100 @@ async function customerProjectMutation(
         AND opportunity_id = '' AND submitted_at = ''
         AND plan_revision = ? AND updated_at = ?
     )`;
+    try {
+      await db.prepare(`UPDATE customer_project_evidence_upload_sessions
+        SET status = 'abandoning', last_error = 'project_deletion_started',
+          updated_at = ?
+        WHERE project_id = ? AND customer_uid = ?
+          AND status IN ('initiated', 'uploading', 'completing', 'finalising')
+          AND ${ownedLockedDraft}`)
+        .bind(
+          now,
+          id,
+          user.uid,
+          id,
+          user.uid,
+          expectedPlanRevision,
+          deletionLockedAt,
+        )
+        .run();
+    } catch {
+      if (!resumingDeletion) await restoreDeletionLock();
+      return json({
+        ok: false,
+        code: "PROJECT_DELETE_CLEANUP_RETRY",
+        error: "Draft deletion paused before file cleanup. Refresh and try delete again.",
+      }, 503);
+    }
+
+    let evidenceObjects: string[] = [];
+    let uploadRecords: Record<string, unknown>[] = [];
+    try {
+      const evidenceRows = await db.prepare(`SELECT object_key
+        FROM customer_project_evidence
+        WHERE project_id = ? AND customer_uid = ?`)
+        .bind(id, user.uid)
+        .all<Record<string, unknown>>();
+      const uploadRows = await db.prepare(`SELECT staging_object_key, upload_id,
+          replacement_object_key
+        FROM customer_project_evidence_upload_sessions
+        WHERE project_id = ? AND customer_uid = ? AND status = 'abandoning'`)
+        .bind(id, user.uid)
+        .all<Record<string, unknown>>();
+      evidenceObjects = evidenceRows.results.map(
+        (item) => String(item.object_key || ""),
+      );
+      uploadRecords = uploadRows.results;
+    } catch {
+      return json({
+        ok: false,
+        code: "PROJECT_DELETE_CLEANUP_RETRY",
+        error: "File cleanup could not be prepared. Refresh and delete this draft again.",
+      }, 503);
+    }
+    const uploadCleanups: CustomerProjectEvidenceUploadCleanup[] =
+      uploadRecords.flatMap((item) => {
+        const stagingObjectKey = String(item.staging_object_key || "");
+        const uploadId = String(item.upload_id || "");
+        return stagingObjectKey && uploadId
+          ? [{ stagingObjectKey, uploadId }]
+          : [];
+      });
+    try {
+      await deleteCustomerProjectEvidenceObjects(
+        [
+          ...evidenceObjects,
+          ...uploadRecords.map(
+            (item) => String(item.replacement_object_key || ""),
+          ),
+        ],
+        uploadCleanups,
+      );
+    } catch {
+      return json({
+        ok: false,
+        code: "PROJECT_DELETE_CLEANUP_RETRY",
+        error: "File cleanup did not finish. Refresh and delete this draft again.",
+      }, 503);
+    }
+
     let deletionResults;
     try {
       deletionResults = await db.batch([
+        db.prepare(`UPDATE customer_project_evidence_upload_sessions
+          SET status = 'abandoned', privacy_status = 'not-stored',
+            last_error = 'project_deleted', updated_at = ?
+          WHERE project_id = ? AND customer_uid = ? AND status = 'abandoning'
+            AND ${ownedLockedDraft}`)
+          .bind(
+            now,
+            id,
+            user.uid,
+            id,
+            user.uid,
+            expectedPlanRevision,
+            deletionLockedAt,
+          ),
         db.prepare(`DELETE FROM customer_project_evidence_events
           WHERE project_id = ? AND customer_uid = ? AND ${ownedLockedDraft}`)
           .bind(id, user.uid, id, user.uid, expectedPlanRevision, deletionLockedAt),
@@ -752,10 +846,10 @@ async function customerProjectMutation(
           ),
       ]);
     } catch {
-      await restoreDeletionLock();
       return json({
         ok: false,
-        error: "The draft could not be deleted safely. It was kept so you can try again.",
+        code: "PROJECT_DELETE_CLEANUP_RETRY",
+        error: "Final draft cleanup did not finish. Refresh and delete this draft again.",
       }, 503);
     }
     if (
@@ -763,12 +857,11 @@ async function customerProjectMutation(
         deletionResults[deletionResults.length - 1]?.meta.changes || 0,
       ) !== 1
     ) {
-      await restoreDeletionLock();
       return json({
         ok: false,
-        code: "PROJECT_DELETE_CONFLICT",
-        error: "This draft changed while it was being deleted. Refresh and try again.",
-      }, 409);
+        code: "PROJECT_DELETE_CLEANUP_RETRY",
+        error: "Final draft cleanup paused. Refresh and delete this draft again.",
+      }, 503);
     }
   } else if (action === "update") {
     if (current.status !== "draft") return json({ ok: false, error: "Submitted projects are locked. Duplicate this project to revise its installer scope." }, 409);
