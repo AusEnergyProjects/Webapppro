@@ -5,6 +5,10 @@ import {
   opportunityNotificationIdempotencyKey,
 } from "@/lib/opportunity-notifications";
 import {
+  CUSTOMER_MATCHING_NOTICE_VERSION,
+  matchingLocalityDisclosure,
+} from "@/lib/customer-matching-locality.mjs";
+import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
   serviceReminderRetryAt,
@@ -46,16 +50,21 @@ async function deliveryContext(deliveryId: string) {
       delivery.attempts, delivery.recipient_email_hash, delivery.idempotency_key,
       delivery.subject, delivery.body,
       assignment.firebase_uid, assignment.status match_status, assignment.matched_categories,
+      opportunity.suburb opportunity_suburb, opportunity.postcode opportunity_postcode,
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
+      matching_locality_consent.purpose matching_consent_purpose,
+      matching_locality_consent.notice_version matching_notice_version,
+      matching_locality_consent.granted_at matching_granted_at,
+      matching_locality_consent.withdrawn_at matching_withdrawn_at,
       account.email, account.business_name, account.consent_at, account.email_opportunities,
       CASE WHEN ${verifiedTradeAccountPredicate("account")} AND account.partner_type = 'installer'
         THEN 1 ELSE 0 END installer_access_approved,
       COALESCE((
         SELECT COUNT(*)
         FROM customer_project_evidence evidence
-        JOIN customer_projects project ON project.id = evidence.project_id
-        WHERE project.opportunity_id = opportunity.id
+        WHERE evidence.project_id = project.id
+          AND evidence.customer_uid = project.firebase_uid
           AND evidence.status = 'active'
           AND evidence.sharing_scope = 'allocated-installers'
           AND EXISTS (
@@ -71,6 +80,21 @@ async function deliveryContext(deliveryId: string) {
     JOIN trade_opportunity_matches assignment ON assignment.id = delivery.match_id
     JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
     JOIN trade_accounts account ON account.firebase_uid = assignment.firebase_uid
+    LEFT JOIN customer_projects project ON project.opportunity_id = opportunity.id
+      AND opportunity.source_reference = 'customer-project:' || project.id
+    LEFT JOIN customer_consent_receipts matching_locality_consent
+      ON matching_locality_consent.id = (
+        SELECT locality_consent.id
+        FROM customer_consent_receipts locality_consent
+        WHERE locality_consent.project_id = project.id
+          AND locality_consent.firebase_uid = project.firebase_uid
+          AND locality_consent.purpose = 'anonymized_installer_matching'
+          AND locality_consent.notice_version = '${CUSTOMER_MATCHING_NOTICE_VERSION}'
+          AND locality_consent.granted_at <> ''
+          AND locality_consent.withdrawn_at = ''
+        ORDER BY locality_consent.granted_at DESC, locality_consent.id DESC
+        LIMIT 1
+      )
     WHERE delivery.id = ? LIMIT 1`)
     .bind(deliveryId).first<DeliveryRow>();
 }
@@ -165,11 +189,23 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const idempotencyKey = previousAttempts > 0
     ? storedIdempotencyKey
     : await opportunityNotificationIdempotencyKey(String(context.match_id));
+  const matchingLocality = matchingLocalityDisclosure({
+    suburb: context.opportunity_suburb,
+    postcode: context.opportunity_postcode,
+    state: context.state,
+  }, {
+    purpose: context.matching_consent_purpose,
+    noticeVersion: context.matching_notice_version,
+    grantedAt: context.matching_granted_at,
+    withdrawnAt: context.matching_withdrawn_at,
+  });
   const draft = previousAttempts > 0
     ? { subject: storedSubject, body: storedBody }
     : opportunityNotificationDraft({
       businessName: String(context.business_name || ""),
-      state: String(context.state || ""),
+      suburb: matchingLocality.suburb,
+      postcode: matchingLocality.postcode,
+      state: matchingLocality.state,
       matchedCategories: list(context.matched_categories),
       timing: String(context.timing || ""),
       expiresAt: String(context.expires_at || ""),

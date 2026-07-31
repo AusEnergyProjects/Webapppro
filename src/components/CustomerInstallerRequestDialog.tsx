@@ -72,6 +72,7 @@ function OpenCustomerInstallerRequestDialog({
 }: CustomerInstallerRequestDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const formErrorId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addressLine1Ref = useRef<HTMLInputElement>(null);
@@ -235,7 +236,7 @@ function OpenCustomerInstallerRequestDialog({
         contact: nextContact,
         field: "evidence" as const,
         error:
-          "Confirm the privacy-safe plan and project photos can be shared with allocated verified installers.",
+          "Confirm that your suburb, postcode and state, privacy-safe plan and project photos can be shared with allocated verified installers.",
       };
     }
     return { contact: nextContact, field: "" as const, error: "" };
@@ -385,6 +386,12 @@ function OpenCustomerInstallerRequestDialog({
                     <span>Phone number</span>
                     <input
                       ref={phoneRef}
+                      aria-describedby={
+                        invalidField === "phone" ? formErrorId : undefined
+                      }
+                      aria-errormessage={
+                        invalidField === "phone" ? formErrorId : undefined
+                      }
                       aria-invalid={invalidField === "phone"}
                       autoComplete="tel"
                       inputMode="tel"
@@ -401,6 +408,16 @@ function OpenCustomerInstallerRequestDialog({
                     <span>Service street address</span>
                     <input
                       ref={addressLine1Ref}
+                      aria-describedby={
+                        invalidField === "addressLine1"
+                          ? formErrorId
+                          : undefined
+                      }
+                      aria-errormessage={
+                        invalidField === "addressLine1"
+                          ? formErrorId
+                          : undefined
+                      }
                       aria-invalid={invalidField === "addressLine1"}
                       autoComplete="address-line1"
                       maxLength={120}
@@ -429,6 +446,12 @@ function OpenCustomerInstallerRequestDialog({
                     <span>Suburb</span>
                     <input
                       ref={suburbRef}
+                      aria-describedby={
+                        invalidField === "suburb" ? formErrorId : undefined
+                      }
+                      aria-errormessage={
+                        invalidField === "suburb" ? formErrorId : undefined
+                      }
                       aria-invalid={invalidField === "suburb"}
                       autoComplete="address-level2"
                       maxLength={80}
@@ -467,9 +490,24 @@ function OpenCustomerInstallerRequestDialog({
                   the service area in your private profile.
                 </p>
 
-                <label className={styles.evidenceConfirmation}>
+              </div>
+
+              <footer className={styles.actions}>
+                <label
+                  className={`${styles.evidenceConfirmation} ${styles.actionConsent}`}
+                >
                   <input
                     ref={evidenceRef}
+                    aria-describedby={
+                      invalidField === "evidence"
+                        ? formErrorId
+                        : undefined
+                    }
+                    aria-errormessage={
+                      invalidField === "evidence"
+                        ? formErrorId
+                        : undefined
+                    }
                     aria-invalid={invalidField === "evidence"}
                     checked={confirmAllProjectPhotoSharing}
                     type="checkbox"
@@ -483,8 +521,8 @@ function OpenCustomerInstallerRequestDialog({
                   />
                   <span>
                     {projectPhotoCount === 0
-                      ? "I confirm the privacy-safe generated plan can be shared with verified installers allocated to this enquiry. There are currently no project photos to share."
-                      : `I confirm the privacy-safe generated plan and all ${projectPhotoCount} ${
+                      ? "I confirm my suburb, postcode and state, plus the privacy-safe generated plan, can be shared with verified installers allocated to this enquiry. There are currently no project photos to share."
+                      : `I confirm my suburb, postcode and state, the privacy-safe generated plan and all ${projectPhotoCount} ${
                           projectPhotoCount === 1 ? "current project photo" : "current project photos"
                         } can be shared with verified installers allocated to this enquiry.`}{" "}
                     Other uploaded documents stay private unless I already
@@ -493,13 +531,15 @@ function OpenCustomerInstallerRequestDialog({
                 </label>
 
                 {error && (
-                  <p className={styles.error} role="alert">
+                  <p
+                    id={formErrorId}
+                    className={`${styles.error} ${styles.actionError}`}
+                    role="alert"
+                  >
                     {error}
                   </p>
                 )}
-              </div>
 
-              <footer className={styles.actions}>
                 {busy && progress && (
                   <div
                     className={styles.progressRegion}

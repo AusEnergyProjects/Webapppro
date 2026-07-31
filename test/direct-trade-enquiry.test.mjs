@@ -77,15 +77,17 @@ test("anonymised matching is built only from controlled project choices", () => 
   assert.equal(opportunity.title, "Multi-upgrade home project");
   assert.equal(opportunity.sourceReference, "customer-project:project-123");
   assert.deepEqual(opportunity.serviceCategories, ["solar", "battery"]);
-  assert.match(opportunity.summary, /Identity, exact location, contact details, private notes and usage records are withheld/);
+  assert.match(opportunity.summary, /Identity, contact details, street and unit address, private notes and usage records are withheld/);
   assert.doesNotMatch(JSON.stringify(opportunity), /Jamie|Taylor|0400 000 000|Our exact home name/);
   assert.equal("privateNotes" in opportunity, false);
 });
 
-test("installer matching masks location and releases contact only through exact customer consent", () => {
+test("installer matching limits location to locality and releases contact only through exact customer consent", () => {
   assert.match(tradeOpportunitiesRoute, /function distanceBand/);
   assert.match(tradeOpportunitiesRoute, /distanceBand: distanceBand\(row\.distance_metres\)/);
-  assert.match(tradeOpportunitiesRoute, /postcode: ""/);
+  assert.match(tradeOpportunitiesRoute, /suburb: matchingLocality\.suburb/);
+  assert.match(tradeOpportunitiesRoute, /postcode: matchingLocality\.postcode/);
+  assert.match(tradeOpportunitiesRoute, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(tradeOpportunitiesRoute, /Household opportunities are never available to wholesaler accounts/);
   assert.match(tradeOpportunitiesRoute, /if \(action === "record_contact"\)/);
   assert.match(tradeOpportunitiesRoute, /customer_project_contact_releases/);
@@ -105,7 +107,8 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /Duplicate as a new draft/);
   assert.match(customerDashboard, /tick off completed steps/i);
   assert.match(customerDashboard, /Review exactly what installers can see/);
-  assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and\s+exact postcode stay hidden/);
+  assert.match(customerDashboard, /Your suburb, postcode and state help matched trades understand\s+the job area/);
+  assert.match(customerDashboard, /Your name, email, phone, street and unit address,\s+home nickname, project name and private notes stay hidden/);
   assert.match(customerDashboard, /Private-plan files stay in your\s+signed-in plan/);
   assert.match(customerDashboard, /Only files you explicitly mark for installer\s+sharing can be viewed by allocated verified installers/);
   assert.match(customerDashboard, /confirmInstallerContact: true/);

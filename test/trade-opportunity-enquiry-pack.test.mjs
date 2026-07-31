@@ -200,6 +200,21 @@ test("verified exact-match opportunity API projects the pack and approved file c
   assert.doesNotMatch(opportunityRoute, /p\.title|p\.home_nickname|p\.private_notes/);
   assert.doesNotMatch(opportunityRoute, /fileName: item\.file_name/);
   assert.match(opportunityRoute, /purpose = 'anonymized_installer_matching'/);
+  assert.match(opportunityRoute, /o\.suburb opportunity_suburb/);
+  assert.match(
+    opportunityRoute,
+    /o\.source_reference = 'customer-project:' \|\| p\.id/,
+  );
+  assert.match(
+    opportunityRoute,
+    /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/,
+  );
+  assert.match(opportunityRoute, /suburb: matchingLocality\.suburb/);
+  assert.match(
+    opportunityRoute,
+    /postcode: matchingLocality\.postcode/,
+  );
+  assert.doesNotMatch(opportunityRoute, /JOIN customer_accounts|LEFT JOIN customer_accounts/);
 });
 
 test("complete plan endpoint keeps exact-match and privacy boundaries", () => {
@@ -253,6 +268,23 @@ test("lead card opens the complete plan and represents every returned shared fil
   assert.match(dashboard, /"leads",/);
   assert.match(styles, /\.dashboard-enquiry-pack/);
   assert.match(styles, /\.dashboard-enquiry-thumbnails img/);
+});
+
+test("lead summaries show the protected suburb and postcode without customer contact details", () => {
+  assert.match(dashboard, /function opportunityBroadLocation/);
+  assert.match(dashboard, /opportunity\.suburb, opportunity\.postcode/);
+  assert.match(
+    dashboard,
+    /\{opportunityBroadLocation\(opportunity\)\} \| \{opportunity\.distanceBand\}/,
+  );
+  assert.match(
+    dashboard,
+    /Household identity, street and unit address, and contact[\s\S]*details stay outside the trade workspace during matching/,
+  );
+  assert.match(
+    dashboard,
+    /Suburb, postcode and state are shown for service-area planning\.[\s\S]*street and unit address/,
+  );
 });
 
 test("protected installer plan and evidence state is cleared before an auth identity transition renders", () => {

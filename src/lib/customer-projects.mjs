@@ -2846,7 +2846,7 @@ export function buildAnonymizedOpportunity(project, projectId) {
     serviceCategories: installerCategories,
     priority: project.timing === "urgent" ? "urgent" : "standard",
     timing: project.timing,
-    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Advisor planning context: ${advisorContext}. The household is following a ${paceLabel} plan. Identity, exact location, contact details, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
+    summary: `${propertyLabel} household seeking ${categorySummary}. Property context: ${propertyFacts.join(", ").toLowerCase()}${siteConsiderations ? `. Site considerations: ${siteConsiderations.toLowerCase()}` : ""}. Goals: ${goalSummary}. Advisor planning context: ${advisorContext}. The household is following a ${paceLabel} plan. Identity, contact details, street and unit address, private notes and usage records are withheld. Any customer-approved photos and documents are provided separately to allocated verified installers for quoting guidance. Respond only through the structured platform workflow.`,
     sourceReference: `customer-project:${projectId}`,
   };
 }

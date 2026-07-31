@@ -154,7 +154,9 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   );
   assert.match(partnerOpportunities, /WHERE m\.firebase_uid = \?/);
   assert.match(partnerOpportunities, /WHERE id = \? AND firebase_uid = \?/);
-  assert.match(partnerOpportunities, /postcode: ""/);
+  assert.match(partnerOpportunities, /suburb: matchingLocality\.suburb/);
+  assert.match(partnerOpportunities, /postcode: matchingLocality\.postcode/);
+  assert.match(partnerOpportunities, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(
     partnerOpportunities,
     /distanceBand: distanceBand\(row\.distance_metres\)/,
@@ -170,7 +172,7 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(partnerOpportunities, /action === "submit_quote"/);
   assert.match(
     dashboard,
-    /Household identity, exact location and contact details\s+stay outside the trade workspace during matching/,
+    /Household identity, street and unit address, and contact\s+details stay outside the trade workspace during matching/,
   );
   assert.match(dashboard, /release them to this exact business/);
   assert.match(dashboard, /Platform coordination active/);

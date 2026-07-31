@@ -13,7 +13,11 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter } from "./ComparatorChrome";
 import { TradeBusinessHub } from "./TradeBusinessHub";
-import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
+import {
+  AeaProductLink,
+  TLinkBrand,
+  TLinkHeader,
+} from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
 import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
@@ -66,6 +70,7 @@ type DashboardOpportunity = {
   id: string;
   title: string;
   projectType: string;
+  suburb: string;
   postcode: string;
   state: string;
   serviceCategories: string[];
@@ -179,6 +184,15 @@ const opportunityMatchIdPattern =
 function opportunityMatchFromSearch(search: string) {
   const requested = new URLSearchParams(search).get("matchId") || "";
   return opportunityMatchIdPattern.test(requested) ? requested : "";
+}
+
+function opportunityBroadLocation(opportunity: DashboardOpportunity) {
+  const locality = [opportunity.suburb, opportunity.postcode]
+    .filter(Boolean)
+    .join(" ");
+  return locality
+    ? `${locality}, ${opportunity.state}`
+    : `${opportunity.state} region`;
 }
 
 function opportunityNextAction(opportunity: DashboardOpportunity) {
@@ -432,7 +446,11 @@ function EnquiryPack({
         )}
       </div>
 
-      <small className="dashboard-enquiry-privacy">{pack.privacyNote}</small>
+      <small className="dashboard-enquiry-privacy">
+        Suburb, postcode and state are shown for service-area planning.
+        Customer identity, contact details, street and unit address, private
+        notes, room details and evidence filenames remain withheld.
+      </small>
     </section>
   );
 }
@@ -681,7 +699,7 @@ export function DirectTradeDashboard() {
       .filter((item) => !leadStatusFilter || item.matchStatus === leadStatusFilter)
       .filter((item) => !leadStateFilter || item.state === leadStateFilter)
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
-      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.distanceBand}`.toLowerCase().includes(term));
+      .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.suburb} ${item.postcode} ${item.state} ${item.distanceBand}`.toLowerCase().includes(term));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
 
   const openOpportunityNotification = useCallback(async (matchId: string) => {
@@ -1207,6 +1225,7 @@ export function DirectTradeDashboard() {
             <div className="trade-portal-brand">
               <TLinkBrand context={isSupplier ? "Wholesaler control centre" : "Installer control centre"} />
             </div>
+            <AeaProductLink placement="trade-portal" />
             <TLinkCommandCentre
               user={user}
               partnerType={isSupplier ? "supplier" : "installer"}
@@ -1397,8 +1416,8 @@ export function DirectTradeDashboard() {
                     </h2>
                     <p>
                       At most six eligible installers ever see a scope.
-                      Household identity, exact location and contact details
-                      stay outside the trade workspace during matching. A
+                      Household identity, street and unit address, and contact
+                      details stay outside the trade workspace during matching. A
                       customer can later release them to this exact business
                       after choosing to get in touch.
                     </p>
@@ -1497,7 +1516,7 @@ export function DirectTradeDashboard() {
                           <header>
                             <div className="dashboard-opportunity-heading">
                               <span>
-                                {opportunity.state} region | {opportunity.distanceBand}
+                                {opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}
                               </span>
                               <h3>
                                 {releasedCustomerContact

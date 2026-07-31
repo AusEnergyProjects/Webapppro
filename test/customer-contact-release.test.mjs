@@ -94,7 +94,9 @@ test("installer payload exposes snapshots only through its own active release", 
   assert.match(opportunitiesRoute, /r\.opportunity_match_id = m\.id/);
   assert.match(opportunitiesRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
   assert.match(opportunitiesRoute, /customerContact: row\.contact_release_id/);
-  assert.match(opportunitiesRoute, /postcode: ""/);
+  assert.match(opportunitiesRoute, /suburb: matchingLocality\.suburb/);
+  assert.match(opportunitiesRoute, /postcode: matchingLocality\.postcode/);
+  assert.match(opportunitiesRoute, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(opportunitiesRoute, /Customer details appear only after that customer releases them to this exact match/);
 });
 

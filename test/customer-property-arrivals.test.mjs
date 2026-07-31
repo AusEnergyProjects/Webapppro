@@ -235,7 +235,7 @@ test("customer devices use guided safe capture plus separate supporting evidence
   );
   assert.match(
     customerUi,
-    /privacy-safe plan and all project photos in\s+the final request window/,
+    /suburb, postcode and state, privacy-safe plan\s+and all project photos in\s+the final request window/,
   );
   assert.match(customerUi, /pendingEvidence=\{pendingEvidence\}/);
   assert.match(

@@ -16,6 +16,10 @@ import {
   normalizePlatformQuote,
   parseStoredJson,
 } from "@/lib/customer-projects.mjs";
+import {
+  CUSTOMER_MATCHING_NOTICE_VERSION,
+  matchingLocalityDisclosure,
+} from "@/lib/customer-matching-locality.mjs";
 import { createInstallerEnquiryPack } from "@/lib/customer-plan-document.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
@@ -208,7 +212,8 @@ export async function GET(request: Request) {
     .prepare(
       `SELECT m.id match_id, m.status match_status, m.matched_categories,
     m.distance_metres, m.allocation_rank, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at, m.updated_at,
-    o.id, o.title, o.project_type, o.postcode, o.state, o.service_categories, o.priority, o.timing, o.summary, o.status,
+    o.id, o.title, o.project_type, o.suburb opportunity_suburb,
+    o.postcode opportunity_postcode, o.state, o.service_categories, o.priority, o.timing, o.summary, o.status,
     o.contact_limit, o.maximum_connected_installers, o.expires_at, o.source_reference,
     q.id quote_id, q.product_list_id, q.inclusions quote_inclusions, q.product_snapshot,
     q.product_subtotal_cents_ex_gst, q.labour_cents_ex_gst, q.other_cents_ex_gst, q.total_cents_ex_gst,
@@ -222,6 +227,10 @@ export async function GET(request: Request) {
     p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
     p.goal customer_goal, p.goals customer_goals, p.pace customer_pace,
     p.postcode customer_postcode, p.address_state customer_address_state,
+    matching_locality_consent.purpose matching_consent_purpose,
+    matching_locality_consent.notice_version matching_notice_version,
+    matching_locality_consent.granted_at matching_granted_at,
+    matching_locality_consent.withdrawn_at matching_withdrawn_at,
     p.property_type customer_property_type, p.household_situation customer_household_situation,
     p.existing_features customer_existing_features,
     p.service_categories customer_service_categories, p.budget_range customer_budget_range,
@@ -235,6 +244,20 @@ export async function GET(request: Request) {
     ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
     FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN customer_projects p ON p.opportunity_id = o.id
+      AND o.source_reference = 'customer-project:' || p.id
+    LEFT JOIN customer_consent_receipts matching_locality_consent
+      ON matching_locality_consent.id = (
+        SELECT locality_consent.id
+        FROM customer_consent_receipts locality_consent
+        WHERE locality_consent.project_id = p.id
+          AND locality_consent.firebase_uid = p.firebase_uid
+          AND locality_consent.purpose = 'anonymized_installer_matching'
+          AND locality_consent.notice_version = '${CUSTOMER_MATCHING_NOTICE_VERSION}'
+          AND locality_consent.granted_at <> ''
+          AND locality_consent.withdrawn_at = ''
+        ORDER BY locality_consent.granted_at DESC, locality_consent.id DESC
+        LIMIT 1
+      )
     LEFT JOIN customer_project_quotes q ON q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
     LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = m.id
       AND r.installer_uid = m.firebase_uid AND r.status = 'active'
@@ -262,6 +285,7 @@ export async function GET(request: Request) {
     JOIN customer_projects p ON p.id = e.project_id AND p.firebase_uid = e.customer_uid
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
     JOIN trade_opportunities o ON o.id = m.opportunity_id
+      AND o.source_reference = 'customer-project:' || p.id
     WHERE e.status = 'active' AND e.sharing_scope = 'allocated-installers'
       AND (? = '' OR m.id = ?)
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
@@ -286,6 +310,16 @@ export async function GET(request: Request) {
     ok: true,
     opportunities: rows.results.map((row: Record<string, unknown>) => {
       const sharedEvidence = evidenceByMatch.get(String(row.match_id || "")) || [];
+      const matchingLocality = matchingLocalityDisclosure({
+        suburb: row.opportunity_suburb,
+        postcode: row.opportunity_postcode,
+        state: row.state,
+      }, {
+        purpose: row.matching_consent_purpose,
+        noticeVersion: row.matching_notice_version,
+        grantedAt: row.matching_granted_at,
+        withdrawnAt: row.matching_withdrawn_at,
+      });
       const evidence = sharedEvidence.map((item: Record<string, unknown>) => ({
         id: item.id,
         category: item.category,
@@ -313,8 +347,9 @@ export async function GET(request: Request) {
         id: row.id,
         title: row.title,
         projectType: row.project_type,
-        postcode: "",
-        state: row.state,
+        suburb: matchingLocality.suburb,
+        postcode: matchingLocality.postcode,
+        state: matchingLocality.state,
         serviceCategories: parseJsonList(row.service_categories),
         priority: row.priority,
         timing: row.timing,

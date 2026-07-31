@@ -18,7 +18,6 @@ import {
   CUSTOMER_CONTACT_RELEASE_FIELDS,
   CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION,
   CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
-  CUSTOMER_NOTICE_VERSION,
   MAX_CUSTOMER_PROJECTS,
   MAX_OPEN_CUSTOMER_OPPORTUNITIES,
   normalizeCustomerAdvisorProfile,
@@ -29,6 +28,10 @@ import {
   submissionReadiness,
   validateCustomerProfile,
 } from "@/lib/customer-projects.mjs";
+import {
+  CUSTOMER_MATCHING_NOTICE_VERSION,
+  matchingLocalitySnapshot,
+} from "@/lib/customer-matching-locality.mjs";
 import {
   prepareCustomerPlanRevisionRestore,
 } from "@/lib/customer-plan-revisions.mjs";
@@ -1543,6 +1546,11 @@ async function customerProjectMutation(
       .bind(user.uid).first<{ count: number }>();
     if (Number(open?.count || 0) >= MAX_OPEN_CUSTOMER_OPPORTUNITIES) return json({ ok: false, error: "Finish or withdraw an active enquiry before submitting another one." }, 409);
     const opportunity = buildAnonymizedOpportunity(stored, id);
+    const matchingLocality = matchingLocalitySnapshot({
+      suburb: authoritativeContact.suburb,
+      postcode: opportunity.postcode,
+      state: opportunity.state,
+    });
     const submittedAt = now;
     const submitStatements = [
       db.prepare(`UPDATE customer_accounts
@@ -1594,15 +1602,16 @@ async function customerProjectMutation(
           authoritativeContact.addressState,
           contactUpdatedAt),
       db.prepare(`INSERT INTO trade_opportunities
-        (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
+        (id, title, project_type, suburb, postcode, state, service_categories, priority, timing, summary, status,
          source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, '', 'customer-platform', ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, '', 'customer-platform', ?, ?, ?
         FROM customer_projects
         WHERE id = ? AND firebase_uid = ? AND status = 'matching'
           AND opportunity_id = ? AND submitted_at = ?
           AND plan_revision = ? AND updated_at = ?
         ON CONFLICT(id) DO NOTHING`)
-        .bind(opportunityId, opportunity.title, opportunity.projectType, opportunity.postcode, opportunity.state,
+        .bind(opportunityId, opportunity.title, opportunity.projectType,
+          matchingLocality.suburb, matchingLocality.postcode, matchingLocality.state,
           JSON.stringify(opportunity.serviceCategories), opportunity.priority, opportunity.timing, opportunity.summary,
           opportunity.sourceReference, DEFAULT_CONTACT_LIMIT, DEFAULT_CONNECTED_INSTALLERS, opportunityExpiry(),
           Number(current.is_synthetic || 0), submittedAt, submittedAt,
@@ -1615,7 +1624,7 @@ async function customerProjectMutation(
           AND opportunity_id = ? AND submitted_at = ?
           AND plan_revision = ? AND updated_at = ?
         ON CONFLICT(id) DO NOTHING`)
-        .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_NOTICE_VERSION,
+        .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_MATCHING_NOTICE_VERSION,
           submittedAt, submittedAt, id, user.uid, opportunityId, submittedAt,
           expectedPlanRevision, submittedAt),
       adminNotificationStatement(db, {

@@ -64,7 +64,9 @@ test("household opportunity exposure, platform response and expiry have hard ser
   assert.match(partnerRoute, /action === "submit_quote"/);
   assert.match(partnerRoute, /normalizePlatformQuote/);
   assert.match(partnerRoute, /INSERT INTO customer_project_quotes/);
-  assert.match(partnerRoute, /postcode: ""/);
+  assert.match(partnerRoute, /suburb: matchingLocality\.suburb/);
+  assert.match(partnerRoute, /postcode: matchingLocality\.postcode/);
+  assert.match(partnerRoute, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(partnerRoute, /distanceBand: distanceBand/);
   assert.match(partnerRoute, /This opportunity response cannot be reversed/);
   assert.match(adminMatches, /reached its six-installer visibility limit/);

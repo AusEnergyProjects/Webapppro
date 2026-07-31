@@ -1019,6 +1019,7 @@ export const tradeOpportunities = sqliteTable("trade_opportunities", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   projectType: text("project_type").notNull(),
+  suburb: text("suburb").notNull().default(""),
   postcode: text("postcode").notNull().default(""),
   state: text("state").notNull(),
   serviceCategories: text("service_categories").notNull().default("[]"),

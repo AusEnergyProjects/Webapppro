@@ -148,7 +148,7 @@ test("project normalization keeps notes private and rejects uncontrolled selecti
   const opportunity = buildAnonymizedOpportunity(result.project, "safe-project");
   assert.doesNotMatch(JSON.stringify(opportunity), /Jamie|0400 000 000|Smith Street|My exact project name/);
   assert.equal("privateNotes" in opportunity, false);
-  assert.match(opportunity.summary, /Identity, exact location, contact details, private notes and usage records are withheld/);
+  assert.match(opportunity.summary, /Identity, contact details, street and unit address, private notes and usage records are withheld/);
 });
 
 test("state and postcode integrity is checked before records or opportunities are written", () => {
@@ -188,7 +188,9 @@ test("installer responses stay anonymous until an exact customer-authorised matc
   assert.equal(valid.ok, true);
   assert.deepEqual(valid.quote.inclusions, ["site-assessment", "installation-commissioning"]);
   assert.match(tradeRoute, /Household opportunities are never available to wholesaler accounts/);
-  assert.match(tradeRoute, /postcode: ""/);
+  assert.match(tradeRoute, /suburb: matchingLocality\.suburb/);
+  assert.match(tradeRoute, /postcode: matchingLocality\.postcode/);
+  assert.match(tradeRoute, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(tradeRoute, /distanceBand: distanceBand/);
   assert.match(tradeRoute, /customer_project_contact_releases r ON r\.opportunity_match_id = m\.id/);
   assert.match(tradeRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);

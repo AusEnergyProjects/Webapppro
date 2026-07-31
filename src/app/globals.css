@@ -3270,10 +3270,12 @@ body input[type="number"]::-webkit-outer-spin-button {
 
 .customer-dashboard-nav { align-items: center; background: rgba(3, 25, 45, .92); border: 1px solid rgba(110,231,183,.2); border-radius: 15px; display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; padding: 6px; }
 .customer-dashboard-nav a,
-.customer-dashboard-nav button { background: transparent; border: 0; border-radius: 10px; color: #d5e6e8; cursor: pointer; flex: 0 0 auto; font-size: .72rem; font-weight: 800; min-height: 42px; padding: 0 13px; text-decoration: none; }
+.customer-dashboard-nav button { align-items: center; background: transparent; border: 0; border-radius: 10px; color: #d5e6e8; cursor: pointer; display: inline-flex; flex: 0 0 auto; font-size: .72rem; font-weight: 800; justify-content: center; line-height: 1.15; min-height: 42px; padding: 0 13px; text-decoration: none; white-space: nowrap; }
 .customer-dashboard-nav a.active { background: var(--action-primary); color: #fff; }
 .customer-dashboard-nav button { margin-left: auto; }
 .customer-dashboard-nav .customer-nav-quote-link { align-items: center; display: inline-flex; gap: 7px; }
+.customer-dashboard-nav .customer-dashboard-nav-tlink { gap: 7px; }
+.customer-dashboard-nav-tlink-mark { border-radius: 6px; display: block; height: 24px; width: 24px; }
 .customer-nav-quote-badge { align-items: center; background: #d9fff0; border-radius: 999px; color: #075f42; display: inline-flex; font-size: .62rem; height: 20px; justify-content: center; line-height: 1; min-width: 20px; padding: 0 6px; }
 .customer-nav-quote-link.active .customer-nav-quote-badge { background: #fff; color: #08794c; }
 .customer-verification-banner { align-items: center; background: #fff5d9; border: 1px solid #e8ce7b; border-radius: 14px; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 16px; padding: 15px 18px; }
@@ -4517,9 +4519,13 @@ body input[type="number"]::-webkit-outer-spin-button {
 .tlink-brand > span > strong { color: #fff; font-size: .92rem; letter-spacing: -.02em; }
 .tlink-brand > span > small { color: #83aaa8; font-size: .57rem; margin-top: 2px; }
 .tlink-site-header nav { align-items: center; display: flex; gap: 4px; }
-.tlink-site-header nav a, .tlink-aea-link { border-radius: 8px; color: #b8cfce; font-size: .61rem; font-weight: 800; padding: 9px 10px; text-decoration: none; }
+.tlink-site-header nav a { border-radius: 8px; color: #b8cfce; font-size: .61rem; font-weight: 800; padding: 9px 10px; text-decoration: none; }
 .tlink-site-header nav a:hover, .tlink-site-header nav a.active { background: #0d353c; color: #fff; }
-.tlink-aea-link { border: 1px solid #2b4c55; color: #d9e7e5; }
+.tlink-aea-product-link { align-items: center; border: 1px solid #2b4c55; border-radius: 10px; color: #f1faf9; display: inline-flex; flex: 0 0 auto; gap: 8px; min-height: 40px; padding: 5px 10px 5px 7px; text-decoration: none; }
+.tlink-aea-product-link:hover { background: #0d353c; border-color: #3a716e; color: #fff; }
+.tlink-aea-product-mark { display: block; filter: brightness(0) invert(1); height: 28px; object-fit: contain; width: 28px; }
+.tlink-aea-product-name { font-size: .58rem; font-weight: 850; line-height: 1.2; max-width: 132px; }
+.tlink-aea-product-link-trade-portal { border-color: #28505a; }
 
 /* Admin-inspired trade CRM shell */
 .direct-trade-dashboard-page:has(.trade-portal-shell) { background: #f3f8f6; max-width: none; padding: 0; width: 100%; }
@@ -4534,6 +4540,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-brand .tlink-brand-mark { height: 46px; width: 46px; }
 .trade-portal-brand .tlink-brand > span > strong { font-size: .9rem; white-space: nowrap; }
 .trade-portal-brand .tlink-brand > span > small { font-size: .59rem; white-space: nowrap; }
+.trade-portal-shell > .dashboard-hero > .tlink-aea-product-link { align-self: center; }
 .tlink-command-launcher { align-items: center; background: #082a35; border: 1px solid #28505a; border-radius: 10px; color: #bcd2d0; cursor: pointer; display: flex; flex: 1 1 360px; gap: 10px; justify-content: flex-start; margin: 0 auto; max-width: 540px; min-height: 40px; padding: 8px 10px 8px 13px; text-align: left; }
 .tlink-command-launcher:hover { background: #0a3440; border-color: #39716f; color: #fff; }
 .tlink-command-launcher > span:nth-child(2) { font-size: .64rem; font-weight: 750; }
@@ -4747,10 +4754,24 @@ body input[type="number"]::-webkit-outer-spin-button {
   .trade-portal-shell .dashboard-account-actions > div { display: none; }
 }
 
+@media (max-width: 960px) {
+  .trade-portal-shell { grid-template-rows: auto auto; }
+  .trade-portal-shell > .dashboard-hero { flex-wrap: wrap; gap: 8px 12px; }
+  .trade-portal-shell > .dashboard-hero > .tlink-command-launcher { flex: 1 0 100%; margin: 0; max-width: none; order: 5; }
+}
+
+@media (max-width: 800px) {
+  .tlink-site-header { align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
+  .tlink-home-link { margin-right: auto; }
+  .tlink-site-header nav { flex: 1 0 100%; order: 3; overflow-x: auto; }
+  .tlink-site-header nav a { flex: 0 0 auto; }
+}
+
 @media (max-width: 780px) {
   .trade-portal-shell { display: block; min-height: 100vh; }
   .trade-portal-shell > .dashboard-hero { align-items: flex-start; flex-direction: column; gap: 11px; min-height: auto; padding: 14px 16px; position: relative; }
   .trade-portal-brand { flex-basis: auto; }
+  .trade-portal-shell > .dashboard-hero > .tlink-aea-product-link { align-self: flex-start; }
   .tlink-job-notifications { position: absolute; right: 16px; top: 16px; }
   .tlink-command-launcher { flex: none; margin: 0; max-width: none; order: 3; width: 100%; }
   .trade-portal-shell .dashboard-account-actions { flex-wrap: wrap; width: 100%; }
@@ -4789,7 +4810,7 @@ body input[type="number"]::-webkit-outer-spin-button {
   .tlink-brand-mark { border-radius: 10px; height: 42px; width: 42px; }
   .tlink-site-header nav { flex: 1 0 100%; order: 3; overflow-x: auto; }
   .tlink-site-header nav a { flex: 0 0 auto; }
-  .tlink-aea-link { align-self: center; padding: 7px 8px; }
+  .tlink-aea-product-link-site-header { align-self: center; }
   .trade-portal-brand .tlink-brand > span > strong { font-size: .72rem; }
   .trade-portal-brand .tlink-brand > span > small { font-size: .55rem; }
   .tlink-command-backdrop { align-items: flex-end; padding: 0; }
@@ -4820,6 +4841,12 @@ body input[type="number"]::-webkit-outer-spin-button {
   .trade-portal-shell .purchasing-flow-strip { grid-template-columns: 1fr; }
   .trade-portal-shell .purchasing-flow-strip article { border-bottom: 1px solid var(--trade-line); border-right: 0; }
   .trade-portal-shell .purchasing-flow-strip article:last-child { border-bottom: 0; }
+}
+
+@media (max-width: 420px) {
+  .tlink-home-link,
+  .tlink-aea-product-link-site-header { flex: 1 0 100%; }
+  .tlink-aea-product-link-site-header { justify-content: flex-start; order: 2; }
 }
 
 @media (max-width: 520px) {

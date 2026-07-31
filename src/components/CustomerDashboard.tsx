@@ -40,6 +40,7 @@ import {
   customerReviewOptions as rawCustomerReviewOptions,
 } from "@/lib/customer-plan-decision-support.mjs";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
+import { TLinkMark } from "./TLinkChrome";
 import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
@@ -4388,8 +4389,9 @@ function ProjectEditor({
               <h2>Review exactly what installers can see</h2>
               <p>
                 The platform generates this summary from controlled choices.
-                Your name, email, home nickname, project name, private notes and
-                exact postcode stay hidden during matching and quote review.
+                Your suburb, postcode and state help matched trades understand
+                the job area. Your name, email, phone, street and unit address,
+                home nickname, project name and private notes stay hidden.
               </p>
             </div>
             <div className="customer-privacy-preview">
@@ -4404,8 +4406,12 @@ function ProjectEditor({
                 </h3>
                 <dl>
                   <div>
-                    <dt>Region</dt>
-                    <dd>{draft.addressState}, exact location withheld</dd>
+                    <dt>Job area</dt>
+                    <dd>
+                      Postcode {draft.postcode}, {draft.addressState}. Your
+                      suburb is added from the service details you confirm when
+                      requesting responses.
+                    </dd>
                   </div>
                   <div>
                     <dt>Property</dt>
@@ -4467,17 +4473,18 @@ function ProjectEditor({
                 <strong>Withheld during matching</strong>
                 <ul>
                   <li>Name or account email</li>
-                  <li>Phone or street address</li>
-                  <li>Exact postcode or precise distance</li>
+                  <li>Phone number</li>
+                  <li>Street and unit address</li>
+                  <li>Precise distance</li>
                   <li>Private project names and notes</li>
                   <li>Bills, NMI or meter data</li>
                 </ul>
               </aside>
             </div>
             <p className="customer-submit-consent">
-              You will confirm the privacy-safe plan and all project photos in
-              the final request window. Other documents keep the sharing choice
-              shown on each file.
+              You will confirm the suburb, postcode and state, privacy-safe plan
+              and all project photos in the final request window. Other
+              documents keep the sharing choice shown on each file.
             </p>
           </section>
         )}
@@ -5107,8 +5114,10 @@ function ProjectDetail({
                 <h2>Your enquiry stays inside the platform</h2>
                 <p>
                   Installers can review and submit structured options without
-                  seeing your identity or exact location. Direct contact becomes
-                  available only to an installer you deliberately connect with.
+                  seeing your identity, contact details, street or unit
+                  address. They receive only the confirmed suburb, postcode and
+                  state for job-area context. Direct contact becomes available
+                  only to an installer you deliberately connect with.
                 </p>
               </div>
               <ol className="customer-progress-list">
@@ -6907,6 +6916,76 @@ export function CustomerDashboard({
   );
   const selectedProjectId = selected?.id || "";
   const selectedQuoteCount = selected?.quotes.length || 0;
+  const customerNavigation = account.profile ? (
+    <nav
+      className="customer-dashboard-nav customer-product-navigation"
+      aria-label="Customer account"
+    >
+      <a
+        className={`customer-dashboard-nav-item customer-dashboard-nav-overview${view === "overview" ? " active" : ""}`}
+        href="/account"
+        aria-current={view === "overview" ? "page" : undefined}
+      >
+        <span className="customer-dashboard-nav-label">Overview</span>
+      </a>
+      <a
+        className={`customer-nav-quote-link customer-dashboard-nav-item customer-dashboard-nav-quotes${view === "quotes" ? " active" : ""}`}
+        href="/account/quotes"
+        aria-current={view === "quotes" ? "page" : undefined}
+      >
+        <span className="customer-dashboard-nav-label">Quotes</span>
+        {quotesAwaitingReview.length > 0 && (
+          <span
+            className="customer-nav-quote-badge"
+            aria-label={`${quotesAwaitingReview.length} installer ${quotesAwaitingReview.length === 1 ? "quote" : "quotes"} awaiting review`}
+          >
+            {quotesAwaitingReview.length}
+          </span>
+        )}
+      </a>
+      <a
+        className={`customer-dashboard-nav-item customer-dashboard-nav-appointments${view === "appointments" ? " active" : ""}`}
+        href="/account/appointments"
+        aria-current={view === "appointments" ? "page" : undefined}
+      >
+        <span className="customer-dashboard-nav-label">Appointments</span>
+      </a>
+      <a
+        className={`customer-dashboard-nav-item customer-dashboard-nav-new-project${view === "editor" && !editingId ? " active" : ""}`}
+        href="/account/projects/new"
+        aria-current={view === "editor" && !editingId ? "page" : undefined}
+      >
+        <span className="customer-dashboard-nav-label">New project</span>
+      </a>
+      <a
+        className={`customer-dashboard-nav-item customer-dashboard-nav-profile${view === "profile" ? " active" : ""}`}
+        href="/account/profile"
+        aria-current={view === "profile" ? "page" : undefined}
+      >
+        <span className="customer-dashboard-nav-label">Privacy and profile</span>
+      </a>
+      {account.tradeWorkspace && (
+        <a
+          className="customer-dashboard-nav-item customer-dashboard-nav-tlink"
+          href="/direct-trade/dashboard"
+          aria-label="Open the TLink trade workspace"
+        >
+          <TLinkMark
+            className="customer-dashboard-nav-tlink-mark"
+            size={24}
+          />
+          <span className="customer-dashboard-nav-label">TLink</span>
+        </a>
+      )}
+      <button
+        className="customer-dashboard-nav-signout"
+        type="button"
+        onClick={() => void signOut(firebaseAuth)}
+      >
+        <span className="customer-dashboard-nav-label">Sign out</span>
+      </button>
+    </nav>
+  ) : null;
 
   useEffect(() => {
     if (
@@ -7047,6 +7126,7 @@ export function CustomerDashboard({
               </button>
             </div>
           </header>
+          {customerNavigation}
           <ProfileForm
             user={user}
             profile={account.profile}
@@ -7075,44 +7155,7 @@ export function CustomerDashboard({
               </small>
             </aside>
           </header>
-          <nav className="customer-dashboard-nav" aria-label="Customer account">
-            <a className={view === "overview" ? "active" : ""} href="/account">
-              Overview
-            </a>
-            <a
-              className={`customer-nav-quote-link${view === "quotes" ? " active" : ""}`}
-              href="/account/quotes"
-            >
-              Quotes
-              {quotesAwaitingReview.length > 0 && (
-                <span
-                  className="customer-nav-quote-badge"
-                  aria-label={`${quotesAwaitingReview.length} installer ${quotesAwaitingReview.length === 1 ? "quote" : "quotes"} awaiting review`}
-                >
-                  {quotesAwaitingReview.length}
-                </span>
-              )}
-            </a>
-            <a
-              className={view === "appointments" ? "active" : ""}
-              href="/account/appointments"
-            >
-              Appointments
-            </a>
-            <a
-              className={view === "editor" && !editingId ? "active" : ""}
-              href="/account/projects/new"
-            >
-              New project
-            </a>
-            <a href="/account/profile">Privacy and profile</a>
-            {account.tradeWorkspace && (
-              <a href="/direct-trade/dashboard">Trade workspace</a>
-            )}
-            <button type="button" onClick={() => void signOut(firebaseAuth)}>
-              Sign out
-            </button>
-          </nav>
+          {customerNavigation}
           {!account.emailVerified && (
             <section className="customer-verification-banner" role="status">
               <div>
@@ -7564,7 +7607,11 @@ export function CustomerDashboard({
                     <h2>Personal information stays on this side</h2>
                     <ul>
                       <li>Trades cannot browse your account profile</li>
-                      <li>Exact postcode is used for matching, then hidden</li>
+                      <li>
+                        Only the confirmed suburb, postcode and state identify
+                        the job area during matching
+                      </li>
+                      <li>Street and unit address stay hidden</li>
                       <li>Private notes never enter the trade scope</li>
                       <li>
                         Each real contact handover requires your named-installer

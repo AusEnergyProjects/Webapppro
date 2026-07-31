@@ -3,6 +3,8 @@ export const OPPORTUNITY_INBOX_URL =
 
 type OpportunityNotificationDraftInput = {
   businessName: string;
+  suburb: string;
+  postcode: string;
   state: string;
   matchedCategories: string[];
   timing: string;
@@ -54,6 +56,19 @@ function broadState(value: unknown) {
   return AUSTRALIAN_STATES.has(state) ? state : "your service area";
 }
 
+function broadPostcode(value: unknown) {
+  const postcode = bounded(value, 4);
+  return /^\d{4}$/.test(postcode) ? postcode : "";
+}
+
+function broadLocation(suburbValue: unknown, postcodeValue: unknown, stateValue: unknown) {
+  const suburb = bounded(suburbValue, 80);
+  const postcode = broadPostcode(postcodeValue);
+  const state = broadState(stateValue);
+  const locality = [suburb, postcode].filter(Boolean).join(" ");
+  return locality ? `${locality}, ${state}` : state;
+}
+
 function serviceLabels(values: unknown) {
   if (!Array.isArray(values)) return ["Energy upgrade"];
   const labels = Array.from(new Set(values
@@ -80,7 +95,7 @@ async function sha256(value: string) {
 
 export function opportunityNotificationDraft(input: OpportunityNotificationDraftInput) {
   const businessName = bounded(input.businessName, 120) || "Your business";
-  const state = broadState(input.state);
+  const location = broadLocation(input.suburb, input.postcode, input.state);
   const services = serviceLabels(input.matchedCategories);
   const timing = TIMING_LABELS[bounded(input.timing, 40)] || "Planning";
   const evidenceCount = Math.max(
@@ -92,13 +107,13 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
     : `The complete set of ${evidenceCount} customer-shared ${
       evidenceCount === 1 ? "photo or document" : "photos or documents"
     } is available after sign-in.`;
-  const subject = `New TLink opportunity in ${state}`.slice(0, 160);
+  const subject = `New TLink opportunity in ${location}`.slice(0, 160);
   const body = [
     `Hello ${businessName},`,
     "",
     "A new matched opportunity is ready in your private TLink workspace.",
     "",
-    `Broad location: ${state}`,
+    `Broad location: ${location}`,
     `Matched services: ${services.join(", ")}`,
     `Timing: ${timing}`,
     `Opportunity closes: ${expiryLabel(input.expiresAt)}`,
@@ -107,7 +122,7 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
     "",
     `Review the opportunity: ${OPPORTUNITY_INBOX_URL}`,
     "",
-    "Customer identity, contact details, exact location and private evidence remain protected in the signed-in workflow.",
+    "Customer identity, contact details, street and unit address, and private evidence remain protected in the signed-in workflow.",
   ].join("\n");
   return { subject, body: body.slice(0, 1800) };
 }

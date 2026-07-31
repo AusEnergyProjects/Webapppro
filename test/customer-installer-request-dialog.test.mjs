@@ -99,6 +99,59 @@ test("the complete safe plan and current photos need one explicit confirmation",
   );
 });
 
+test("missing sharing consent is visible and focused beside the sticky submit action", () => {
+  const stickyFooterStart = dialog.indexOf(
+    "<footer className={styles.actions}>",
+  );
+  const consentStart = dialog.indexOf(
+    "className={`${styles.evidenceConfirmation} ${styles.actionConsent}`}",
+  );
+  const consentErrorStart = dialog.indexOf("id={formErrorId}");
+  const submitActionStart = dialog.indexOf(
+    "Save details and request responses",
+  );
+
+  assert.ok(stickyFooterStart >= 0);
+  assert.ok(consentStart > stickyFooterStart);
+  assert.ok(consentErrorStart > consentStart);
+  assert.ok(submitActionStart > consentErrorStart);
+  assert.equal(
+    [...dialog.matchAll(/styles\.evidenceConfirmation/g)].length,
+    1,
+  );
+  assert.match(
+    dialog,
+    /className=\{`\$\{styles\.evidenceConfirmation\} \$\{styles\.actionConsent\}`\}/,
+  );
+  assert.match(
+    dialog,
+    /my suburb, postcode and state,[\s\S]*privacy-safe generated plan/,
+  );
+  assert.match(
+    dialog,
+    /aria-describedby=\{\s*invalidField === "evidence"\s*\?\s*formErrorId\s*:\s*undefined\s*\}/,
+  );
+  assert.match(
+    dialog,
+    /aria-errormessage=\{\s*invalidField === "evidence"\s*\?\s*formErrorId\s*:\s*undefined\s*\}/,
+  );
+  assert.match(
+    dialog,
+    /result\.field === "suburb"[\s\S]*:\s*evidenceRef\.current;[\s\S]*target\?\.focus\(\)/,
+  );
+  assert.match(
+    dialog,
+    /if \(invalidField === "evidence"\) \{\s*setInvalidField\(""\);\s*setError\(""\);\s*\}/,
+  );
+  assert.match(
+    dialog,
+    /className=\{styles\.primaryButton\}\s*disabled=\{busy\}\s*type="submit"/,
+  );
+  assert.match(styles, /\.actions \{[\s\S]*position: sticky/);
+  assert.match(styles, /\.actionConsent \{[\s\S]*grid-column: 1 \/ -1/);
+  assert.match(styles, /\.actionError \{[\s\S]*grid-column: 1 \/ -1/);
+});
+
 test("installer request dialog traps focus, blocks busy dismissal and restores focus", () => {
   assert.match(dialog, /role="dialog"/);
   assert.match(dialog, /aria-modal="true"/);
@@ -146,4 +199,17 @@ test("installer request dialog remains compact and touch friendly", () => {
   assert.match(styles, /min-height: 2\.8rem/);
   assert.match(styles, /@media \(max-width: 560px\)/);
   assert.match(styles, /border-radius: 1\.35rem 1\.35rem 0 0/);
+  assert.match(styles, /calc\(100dvh - 1rem\)/);
+  assert.match(
+    styles,
+    /grid-template-columns: minmax\(5\.5rem, 0\.65fr\) minmax\(0, 1\.35fr\)/,
+  );
+  for (const field of ["phone", "addressLine1", "suburb"]) {
+    assert.match(
+      dialog,
+      new RegExp(
+        `aria-describedby=\\{\\s*invalidField === "${field}"[\\s\\S]*?formErrorId`,
+      ),
+    );
+  }
 });

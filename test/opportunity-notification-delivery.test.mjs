@@ -39,20 +39,25 @@ function notificationDatabase() {
 test("opportunity email copy contains only the bounded business summary and signed-in CTA", () => {
   const draft = opportunityNotificationDraft({
     businessName: "Example Energy",
-    state: "NSW",
+    suburb: "Southbank",
+    postcode: "3006",
+    state: "VIC",
     matchedCategories: ["solar", "battery"],
     timing: "within_3_months",
     expiresAt: "2026-08-31T00:00:00.000Z",
     customerSharedEvidenceCount: 2,
+    addressLine1: "70 Southbank Boulevard",
+    addressLine2: "Unit 6612",
   });
-  assert.match(draft.subject, /New TLink opportunity in NSW/);
-  for (const value of ["Example Energy", "Broad location: NSW", "Rooftop solar", "Home battery",
+  assert.match(draft.subject, /New TLink opportunity in Southbank 3006, VIC/);
+  for (const value of ["Example Energy", "Broad location: Southbank 3006, VIC", "Rooftop solar", "Home battery",
     "Within 3 months", "Complete privacy-safe customer plan: available after sign-in.",
     "The complete set of 2 customer-shared photos or documents is available after sign-in.",
     OPPORTUNITY_INBOX_URL]) {
     assert.match(draft.body, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(draft.body, /approved evidence|customer-approved/i);
+  assert.doesNotMatch(draft.body, /70 Southbank Boulevard|Unit 6612/i);
   assert.doesNotMatch(draft.body, /2000|distance|customer name|customer email|customer phone|filename|meter|usage|token|match id/i);
   assert.ok(draft.subject.length <= 160 && draft.body.length <= 1800);
 });
@@ -173,6 +178,25 @@ test("dispatch rechecks authoritative access, consent, current email and live of
   assert.match(deliveryServer, /messageType: "trade_opportunity"/);
   assert.match(deliveryServer, /serviceReminderRetryAt/);
   assert.match(deliveryServer, /status = 'failed'/);
+});
+
+test("notification location comes from the consented opportunity snapshot without mutable profile fields", () => {
+  assert.match(deliveryServer, /opportunity\.suburb opportunity_suburb/);
+  assert.match(deliveryServer, /opportunity\.postcode opportunity_postcode/);
+  assert.match(
+    deliveryServer,
+    /opportunity\.source_reference = 'customer-project:' \|\| project\.id/,
+  );
+  assert.match(
+    deliveryServer,
+    /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/,
+  );
+  assert.match(deliveryServer, /suburb: matchingLocality\.suburb/);
+  assert.match(deliveryServer, /postcode: matchingLocality\.postcode/);
+  assert.doesNotMatch(
+    deliveryServer,
+    /JOIN customer_accounts|LEFT JOIN customer_accounts/,
+  );
 });
 
 test("allocation paths only write matches while the database trigger owns durable enqueue", () => {

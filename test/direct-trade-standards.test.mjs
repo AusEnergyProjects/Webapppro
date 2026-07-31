@@ -55,7 +55,9 @@ test("standards enforce anonymised matching and household-controlled contact rel
   );
   assert.match(standards, /Wholesalers manage products and pricing only/);
   assert.match(standards, /never see household opportunities or customer contact/);
-  assert.match(opportunities, /postcode: ""/);
+  assert.match(opportunities, /suburb: matchingLocality\.suburb/);
+  assert.match(opportunities, /postcode: matchingLocality\.postcode/);
+  assert.match(opportunities, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(opportunities, /distanceBand: distanceBand\(row\.distance_metres\)/);
   assert.match(opportunities, /customer_project_contact_releases/);
   assert.match(opportunities, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
