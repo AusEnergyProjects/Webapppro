@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 31 July 2026
 
-Milestone ID: `CUSTOMER-PLAN-TRADE-ENQUIRY-22`
+Milestone ID: `CUSTOMER-ACCOUNT-TRUST-23`
 
-Released application commit: `b40c101939eec44b178b34ccb6397a989d2467d0`
+Released application commit: `da4fa911c0b6c7f520e266259af8882b95aaf14a`
 
-Released application for this milestone: Sites version 240 from application commit `b40c101939eec44b178b34ccb6397a989d2467d0`
+Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -20,48 +20,52 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make the public home-energy plan lead naturally into one privacy-first next step: `Enquire with verified trades`. The action appears beside the completed roadmap and again at the real bottom of the page, explains why a free private account is useful, and carries the customer's current plan selections into account creation or sign-in without double entry.
-
-The shared home-detail model now distinguishes gas storage, gas continuous-flow and unknown hot-water types; treats reported single- or three-phase supply only as a planning clue; and records exhaust discharge and backdraft-damper knowledge without encouraging unsafe inspection. Once a customer has authorised contact, the connected trade sees the customer's identity and contact details first instead of finding them among lower-priority lead tiles.
+Make the remaining household ventilation questions answerable without technical building knowledge, make the email account form visibly usable, and make the Firebase customer-verification return refresh the trusted account identity instead of relying on a stale token.
 
 ## Customer and trade outcomes
 
-- The public plan contains exactly two `Enquire with verified trades` placements: one at the completed roadmap decision point and one after the final plan item at the true page bottom.
-- Both placements open the same private-account path and preserve every supported goal, home feature, tenure, budget, pace and approval selection already made in the public planner.
-- The account step explains that the saved plan stays private during matching, exact contact details remain hidden from installers, and details are released only to the one business the customer later chooses.
-- The hot-water question separates gas storage, gas continuous-flow and gas type not known, so advice can discuss tank capacity, flow rate or confirmation without guessing from the legacy gas value.
-- The electrical-supply question records single phase, three phase or not sure. A reported phase is a planning clue only and never proof of spare capacity or suitability for new equipment.
-- Ventilation questions separately record where kitchen and bathroom exhausts appear to discharge and whether a self-sealing or backdraft damper is known, with `Not sure` available and no instruction to enter a roof or ceiling cavity or dismantle a fan.
-- A connected lead places the customer-authorised name, phone, email and service address immediately after the lead heading and before the compact summary, enquiry pack and quote controls.
+- Public `/plan` and the signed-in project builder now ask the same plain question: whether a kitchen exhaust fan or rangehood and a bathroom exhaust fan are fitted.
+- The choices are kitchen, bathroom, no kitchen or bathroom fan, and `Not sure`. The household is explicitly told that it does not need to know where a fan vents or whether it has a shutter or damper.
+- Legacy discharge and damper answers are retained only as a conservative `Not sure` migration when no newer explicit fan answer exists.
+- Technical discharge-path confirmation is deferred to a property manager or suitably qualified trade only when moisture, steam or smells do not clear.
+- Every email-account input, including the password, is a visible full-width control with a persistent eight-character requirement.
+- Create-account and sign-in choices are equal-width responsive tabs with a clear selected state, hover and keyboard focus treatment.
+- Customer verification uses Firebase's hosted action handler with an authorised current-origin return to `/account?verification=complete`.
+- On return, focus or visibility refresh, the customer identity is reloaded and a fresh ID token is obtained before a verified state is trusted.
+- Verification-send failure is reported as failure instead of being silently represented as successful delivery.
+- Existing trade signup and verification behavior was not changed by this customer-only milestone.
 
 ## Integrity and communication design
 
-- One shared planner-selection contract drives both enquiry placements and the signed-in project builder, avoiding a second source of truth or a reduced handoff payload.
-- The expanded household facts use explicit controlled values and retain a safe `Not sure` path. They can alter roadmap sequencing, but customer reports remain observations rather than professional verification.
-- Reported electrical phase cannot be interpreted as verified supply, available capacity or approval for electrical work; a licensed electrician must confirm those facts.
-- Exhaust guidance distinguishes apparent discharge from confirmed compliant discharge, keeps related evidence unknown until the linked questions are addressed, and forbids unsafe cavity access or fan disassembly.
-- Customer identity and contact appear first only for the exact connected lead after customer-authorised release. Collapsed or unconnected leads retain the existing privacy boundary.
-- The connected lead contains one authoritative contact block so customer details are not duplicated among competing tiles or mistaken for general opportunity data.
+- One shared home-feature taxonomy drives the public and private planners, evidence readiness, report projection and deterministic advice.
+- The simplified question records only what an ordinary household can safely see. It does not imply that fan discharge or airtightness has been checked.
+- Legacy technical answers are never guessed into a specific modern fan selection.
+- Firebase remains the verification-code processor. The application supplies the bounded return URL, then refreshes provider state and the token before server-backed account data is trusted.
+- Account status messages distinguish information, success and error and keep field errors associated with the relevant control.
+- The customer helper is imported only by the customer account panel and dashboard. The trade signup source content remains identical to the prior release.
 
 ## Acceptance and release evidence
 
-- Exact application commit `b40c101939eec44b178b34ccb6397a989d2467d0` passed the complete release gate.
-- The focused public-plan enquiry, home-system taxonomy, decision-support and connected-trade set passed 99 of 99 tests. Independent public-planner coverage passed 52 of 52 plus type checking, and the focused connected-trade set passed 13 of 13.
-- `npm.cmd run validate` passed, including 31 of 31 integration tests and 994 total tests with 992 passed, 0 failed and 2 intentionally skipped.
-- Type checking, warning-free lint, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the nine-page customer-plan PDF audit, Vinext production build and Sites server-bundle audit passed. `git diff --check` passed.
+- Exact application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a` passed the complete release gate.
+- The integrated focused customer taxonomy, decision-support, account UI and verification set passed 72 of 72 tests. Independent account and verification review passed 18 of 18 tests, trade-isolation review passed 25 of 25 tests, and type checking passed.
+- `npm.cmd run validate` passed, including type checking, warning-free lint, the integration and full test suites, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the nine-page customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- `git diff --check` passed. An independent final read-only review reported no actionable defect.
 - GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
-- Sites version 240 was saved directly from the exact managed source commit and deployed publicly. No local release archive was uploaded or supplied for this release, so archive size, archive hash, stored-file count, stored bytes and package content hash are not claimed.
-- Public production verification confirmed exactly two enquiry calls to action; the second is at the true page bottom. Owner tenure, gas continuous-flow hot water, reported three-phase supply, apparent cavity exhaust and the damper follow-up survived the account handoff.
-- The private-account screen explained the privacy and no-double-entry purpose of the account. Signed-in trade verification confirmed that a connected lead presents the customer-authorised identity and contact block first.
+- Sites version 241 was saved directly from the exact managed source commit and deployed publicly. No local release archive was uploaded or supplied for this release, so archive size, archive hash, stored-file count, stored bytes and package content hash are not claimed.
+- Live public production verification confirmed the simple fan question and absence of customer-facing discharge-path and damper questions.
+- Live account-entry verification measured a visible 364 by 48 pixel password control and equal 175 by 46 pixel tabs at the desktop viewport, with no horizontal overflow.
+- The live `/account?verification=complete` route rendered the customer account entry rather than an application route error.
+- Local 390 by 844 visual inspection confirmed responsive tab and password-control layout.
+- A new provider email was not sent during release QA, so newly generated email receipt and action-code processing remain unverified.
 - The Sites Worker error-only query returned zero events. Release verification made no production data mutation.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Current executable application commit: `b40c101939eec44b178b34ccb6397a989d2467d0`
-- Sites application version: 240
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_f26581d5ff348191855551ce325e8c40`
-- Sites production deployment: `appgdep_6a6c971b63988191a92e4031fc74692b`
+- Current executable application commit: `da4fa911c0b6c7f520e266259af8882b95aaf14a`
+- Sites application version: 241
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_2149679b0df08191a77cd91ac13d9cc7`
+- Sites production deployment: `appgdep_6a6caabc547c81919c4642b1f7cfcde1`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites access: public custom domain
 - Sites environment revision: 19
@@ -71,23 +75,36 @@ The shared home-detail model now distinguishes gas storage, gas continuous-flow 
 
 ## Known release risk
 
-The application, exact planner handoff, expanded household taxonomy and connected-lead hierarchy passed automated and production presentation checks. Release QA did not create a new account or submit a new installer enquiry, so the verified public handoff stops at the existing private-account screen and preserved selection state. No local archive or Sites package metrics were supplied for this source-only save. Production provider inbox receipt and hosted row counts remain unverified.
+The shared household taxonomy, account presentation, customer verification settings, trusted-state refresh and live return route passed automated and production presentation checks. Release QA did not create a new account or send a verification email, so provider inbox receipt and a fresh end-to-end email action remain unverified. Existing trade verification debt identified during review is outside this customer-only milestone and was not changed or represented as fixed. No local archive or Sites package metrics were supplied for this source-only save. Production provider inbox receipt and hosted row counts remain unverified.
 
 ## Stop conditions
 
 Stop the affected path when:
 
-- either public enquiry action omits or changes a supported planner selection;
-- the second enquiry action is not reachable at the real bottom of the completed plan;
-- account or enquiry copy implies that household identity or exact contact details are available to installers during matching;
-- gas hot-water advice guesses storage or continuous-flow type when the customer selected `Not sure` or supplied only the legacy gas value;
-- reported single- or three-phase supply is treated as verified capacity, suitability or approval;
-- exhaust guidance encourages roof-space or ceiling-cavity entry, fan disassembly or blocking required ventilation;
-- an unconnected or collapsed lead can expose customer identity, contact details, exact location or private household content;
-- the connected lead duplicates customer contact data or places it below lower-priority enquiry content;
+- public and signed-in planners present different exhaust-fan choices;
+- a household is required to know fan discharge, backdraft-damper or self-sealing details;
+- a legacy technical answer is guessed into a specific modern household answer;
+- the password control is clipped, transparent, too small or not associated with its requirement;
+- account tabs do not expose a selected state or become uneven or unusable at a supported viewport;
+- a customer verification link returns outside the authorised current site or a verified account is trusted before Firebase identity and token refresh;
+- verification-send failure is represented as successful delivery;
 - live verification would send to an unapproved recipient or mutate new demo data;
 - the release source, saved version and public deployment cannot be reconciled; or
 - a change would alter the immutable dated audit.
+
+## Prior released milestone: `CUSTOMER-PLAN-TRADE-ENQUIRY-22`
+
+### Outcome
+
+The prior release added the privacy-first `Enquire with verified trades` bridge, preserved every public planner selection through account entry, added precise gas hot-water and reported electrical-phase choices, and placed authorised customer identity first for connected trade leads. Its technical exhaust-discharge and damper questions are superseded by the plain household fan question in `CUSTOMER-ACCOUNT-TRUST-23`; the enquiry bridge, hot-water, electrical and connected-lead contracts remain active.
+
+### Historical release identity
+
+- Application commit: `b40c101939eec44b178b34ccb6397a989d2467d0`
+- Sites version: 240
+- Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_f26581d5ff348191855551ce325e8c40`
+- Deployment: `appgdep_6a6c971b63988191a92e4031fc74692b`
+- Environment revision: 19
 
 ## Prior released milestone: `CUSTOMER-TRADE-CONTACT-21`
 

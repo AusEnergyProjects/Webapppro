@@ -716,6 +716,41 @@ Turn the completed public home-energy roadmap into one privacy-first trade-enqui
 
 The executable, deployment, privacy and signed-in presentation gates are met. No release archive was uploaded for Sites version 240, so archive hashes and Sites stored-file counts or bytes are not recorded for this release.
 
+## Released milestone: CUSTOMER-ACCOUNT-TRUST-23
+
+Release status: application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly at `https://compare.ausenergyassessments.com` as Sites version 241. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_2149679b0df08191a77cd91ac13d9cc7`, deployment `appgdep_6a6caabc547c81919c4642b1f7cfcde1` and environment revision 19 report the exact application commit.
+
+### Outcome
+
+Make the remaining household ventilation intake answerable without technical building knowledge, make email account creation visibly usable, and return a newly verified customer to an account state that refreshes the trusted Firebase identity instead of relying on a stale token.
+
+### In scope
+
+- Replace separate exhaust-discharge and backdraft-damper questions with one shared kitchen and bathroom exhaust-fan question used by public `/plan` and the signed-in project builder.
+- Ask only whether a kitchen exhaust fan or rangehood and a bathroom exhaust fan are fitted, with explicit `No fans` and `Not sure` choices.
+- Explain that the household does not need to know where a fan vents or whether it has a shutter or damper.
+- Migrate legacy technical ventilation selections conservatively to `Not sure` unless the household has already provided a newer explicit fan answer.
+- Keep technical discharge-path confirmation as later qualified-trade work when moisture does not clear, not as a customer intake requirement.
+- Style every account email input, including the password control, as a visible full-width control with a persistent password requirement.
+- Present equal create-account and sign-in tabs with a high-contrast selected state, keyboard focus and responsive sizing.
+- Pass an authorised current-origin return URL to Firebase's hosted customer verification action handler.
+- Reload the customer identity and force a fresh ID token before the application trusts a newly verified email state.
+- Report verification-send failure accurately instead of claiming that a link was sent.
+
+### Acceptance gates
+
+- Public and signed-in planners expose the same simple exhaust-fan choices and no customer-facing discharge-path or damper question.
+- The password field is visible, at least 48 pixels high, full width and programmatically associated with its persistent requirement.
+- Create-account and sign-in choices have equal responsive geometry, explicit selected state and accessible focus behavior.
+- Customer account creation and resend use the same bounded verification return settings.
+- A verification refresh calls Firebase user reload before checking `emailVerified` and forces a fresh ID token before loading trusted account state.
+- Verification-send failures cannot be silently represented as successful delivery.
+- Focused customer and trade-isolation tests, type checking, warning-free lint, the complete validation gate, production build and Sites server-bundle audit pass.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`.
+- Live desktop verification confirms the simplified planner wording, visible password, equal tabs and a working `/account?verification=complete` return route with no browser or Worker errors.
+
+The executable, source-provenance, production presentation and error-log gates are met. Release QA did not create a new account or send a verification email, so receipt and successful use of a newly generated provider email link remain unverified.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
