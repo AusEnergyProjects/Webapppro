@@ -61,7 +61,10 @@ test("verified trade access and team access are enforced server side", () => {
 test("marketplace opportunity actions preserve the match through quote and CRM conversion", () => {
   assert.match(dashboard, />Create job</);
   assert.doesNotMatch(dashboard, />Book site visit</);
-  assert.match(dashboard, /Create the CRM job after customer acceptance/);
+  assert.match(
+    dashboard,
+    /Create the CRM job when you are ready to arrange the work/,
+  );
   assert.match(dashboard, /<InstallerArrivalWindows matchId=\{opportunity\.matchId\}/);
   assert.match(dashboard, /<InstallerPlatformQuote matchId=\{opportunity\.matchId\}/);
   assert.match(dashboard, /sourceReference: matchId/);

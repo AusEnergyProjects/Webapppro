@@ -181,6 +181,32 @@ function opportunityMatchFromSearch(search: string) {
   return opportunityMatchIdPattern.test(requested) ? requested : "";
 }
 
+function opportunityNextAction(opportunity: DashboardOpportunity) {
+  if (
+    opportunity.quote?.customerDecision === "accepted"
+  ) {
+    return opportunity.customerContact
+      ? "Customer contact ready"
+      : "Customer choice recorded";
+  }
+  if (opportunity.quote?.status === "submitted") {
+    return "Quote with customer";
+  }
+  if (opportunity.matchStatus === "interested") {
+    return "Prepare the quote";
+  }
+  if (opportunity.matchStatus === "connected") {
+    return "Review customer progress";
+  }
+  if (opportunity.matchStatus === "declined") {
+    return "No action required";
+  }
+  if (opportunity.matchStatus === "closed") {
+    return "Lead closed";
+  }
+  return "Review and respond";
+}
+
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
   solar: "Rooftop solar",
@@ -477,6 +503,8 @@ export function DirectTradeDashboard() {
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
   const [focusedOpportunityMatchId, setFocusedOpportunityMatchId] = useState("");
+  const [expandedOpportunityMatchIds, setExpandedOpportunityMatchIds] =
+    useState<Set<string>>(() => new Set());
   const [workspace, setWorkspace] = useState<DashboardWorkspace>(() =>
     typeof window === "undefined"
       ? "work"
@@ -519,6 +547,8 @@ export function DirectTradeDashboard() {
     setEvidencePhotoUrls({});
     setEvidencePhotoBusy("");
     setEvidencePhotoErrors({});
+    setExpandedOpportunityMatchIds(new Set());
+    setFocusedOpportunityMatchId("");
   }, [revokeAllEvidenceObjectUrls]);
 
   useEffect(() => {
@@ -660,8 +690,23 @@ export function DirectTradeDashboard() {
     setLeadServiceFilter("");
     setLeadStateFilter("");
     setFocusedOpportunityMatchId(matchId);
+    setExpandedOpportunityMatchIds((current) => {
+      if (current.has(matchId)) return current;
+      const next = new Set(current);
+      next.add(matchId);
+      return next;
+    });
     setWorkspace("leads");
-    setOpportunityNavigationStatus("Opening the accepted lead...");
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("workspace", "leads");
+    nextUrl.searchParams.set("matchId", matchId);
+    nextUrl.hash = "opportunity-inbox";
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
+    );
+    setOpportunityNavigationStatus("Opening lead...");
     if (!user) return;
     try {
       const token = await user.getIdToken();
@@ -674,14 +719,14 @@ export function DirectTradeDashboard() {
       );
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(result.error || "The accepted lead could not be refreshed.");
+        throw new Error(result.error || "The lead could not be refreshed.");
       }
-      const acceptedLead = result.opportunities?.[0];
-      if (!acceptedLead || acceptedLead.matchId !== matchId) {
-        throw new Error("The accepted lead is no longer available.");
+      const selectedLead = result.opportunities?.[0];
+      if (!selectedLead || selectedLead.matchId !== matchId) {
+        throw new Error("The lead is no longer available.");
       }
       setOpportunities((current) => [
-        acceptedLead,
+        selectedLead,
         ...current.filter((item) => item.matchId !== matchId),
       ]);
       setOpportunityNavigationStatus("");
@@ -689,7 +734,7 @@ export function DirectTradeDashboard() {
       setOpportunityNavigationStatus(
         openError instanceof Error
           ? openError.message
-          : "The accepted lead could not be refreshed.",
+          : "The lead could not be refreshed.",
       );
     }
   }, [user]);
@@ -704,6 +749,14 @@ export function DirectTradeDashboard() {
   useEffect(() => {
     if (workspace !== "leads" || !focusedOpportunityMatchId) return;
     if (!opportunities.some((item) => item.matchId === focusedOpportunityMatchId)) return;
+    if (!expandedOpportunityMatchIds.has(focusedOpportunityMatchId)) {
+      setExpandedOpportunityMatchIds((current) => {
+        const next = new Set(current);
+        next.add(focusedOpportunityMatchId);
+        return next;
+      });
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
       const target = document.getElementById(
         `opportunity-${focusedOpportunityMatchId}`,
@@ -719,7 +772,24 @@ export function DirectTradeDashboard() {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  }, [focusedOpportunityMatchId, opportunities, workspace]);
+  }, [
+    expandedOpportunityMatchIds,
+    focusedOpportunityMatchId,
+    opportunities,
+    workspace,
+  ]);
+
+  const toggleOpportunityExpanded = useCallback((matchId: string) => {
+    setExpandedOpportunityMatchIds((current) => {
+      const next = new Set(current);
+      if (next.has(matchId)) {
+        next.delete(matchId);
+      } else {
+        next.add(matchId);
+      }
+      return next;
+    });
+  }, []);
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1330,7 +1400,7 @@ export function DirectTradeDashboard() {
                       Household identity, exact location and contact details
                       stay outside the trade workspace during matching. A
                       customer can later release them to this exact business
-                      after shortlisting its option.
+                      after choosing to get in touch.
                     </p>
                   </div>
                   {opportunityNavigationStatus && (
@@ -1398,12 +1468,23 @@ export function DirectTradeDashboard() {
                         </div>
                       </div>
                       {visibleLeadOpportunities.length ? <div className="dashboard-opportunity-list">
-                      {visibleLeadOpportunities.map((opportunity) => (
+                      {visibleLeadOpportunities.map((opportunity) => {
+                        const isExpanded = expandedOpportunityMatchIds.has(
+                          opportunity.matchId,
+                        );
+                        const detailId = `opportunity-details-${opportunity.matchId}`;
+                        const toggleId = `opportunity-toggle-${opportunity.matchId}`;
+                        const services = (
+                          opportunity.matchedCategories.length
+                            ? opportunity.matchedCategories
+                            : opportunity.serviceCategories
+                        ).map((item) => capabilityLabels[item] || item);
+                        return (
                         <article
                           key={opportunity.matchId}
                           id={`opportunity-${opportunity.matchId}`}
                           tabIndex={-1}
-                          className={`dashboard-opportunity-card status-${opportunity.matchStatus}${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
+                          className={`dashboard-opportunity-card status-${opportunity.matchStatus}${isExpanded ? " expanded" : " collapsed"}${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
                         >
                           <header>
                             <div>
@@ -1412,12 +1493,57 @@ export function DirectTradeDashboard() {
                               </span>
                               <h3>{opportunity.title}</h3>
                             </div>
-                            <strong>
-                              {opportunity.matchStatus === "offered"
-                                ? "New"
-                                : opportunity.matchStatus.replaceAll("_", " ")}
-                            </strong>
+                            <div className="dashboard-opportunity-card-controls">
+                              <strong>
+                                {opportunity.matchStatus === "offered"
+                                  ? "New"
+                                  : opportunity.matchStatus.replaceAll("_", " ")}
+                              </strong>
+                              <button
+                                id={toggleId}
+                                type="button"
+                                aria-expanded={isExpanded}
+                                aria-controls={detailId}
+                                onClick={() =>
+                                  toggleOpportunityExpanded(opportunity.matchId)
+                                }
+                              >
+                                {isExpanded ? "Collapse lead" : "Expand lead"}
+                              </button>
+                            </div>
                           </header>
+                          <div className="dashboard-opportunity-compact-summary">
+                            <p>
+                              {opportunity.enquiryPack?.summary ||
+                                opportunity.summary}
+                            </p>
+                            <dl>
+                              <div>
+                                <dt>Work</dt>
+                                <dd>{services.join(", ") || "Scope to review"}</dd>
+                              </div>
+                              <div>
+                                <dt>Timing</dt>
+                                <dd>{opportunity.timing.replaceAll("_", " ")}</dd>
+                              </div>
+                              <div>
+                                <dt>Shared files</dt>
+                                <dd>{opportunity.approvedSharedFileCount}</dd>
+                              </div>
+                              <div>
+                                <dt>Next</dt>
+                                <dd>{opportunityNextAction(opportunity)}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                          <div
+                            id={detailId}
+                            className="dashboard-opportunity-details"
+                            aria-labelledby={toggleId}
+                            hidden={!isExpanded}
+                          >
+                            {isExpanded && (
+                              <>
                           {(!opportunity.platformOnly || !opportunity.enquiryPack) && (
                             <p>{opportunity.summary}</p>
                           )}
@@ -1553,11 +1679,15 @@ export function DirectTradeDashboard() {
                           )}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
-                            <section className="dashboard-opportunity-conversion" aria-label="Accepted opportunity workflow action"><div><strong>Create the CRM job after customer acceptance</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
+                            <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
                           </>}
-                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for customer acceptance</strong><span>Contact release does not authorise a job, evidence access or an arrival window proposal. The customer must accept this installer for the next step.</span></div></div>}
+                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
+                              </>
+                            )}
+                          </div>
                         </article>
-                      ))}
+                        );
+                      })}
                     </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
                     </>
                   ) : (

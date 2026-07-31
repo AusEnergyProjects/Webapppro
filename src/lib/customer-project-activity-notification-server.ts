@@ -54,7 +54,7 @@ function validEmail(value: unknown) {
 function summary(eventType: CustomerProjectActivityEventType) {
   return eventType === "installer_quote_submitted"
     ? "A verified installer submitted a structured quote for customer review."
-    : "The customer accepted the installer quote and released contact details.";
+    : "The customer chose the installer for direct contact and released contact details.";
 }
 
 export async function customerProjectActivityStatements(
@@ -197,7 +197,7 @@ function ineligibility(context: DeliveryRow) {
       context.customer_decision !== "accepted"
       || context.contact_release_status !== "active"
     ) {
-      return "The accepted installer contact release is no longer active.";
+      return "The chosen installer contact release is no longer active.";
     }
     if (
       context.installer_account_status !== "active"

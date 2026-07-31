@@ -190,7 +190,14 @@ test("project evidence is R2 backed with explicit private or installer sharing s
 });
 
 test("only an accepted installer can propose windows or convert the platform lead", () => {
-  assert.match(customerRoute, /confirmInstallerAcceptance !== true/);
+  assert.match(
+    customerRoute,
+    /legacyAcceptanceAfterRelease = raw\.confirmInstallerAcceptance === true/,
+  );
+  assert.match(
+    customerRoute,
+    /raw\.confirmInstallerContact !== true && !legacyAcceptanceAfterRelease/,
+  );
   assert.match(customerRoute, /decision = 'accepted'|customer_decision = \?/);
   assert.match(customerRoute, /action === "select_arrival_window"/);
   assert.match(opportunityRoute, /action === "propose_arrival_windows"/);
@@ -200,7 +207,7 @@ test("only an accepted installer can propose windows or convert the platform lea
   assert.match(workOrderRoute, /change_source, source_reference/);
   assert.match(workOrderRoute, /'customer_arrival'/);
   assert.match(workOrderRoute, /crm_appointment_id/);
-  assert.match(installerUi, /Waiting for customer acceptance/);
+  assert.match(installerUi, /Waiting for the customer to choose a business/);
   assert.doesNotMatch(installerUi, /Book site visit/);
 });
 
@@ -239,7 +246,7 @@ test("customer devices use guided safe capture plus separate supporting evidence
   assert.match(customerRoute, /photoCount > 0/);
   assert.match(customerRoute, /privatePhotoCount > 0 \|\| !evidenceConsent/);
   assert.match(customerRoute, /confirmAllProjectPhotoSharing !== true/);
-  assert.match(customerUi, /Accept installer for next step/);
+  assert.match(customerUi, /Get in touch with this business/);
   assert.match(arrivalUi, /Provide arrival windows for the customer/);
   assert.match(arrivalUi, /data-date-range-group=/);
   assert.match(arrivalUi, /data-date-range-role="start"/);

@@ -88,15 +88,15 @@ export function customerProjectActivityDraft({
     eventType === "installer_quote_submitted" && audience === "customer";
   const subject = customerMessage
     ? "Your installer quote is ready to review"
-    : "Your customer accepted the quote";
+    : "Your customer wants to get in touch";
   const heading = customerMessage
     ? "A quote is ready"
     : "The customer chose your business";
   const intro = customerMessage
     ? `${installerName} has sent a structured quote for your home project.`
-    : "The customer accepted your quote and released their contact details to your business.";
+    : "The customer chose your business to discuss the next step and released their contact details.";
   const action = customerMessage
-    ? "Review the quote in your secure AEA account. Nothing is accepted until you choose the installer and confirm the next step."
+    ? "Review the quote in your secure AEA account. Choose Get in touch only if you want that business to receive your contact details. This does not accept a quote, make a payment or authorise work."
     : "Open the lead in TLink, call or email the customer, and schedule the next step.";
   const exactInstallerLeadUrl = UUID_PATTERN.test(
     String(opportunityMatchId || ""),
@@ -107,7 +107,7 @@ export function customerProjectActivityDraft({
     ? CUSTOMER_QUOTE_INBOX_URL
     : exactInstallerLeadUrl;
   const htmlLink = escapeHtml(link);
-  const button = customerMessage ? "Review my quote" : "Open the accepted lead";
+  const button = customerMessage ? "Review my quote" : "Open the connected lead";
   const boundary = customerMessage
     ? "Your private notes and full service details remain protected in the signed-in workflow."
     : "Customer contact details are available only inside the signed-in lead. They are not included in this email.";

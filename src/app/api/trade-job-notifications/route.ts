@@ -49,7 +49,7 @@ function workEventPresentation(eventType: string) {
 async function notifications(access: TeamAccess) {
   const db = getD1();
   const scope = jobScope(access);
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, acceptedProjectQuotes, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, reads] = await Promise.all([
     db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title
       FROM trade_crm_photo_request_completions completion
@@ -119,6 +119,15 @@ async function notifications(access: TeamAccess) {
         AND (? <> 'technician' OR work.assignee_member_id = ?)
       ORDER BY signoff.signed_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
+    db.prepare(`SELECT assignment.id opportunity_match_id, assignment.matched_at
+      FROM trade_opportunity_matches assignment
+      JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
+      WHERE assignment.firebase_uid = ?
+        AND ? <> 'technician'
+        AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')
+        AND opportunity.status IN ('open', 'paused')
+      ORDER BY assignment.matched_at DESC LIMIT 80`)
+      .bind(access.ownerUid, scope.role).all<Row>(),
     db.prepare(`SELECT event.id, event.opportunity_match_id, event.occurred_at
       FROM customer_project_activity_events event
       JOIN customer_project_quotes quote ON quote.id = event.quote_id
@@ -179,13 +188,25 @@ async function notifications(access: TeamAccess) {
       title: customer ? "Customer sign-off recorded" : "Technician sign-off recorded",
       summary: `${String(row.signer_name || (customer ? "Customer" : "Technician"))} signed the field record for ${String(row.title)}.`,
       createdAt: String(row.signed_at), targetTab: "field" as const, source: customer ? "customer" as const : "field" as const }; }),
+    ...allocatedProjectLeads.results.map((row) => ({
+      id: `platform-lead-allocated:${String(row.opportunity_match_id)}`,
+      targetKind: "opportunity" as const,
+      targetId: String(row.opportunity_match_id),
+      workOrderId: "",
+      workNumber: "TLink lead",
+      title: "New lead ready to review",
+      summary: "A new privacy-safe customer enquiry is ready in your Leads workspace.",
+      createdAt: String(row.matched_at),
+      targetTab: "quote" as const,
+      source: "customer" as const,
+    })),
     ...acceptedProjectQuotes.results.map((row) => ({
       id: `platform-quote-accepted:${String(row.id)}`,
       targetKind: "opportunity" as const,
       targetId: String(row.opportunity_match_id),
       workOrderId: "",
       workNumber: "TLink lead",
-      title: "Quote accepted, contact the customer",
+      title: "Customer wants to get in touch",
       summary: "Contact details are ready. Call or email the customer and schedule the next step.",
       createdAt: String(row.occurred_at),
       targetTab: "quote" as const,

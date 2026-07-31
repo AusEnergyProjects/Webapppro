@@ -65,6 +65,45 @@ test("customer and field activity powers one unread installer review queue", () 
   assert.match(dashboard, /<TradeJobNotifications/);
 });
 
+test("newly allocated leads enter the owner scoped unread work queue without household details", () => {
+  const queryMatch = route.match(
+    /db\.prepare\(`(SELECT assignment\.id opportunity_match_id, assignment\.matched_at[\s\S]*?ORDER BY assignment\.matched_at DESC LIMIT 80)`\)\s*\.bind\(access\.ownerUid, scope\.role\)/,
+  );
+  assert.ok(queryMatch, "the allocated lead query must remain identifiable and owner scoped");
+
+  const db = new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE trade_opportunities (
+    id text PRIMARY KEY NOT NULL,
+    status text NOT NULL
+  );
+  CREATE TABLE trade_opportunity_matches (
+    id text PRIMARY KEY NOT NULL,
+    opportunity_id text NOT NULL,
+    firebase_uid text NOT NULL,
+    status text NOT NULL,
+    matched_at text NOT NULL
+  );`);
+  db.prepare("INSERT INTO trade_opportunities (id, status) VALUES (?, ?)").run("open-lead", "open");
+  db.prepare("INSERT INTO trade_opportunities (id, status) VALUES (?, ?)").run("closed-lead", "closed");
+  const insert = db.prepare(`INSERT INTO trade_opportunity_matches
+    (id, opportunity_id, firebase_uid, status, matched_at) VALUES (?, ?, ?, ?, ?)`);
+  insert.run("owner-match", "open-lead", "owner-a", "offered", "2026-07-31T00:03:00.000Z");
+  insert.run("other-owner-match", "open-lead", "owner-b", "offered", "2026-07-31T00:02:00.000Z");
+  insert.run("closed-match", "closed-lead", "owner-a", "offered", "2026-07-31T00:01:00.000Z");
+
+  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a", "owner").map((row) => ({ ...row })), [{
+    opportunity_match_id: "owner-match",
+    matched_at: "2026-07-31T00:03:00.000Z",
+  }]);
+  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a", "technician"), []);
+  db.close();
+
+  assert.match(route, /id: `platform-lead-allocated:\$\{String\(row\.opportunity_match_id\)\}`/);
+  assert.match(route, /title: "New lead ready to review"/);
+  assert.match(route, /summary: "A new privacy-safe customer enquiry is ready in your Leads workspace\."/);
+  assert.match(route, /targetKind: "opportunity" as const,[\s\S]*targetId: String\(row\.opportunity_match_id\)/);
+});
+
 test("private job files preview in place and retain an explicit download action", () => {
   assert.match(fieldRoute, /url\.searchParams\.get\("preview"\)/);
   assert.match(fieldRoute, /previewId \? "inline" : "attachment"/);

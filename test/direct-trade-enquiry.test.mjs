@@ -108,8 +108,12 @@ test("the customer dashboard supports guided, saved and separately managed proje
   assert.match(customerDashboard, /Your name, email, home nickname, project name, private notes and\s+exact postcode stay hidden/);
   assert.match(customerDashboard, /Private-plan files stay in your\s+signed-in plan/);
   assert.match(customerDashboard, /Only files you explicitly mark for installer\s+sharing can be viewed by allocated verified installers/);
-  assert.match(customerDashboard, /confirmContactRelease: true/);
-  assert.match(customerDashboard, /Other\s+installers remain anonymised/);
+  assert.match(customerDashboard, /confirmInstallerContact: true/);
+  assert.match(customerDashboard, /only to this verified business/);
+  assert.match(
+    customerDashboard,
+    /does not accept the quote, create a contract or\s+invoice, make a payment, or authorise any work/,
+  );
   assert.match(customerDashboard, /All household project tools are included at no cost/);
 });
 

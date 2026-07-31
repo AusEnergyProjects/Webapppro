@@ -54,7 +54,7 @@ test("the quote centre presents project responses before retained direct quote t
   );
   assert.match(
     dashboard,
-    /href=\{`\/account\/projects\/\$\{projectId\}#structured-quote-options`\}[\s\S]*?View accepted quote[\s\S]*?Continue with quote[\s\S]*?View quote history[\s\S]*?Review quote/,
+    /href=\{`\/account\/projects\/\$\{projectId\}#structured-quote-options`\}[\s\S]*?View connected business[\s\S]*?Finish contact request[\s\S]*?View quote history[\s\S]*?Review quote/,
   );
   assert.match(
     dashboard,
@@ -74,6 +74,33 @@ test("overview and project cards lead customers straight to waiting quotes", () 
   assert.match(
     styles,
     /\.customer-quote-ready-alert\s*\{[^}]*background:\s*linear-gradient[^}]*display:\s*flex;/s,
+  );
+});
+
+test("project quotes use one explicit direct-contact action instead of shortlist and acceptance steps", () => {
+  assert.match(
+    dashboard,
+    /Get in touch with this business/,
+  );
+  assert.match(
+    dashboard,
+    /releases your account name, email, phone number and[\s\S]*?full service address only to this verified business/,
+  );
+  assert.match(
+    dashboard,
+    /does not accept the quote, create a contract or[\s\S]*?invoice, make a payment, or authorise any work/,
+  );
+  assert.match(
+    dashboard,
+    /action === "connect_installer"[\s\S]*?action: "quote_decision"[\s\S]*?decision: "accepted"[\s\S]*?confirmInstallerContact: true/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /action === "connect_installer"[\s\S]{0,1200}action: "release_contact"/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /Shortlist this option|Share details with this installer|Accept installer for next step/,
   );
 });
 

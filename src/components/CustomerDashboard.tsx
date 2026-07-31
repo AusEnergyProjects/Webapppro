@@ -759,8 +759,8 @@ function ProfileForm({
         <p>
           Your phone and service address stay private while you plan and while
           installers review an anonymised lead. They are required only when
-          requesting trades, and are released only when you deliberately connect
-          with one shortlisted installer.
+          requesting trades, and are released only when you deliberately ask
+          one specific verified business to contact you.
         </p>
       </div>
       <form onSubmit={save} noValidate>
@@ -916,7 +916,7 @@ function ProfileForm({
             <small>
               I understand my contact details are stored privately. No trade can
               access them unless I later confirm a release to that specific
-              shortlisted installer.
+              verified business.
             </small>
           </span>
         </label>
@@ -1021,6 +1021,9 @@ function ProjectEditor({
   const [installerRequestOpen, setInstallerRequestOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const draggedPlanItem = useRef("");
+  const activeStepRef = useRef<HTMLElement>(null);
+  const stepScrollFrame = useRef<number | null>(null);
+  const stepFocusFrame = useRef<number | null>(null);
   const activePdfDownload = useRef(false);
   const editGeneration = useRef(0);
   const createRequestId = useRef("");
@@ -1876,6 +1879,18 @@ function ProjectEditor({
     return () => window.removeEventListener("beforeunload", protect);
   }, [dirty]);
 
+  useEffect(
+    () => () => {
+      if (stepScrollFrame.current !== null) {
+        window.cancelAnimationFrame(stepScrollFrame.current);
+      }
+      if (stepFocusFrame.current !== null) {
+        window.cancelAnimationFrame(stepFocusFrame.current);
+      }
+    },
+    [],
+  );
+
   function isStepReady(candidateStep: number) {
     if (candidateStep === 1) {
       return Boolean(
@@ -1914,7 +1929,26 @@ function ProjectEditor({
     }
     setValidationError("");
     setStep(nextStep);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (stepScrollFrame.current !== null) {
+      window.cancelAnimationFrame(stepScrollFrame.current);
+    }
+    if (stepFocusFrame.current !== null) {
+      window.cancelAnimationFrame(stepFocusFrame.current);
+    }
+    stepScrollFrame.current = window.requestAnimationFrame(() => {
+      stepFocusFrame.current = window.requestAnimationFrame(() => {
+        const target = activeStepRef.current;
+        const behavior = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+          ).matches
+          ? "auto"
+          : "smooth";
+        target?.scrollIntoView({ behavior, block: "start" });
+        target?.focus({ preventScroll: true });
+        stepScrollFrame.current = null;
+        stepFocusFrame.current = null;
+      });
+    });
   }
 
   function openPlanQuestion(question: CustomerPlanQuestion) {
@@ -2666,7 +2700,11 @@ function ProjectEditor({
       )}
       <div className="customer-editor-body">
         {step === 1 && (
-          <section className="customer-editor-step">
+          <section
+            ref={activeStepRef}
+            className="customer-editor-step"
+            tabIndex={-1}
+          >
             <div className="customer-step-heading">
               <span>Step 1</span>
               <h2>Which home and project is this?</h2>
@@ -2786,7 +2824,11 @@ function ProjectEditor({
           </section>
         )}
         {step === 2 && (
-          <section className="customer-editor-step">
+          <section
+            ref={activeStepRef}
+            className="customer-editor-step"
+            tabIndex={-1}
+          >
             <div className="customer-step-heading">
               <span>Step 2</span>
               <h2>Tell us what should shape your roadmap</h2>
@@ -3384,7 +3426,11 @@ function ProjectEditor({
           </section>
         )}
         {step === 3 && (
-          <section className="customer-editor-step">
+          <section
+            ref={activeStepRef}
+            className="customer-editor-step"
+            tabIndex={-1}
+          >
             <div className="customer-step-heading">
               <span>Your home energy roadmap</span>
               <h2>{advisorPlan.title}</h2>
@@ -4051,7 +4097,11 @@ function ProjectEditor({
           </section>
         )}
         {step === 4 && (
-          <section className="customer-editor-step">
+          <section
+            ref={activeStepRef}
+            className="customer-editor-step"
+            tabIndex={-1}
+          >
             <div className="customer-step-heading">
               <span>Step 4</span>
               <h2>Prepare for quotes, only if you want them</h2>
@@ -4316,7 +4366,11 @@ function ProjectEditor({
           </section>
         )}
         {step === 5 && (
-          <section className="customer-editor-step">
+          <section
+            ref={activeStepRef}
+            className="customer-editor-step"
+            tabIndex={-1}
+          >
             <div className="customer-step-heading">
               <span>Step 5</span>
               <h2>Review exactly what installers can see</h2>
@@ -4694,12 +4748,6 @@ function ProjectDetail({
     input: CustomerPlanProgressInput,
   ) => Promise<void>;
 }) {
-  const [releaseConfirmations, setReleaseConfirmations] = useState<
-    Record<string, boolean>
-  >({});
-  const [acceptConfirmations, setAcceptConfirmations] = useState<
-    Record<string, boolean>
-  >({});
   const [preparationConfirmations, setPreparationConfirmations] = useState<
     Record<string, Record<string, boolean>>
   >({});
@@ -5212,10 +5260,14 @@ function ProjectDetail({
                         </small>
                       </div>
                       {quote.customerDecision === "accepted" ? (
-                        <strong>Accepted for next step</strong>
+                        <strong>
+                          {quote.contactRelease?.status === "active"
+                            ? "Connected for direct contact"
+                            : "Direct contact previously chosen"}
+                        </strong>
                       ) : (
                         quote.customerDecision === "shortlisted" && (
-                          <strong>Shortlisted</strong>
+                          <strong>Ready to get in touch</strong>
                         )
                       )}
                     </header>
@@ -5304,159 +5356,86 @@ function ProjectDetail({
                         ))}
                       </ul>
                     </details>
-                    {quote.customerDecision !== "accepted" && (
-                      <div className="customer-quote-actions">
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={
-                            busy || quote.customerDecision === "shortlisted"
-                          }
-                          onClick={() =>
-                            void onAction("quote_decision", {
-                              quoteId: quote.id,
-                              decision: "shortlisted",
-                            })
-                          }
-                        >
-                          {quote.customerDecision === "shortlisted"
-                            ? "Shortlisted"
-                            : "Shortlist this option"}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            busy || quote.customerDecision === "declined"
-                          }
-                          onClick={() =>
-                            void onAction("quote_decision", {
-                              quoteId: quote.id,
-                              decision: "declined",
-                            })
-                          }
-                        >
-                          Not for me
-                        </button>
-                      </div>
-                    )}
-                    {quote.customerDecision === "shortlisted" &&
-                      quote.contactRelease?.status !== "active" && (
-                        <div className="customer-contact-release">
-                          <strong>
-                            Connect with {quote.installerBusinessName}
-                          </strong>
-                          {project.contactReady ? (
-                            <>
-                              <label className="customer-check-row">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(
-                                    releaseConfirmations[quote.id],
-                                  )}
-                                  onChange={(event) =>
-                                    setReleaseConfirmations((current) => ({
-                                      ...current,
-                                      [quote.id]: event.target.checked,
-                                    }))
-                                  }
-                                />
-                                <span>
-                                  <small>
-                                    I authorise AEA to release my account name,
-                                    email, phone and full service address to
-                                    this specific verified installer so they can
-                                    contact me about this project. Other
-                                    installers remain anonymised.
-                                  </small>
-                                </span>
-                              </label>
-                              <button
-                                type="button"
-                                className="primary"
-                                disabled={
-                                  busy || !releaseConfirmations[quote.id]
-                                }
-                                onClick={() =>
-                                  void onAction("release_contact", {
-                                    quoteId: quote.id,
-                                    confirmContactRelease: true,
-                                  })
-                                }
-                              >
-                                Share details with this installer
-                              </button>
-                            </>
-                          ) : (
+                    {["reviewing", "shortlisted"].includes(
+                      quote.customerDecision,
+                    ) && (
+                      <div className="customer-contact-release">
+                        <strong>
+                          Get in touch with {quote.installerBusinessName}
+                        </strong>
+                        <p id={`customer-contact-disclosure-${quote.id}`}>
+                          Choosing this asks the business to contact you and
+                          releases your account name, email, phone number and
+                          full service address only to this verified business.
+                          It does not accept the quote, create a contract or
+                          invoice, make a payment, or authorise any work.
+                        </p>
+                        {project.contactReady ? (
+                          <div className="customer-quote-actions">
+                            <button
+                              type="button"
+                              className="primary"
+                              aria-describedby={`customer-contact-disclosure-${quote.id}`}
+                              disabled={busy}
+                              onClick={() =>
+                                void onAction("connect_installer", {
+                                  quoteId: quote.id,
+                                  businessName:
+                                    quote.installerBusinessName,
+                                })
+                              }
+                            >
+                              Get in touch with this business
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void onAction("quote_decision", {
+                                  quoteId: quote.id,
+                                  decision: "declined",
+                                })
+                              }
+                            >
+                              Not for me
+                            </button>
+                          </div>
+                        ) : (
+                          <>
                             <p>
                               Add your phone and complete service address in{" "}
                               <a href="/account/profile">Privacy and profile</a>
-                              , matching this project postcode, before
-                              connecting.
+                              , matching this project postcode, before asking
+                              the business to contact you.
                             </p>
-                          )}
-                        </div>
-                      )}
-                    {quote.customerDecision === "shortlisted" &&
-                      quote.contactRelease?.status === "active" && (
-                        <div className="customer-contact-release active">
-                          <strong>
-                            Choose {quote.installerBusinessName} for the next
-                            step
-                          </strong>
-                          <p>
-                            All allocated installers can view only the files you
-                            marked for installer sharing. Accepting this
-                            installer lets them propose arrival windows. It does
-                            not accept a final contract or authorise installation
-                            work.
-                          </p>
-                          <label className="customer-check-row">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(acceptConfirmations[quote.id])}
-                              onChange={(event) =>
-                                setAcceptConfirmations((current) => ({
-                                  ...current,
-                                  [quote.id]: event.target.checked,
-                                }))
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void onAction("quote_decision", {
+                                  quoteId: quote.id,
+                                  decision: "declined",
+                                })
                               }
-                            />
-                            <span>
-                              <small>
-                                I choose this verified installer for site
-                                assessment and scheduling preparation.
-                              </small>
-                            </span>
-                          </label>
-                          <button
-                            type="button"
-                            className="primary"
-                            disabled={busy || !acceptConfirmations[quote.id]}
-                            onClick={() =>
-                              void onAction("quote_decision", {
-                                quoteId: quote.id,
-                                decision: "accepted",
-                                confirmInstallerAcceptance: true,
-                              })
-                            }
-                          >
-                            Accept installer for next step
-                          </button>
-                        </div>
-                      )}
+                            >
+                              Not for me
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {quote.customerDecision === "accepted" &&
                       quote.contactRelease?.status === "active" && (
                         <div className="customer-contact-release active">
                           <strong>
-                            {quote.installerBusinessName} is accepted for the
-                            next step
+                            {quote.installerBusinessName} can now contact you
                           </strong>
                           <p>
-                            This installer can view your released contact
-                            details. All allocated installers can view only the
-                            project files you marked for installer sharing. The
-                            accepted installer provides the arrival windows for
-                            you to review.
+                            This business can view the contact details you
+                            released and can contact you about the next step.
+                            This is a direct contact request only. It does not
+                            accept the quote, create a contract or invoice, make
+                            a payment, or authorise any work.
                           </p>
                           <button
                             type="button"
@@ -5558,11 +5537,10 @@ function ProjectDetail({
               <div className="customer-guidance-note">
                 <strong>You control the handover</strong>
                 <p>
-                  Shortlisting alone does not create a contract, release your
-                  contact details or authorise work. Only photos and documents
-                  you marked for installer sharing are available to allocated
-                  verified installers under the submission notice. Private-plan
-                  files remain owner-only.
+                  Getting in touch releases your contact details only to the
+                  business you choose and asks them to contact you. It does not
+                  accept a quote, create a contract or invoice, make a payment,
+                  or authorise work. Private-plan files remain owner-only.
                 </p>
               </div>
             </section>
@@ -6498,6 +6476,27 @@ export function CustomerDashboard({
     setBusy(true);
     setStatus("");
     try {
+      if (action === "connect_installer") {
+        const quoteId = String(extra.quoteId || "");
+        const businessName = String(
+          extra.businessName || "this verified business",
+        );
+        if (!quoteId) {
+          throw new Error("Choose a valid business before continuing.");
+        }
+        await projectRequest("PATCH", {
+          id: project.id,
+          action: "quote_decision",
+          quoteId,
+          decision: "accepted",
+          confirmInstallerContact: true,
+        });
+        if (user) await refreshProjects(user);
+        setStatus(
+          `Your contact request was sent to ${businessName}. They can now contact you directly. This did not accept the quote, authorise payment or approve any work.`,
+        );
+        return;
+      }
       const result = await projectRequest("PATCH", {
         id: project.id,
         action,
@@ -6521,7 +6520,7 @@ export function CustomerDashboard({
         window.history.replaceState({}, "", "/account");
       } else if (action === "quote_decision" && extra.decision === "accepted")
         setStatus(
-          "Installer accepted for the next step. They can now propose arrival windows.",
+          "Direct contact selected. The business can now contact you about the next step.",
         );
       else if (action === "quote_decision")
         setStatus(
@@ -6577,6 +6576,14 @@ export function CustomerDashboard({
         );
       } else setStatus("Project updated.");
     } catch (error) {
+      if (action === "connect_installer" && user) {
+        try {
+          await refreshProjects(user);
+        } catch {
+          // Keep the original action error while the normal focus and
+          // visibility refresh handlers remain available for reconciliation.
+        }
+      }
       setStatus(
         error instanceof Error
           ? error.message
@@ -7192,8 +7199,9 @@ export function CustomerDashboard({
                     Your project installer quotes
                   </h2>
                   <p>
-                    Compare each response inside its project before choosing a
-                    shortlist or sharing any contact details.
+                    Compare each response inside its project, then choose the
+                    business you would like to contact. Contacting a business
+                    does not accept its quote or authorise payment or work.
                   </p>
                 </div>
                 <strong>
@@ -7212,9 +7220,11 @@ export function CustomerDashboard({
                           <div>
                             <span>
                               {quote.customerDecision === "accepted"
-                                ? "Accepted for the next step"
+                                ? quote.contactRelease?.status === "active"
+                                  ? "Connected for direct contact"
+                                  : "Direct contact previously chosen"
                                 : quote.customerDecision === "shortlisted"
-                                  ? "Shortlisted, next step ready"
+                                  ? "Ready to get in touch"
                                   : quote.customerDecision === "declined"
                                     ? "Not selected"
                                     : "Ready to review"}
@@ -7257,9 +7267,9 @@ export function CustomerDashboard({
                           href={`/account/projects/${projectId}#structured-quote-options`}
                         >
                           {quote.customerDecision === "accepted"
-                            ? "View accepted quote"
+                            ? "View connected business"
                             : quote.customerDecision === "shortlisted"
-                              ? "Continue with quote"
+                              ? "Finish contact request"
                               : quote.customerDecision === "declined"
                                 ? "View quote history"
                                 : "Review quote"}
@@ -7314,8 +7324,9 @@ export function CustomerDashboard({
                       for your review
                     </h2>
                     <p>
-                      Compare the details before you shortlist an installer or
-                      share any contact information.
+                      Compare the details, then choose which business you would
+                      like to contact. Your details stay private until you make
+                      that choice.
                     </p>
                   </div>
                   <a href="/account/quotes">Review your quotes</a>

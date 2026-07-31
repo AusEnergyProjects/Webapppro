@@ -2108,14 +2108,19 @@ async function customerProjectMutation(
     if (!quoteId || !["reviewing", "shortlisted", "declined", "accepted"].includes(decision)) return json({ ok: false, error: "Choose a valid quote option and decision." }, 400);
     const quote = await db.prepare(`SELECT q.id, q.installer_uid, q.opportunity_match_id, q.customer_decision,
       m.status match_status, o.status opportunity_status,
-      r.id contact_release_id, r.status contact_release_status
+      r.id contact_release_id, r.status contact_release_status,
+      a.business_name,
+      c.display_name, c.phone, c.address_line_1,
+      c.address_line_1 AS addressLine1, c.address_line_2, c.suburb, c.postcode,
+      c.address_state, c.address_state AS addressState
       FROM customer_project_quotes q
       JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
       JOIN trade_opportunities o ON o.id = q.opportunity_id
       JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
         AND a.partner_type = 'installer' AND ${verifiedTradeAccountPredicate("a")}
+      JOIN customer_accounts c ON c.firebase_uid = ?
       LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
-        AND r.customer_uid = ? AND r.installer_uid = q.installer_uid
+        AND r.customer_uid = c.firebase_uid AND r.installer_uid = q.installer_uid
       WHERE q.id = ? AND q.project_id = ? AND q.status = 'submitted'`)
       .bind(user.uid, quoteId, id).first<Record<string, unknown>>();
     if (!quote) return json({ ok: false, error: "Quote option not found." }, 404);
@@ -2135,7 +2140,7 @@ async function customerProjectMutation(
       }
       return json({
         ok: false,
-        error: "This project already has an accepted installer. That choice is locked for the next step.",
+        error: "This project is already connected with an installer. That contact choice is locked.",
       }, 409);
     }
     if (
@@ -2148,7 +2153,7 @@ async function customerProjectMutation(
     if (quote.customer_decision === "accepted") {
       return json({
         ok: false,
-        error: "This installer is already accepted for the next step.",
+        error: "You are already connected with this installer.",
       }, 409);
     }
     const statements = [];
@@ -2163,10 +2168,74 @@ async function customerProjectMutation(
           )`).bind(now, id, id, user.uid));
     }
     if (decision === "accepted") {
-      if (raw.confirmInstallerAcceptance !== true) return json({ ok: false, error: "Confirm the named installer selection before continuing." }, 400);
-      if (quote.customer_decision !== "shortlisted" || quote.contact_release_status !== "active"
-        || quote.match_status !== "connected" || !["open", "paused"].includes(String(quote.opportunity_status))) {
-        return json({ ok: false, error: "Shortlist and connect with this installer before accepting them for the next step." }, 409);
+      if (!user.emailVerified && !Boolean(current.is_synthetic)) {
+        return json({ ok: false, error: "Verify your account email before sharing contact details with an installer." }, 403);
+      }
+      const legacyAcceptanceAfterRelease = raw.confirmInstallerAcceptance === true
+        && quote.contact_release_status === "active"
+        && quote.match_status === "connected";
+      if (raw.confirmInstallerContact !== true && !legacyAcceptanceAfterRelease) {
+        return json({ ok: false, error: "Confirm that you want to share your contact details with this business." }, 400);
+      }
+      if (!["reviewing", "shortlisted"].includes(String(quote.customer_decision))
+        || !["interested", "connected"].includes(String(quote.match_status))
+        || !["open", "paused"].includes(String(quote.opportunity_status))) {
+        return json({ ok: false, error: "This installer is no longer available for a contact handover." }, 409);
+      }
+      const contactReadiness = customerContactReadiness(quote, current);
+      if (!contactReadiness.ok) return json({ ok: false, error: contactReadiness.error }, 400);
+      const releaseId = String(quote.contact_release_id || `customer-contact-release:${quote.opportunity_match_id}`);
+      const releaseIsActive = quote.contact_release_status === "active";
+      const disclosedFields = JSON.stringify(CUSTOMER_CONTACT_RELEASE_FIELDS);
+      if (!releaseIsActive) {
+        statements.push(
+          db.prepare(`INSERT INTO customer_project_contact_releases
+            (id, project_id, opportunity_id, opportunity_match_id, quote_id, customer_uid, installer_uid,
+             status, notice_version, disclosed_fields, customer_name, customer_email, customer_phone,
+             address_line_1, address_line_2, suburb, address_state, postcode, granted_at, withdrawn_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+            ON CONFLICT(opportunity_match_id) DO UPDATE SET quote_id = excluded.quote_id, status = 'active',
+              notice_version = excluded.notice_version, disclosed_fields = excluded.disclosed_fields,
+              customer_name = excluded.customer_name, customer_email = excluded.customer_email,
+              customer_phone = excluded.customer_phone, address_line_1 = excluded.address_line_1,
+              address_line_2 = excluded.address_line_2, suburb = excluded.suburb,
+              address_state = excluded.address_state, postcode = excluded.postcode,
+              granted_at = excluded.granted_at, withdrawn_at = '', updated_at = excluded.updated_at`)
+            .bind(releaseId, id, current.opportunity_id, quote.opportunity_match_id, quoteId, user.uid,
+              quote.installer_uid, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, disclosedFields,
+              quote.display_name, user.email, quote.phone, quote.address_line_1,
+              quote.address_line_2, quote.suburb, quote.address_state,
+              quote.postcode, now, now, now),
+          db.prepare(`INSERT INTO customer_project_contact_release_events
+            (id, release_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
+             actor_uid, event_type, notice_version, disclosed_fields, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'customer', ?, 'granted', ?, ?, ?)`)
+            .bind(crypto.randomUUID(), releaseId, id, quote.opportunity_match_id, user.uid, quote.installer_uid,
+              user.uid, CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, disclosedFields, now),
+          db.prepare(`INSERT INTO customer_consent_receipts
+            (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, '', ?)`)
+            .bind(crypto.randomUUID(), user.uid, id, `matched_installer_contact_release:${quote.opportunity_match_id}`,
+              CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, now, now),
+          db.prepare(`UPDATE trade_opportunity_matches SET status = 'connected', connected_at = ?, updated_at = ?
+            WHERE id = ? AND firebase_uid = ? AND status IN ('interested', 'connected')`)
+            .bind(now, now, quote.opportunity_match_id, quote.installer_uid),
+          adminNotificationStatement(db, {
+            eventKey: `customer-contact-release:${quote.opportunity_match_id}`,
+            eventType: "customer.contact_released",
+            category: "customer",
+            priority: "high",
+            title: "Customer chose a business to contact",
+            summary: `A customer deliberately released contact details to ${String(quote.business_name).slice(0, 160)}.`,
+            entityType: "customer_project_contact_release",
+            entityId: releaseId,
+            actorType: "customer",
+            actorUid: user.uid,
+            requiresAction: true,
+            metadata: { projectId: id, quoteId, opportunityMatchId: quote.opportunity_match_id },
+            occurredAt: now,
+          }),
+        );
       }
       const otherReleases = await db.prepare(`SELECT id, opportunity_match_id, installer_uid, notice_version, disclosed_fields
         FROM customer_project_contact_releases WHERE project_id = ? AND customer_uid = ? AND status = 'active'
@@ -2193,8 +2262,8 @@ async function customerProjectMutation(
             WHERE candidate.id = ? AND candidate.project_id = ?
               AND candidate.installer_uid = ?
               AND candidate.status = 'submitted'
-              AND candidate.customer_decision = 'shortlisted'
-              AND candidate_match.status = 'connected'
+              AND candidate.customer_decision IN ('reviewing', 'shortlisted')
+              AND candidate_match.status IN ('interested', 'connected')
               AND candidate_opportunity.status IN ('open', 'paused')
               AND NOT EXISTS (
                 SELECT 1 FROM customer_project_quotes accepted
@@ -2203,9 +2272,9 @@ async function customerProjectMutation(
                   AND accepted.customer_decision = 'accepted'
               )
           ), ''), ?, ?, ?, ?)`)
-          .bind(id, user.uid, quote.contact_release_id, user.uid, quoteId, id,
+          .bind(id, user.uid, releaseId, user.uid, quoteId, id,
             quote.installer_uid, quote.opportunity_match_id,
-            quote.contact_release_id, now, now),
+            releaseId, now, now),
         db.prepare(`UPDATE customer_project_quotes SET customer_decision = 'declined', updated_at = ?
           WHERE project_id = ? AND status = 'submitted' AND id != ?`).bind(now, id, quoteId),
         db.prepare("UPDATE trade_opportunities SET status = 'paused', updated_at = ? WHERE id = ? AND status = 'open'")
@@ -2248,7 +2317,7 @@ async function customerProjectMutation(
     statements.push(decision === "accepted"
       ? db.prepare(`UPDATE customer_project_quotes
           SET customer_decision = 'accepted', updated_at = ?
-          WHERE id = ? AND project_id = ? AND customer_decision = 'shortlisted'
+          WHERE id = ? AND project_id = ? AND customer_decision IN ('reviewing', 'shortlisted')
             AND EXISTS (
               SELECT 1 FROM customer_project_quote_acceptance_claims claim
               WHERE claim.project_id = ? AND claim.customer_uid = ? AND claim.quote_id = ?
@@ -2280,8 +2349,10 @@ async function customerProjectMutation(
       eventType: `customer.quote_${decision}`,
       category: "customer",
       priority: ["shortlisted", "accepted"].includes(decision) ? "high" : "normal",
-      title: decision === "accepted" ? "Customer accepted an installer for the next step" : decision === "shortlisted" ? "Customer shortlisted a quote" : "Customer updated a quote decision",
-      summary: `${String(current.title).slice(0, 120)} has a quote marked ${decision}.`,
+      title: decision === "accepted" ? "Customer chose a business to contact" : decision === "shortlisted" ? "Customer shortlisted a quote" : "Customer updated a quote decision",
+      summary: decision === "accepted"
+        ? `${String(current.title).slice(0, 120)} is connected with the chosen business.`
+        : `${String(current.title).slice(0, 120)} has a quote marked ${decision}.`,
       entityType: "customer_project_quote",
       entityId: quoteId,
       actorType: "customer",
@@ -2312,7 +2383,7 @@ async function customerProjectMutation(
       if (winner) {
         return json({
           ok: false,
-          error: "This project already has an accepted installer. That choice is locked for the next step.",
+          error: "This project is already connected with an installer. That contact choice is locked.",
         }, 409);
       }
       return json({ ok: false, error: "The quote decision could not be saved." }, 500);
@@ -2320,7 +2391,7 @@ async function customerProjectMutation(
     if (Number(decisionResults[decisionMutationIndex]?.meta.changes || 0) !== 1) {
       return json({
         ok: false,
-        error: "This project already has an accepted installer. That choice is locked for the next step.",
+        error: "This project is already connected with an installer. That contact choice is locked.",
       }, 409);
     }
     if (decision !== "accepted") await createAdminNotification(adminInput);

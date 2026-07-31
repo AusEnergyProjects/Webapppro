@@ -79,6 +79,17 @@ test("customer release is explicit, exact-match scoped, verified and audited", (
   assert.match(accountRoute, /phone, address_line_1, address_line_2, suburb/);
 });
 
+test("legacy quote acceptance cannot authorise a first-time contact disclosure", () => {
+  assert.match(
+    projectsRoute,
+    /const legacyAcceptanceAfterRelease = raw\.confirmInstallerAcceptance === true\s*&& quote\.contact_release_status === "active"\s*&& quote\.match_status === "connected";/,
+  );
+  assert.match(
+    projectsRoute,
+    /if \(raw\.confirmInstallerContact !== true && !legacyAcceptanceAfterRelease\)/,
+  );
+});
+
 test("installer payload exposes snapshots only through its own active release", () => {
   assert.match(opportunitiesRoute, /r\.opportunity_match_id = m\.id/);
   assert.match(opportunitiesRoute, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
@@ -88,9 +99,16 @@ test("installer payload exposes snapshots only through its own active release", 
 });
 
 test("interfaces name the recipient and explain withdrawal limits", () => {
-  assert.match(customerUi, /Connect with \{quote\.installerBusinessName\}/);
-  assert.match(customerUi, /confirmContactRelease: true/);
-  assert.match(customerUi, /Other\s+installers remain anonymised/);
+  assert.match(
+    customerUi,
+    /Get in touch with \{quote\.installerBusinessName\}/,
+  );
+  assert.match(customerUi, /confirmInstallerContact: true/);
+  assert.match(customerUi, /only to this verified business/);
+  assert.match(
+    customerUi,
+    /does not accept the quote, create a contract or\s+invoice, make a payment, or authorise any work/,
+  );
   assert.match(customerUi, /It cannot erase\s+information an installer already viewed or saved/);
   assert.match(installerUi, /Customer-authorised contact/);
   assert.match(installerUi, /opportunity\.customerContact\.phone/);

@@ -174,7 +174,8 @@ test("customer and installer emails are bounded, actionable and exclude private 
     eventType: "customer_installer_accepted",
     audience: "installer",
   });
-  assert.match(installer.subject, /customer accepted the quote/i);
+  assert.match(installer.subject, /customer wants to get in touch/i);
+  assert.doesNotMatch(installer.body, /accepted your quote/i);
   assert.match(installer.body, /contact details are available only inside the signed-in lead/i);
   assert.match(installer.body, new RegExp(escapePattern(INSTALLER_LEAD_INBOX_URL)));
 
@@ -434,19 +435,28 @@ test("exact opportunity targeting validates one match id and remains owner scope
   );
 });
 
-test("accepted installer activity is deterministic and committed in the acceptance batch", () => {
+test("chosen installer contact activity and release are deterministic in one batch", () => {
   assert.match(
     customerProjects,
     /decision === "accepted"[\s\S]*quote\.customer_decision === "accepted"[\s\S]*return json\(\{ ok: true/,
   );
   assert.match(
     customerProjects,
-    /if \(quote\.customer_decision === "accepted"\)[\s\S]*already accepted/,
+    /if \(quote\.customer_decision === "accepted"\)[\s\S]*already connected/,
+  );
+  assert.match(customerProjects, /confirmInstallerContact/);
+  assert.match(
+    customerProjects,
+    /INSERT INTO customer_project_contact_releases[\s\S]*INSERT INTO customer_project_quote_acceptance_claims/,
   );
   assert.match(customerProjects, /customer_project_quote_acceptance_claims/);
   assert.match(
     customerProjects,
-    /INSERT INTO customer_project_quote_acceptance_claims[\s\S]*candidate\.customer_decision = 'shortlisted'/,
+    /INSERT INTO customer_project_quote_acceptance_claims[\s\S]*candidate\.customer_decision IN \('reviewing', 'shortlisted'\)/,
+  );
+  assert.match(
+    customerProjects,
+    /SET customer_decision = 'accepted'[\s\S]*customer_decision IN \('reviewing', 'shortlisted'\)/,
   );
   assert.match(
     customerProjects,
@@ -560,7 +570,7 @@ test("authenticated Resend callbacks update the activity ledger and recipient su
   );
 });
 
-test("accepted platform quotes enter the trade queue and open the exact lead", () => {
+test("chosen platform businesses enter the trade queue and open the exact lead", () => {
   assert.match(tradeNotificationsRoute, /customer_project_activity_events/);
   assert.match(
     tradeNotificationsRoute,
@@ -574,6 +584,7 @@ test("accepted platform quotes enter the trade queue and open the exact lead", (
     tradeNotificationsRoute,
     /release\.status = 'active'/,
   );
+  assert.match(tradeNotificationsRoute, /Customer wants to get in touch/);
   assert.match(tradeNotificationsRoute, /targetKind: "opportunity"/);
   assert.match(
     tradeNotificationsRoute,

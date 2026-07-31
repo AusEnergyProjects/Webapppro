@@ -516,7 +516,7 @@ export async function PATCH(request: Request) {
       });
     }
     if (currentQuote?.customerDecision === "accepted") {
-      return json({ ok: false, error: "The accepted quote is locked. Use the reviewed customer change workflow for later scope changes." }, 409);
+      return json({ ok: false, error: "This option is locked after the customer chose to get in touch. Use the reviewed customer change workflow for later scope changes." }, 409);
     }
     const currentSubmissionRevision = currentQuote?.submissionRevision || 0;
     if (currentSubmissionRevision !== expectedSubmissionRevision) {

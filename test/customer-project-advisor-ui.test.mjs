@@ -43,6 +43,27 @@ test("the customer project wizard exposes every stage as an accessible button", 
   assert.match(dashboard, /<nav[\s\S]{0,100}aria-label="Project builder steps"/);
 });
 
+test("every wizard step change scrolls and focuses the next step after it renders", () => {
+  assert.match(dashboard, /const activeStepRef = useRef<HTMLElement>\(null\)/);
+  assert.match(
+    dashboard,
+    /setStep\(nextStep\)[\s\S]*?requestAnimationFrame[\s\S]*?requestAnimationFrame[\s\S]*?activeStepRef\.current/,
+  );
+  assert.match(
+    dashboard,
+    /prefers-reduced-motion: reduce[\s\S]*?\? "auto"[\s\S]*?: "smooth"/,
+  );
+  assert.match(
+    dashboard,
+    /target\?\.scrollIntoView\(\{ behavior, block: "start" \}\)[\s\S]*?target\?\.focus\(\{ preventScroll: true \}\)/,
+  );
+  assert.equal(
+    (dashboard.match(/ref=\{activeStepRef\}[\s\S]{0,100}tabIndex=\{-1\}/g) || [])
+      .length,
+    5,
+  );
+});
+
 test("advisor intake supports multiple goals, tenure, budget and detailed home facts", () => {
   assert.match(dashboard, /Do you own or rent this home\?/);
   assert.match(dashboard, /Strata or common-property approval/);
