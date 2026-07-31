@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 30 July 2026
+Last reconciled: 31 July 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -511,7 +511,37 @@ Remove the false installer-request conflict and let customers add the several ph
 - Signed-in production inspection loads the quote-preparation photo cards, privacy review and active one-step request modal. Customer-account and customer-project reads return `200` and the recent Worker error-only query returns zero events.
 - No working-demo profile, project, photo or installer request is changed during release verification.
 
-All listed acceptance gates are met. Version 233 is the current executable source; version 232 remains historical release evidence.
+All listed acceptance gates are met. Version 233 is the exact executable source for this milestone and now remains historical release evidence after version 234 superseded it.
+
+## Released milestone: CUSTOMER-INSTALLER-SUBMIT-17
+
+Release status: application commit `7d7a821123d9b70cace08ac632d58ca1d3851b1b` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 234 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_06f96686a8dc8191a0e01c2555c2de1b` and deployment `appgdep_6a6bf3695b6081918ce2a9dd77bc3869` report the exact commit and environment revision 19.
+
+### Outcome
+
+Make the installer-response modal the single source of truth. The contact details confirmed in that modal now save in the same guarded server transaction that submits the project, creates the installer opportunity and records consent. A customer no longer encounters a false missing-address error after the contact data has already saved.
+
+### In scope
+
+- Send phone, street, unit and suburb with the project submission instead of performing a separate profile PATCH.
+- Validate modal contact at the server boundary and derive postcode and state from the owner-scoped project.
+- Persist contact, transition the draft, create the opportunity and record consent in one guarded D1 batch.
+- Preserve project revision protection while removing the obsolete client-side profile revision conflict and retry loop.
+- Treat matching and quote-review replays as idempotent contact updates without duplicate opportunity or consent rows.
+- Normalise both raw D1 snake-case and API camel-case address projections at the shared readiness boundary.
+- Reject genuinely terminal project states instead of returning a false success.
+
+### Acceptance gates
+
+- Screenshot-equivalent valid contact details submit from the modal without a profile-precondition message or another customer step.
+- A stale project revision fails before contact or project state can be partially changed.
+- Matching and quote-review replays do not duplicate installer opportunities or customer consent.
+- Focused authoritative-submit regressions pass 50 of 50. The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, 915 total tests with 913 passed and 2 intentionally skipped, all 87 migrations through `0086_customer_evidence_multi_photo_prompts.sql`, the tagged-PDF audit, Vinext build and Sites server-bundle audit.
+- GitHub `main`, the working branch, Sites managed source, saved-version provenance and public deployment all resolve to application commit `7d7a821123d9b70cace08ac632d58ca1d3851b1b`.
+- The local archive is 7,086,533 bytes with SHA-256 `22DE94F3E9B22493FF79ED9DC70FF62F6D8B7259DC02AEB93E33B28445EEF2C3`; Sites reports 312 stored files, 27,770,880 bytes and content hash `sha256:3ffeb4fb493c6426cb78aceb8792de7e2e65830181d410c23d53ea9a8a87cc9f`.
+- Signed-in production verification submits working-demo project `154aee4d-3648-4c7c-b393-c6715c518b24`: request `a238af3e5f81164e` returns HTTP `200`, the dialog reports `Request sent`, the overview reports `Installer matching`, and the recent Worker error-only query returns zero events.
+
+All listed acceptance gates are met. Version 234 is the current executable source; version 233 remains historical release evidence.
 
 ## Forward phases
 
