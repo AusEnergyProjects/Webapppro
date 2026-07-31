@@ -614,6 +614,40 @@ Make one customer confirmation complete the installer handoff without a 50-secon
 
 The executable and deployment gates are met. Live signed-in complete-plan and complete-photo presentation, measured production submit duration, and operations and business inbox receipt remain bounded acceptance checks until verified with the existing working-demo sessions. They are not inferred from provider configuration.
 
+## Released milestone: CUSTOMER-QUOTE-COMMS-20
+
+Release status: application commit `35552796048df63c03409d03401d33a47f326434` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly at `https://compare.ausenergyassessments.com` as Sites version 238. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_c9b4dbcee8408191a3fdce1aaef5548d`, deployment `appgdep_6a6c5f96df388191a5e68ffd53fb68b0` and environment revision 19 report the exact application commit.
+
+### Outcome
+
+Make each quote transition obvious without requiring either party to remember to revisit the platform: notify the customer when an installer submits a quote, keep every current and historical project quote in one top-level quote centre, and notify the verified trade by both email and the signed-in Work updates queue when the customer accepts and releases contact details.
+
+### In scope
+
+- Add a top-level customer Quotes destination, an action-only waiting count, an overview alert, quote-aware project actions and deep links that focus the project quote section.
+- Keep reviewing, shortlisted, accepted and declined project quotes findable in the quote centre, with the retained direct-service quote tool clearly separated below them.
+- Send the customer a privacy-safe account email after a structured installer quote is committed, linking directly to the signed-in quote centre.
+- Send the accepted installer a privacy-safe email and one Work updates item after customer acceptance, stating that contact details are available only inside the signed-in exact lead and prompting the trade to call, email and schedule the next step.
+- Validate one exact opportunity match, fetch it through the installer-owned route, clear stale lead filters, focus the matching lead card and keep customer identity out of the notification payload.
+- Add durable activity events, delivery attempts and provider callback history with frozen retry payloads, bounded retry, current consent and recipient rechecks, suppression handling and monotonic Resend callback state.
+- Give each intentional quote submission a stable request identity and monotonic revision, preserve one authoritative submitted version across retries and reject stale concurrent writes without duplicating the customer email.
+- Make customer acceptance immutable and idempotent so repeated confirmation cannot duplicate the installer email or Work update.
+- Move keyboard focus into the Work updates dialog when it opens, restore focus to the bell for ordinary close actions and remove the full-screen dismiss surface from keyboard order.
+
+### Acceptance gates
+
+- Quote state and its corresponding durable activity event commit together before either provider email is attempted; provider work runs outside the customer or trade request and retains the minute drain as recovery.
+- Customer and installer recipient readiness, consent, active access, exact contact release and suppression state are rechecked immediately before sending.
+- Retry and callback tests prove one request identity survives retries, stale writes cannot replace a newer quote, delivery payloads remain immutable, terminal provider states are monotonic and replayed callbacks do not duplicate effects.
+- The focused customer quote, notification and delivery suites pass 26 of 26 tests, and the ordered Resend callback suite passes 7 of 7.
+- The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, 973 total tests with 971 passed, 2 intentionally skipped and 0 failed, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the tagged-PDF audit, Vinext build and Sites server-bundle audit.
+- Signed-in Chrome verification on the public custom domain confirms the top-level customer Quotes centre, its accepted quote card, and the trade Work updates bell, dialog and accepted event. Focused automated tests cover project-section focus and exact accepted-lead targeting.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `35552796048df63c03409d03401d33a47f326434`.
+- The local archive `aea-sites-3555279.tar.gz` is 7,110,732 bytes with SHA-256 `387A5D0FC4A5BF74DB78964348EC3577457818FBC9BC35F86BCFF1C04F83B616`; Sites reports 321 stored files, 27,965,440 bytes and content hash `sha256:291666539b26173a276dc09c76bbba6e94955b434d6ab5f524b850e5cda6ad52`.
+- Sites version 238 deploys successfully with environment revision 19 at `https://compare.ausenergyassessments.com`.
+
+The executable, deployment and signed-in workflow gates are met. Production customer and trade inbox delivery remains unverified; durable queue state, provider acceptance and callback handling do not prove final inbox receipt.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -713,11 +747,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Opportunity delivery health and bounded retry console:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
-2. **Customer installer-safe projection preview and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur and redaction controls, and keep a resumable upload queue across reloads.
-3. **Installer structured request-for-information and quote-readiness loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
-4. **Administrator matching SLA, dispatch exception queue and notification observability:** surface delayed allocation or delivery work with bounded owner-only recovery actions and no generic database mutation.
-5. **Outlook, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** verify report and enquiry rendering plus keyboard and screen-reader workflows, then measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data.
+1. **Accepted quote follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
+2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
+3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
+4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
+5. **Administrator communication SLA, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, acceptance, contact and scheduling outcomes without exposing household content.
 
 ## Global stop conditions
 

@@ -4,32 +4,101 @@ Status: released implementation milestone
 
 Prepared: 31 July 2026
 
-Milestone ID: `CUSTOMER-INSTALLER-HANDOFF-19`
+Milestone ID: `CUSTOMER-QUOTE-COMMS-20`
 
-Implementation baseline: `86b6862e0d87af17fd3267177e24f632946efd57`
+Released application commit: `35552796048df63c03409d03401d33a47f326434`
 
-Released application for this milestone: Sites version 236 from application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb`
+Released application for this milestone: Sites version 238 from application commit `35552796048df63c03409d03401d33a47f326434`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
 Production URL: `https://compare.ausenergyassessments.com`
 
+Production access: public custom domain
+
 The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. The household and experienced-assessor pilot remains deliberately deferred while the five next product steps recorded below are completed.
 
 ## Current milestone outcome
+
+Complete the quote communication loop without requiring either party to remember to revisit the platform. A submitted installer quote now creates a durable customer email with a direct signed-in route to the top-level Quotes centre. Customer acceptance creates a durable trade email and a Work updates bell item that opens the exact accepted opportunity, where the released customer contact details and next action are available.
+
+The customer no longer has to open each project and scroll to find quote options. Quotes are available from the account's top-level `Quotes` navigation and `/account/quotes`, with each option linking to the exact project quote section.
+
+## Customer and trade outcomes
+
+- A customer receives the bounded `Your installer quote is ready to review` email after an installer submits a structured platform quote. Its action opens `https://compare.ausenergyassessments.com/account/quotes`.
+- The top-level Quotes centre collects quotes awaiting review across projects and links each quote to `/account/projects/{projectId}#structured-quote-options`.
+- Accepting one quote releases contact details only to that exact installer match and sends the bounded `Your customer accepted the quote` email. The action opens `https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=leads&matchId={opportunityMatchId}#opportunity-inbox`.
+- The installer Work updates bell shows `Quote accepted, contact the customer`, targets the exact `opportunity_match_id`, and opens that same accepted lead rather than a generic dashboard.
+- Customer emails can name the verified installer business, but trade emails and bell summaries do not contain customer name, phone, email, street address, private project text or household evidence.
+
+## Integrity and communication design
+
+- Quote submission uses one client request identity across retries. Migration `0090_customer_project_quote_submission_ledger.sql` records the request, quote revision and activity event atomically, so a replay returns the authoritative quote instead of submitting a duplicate.
+- Migration `0091_customer_project_quote_acceptance_claims.sql` provides one project-level acceptance claim. A sequential or concurrent competing acceptance cannot replace the winner, stale A/B writes cannot separate the accepted quote from its exact contact release, and replaying the winning acceptance remains safe.
+- Activity event and delivery identities are deterministic and audience bound. Dispatch rechecks the active account, current consent, exact customer or installer recipient, current active contact release and provider suppression before sending.
+- Authenticated Resend callbacks retain replay protection and monotonic terminal states. A recognised callback that arrives before its provider message binding is visible returns retryable HTTP `503` with `Retry-After: 5`; malformed or unsupported events remain safely ignored.
+- Provider delivery does not form part of the quote-write transaction. Durable queued activity is the source of truth, immediate Worker dispatch is the fast path, and the scheduled Worker remains the bounded recovery path.
+
+## Acceptance and release evidence
+
+- Exact application commit `35552796048df63c03409d03401d33a47f326434` passed the complete release gate.
+- The focused quote communication and discovery set passed 26 of 26 tests. The focused Resend callback ordering and early-binding set passed 7 of 7 tests.
+- `npm.cmd run validate` passed, including 31 of 31 integration tests and 973 total tests: 971 passed, 2 intentionally skipped and 0 failed.
+- Type checking, warning-free lint, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the Vinext production build, Sites server-bundle audit and customer-plan PDF audit passed. `git diff --check` passed.
+- GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
+- Local archive `aea-sites-3555279.tar.gz` is 7,110,732 bytes with SHA-256 `387A5D0FC4A5BF74DB78964348EC3577457818FBC9BC35F86BCFF1C04F83B616`.
+- Sites stored 321 files, 27,965,440 bytes with content hash `sha256:291666539b26173a276dc09c76bbba6e94955b434d6ab5f524b850e5cda6ad52`.
+- Signed-in Chrome production verification confirmed the customer top-level Quotes entry, accepted quote presentation and exact project quote link, plus the installer Work updates bell, dialog and accepted event. Focused automated tests cover the exact accepted-opportunity deep link.
+- Release QA performed no new demo mutation.
+
+## Released implementation state
+
+- GitHub branch: `codex/sites-custom-domain-migration`
+- Current executable application commit: `35552796048df63c03409d03401d33a47f326434`
+- Sites application version: 238
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_c9b4dbcee8408191a3fdce1aaef5548d`
+- Sites production deployment: `appgdep_6a6c5f96df388191a5e68ffd53fb68b0`
+- Production URL: `https://compare.ausenergyassessments.com`
+- Sites access: public custom domain
+- Sites environment revision: 19
+- D1 migration count: 92, through `0091`
+- Immutable audit changes: none
+- Working-demo data changed during release verification: none
+
+## Known release risk
+
+The application, delivery ledger, consent checks, callback authentication path, retry behavior and signed-in destinations passed automated and production presentation checks. Production Resend sender approval, authenticated webhook receipt and actual customer or trade inbox delivery were not verified. Provider configuration or an accepted API response alone is not inbox-delivery proof.
+
+## Stop conditions
+
+Stop the affected path when:
+
+- a quote notification or Work update could expose customer identity, contact details, private household content or arbitrary project text;
+- a retry or replay could create a second quote, choose a second accepted installer or release contact details to a different match;
+- a callback could acknowledge a recognised delivery event before its local provider binding exists;
+- delivery eligibility cannot recheck current consent, account status, contact-release state and suppression;
+- a notification cannot open the exact authorised quote or opportunity;
+- live verification would send to an unapproved recipient or mutate new demo data;
+- the release source, archive, saved version and public deployment cannot be reconciled; or
+- a change would alter the immutable dated audit.
+
+## Prior released milestone: `CUSTOMER-INSTALLER-HANDOFF-19`
+
+### Outcome
 
 Make one customer confirmation complete the installer handoff quickly and visibly: save the private request, share the complete privacy-safe plan plus every customer-uploaded photo with each exact allocated installer, and send durable email alerts to both operations and the allocated businesses.
 
 The request must not look frozen while background matching and delivery continue. The customer-facing response must finish after the authoritative request and durable follow-up work are recorded, not after external email providers, administrator webhooks or installer allocation have completed.
 
-## Owning workflow and expected files
+### Owning workflow and expected files
 
 - Customer request and durable follow-up: `src/app/api/customer-projects/route.ts`, opportunity allocation helpers, notification delivery helpers, `worker/index.ts` and an additive D1 migration if required.
 - Evidence and full plan delivery: `src/app/api/customer-project-evidence/route.ts`, `src/app/api/trade-opportunities/route.ts`, the authoritative customer-plan document and PDF projection, and installer Leads UI.
 - Customer progress feedback: the saved-project advisor component and its feature-local styles.
 - Tests: focused customer-submit, evidence authorization, plan projection, admin delivery, business delivery, worker and UI contracts.
 
-## In scope
+### In scope
 
 - Treat the final confirmed installer request as explicit consent to share every active photo uploaded to that project with exact allocated installers while the match remains active. Uploaded PDFs and other documents retain their separate explicit sharing choice because their contents cannot be automatically privacy-filtered.
 - Reconcile older matching demo projects through the same project-level request consent without manufacturing synthetic production rows.
@@ -42,7 +111,7 @@ The request must not look frozen while background matching and delivery continue
 - Show immediate, accessible progress feedback with clear stages, elapsed-time reassurance and a success transition.
 - Measure and record the production request duration with a dedicated working-demo fixture only when the live test can avoid real customer or business impact.
 
-## Out of scope
+### Out of scope
 
 - Releasing customer identity, exact address, contact details, private notes, room names, routines, permission notes, adviser identity or meter data before separate direct-contact approval.
 - Changing reviewed-ABN access or the exact allocated-installer authorization boundary.
@@ -50,7 +119,7 @@ The request must not look frozen while background matching and delivery continue
 - Broad CRM redesign, unrestricted messaging, quoting automation or pilot execution.
 - Netlify deployment or changes to the immutable dated audit.
 
-## Acceptance criteria
+### Acceptance criteria
 
 - Submission returns without awaiting installer allocation, the administrator webhook, Resend or another external provider. Automated timing contracts prove those slow dependencies cannot extend the customer response.
 - The confirmation button changes immediately to an accessible multi-stage progress state. A request taking longer than eight seconds explains that it is still working, and success or failure appears inside the same dialog.
@@ -61,7 +130,7 @@ The request must not look frozen while background matching and delivery continue
 - Desktop, mobile, keyboard and assistive-status behavior pass focused UI checks.
 - The exact application commit passes `npm.cmd run validate`, `npm.cmd run build`, migration replay, Sites bundle audit, `git diff --check`, GitHub reconciliation, Sites save and production deployment.
 
-## Smallest validation set
+### Smallest validation set
 
 - Focused evidence, full-plan, notification, allocation, timing and modal-progress tests during implementation.
 - Fresh SQLite and Cloudflare D1 migration replay for every additive migration.
@@ -69,7 +138,7 @@ The request must not look frozen while background matching and delivery continue
 - Signed-in production verification of the request dialog and the allocated installer Leads view when a safe working-demo fixture is available.
 - Provider delivery ledger and worker error inspection without exposing recipient addresses or message content.
 
-## Current acceptance and release evidence
+### Acceptance and release evidence
 
 - Exact application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb` records the authoritative customer request and durable operations, allocation and business-email work before returning HTTP `202`.
 - The customer response does not await Resend, the administrator webhook or installer allocation. Immediate Worker draining uses `waitUntil`, and the scheduled Worker retains the recovery path.
@@ -83,7 +152,7 @@ The request must not look frozen while background matching and delivery continue
 - Sites stored 318 files, 27,873,280 bytes with content hash `sha256:6c489fbaa560f2df5dc6cb9d807d1ae7c1d7b7a752632909bc45bc1f71a9c090`.
 - Sites version 236 is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_82454487760c8191b1f5338538b8fcb8` and deployed as `appgdep_6a6c3b56a1b881919e82e97eaa286bc4` with environment revision 19.
 
-## Released implementation state
+### Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
 - Current executable application commit: `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb`
@@ -96,11 +165,11 @@ The request must not look frozen while background matching and delivery continue
 - Immutable audit changes: none
 - Working-demo data changed during release verification: none before the bounded signed-in acceptance check
 
-## Known release risk
+### Known release risk
 
 Automated privacy, authorization, idempotency, retry, progress, full-plan and complete-evidence contracts pass. Live provider inbox receipt and signed-in production presentation remain acceptance checks until they are exercised with the existing working-demo data. Provider configuration alone is not delivery proof.
 
-## Stop conditions
+### Stop conditions
 
 Stop this milestone when:
 
@@ -615,8 +684,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Opportunity delivery health and bounded retry console:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
-2. **Customer installer-safe projection preview and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur and redaction controls, and keep a resumable upload queue across reloads.
-3. **Installer structured request-for-information and quote-readiness loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
-4. **Administrator matching SLA, dispatch exception queue and notification observability:** surface delayed allocation or delivery work with bounded owner-only recovery actions and no generic database mutation.
-5. **Outlook, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** verify report and enquiry rendering plus keyboard and screen-reader workflows, then measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data.
+1. **Accepted quote follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
+2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
+3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
+4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
+5. **Administrator communication SLA, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, acceptance, contact and scheduling outcomes without exposing household content.
