@@ -577,6 +577,43 @@ Give an allocated, approved installer enough privacy-safe information to underst
 
 The executable and deployment gates are met. No new working-demo match was created after version 235, so live provider delivery, the reduced submit duration and the signed-in Leads photo presentation remain explicitly unverified in production. The pre-release working-demo lead is not backfilled; the notification trigger applies to new matches only.
 
+## Released milestone: CUSTOMER-INSTALLER-HANDOFF-19
+
+Release status: application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 236 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_82454487760c8191b1f5338538b8fcb8` and deployment `appgdep_6a6c3b56a1b881919e82e97eaa286bc4` report the exact commit and environment revision 19.
+
+### Outcome
+
+Make one customer confirmation complete the installer handoff without a 50-second provider wait: record durable follow-up work, share the complete privacy-safe plan plus every active customer-uploaded photo with exact allocated installers, send operations and business alerts automatically, and show staged progress throughout the request.
+
+### In scope
+
+- Add `0088_customer_opportunity_dispatch_jobs.sql` as the durable outbox for allocation, operations-alert and business-alert work.
+- Return compact HTTP `202` after the authoritative request transaction records its durable job.
+- Drain immediately outside the response and retain scheduled bounded retries as recovery.
+- Keep provider delivery idempotent, revalidate recipients and exact allocations, and preserve completed or actively processing work on resubmit.
+- Treat final installer-request consent as explicit sharing of every active project image present at that request boundary.
+- Keep arbitrary PDFs and documents private unless the customer separately approved them for installer sharing.
+- Replace the first-three-step extract with the complete ordered privacy-safe plan, protected preview and protected PDF.
+- Render every authorised evidence card with concurrent image loading, partial-success preservation and a protected download fallback.
+- Clear protected plan and photo state across installer identity changes and revoke object URLs.
+- Show accessible checking, save, upload percentage and dispatch phases, with eight-second and 25-second reassurance.
+
+### Acceptance gates
+
+- Customer submission does not await Resend, the administrator webhook or installer allocation.
+- Every active request-bound project image is available to each exact eligible allocation and every prohibited installer receives a denial.
+- The complete plan and PDF exclude identity, exact location, contact details, private notes, routines, permission notes, adviser identity, customer-written arbitrary items, evidence filenames and meter data.
+- One durable operations alert and one business alert per exact eligible allocation are queued automatically and cannot be duplicated by repeated requests.
+- Protected trade state cannot survive sign-out or installer UID change.
+- Backend-focused dispatch, timing, notification and property-arrival tests pass 32 of 32.
+- The complete non-release-integrity suite passes 941 tests with 939 passed, 2 intentionally skipped and 0 failed.
+- Type checking, warning-free lint, all 89 migrations through `0088_customer_opportunity_dispatch_jobs.sql`, tagged-PDF audit, Vinext build, Sites bundle audit and `git diff --check` pass.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb`.
+- The local archive is 7,107,950 bytes with SHA-256 `D32307C4B0FABF955FB4CF878CBD31290F053E06BA3CA67A92DBFBED6FD262E4`; Sites reports 318 stored files, 27,873,280 bytes and content hash `sha256:6c489fbaa560f2df5dc6cb9d807d1ae7c1d7b7a752632909bc45bc1f71a9c090`.
+- Sites deployment succeeds with environment revision 19.
+
+The executable and deployment gates are met. Live signed-in complete-plan and complete-photo presentation, measured production submit duration, and operations and business inbox receipt remain bounded acceptance checks until verified with the existing working-demo sessions. They are not inferred from provider configuration.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -676,11 +713,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Opportunity email delivery health and bounded retries:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
-2. **Customer share-before-submit review and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur or redaction controls, and keep a resumable upload queue across reloads.
-3. **Installer quote-readiness and request-for-information loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
-4. **Outlook desktop and assistive-technology acceptance:** verify customer reports and opportunity emails in Outlook desktop's Word renderer and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
-5. **Privacy-safe funnel telemetry, then deferred pilot:** measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data, then run the pilot only when the product owner resumes it.
+1. **Opportunity delivery health and bounded retry console:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
+2. **Customer installer-safe projection preview and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur and redaction controls, and keep a resumable upload queue across reloads.
+3. **Installer structured request-for-information and quote-readiness loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
+4. **Administrator matching SLA, dispatch exception queue and notification observability:** surface delayed allocation or delivery work with bounded owner-only recovery actions and no generic database mutation.
+5. **Outlook, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** verify report and enquiry rendering plus keyboard and screen-reader workflows, then measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data.
 
 ## Global stop conditions
 

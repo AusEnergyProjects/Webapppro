@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 31 July 2026
 
-Milestone ID: `INSTALLER-ENQUIRY-PACK-18`
+Milestone ID: `CUSTOMER-INSTALLER-HANDOFF-19`
 
-Implementation baseline: `2b7805d193cfa6ec04858caee0a6715d36fe0b1d`
+Implementation baseline: `86b6862e0d87af17fd3267177e24f632946efd57`
 
-Released application for this milestone: Sites version 235 from application commit `eeba3679c30789cfe2e633a913a18492270fcc3e`
+Released application for this milestone: Sites version 236 from application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -18,54 +18,107 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Turn each newly allocated installer lead into a useful privacy-safe enquiry pack, expose only customer-approved evidence to the exact approved business, notify that business automatically and remove unrelated notification latency from the customer's final submit.
+Make one customer confirmation complete the installer handoff quickly and visibly: save the private request, share the complete privacy-safe plan plus every customer-uploaded photo with each exact allocated installer, and send durable email alerts to both operations and the allocated businesses.
 
-Application commit `eeba3679c30789cfe2e633a913a18492270fcc3e` keeps one recommendation source by deriving the installer pack from the authoritative customer-plan document. It adds durable exactly-once opportunity notification delivery and moves provider work out of the customer request.
+The request must not look frozen while background matching and delivery continue. The customer-facing response must finish after the authoritative request and durable follow-up work are recorded, not after external email providers, administrator webhooks or installer allocation have completed.
 
-## Current user outcomes
+## Owning workflow and expected files
 
-- A customer request no longer waits for the independent administrator webhook or for the business-email provider.
-- The allocated installer sees goals, the plan boundary, controlled home context, quote readiness and the first three ordered roadmap steps near the top of the lead.
-- The lead shows how many approved files are available. Selecting `Show approved photos` loads only that lead's authorised images; PDFs require a deliberate protected download.
-- New matches enqueue one automatic business email with a direct signed-in Leads link.
-- Email and matching views remain useful without exposing customer identity, contact details, exact location, private text or meter data.
+- Customer request and durable follow-up: `src/app/api/customer-projects/route.ts`, opportunity allocation helpers, notification delivery helpers, `worker/index.ts` and an additive D1 migration if required.
+- Evidence and full plan delivery: `src/app/api/customer-project-evidence/route.ts`, `src/app/api/trade-opportunities/route.ts`, the authoritative customer-plan document and PDF projection, and installer Leads UI.
+- Customer progress feedback: the saved-project advisor component and its feature-local styles.
+- Tests: focused customer-submit, evidence authorization, plan projection, admin delivery, business delivery, worker and UI contracts.
 
-## Current scope and boundaries
+## In scope
 
-- Reviewed-ABN access, installer entitlement, exact allocation, active opportunity status and current evidence-sharing consent remain authoritative gates.
-- Customer identity, contact, exact location, project and account identifiers, private notes, room names and routines, permission notes, adviser identity and review text, arbitrary customer plan items, evidence filenames and meter data remain withheld during matching.
-- Provider delivery cannot create or expand an allocation. A send is skipped when the installer, consent, opportunity, match, recipient or suppression state is no longer eligible.
-- The release does not backfill or email historical matches. It applies to new matches created after migration `0087_trade_opportunity_notifications.sql`.
-- No real or working-demo profile, project, evidence, allocation or notification was created or changed during this release verification.
+- Treat the final confirmed installer request as explicit consent to share every active photo uploaded to that project with exact allocated installers while the match remains active. Uploaded PDFs and other documents retain their separate explicit sharing choice because their contents cannot be automatically privacy-filtered.
+- Reconcile older matching demo projects through the same project-level request consent without manufacturing synthetic production rows.
+- Present every shared photo in the lead and provide a protected download for every shared document.
+- Present the complete ordered privacy-safe customer plan in the lead and provide its complete installer-safe PDF, not a three-step extract.
+- Record durable allocation, operations-email and business-email work before returning success.
+- Drain newly recorded work immediately outside the customer response and retain the scheduled worker as the recovery path.
+- Send an operations email for every new customer installer request and one business email for each new eligible allocation.
+- Keep provider idempotency, bounded retry, bounce and complaint suppression, delivery events and recipient revalidation.
+- Show immediate, accessible progress feedback with clear stages, elapsed-time reassurance and a success transition.
+- Measure and record the production request duration with a dedicated working-demo fixture only when the live test can avoid real customer or business impact.
+
+## Out of scope
+
+- Releasing customer identity, exact address, contact details, private notes, room names, routines, permission notes, adviser identity or meter data before separate direct-contact approval.
+- Changing reviewed-ABN access or the exact allocated-installer authorization boundary.
+- Creating real customer, trade, wholesaler or administrator accounts.
+- Broad CRM redesign, unrestricted messaging, quoting automation or pilot execution.
+- Netlify deployment or changes to the immutable dated audit.
+
+## Acceptance criteria
+
+- Submission returns without awaiting installer allocation, the administrator webhook, Resend or another external provider. Automated timing contracts prove those slow dependencies cannot extend the customer response.
+- The confirmation button changes immediately to an accessible multi-stage progress state. A request taking longer than eight seconds explains that it is still working, and success or failure appears inside the same dialog.
+- Every active customer-uploaded photo is counted and available to each exact eligible allocation after submission. Documents already explicitly approved for installer sharing remain available, while private documents remain owner-only. Authorization tests deny unrelated, expired, inactive, unreviewed and unallocated installers.
+- The installer receives the complete canonical privacy-safe plan in order, including every controlled roadmap step, plus a protected full-plan PDF.
+- The plan and evidence projection excludes identity, exact location, contact, private notes, room names and routines, permission notes, adviser identity and review text, customer-written arbitrary items, original evidence filenames and meter data.
+- A durable operations email and durable business email are queued automatically after submission. Immediate background draining and scheduled recovery are both covered, provider failures remain observable, and duplicate requests cannot duplicate deliveries.
+- Desktop, mobile, keyboard and assistive-status behavior pass focused UI checks.
+- The exact application commit passes `npm.cmd run validate`, `npm.cmd run build`, migration replay, Sites bundle audit, `git diff --check`, GitHub reconciliation, Sites save and production deployment.
+
+## Smallest validation set
+
+- Focused evidence, full-plan, notification, allocation, timing and modal-progress tests during implementation.
+- Fresh SQLite and Cloudflare D1 migration replay for every additive migration.
+- Complete `npm.cmd run validate`, explicit `npm.cmd run build` and `git diff --check`.
+- Signed-in production verification of the request dialog and the allocated installer Leads view when a safe working-demo fixture is available.
+- Provider delivery ledger and worker error inspection without exposing recipient addresses or message content.
 
 ## Current acceptance and release evidence
 
-- Focused notification, enquiry-pack, submit-performance and related contact or cron regressions pass.
-- Exact application commit `eeba3679c30789cfe2e633a913a18492270fcc3e` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 931 total tests with 929 passed and 2 intentionally skipped, all 88 migrations through `0087_trade_opportunity_notifications.sql`, the tagged-PDF audit, Vinext production build and Sites server-bundle audit.
-- `git diff --check` passes. GitHub `main`, branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
-- Local archive `aea-sites-eeba367.tar.gz` is 7,098,588 bytes with SHA-256 `326DD4224505C9364A8D2852877D4037C397422788F97394B00A0EA9D80D48F1`.
-- Sites stored 313 files, 27,822,080 bytes with content hash `sha256:7eea5f36d7a31df1213c163a8d0f836b6f02dd18e3bdc6a60cc5cc5831b24121`.
-- Sites version 235 is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584` and deployed as `appgdep_6a6c0908063081919b2e985a27141e34` with environment revision 19.
-- Required Resend configuration names are present in Sites. The post-deployment Worker error-only query returns zero events.
+- Exact application commit `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb` records the authoritative customer request and durable operations, allocation and business-email work before returning HTTP `202`.
+- The customer response does not await Resend, the administrator webhook or installer allocation. Immediate Worker draining uses `waitUntil`, and the scheduled Worker retains the recovery path.
+- Explicit installer-request consent promotes every active project image that existed at the request boundary. Arbitrary PDFs and other documents retain their separate explicit sharing choice.
+- The allocated reviewed installer receives every authorised evidence card plus the complete ordered privacy-safe plan, protected preview and protected PDF. Identity, exact location, contact, private notes, routines, permission notes, adviser identity, customer-written arbitrary items, filenames and meter data remain excluded.
+- The dialog reports checking, plan save, per-photo upload progress and request dispatch. It adds reassurance after eight seconds, a longer-delay message after 25 seconds, blocks duplicate close or resubmit while busy, and preserves partial upload success.
+- Backend-focused dispatch, timing, notification and property-arrival tests pass 32 of 32. The complete non-release-integrity suite passes 941 tests: 939 passed, 2 intentionally skipped and 0 failed.
+- Type checking, warning-free lint, all 89 migrations through `0088_customer_opportunity_dispatch_jobs.sql`, the tagged-PDF audit, Vinext production build and Sites server-bundle audit pass. `git diff --check` passes.
+- GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
+- Local archive `aea-sites-059f2ff.tar.gz` is 7,107,950 bytes with SHA-256 `D32307C4B0FABF955FB4CF878CBD31290F053E06BA3CA67A92DBFBED6FD262E4`.
+- Sites stored 318 files, 27,873,280 bytes with content hash `sha256:6c489fbaa560f2df5dc6cb9d807d1ae7c1d7b7a752632909bc45bc1f71a9c090`.
+- Sites version 236 is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_82454487760c8191b1f5338538b8fcb8` and deployed as `appgdep_6a6c3b56a1b881919e82e97eaa286bc4` with environment revision 19.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Current executable application commit: `eeba3679c30789cfe2e633a913a18492270fcc3e`
-- Sites application version: 235
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584`
-- Sites production deployment: `appgdep_6a6c0908063081919b2e985a27141e34`
+- Current executable application commit: `059f2ff8d3885b3453dd38d7dee8e660fd05c4fb`
+- Sites application version: 236
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_82454487760c8191b1f5338538b8fcb8`
+- Sites production deployment: `appgdep_6a6c3b56a1b881919e82e97eaa286bc4`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites environment revision: 19
-- D1 migration count: 88
+- D1 migration count: 89
 - Immutable audit changes: none
-- Working-demo data changed during live verification: none
+- Working-demo data changed during release verification: none before the bounded signed-in acceptance check
 
 ## Known release risk
 
-No new match was created after version 235, so a live Resend delivery and the reduced production submit duration were not measured. The existing pre-release working-demo lead is intentionally not backfilled. The signed-in Chrome tab could not be claimed reliably during final visual QA; the in-app browser reached the expected signed-out gate. Automated privacy, UI, API, migration and delivery contracts pass, but the live signed-in Leads pack and photo presentation remain an explicit acceptance follow-up.
+Automated privacy, authorization, idempotency, retry, progress, full-plan and complete-evidence contracts pass. Live provider inbox receipt and signed-in production presentation remain acceptance checks until they are exercised with the existing working-demo data. Provider configuration alone is not delivery proof.
 
-The last recorded exact production-only `npm audit --omit=dev` result reports six existing advisories: one low and five high. Dependency remediation remains a separate bounded patch with the complete validation and live-release gates.
+## Stop conditions
+
+Stop this milestone when:
+
+- the complete plan or evidence cannot be shared without exposing a prohibited private field;
+- a background task cannot be made durable before the customer response;
+- the requested email needs a new paid provider, account or unapproved recipient;
+- an authorization, tenant or reviewed-ABN test fails;
+- a migration would need to rewrite shared history or populate synthetic accounts;
+- live testing would affect a real customer, trade or administrator; or
+- the release source, archive, saved version and production deployment cannot be reconciled.
+
+## Prior released milestone: `INSTALLER-ENQUIRY-PACK-18`
+
+### Outcome
+
+Application commit `eeba3679c30789cfe2e633a913a18492270fcc3e` established the bounded privacy-safe enquiry pack, consent-gated evidence presentation, exact-allocation evidence authorization, direct Leads notification link and durable business-notification ledger through `0087_trade_opportunity_notifications.sql`. It passed its complete release gate and was deployed as historical Sites version 235 through `appgdep_6a6c0908063081919b2e985a27141e34`.
+
+Those enquiry-pack, protected-evidence and notification-ledger contracts remain active underneath version 236. Milestone 19 supersedes only the first-three-step presentation, partial image-sharing behavior and request-latency boundary.
 
 ## Prior released milestone: `CUSTOMER-INSTALLER-SUBMIT-17`
 
@@ -73,7 +126,7 @@ The last recorded exact production-only `npm audit --omit=dev` result reports si
 
 Make the final installer-response confirmation one authoritative action. Exact application commit `7d7a821123d9b70cace08ac632d58ca1d3851b1b` passed the complete release gate and was deployed as historical Sites version 234 through `appgdep_6a6bf3695b6081918ce2a9dd77bc3869`. Documentation checkpoint `2b7805d193cfa6ec04858caee0a6715d36fe0b1d` recorded that release before version 235 superseded it.
 
-Those single-transaction contact, project-transition, consent and opportunity-creation contracts remain active underneath version 235.
+Those single-transaction contact, project-transition, consent and opportunity-creation contracts remain active underneath version 236.
 
 ## Prior released milestone: `CUSTOMER-INSTALLER-PHOTOS-16`
 
@@ -81,7 +134,7 @@ Those single-transaction contact, project-transition, consent and opportunity-cr
 
 Remove trigger-amplified false conflicts and let each guided photo prompt hold several independent photos. Exact application commit `5acc4ccf37acd608dc437d3a074410b1d840f706` passed the complete release gate and was deployed as historical Sites version 233 through `appgdep_6a6be56ca9ac8191918423bd57f0a05d`. Documentation checkpoint `a0a438271b03936e3972383e5586c2a12caa51aa` recorded that release before version 234 superseded it.
 
-Those multi-photo, private-evidence, trigger-safe change-count and per-photo control contracts remain active underneath version 235.
+Those multi-photo, private-evidence, trigger-safe change-count and per-photo control contracts remain active underneath version 236.
 
 ## Prior released milestone: `CUSTOMER-PLAN-DURABILITY-15`
 
@@ -214,23 +267,23 @@ The last recorded exact production-only `npm audit --omit=dev` result reports si
 
 ## Prior released milestone: `CUSTOMER-INSTALLER-REQUEST-14`
 
-The prior release established explicit completed-stage styling and the focused private installer-request dialog with protected recovery. Its exact application commit was `2607cc53f2e4c79546701e29d3d182fde4670952`, deployed as Sites version 230 through deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`. Documentation baseline `8a3a38c2e68de30f77720be0800acf6119fb32f0` recorded that checkpoint. Those contracts remain active underneath version 235.
+The prior release established explicit completed-stage styling and the focused private installer-request dialog with protected recovery. Its exact application commit was `2607cc53f2e4c79546701e29d3d182fde4670952`, deployed as Sites version 230 through deployment `appgdep_6a6b5469c8bc81919f0e2c9ef22da602`. Documentation baseline `8a3a38c2e68de30f77720be0800acf6119fb32f0` recorded that checkpoint. Those contracts remain active underneath version 236.
 
 ## Prior released milestone: `CUSTOMER-ROADMAP-CONTEXT-13`
 
-The prior release established the authoritative pre-roadmap home and work context, goal-derived priorities, `What shaped this roadmap` summary and non-duplicated quote-preparation stage. Its exact application commit was `0db488f325a79e22d126aace75647715b59c96f9`, deployed as Sites version 229 through deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`. Documentation-only child `f4dbde8b742ece96e44f5a941f26bc712b0f82f8` recorded that checkpoint without changing the executable application. Those contracts remain active underneath version 235.
+The prior release established the authoritative pre-roadmap home and work context, goal-derived priorities, `What shaped this roadmap` summary and non-duplicated quote-preparation stage. Its exact application commit was `0db488f325a79e22d126aace75647715b59c96f9`, deployed as Sites version 229 through deployment `appgdep_6a6b38fcccbc8191b8b2daedf57b9e24`. Documentation-only child `f4dbde8b742ece96e44f5a941f26bc712b0f82f8` recorded that checkpoint without changing the executable application. Those contracts remain active underneath version 236.
 
 ## Earlier released milestone: `CUSTOMER-PROJECT-CLEANUP-12`
 
-The earlier release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 235.
+The earlier release established compact project controls and guarded permanent deletion for unused private drafts. Its exact application commit was `da35ce60295d6c7150cddd9b35e33fcf64c8521b`, deployed as Sites version 227 through deployment `appgdep_6a6b22db21c48191a2dedbdbf05274ef`. Documentation-only child `563a4d805d9c6443096d5c73317ec18fc56f041e` recorded that checkpoint without changing the executable application. Those controls remain active underneath version 236.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TRUST-11`
 
-The earlier release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore through `0084_customer_plan_revision_restore.sql`, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 235.
+The earlier release established the shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore through `0084_customer_plan_revision_restore.sql`, tagged-PDF foundations through format `2026-07-30-tagged-plan-pdf-v3` and adaptive email compatibility. Its exact application commit was `bc427d295b3106907904a3c0b7bf9f2945561cd1`, deployed as Sites version 224 through deployment `appgdep_6a6b151c0178819185e4d57c1cbf75c2`. Documentation-only child `23594c2b61dec855aeba0a10ba5a28eb3aeaf692` was later published as historical Sites version 225 without changing that executable application. Those contracts remain active underneath version 236.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-SPACING-10`
 
-The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing the executable application. Those visual contracts remain active underneath version 235.
+The earlier release established consistent spacing and rounded surfaces throughout the premium PDF and email. Its exact application commit was `e74c2d95889a381cb3bb434607bc6584e54cf722`, deployed as Sites version 222 through deployment `appgdep_6a6a8887a0048191b7eb1706e742ad28`. Documentation-only child `c2599eb5bedb11b1648da2b4a60e11b242cb2abb` was later published as historical Sites version 223 without changing the executable application. Those visual contracts remain active underneath version 236.
 
 ## Earlier released milestone: `CUSTOMER-PLAN-TECH-PRESENTATION-09`
 
@@ -562,8 +615,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Opportunity email delivery health and bounded retries:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
-2. **Customer share-before-submit review and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur or redaction controls, and keep a resumable upload queue across reloads.
-3. **Installer quote-readiness and request-for-information loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
-4. **Outlook desktop and assistive-technology acceptance:** verify customer reports and opportunity emails in Outlook desktop's Word renderer and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
-5. **Privacy-safe funnel telemetry, then deferred pilot:** measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data, then run the pilot only when the product owner resumes it.
+1. **Opportunity delivery health and bounded retry console:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
+2. **Customer installer-safe projection preview and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur and redaction controls, and keep a resumable upload queue across reloads.
+3. **Installer structured request-for-information and quote-readiness loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
+4. **Administrator matching SLA, dispatch exception queue and notification observability:** surface delayed allocation or delivery work with bounded owner-only recovery actions and no generic database mutation.
+5. **Outlook, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** verify report and enquiry rendering plus keyboard and screen-reader workflows, then measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data.
