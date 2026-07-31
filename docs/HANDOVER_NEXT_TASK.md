@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 31 July 2026
 
-Milestone ID: `CUSTOMER-QUOTE-COMMS-20`
+Milestone ID: `CUSTOMER-TRADE-CONTACT-21`
 
-Released application commit: `35552796048df63c03409d03401d33a47f326434`
+Released application commit: `97e6c7356483706e8e978ab53b842a9e41152f7e`
 
-Released application for this milestone: Sites version 238 from application commit `35552796048df63c03409d03401d33a47f326434`
+Released application for this milestone: Sites version 239 from application commit `97e6c7356483706e8e978ab53b842a9e41152f7e`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -20,45 +20,49 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Complete the quote communication loop without requiring either party to remember to revisit the platform. A submitted installer quote now creates a durable customer email with a direct signed-in route to the top-level Quotes centre. Customer acceptance creates a durable trade email and a Work updates bell item that opens the exact accepted opportunity, where the released customer contact details and next action are available.
+Make the customer-to-trade handover one simple decision: `Get in touch with this business`. The choice releases contact details only to that exact verified business and asks it to contact the customer. It does not accept a quote, create a contract or invoice, make a payment, or authorise work.
 
-The customer no longer has to open each project and scroll to find quote options. Quotes are available from the account's top-level `Quotes` navigation and `/account/quotes`, with each option linking to the exact project quote section.
+Newly allocated privacy-safe leads now appear in the trade Work updates bell as unread items. The lead workspace opens as a compact scan-friendly list, expands only the lead being worked on, and keeps structured quote fields aligned. Project-builder Continue actions move the customer to the top of the next step instead of preserving the previous page's scroll position.
 
 ## Customer and trade outcomes
 
-- A customer receives the bounded `Your installer quote is ready to review` email after an installer submits a structured platform quote. Its action opens `https://compare.ausenergyassessments.com/account/quotes`.
-- The top-level Quotes centre collects quotes awaiting review across projects and links each quote to `/account/projects/{projectId}#structured-quote-options`.
-- Accepting one quote releases contact details only to that exact installer match and sends the bounded `Your customer accepted the quote` email. The action opens `https://compare.ausenergyassessments.com/direct-trade/dashboard?workspace=leads&matchId={opportunityMatchId}#opportunity-inbox`.
-- The installer Work updates bell shows `Quote accepted, contact the customer`, targets the exact `opportunity_match_id`, and opens that same accepted lead rather than a generic dashboard.
-- Customer emails can name the verified installer business, but trade emails and bell summaries do not contain customer name, phone, email, street address, private project text or household evidence.
+- Each available project quote has one customer action: `Get in touch with this business`. The former shortlist confirmation step is removed.
+- The confirmation copy and connected state explicitly explain that this is contact permission only, not quote acceptance, payment, contract, invoice or work approval.
+- The contact action atomically selects one business, releases contact details to that exact match, connects the match, closes competing options, records consent and queues the trade follow-up.
+- Each newly allocated lead produces one `New lead ready to review` Work update for the owning business. Its exact lead target contains no customer identity, address, contact details or household evidence.
+- Lead cards start collapsed with work, timing, shared-file count and next action visible. An accessible control expands one card; an exact notification deep link expands and focuses its authorised lead.
+- The quote form groups price, delivery and warranty fields into aligned responsive sections while retaining integer-cent totals and the existing immutable submission contract.
+- Continue in the five-step project builder focuses and scrolls to the new active step heading after the next panel renders.
 
 ## Integrity and communication design
 
-- Quote submission uses one client request identity across retries. Migration `0090_customer_project_quote_submission_ledger.sql` records the request, quote revision and activity event atomically, so a replay returns the authoritative quote instead of submitting a duplicate.
-- Migration `0091_customer_project_quote_acceptance_claims.sql` provides one project-level acceptance claim. A sequential or concurrent competing acceptance cannot replace the winner, stale A/B writes cannot separate the accepted quote from its exact contact release, and replaying the winning acceptance remains safe.
-- Activity event and delivery identities are deterministic and audience bound. Dispatch rechecks the active account, current consent, exact customer or installer recipient, current active contact release and provider suppression before sending.
-- Authenticated Resend callbacks retain replay protection and monotonic terminal states. A recognised callback that arrives before its provider message binding is visible returns retryable HTTP `503` with `Retry-After: 5`; malformed or unsupported events remain safely ignored.
-- Provider delivery does not form part of the quote-write transaction. Durable queued activity is the source of truth, immediate Worker dispatch is the fast path, and the scheduled Worker remains the bounded recovery path.
+- The legacy internal `accepted` decision value and acceptance-claim table remain compatibility representations of the one-business contact claim. They are not customer-visible commercial acceptance and must not be used as evidence of payment, contract, invoice or authorised work.
+- First-time contact disclosure requires the new explicit contact confirmation. A legacy acceptance flag is honoured only when the exact active contact release and connected match already exist, closing the stale-client privacy bypass.
+- Contact release, match connection, one-business selection, consent receipt, activity event and trade delivery job are committed in one owner-scoped database batch.
+- Lead bell identities use `platform-lead-allocated:{opportunityMatchId}` so retries cannot create duplicates and one business cannot observe another business's allocation.
+- Protected customer identity remains unavailable until the customer makes the exact contact choice. New-lead notification payloads stay privacy-safe.
+- The scroll transition uses two animation frames so it runs after the next step is rendered, moves keyboard focus to the active heading and respects reduced-motion preferences.
 
 ## Acceptance and release evidence
 
-- Exact application commit `35552796048df63c03409d03401d33a47f326434` passed the complete release gate.
-- The focused quote communication and discovery set passed 26 of 26 tests. The focused Resend callback ordering and early-binding set passed 7 of 7 tests.
-- `npm.cmd run validate` passed, including 31 of 31 integration tests and 973 total tests: 971 passed, 2 intentionally skipped and 0 failed.
+- Exact application commit `97e6c7356483706e8e978ab53b842a9e41152f7e` passed the complete release gate.
+- The integrated focused customer-contact, lead-notification, trade-card, quote-layout and navigation set passed 68 of 68 tests. Additional direct-trade and business-hub coverage passed 16 of 16, and the final privacy regression set passed 35 of 35.
+- `npm.cmd run validate` passed, including 31 of 31 integration tests and the complete test suite with no failures and 2 intentionally skipped tests.
 - Type checking, warning-free lint, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the Vinext production build, Sites server-bundle audit and customer-plan PDF audit passed. `git diff --check` passed.
 - GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
-- Local archive `aea-sites-3555279.tar.gz` is 7,110,732 bytes with SHA-256 `387A5D0FC4A5BF74DB78964348EC3577457818FBC9BC35F86BCFF1C04F83B616`.
-- Sites stored 321 files, 27,965,440 bytes with content hash `sha256:291666539b26173a276dc09c76bbba6e94955b434d6ab5f524b850e5cda6ad52`.
-- Signed-in Chrome production verification confirmed the customer top-level Quotes entry, accepted quote presentation and exact project quote link, plus the installer Work updates bell, dialog and accepted event. Focused automated tests cover the exact accepted-opportunity deep link.
+- Local archive `aea-sites-97e6c73.tar.gz` is 7,127,725 bytes with SHA-256 `BF9EAAE34B1FBB197C30AF94F0ADB9DBE92BBC347F8B60424C6D0444D9FCD7DF`.
+- Sites stored 321 files, 27,985,920 bytes with content hash `sha256:8554bdbdbcc6c54afc9b04cb4d37b96d7ab423ed2ed64d591247bfa3ee6c6136`.
+- Signed-in Chrome production verification confirmed three unread `New lead ready to review` bell items, default-collapsed lead cards, exact expansion, the top-level Quotes centre and the connected-state contact-only disclosure.
+- The Sites error-only query returned two informational canceled GET invocations caused while the signed-in pages were being reloaded and no Worker exception attributable to the release. A direct `/api/health` browser navigation was blocked by the local client extension and is not claimed as a successful health probe.
 - Release QA performed no new demo mutation.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Current executable application commit: `35552796048df63c03409d03401d33a47f326434`
-- Sites application version: 238
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_c9b4dbcee8408191a3fdce1aaef5548d`
-- Sites production deployment: `appgdep_6a6c5f96df388191a5e68ffd53fb68b0`
+- Current executable application commit: `97e6c7356483706e8e978ab53b842a9e41152f7e`
+- Sites application version: 239
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_ae43b05060ac8191918c70e9960e213c`
+- Sites production deployment: `appgdep_6a6c7cb6d6e0819187e9566a452e6850`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites access: public custom domain
 - Sites environment revision: 19
@@ -68,22 +72,39 @@ The customer no longer has to open each project and scroll to find quote options
 
 ## Known release risk
 
-The application, delivery ledger, consent checks, callback authentication path, retry behavior and signed-in destinations passed automated and production presentation checks. Production Resend sender approval, authenticated webhook receipt and actual customer or trade inbox delivery were not verified. Provider configuration or an accepted API response alone is not inbox-delivery proof.
+The application, atomic contact handover, legacy-client privacy guard, owner-scoped notification derivation and signed-in destinations passed automated and production presentation checks. Release QA did not send another provider email, so production Resend delivery for the revised contact wording was not newly exercised. Provider inbox receipt and hosted row counts remain unverified.
 
 ## Stop conditions
 
 Stop the affected path when:
 
-- a quote notification or Work update could expose customer identity, contact details, private household content or arbitrary project text;
-- a retry or replay could create a second quote, choose a second accepted installer or release contact details to a different match;
-- a callback could acknowledge a recognised delivery event before its local provider binding exists;
-- delivery eligibility cannot recheck current consent, account status, contact-release state and suppression;
-- a notification cannot open the exact authorised quote or opportunity;
+- a contact action or new-lead Work update could expose identity, contact details, exact location, private household content or arbitrary project text before the explicit customer choice;
+- the legacy acceptance flag could create first-time contact disclosure;
+- one customer action could select, connect or disclose contact details to more than one business;
+- a notification cannot open the exact owner-scoped opportunity;
+- a customer-visible label implies quote acceptance, payment, contract, invoice or authorised work;
+- a Continue action can leave the customer at the bottom of the next step;
 - live verification would send to an unapproved recipient or mutate new demo data;
 - the release source, archive, saved version and public deployment cannot be reconciled; or
 - a change would alter the immutable dated audit.
 
-## Prior released milestone: `CUSTOMER-INSTALLER-HANDOFF-19`
+## Prior released milestone: `CUSTOMER-QUOTE-COMMS-20`
+
+### Outcome
+
+The prior release added the top-level customer Quotes centre, exact quote deep links, customer and trade quote emails, trade Work updates, retry-safe quote submission and a concurrency-safe one-business claim. Its customer-visible shortlist and acceptance sequence is superseded by `CUSTOMER-TRADE-CONTACT-21`; its durable delivery and immutable quote-submission contracts remain active.
+
+### Historical release identity
+
+- Application commit: `35552796048df63c03409d03401d33a47f326434`
+- Sites version: 238
+- Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_c9b4dbcee8408191a3fdce1aaef5548d`
+- Deployment: `appgdep_6a6c5f96df388191a5e68ffd53fb68b0`
+- Environment revision: 19
+
+The historical release used acceptance wording for its one-business selection. Current customer and trade surfaces use contact-only wording, and the retained internal accepted identifier is compatibility state rather than commercial acceptance.
+
+## Earlier released milestone: `CUSTOMER-INSTALLER-HANDOFF-19`
 
 ### Outcome
 
@@ -684,8 +705,8 @@ Stop the affected work when:
 
 ## Next five logical product steps
 
-1. **Accepted quote follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
+1. **Connected customer follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
 2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
 3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
 4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
-5. **Administrator communication SLA, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, acceptance, contact and scheduling outcomes without exposing household content.
+5. **Administrator communication SLA, assistive contact handover and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, business-contact choice and scheduling outcomes without exposing household content.

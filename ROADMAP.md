@@ -648,6 +648,42 @@ Make each quote transition obvious without requiring either party to remember to
 
 The executable, deployment and signed-in workflow gates are met. Production customer and trade inbox delivery remains unverified; durable queue state, provider acceptance and callback handling do not prove final inbox receipt.
 
+## Released milestone: CUSTOMER-TRADE-CONTACT-21
+
+Release status: application commit `97e6c7356483706e8e978ab53b842a9e41152f7e` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly at `https://compare.ausenergyassessments.com` as Sites version 239. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_ae43b05060ac8191918c70e9960e213c`, deployment `appgdep_6a6c7cb6d6e0819187e9566a452e6850` and environment revision 19 report the exact application commit.
+
+### Outcome
+
+Replace the drawn-out shortlist-and-accept journey with one plain-language customer choice to get in touch with a verified business, make newly allocated leads visible in the trade Work updates bell, keep the lead workspace compact, align the structured quote form, and return every project-builder Continue action to the start of the next step.
+
+### In scope
+
+- Use one `Get in touch with this business` action for the customer. The confirmation shares contact details only with that exact business and asks it to make contact.
+- State at the decision and connected states that getting in touch does not accept a quote, create a contract or invoice, make a payment, or authorise work.
+- Commit the one-business contact claim, exact contact release, match connection, competing-option closure, consent receipt, activity event and durable trade notification together.
+- Preserve the legacy internal `accepted` decision identifier only as a compatibility representation of the one-business contact claim. It is not customer-visible acceptance and cannot be treated as commercial approval.
+- Reject a first-time contact release attempted through the legacy acceptance flag; that flag is honoured only when the exact contact release and match connection already exist.
+- Derive a deterministic unread `New lead ready to review` Work update from each exact owner-scoped opportunity allocation without exposing customer identity, contact details or private household content.
+- Collapse lead tiles by default, retain a compact work, timing, file-count and next-action summary, and provide accessible expand and collapse controls. Exact deep links expand and focus their authorised lead.
+- Group and align the structured quote fields into responsive sections without changing integer-cent calculations or immutable submission contracts.
+- Move the project builder to the active step heading after Continue using a reduced-motion-aware two-frame scroll and focus transition.
+
+### Acceptance gates
+
+- The customer contact action performs one owner-scoped API write and cannot leave contact release, match connection and one-business selection out of sync.
+- A stale client cannot use the legacy acceptance flag to create first-time contact disclosure.
+- Customer and trade surfaces contain no wording that implies payment, contract formation, invoice creation, quote acceptance or work authorisation.
+- Every allocated lead produces one deterministic owner-only bell item; technicians and other businesses cannot receive it.
+- Lead cards are collapsed by default, deep-link expansion remains exact and keyboard operation is preserved.
+- Focused customer-contact, notification, trade-lead, quote-layout, privacy and wizard-navigation regressions pass.
+- The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, the full test suite with no failures and 2 intentional skips, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the customer-plan PDF audit, Vinext build and Sites server-bundle audit.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `97e6c7356483706e8e978ab53b842a9e41152f7e`.
+- Local archive `aea-sites-97e6c73.tar.gz` is 7,127,725 bytes with SHA-256 `BF9EAAE34B1FBB197C30AF94F0ADB9DBE92BBC347F8B60424C6D0444D9FCD7DF`; Sites reports 321 stored files, 27,985,920 bytes and content hash `sha256:8554bdbdbcc6c54afc9b04cb4d37b96d7ab423ed2ed64d591247bfa3ee6c6136`.
+- Sites version 239 deploys successfully with environment revision 19 at `https://compare.ausenergyassessments.com`.
+- Signed-in Chrome verification confirms three unread new-lead bell items, compact collapsed lead cards, exact expansion, the customer Quotes centre and the connected-state contact-only disclosure.
+
+The executable, deployment, privacy and signed-in presentation gates are met. Release QA did not submit another quote, release another customer contact, send a new provider email or mutate demo records. Production provider inbox delivery and hosted row counts remain unverified. The direct `/api/health` browser navigation was blocked by the local client extension, while the custom-domain signed-in application and its authenticated APIs rendered successfully.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -747,11 +783,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Accepted quote follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
+1. **Connected customer follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
 2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
 3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
 4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
-5. **Administrator communication SLA, assistive acceptance and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, acceptance, contact and scheduling outcomes without exposing household content.
+5. **Administrator communication SLA, assistive contact handover and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, business-contact choice and scheduling outcomes without exposing household content.
 
 ## Global stop conditions
 
