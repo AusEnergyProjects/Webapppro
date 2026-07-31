@@ -483,6 +483,36 @@ Make plan completion durable and understandable: keep guided photos visible wher
 
 All listed acceptance gates are met. The failed version 231 remains historical non-live evidence only. Version 232 is the sole current executable source for this milestone.
 
+## Released milestone: CUSTOMER-INSTALLER-PHOTOS-16
+
+Release status: application commit `5acc4ccf37acd608dc437d3a074410b1d840f706` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 233 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_218ad21977748191a3283723f395cadd` and deployment `appgdep_6a6be56ca9ac8191918423bd57f0a05d` report the exact commit and environment revision 19.
+
+### Outcome
+
+Remove the false installer-request conflict and let customers add the several photos a real quote-preparation section may need without weakening the private evidence boundary.
+
+### In scope
+
+- Treat any positive D1 change count as a successful conditional profile or request-submission write while preserving zero changes as a real revision conflict.
+- Cover the customer-search trigger that turns one successful profile update into three total D1 changes and the trade-opportunity search trigger that amplifies the request insert.
+- Display every saved and pending photo inside its guided prompt with a count and individual retake, replace, remove or cancel controls.
+- Add another independent photo to the same prompt until the existing 12-file project cap is reached.
+- Keep owner checks, private-by-default storage, metadata stripping, 8 MB limits, client-upload idempotency and exact-photo replacement locking.
+- Apply `0086_customer_evidence_multi_photo_prompts.sql`, removing only the two obsolete prompt-level uniqueness indexes.
+
+### Acceptance gates
+
+- The final `Save details and request responses` confirmation no longer returns a false `PROFILE_REVISION_CONFLICT` after a successful trigger-amplified update.
+- A zero-change stale revision still fails closed and an uncertain request still reconciles against authoritative server state.
+- Same-prompt additions can coexist; a replacement remains bound to one exact evidence row and cannot consume an extra project slot.
+- Focused regressions pass 55 of 55. The complete release gate passes 31 of 31 integration tests, 916 total tests with 914 passed and 2 intentionally skipped, all 87 migrations through `0086_customer_evidence_multi_photo_prompts.sql`, the tagged-PDF audit, Vinext build and Sites server-bundle audit.
+- GitHub `main`, the working branch, Sites managed source, saved-version provenance and public deployment all resolve to application commit `5acc4ccf37acd608dc437d3a074410b1d840f706`.
+- The local archive is 7,086,372 bytes with SHA-256 `B110B28AE3F5D1A5256E478C20D44A5727084C51C6D0159FA20E91D31F6D69B0`; Sites reports 312 stored files, 27,770,880 bytes and content hash `sha256:47e85a2c9289437ee38c3c478a6191687e46ffec393215a59092ac1185bc8c6f`.
+- Signed-in production inspection loads the quote-preparation photo cards, privacy review and active one-step request modal. Customer-account and customer-project reads return `200` and the recent Worker error-only query returns zero events.
+- No working-demo profile, project, photo or installer request is changed during release verification.
+
+All listed acceptance gates are met. Version 233 is the current executable source; version 232 remains historical release evidence.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
