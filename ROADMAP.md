@@ -751,6 +751,40 @@ Make the remaining household ventilation intake answerable without technical bui
 
 The executable, source-provenance, production presentation and error-log gates are met. Release QA did not create a new account or send a verification email, so receipt and successful use of a newly generated provider email link remain unverified.
 
+## Released milestone: CUSTOMER-TRADE-LOCALITY-24
+
+Release status: application commit `399b04f4a5d680080610f9e88b994506bb60c16f` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly at `https://compare.ausenergyassessments.com` as Sites version 242. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0`, deployment `appgdep_6a6cc08dc6f881919a349de607f5a8a9` and environment revision 19 report the exact application commit.
+
+### Outcome
+
+Keep the installer-request consent and any missing-consent explanation beside submit, make the customer and TLink navigation aligned and reciprocal, and give eligible installers the customer-confirmed suburb, postcode and state without exposing identity, street address, unit or private project content.
+
+### In scope
+
+- Move the installer-request consent into the sticky action area immediately above submit and keep its error, focus and accessibility association at that decision point.
+- Fit the request dialog to the current viewport and retain a usable internal scroll and sticky action area on a 360 by 800 mobile viewport.
+- Reuse one aligned customer navigation on the account dashboard and profile, with current-page semantics and a branded TLink destination.
+- Add the real white Australian Energy Assessments mark and full-name return destination to public and signed-in TLink headers.
+- Add immutable opportunity suburb through `0092_trade_opportunity_matching_locality.sql`, alongside the existing postcode and state snapshot.
+- Gate suburb and postcode presentation on an active exact-project receipt for current notice version `2026-08-01-anonymized-matching-locality-v1` and purpose `anonymized_installer_matching`.
+- Use the same immutable snapshot and consent gate for trade leads and business-notification emails.
+- Keep legacy, missing, mismatched and withdrawn consent state-only and do not backfill locality from a mutable customer profile.
+- Retain name, phone, email, street, unit, precise distance, project names, private notes, meter data and unapproved files outside installer matching.
+
+### Acceptance gates
+
+- Focused consent, navigation, privacy, locality, trade-enquiry and notification tests pass 96 of 96.
+- The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, 1,014 main tests with 1,012 passed, 2 intentionally skipped and 0 failed, all 93 migrations through `0092_trade_opportunity_matching_locality.sql`, the nine-page customer-plan PDF audit, Vinext build and Sites server-bundle audit.
+- Targeted ESLint and `git diff --check` pass.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `399b04f4a5d680080610f9e88b994506bb60c16f`.
+- Customer navigation remains aligned at desktop, 900 and 768 pixel widths and produces no document overflow at 520 pixels; the profile route uses the same navigation and exposes its current page.
+- TLink retains the full Australian Energy Assessments return at 520 pixels and wraps cleanly at 900 pixels without document overflow.
+- At 360 by 800 pixels the installer-request checkbox, missing-consent alert and submit action remain together and visible at the decision point.
+- The production preview explains protected suburb, postcode and state while retaining street, unit, contact and private-data exclusions.
+- The Sites Worker error-only query returns no events and release verification does not create a production opportunity.
+
+The executable, migration, source-provenance, consent-presentation, responsive-navigation and error-log gates are met. Release QA deliberately did not submit a new production enquiry, so a newly written version-242 locality row and locality-bearing business email were not observed live. Existing opportunities remain state-only by design and are not backfilled.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
