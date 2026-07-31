@@ -65,9 +65,7 @@ import { prepareCustomerPhotoUpload } from "@/lib/customer-photo-upload";
 import {
   canRecoverInstallerRequest,
   canUpdateReplayedCustomerDraft,
-  installerContactFingerprint,
   installerRequestFingerprint,
-  saveInstallerRequestProfileWithOneConflictRetry,
 } from "@/lib/customer-installer-request-recovery.mjs";
 import {
   createCustomerPlanDocument,
@@ -954,7 +952,6 @@ function ProjectEditor({
   onUploadEvidence,
   onLoadEvidencePreview,
   onDeleteEvidence,
-  onSaveRequestProfile,
   onCheckInstallerRequestSubmitted,
   onRequestInstallerResponses,
   onRequestComplete,
@@ -989,16 +986,15 @@ function ProjectEditor({
   onDeleteEvidence: (
     evidence: CustomerProject["evidence"][number],
   ) => Promise<void>;
-  onSaveRequestProfile: (
-    contact: CustomerInstallerRequestContact,
+  onCheckInstallerRequestSubmitted: (
     projectId: string,
-    allowSubmittedProjectContactUpdate?: boolean,
-  ) => Promise<CustomerProfile>;
-  onCheckInstallerRequestSubmitted: (projectId: string) => Promise<boolean>;
+  ) => Promise<CustomerProject | null>;
   onRequestInstallerResponses: (
     projectId: string,
     expectedPlanRevision: number,
     confirmInstallerPhotoSharing: boolean,
+    contact: CustomerInstallerRequestContact,
+    recoverCommittedSubmit?: boolean,
   ) => Promise<void>;
   onRequestComplete: () => void;
 }) {
@@ -1033,7 +1029,6 @@ function ProjectEditor({
     projectId: string;
     planRevision: number;
     editGeneration: number;
-    contactFingerprint: string;
     requestFingerprint: string;
   } | null>(null);
   const [revisionConflict, setRevisionConflict] = useState(false);
@@ -2401,7 +2396,6 @@ function ProjectEditor({
   ) {
     const installerPhotoSharing =
       modalInstallerPhotoSharing || confirmInstallerPhotoSharing;
-    const contactFingerprint = installerContactFingerprint(contact);
     const requestFingerprint = installerRequestFingerprint(
       contact,
       installerPhotoSharing,
@@ -2410,30 +2404,26 @@ function ProjectEditor({
     try {
       const uncertainSubmit = uncertainInstallerSubmit.current;
       if (uncertainSubmit) {
-        const alreadySubmitted = await onCheckInstallerRequestSubmitted(
+        const submittedProject = await onCheckInstallerRequestSubmitted(
           uncertainSubmit.projectId,
         );
-        if (alreadySubmitted) {
+        if (submittedProject) {
           const sameRequest = canRecoverInstallerRequest(uncertainSubmit, {
             projectId: savedId || uncertainSubmit.projectId,
             planRevision: savedPlanRevision,
             editGeneration: editGeneration.current,
             requestFingerprint,
           });
-          const contactChanged =
-            uncertainSubmit.contactFingerprint !== contactFingerprint;
-          if (contactChanged) {
-            await onSaveRequestProfile(
-              contact,
-              uncertainSubmit.projectId,
-              true,
-            );
-          }
           uncertainInstallerSubmit.current = null;
           if (sameRequest) return;
-          return contactChanged
-            ? "Your earlier request was sent, and your latest private contact details were saved. Any plan or evidence-sharing changes made after the network interruption were not applied. Review the submitted project from your overview."
-            : "Your earlier request was sent. Any plan or evidence-sharing changes made after the network interruption were not applied. Review the submitted project from your overview.";
+          await onRequestInstallerResponses(
+            uncertainSubmit.projectId,
+            uncertainSubmit.planRevision,
+            installerPhotoSharing,
+            contact,
+            false,
+          );
+          return "Your earlier request was sent, and your latest contact details were saved. Any plan or evidence-sharing changes made after the network interruption were not applied. Review the submitted project from your overview.";
         }
         uncertainInstallerSubmit.current = null;
       }
@@ -2447,7 +2437,6 @@ function ProjectEditor({
       );
       setSavedId(saved.id);
       setSavedPlanRevision(saved.planRevision);
-      await onSaveRequestProfile(contact, saved.id);
       await storePendingEvidence(
         saved.id,
         pendingEvidence,
@@ -2457,13 +2446,13 @@ function ProjectEditor({
         projectId: saved.id,
         planRevision: saved.planRevision,
         editGeneration: editGeneration.current,
-        contactFingerprint,
         requestFingerprint,
       };
       await onRequestInstallerResponses(
         saved.id,
         saved.planRevision,
         installerPhotoSharing,
+        contact,
       );
       uncertainInstallerSubmit.current = null;
       if (editGeneration.current === saveGeneration) setDirty(false);
@@ -4619,7 +4608,6 @@ function ProjectDetail({
   busy,
   onAction,
   onRequestStart,
-  onSaveRequestProfile,
   onCheckInstallerRequestSubmitted,
   onRequestInstallerResponses,
   onRequestComplete,
@@ -4636,16 +4624,15 @@ function ProjectDetail({
   busy: boolean;
   onAction: (action: string, extra?: Record<string, unknown>) => Promise<void>;
   onRequestStart: () => void;
-  onSaveRequestProfile: (
-    contact: CustomerInstallerRequestContact,
+  onCheckInstallerRequestSubmitted: (
     projectId: string,
-    allowSubmittedProjectContactUpdate?: boolean,
-  ) => Promise<CustomerProfile>;
-  onCheckInstallerRequestSubmitted: (projectId: string) => Promise<boolean>;
+  ) => Promise<CustomerProject | null>;
   onRequestInstallerResponses: (
     projectId: string,
     expectedPlanRevision: number,
     confirmInstallerPhotoSharing: boolean,
+    contact: CustomerInstallerRequestContact,
+    recoverCommittedSubmit?: boolean,
   ) => Promise<void>;
   onRequestComplete: () => void;
   onDownloadHandover: (
@@ -4680,7 +4667,6 @@ function ProjectDetail({
     projectId: string;
     planRevision: number;
     editGeneration: number;
-    contactFingerprint: string;
     requestFingerprint: string;
   } | null>(null);
   const planItems = project.planSnapshot.items || [];
@@ -4722,52 +4708,46 @@ function ProjectDetail({
   ) {
     const installerPhotoSharing =
       confirmInstallerPhotoSharing || project.evidenceSharingConsent;
-    const contactFingerprint = installerContactFingerprint(contact);
     const requestFingerprint = installerRequestFingerprint(
       contact,
       installerPhotoSharing,
     );
     const uncertainSubmit = uncertainInstallerSubmit.current;
     if (uncertainSubmit) {
-      const alreadySubmitted = await onCheckInstallerRequestSubmitted(
+      const submittedProject = await onCheckInstallerRequestSubmitted(
         uncertainSubmit.projectId,
       );
-      if (alreadySubmitted) {
+      if (submittedProject) {
         const sameRequest = canRecoverInstallerRequest(uncertainSubmit, {
           projectId: project.id,
           planRevision: project.planRevision,
           editGeneration: 0,
           requestFingerprint,
         });
-        const contactChanged =
-          uncertainSubmit.contactFingerprint !== contactFingerprint;
-        if (contactChanged) {
-          await onSaveRequestProfile(
-            contact,
-            uncertainSubmit.projectId,
-            true,
-          );
-        }
         uncertainInstallerSubmit.current = null;
         if (sameRequest) return;
-        return contactChanged
-          ? "Your earlier request was sent, and your latest private contact details were saved. Any evidence-sharing change made after the network interruption was not applied. Review the submitted project from your overview."
-          : "Your earlier request was sent. Any evidence-sharing change made after the network interruption was not applied. Review the submitted project from your overview.";
+        await onRequestInstallerResponses(
+          uncertainSubmit.projectId,
+          uncertainSubmit.planRevision,
+          installerPhotoSharing,
+          contact,
+          false,
+        );
+        return "Your earlier request was sent, and your latest contact details were saved. Any evidence-sharing change made after the network interruption was not applied. Review the submitted project from your overview.";
       }
       uncertainInstallerSubmit.current = null;
     }
-    await onSaveRequestProfile(contact, project.id);
     uncertainInstallerSubmit.current = {
       projectId: project.id,
       planRevision: project.planRevision,
       editGeneration: 0,
-      contactFingerprint,
       requestFingerprint,
     };
     await onRequestInstallerResponses(
       project.id,
       project.planRevision,
       installerPhotoSharing,
+      contact,
     );
     uncertainInstallerSubmit.current = null;
   }
@@ -6181,101 +6161,6 @@ export function CustomerDashboard({
     return stored;
   }
 
-  async function saveInstallerRequestProfile(
-    contact: CustomerInstallerRequestContact,
-    projectId: string,
-    allowSubmittedProjectContactUpdate = false,
-  ) {
-    if (!user || !account.profile) {
-      throw new Error("Sign in to save your private contact details.");
-    }
-    const token = await user.getIdToken();
-    type ProfileSaveResult = {
-      ok?: boolean;
-      status: number;
-      code?: string;
-      error?: string;
-      updatedAt?: string;
-      profile?: CustomerProfile;
-    };
-    const patchProfile = async (
-      expectedUpdatedAt: string,
-      submittedContact: CustomerInstallerRequestContact,
-    ): Promise<ProfileSaveResult> => {
-      const response = await fetch("/api/customer-account", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          projectId,
-          ...submittedContact,
-          expectedUpdatedAt,
-          confirmPrivateProfileSave: true,
-          confirmSubmittedProjectContactUpdate:
-            allowSubmittedProjectContactUpdate,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      return {
-        ...result,
-        status: response.status,
-      } as ProfileSaveResult;
-    };
-    const loadLatestProfile = async (): Promise<CustomerProfile> => {
-      const latestResponse = await fetch("/api/customer-account", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const latest = await latestResponse.json().catch(() => ({}));
-      if (!latestResponse.ok || !latest.ok || !latest.profile) {
-        throw new Error(
-          latest.error
-          || "Your latest private profile could not be checked. Try again.",
-        );
-      }
-      const latestProfile = latest.profile as CustomerProfile;
-      setAccount((current) => ({
-        ...current,
-        profile: latestProfile,
-      }));
-      return latestProfile;
-    };
-    // Keep the bounded profile CAS recovery inside this save. The surrounding
-    // project save, evidence upload and installer request must never be replayed.
-    const outcome = await saveInstallerRequestProfileWithOneConflictRetry({
-      contact,
-      expectedUpdatedAt: account.profile.updatedAt,
-      save: patchProfile,
-      loadLatest: loadLatestProfile,
-    }) as {
-      result: ProfileSaveResult;
-      latestProfile: CustomerProfile | null;
-      retried: boolean;
-    };
-    const result = outcome.result;
-    if (!result.ok || !result.profile) {
-      if (result.code === "PROFILE_REVISION_CONFLICT") {
-        throw new Error(
-          outcome.retried
-            ? "Your private profile changed again while these details were saving. Your entries are still here. Check them and try once more."
-            : "Your private profile changed while these details were saving and could not be safely reconciled. Your entries are still here. Check them and try once more.",
-        );
-      }
-      throw new Error(
-        result.error
-        || "Your private contact details could not be saved. Try again.",
-      );
-    }
-    const savedProfile = result.profile;
-    setAccount((current) => ({
-      ...current,
-      profile: savedProfile,
-    }));
-    return savedProfile;
-  }
-
   async function checkInstallerRequestSubmitted(projectId: string) {
     if (!user) throw new Error("Sign in to check this installer request.");
     const token = await user.getIdToken();
@@ -6295,30 +6180,59 @@ export function CustomerDashboard({
     const recovered = nextProjects.find(
       (project) => project.id === projectId,
     );
-    return Boolean(
-      recovered
-      && ["matching", "quote_review"].includes(recovered.status),
-    );
+    return recovered
+      && ["matching", "quote_review"].includes(recovered.status)
+      ? recovered
+      : null;
   }
 
   async function requestInstallerResponses(
     projectId: string,
     expectedPlanRevision: number,
     confirmInstallerPhotoSharing: boolean,
+    contact: CustomerInstallerRequestContact,
+    recoverCommittedSubmit = true,
   ) {
+    const keepAuthoritativeContact = (
+      savedProfile?: CustomerProfile,
+      submittedProject?: CustomerProject,
+    ) => {
+      setAccount((current) => {
+        if (!current.profile) return current;
+        return {
+          ...current,
+          profile: savedProfile || {
+            ...current.profile,
+            ...contact,
+            postcode:
+              submittedProject?.postcode || current.profile.postcode,
+            addressState:
+              submittedProject?.addressState || current.profile.addressState,
+          },
+        };
+      });
+    };
     try {
-      await projectRequest("PATCH", {
+      const result = await projectRequest("PATCH", {
         id: projectId,
         action: "submit",
         confirmInstallerPhotoSharing,
         expectedPlanRevision,
+        contact,
       });
+      keepAuthoritativeContact(result.profile as CustomerProfile | undefined);
     } catch (error) {
+      if (!recoverCommittedSubmit) throw error;
       try {
-        if (await checkInstallerRequestSubmitted(projectId)) return;
+        const submittedProject =
+          await checkInstallerRequestSubmitted(projectId);
+        if (submittedProject) {
+          keepAuthoritativeContact(undefined, submittedProject);
+          return;
+        }
       } catch {
-        // Preserve the original submit error. The dialog retains its uncertain
-        // attempt marker and will reconcile status before any retry.
+        // Preserve the original submit error. The dialog will reconcile the
+        // uncertain request status before it allows another submission.
       }
       throw error;
     }
@@ -6964,7 +6878,6 @@ export function CustomerDashboard({
               onUploadEvidence={uploadProjectEvidence}
               onLoadEvidencePreview={loadProjectEvidencePreview}
               onDeleteEvidence={deleteProjectEvidence}
-              onSaveRequestProfile={saveInstallerRequestProfile}
               onCheckInstallerRequestSubmitted={checkInstallerRequestSubmitted}
               onRequestInstallerResponses={requestInstallerResponses}
               onRequestComplete={completeInstallerRequest}
@@ -6980,7 +6893,6 @@ export function CustomerDashboard({
                 projectAction(selected, action, extra)
               }
               onRequestStart={() => setStatus("")}
-              onSaveRequestProfile={saveInstallerRequestProfile}
               onCheckInstallerRequestSubmitted={checkInstallerRequestSubmitted}
               onRequestInstallerResponses={requestInstallerResponses}
               onRequestComplete={completeInstallerRequest}

@@ -22,6 +22,7 @@ import {
   reconcileCompletedPlanItems,
   customerContactReadiness,
   submissionReadiness,
+  validateCustomerProfile,
 } from "@/lib/customer-projects.mjs";
 import {
   prepareCustomerPlanRevisionRestore,
@@ -71,6 +72,14 @@ function cleanPlanRevision(value: unknown) {
     && value <= 1_000_000
     ? value
     : 0;
+}
+
+function nextUpdatedAt(current: unknown) {
+  const currentMillis = Date.parse(String(current || ""));
+  return new Date(Math.max(
+    Date.now(),
+    Number.isFinite(currentMillis) ? currentMillis + 1 : 0,
+  )).toISOString();
 }
 
 async function identity(request: Request) {
@@ -291,8 +300,10 @@ function storedProjectDraft(row: Record<string, unknown>) {
 
 async function projectsForOwner(firebaseUid: string) {
   const db = getD1();
-  const account = await db.prepare(`SELECT display_name, email, phone, address_line_1, address_line_2,
-    suburb, postcode, address_state FROM customer_accounts WHERE firebase_uid = ?`)
+  const account = await db.prepare(`SELECT display_name, email, phone,
+    address_line_1 AS addressLine1, address_line_2 AS addressLine2,
+    suburb, postcode, address_state AS addressState
+    FROM customer_accounts WHERE firebase_uid = ?`)
     .bind(firebaseUid).first<Record<string, unknown>>();
   const rows = await db.prepare(`SELECT * FROM customer_projects
     WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100`)
@@ -582,6 +593,7 @@ async function customerProjectMutation(
   const current = await ownedProject(user.uid, id);
   if (!current) return json({ ok: false, error: "Project not found." }, 404);
   const now = new Date().toISOString();
+  let responseProfile: Record<string, unknown> | null = null;
   if (current.status === "deleting" && action !== "delete_draft") {
     return json({
       ok: false,
@@ -1119,15 +1131,119 @@ async function customerProjectMutation(
     });
   } else if (action === "submit") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
-    if (current.status !== "draft") return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    const activeSubmitRetry = ["matching", "quote_review"].includes(
+      String(current.status),
+    );
+    if (current.status !== "draft" && !activeSubmitRetry) {
+      return json({
+        ok: false,
+        error: "This project is no longer open for installer matching.",
+      }, 409);
+    }
     const expectedPlanRevision = cleanPlanRevision(raw.expectedPlanRevision);
     const currentPlanRevision = Number(current.plan_revision || 1);
     const currentUpdatedAt = String(current.updated_at || "");
-    if (!expectedPlanRevision) {
+    if (current.status === "draft" && !expectedPlanRevision) {
       return json({ ok: false, error: "Refresh this project before requesting installer responses." }, 400);
     }
-    if (expectedPlanRevision !== currentPlanRevision) {
+    if (
+      current.status === "draft"
+      && expectedPlanRevision !== currentPlanRevision
+    ) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
+    }
+    const contactAccount = await db.prepare(`SELECT display_name, phone,
+      address_line_1, address_line_2, suburb, postcode, address_state,
+      property_type, household_situation, account_updates, account_status,
+      consent_version, consent_at, created_at, updated_at
+      FROM customer_accounts
+      WHERE firebase_uid = ? AND account_status = 'active'`)
+      .bind(user.uid).first<Record<string, unknown>>();
+    if (!contactAccount) {
+      return json({ ok: false, error: "Complete your private household profile first." }, 404);
+    }
+    const submittedContact =
+      raw.contact && typeof raw.contact === "object" && !Array.isArray(raw.contact)
+        ? raw.contact as Record<string, unknown>
+        : null;
+    if (!submittedContact) {
+      return json({
+        ok: false,
+        error: "Add the service contact details shown in this request.",
+      }, 400);
+    }
+    const validatedContact = validateCustomerProfile({
+      displayName: contactAccount.display_name,
+      phone: submittedContact.phone,
+      addressLine1: submittedContact.addressLine1,
+      addressLine2: submittedContact.addressLine2,
+      suburb: submittedContact.suburb,
+      postcode: current.postcode,
+      addressState: current.address_state,
+      propertyType: contactAccount.property_type,
+      householdSituation: contactAccount.household_situation,
+      accountUpdates: Boolean(contactAccount.account_updates),
+      consent: true,
+    });
+    if (!validatedContact.ok || !validatedContact.profile) {
+      return json({
+        ok: false,
+        error: validatedContact.error || "Enter valid service contact details.",
+      }, 400);
+    }
+    const authoritativeContact = validatedContact.profile;
+    const contactReadiness = customerContactReadiness(
+      authoritativeContact,
+      current,
+    );
+    if (!contactReadiness.ok) {
+      return json({ ok: false, error: contactReadiness.error }, 400);
+    }
+    const contactUpdatedAt = nextUpdatedAt(contactAccount.updated_at);
+    responseProfile = {
+      ...authoritativeContact,
+      accountStatus: "active",
+      accountTier: "Always free",
+      consentVersion: contactAccount.consent_version,
+      consentAt: contactAccount.consent_at,
+      createdAt: contactAccount.created_at,
+      updatedAt: contactUpdatedAt,
+    };
+    if (activeSubmitRetry) {
+      const contactUpdate = await db.prepare(`UPDATE customer_accounts
+        SET phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?,
+          postcode = ?, address_state = ?, updated_at = ?
+        WHERE firebase_uid = ? AND account_status = 'active'
+          AND EXISTS (
+            SELECT 1 FROM customer_projects
+            WHERE id = ? AND firebase_uid = ?
+              AND status IN ('matching', 'quote_review')
+          )`)
+        .bind(
+          authoritativeContact.phone,
+          authoritativeContact.addressLine1,
+          authoritativeContact.addressLine2,
+          authoritativeContact.suburb,
+          authoritativeContact.postcode,
+          authoritativeContact.addressState,
+          contactUpdatedAt,
+          user.uid,
+          id,
+          user.uid,
+        )
+        .run();
+      if (Number(contactUpdate.meta.changes || 0) < 1) {
+        return json({
+          ok: false,
+          error: "Your service contact details could not be saved. Try again.",
+        }, 503);
+      }
+      return json({
+        ok: true,
+        id,
+        profile: responseProfile,
+        projects: await projectsForOwner(user.uid),
+      });
     }
     const evidenceCount = await db.prepare(`SELECT COUNT(*) count
       FROM customer_project_evidence
@@ -1175,11 +1291,6 @@ async function customerProjectMutation(
     };
     const readiness = submissionReadiness(stored);
     if (!readiness.ok) return json({ ok: false, error: readiness.error }, 400);
-    const contactAccount = await db.prepare(`SELECT phone, address_line_1, suburb, postcode, address_state
-      FROM customer_accounts WHERE firebase_uid = ? AND account_status = 'active'`)
-      .bind(user.uid).first<Record<string, unknown>>();
-    const contactReadiness = customerContactReadiness(contactAccount || {}, current);
-    if (!contactReadiness.ok) return json({ ok: false, error: contactReadiness.error }, 400);
     const open = await db.prepare("SELECT COUNT(*) count FROM customer_projects WHERE firebase_uid = ? AND status IN ('matching', 'quote_review')")
       .bind(user.uid).first<{ count: number }>();
     if (Number(open?.count || 0) >= MAX_OPEN_CUSTOMER_OPPORTUNITIES) return json({ ok: false, error: "Finish or withdraw an active enquiry before submitting another one." }, 409);
@@ -1187,13 +1298,54 @@ async function customerProjectMutation(
     const opportunityId = `customer-project:${id}`;
     const submittedAt = now;
     const submitStatements = [
+      db.prepare(`UPDATE customer_accounts
+        SET phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?,
+          postcode = ?, address_state = ?, updated_at = ?
+        WHERE firebase_uid = ? AND account_status = 'active'
+          AND EXISTS (
+            SELECT 1 FROM customer_projects
+            WHERE id = ? AND firebase_uid = ? AND status = 'draft'
+              AND plan_revision = ? AND updated_at = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM trade_opportunities WHERE id = ?
+              )
+          )`)
+        .bind(
+          authoritativeContact.phone,
+          authoritativeContact.addressLine1,
+          authoritativeContact.addressLine2,
+          authoritativeContact.suburb,
+          authoritativeContact.postcode,
+          authoritativeContact.addressState,
+          contactUpdatedAt,
+          user.uid,
+          id,
+          user.uid,
+          expectedPlanRevision,
+          currentUpdatedAt,
+          opportunityId,
+        ),
       db.prepare(`UPDATE customer_projects
         SET status = 'matching', opportunity_id = ?, submitted_at = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND status = 'draft'
           AND plan_revision = ? AND updated_at = ?
-          AND NOT EXISTS (SELECT 1 FROM trade_opportunities WHERE id = ?)`)
+          AND NOT EXISTS (SELECT 1 FROM trade_opportunities WHERE id = ?)
+          AND EXISTS (
+            SELECT 1 FROM customer_accounts
+            WHERE firebase_uid = ? AND account_status = 'active'
+              AND phone = ? AND address_line_1 = ? AND address_line_2 = ?
+              AND suburb = ? AND postcode = ? AND address_state = ?
+              AND updated_at = ?
+          )`)
         .bind(opportunityId, submittedAt, submittedAt, id, user.uid,
-          expectedPlanRevision, currentUpdatedAt, opportunityId),
+          expectedPlanRevision, currentUpdatedAt, opportunityId,
+          user.uid, authoritativeContact.phone,
+          authoritativeContact.addressLine1,
+          authoritativeContact.addressLine2,
+          authoritativeContact.suburb,
+          authoritativeContact.postcode,
+          authoritativeContact.addressState,
+          contactUpdatedAt),
       db.prepare(`INSERT INTO trade_opportunities
         (id, title, project_type, postcode, state, service_categories, priority, timing, summary, status,
          source_reference, contact_limit, maximum_connected_installers, expires_at, expired_at, created_by_uid, is_synthetic, created_at, updated_at)
@@ -1244,6 +1396,7 @@ async function customerProjectMutation(
     if (
       Number(submitResults[0]?.meta.changes || 0) < 1
       || Number(submitResults[1]?.meta.changes || 0) < 1
+      || Number(submitResults[2]?.meta.changes || 0) < 1
     ) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
     }
@@ -1278,7 +1431,9 @@ async function customerProjectMutation(
     const releaseSource = await db.prepare(`SELECT q.id quote_id, q.installer_uid, q.opportunity_match_id,
       q.customer_decision, q.status quote_status, m.status match_status, o.status opportunity_status,
       a.business_name,
-      c.display_name, c.phone, c.address_line_1, c.address_line_2, c.suburb, c.postcode, c.address_state
+      c.display_name, c.phone, c.address_line_1,
+      c.address_line_1 AS addressLine1, c.address_line_2, c.suburb, c.postcode,
+      c.address_state, c.address_state AS addressState
       FROM customer_project_quotes q
       JOIN trade_opportunity_matches m ON m.id = q.opportunity_match_id AND m.firebase_uid = q.installer_uid
       JOIN trade_opportunities o ON o.id = q.opportunity_id
@@ -1749,5 +1904,10 @@ async function customerProjectMutation(
   } else {
     return json({ ok: false, error: "Choose a valid project action." }, 400);
   }
-  return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+  return json({
+    ok: true,
+    id,
+    ...(responseProfile ? { profile: responseProfile } : {}),
+    projects: await projectsForOwner(user.uid),
+  });
 }

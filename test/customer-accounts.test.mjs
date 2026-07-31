@@ -60,7 +60,12 @@ test("trade-seeking profiles require private contact details that match the proj
   assert.equal(CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION, "2026-07-18");
   assert.match(schema, /phone: text\("phone"\).*?default\(""\)/);
   assert.match(schema, /addressLine1: text\("address_line_1"\).*?default\(""\)/);
-  assert.match(projectsRoute, /customerContactReadiness\(contactAccount \|\| \{\}, current\)/);
+  assert.match(projectsRoute, /address_line_1 AS addressLine1/);
+  assert.match(projectsRoute, /address_state AS addressState/);
+  assert.match(
+    projectsRoute,
+    /customerContactReadiness\(\s*authoritativeContact,\s*current,\s*\)/,
+  );
 });
 
 test("customer auth supports Google, email, verification and password recovery", () => {

@@ -56,15 +56,6 @@ function customerProfileShape(record: CustomerAccountRecord) {
   };
 }
 
-function profileRevisionConflict(updatedAt = "") {
-  return json({
-    ok: false,
-    code: "PROFILE_REVISION_CONFLICT",
-    error: "Your private profile changed in another tab. Review the latest details before trying again.",
-    updatedAt,
-  }, 409);
-}
-
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -204,16 +195,7 @@ export async function PATCH(request: Request) {
   const confirmSubmittedProjectContactUpdate =
     raw.confirmSubmittedProjectContactUpdate === true;
   const projectId = cleanId(raw.projectId);
-  const expectedUpdatedAt = typeof raw.expectedUpdatedAt === "string"
-    ? raw.expectedUpdatedAt.trim().slice(0, 40)
-    : "";
   if (!projectId) return json({ ok: false, error: "Choose a valid project." }, 400);
-  if (!expectedUpdatedAt) {
-    return json({
-      ok: false,
-      error: "Refresh your private profile before saving these contact details.",
-    }, 400);
-  }
 
   const db = getD1();
   const [account, project] = await Promise.all([
@@ -248,10 +230,6 @@ export async function PATCH(request: Request) {
       error: "Private contact details cannot be updated for this project's current status.",
     }, 409);
   }
-  if (expectedUpdatedAt !== String(account.updated_at || "")) {
-    return profileRevisionConflict(String(account.updated_at || ""));
-  }
-
   const validated = validateCustomerProfile({
     displayName: account.display_name,
     phone: raw.phone,
@@ -285,7 +263,7 @@ export async function PATCH(request: Request) {
   const updated = await db.prepare(`UPDATE customer_accounts
     SET phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?,
       postcode = ?, address_state = ?, updated_at = ?
-    WHERE firebase_uid = ? AND updated_at = ?
+    WHERE firebase_uid = ?
       AND EXISTS (
         SELECT 1 FROM customer_projects
         WHERE id = ? AND firebase_uid = ?
@@ -303,7 +281,6 @@ export async function PATCH(request: Request) {
       profile.addressState,
       updatedAt,
       user.uid,
-      expectedUpdatedAt,
       projectId,
       user.uid,
       confirmSubmittedProjectContactUpdate ? 1 : 0,
@@ -314,9 +291,13 @@ export async function PATCH(request: Request) {
   // contact update can therefore report more than one changed row.
   if (Number(updated.meta.changes || 0) < 1) {
     const [latestAccount, latestProject] = await Promise.all([
-      db.prepare("SELECT updated_at FROM customer_accounts WHERE firebase_uid = ?")
+      db.prepare(`SELECT firebase_uid, email, display_name, phone, address_line_1,
+        address_line_2, suburb, postcode, address_state, property_type,
+        household_situation, account_updates, account_status, consent_version,
+        consent_at, created_at, updated_at
+        FROM customer_accounts WHERE firebase_uid = ?`)
         .bind(user.uid)
-        .first<{ updated_at: string }>(),
+        .first<CustomerAccountRecord>(),
       db.prepare("SELECT status FROM customer_projects WHERE id = ? AND firebase_uid = ?")
         .bind(projectId, user.uid)
         .first<{ status: string }>(),
@@ -338,7 +319,23 @@ export async function PATCH(request: Request) {
         error: "Private contact details cannot be updated for this project's current status.",
       }, 409);
     }
-    return profileRevisionConflict(String(latestAccount.updated_at || ""));
+    const latestMatchesSubmittedContact =
+      String(latestAccount.phone || "") === profile.phone
+      && String(latestAccount.address_line_1 || "") === profile.addressLine1
+      && String(latestAccount.address_line_2 || "") === profile.addressLine2
+      && String(latestAccount.suburb || "") === profile.suburb
+      && String(latestAccount.postcode || "") === profile.postcode
+      && String(latestAccount.address_state || "") === profile.addressState;
+    if (latestMatchesSubmittedContact) {
+      return json({
+        ok: true,
+        profile: customerProfileShape(latestAccount),
+      });
+    }
+    return json({
+      ok: false,
+      error: "Your private contact details could not be saved. Try again.",
+    }, 503);
   }
 
   return json({

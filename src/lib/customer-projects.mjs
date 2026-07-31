@@ -1388,15 +1388,21 @@ export function validateCustomerProfile(raw = {}) {
 }
 
 export function customerContactReadiness(profile = {}, project = {}) {
-  if (!text(profile.phone, 32) || !text(profile.addressLine1, 120) || !text(profile.suburb, 80)) {
-    return { ok: false, error: "Add your phone number and full service address in Privacy and profile before requesting trades." };
+  const phone = text(profile.phone, 32);
+  const addressLine1 = text(
+    profile.addressLine1 || profile.address_line_1,
+    120,
+  );
+  const suburb = text(profile.suburb, 80);
+  if (!phone || !addressLine1 || !suburb) {
+    return { ok: false, error: "Add a phone number, street address and suburb to continue." };
   }
   const projectPostcode = text(project.postcode, 4);
   const projectState = canonicalAustralianState(project.addressState || project.address_state) || "";
   const profilePostcode = text(profile.postcode, 4);
   const profileState = canonicalAustralianState(profile.addressState || profile.address_state) || "";
   if (projectPostcode !== profilePostcode || projectState !== profileState) {
-    return { ok: false, error: "Update Privacy and profile so the service address matches this project's postcode and state before requesting trades." };
+    return { ok: false, error: "The service address postcode and state must match this project." };
   }
   return { ok: true };
 }

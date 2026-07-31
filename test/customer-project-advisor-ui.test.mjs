@@ -428,30 +428,24 @@ test("preview navigation reports saved readiness instead of transient click hist
   assert.doesNotMatch(dashboard, /step > index \+ 1/);
 });
 
-test("both installer request entry points use one revision-safe completion flow", () => {
+test("both installer request entry points submit the modal contact as the authority", () => {
   assert.equal((dashboard.match(/<CustomerInstallerRequestDialog/g) || []).length, 2);
   assert.doesNotMatch(dashboard, /key=\{`installer-request-\$\{profile\.updatedAt\}`\}/);
   assert.match(
     dashboard,
-    /const patchProfile = async \([\s\S]{0,900}method: "PATCH"[\s\S]{0,500}expectedUpdatedAt,/,
+    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,\s*installerPhotoSharing,\s*contact,/,
   );
   assert.match(
     dashboard,
-    /saveInstallerRequestProfileWithOneConflictRetry\(\{[\s\S]{0,180}contact,[\s\S]{0,120}expectedUpdatedAt: account\.profile\.updatedAt,[\s\S]{0,120}save: patchProfile,[\s\S]{0,120}loadLatest: loadLatestProfile,/,
+    /onRequestInstallerResponses\(\s*project\.id,\s*project\.planRevision,\s*installerPhotoSharing,\s*contact,/,
   );
   assert.match(
     dashboard,
-    /const latestProfile = latest\.profile as CustomerProfile;[\s\S]{0,140}profile: latestProfile,[\s\S]{0,100}return latestProfile;/,
+    /action: "submit",[\s\S]{0,180}confirmInstallerPhotoSharing,[\s\S]{0,120}expectedPlanRevision,[\s\S]{0,80}contact,/,
   );
-  assert.match(dashboard, /onSaveRequestProfile\(contact, saved\.id\)/);
-  assert.match(
-    dashboard,
-    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,/,
-  );
-  assert.match(
-    dashboard,
-    /onRequestInstallerResponses\(\s*project\.id,\s*project\.planRevision,/,
-  );
+  assert.doesNotMatch(dashboard, /saveInstallerRequestProfileWithOneConflictRetry/);
+  assert.doesNotMatch(dashboard, /confirmSubmittedProjectContactUpdate/);
+  assert.doesNotMatch(dashboard, /expectedUpdatedAt: account\.profile\.updatedAt/);
   assert.match(
     dashboard,
     /\["matching", "quote_review"\]\.includes\(recovered\.status\)/,
@@ -470,22 +464,21 @@ test("both installer request entry points use one revision-safe completion flow"
   assert.equal(
     (editorCompletion.match(/await onRequestInstallerResponses\(/g) || [])
       .length,
-    1,
+    2,
+  );
+  assert.match(
+    editorCompletion,
+    /onRequestInstallerResponses\([\s\S]{0,220}contact,\s*false,/,
   );
   assert.ok(
     editorCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
       < editorCompletion.indexOf("const saved = await onSave("),
     "the editor must reconcile an uncertain submit before saving the draft",
   );
-  assert.match(editorCompletion, /installerContactFingerprint\(contact\)/);
-  assert.match(editorCompletion, /contactFingerprint,/);
+  assert.doesNotMatch(editorCompletion, /onSaveRequestProfile|customer-account/);
   assert.match(
     editorCompletion,
-    /await onSaveRequestProfile\(\s*contact,\s*uncertainSubmit\.projectId,\s*true,/,
-  );
-  assert.match(
-    editorCompletion,
-    /Any plan or evidence-sharing changes made after the network interruption were not applied/,
+    /latest contact details were saved\. Any plan or evidence-sharing changes made after the network interruption were not applied/,
   );
 
   const detailSectionStart = dashboard.indexOf("function ProjectDetail");
@@ -499,24 +492,21 @@ test("both installer request entry points use one revision-safe completion flow"
   assert.equal(
     (detailCompletion.match(/await onRequestInstallerResponses\(/g) || [])
       .length,
-    1,
-  );
-  assert.ok(
-    detailCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
-      < detailCompletion.indexOf("await onSaveRequestProfile(contact, project.id)"),
-    "the detail view must reconcile an uncertain submit before saving contact",
+    2,
   );
   assert.match(
     detailCompletion,
-    /await onSaveRequestProfile\(\s*contact,\s*uncertainSubmit\.projectId,\s*true,/,
+    /onRequestInstallerResponses\([\s\S]{0,220}contact,\s*false,/,
   );
+  assert.ok(
+    detailCompletion.indexOf("await onCheckInstallerRequestSubmitted(")
+      < detailCompletion.indexOf("await onRequestInstallerResponses("),
+    "the detail view must reconcile an uncertain submit before sending again",
+  );
+  assert.doesNotMatch(detailCompletion, /onSaveRequestProfile|customer-account/);
   assert.match(
     dashboard,
-    /confirmSubmittedProjectContactUpdate:\s*allowSubmittedProjectContactUpdate/,
-  );
-  assert.match(
-    dashboard,
-    /The dialog retains its uncertain[\s\S]{0,100}reconcile status before any retry/,
+    /The dialog will reconcile the[\s\S]{0,120}uncertain request status before it allows another submission/,
   );
   assert.doesNotMatch(
     installerRequestDialog,
@@ -526,13 +516,10 @@ test("both installer request entry points use one revision-safe completion flow"
     dashboard,
     /CustomerInstallerRequestProfileConflictError/,
   );
+  assert.doesNotMatch(dashboard, /private profile changed|safely reconciled/i);
   assert.match(
     dashboard,
-    /Your private profile changed again while these details were saving\. Your entries are still here\./,
-  );
-  assert.match(
-    dashboard,
-    /could not be safely reconciled\. Your entries are still here\./,
+    /keepAuthoritativeContact\(result\.profile as CustomerProfile \| undefined\)/,
   );
   assert.doesNotMatch(
     dashboard,
