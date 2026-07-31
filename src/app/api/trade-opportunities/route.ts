@@ -16,6 +16,7 @@ import {
   normalizePlatformQuote,
   parseStoredJson,
 } from "@/lib/customer-projects.mjs";
+import { createInstallerEnquiryPack } from "@/lib/customer-plan-document.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
@@ -38,6 +39,32 @@ function installerEvidenceName(item: Record<string, unknown>) {
       : item.content_type === "image/webp" ? "webp" : "jpg";
   const category = String(item.category || "project-evidence").replace(/[^a-z0-9-]/g, "");
   return `${category || "project-evidence"}.${extension}`;
+}
+
+function installerEnquiryPack(
+  row: Record<string, unknown>,
+  evidence: Array<Record<string, unknown>>,
+) {
+  if (!row.customer_project_id) return null;
+  return createInstallerEnquiryPack({
+    goal: row.customer_goal,
+    goals: row.customer_goals,
+    pace: row.customer_pace,
+    postcode: row.customer_postcode,
+    address_state: row.customer_address_state,
+    property_type: row.customer_property_type,
+    household_situation: row.customer_household_situation,
+    existing_features: row.customer_existing_features,
+    service_categories: row.customer_service_categories,
+    budget_range: row.customer_budget_range,
+    property_context: row.property_context,
+    advisor_profile: row.customer_advisor_profile,
+    plan_snapshot: row.customer_plan_snapshot,
+    completed_plan_items: row.customer_completed_plan_items,
+  }, {
+    preparedAt: String(row.customer_project_updated_at || new Date().toISOString()),
+    evidence,
+  });
 }
 
 async function productSnapshot(installerUid: string, productListId: string) {
@@ -123,6 +150,14 @@ export async function GET(request: Request) {
     r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
     r.notice_version contact_notice_version, r.granted_at contact_granted_at,
     p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
+    p.goal customer_goal, p.goals customer_goals, p.pace customer_pace,
+    p.postcode customer_postcode, p.address_state customer_address_state,
+    p.property_type customer_property_type, p.household_situation customer_household_situation,
+    p.existing_features customer_existing_features,
+    p.service_categories customer_service_categories, p.budget_range customer_budget_range,
+    p.advisor_profile customer_advisor_profile, p.plan_snapshot customer_plan_snapshot,
+    p.completed_plan_items customer_completed_plan_items,
+    p.updated_at customer_project_updated_at,
     ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
     ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
     ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
@@ -141,7 +176,8 @@ export async function GET(request: Request) {
     .bind(user.uid)
     .all<Record<string, unknown>>();
   const evidenceRows = await db.prepare(`SELECT e.id, e.project_id, e.category, e.content_type,
-      e.size_bytes, e.created_at, m.id opportunity_match_id
+      e.size_bytes, e.created_at, e.fact_keys, e.sharing_scope,
+      m.id opportunity_match_id
     FROM customer_project_evidence e
     JOIN customer_projects p ON p.id = e.project_id AND p.firebase_uid = e.customer_uid
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
@@ -155,89 +191,105 @@ export async function GET(request: Request) {
           AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
       )
     ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
+  const evidenceByMatch = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of evidenceRows.results) {
+    const matchId = String(item.opportunity_match_id || "");
+    if (!matchId) continue;
+    const current = evidenceByMatch.get(matchId) || [];
+    current.push(item);
+    evidenceByMatch.set(matchId, current);
+  }
   return json({
     ok: true,
-    opportunities: rows.results.map((row: Record<string, unknown>) => ({
-      matchId: row.match_id,
-      matchStatus: row.match_status,
-      matchedCategories: parseJsonList(row.matched_categories),
-      distanceBand: distanceBand(row.distance_metres),
-      allocationRank: Number(row.allocation_rank || 0),
-      contactAttemptCount: Number(row.contact_attempt_count || 0),
-      contactLimit: Number(row.contact_limit || 2),
-      lastContactAt: row.last_contact_at,
-      connectedAt: row.connected_at,
-      expiresAt: row.expires_at,
-      matchedAt: row.matched_at,
-      updatedAt: row.updated_at,
-      id: row.id,
-      title: row.title,
-      projectType: row.project_type,
-      postcode: "",
-      state: row.state,
-      serviceCategories: parseJsonList(row.service_categories),
-      priority: row.priority,
-      timing: row.timing,
-      summary: row.summary,
-      propertyContext: buildInstallerPropertyContext(
-        parseStoredJson(row.property_context, {}),
-      ),
-      opportunityStatus: row.status,
-      platformOnly: String(row.source_reference || "").startsWith("customer-project:"),
-      customerContact: row.contact_release_id ? {
-        name: row.customer_name,
-        email: row.customer_email,
-        phone: row.customer_phone,
-        addressLine1: row.contact_address_line_1,
-        addressLine2: row.contact_address_line_2,
-        suburb: row.contact_suburb,
-        addressState: row.contact_address_state,
-        postcode: row.contact_postcode,
-        grantedAt: row.contact_granted_at,
-        noticeVersion: row.contact_notice_version,
-      } : null,
-      evidence: evidenceRows.results
-        .filter((item: Record<string, unknown>) => item.opportunity_match_id === row.match_id)
-        .map((item: Record<string, unknown>) => ({
-          id: item.id,
-          category: item.category,
-          fileName: installerEvidenceName(item),
-          contentType: item.content_type,
-          sizeBytes: Number(item.size_bytes || 0),
-          createdAt: item.created_at,
-          sharingScope: "allocated-installers",
-        })),
-      arrivalProposal: row.arrival_proposal_id ? {
-        id: row.arrival_proposal_id,
-        status: row.arrival_status,
-        windows: parseArrivalWindows(row.arrival_windows),
-        installerNote: row.arrival_installer_note,
-        selectedWindow: parseStoredJson(row.arrival_selected_window, null),
-        crmWorkOrderId: row.arrival_crm_work_order_id,
-        crmAppointmentId: row.arrival_crm_appointment_id,
-        preparationAcknowledgedAt: row.arrival_preparation_acknowledged_at,
-        revision: Number(row.arrival_revision || 1),
-        proposedAt: row.arrival_proposed_at,
-        selectedAt: row.arrival_selected_at,
-      } : null,
-      quote: row.quote_id ? {
-        id: row.quote_id,
-        productListId: row.product_list_id,
-        inclusions: parseStoredJson(row.quote_inclusions, []),
-        products: parseStoredJson(row.product_snapshot, []),
-        productSubtotalCentsExGst: Number(row.product_subtotal_cents_ex_gst || 0),
-        labourCentsExGst: Number(row.labour_cents_ex_gst || 0),
-        otherCentsExGst: Number(row.other_cents_ex_gst || 0),
-        totalCentsExGst: Number(row.total_cents_ex_gst || 0),
-        quoteType: row.quote_type,
-        startWindow: row.start_window,
-        durationWeeks: Number(row.duration_weeks || 0),
-        workmanshipWarrantyYears: Number(row.workmanship_warranty_years || 0),
-        status: row.quote_status,
-        customerDecision: row.customer_decision,
-        submittedAt: row.quote_submitted_at,
-      } : null,
-    })),
+    opportunities: rows.results.map((row: Record<string, unknown>) => {
+      const sharedEvidence = evidenceByMatch.get(String(row.match_id || "")) || [];
+      const evidence = sharedEvidence.map((item: Record<string, unknown>) => ({
+        id: item.id,
+        category: item.category,
+        fileName: installerEvidenceName(item),
+        contentType: item.content_type,
+        sizeBytes: Number(item.size_bytes || 0),
+        createdAt: item.created_at,
+        sharingScope: "allocated-installers",
+      }));
+      const platformOnly = String(row.source_reference || "")
+        .startsWith("customer-project:");
+      return {
+        matchId: row.match_id,
+        matchStatus: row.match_status,
+        matchedCategories: parseJsonList(row.matched_categories),
+        distanceBand: distanceBand(row.distance_metres),
+        allocationRank: Number(row.allocation_rank || 0),
+        contactAttemptCount: Number(row.contact_attempt_count || 0),
+        contactLimit: Number(row.contact_limit || 2),
+        lastContactAt: row.last_contact_at,
+        connectedAt: row.connected_at,
+        expiresAt: row.expires_at,
+        matchedAt: row.matched_at,
+        updatedAt: row.updated_at,
+        id: row.id,
+        title: row.title,
+        projectType: row.project_type,
+        postcode: "",
+        state: row.state,
+        serviceCategories: parseJsonList(row.service_categories),
+        priority: row.priority,
+        timing: row.timing,
+        summary: row.summary,
+        propertyContext: buildInstallerPropertyContext(
+          parseStoredJson(row.property_context, {}),
+        ),
+        enquiryPack: platformOnly
+          ? installerEnquiryPack(row, sharedEvidence)
+          : null,
+        approvedSharedFileCount: evidence.length,
+        opportunityStatus: row.status,
+        platformOnly,
+        customerContact: row.contact_release_id ? {
+          name: row.customer_name,
+          email: row.customer_email,
+          phone: row.customer_phone,
+          addressLine1: row.contact_address_line_1,
+          addressLine2: row.contact_address_line_2,
+          suburb: row.contact_suburb,
+          addressState: row.contact_address_state,
+          postcode: row.contact_postcode,
+          grantedAt: row.contact_granted_at,
+          noticeVersion: row.contact_notice_version,
+        } : null,
+        evidence,
+        arrivalProposal: row.arrival_proposal_id ? {
+          id: row.arrival_proposal_id,
+          status: row.arrival_status,
+          windows: parseArrivalWindows(row.arrival_windows),
+          installerNote: row.arrival_installer_note,
+          selectedWindow: parseStoredJson(row.arrival_selected_window, null),
+          crmWorkOrderId: row.arrival_crm_work_order_id,
+          crmAppointmentId: row.arrival_crm_appointment_id,
+          preparationAcknowledgedAt: row.arrival_preparation_acknowledged_at,
+          revision: Number(row.arrival_revision || 1),
+          proposedAt: row.arrival_proposed_at,
+          selectedAt: row.arrival_selected_at,
+        } : null,
+        quote: row.quote_id ? {
+          id: row.quote_id,
+          productListId: row.product_list_id,
+          inclusions: parseStoredJson(row.quote_inclusions, []),
+          products: parseStoredJson(row.product_snapshot, []),
+          productSubtotalCentsExGst: Number(row.product_subtotal_cents_ex_gst || 0),
+          labourCentsExGst: Number(row.labour_cents_ex_gst || 0),
+          otherCentsExGst: Number(row.other_cents_ex_gst || 0),
+          totalCentsExGst: Number(row.total_cents_ex_gst || 0),
+          quoteType: row.quote_type,
+          startWindow: row.start_window,
+          durationWeeks: Number(row.duration_weeks || 0),
+          workmanshipWarrantyYears: Number(row.workmanship_warranty_years || 0),
+          status: row.quote_status,
+          customerDecision: row.customer_decision,
+          submittedAt: row.quote_submitted_at,
+        } : null,
+      };
+    }),
   });
 }
 

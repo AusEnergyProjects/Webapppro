@@ -398,7 +398,7 @@ test("the authoritative submit SQL accepts the modal contact and rejects a stale
     /,\s*db\.prepare\(`(UPDATE customer_projects[\s\S]*?)`\)/,
   )?.[1];
   const ownerContactSelect = projectsRoute.match(
-    /const account = await db\.prepare\(`(SELECT display_name[\s\S]*?FROM customer_accounts WHERE firebase_uid = \?)`\)/,
+    /db\.prepare\(`(SELECT display_name[\s\S]*?FROM customer_accounts WHERE firebase_uid = \?)`\)\s*\.bind\(firebaseUid\)\.first/,
   )?.[1];
   assert.ok(accountUpdate, "authoritative account update SQL was not found");
   assert.ok(projectUpdate, "guarded project submit SQL was not found");

@@ -97,9 +97,10 @@ test("recurring jobs use system numbers, a due-date ledger and protected custome
 });
 
 test("schedule automation has daily and manual controls without duplicate entry points", () => {
-  assert.match(vite, /triggers: \{ crons: \["15 20 \* \* \*"\] \}/);
+  assert.match(vite, /triggers: \{ crons: \["\* \* \* \* \*", "15 20 \* \* \*"\] \}/);
   assert.match(worker, /async scheduled/);
-  assert.match(worker, /generateDueServiceJobs/);
+  assert.match(worker, /controller\.cron === DAILY_MAINTENANCE_CRON[\s\S]*generateDueServiceJobs/);
+  assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
   assert.match(lifecycleRoute, /action === "generate_due_jobs"/);
   assert.match(lifecycleRoute, /auto_create_enabled/);
   assert.match(lifecycleUi, /Create recurring jobs automatically/);

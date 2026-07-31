@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -71,6 +71,43 @@ type DashboardOpportunity = {
   timing: string;
   summary: string;
   propertyContext: Record<string, string | string[]>;
+  enquiryPack: null | {
+    version: string;
+    planTitle: string;
+    summary: string;
+    goals: string[];
+    planBoundary: {
+      pace: string;
+      budget: string;
+    };
+    homeContext: {
+      propertyType: string;
+      tenure: string;
+      state: string;
+      approval: string;
+      details: string[];
+      consideredWork: string[];
+    };
+    readiness: {
+      answered: number;
+      total: number;
+      notSure: number;
+      missing: number;
+      message: string;
+      boundary: string;
+    };
+    firstSteps: Array<{
+      number: number;
+      stage: string;
+      title: string;
+      description: string;
+      guideLabel: string;
+      guideHref: string;
+    }>;
+    privacyNote: string;
+    adviceBoundary: string;
+  };
+  approvedSharedFileCount: number;
   opportunityStatus: string;
   platformOnly: boolean;
   customerContact: null | {
@@ -114,6 +151,24 @@ type DashboardOpportunity = {
   };
 };
 type DashboardWorkspace = "work" | "schedule" | "invoices" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account";
+const dashboardWorkspaces = new Set<DashboardWorkspace>([
+  "work",
+  "schedule",
+  "invoices",
+  "follow-ups",
+  "leads",
+  "products",
+  "orders",
+  "import",
+  "account",
+]);
+
+function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
+  const requested = new URLSearchParams(search).get("workspace");
+  return dashboardWorkspaces.has(requested as DashboardWorkspace)
+    ? requested as DashboardWorkspace
+    : "work";
+}
 
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
@@ -132,6 +187,204 @@ const capabilityLabels: Record<string, string> = {
   controls: "Energy controls",
   other: "Other energy upgrades",
 };
+
+function EnquiryPack({
+  opportunity,
+  photoUrls,
+  photosVisible,
+  photoBusy,
+  photoError,
+  downloadBusy,
+  onTogglePhotos,
+  onDownload,
+}: {
+  opportunity: DashboardOpportunity;
+  photoUrls: Record<string, string>;
+  photosVisible: boolean;
+  photoBusy: boolean;
+  photoError: string;
+  downloadBusy: string;
+  onTogglePhotos: () => void;
+  onDownload: (item: DashboardOpportunity["evidence"][number]) => void;
+}) {
+  const pack = opportunity.enquiryPack;
+  if (!pack) return null;
+  const photos = opportunity.evidence.filter((item) =>
+    item.contentType.startsWith("image/")
+  );
+  const documents = opportunity.evidence.filter(
+    (item) => item.contentType === "application/pdf",
+  );
+  const sharedFileCount = opportunity.approvedSharedFileCount;
+
+  return (
+    <section className="dashboard-enquiry-pack" aria-label="Enquiry pack">
+      <div className="dashboard-enquiry-pack-heading">
+        <div>
+          <span>Enquiry pack</span>
+          <h4>{pack.planTitle}</h4>
+          {pack.summary && <p>{pack.summary}</p>}
+        </div>
+        <strong>
+          {sharedFileCount} approved file{sharedFileCount === 1 ? "" : "s"}
+        </strong>
+      </div>
+
+      <div className="dashboard-enquiry-pack-grid">
+        <div>
+          <span>Customer goals</span>
+          <p>{pack.goals.join(", ") || "No goals recorded"}</p>
+        </div>
+        <div>
+          <span>Plan boundary</span>
+          <p>{pack.planBoundary.pace} | {pack.planBoundary.budget}</p>
+        </div>
+        <div>
+          <span>Home context</span>
+          <p>
+            {[pack.homeContext.propertyType, pack.homeContext.tenure, pack.homeContext.state]
+              .filter(Boolean)
+              .join(", ")}
+          </p>
+          <small>{pack.homeContext.details.join(", ")}</small>
+          {pack.homeContext.consideredWork.length > 0 && (
+            <small>
+              Work being considered: {pack.homeContext.consideredWork.join(", ")}
+            </small>
+          )}
+          {pack.homeContext.approval && (
+            <small>Approval: {pack.homeContext.approval}</small>
+          )}
+        </div>
+        <div>
+          <span>Planning readiness</span>
+          <p>{pack.readiness.message}</p>
+          <small>{pack.readiness.boundary}</small>
+        </div>
+      </div>
+
+      {pack.firstSteps.length > 0 && (
+        <div className="dashboard-enquiry-first-steps">
+          <div>
+            <span>Ordered first steps</span>
+            <small>Use these priorities to shape a clear written scope.</small>
+          </div>
+          <ol>
+            {pack.firstSteps.map((step) => (
+              <li key={`${step.number}-${step.title}`}>
+                <b>{step.number.toString().padStart(2, "0")}</b>
+                <div>
+                  <span>{step.stage}</span>
+                  <strong>{step.title}</strong>
+                  <p>{step.description}</p>
+                  {step.guideHref && (
+                    <a href={step.guideHref}>{step.guideLabel}</a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <div className="dashboard-enquiry-evidence">
+        <div className="dashboard-enquiry-evidence-heading">
+          <div>
+            <span>Customer-approved shared files</span>
+            <strong>
+              {sharedFileCount
+                ? `${sharedFileCount} protected file${sharedFileCount === 1 ? "" : "s"} available`
+                : "No approved shared evidence"}
+            </strong>
+          </div>
+          {photos.length > 0 && (
+            <button
+              type="button"
+              disabled={photoBusy}
+              onClick={onTogglePhotos}
+            >
+              {photoBusy
+                ? "Opening approved photos..."
+                : photosVisible
+                  ? "Hide approved photos"
+                  : `Show approved photos (${photos.length})`}
+            </button>
+          )}
+        </div>
+
+        {!sharedFileCount ? (
+          <p>
+            No customer-approved photos or documents are shared with this
+            enquiry.
+          </p>
+        ) : (
+          <p>
+            Files are available only to verified installers allocated to this
+            enquiry. Every protected file access is authorised and recorded.
+          </p>
+        )}
+
+        {photosVisible && photos.length > 0 && (
+          <div className="dashboard-enquiry-thumbnails">
+            {photos.map((item) => (
+              <article key={item.id}>
+                {photoUrls[item.id] && (
+                  // Authenticated evidence is exposed as a short-lived object URL.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrls[item.id]}
+                    alt={`Customer-approved ${item.category.replaceAll("-", " ")} photo`}
+                  />
+                )}
+                <div>
+                  <span>Approved quoting photo</span>
+                  <strong>{item.category.replaceAll("-", " ")}</strong>
+                  <small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small>
+                </div>
+                <button
+                  type="button"
+                  disabled={downloadBusy === item.id}
+                  onClick={() => onDownload(item)}
+                >
+                  Protected download
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {documents.length > 0 && (
+          <div className="dashboard-enquiry-documents">
+            {documents.map((item) => (
+              <article key={item.id}>
+                <div>
+                  <span>Approved project document</span>
+                  <strong>{item.category.replaceAll("-", " ")}</strong>
+                  <small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small>
+                </div>
+                <button
+                  type="button"
+                  disabled={downloadBusy === item.id}
+                  onClick={() => onDownload(item)}
+                >
+                  Protected PDF download
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {photoError && (
+          <p className="dashboard-enquiry-evidence-error" role="alert">
+            {photoError}
+          </p>
+        )}
+      </div>
+
+      <small className="dashboard-enquiry-privacy">{pack.privacyNote}</small>
+    </section>
+  );
+}
 
 const verifiedTradeFeatures = [
   "Leads and privacy-safe marketplace opportunities",
@@ -196,9 +449,18 @@ export function DirectTradeDashboard() {
   const [leadStatusFilter, setLeadStatusFilter] = useState("");
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
-  const [workspace, setWorkspace] = useState<DashboardWorkspace>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "work");
+  const [workspace, setWorkspace] = useState<DashboardWorkspace>(() =>
+    typeof window === "undefined"
+      ? "work"
+      : dashboardWorkspaceFromSearch(window.location.search)
+  );
   const [scheduleWeekStart, setScheduleWeekStart] = useState("");
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
+  const [visibleEvidenceMatches, setVisibleEvidenceMatches] = useState<Record<string, boolean>>({});
+  const [evidencePhotoUrls, setEvidencePhotoUrls] = useState<Record<string, Record<string, string>>>({});
+  const [evidencePhotoBusy, setEvidencePhotoBusy] = useState("");
+  const [evidencePhotoErrors, setEvidencePhotoErrors] = useState<Record<string, string>>({});
+  const evidenceObjectUrls = useRef(new Set<string>());
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -212,6 +474,11 @@ export function DirectTradeDashboard() {
       setCommandTarget({ workspace: "work", kind: "crm-view", id: "integrations", query: "", nonce: Date.now() });
     });
     return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => () => {
+    for (const url of evidenceObjectUrls.current) URL.revokeObjectURL(url);
+    evidenceObjectUrls.current.clear();
   }, []);
 
   useEffect(
@@ -456,6 +723,73 @@ export function DirectTradeDashboard() {
       );
     } finally {
       setOpportunityBusy("");
+    }
+  }
+
+  async function toggleOpportunityPhotos(opportunity: DashboardOpportunity) {
+    if (!user) return;
+    const photos = opportunity.evidence.filter((item) =>
+      item.contentType.startsWith("image/")
+    );
+    if (!photos.length) return;
+    const existing = evidencePhotoUrls[opportunity.matchId];
+    if (existing && Object.keys(existing).length === photos.length) {
+      setVisibleEvidenceMatches((current) => ({
+        ...current,
+        [opportunity.matchId]: !current[opportunity.matchId],
+      }));
+      return;
+    }
+
+    setEvidencePhotoBusy(opportunity.matchId);
+    setEvidencePhotoErrors((current) => ({
+      ...current,
+      [opportunity.matchId]: "",
+    }));
+    const createdUrls: string[] = [];
+    try {
+      const token = await user.getIdToken();
+      const nextUrls: Record<string, string> = {};
+      for (const item of photos) {
+        const response = await fetch(
+          `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          },
+        );
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(
+            result.error || "The approved photo could not be opened.",
+          );
+        }
+        const url = URL.createObjectURL(await response.blob());
+        createdUrls.push(url);
+        evidenceObjectUrls.current.add(url);
+        nextUrls[item.id] = url;
+      }
+      setEvidencePhotoUrls((current) => ({
+        ...current,
+        [opportunity.matchId]: nextUrls,
+      }));
+      setVisibleEvidenceMatches((current) => ({
+        ...current,
+        [opportunity.matchId]: true,
+      }));
+    } catch (previewError) {
+      for (const url of createdUrls) {
+        URL.revokeObjectURL(url);
+        evidenceObjectUrls.current.delete(url);
+      }
+      setEvidencePhotoErrors((current) => ({
+        ...current,
+        [opportunity.matchId]: previewError instanceof Error
+          ? previewError.message
+          : "The approved photos could not be opened.",
+      }));
+    } finally {
+      setEvidencePhotoBusy("");
     }
   }
 
@@ -809,8 +1143,22 @@ export function DirectTradeDashboard() {
                                 : opportunity.matchStatus.replaceAll("_", " ")}
                             </strong>
                           </header>
-                          <p>{opportunity.summary}</p>
-                          {opportunity.platformOnly && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}
+                          {(!opportunity.platformOnly || !opportunity.enquiryPack) && (
+                            <p>{opportunity.summary}</p>
+                          )}
+                          {opportunity.platformOnly && opportunity.enquiryPack && (
+                            <EnquiryPack
+                              opportunity={opportunity}
+                              photoUrls={evidencePhotoUrls[opportunity.matchId] || {}}
+                              photosVisible={Boolean(visibleEvidenceMatches[opportunity.matchId])}
+                              photoBusy={evidencePhotoBusy === opportunity.matchId}
+                              photoError={evidencePhotoErrors[opportunity.matchId] || ""}
+                              downloadBusy={opportunityBusy}
+                              onTogglePhotos={() => void toggleOpportunityPhotos(opportunity)}
+                              onDownload={(item) => void downloadOpportunityEvidence(item)}
+                            />
+                          )}
+                          {opportunity.platformOnly && !opportunity.enquiryPack && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}
                           <div className="dashboard-opportunity-tags">
                             <span>
                               Allocation {opportunity.allocationRank} of 6
@@ -924,7 +1272,6 @@ export function DirectTradeDashboard() {
                               <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button>
                             </section>
                           )}
-                          {opportunity.platformOnly && opportunity.evidence.length > 0 && <section className="dashboard-customer-evidence" aria-label="Customer project evidence"><header><div><strong>Customer property evidence</strong><span>All customer-uploaded photos and documents are shared with every verified installer allocated to this enquiry for quoting guidance.</span></div><b>{opportunity.evidence.length}</b></header><div>{opportunity.evidence.map((item) => <article key={item.id}><div><span>{item.contentType === "application/pdf" ? "Project document" : "Quoting photo"}</span><strong>{item.category.replaceAll("-", " ")}</strong><small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small></div><button type="button" disabled={opportunityBusy === item.id} onClick={() => void downloadOpportunityEvidence(item)}>Protected download</button></article>)}</div><small>Every download is authorised against this exact allocated match and recorded. Do not redistribute household evidence outside the enquiry.</small></section>}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
                             <section className="dashboard-opportunity-conversion" aria-label="Accepted opportunity workflow action"><div><strong>Create the CRM job after customer acceptance</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>

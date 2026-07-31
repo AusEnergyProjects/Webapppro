@@ -1066,6 +1066,65 @@ export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", 
   index("trade_opportunity_matches_status_idx").on(table.status),
 ]);
 
+export const tradeOpportunityNotificationDeliveries = sqliteTable("trade_opportunity_notification_deliveries", {
+  id: text("id").primaryKey(),
+  matchId: text("match_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  eligibilityReason: text("eligibility_reason").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  provider: text("provider").notNull().default("resend"),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  recipientEmailHash: text("recipient_email_hash").notNull().default(""),
+  idempotencyKey: text("idempotency_key").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  body: text("body").notNull().default(""),
+  enqueuedAt: text("enqueued_at").notNull(),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_opportunity_notification_deliveries_match_idx").on(table.matchId),
+  uniqueIndex("trade_opportunity_notification_deliveries_idempotency_idx")
+    .on(table.idempotencyKey).where(sql`${table.idempotencyKey} <> ''`),
+  uniqueIndex("trade_opportunity_notification_deliveries_provider_message_idx")
+    .on(table.provider, table.providerMessageId).where(sql`${table.providerMessageId} <> ''`),
+  index("trade_opportunity_notification_deliveries_status_idx").on(table.status, table.nextAttemptAt, table.enqueuedAt),
+  index("trade_opportunity_notification_deliveries_recipient_idx").on(table.recipientEmailHash, table.createdAt),
+]);
+
+export const tradeOpportunityNotificationDeliveryEvents = sqliteTable("trade_opportunity_notification_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_opportunity_notification_delivery_events_provider_idx").on(table.providerEventKey),
+  index("trade_opportunity_notification_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
+]);
+
+export const tradeOpportunityEmailSuppressions = sqliteTable("trade_opportunity_email_suppressions", {
+  emailHash: text("email_hash").primaryKey(),
+  reason: text("reason").notNull(),
+  provider: text("provider").notNull().default("resend"),
+  providerStatus: text("provider_status").notNull(),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  suppressedAt: text("suppressed_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_opportunity_email_suppressions_time_idx").on(table.suppressedAt),
+]);
+
 export const tradeCrmCustomers = sqliteTable("trade_crm_customers", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),

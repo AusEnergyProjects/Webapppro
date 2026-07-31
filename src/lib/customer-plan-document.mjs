@@ -22,6 +22,8 @@ import {
 } from "./customer-plan-report-design.mjs";
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
 export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-premium-report-v3";
+export const INSTALLER_ENQUIRY_PACK_VERSION =
+  "2026-07-31-installer-enquiry-pack-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
 export const CUSTOMER_PLAN_PUBLIC_ORIGIN = "https://compare.ausenergyassessments.com";
 export const AEA_BRANDMARK_PUBLIC_URL =
@@ -530,6 +532,87 @@ export function createCustomerPlanDocument(
     omitted: countPrivateItems(sourceAdvisorProfile, snapshotItems),
     privacyNote: "This shareable copy deliberately excludes the exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.",
     adviceBoundary: "This plan is independent general guidance. It is not a quote, product endorsement, home energy rating, equipment sizing result or savings promise. Confirm safety, permissions, suitability and current incentives before committing to work.",
+  };
+}
+
+/**
+ * Build the bounded planning context an allocated installer needs to decide
+ * whether to quote. The authoritative customer plan document performs the
+ * privacy filtering first; this projection deliberately omits every private
+ * document field that is not required for matching or quote preparation.
+ *
+ * @param {any} row
+ * @param {{preparedAt?: string, evidence?: Array<Record<string, unknown>>}} [options]
+ */
+export function createInstallerEnquiryPack(row, options = {}) {
+  const document = createCustomerPlanDocument(row, options);
+  const overview = (
+    document.overview
+    && typeof document.overview === "object"
+    && !Array.isArray(document.overview)
+  ) ? document.overview : {};
+  const readiness = (
+    document.readiness
+    && typeof document.readiness === "object"
+    && !Array.isArray(document.readiness)
+  ) ? document.readiness : {};
+  const sourceActions = Array.isArray(document.actions)
+    ? document.actions
+    : [];
+  const remainingActions = sourceActions.filter(
+    (action) => action?.completed !== true,
+  );
+  const firstSteps = (remainingActions.length ? remainingActions : sourceActions)
+    .slice(0, 3)
+    .map((action, index) => ({
+      number: Number.isFinite(Number(action?.number))
+        ? Number(action.number)
+        : index + 1,
+      stage: boundedText(action?.stage, 100),
+      title: boundedText(action?.title, 180),
+      description: boundedText(action?.description, 360),
+      guideLabel: safeGuideHref(action?.guideHref)
+        ? boundedText(action?.guideLabel, 120) || "Open the related guide"
+        : "",
+      guideHref: safeGuideHref(action?.guideHref),
+    }))
+    .filter((action) => action.title);
+  const readinessBoundary = document.professionalReview
+    ? "These home answers were marked as reviewed by a self-declared accredited adviser. Australian Energy Assessments has not independently checked that review."
+    : boundedText(readiness.boundary, 420);
+
+  return {
+    version: INSTALLER_ENQUIRY_PACK_VERSION,
+    planTitle: boundedText(document.planTitle, 180),
+    summary: boundedText(document.summary, 360),
+    goals: boundedStringList(overview.goals, 10, 120),
+    planBoundary: {
+      pace: boundedText(overview.pace, 100) || "Not recorded",
+      budget: boundedText(overview.budget, 100) || "Not recorded",
+    },
+    homeContext: {
+      propertyType: boundedText(overview.propertyType, 100) || "Home",
+      tenure: boundedText(overview.tenure, 100) || "Not recorded",
+      state: boundedText(overview.state, 20) || "Not recorded",
+      approval: boundedText(overview.approval, 180) || "Not recorded",
+      details: boundedStringList(overview.homeDetails, 5, 120),
+      consideredWork: boundedStringList(
+        overview.consideredWork,
+        12,
+        120,
+      ),
+    },
+    readiness: {
+      answered: Math.max(0, Number(readiness.answered || 0)),
+      total: Math.max(0, Number(readiness.total || 0)),
+      notSure: Math.max(0, Number(readiness.notSure || 0)),
+      missing: Math.max(0, Number(readiness.missing || 0)),
+      message: boundedText(readiness.message, 360),
+      boundary: readinessBoundary,
+    },
+    firstSteps,
+    privacyNote: "This enquiry pack excludes the exact postcode, private project and account details, contact details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.",
+    adviceBoundary: boundedText(document.adviceBoundary, 700),
   };
 }
 

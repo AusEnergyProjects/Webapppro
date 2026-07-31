@@ -1,12 +1,16 @@
 import handler from "vinext/server/app-router-entry";
 import { getD1 } from "../db";
+import { dispatchAdminNotificationDeliveries } from "../src/lib/admin-notification-delivery";
 import { syncCertificatePriceHistory } from "../src/lib/certificate-prices-server";
+import { drainOpportunityNotificationDeliveries } from "../src/lib/opportunity-notification-server";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
 const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
 const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
+const NOTIFICATION_DELIVERY_CRON = "* * * * *";
+const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
@@ -81,16 +85,30 @@ const worker = {
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
     return cacheable;
   },
-  async scheduled(_controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
-    const db = getD1();
-    ctx.waitUntil(Promise.all([
-      generateDueServiceJobs(db, { limit: 200 }).catch((error) => {
-        console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
-      }),
-      syncCertificatePriceHistory(db).catch((error) => {
-        console.error("Certificate price refresh failed.", error instanceof Error ? error.message : "Unknown error");
-      }),
-    ]).then(() => undefined));
+  async scheduled(controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
+    const tasks: Promise<unknown>[] = [];
+    if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
+      tasks.push(
+        drainOpportunityNotificationDeliveries().catch((error) => {
+          console.error("Opportunity notification delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        dispatchAdminNotificationDeliveries().catch((error) => {
+          console.error("Admin notification delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+      );
+    }
+    if (controller.cron === DAILY_MAINTENANCE_CRON) {
+      const db = getD1();
+      tasks.push(
+        generateDueServiceJobs(db, { limit: 200 }).catch((error) => {
+          console.error("Recurring service job generation failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        syncCertificatePriceHistory(db).catch((error) => {
+          console.error("Certificate price refresh failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+      );
+    }
+    ctx.waitUntil(Promise.all(tasks).then(() => undefined));
   },
 };
 

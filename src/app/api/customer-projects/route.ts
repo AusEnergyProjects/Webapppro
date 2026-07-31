@@ -300,110 +300,126 @@ function storedProjectDraft(row: Record<string, unknown>) {
 
 async function projectsForOwner(firebaseUid: string) {
   const db = getD1();
-  const account = await db.prepare(`SELECT display_name, email, phone,
-    address_line_1 AS addressLine1, address_line_2 AS addressLine2,
-    suburb, postcode, address_state AS addressState
-    FROM customer_accounts WHERE firebase_uid = ?`)
-    .bind(firebaseUid).first<Record<string, unknown>>();
-  const rows = await db.prepare(`SELECT * FROM customer_projects
-    WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100`)
-    .bind(firebaseUid).all<Record<string, unknown>>();
+  const [account, rows] = await Promise.all([
+    db.prepare(`SELECT display_name, email, phone,
+      address_line_1 AS addressLine1, address_line_2 AS addressLine2,
+      suburb, postcode, address_state AS addressState
+      FROM customer_accounts WHERE firebase_uid = ?`)
+      .bind(firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT * FROM customer_projects
+      WHERE firebase_uid = ? ORDER BY archived_at = '', updated_at DESC LIMIT 100`)
+      .bind(firebaseUid).all<Record<string, unknown>>(),
+  ]);
   const opportunityIds = rows.results.map((row: Record<string, unknown>) => String(row.opportunity_id || "")).filter(Boolean);
   const projectIds = rows.results.map((row: Record<string, unknown>) => String(row.id));
-  const progressRows = opportunityIds.length ? await db.prepare(`SELECT o.id opportunity_id, o.status opportunity_status, o.expires_at,
-    COUNT(m.id) installer_count,
-    SUM(CASE WHEN m.status IN ('offered', 'viewed') THEN 1 ELSE 0 END) reviewing_count,
-    SUM(CASE WHEN m.status IN ('interested', 'connected') THEN 1 ELSE 0 END) response_count
-    FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
-    WHERE o.id IN (${opportunityIds.map(() => "?").join(",")}) GROUP BY o.id`)
-    .bind(...opportunityIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const quoteRows = projectIds.length ? await db.prepare(`SELECT q.id, q.project_id, q.inclusions, q.product_snapshot,
-    product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst, total_cents_ex_gst,
-    quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, q.submitted_at, q.updated_at,
-    a.business_name installer_business_name,
-    CASE WHEN ${verifiedTradeAccountPredicate("a")} THEN 'approved' ELSE 'unavailable' END installer_verification_status,
-    r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at,
-    ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
-    ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
-    ap.direct_contact_snapshot arrival_direct_contact_snapshot,
-    ap.direct_contact_selected_at arrival_direct_contact_selected_at,
-    ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
-    ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
-    ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
-    FROM customer_project_quotes q
-    JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
-    LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
-    LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = q.opportunity_match_id
-    WHERE q.project_id IN (${projectIds.map(() => "?").join(",")}) AND q.status = 'submitted'
-    ORDER BY q.submitted_at, q.id`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const retainedHandoverRows = projectIds.length ? await db.prepare(`SELECT DISTINCT customer_project_id
-    FROM trade_handover_packs WHERE customer_project_id IN (${projectIds.map(() => "?").join(",")})
-      AND status = 'published'`).bind(...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const handoverRows = projectIds.length ? await db.prepare(`SELECT p.id, p.customer_project_id, p.service_category,
-    p.published_at, p.updated_at, w.work_number
-    FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
-    WHERE p.customer_project_id IN (${projectIds.map(() => "?").join(",")}) AND p.status = 'published'
-      AND (NOT EXISTS (SELECT 1 FROM customer_asset_ownerships history WHERE history.handover_pack_id = p.id)
-        OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
-          WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
-    ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const evidenceRows = projectIds.length ? await db.prepare(`SELECT id, project_id, category, capture_slot,
-      fact_keys, sharing_scope, file_name, content_type, size_bytes, privacy_status,
-      revision, created_at, updated_at
-    FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
-      AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
-    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const planRevisionRows = projectIds.length ? await db.prepare(`WITH ranked_revisions AS (
+  const emptyRows = { results: [] as Record<string, unknown>[] };
+  const [
+    progressRows,
+    quoteRows,
+    retainedHandoverRows,
+    handoverRows,
+    evidenceRows,
+    planRevisionRows,
+    outcomeRows,
+    evidenceConsentRows,
+  ] = await Promise.all([
+    opportunityIds.length ? db.prepare(`SELECT o.id opportunity_id, o.status opportunity_status, o.expires_at,
+      COUNT(m.id) installer_count,
+      SUM(CASE WHEN m.status IN ('offered', 'viewed') THEN 1 ELSE 0 END) reviewing_count,
+      SUM(CASE WHEN m.status IN ('interested', 'connected') THEN 1 ELSE 0 END) response_count
+      FROM trade_opportunities o LEFT JOIN trade_opportunity_matches m ON m.opportunity_id = o.id
+      WHERE o.id IN (${opportunityIds.map(() => "?").join(",")}) GROUP BY o.id`)
+      .bind(...opportunityIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`SELECT q.id, q.project_id, q.inclusions, q.product_snapshot,
+      product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst, total_cents_ex_gst,
+      quote_type, start_window, duration_weeks, workmanship_warranty_years, customer_decision, q.submitted_at, q.updated_at,
+      a.business_name installer_business_name,
+      CASE WHEN ${verifiedTradeAccountPredicate("a")} THEN 'approved' ELSE 'unavailable' END installer_verification_status,
+      r.status contact_release_status, r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at,
+      ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
+      ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
+      ap.direct_contact_snapshot arrival_direct_contact_snapshot,
+      ap.direct_contact_selected_at arrival_direct_contact_selected_at,
+      ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
+      ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
+      ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
+      FROM customer_project_quotes q
+      JOIN trade_accounts a ON a.firebase_uid = q.installer_uid
+      LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = q.opportunity_match_id
+      LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = q.opportunity_match_id
+      WHERE q.project_id IN (${projectIds.map(() => "?").join(",")}) AND q.status = 'submitted'
+      ORDER BY q.submitted_at, q.id`).bind(...projectIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`SELECT DISTINCT customer_project_id
+      FROM trade_handover_packs WHERE customer_project_id IN (${projectIds.map(() => "?").join(",")})
+        AND status = 'published'`).bind(...projectIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`SELECT p.id, p.customer_project_id, p.service_category,
+      p.published_at, p.updated_at, w.work_number
+      FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id
+      WHERE p.customer_project_id IN (${projectIds.map(() => "?").join(",")}) AND p.status = 'published'
+        AND (NOT EXISTS (SELECT 1 FROM customer_asset_ownerships history WHERE history.handover_pack_id = p.id)
+          OR EXISTS (SELECT 1 FROM customer_asset_ownerships ownership
+            WHERE ownership.handover_pack_id = p.id AND ownership.customer_uid = ? AND ownership.status = 'active'))
+      ORDER BY p.published_at DESC`).bind(...projectIds, firebaseUid).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`SELECT id, project_id, category, capture_slot,
+        fact_keys, sharing_scope, file_name, content_type, size_bytes, privacy_status,
+        revision, created_at, updated_at
+      FROM customer_project_evidence WHERE customer_uid = ? AND status = 'active'
+        AND project_id IN (${projectIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
+      .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`WITH ranked_revisions AS (
+        SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
+          pace, budget_range, plan_snapshot, restored_from_revision, created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY project_id
+            ORDER BY revision_number DESC, created_at DESC, id DESC
+          ) row_rank
+        FROM customer_project_plan_revisions
+        WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
+      )
       SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
-        pace, budget_range, plan_snapshot, restored_from_revision, created_at,
-        ROW_NUMBER() OVER (
-          PARTITION BY project_id
-          ORDER BY revision_number DESC, created_at DESC, id DESC
-        ) row_rank
-      FROM customer_project_plan_revisions
-      WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
-    )
-    SELECT id, project_id, revision_number, event_type, plan_version, goals, home_features,
-      pace, budget_range, plan_snapshot, restored_from_revision, created_at
-    FROM ranked_revisions WHERE row_rank <= ${PLAN_REVISION_READ_LIMIT}
-    ORDER BY project_id, revision_number DESC`)
-    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const outcomeRows = projectIds.length ? await db.prepare(`WITH ranked_outcomes AS (
-      SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at,
-        ROW_NUMBER() OVER (
-          PARTITION BY project_id
-          ORDER BY recorded_at DESC, id DESC
-        ) row_rank
-      FROM customer_project_outcome_checkins
-      WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
-    )
-    SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at
-    FROM ranked_outcomes WHERE row_rank <= ${OUTCOME_CHECKIN_READ_LIMIT}
-    ORDER BY project_id, recorded_at DESC`)
-    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const evidenceConsentRows = projectIds.length ? await db.prepare(`SELECT project_id
-    FROM customer_consent_receipts
-    WHERE firebase_uid = ? AND purpose = 'installer_evidence_sharing' AND withdrawn_at = ''
-      AND project_id IN (${projectIds.map(() => "?").join(",")})`)
-    .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+        pace, budget_range, plan_snapshot, restored_from_revision, created_at
+      FROM ranked_revisions WHERE row_rank <= ${PLAN_REVISION_READ_LIMIT}
+      ORDER BY project_id, revision_number DESC`)
+      .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`WITH ranked_outcomes AS (
+        SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY project_id
+            ORDER BY recorded_at DESC, id DESC
+          ) row_rank
+        FROM customer_project_outcome_checkins
+        WHERE customer_uid = ? AND project_id IN (${projectIds.map(() => "?").join(",")})
+      )
+      SELECT id, project_id, comfort_outcome, energy_outcome, completed_item_ids, note, recorded_at
+      FROM ranked_outcomes WHERE row_rank <= ${OUTCOME_CHECKIN_READ_LIMIT}
+      ORDER BY project_id, recorded_at DESC`)
+      .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : emptyRows,
+    projectIds.length ? db.prepare(`SELECT project_id
+      FROM customer_consent_receipts
+      WHERE firebase_uid = ? AND purpose = 'installer_evidence_sharing' AND withdrawn_at = ''
+        AND project_id IN (${projectIds.map(() => "?").join(",")})`)
+      .bind(firebaseUid, ...projectIds).all<Record<string, unknown>>() : emptyRows,
+  ]);
   const handoverIds = handoverRows.results.map((row: Record<string, unknown>) => String(row.id));
-  const assetRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
-    model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
-    warranty_start, warranty_end FROM trade_installed_assets
-    WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND record_status = 'active'
-    ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const complianceRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, label, status, completed_at
-    FROM trade_compliance_items WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
-    ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const documentRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, category, file_name,
-    content_type, size_bytes, created_at FROM trade_handover_documents
-    WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND customer_visible = 1
-    ORDER BY created_at DESC`).bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
-  const correctionRows = handoverIds.length ? await db.prepare(`SELECT handover_pack_id, id, asset_id, version_number,
-    field_key, previous_value, proposed_value, reason, published_at
-    FROM trade_handover_corrections WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
-      AND status = 'published' ORDER BY version_number DESC`)
-    .bind(...handoverIds).all<Record<string, unknown>>() : { results: [] as Record<string, unknown>[] };
+  const [assetRows, complianceRows, documentRows, correctionRows] = await Promise.all([
+    handoverIds.length ? db.prepare(`SELECT handover_pack_id, id, asset_category, brand,
+      model_number, serial_number, quantity, installed_at, warranty_provider, warranty_reference,
+      warranty_start, warranty_end FROM trade_installed_assets
+      WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND record_status = 'active'
+      ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : emptyRows,
+    handoverIds.length ? db.prepare(`SELECT handover_pack_id, id, label, status, completed_at
+      FROM trade_compliance_items WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
+      ORDER BY created_at`).bind(...handoverIds).all<Record<string, unknown>>() : emptyRows,
+    handoverIds.length ? db.prepare(`SELECT handover_pack_id, id, category, file_name,
+      content_type, size_bytes, created_at FROM trade_handover_documents
+      WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")}) AND customer_visible = 1
+      ORDER BY created_at DESC`).bind(...handoverIds).all<Record<string, unknown>>() : emptyRows,
+    handoverIds.length ? db.prepare(`SELECT handover_pack_id, id, asset_id, version_number,
+      field_key, previous_value, proposed_value, reason, published_at
+      FROM trade_handover_corrections WHERE handover_pack_id IN (${handoverIds.map(() => "?").join(",")})
+        AND status = 'published' ORDER BY version_number DESC`)
+      .bind(...handoverIds).all<Record<string, unknown>>() : emptyRows,
+  ]);
   const shapedHandovers = handoverRows.results.map((handover: Record<string, unknown>) => ({
     ...handover,
     assets: assetRows.results.filter((item: Record<string, unknown>) => item.handover_pack_id === handover.id).map((item: Record<string, unknown>) => ({
@@ -1371,6 +1387,25 @@ async function customerProjectMutation(
         .bind(`customer-project-submit:${id}`, user.uid, id, CUSTOMER_NOTICE_VERSION,
           submittedAt, submittedAt, id, user.uid, opportunityId, submittedAt,
           expectedPlanRevision, submittedAt),
+      adminNotificationStatement(db, {
+        eventKey: `customer-enquiry:${id}`,
+        eventType: "customer.enquiry_submitted",
+        category: "customer",
+        priority: "high",
+        title: "Customer enquiry submitted",
+        summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
+        entityType: "customer_project",
+        entityId: id,
+        actorType: "customer",
+        actorUid: user.uid,
+        requiresAction: true,
+        metadata: {
+          opportunityId,
+          state: opportunity.state,
+          serviceCategories: opportunity.serviceCategories,
+        },
+        occurredAt: submittedAt,
+      }),
     ];
     if (
       Number(evidenceCount?.count || 0) > 0
@@ -1400,22 +1435,6 @@ async function customerProjectMutation(
     ) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
     }
-    await createAdminNotification({
-      eventKey: `customer-enquiry:${id}`,
-      eventType: "customer.enquiry_submitted",
-      category: "customer",
-      priority: "high",
-      title: "Customer enquiry submitted",
-      summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
-      entityType: "customer_project",
-      entityId: id,
-      actorType: "customer",
-      actorUid: user.uid,
-      requiresAction: true,
-      metadata: { opportunityId, state: opportunity.state, serviceCategories: opportunity.serviceCategories },
-      occurredAt: submittedAt,
-    });
-    await dispatchAdminNotificationDeliveries();
     await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
   } else if (action === "release_contact") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) {
