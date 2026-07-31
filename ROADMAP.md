@@ -684,6 +684,38 @@ Replace the drawn-out shortlist-and-accept journey with one plain-language custo
 
 The executable, deployment, privacy and signed-in presentation gates are met. Release QA did not submit another quote, release another customer contact, send a new provider email or mutate demo records. Production provider inbox delivery and hosted row counts remain unverified. The direct `/api/health` browser navigation was blocked by the local client extension, while the custom-domain signed-in application and its authenticated APIs rendered successfully.
 
+## Released milestone: CUSTOMER-PLAN-TRADE-ENQUIRY-22
+
+Release status: application commit `b40c101939eec44b178b34ccb6397a989d2467d0` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly at `https://compare.ausenergyassessments.com` as Sites version 240. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_f26581d5ff348191855551ce325e8c40`, deployment `appgdep_6a6c971b63988191a92e4031fc74692b` and environment revision 19 report the exact application commit.
+
+### Outcome
+
+Turn the completed public home-energy roadmap into one privacy-first trade-enquiry path without repeated entry, extend the home-system questions so each answer changes safe and brand-neutral advice, and put released customer identity and contact details first for connected trade leads.
+
+### In scope
+
+- Replace `Continue in my free account` with `Enquire with verified trades` in the roadmap action area and at the true bottom of the public plan page.
+- Explain why account creation or sign-in is the next step: the plan and household data stay private, installers first receive a non-identifying scope, and the customer controls any later contact release.
+- Preserve the exact selected planner query through account creation or sign-in so the customer does not repeat earlier answers.
+- Distinguish gas storage hot water, gas continuous-flow hot water and unknown. Treat the legacy generic gas value as unknown instead of guessing.
+- Add household-reported single-phase, three-phase and unknown electricity-supply choices as planning clues only; a licensed electrician must confirm supply and capacity.
+- Separate fixed openings, exhaust discharge and backdraft or damper questions. Require all three before the evidence set is complete, target the first unresolved follow-up and never direct a customer to perform an unsafe inspection.
+- Put customer identity and contact details first when a connected trade lead is expanded, with the protected plan, customer-shared files and quote controls following below.
+
+### Acceptance gates
+
+- The focused customer-plan, home-system, handoff and connected-lead suites pass 99 of 99 tests.
+- The independent public-plan review passes 52 of 52 tests and type checking.
+- The independent trade review passes 13 of 13 tests.
+- The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, 994 total tests with 992 passed, 2 intentionally skipped and 0 failed, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the 9-page customer-plan PDF audit, Vinext build and Sites server-bundle audit.
+- `git diff --check` is clean.
+- GitHub, Sites managed source, saved-version provenance and public deployment all resolve to application commit `b40c101939eec44b178b34ccb6397a989d2467d0`.
+- Sites version 240 deploys successfully with environment revision 19 at `https://compare.ausenergyassessments.com`.
+- Production browser verification confirms both `Enquire with verified trades` actions, the exact selected-query handoff and the account privacy explanation. Signed-in Chrome verification confirms customer identity and contact details first in an expanded connected lead.
+- The live verification records zero Worker error events and does not mutate production, customer, trade or demo data.
+
+The executable, deployment, privacy and signed-in presentation gates are met. No release archive was uploaded for Sites version 240, so archive hashes and Sites stored-file counts or bytes are not recorded for this release.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions

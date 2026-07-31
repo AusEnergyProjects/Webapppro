@@ -4,11 +4,11 @@ Status: released implementation milestone
 
 Prepared: 31 July 2026
 
-Milestone ID: `CUSTOMER-TRADE-CONTACT-21`
+Milestone ID: `CUSTOMER-PLAN-TRADE-ENQUIRY-22`
 
-Released application commit: `97e6c7356483706e8e978ab53b842a9e41152f7e`
+Released application commit: `b40c101939eec44b178b34ccb6397a989d2467d0`
 
-Released application for this milestone: Sites version 239 from application commit `97e6c7356483706e8e978ab53b842a9e41152f7e`
+Released application for this milestone: Sites version 240 from application commit `b40c101939eec44b178b34ccb6397a989d2467d0`
 
 Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
 
@@ -20,49 +20,48 @@ The [complete current-state audit](./audit/2026-07-21-complete-current-state/REA
 
 ## Current milestone outcome
 
-Make the customer-to-trade handover one simple decision: `Get in touch with this business`. The choice releases contact details only to that exact verified business and asks it to contact the customer. It does not accept a quote, create a contract or invoice, make a payment, or authorise work.
+Make the public home-energy plan lead naturally into one privacy-first next step: `Enquire with verified trades`. The action appears beside the completed roadmap and again at the real bottom of the page, explains why a free private account is useful, and carries the customer's current plan selections into account creation or sign-in without double entry.
 
-Newly allocated privacy-safe leads now appear in the trade Work updates bell as unread items. The lead workspace opens as a compact scan-friendly list, expands only the lead being worked on, and keeps structured quote fields aligned. Project-builder Continue actions move the customer to the top of the next step instead of preserving the previous page's scroll position.
+The shared home-detail model now distinguishes gas storage, gas continuous-flow and unknown hot-water types; treats reported single- or three-phase supply only as a planning clue; and records exhaust discharge and backdraft-damper knowledge without encouraging unsafe inspection. Once a customer has authorised contact, the connected trade sees the customer's identity and contact details first instead of finding them among lower-priority lead tiles.
 
 ## Customer and trade outcomes
 
-- Each available project quote has one customer action: `Get in touch with this business`. The former shortlist confirmation step is removed.
-- The confirmation copy and connected state explicitly explain that this is contact permission only, not quote acceptance, payment, contract, invoice or work approval.
-- The contact action atomically selects one business, releases contact details to that exact match, connects the match, closes competing options, records consent and queues the trade follow-up.
-- Each newly allocated lead produces one `New lead ready to review` Work update for the owning business. Its exact lead target contains no customer identity, address, contact details or household evidence.
-- Lead cards start collapsed with work, timing, shared-file count and next action visible. An accessible control expands one card; an exact notification deep link expands and focuses its authorised lead.
-- The quote form groups price, delivery and warranty fields into aligned responsive sections while retaining integer-cent totals and the existing immutable submission contract.
-- Continue in the five-step project builder focuses and scrolls to the new active step heading after the next panel renders.
+- The public plan contains exactly two `Enquire with verified trades` placements: one at the completed roadmap decision point and one after the final plan item at the true page bottom.
+- Both placements open the same private-account path and preserve every supported goal, home feature, tenure, budget, pace and approval selection already made in the public planner.
+- The account step explains that the saved plan stays private during matching, exact contact details remain hidden from installers, and details are released only to the one business the customer later chooses.
+- The hot-water question separates gas storage, gas continuous-flow and gas type not known, so advice can discuss tank capacity, flow rate or confirmation without guessing from the legacy gas value.
+- The electrical-supply question records single phase, three phase or not sure. A reported phase is a planning clue only and never proof of spare capacity or suitability for new equipment.
+- Ventilation questions separately record where kitchen and bathroom exhausts appear to discharge and whether a self-sealing or backdraft damper is known, with `Not sure` available and no instruction to enter a roof or ceiling cavity or dismantle a fan.
+- A connected lead places the customer-authorised name, phone, email and service address immediately after the lead heading and before the compact summary, enquiry pack and quote controls.
 
 ## Integrity and communication design
 
-- The legacy internal `accepted` decision value and acceptance-claim table remain compatibility representations of the one-business contact claim. They are not customer-visible commercial acceptance and must not be used as evidence of payment, contract, invoice or authorised work.
-- First-time contact disclosure requires the new explicit contact confirmation. A legacy acceptance flag is honoured only when the exact active contact release and connected match already exist, closing the stale-client privacy bypass.
-- Contact release, match connection, one-business selection, consent receipt, activity event and trade delivery job are committed in one owner-scoped database batch.
-- Lead bell identities use `platform-lead-allocated:{opportunityMatchId}` so retries cannot create duplicates and one business cannot observe another business's allocation.
-- Protected customer identity remains unavailable until the customer makes the exact contact choice. New-lead notification payloads stay privacy-safe.
-- The scroll transition uses two animation frames so it runs after the next step is rendered, moves keyboard focus to the active heading and respects reduced-motion preferences.
+- One shared planner-selection contract drives both enquiry placements and the signed-in project builder, avoiding a second source of truth or a reduced handoff payload.
+- The expanded household facts use explicit controlled values and retain a safe `Not sure` path. They can alter roadmap sequencing, but customer reports remain observations rather than professional verification.
+- Reported electrical phase cannot be interpreted as verified supply, available capacity or approval for electrical work; a licensed electrician must confirm those facts.
+- Exhaust guidance distinguishes apparent discharge from confirmed compliant discharge, keeps related evidence unknown until the linked questions are addressed, and forbids unsafe cavity access or fan disassembly.
+- Customer identity and contact appear first only for the exact connected lead after customer-authorised release. Collapsed or unconnected leads retain the existing privacy boundary.
+- The connected lead contains one authoritative contact block so customer details are not duplicated among competing tiles or mistaken for general opportunity data.
 
 ## Acceptance and release evidence
 
-- Exact application commit `97e6c7356483706e8e978ab53b842a9e41152f7e` passed the complete release gate.
-- The integrated focused customer-contact, lead-notification, trade-card, quote-layout and navigation set passed 68 of 68 tests. Additional direct-trade and business-hub coverage passed 16 of 16, and the final privacy regression set passed 35 of 35.
-- `npm.cmd run validate` passed, including 31 of 31 integration tests and the complete test suite with no failures and 2 intentionally skipped tests.
-- Type checking, warning-free lint, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the Vinext production build, Sites server-bundle audit and customer-plan PDF audit passed. `git diff --check` passed.
+- Exact application commit `b40c101939eec44b178b34ccb6397a989d2467d0` passed the complete release gate.
+- The focused public-plan enquiry, home-system taxonomy, decision-support and connected-trade set passed 99 of 99 tests. Independent public-planner coverage passed 52 of 52 plus type checking, and the focused connected-trade set passed 13 of 13.
+- `npm.cmd run validate` passed, including 31 of 31 integration tests and 994 total tests with 992 passed, 0 failed and 2 intentionally skipped.
+- Type checking, warning-free lint, all 92 migrations through `0091_customer_project_quote_acceptance_claims.sql`, the nine-page customer-plan PDF audit, Vinext production build and Sites server-bundle audit passed. `git diff --check` passed.
 - GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA.
-- Local archive `aea-sites-97e6c73.tar.gz` is 7,127,725 bytes with SHA-256 `BF9EAAE34B1FBB197C30AF94F0ADB9DBE92BBC347F8B60424C6D0444D9FCD7DF`.
-- Sites stored 321 files, 27,985,920 bytes with content hash `sha256:8554bdbdbcc6c54afc9b04cb4d37b96d7ab423ed2ed64d591247bfa3ee6c6136`.
-- Signed-in Chrome production verification confirmed three unread `New lead ready to review` bell items, default-collapsed lead cards, exact expansion, the top-level Quotes centre and the connected-state contact-only disclosure.
-- The Sites error-only query returned two informational canceled GET invocations caused while the signed-in pages were being reloaded and no Worker exception attributable to the release. A direct `/api/health` browser navigation was blocked by the local client extension and is not claimed as a successful health probe.
-- Release QA performed no new demo mutation.
+- Sites version 240 was saved directly from the exact managed source commit and deployed publicly. No local release archive was uploaded or supplied for this release, so archive size, archive hash, stored-file count, stored bytes and package content hash are not claimed.
+- Public production verification confirmed exactly two enquiry calls to action; the second is at the true page bottom. Owner tenure, gas continuous-flow hot water, reported three-phase supply, apparent cavity exhaust and the damper follow-up survived the account handoff.
+- The private-account screen explained the privacy and no-double-entry purpose of the account. Signed-in trade verification confirmed that a connected lead presents the customer-authorised identity and contact block first.
+- The Sites Worker error-only query returned zero events. Release verification made no production data mutation.
 
 ## Released implementation state
 
 - GitHub branch: `codex/sites-custom-domain-migration`
-- Current executable application commit: `97e6c7356483706e8e978ab53b842a9e41152f7e`
-- Sites application version: 239
-- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_ae43b05060ac8191918c70e9960e213c`
-- Sites production deployment: `appgdep_6a6c7cb6d6e0819187e9566a452e6850`
+- Current executable application commit: `b40c101939eec44b178b34ccb6397a989d2467d0`
+- Sites application version: 240
+- Sites saved-version identity: `appgprj_6a550c378000819185caf094173422bb~appgver_f26581d5ff348191855551ce325e8c40`
+- Sites production deployment: `appgdep_6a6c971b63988191a92e4031fc74692b`
 - Production URL: `https://compare.ausenergyassessments.com`
 - Sites access: public custom domain
 - Sites environment revision: 19
@@ -72,23 +71,43 @@ Newly allocated privacy-safe leads now appear in the trade Work updates bell as 
 
 ## Known release risk
 
-The application, atomic contact handover, legacy-client privacy guard, owner-scoped notification derivation and signed-in destinations passed automated and production presentation checks. Release QA did not send another provider email, so production Resend delivery for the revised contact wording was not newly exercised. Provider inbox receipt and hosted row counts remain unverified.
+The application, exact planner handoff, expanded household taxonomy and connected-lead hierarchy passed automated and production presentation checks. Release QA did not create a new account or submit a new installer enquiry, so the verified public handoff stops at the existing private-account screen and preserved selection state. No local archive or Sites package metrics were supplied for this source-only save. Production provider inbox receipt and hosted row counts remain unverified.
 
 ## Stop conditions
 
 Stop the affected path when:
 
-- a contact action or new-lead Work update could expose identity, contact details, exact location, private household content or arbitrary project text before the explicit customer choice;
-- the legacy acceptance flag could create first-time contact disclosure;
-- one customer action could select, connect or disclose contact details to more than one business;
-- a notification cannot open the exact owner-scoped opportunity;
-- a customer-visible label implies quote acceptance, payment, contract, invoice or authorised work;
-- a Continue action can leave the customer at the bottom of the next step;
+- either public enquiry action omits or changes a supported planner selection;
+- the second enquiry action is not reachable at the real bottom of the completed plan;
+- account or enquiry copy implies that household identity or exact contact details are available to installers during matching;
+- gas hot-water advice guesses storage or continuous-flow type when the customer selected `Not sure` or supplied only the legacy gas value;
+- reported single- or three-phase supply is treated as verified capacity, suitability or approval;
+- exhaust guidance encourages roof-space or ceiling-cavity entry, fan disassembly or blocking required ventilation;
+- an unconnected or collapsed lead can expose customer identity, contact details, exact location or private household content;
+- the connected lead duplicates customer contact data or places it below lower-priority enquiry content;
 - live verification would send to an unapproved recipient or mutate new demo data;
-- the release source, archive, saved version and public deployment cannot be reconciled; or
+- the release source, saved version and public deployment cannot be reconciled; or
 - a change would alter the immutable dated audit.
 
-## Prior released milestone: `CUSTOMER-QUOTE-COMMS-20`
+## Prior released milestone: `CUSTOMER-TRADE-CONTACT-21`
+
+### Outcome
+
+The prior release replaced shortlist and quote-acceptance language with one contact-only customer choice, committed the exact one-business contact handover atomically, added owner-scoped new-lead Work updates, collapsed lead cards, aligned quote fields and returned Continue navigation to the active project step. Those privacy, contact and navigation contracts remain active beneath the public-plan enquiry and connected-lead presentation added by the current milestone.
+
+### Historical release identity
+
+- Application commit: `97e6c7356483706e8e978ab53b842a9e41152f7e`
+- Sites version: 239
+- Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_ae43b05060ac8191918c70e9960e213c`
+- Deployment: `appgdep_6a6c7cb6d6e0819187e9566a452e6850`
+- Environment revision: 19
+- Local archive: `aea-sites-97e6c73.tar.gz`, 7,127,725 bytes, SHA-256 `BF9EAAE34B1FBB197C30AF94F0ADB9DBE92BBC347F8B60424C6D0444D9FCD7DF`
+- Sites package evidence: 321 stored files, 27,985,920 bytes, content hash `sha256:8554bdbdbcc6c54afc9b04cb4d37b96d7ab423ed2ed64d591247bfa3ee6c6136`
+
+Signed-in production verification confirmed three unread new-lead bell items, default-collapsed lead cards, exact expansion, the top-level Quotes centre and contact-only connected state. Production provider inbox receipt and hosted row counts remained unverified.
+
+## Earlier released milestone: `CUSTOMER-QUOTE-COMMS-20`
 
 ### Outcome
 
