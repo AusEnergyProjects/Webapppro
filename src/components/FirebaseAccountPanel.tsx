@@ -28,7 +28,12 @@ function authMessage(error: unknown) {
   return "The account action could not be completed. Please try again.";
 }
 
-export function FirebaseAccountPanel() {
+export function FirebaseAccountPanel({
+  intent = "account",
+}: {
+  intent?: "account" | "trade-enquiry";
+}) {
+  const isTradeEnquiry = intent === "trade-enquiry";
   const [mode, setMode] = useState<AuthMode>("create");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -94,21 +99,40 @@ export function FirebaseAccountPanel() {
     }
   }
 
-  return <section className="customer-auth-card" aria-labelledby="customer-auth-title">
-    <div className="customer-auth-intro"><span>Free household account</span><h2 id="customer-auth-title">Keep every home project in one private place</h2><p>Use Google for the quickest setup, or create an account with email. Customer accounts stay free.</p></div>
+  return <section className={`customer-auth-card${isTradeEnquiry ? " customer-auth-card-trade-enquiry" : ""}`} aria-labelledby="customer-auth-title">
+    <div className="customer-auth-intro">
+      <span>{isTradeEnquiry ? "Your plan is ready" : "Free household account"}</span>
+      <h2 id="customer-auth-title">{isTradeEnquiry ? "Save your plan, then ask verified trades" : "Keep every home project in one private place"}</h2>
+      <p>{isTradeEnquiry ? "Create a free private account or sign in. Your plan choices are already carried across, so you will not need to answer them again." : "Use Google for the quickest setup, or create an account with email. Customer accounts stay free."}</p>
+    </div>
     <div className="customer-auth-panel">
-      <button className="customer-google-button" type="button" onClick={useGoogle} disabled={busy}><img aria-hidden="true" alt="" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />Continue with Google</button>
+      <button className="customer-google-button" type="button" onClick={useGoogle} disabled={busy}><img aria-hidden="true" alt="" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />{isTradeEnquiry ? "Continue securely with Google" : "Continue with Google"}</button>
       <div className="customer-auth-divider"><span>or use email</span></div>
       <div className="customer-auth-tabs" role="group" aria-label="Email account action"><button type="button" aria-pressed={mode === "create"} className={mode === "create" ? "selected" : ""} onClick={() => { setMode("create"); setStatus(""); }}>Create account</button><button type="button" aria-pressed={mode === "signin"} className={mode === "signin" ? "selected" : ""} onClick={() => { setMode("signin"); setStatus(""); }}>Sign in</button></div>
       <form className="customer-email-form" onSubmit={useEmail} noValidate>
         {mode === "create" && <Field label="Your name"><input type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></Field>}
         <Field label="Email"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></Field>
         <Field label="Password" hint="Use at least eight characters."><input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "create" ? "new-password" : "current-password"} /></Field>
-        <button className="btn customer-auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "create" ? "Create my free account" : "Sign in"}</button>
+        <button className="btn customer-auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "create" ? isTradeEnquiry ? "Create account and continue" : "Create my free account" : isTradeEnquiry ? "Sign in and continue" : "Sign in"}</button>
         {mode === "signin" && <button className="customer-reset-link" type="button" onClick={resetPassword} disabled={busy}>Reset password</button>}
       </form>
       {status && <p className="customer-auth-status" role="status">{status}</p>}
     </div>
-    <aside className="customer-auth-benefits"><strong>Private by default</strong><ul><li>No phone number or street address required for planning</li><li>Create and save multiple home projects</li><li>Installers receive an anonymised scope during matching</li><li>You choose any named-installer contact handover</li></ul></aside>
+    <aside className="customer-auth-benefits">
+      <strong>{isTradeEnquiry ? "Why an account is needed" : "Private by default"}</strong>
+      <ul>
+        {isTradeEnquiry ? <>
+          <li>Your plan stays saved to you and can be updated later</li>
+          <li>Verified trades first receive a useful scope, not your identity</li>
+          <li>Your phone number and exact address stay hidden during matching</li>
+          <li>You choose the business that can contact you</li>
+        </> : <>
+          <li>No phone number or street address required for planning</li>
+          <li>Create and save multiple home projects</li>
+          <li>Installers receive an anonymised scope during matching</li>
+          <li>You choose any named-installer contact handover</li>
+        </>}
+      </ul>
+    </aside>
   </section>;
 }

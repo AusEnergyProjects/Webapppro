@@ -134,6 +134,89 @@ test("roof and switchboard questions return to the roadmap intake before the pla
   );
 });
 
+test("electrical supply and exhaust details return to their shared home questions", () => {
+  const questions = createNextBestQuestions({
+    items: [
+      { id: "electrical-supply-check" },
+      { id: "exhaust-discharge-review" },
+    ],
+    factEvidence: [
+      { factKey: "electrical-supply", source: "unknown" },
+      { factKey: "switchboard", source: "customer-reported" },
+      { factKey: "ventilation", source: "unknown" },
+    ],
+    homeFeatures: [
+      "ventilation-none-known",
+      "exhaust-discharge-unknown",
+      "exhaust-damper-none-known",
+    ],
+    situation: "owner",
+    approvalContext: "none",
+    budgetRange: "under_2k",
+    roomCount: 1,
+    goals: ["move-from-gas"],
+  });
+  assert.deepEqual(
+    questions.map(({ id, targetStep, targetAnchor }) => ({
+      id,
+      targetStep,
+      targetAnchor,
+    })),
+    [
+      {
+        id: "fact-electrical-supply",
+        targetStep: 2,
+        targetAnchor: "customer-home-feature-electrical-supply",
+      },
+      {
+        id: "fact-ventilation",
+        targetStep: 2,
+        targetAnchor: "customer-home-feature-exhaust-discharge",
+      },
+    ],
+  );
+  assert.match(questions[0].whyItMatters, /licensed electrician/i);
+  assert.match(questions[1].prompt, /discharge/i);
+  assert.match(questions[1].prompt, /backdraft damper/i);
+});
+
+test("ventilation follow-ups target the first unresolved related question", () => {
+  const targetFor = (homeFeatures) => createNextBestQuestions({
+    items: [{ id: "exhaust-discharge-review" }],
+    factEvidence: [{ factKey: "ventilation", source: "unknown" }],
+    homeFeatures,
+    situation: "owner",
+    approvalContext: "none",
+    budgetRange: "under_2k",
+    roomCount: 1,
+    goals: ["healthier-home"],
+  })[0].targetAnchor;
+
+  assert.equal(
+    targetFor([
+      "exhaust-discharge-outside",
+      "exhaust-damper-known",
+    ]),
+    "customer-home-feature-ventilation-features",
+  );
+  assert.equal(
+    targetFor([
+      "ventilation-none-known",
+      "exhaust-discharge-unknown",
+      "exhaust-damper-known",
+    ]),
+    "customer-home-feature-exhaust-discharge",
+  );
+  assert.equal(
+    targetFor([
+      "ventilation-none-known",
+      "exhaust-discharge-outside",
+      "exhaust-damper-unknown",
+    ]),
+    "customer-home-feature-exhaust-damper",
+  );
+});
+
 test("review items keep only bounded customer-owned allowlisted records", () => {
   const normalized = normalizeCustomerReviewItems([
     {

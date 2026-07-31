@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-30-roadmap-context-v4";
+export const CUSTOMER_PLAN_VERSION = "2026-07-31-trade-enquiry-home-systems-v5";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -24,8 +24,9 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-29-decision-support-advisor",
   "2026-07-29-home-feature-taxonomy-v2",
   "2026-07-29-adviser-print-comfort-v3",
+  "2026-07-30-roadmap-context-v4",
 ];
-export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-29-advisor-profile-v4";
+export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
   "2026-07-29-self-declared-adviser-v1";
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
@@ -155,11 +156,11 @@ export const customerHomeFeatureSections = [
   {
     id: "ventilation",
     title: "Draughts and ventilation",
-    description: "Record fixed openings so the plan does not mistake required ventilation for an unwanted draught.",
+    description: "Record fixed openings and what you safely know about exhaust fans so the plan does not mistake required ventilation for an unwanted draught.",
     questions: [
       {
         id: "ventilation-features",
-        label: "Which fixed openings or ventilation systems are present?",
+        label: "Which other fixed openings or ventilation systems are present?",
         help: "Choose all that apply. Never block a fixed vent without confirming why it is there.",
         mode: "multiple",
         noneValue: "ventilation-none-known",
@@ -167,10 +168,36 @@ export const customerHomeFeatureSections = [
         options: [
           ["open-wall-vents", "Open wall vents or an unused chimney"],
           ["evaporative-ducts", "Evaporative-cooling ceiling outlets"],
-          ["exhaust-ducted-outside", "Kitchen or bathroom exhaust ducted outside"],
           ["mechanical-ventilation", "Purpose-designed mechanical ventilation"],
-          ["ventilation-none-known", "None of these that I know of"],
+          ["ventilation-none-known", "None of these other systems that I know of"],
           ["ventilation-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "exhaust-discharge",
+        label: "What do you know about the kitchen and bathroom exhaust fans?",
+        help: "Choose all that apply because different fans can discharge to different places. Use only visible grilles, safe observations or existing records. Do not enter a roof or ceiling cavity or dismantle a fan.",
+        mode: "multiple",
+        noneValue: "exhaust-fans-none",
+        unknownValue: "exhaust-fans-unknown",
+        options: [
+          ["exhaust-discharge-outside", "At least one exhaust fan is ducted outdoors"],
+          ["exhaust-discharge-cavity", "At least one is known or suspected to discharge into a roof or ceiling cavity"],
+          ["exhaust-discharge-unknown", "A fan is fitted, but I do not know where it discharges"],
+          ["exhaust-fans-none", "No kitchen or bathroom exhaust fan is fitted"],
+          ["exhaust-fans-unknown", "Not sure whether exhaust fans are fitted"],
+        ],
+      },
+      {
+        id: "exhaust-damper",
+        label: "Are self-closing shutters or backdraft dampers known?",
+        help: "Answer only from something safely visible or recorded. Do not remove a grille or enter a roof or ceiling cavity to check.",
+        mode: "single",
+        unknownValue: "exhaust-damper-unknown",
+        options: [
+          ["exhaust-damper-known", "A self-closing shutter or backdraft damper is visible or recorded"],
+          ["exhaust-damper-none-known", "No self-closing shutter or backdraft damper that I know of"],
+          ["exhaust-damper-unknown", "Not sure"],
         ],
       },
     ],
@@ -211,7 +238,9 @@ export const customerHomeFeatureSections = [
         mode: "single",
         unknownValue: "hot-water-unknown",
         options: [
-          ["gas-hot-water", "Gas hot water"],
+          ["gas-storage-hot-water", "Gas storage hot water"],
+          ["gas-continuous-flow-hot-water", "Instantaneous or continuous-flow gas hot water"],
+          ["gas-hot-water-type-unknown", "Gas hot water, type not sure"],
           ["heat-pump-hot-water", "Heat-pump hot water"],
           ["electric-storage-hot-water", "Electric storage hot water"],
           ["electric-instant-hot-water", "Instantaneous electric hot water"],
@@ -238,9 +267,21 @@ export const customerHomeFeatureSections = [
   },
   {
     id: "solar-storage-transport",
-    title: "Solar, battery and electric vehicle",
-    description: "Record what is already installed or planned so the roadmap does not recommend the wrong next step.",
+    title: "Electricity supply, solar, battery and electric vehicle",
+    description: "Record what you safely know and what is already installed or planned. These household answers are planning clues, not verification of electrical capacity.",
     questions: [
+      {
+        id: "electrical-supply",
+        label: "Household electrical supply",
+        help: "Choose Not sure unless this is shown on an existing record or has been confirmed by an electrician. The number of phases does not prove available capacity.",
+        mode: "single",
+        unknownValue: "electrical-supply-unknown",
+        options: [
+          ["electrical-supply-single-phase", "Single-phase supply"],
+          ["electrical-supply-three-phase", "Three-phase supply"],
+          ["electrical-supply-unknown", "Not sure"],
+        ],
+      },
       {
         id: "solar",
         label: "Rooftop solar",
@@ -292,6 +333,8 @@ const legacyHomeFeatureValues = new Set([
   "floor-insulation",
   "insulation-unknown",
   "internal-window-coverings",
+  "gas-hot-water",
+  "exhaust-ducted-outside",
 ]);
 
 function questionHasSelection(question, selected) {
@@ -329,6 +372,12 @@ function migrateLegacyHomeFeatures(value) {
   }
   if (selected.has("internal-window-coverings")) {
     addWhenUnanswered("window-coverings", "window-coverings-unknown");
+  }
+  if (selected.has("gas-hot-water")) {
+    addWhenUnanswered("hot-water", "gas-hot-water-type-unknown");
+  }
+  if (selected.has("exhaust-ducted-outside")) {
+    addWhenUnanswered("exhaust-discharge", "exhaust-discharge-outside");
   }
   for (const legacy of legacyHomeFeatureValues) selected.delete(legacy);
   return selected;
@@ -525,6 +574,7 @@ export const customerAdvisorOptions = {
     ["cooking", "Cooking equipment"],
     ["roof", "Roof type and condition"],
     ["switchboard", "Switchboard"],
+    ["electrical-supply", "Household electrical supply"],
     ["solar", "Rooftop solar"],
     ["battery", "Home battery"],
     ["ev", "Electric vehicle"],
@@ -698,11 +748,49 @@ const homeFeatureFactRules = new Map([
     answered: new Set([
       "open-wall-vents",
       "evaporative-ducts",
-      "exhaust-ducted-outside",
       "mechanical-ventilation",
       "ventilation-none-known",
+      "exhaust-discharge-outside",
+      "exhaust-discharge-cavity",
+      "exhaust-fans-none",
+      "exhaust-damper-known",
+      "exhaust-damper-none-known",
     ]),
-    unknown: new Set(["ventilation-unknown"]),
+    unknown: new Set([
+      "ventilation-unknown",
+      "exhaust-discharge-unknown",
+      "exhaust-fans-unknown",
+      "exhaust-damper-unknown",
+    ]),
+    requiredGroups: [
+      {
+        answered: new Set([
+          "open-wall-vents",
+          "evaporative-ducts",
+          "mechanical-ventilation",
+          "ventilation-none-known",
+        ]),
+        unknown: new Set(["ventilation-unknown"]),
+      },
+      {
+        answered: new Set([
+          "exhaust-discharge-outside",
+          "exhaust-discharge-cavity",
+          "exhaust-fans-none",
+        ]),
+        unknown: new Set([
+          "exhaust-discharge-unknown",
+          "exhaust-fans-unknown",
+        ]),
+      },
+      {
+        answered: new Set([
+          "exhaust-damper-known",
+          "exhaust-damper-none-known",
+        ]),
+        unknown: new Set(["exhaust-damper-unknown"]),
+      },
+    ],
   }],
   ["heating-cooling", {
     answered: new Set([
@@ -717,14 +805,18 @@ const homeFeatureFactRules = new Map([
   }],
   ["hot-water", {
     answered: new Set([
-      "gas-hot-water",
+      "gas-storage-hot-water",
+      "gas-continuous-flow-hot-water",
       "heat-pump-hot-water",
       "electric-storage-hot-water",
       "electric-instant-hot-water",
       "solar-hot-water",
       "hot-water-other",
     ]),
-    unknown: new Set(["hot-water-unknown"]),
+    unknown: new Set([
+      "gas-hot-water-type-unknown",
+      "hot-water-unknown",
+    ]),
   }],
   ["cooking", {
     answered: new Set([
@@ -734,6 +826,13 @@ const homeFeatureFactRules = new Map([
       "mixed-cooking",
     ]),
     unknown: new Set(["cooking-unknown"]),
+  }],
+  ["electrical-supply", {
+    answered: new Set([
+      "electrical-supply-single-phase",
+      "electrical-supply-three-phase",
+    ]),
+    unknown: new Set(["electrical-supply-unknown"]),
   }],
   ["solar", {
     answered: new Set(["solar", "solar-none"]),
@@ -752,6 +851,15 @@ const homeFeatureFactRules = new Map([
 function factSourceForHomeSelections(factKey, suppliedSource, selectedFeatures) {
   const rule = homeFeatureFactRules.get(factKey);
   if (!rule || !(selectedFeatures instanceof Set)) return suppliedSource;
+  if (
+    Array.isArray(rule.requiredGroups)
+    && rule.requiredGroups.some((group) => (
+      [...group.unknown].some((value) => selectedFeatures.has(value))
+      || ![...group.answered].some((value) => selectedFeatures.has(value))
+    ))
+  ) {
+    return "unknown";
+  }
   if ([...rule.unknown].some((value) => selectedFeatures.has(value))) return "unknown";
   if ([...rule.answered].some((value) => selectedFeatures.has(value))) {
     if (suppliedSource === "photo-supported" || suppliedSource === "document-supported") {
@@ -1424,6 +1532,11 @@ const legacyPlannerFeatures = new Set([
   "battery",
   "ev",
 ]);
+const gasHotWaterFeatures = new Set([
+  "gas-storage-hot-water",
+  "gas-continuous-flow-hot-water",
+  "gas-hot-water-type-unknown",
+]);
 const advisorRecommendations = {
   authority: {
     id: "authority",
@@ -1448,6 +1561,22 @@ const advisorRecommendations = {
     text: "Condensation, damp or mould can have several causes. Record when and where it occurs, keep required ventilation open and seek building or health advice before making the home more airtight.",
     href: "/guides/insulation-draught-proofing",
     action: "Review moisture and ventilation guidance",
+  },
+  exhaustCavity: {
+    id: "exhaust-discharge-review",
+    stage: "Confirm moisture discharge",
+    title: "Confirm and correct exhausts that may discharge into a roof or ceiling cavity",
+    text: "The household reports that at least one kitchen or bathroom exhaust may discharge into a roof or ceiling cavity. Do not enter the cavity or dismantle the fan to check. Have a suitably qualified person confirm the discharge path and any correction needed before relying on the fan for moisture control or making the home more airtight.",
+    href: "/guides/insulation-draught-proofing",
+    action: "Review moisture and ventilation guidance",
+  },
+  electricalSupply: {
+    id: "electrical-supply-check",
+    stage: "Confirm electrical capacity",
+    title: "Confirm the household electrical supply before sizing new loads",
+    text: "The household supply answer is a planning clue only. It does not confirm available capacity. A licensed electrician should confirm the phases, service capacity, main switch, switchboard and existing loads before material hot-water, cooking, heating and cooling, solar, battery or EV-charging work is specified.",
+    href: "/guides/project-preparation",
+    action: "Review electrical planning questions",
   },
   draughts: {
     id: "draught-proofing",
@@ -1513,6 +1642,30 @@ const advisorRecommendations = {
     href: "/guides/hot-water",
     action: "Review hot-water guidance",
   },
+  gasStorageHotWater: {
+    id: "hot-water",
+    stage: "Plan the replacement",
+    title: "Plan around the existing gas hot-water storage tank",
+    text: "Record the tank capacity, age, indoor or outdoor location, available space, drainage and household hot-water demand. Before choosing a replacement, have a licensed plumber and electrician confirm the plumbing, electrical supply and capacity, clearances, condensate and noise needs, and safe gas disconnection.",
+    href: "/guides/hot-water",
+    action: "Review hot-water guidance",
+  },
+  gasContinuousFlowHotWater: {
+    id: "hot-water",
+    stage: "Plan the replacement",
+    title: "Plan around the existing continuous-flow gas hot-water unit",
+    text: "Record the model and rated flow, wall location, flue and clearances, temperature controls and household hot-water demand. Before choosing a replacement, have a licensed plumber and electrician confirm a suitable tank or unit location, plumbing, electrical supply and capacity, condensate and noise needs, and safe gas disconnection.",
+    href: "/guides/hot-water",
+    action: "Review hot-water guidance",
+  },
+  gasHotWaterTypeUnknown: {
+    id: "hot-water",
+    stage: "Confirm the existing system",
+    title: "Confirm which type of gas hot-water system is installed",
+    text: "Use a safely visible label, an existing manual or invoice, or a suitably qualified provider to identify whether the system stores hot water or heats it continuously. Do not remove covers or enter an unsafe area to check. The two types can need different space, plumbing and replacement preparation, so do not infer the type from the fuel alone.",
+    href: "/guides/hot-water",
+    action: "Review hot-water guidance",
+  },
   lowBudget: {
     id: "budget-under-2k",
     stage: "Keep the first stage bounded",
@@ -1547,13 +1700,19 @@ const everydayActionCatalogue = [
     id: "moisture-safe-routine",
     category: "Moisture and ventilation",
     title: "Control moisture at the source and keep required ventilation working",
-    text: "Use functioning kitchen and bathroom exhausts where they discharge safely, contain steam and moisture at the source, and air the home only when outdoor humidity, smoke, weather and security make it suitable. Do not block fixed vents or seal unexplained gaps before their purpose and any combustion-safety need are understood.",
+    text: "Use functioning kitchen and bathroom exhausts only where their discharge path is suitable and safely understood, contain steam and moisture at the source, and air the home only when outdoor humidity, smoke, weather and security make it suitable. A fan known or suspected to discharge into a roof or ceiling cavity needs qualified confirmation and any necessary correction. Do not enter the cavity to check, block fixed vents or seal unexplained gaps before their purpose and any combustion-safety need are understood.",
     matches: ({ features, selectedGoals }) => (
       features.some((item) => [
         "condensation-moisture",
         "open-wall-vents",
         "evaporative-ducts",
-        "exhaust-ducted-outside",
+        "exhaust-discharge-outside",
+        "exhaust-discharge-cavity",
+        "exhaust-discharge-unknown",
+        "exhaust-fans-unknown",
+        "exhaust-damper-known",
+        "exhaust-damper-none-known",
+        "exhaust-damper-unknown",
         "mechanical-ventilation",
         "ventilation-unknown",
       ].includes(item))
@@ -1582,7 +1741,9 @@ const everydayActionCatalogue = [
         "electric-resistance-heating",
         "evaporative-cooling",
         "fans-only",
-        "gas-hot-water",
+        "gas-storage-hot-water",
+        "gas-continuous-flow-hot-water",
+        "gas-hot-water-type-unknown",
         "heat-pump-hot-water",
         "electric-storage-hot-water",
         "electric-instant-hot-water",
@@ -1788,6 +1949,62 @@ function shadingRecommendationFor(features, selectedGoals, advisorProfile) {
       title: "Check whether existing shade protects the problem windows",
       text: "The household reports some external shade. Confirm its orientation, seasonal coverage and the rooms still overheating before adding more shade or cooling capacity.",
     };
+  }
+  return null;
+}
+
+function electricalSupplyRecommendationFor(
+  features,
+  selectedGoals,
+  selectedServices,
+) {
+  const supply = features.find((item) => [
+    "electrical-supply-single-phase",
+    "electrical-supply-three-phase",
+    "electrical-supply-unknown",
+  ].includes(item));
+  if (!supply) return null;
+  const materialElectricalPlanning = selectedGoals.some((goal) => [
+    "lower-bills",
+    "improve-comfort",
+    "healthier-home",
+    "reduce-emissions",
+    "replace-now",
+    "move-from-gas",
+    "add-solar-storage",
+    "improve-resilience",
+    "prepare-renovation",
+  ].includes(goal)) || selectedServices.some((service) => [
+    "solar",
+    "battery",
+    "heating-cooling",
+    "hot-water",
+    "ev-charging",
+    "other",
+  ].includes(service));
+  if (!materialElectricalPlanning) return null;
+  if (supply === "electrical-supply-unknown") {
+    return advisorRecommendations.electricalSupply;
+  }
+  const reportedSupply = supply === "electrical-supply-three-phase"
+    ? "three-phase"
+    : "single-phase";
+  return {
+    ...advisorRecommendations.electricalSupply,
+    title: `Treat the reported ${reportedSupply} supply as a planning clue`,
+    text: `The household reports a ${reportedSupply} supply, but this has not been verified and does not prove available capacity. A licensed electrician should confirm the phases, service capacity, main switch, switchboard and existing loads before material hot-water, cooking, heating and cooling, solar, battery or EV-charging work is specified.`,
+  };
+}
+
+function gasHotWaterRecommendationFor(features) {
+  if (features.includes("gas-storage-hot-water")) {
+    return advisorRecommendations.gasStorageHotWater;
+  }
+  if (features.includes("gas-continuous-flow-hot-water")) {
+    return advisorRecommendations.gasContinuousFlowHotWater;
+  }
+  if (features.includes("gas-hot-water-type-unknown")) {
+    return advisorRecommendations.gasHotWaterTypeUnknown;
   }
   return null;
 }
@@ -2055,6 +2272,12 @@ function createAdvisorPlan({
   advisorProfile,
 }) {
   const plannerFeatures = features.filter((item) => legacyPlannerFeatures.has(item));
+  if (
+    includesAny(features, gasHotWaterFeatures)
+    && !plannerFeatures.includes("gas-hot-water")
+  ) {
+    plannerFeatures.push("gas-hot-water");
+  }
   const plannerSituation = approvalContext === "strata" ? "strata" : situation;
   const generated = [];
   const add = (item) => {
@@ -2102,6 +2325,18 @@ function createAdvisorPlan({
       selectedServices,
     ),
   );
+  addContext(
+    electricalSupplyRecommendationFor(
+      features,
+      selectedGoals,
+      selectedServices,
+    ),
+  );
+  const gasHotWaterRecommendation = gasHotWaterRecommendationFor(features);
+  if (gasHotWaterRecommendation) {
+    pull("hot-water");
+    addContext(gasHotWaterRecommendation);
+  }
   if (advisorProfile.climate) {
     addContext({
       id: "climate-sequence",
@@ -2125,6 +2360,7 @@ function createAdvisorPlan({
   }
   if (situation === "renter" || selectedGoals.includes("renter-friendly")) addContext(advisorRecommendations.renter);
   if (features.includes("condensation-moisture") || selectedGoals.includes("healthier-home")) addContext(advisorRecommendations.moisture);
+  if (features.includes("exhaust-discharge-cavity")) addContext(advisorRecommendations.exhaustCavity);
   if (
     selectedGoals.includes("improve-comfort")
     || features.some((item) => [
@@ -2181,9 +2417,11 @@ function createAdvisorPlan({
   const climateOrder = roomComfort.daytimeHeat
     ? [
         "home-planning-context",
+        "electrical-supply-check",
         "room-comfort-profile",
         "climate-sequence",
         "moisture-ventilation",
+        "exhaust-discharge-review",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2192,8 +2430,10 @@ function createAdvisorPlan({
     : roomComfort.overnightCold
       ? [
           "home-planning-context",
+          "electrical-supply-check",
           "room-comfort-profile",
           "moisture-ventilation",
+          "exhaust-discharge-review",
           "draught-proofing",
           "insulation-review",
           "windows-glazing",
@@ -2205,9 +2445,11 @@ function createAdvisorPlan({
       )
     ? [
         "home-planning-context",
+        "electrical-supply-check",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
+        "exhaust-discharge-review",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2215,9 +2457,11 @@ function createAdvisorPlan({
       ]
     : [
         "home-planning-context",
+        "electrical-supply-check",
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
+        "exhaust-discharge-review",
         "draught-proofing",
         "insulation-review",
         "windows-glazing",
@@ -2258,6 +2502,7 @@ function createAdvisorPlan({
   const nextQuestions = createNextBestQuestions({
     items,
     factEvidence: advisorProfile.factEvidence,
+    homeFeatures: features,
     situation,
     approvalContext,
     budgetRange,

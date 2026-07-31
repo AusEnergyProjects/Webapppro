@@ -66,6 +66,42 @@ function appendValues(
   values.forEach((value) => params.append(name, value));
 }
 
+function PlannerTradeEnquiry({
+  href,
+  placement,
+}: {
+  href: string;
+  placement: "summary" | "footer";
+}) {
+  const titleId = `planner-trade-enquiry-${placement}-title`;
+
+  return (
+    <section
+      className={`planner-boundary planner-trade-enquiry planner-trade-enquiry-${placement}`}
+      aria-labelledby={titleId}
+    >
+      <span className="planner-trade-enquiry-eyebrow">
+        Private trade enquiry
+      </span>
+      <h3 id={titleId}>Ready to ask verified trades?</h3>
+      <p>
+        Create or sign in to a free private account to save this plan and carry
+        every current answer across, so you do not need to start again.
+      </p>
+      <p className="planner-trade-enquiry-privacy">
+        You can then request structured options from verified trade businesses.
+        Your name, phone number and exact address stay hidden during matching.
+        Contact details are released only to the one business you choose.
+      </p>
+      <div className="planner-result-actions planner-trade-enquiry-actions">
+        <a className="planner-save-account" href={href}>
+          Enquire with verified trades
+        </a>
+      </div>
+    </section>
+  );
+}
+
 export function HomeEnergyPlanner({
   initialSelection,
 }: {
@@ -125,6 +161,7 @@ export function HomeEnergyPlanner({
     addressState,
     features,
   ]);
+  const tradeEnquiryHref = `/account/projects/new?${selectionParams.toString()}`;
 
   function toggleGoal(value: string) {
     setGoals((current) => {
@@ -146,7 +183,8 @@ export function HomeEnergyPlanner({
   }
 
   return (
-    <section className="planner-layout" aria-label="Home energy planning tool">
+    <>
+      <section className="planner-layout" aria-label="Home energy planning tool">
       <form
         className="planner-controls"
         onSubmit={(event) => event.preventDefault()}
@@ -332,13 +370,11 @@ export function HomeEnergyPlanner({
             selections.
           </p>
         </div>
-        <div className="planner-result-actions">
-          <a
-            className="planner-save-account"
-            href={`/account/projects/new?${selectionParams.toString()}`}
-          >
-            Continue in my free account
-          </a>
+        <PlannerTradeEnquiry
+          href={tradeEnquiryHref}
+          placement="summary"
+        />
+        <div className="planner-result-actions planner-result-secondary-actions">
           <a href={`/plan/print?${selectionParams.toString()}`}>
             Preview and download PDF
           </a>
@@ -439,6 +475,11 @@ export function HomeEnergyPlanner({
           </p>
         </div>
       </section>
-    </section>
+      </section>
+      <PlannerTradeEnquiry
+        href={tradeEnquiryHref}
+        placement="footer"
+      />
+    </>
   );
 }

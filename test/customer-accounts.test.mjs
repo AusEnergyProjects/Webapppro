@@ -80,6 +80,24 @@ test("customer auth supports Google, email, verification and password recovery",
   assert.match(projectsRoute, /COALESCE\(is_synthetic, 0\) is_synthetic/);
 });
 
+test("public plan handoff explains the protected trade enquiry without asking for answers twice", () => {
+  assert.match(dashboard, /const hasPlannerHandoff = Boolean/);
+  assert.match(dashboard, /Your private trade enquiry/);
+  assert.match(dashboard, /Your current answers are carried across automatically/);
+  assert.match(dashboard, /intent=\{hasPlannerHandoff \? "trade-enquiry" : "account"\}/);
+  assert.match(accountPanel, /Your plan choices are already carried across/);
+  assert.match(accountPanel, /Verified trades first receive a useful scope, not your identity/);
+  assert.match(accountPanel, /You choose the business that can contact you/);
+  assert.match(
+    dashboard,
+    /addressState:\s*profile\s*\?\s*profile\.addressState \|\| ""\s*:\s*plannerSelection\?\.addressState \|\| ""/,
+  );
+  assert.match(
+    dashboard,
+    /plannerSelection=\{\s*account\.profile \? undefined : initialPlannerSelection\s*\}/,
+  );
+});
+
 test("customer projects are owner scoped and support separate saved roadmaps", () => {
   assert.equal(MAX_CUSTOMER_PROJECTS, 40);
   assert.match(schema, /sqliteTable\("customer_accounts"/);

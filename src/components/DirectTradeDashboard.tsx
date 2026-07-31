@@ -1472,8 +1472,16 @@ export function DirectTradeDashboard() {
                         const isExpanded = expandedOpportunityMatchIds.has(
                           opportunity.matchId,
                         );
+                        const releasedCustomerContact =
+                          opportunity.matchStatus === "connected"
+                            ? opportunity.customerContact
+                            : null;
                         const detailId = `opportunity-details-${opportunity.matchId}`;
                         const toggleId = `opportunity-toggle-${opportunity.matchId}`;
+                        const customerIdentityId =
+                          `opportunity-customer-contact-${opportunity.matchId}`;
+                        const customerIdentityHeadingId =
+                          `opportunity-customer-${opportunity.matchId}`;
                         const services = (
                           opportunity.matchedCategories.length
                             ? opportunity.matchedCategories
@@ -1487,11 +1495,20 @@ export function DirectTradeDashboard() {
                           className={`dashboard-opportunity-card status-${opportunity.matchStatus}${isExpanded ? " expanded" : " collapsed"}${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
                         >
                           <header>
-                            <div>
+                            <div className="dashboard-opportunity-heading">
                               <span>
                                 {opportunity.state} region | {opportunity.distanceBand}
                               </span>
-                              <h3>{opportunity.title}</h3>
+                              <h3>
+                                {releasedCustomerContact
+                                  ? releasedCustomerContact.name
+                                  : opportunity.title}
+                              </h3>
+                              {releasedCustomerContact && (
+                                <span className="dashboard-connected-customer-scope">
+                                  {opportunity.title}
+                                </span>
+                              )}
                             </div>
                             <div className="dashboard-opportunity-card-controls">
                               <strong>
@@ -1503,7 +1520,11 @@ export function DirectTradeDashboard() {
                                 id={toggleId}
                                 type="button"
                                 aria-expanded={isExpanded}
-                                aria-controls={detailId}
+                                aria-controls={
+                                  releasedCustomerContact
+                                    ? `${customerIdentityId} ${detailId}`
+                                    : detailId
+                                }
                                 onClick={() =>
                                   toggleOpportunityExpanded(opportunity.matchId)
                                 }
@@ -1512,6 +1533,72 @@ export function DirectTradeDashboard() {
                               </button>
                             </div>
                           </header>
+                          {releasedCustomerContact && (
+                            <section
+                              id={customerIdentityId}
+                              className="dashboard-connected-customer-identity"
+                              aria-labelledby={
+                                isExpanded
+                                  ? customerIdentityHeadingId
+                                  : undefined
+                              }
+                              hidden={!isExpanded}
+                            >
+                              {isExpanded && (
+                                <>
+                                  <div className="dashboard-connected-customer-intro">
+                                    <span>Customer-authorised contact</span>
+                                    <h4 id={customerIdentityHeadingId}>
+                                      {releasedCustomerContact.name}
+                                    </h4>
+                                    <p>
+                                      Contact details were released to this exact
+                                      installer match on{" "}
+                                      {new Date(
+                                        releasedCustomerContact.grantedAt,
+                                      ).toLocaleString("en-AU")}
+                                      .
+                                    </p>
+                                  </div>
+                                  <dl
+                                    className="dashboard-connected-customer-contact-grid"
+                                    aria-label={`Contact details for ${releasedCustomerContact.name}`}
+                                  >
+                                    <div>
+                                      <dt>Phone</dt>
+                                      <dd>
+                                        <a href={`tel:${releasedCustomerContact.phone}`}>
+                                          {releasedCustomerContact.phone}
+                                        </a>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Email</dt>
+                                      <dd>
+                                        <a href={`mailto:${releasedCustomerContact.email}`}>
+                                          {releasedCustomerContact.email}
+                                        </a>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Service address</dt>
+                                      <dd>
+                                        {[
+                                          releasedCustomerContact.addressLine1,
+                                          releasedCustomerContact.addressLine2,
+                                          releasedCustomerContact.suburb,
+                                          releasedCustomerContact.addressState,
+                                          releasedCustomerContact.postcode,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(", ")}
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                </>
+                              )}
+                            </section>
+                          )}
                           <div className="dashboard-opportunity-compact-summary">
                             <p>
                               {opportunity.enquiryPack?.summary ||
@@ -1588,22 +1675,7 @@ export function DirectTradeDashboard() {
                               </span>
                             ))}
                           </div>
-                          {opportunity.customerContact ? (
-                            <div className="dashboard-contact-allowance released">
-                              <div>
-                                <strong>Customer-authorised contact</strong>
-                                <span>
-                                  Released to this exact installer match on {new Date(opportunity.customerContact.grantedAt).toLocaleString("en-AU")}.
-                                </span>
-                              </div>
-                              <dl>
-                                <div><dt>Customer</dt><dd>{opportunity.customerContact.name}</dd></div>
-                                <div><dt>Phone</dt><dd><a href={`tel:${opportunity.customerContact.phone}`}>{opportunity.customerContact.phone}</a></dd></div>
-                                <div><dt>Email</dt><dd><a href={`mailto:${opportunity.customerContact.email}`}>{opportunity.customerContact.email}</a></dd></div>
-                                <div><dt>Service address</dt><dd>{[opportunity.customerContact.addressLine1, opportunity.customerContact.addressLine2, opportunity.customerContact.suburb, opportunity.customerContact.addressState, opportunity.customerContact.postcode].filter(Boolean).join(", ")}</dd></div>
-                              </dl>
-                            </div>
-                          ) : opportunity.matchStatus === "connected" ? (
+                          {releasedCustomerContact ? null : opportunity.matchStatus === "connected" ? (
                             <div className="dashboard-contact-allowance">
                               <div>
                                 <strong>Platform coordination active</strong>
@@ -1681,7 +1753,7 @@ export function DirectTradeDashboard() {
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
                             <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
                           </>}
-                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
+                          {opportunity.platformOnly && opportunity.matchStatus === "connected" && !releasedCustomerContact && opportunity.quote?.customerDecision !== "accepted" && <div className="dashboard-contact-allowance"><div><strong>Waiting for the customer to choose a business</strong><span>Contact details remain protected until the customer chooses to get in touch with this business.</span></div></div>}
                               </>
                             )}
                           </div>

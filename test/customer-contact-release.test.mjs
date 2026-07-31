@@ -111,6 +111,10 @@ test("interfaces name the recipient and explain withdrawal limits", () => {
   );
   assert.match(customerUi, /It cannot erase\s+information an installer already viewed or saved/);
   assert.match(installerUi, /Customer-authorised contact/);
-  assert.match(installerUi, /opportunity\.customerContact\.phone/);
+  assert.match(
+    installerUi,
+    /opportunity\.matchStatus === "connected"\s*\? opportunity\.customerContact\s*: null/,
+  );
+  assert.match(installerUi, /releasedCustomerContact\.phone/);
   assert.doesNotMatch(`${customerUi}\n${installerUi}\n${accountRoute}\n${projectsRoute}\n${opportunitiesRoute}`, /[\u2013\u2014]/);
 });

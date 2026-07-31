@@ -1347,6 +1347,28 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .planner-boundary { background: #f8fcf9; border: 1px solid #b8ddc6; border-radius: 12px; margin-top: 14px; padding: 14px; }
 .planner-boundary strong { color: var(--color-aea-ink); font-family: "Source Serif 4", Georgia, serif; }
 .planner-boundary p { color: var(--color-aea-muted); font-size: .68rem; line-height: 1.5; margin: 5px 0 0; }
+.planner-trade-enquiry { background: radial-gradient(circle at 100% 0%, rgba(98, 243, 213, .2), transparent 13rem), linear-gradient(135deg, #05354a, #08766f); border: 1px solid rgba(110, 231, 183, .45); border-radius: 18px; box-shadow: 0 12px 28px rgba(0, 18, 31, .2); overflow: hidden; padding: 18px; position: relative; }
+.planner-trade-enquiry::before { background: #36dfbd; content: ""; inset: 0 auto 0 0; position: absolute; width: 4px; }
+.planner-trade-enquiry-eyebrow { color: #62f3d5; display: block; font-size: .61rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.planner-trade-enquiry h3 { color: #fff; font-size: 1.05rem; margin-top: 4px; }
+.planner-trade-enquiry p,
+.planner-boundary.planner-trade-enquiry p { color: #d5edf0; font-size: .69rem; line-height: 1.58; margin-top: 7px; max-width: 760px; }
+.planner-trade-enquiry .planner-trade-enquiry-privacy { color: #aee4dd; }
+.planner-trade-enquiry-actions { margin-top: 13px; }
+.planner-trade-enquiry-actions .planner-save-account { background: #36dfbd; border: 1px solid #6ee7d0; border-radius: 999px; color: #043b46; display: inline-block; font-size: .82rem; font-weight: 850; padding: 10px 15px; text-decoration: none; }
+.planner-trade-enquiry-actions .planner-save-account:hover,
+.planner-trade-enquiry-actions .planner-save-account:focus-visible { background: #6ef0d1; color: #022c37; outline: 2px solid #a7f3d0; outline-offset: 2px; }
+.planner-results .planner-trade-enquiry-actions .planner-save-account { background: #36dfbd; border-color: #6ee7d0; color: #043b46; }
+.planner-results .planner-trade-enquiry-actions .planner-save-account:hover,
+.planner-results .planner-trade-enquiry-actions .planner-save-account:focus-visible { background: #6ef0d1; color: #022c37; }
+.planner-result-secondary-actions { margin-top: 10px; }
+.planner-results .planner-result-secondary-actions a,
+.planner-results .planner-result-secondary-actions button { background: rgba(255, 255, 255, .06); border-color: rgba(201, 231, 228, .46); color: #d8efef; font-size: .72rem; padding: 8px 12px; }
+.planner-results .planner-result-secondary-actions a:hover,
+.planner-results .planner-result-secondary-actions a:focus-visible,
+.planner-results .planner-result-secondary-actions button:hover,
+.planner-results .planner-result-secondary-actions button:focus-visible { background: rgba(255, 255, 255, .14); }
+.planner-trade-enquiry-footer { margin-top: 20px; padding: 20px; }
 .planner-print-page { margin: 28px auto; max-width: 900px; width: calc(100% - 28px); }
 .planner-print-actions { align-items: center; background: #fff; border: 1px solid #c9d9d5; border-radius: 14px; box-shadow: 0 12px 34px rgba(0, 5, 14, .18); display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 14px; padding: 14px; }
 .planner-print-actions button, .planner-print-actions a { background: var(--action-primary); border: 1px solid #159b69; border-radius: 999px; color: #fff; cursor: pointer; font: inherit; font-size: .78rem; font-weight: 850; padding: 10px 15px; text-decoration: none; }
@@ -1542,6 +1564,7 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .dashboard-opportunity-card header > div:first-child { min-width: 0; }
 .dashboard-opportunity-card header span { color: var(--color-aea-green-dark); display: block; font-size: .6rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
 .dashboard-opportunity-card h3 { color: var(--color-aea-ink); font-size: 1rem; margin-top: 4px; }
+.dashboard-opportunity-heading .dashboard-connected-customer-scope { color: #55756a; font-size: .6rem; letter-spacing: 0; line-height: 1.4; margin-top: 4px; text-transform: none; }
 .dashboard-opportunity-card-controls { align-items: center; display: flex; flex: 0 0 auto; gap: 7px; }
 .dashboard-opportunity-card-controls > strong { background: #e3f5ed; border-radius: 999px; color: #08794c; font-size: .58rem; padding: 4px 8px; text-transform: capitalize; }
 .dashboard-opportunity-card-controls > button { background: #fff; border: 1px solid #91b7aa; border-radius: 8px; color: #087557; cursor: pointer; font-size: .6rem; font-weight: 850; min-height: 32px; padding: 6px 9px; }
@@ -1550,6 +1573,15 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .dashboard-opportunity-card > p { color: var(--color-aea-muted); font-size: .69rem; line-height: 1.58; margin: 10px 0; }
 .dashboard-opportunity-card.collapsed { padding: 13px 15px; }
 .dashboard-opportunity-card.expanded .dashboard-opportunity-compact-summary { display: none; }
+.dashboard-connected-customer-identity { align-items: start; background: linear-gradient(135deg, #e6f8f1, #f4fbff); border: 1px solid #9fd6c5; border-radius: 13px; display: grid; gap: 13px; grid-template-columns: minmax(190px, .62fr) minmax(0, 1.38fr); margin-top: 13px; padding: 14px; }
+.dashboard-connected-customer-intro span { color: #08794c; display: block; font-size: .56rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.dashboard-connected-customer-intro h4 { color: var(--color-aea-ink); font-size: 1rem; margin-top: 4px; }
+.dashboard-connected-customer-intro p { color: #587068; font-size: .58rem; line-height: 1.48; margin: 5px 0 0; }
+.dashboard-connected-customer-contact-grid { display: grid; gap: 8px; grid-template-columns: minmax(115px, .7fr) minmax(180px, 1fr) minmax(240px, 1.45fr); margin: 0; }
+.dashboard-connected-customer-contact-grid > div { background: rgba(255, 255, 255, .86); border: 1px solid #cce3db; border-radius: 10px; min-width: 0; padding: 10px; }
+.dashboard-connected-customer-contact-grid dt { color: #5b7a70; font-size: .5rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.dashboard-connected-customer-contact-grid dd { color: #123e34; font-size: .62rem; font-weight: 800; line-height: 1.42; margin: 4px 0 0; overflow-wrap: anywhere; }
+.dashboard-connected-customer-contact-grid a { color: #08794c; }
 .dashboard-opportunity-compact-summary { display: grid; gap: 8px; margin-top: 10px; }
 .dashboard-opportunity-compact-summary > p { color: #587068; display: -webkit-box; font-size: .64rem; line-height: 1.45; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .dashboard-opportunity-compact-summary dl { display: grid; gap: 7px; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(105px, .55fr)); margin: 0; }
@@ -2888,6 +2920,9 @@ footer a { color: #6ee7b7; font-weight: 700; }
 @media (max-width: 1100px) {
   .dashboard-lead-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-opportunity-compact-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-connected-customer-identity { grid-template-columns: 1fr; }
+  .dashboard-connected-customer-contact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-connected-customer-contact-grid > div:last-child { grid-column: 1 / -1; }
   .admin-ecosystem-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-notification-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2941,6 +2976,8 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .dashboard-opportunity-card-controls > button { flex: 0 0 auto; }
   .dashboard-opportunity-compact-summary dl { grid-template-columns: 1fr 1fr; }
   .dashboard-opportunity-compact-summary dl > div:first-child { grid-column: 1 / -1; }
+  .dashboard-connected-customer-contact-grid { grid-template-columns: 1fr; }
+  .dashboard-connected-customer-contact-grid > div:last-child { grid-column: auto; }
   .admin-recovery-readiness { align-items: flex-start; flex-direction: column; }
   .admin-audit-table article { grid-template-columns: 1fr; }
   .dashboard-serviceability-fields, .supplier-form-grid, .marketplace-filterbar, .marketplace-advanced-filters > div, .marketplace-product-grid, .supplier-enquiry-items, .supplier-enquiry-contact { grid-template-columns: 1fr; }
@@ -4191,6 +4228,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .customer-account-hero h1,
   .customer-project-entry-hero h1 { font-size: 2.15rem; }
   .customer-auth-card { grid-template-columns: 1fr; padding: 20px; }
+  .planner-trade-enquiry { padding: 17px; }
+  .planner-trade-enquiry-actions .planner-save-account { text-align: center; width: 100%; }
   .customer-public-benefits,
   .customer-metric-grid,
   .customer-project-entry-boundaries,

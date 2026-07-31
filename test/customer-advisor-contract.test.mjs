@@ -35,8 +35,8 @@ const project = {
 };
 
 test("important home facts derive customer reports without claiming validation", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-30-roadmap-context-v4");
-  assert.equal(CUSTOMER_ADVISOR_PROFILE_VERSION, "2026-07-29-advisor-profile-v4");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-31-trade-enquiry-home-systems-v5");
+  assert.equal(CUSTOMER_ADVISOR_PROFILE_VERSION, "2026-07-31-advisor-profile-v5");
   assert.equal(
     CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
     "2026-07-29-self-declared-adviser-v1",
@@ -295,7 +295,7 @@ test("installer opportunity summaries cannot disclose private room names or perm
   assert.match(opportunity.summary, /reported concerns: too cold/i);
   assert.match(
     opportunity.summary,
-    /0 tracked home facts have a household answer or linked evidence and 16 remain not known or not checked/i,
+    /0 tracked home facts have a household answer or linked evidence and 17 remain not known or not checked/i,
   );
   assert.doesNotMatch(opportunity.summary, /overnight|permission-needed/i);
 });

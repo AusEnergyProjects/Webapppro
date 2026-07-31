@@ -18,7 +18,10 @@ test("lead results default to compact accessible summaries with one expandable w
   assert.match(dashboard, /dashboard-opportunity-details/);
   assert.match(dashboard, /hidden=\{!isExpanded\}/);
   assert.match(dashboard, /aria-expanded=\{isExpanded\}/);
-  assert.match(dashboard, /aria-controls=\{detailId\}/);
+  assert.match(
+    dashboard,
+    /releasedCustomerContact\s*\?\s*`\$\{customerIdentityId\} \$\{detailId\}`\s*:\s*detailId/,
+  );
   assert.match(dashboard, /Collapse lead/);
   assert.match(dashboard, /Expand lead/);
   assert.match(dashboard, /opportunityNextAction\(opportunity\)/);

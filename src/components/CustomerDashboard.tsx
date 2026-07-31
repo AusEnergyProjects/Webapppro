@@ -688,10 +688,15 @@ function projectDefaultsWithSelection(
 function ProfileForm({
   user,
   profile,
+  plannerSelection,
   onSaved,
 }: {
   user: User;
   profile: CustomerProfile | null;
+  plannerSelection?: {
+    situation?: string;
+    addressState?: string;
+  };
   onSaved: (profile: CustomerProfile) => void;
 }) {
   const [draft, setDraft] = useState(() => ({
@@ -701,13 +706,19 @@ function ProfileForm({
     addressLine2: profile?.addressLine2 || "",
     suburb: profile?.suburb || "",
     postcode: profile?.postcode || "",
-    addressState: profile?.addressState || "",
+    addressState: profile
+      ? profile.addressState || ""
+      : plannerSelection?.addressState || "",
     propertyType: profile?.propertyType || "house",
-    householdSituation: ["owner", "renter"].includes(
-      profile?.householdSituation || "",
-    )
-      ? profile!.householdSituation
-      : "",
+    householdSituation: profile
+      ? profile.householdSituation === "owner"
+        || profile.householdSituation === "renter"
+        ? profile.householdSituation
+        : ""
+      : plannerSelection?.situation === "owner"
+        || plannerSelection?.situation === "renter"
+        ? plannerSelection.situation
+        : "",
     accountUpdates: profile?.accountUpdates ?? false,
     consent: Boolean(profile),
   }));
@@ -5952,6 +5963,18 @@ export function CustomerDashboard({
     useState<HTMLButtonElement | null>(null);
   const projectListHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const projectRefreshSequenceRef = useRef(0);
+  const hasPlannerHandoff = Boolean(
+    initialPlannerSelection &&
+      (initialPlannerSelection.goals?.length ||
+        initialPlannerSelection.features?.length ||
+        initialPlannerSelection.categories?.length ||
+        initialPlannerSelection.pace ||
+        initialPlannerSelection.situation ||
+        initialPlannerSelection.approvalContext ||
+        initialPlannerSelection.budgetRange ||
+        initialPlannerSelection.addressState ||
+        initialPlannerSelection.postcode),
+  );
 
   const refreshProjects = useCallback(async (nextUser: User) => {
     const refreshSequence = projectRefreshSequenceRef.current + 1;
@@ -6899,35 +6922,42 @@ export function CustomerDashboard({
         </section>
       ) : !user ? (
         <>
-          <header className="customer-account-hero">
+          <header className={`customer-account-hero${hasPlannerHandoff ? " customer-account-hero-trade-enquiry" : ""}`}>
             <div>
-              <span>Private home energy workspace</span>
+              <span>{hasPlannerHandoff ? "Your private trade enquiry" : "Private home energy workspace"}</span>
               <h1>
-                Plan every upgrade without opening the door to sales calls
+                {hasPlannerHandoff
+                  ? "Keep your plan private while you explore trade options"
+                  : "Plan every upgrade without opening the door to sales calls"}
               </h1>
               <p>
-                Create projects, save a whole-home roadmap and request
-                structured installer options. Your identity stays private until
-                you choose a specific installer.
+                {hasPlannerHandoff
+                  ? "Your answers are ready to become a useful project scope. Create a free account or sign in so we can save the plan to you, match it without exposing your identity and keep every response together."
+                  : "Create projects, save a whole-home roadmap and request structured installer options. Your identity stays private until you choose a specific installer."}
               </p>
               <div>
                 <strong>Always free for households</strong>
-                <small>All household project tools are included at no cost.</small>
+                <small>{hasPlannerHandoff ? "Your current answers are carried across automatically." : "All household project tools are included at no cost."}</small>
               </div>
             </div>
             <aside>
-              <span>What trades can see first</span>
-              <strong>An anonymised project scope</strong>
+              <span>{hasPlannerHandoff ? "What happens next" : "What trades can see first"}</span>
+              <strong>{hasPlannerHandoff ? "One short, protected path" : "An anonymised project scope"}</strong>
               <ul>
-                <li>Controlled work categories and timing</li>
-                <li>State and service-area eligibility</li>
-                <li>
-                  No name, email, phone or exact address until you connect
-                </li>
+                {hasPlannerHandoff ? <>
+                  <li>Create an account or sign in</li>
+                  <li>Review the plan already carried across</li>
+                  <li>Add only the details needed for useful responses</li>
+                  <li>Choose if one business can contact you</li>
+                </> : <>
+                  <li>Controlled work categories and timing</li>
+                  <li>State and service-area eligibility</li>
+                  <li>No name, email, phone or exact address until you connect</li>
+                </>}
               </ul>
             </aside>
           </header>
-          <FirebaseAccountPanel />
+          <FirebaseAccountPanel intent={hasPlannerHandoff ? "trade-enquiry" : "account"} />
           <section className="customer-public-benefits">
             <article>
               <span>01</span>
@@ -6986,6 +7016,9 @@ export function CustomerDashboard({
           <ProfileForm
             user={user}
             profile={account.profile}
+            plannerSelection={
+              account.profile ? undefined : initialPlannerSelection
+            }
             onSaved={(profile) => void saveProfile(profile)}
           />
         </>

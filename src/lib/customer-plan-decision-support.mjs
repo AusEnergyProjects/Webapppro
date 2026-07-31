@@ -23,7 +23,10 @@ export const customerReviewOptions = {
 const ITEM_FACTS = {
   "climate-sequence": [],
   "room-comfort-profile": [],
-  "home-planning-context": ["roof", "switchboard"],
+  "home-planning-context": ["roof", "switchboard", "electrical-supply"],
+  "electrical-supply-check": ["electrical-supply", "switchboard"],
+  "exhaust-discharge-review": ["ventilation"],
+  "moisture-ventilation": ["ventilation"],
   authority: [],
   assessment: [],
   compare: [],
@@ -33,14 +36,14 @@ const ITEM_FACTS = {
   "insulation-review": ["ceiling-insulation", "wall-insulation", "floor-insulation"],
   "windows-glazing": ["glazing"],
   "window-shading": ["glazing", "window-coverings", "external-shading"],
-  heating: ["heating-cooling", "switchboard"],
-  "reverse-cycle-existing": ["heating-cooling", "switchboard"],
-  "hot-water": ["hot-water", "switchboard"],
-  "heat-pump-hot-water-existing": ["hot-water", "switchboard"],
-  cooking: ["cooking", "switchboard"],
-  solar: ["roof", "switchboard", "solar"],
-  battery: ["solar", "battery", "switchboard"],
-  ev: ["ev", "switchboard"],
+  heating: ["heating-cooling", "switchboard", "electrical-supply"],
+  "reverse-cycle-existing": ["heating-cooling", "switchboard", "electrical-supply"],
+  "hot-water": ["hot-water", "switchboard", "electrical-supply"],
+  "heat-pump-hot-water-existing": ["hot-water", "switchboard", "electrical-supply"],
+  cooking: ["cooking", "switchboard", "electrical-supply"],
+  solar: ["roof", "switchboard", "electrical-supply", "solar"],
+  battery: ["solar", "battery", "switchboard", "electrical-supply"],
+  ev: ["ev", "switchboard", "electrical-supply"],
 };
 
 const FACT_QUESTIONS = {
@@ -84,6 +87,10 @@ const FACT_QUESTIONS = {
     prompt: "Is the switchboard type known from a safe front-on photo or existing record?",
     whyItMatters: "Electrical capacity and protective devices can change the order and scope of electrification work.",
   },
+  "electrical-supply": {
+    prompt: "Is the home reported to have single-phase or three-phase electricity supply?",
+    whyItMatters: "The reported phase is a useful planning clue, but a licensed electrician must still confirm the supply and available capacity.",
+  },
   solar: {
     prompt: "Is the existing solar system size and inverter model known?",
     whyItMatters: "Existing generation, export limits and daytime use affect whether more solar or storage is useful.",
@@ -101,8 +108,8 @@ const FACT_QUESTIONS = {
     whyItMatters: "Orientation-specific external shade can reduce summer heat before cooling equipment or glazing changes are considered.",
   },
   ventilation: {
-    prompt: "Are fixed vents, chimneys, exhausts or mechanical ventilation present?",
-    whyItMatters: "Required ventilation must be separated from unwanted draughts before sealing work is planned.",
+    prompt: "Where do the kitchen and bathroom exhaust fans discharge, and is any self-closing shutter or backdraft damper known?",
+    whyItMatters: "The discharge path, fixed ventilation and sealing mechanism can change moisture control and draught-proofing advice.",
   },
   ev: {
     prompt: "Is an electric vehicle already used or likely during this plan?",
@@ -116,10 +123,10 @@ const FACT_TARGET_QUESTIONS = {
   "wall-insulation": "wall-insulation",
   "floor-insulation": "floor-insulation",
   draughts: "comfort-concerns",
-  ventilation: "ventilation-features",
   "heating-cooling": "heating-cooling-systems",
   "hot-water": "hot-water",
   cooking: "cooking",
+  "electrical-supply": "electrical-supply",
   solar: "solar",
   battery: "battery",
   ev: "ev",
@@ -137,6 +144,63 @@ const FACT_TARGET_OVERRIDES = {
     targetAnchor: "customer-property-switchboard",
   },
 };
+
+const VENTILATION_QUESTION_TARGETS = [
+  {
+    targetAnchor: "customer-home-feature-ventilation-features",
+    answered: new Set([
+      "open-wall-vents",
+      "evaporative-ducts",
+      "mechanical-ventilation",
+      "ventilation-none-known",
+    ]),
+    unknown: new Set(["ventilation-unknown"]),
+  },
+  {
+    targetAnchor: "customer-home-feature-exhaust-discharge",
+    answered: new Set([
+      "exhaust-discharge-outside",
+      "exhaust-discharge-cavity",
+      "exhaust-fans-none",
+    ]),
+    unknown: new Set([
+      "exhaust-discharge-unknown",
+      "exhaust-fans-unknown",
+    ]),
+  },
+  {
+    targetAnchor: "customer-home-feature-exhaust-damper",
+    answered: new Set([
+      "exhaust-damper-known",
+      "exhaust-damper-none-known",
+    ]),
+    unknown: new Set(["exhaust-damper-unknown"]),
+  },
+];
+
+function factTargetFor(factKey, homeFeatures) {
+  if (factKey === "ventilation") {
+    const selected = new Set(
+      Array.isArray(homeFeatures)
+        ? homeFeatures.filter((value) => typeof value === "string")
+        : [],
+    );
+    const unresolved = VENTILATION_QUESTION_TARGETS.find((question) => (
+      [...question.unknown].some((value) => selected.has(value))
+      || ![...question.answered].some((value) => selected.has(value))
+    ));
+    return {
+      targetStep: 2,
+      targetAnchor: unresolved?.targetAnchor
+        || "customer-home-feature-section-ventilation",
+    };
+  }
+  return {
+    targetStep: FACT_TARGET_OVERRIDES[factKey]?.targetStep || 2,
+    targetAnchor: FACT_TARGET_OVERRIDES[factKey]?.targetAnchor
+      || `customer-home-feature-${FACT_TARGET_QUESTIONS[factKey] || factKey}`,
+  };
+}
 
 function cleanText(value, maximum) {
   return typeof value === "string"
@@ -261,6 +325,7 @@ export function addPlanDecisionSupport(items = [], context = {}) {
 export function createNextBestQuestions({
   items = [],
   factEvidence = [],
+  homeFeatures = [],
   situation = "",
   approvalContext = "none",
   budgetRange = "not_set",
@@ -322,12 +387,11 @@ export function createNextBestQuestions({
     if (questions.length >= 3 || sources.get(factKey) !== "unknown") continue;
     const question = FACT_QUESTIONS[factKey];
     if (!question) continue;
+    const target = factTargetFor(factKey, homeFeatures);
     add({
       id: `fact-${factKey}`,
       ...question,
-      targetStep: FACT_TARGET_OVERRIDES[factKey]?.targetStep || 2,
-      targetAnchor: FACT_TARGET_OVERRIDES[factKey]?.targetAnchor
-        || `customer-home-feature-${FACT_TARGET_QUESTIONS[factKey] || factKey}`,
+      ...target,
     });
   }
   if (
