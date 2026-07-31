@@ -2372,6 +2372,8 @@ export const customerProjectQuotes = sqliteTable("customer_project_quotes", {
   opportunityId: text("opportunity_id").notNull(),
   opportunityMatchId: text("opportunity_match_id").notNull(),
   installerUid: text("installer_uid").notNull(),
+  submissionRequestId: text("submission_request_id").notNull().default(""),
+  submissionRevision: integer("submission_revision").notNull().default(0),
   productListId: text("product_list_id").notNull().default(""),
   inclusions: text("inclusions").notNull().default("[]"),
   productSnapshot: text("product_snapshot").notNull().default("[]"),
@@ -2391,6 +2393,112 @@ export const customerProjectQuotes = sqliteTable("customer_project_quotes", {
   uniqueIndex("customer_project_quotes_match_idx").on(table.opportunityMatchId),
   index("customer_project_quotes_project_idx").on(table.projectId, table.status, table.updatedAt),
   index("customer_project_quotes_installer_idx").on(table.installerUid, table.updatedAt),
+]);
+
+export const customerProjectQuoteSubmissions = sqliteTable("customer_project_quote_submissions", {
+  id: text("id").primaryKey(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  submissionRequestId: text("submission_request_id").notNull(),
+  quoteId: text("quote_id").notNull(),
+  submissionRevision: integer("submission_revision").notNull(),
+  quoteSnapshot: text("quote_snapshot").notNull(),
+  submittedAt: text("submitted_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_quote_submissions_request_idx").on(
+    table.installerUid,
+    table.opportunityMatchId,
+    table.submissionRequestId,
+  ),
+  uniqueIndex("customer_project_quote_submissions_revision_idx").on(
+    table.installerUid,
+    table.opportunityMatchId,
+    table.submissionRevision,
+  ),
+  index("customer_project_quote_submissions_quote_idx").on(table.quoteId, table.submittedAt),
+]);
+
+export const customerProjectQuoteAcceptanceClaims = sqliteTable("customer_project_quote_acceptance_claims", {
+  projectId: text("project_id").primaryKey(),
+  customerUid: text("customer_uid").notNull(),
+  quoteId: text("quote_id").notNull(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  contactReleaseId: text("contact_release_id").notNull(),
+  acceptedAt: text("accepted_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_quote_acceptance_claims_quote_idx").on(table.quoteId),
+  index("customer_project_quote_acceptance_claims_owner_idx").on(table.customerUid, table.acceptedAt),
+]);
+
+export const customerProjectActivityEvents = sqliteTable("customer_project_activity_events", {
+  id: text("id").primaryKey(),
+  eventKey: text("event_key").notNull(),
+  projectId: text("project_id").notNull(),
+  quoteId: text("quote_id").notNull(),
+  opportunityMatchId: text("opportunity_match_id").notNull(),
+  customerUid: text("customer_uid").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  actorType: text("actor_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_activity_events_key_idx").on(table.eventKey),
+  index("customer_project_activity_events_customer_idx").on(table.customerUid, table.occurredAt, table.id),
+  index("customer_project_activity_events_installer_idx").on(table.installerUid, table.occurredAt, table.id),
+]);
+
+export const customerProjectActivityDeliveries = sqliteTable("customer_project_activity_deliveries", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  audience: text("audience").notNull(),
+  recipientUid: text("recipient_uid").notNull(),
+  channel: text("channel").notNull().default("email"),
+  provider: text("provider").notNull().default("resend"),
+  status: text("status").notNull().default("pending"),
+  eligibilityReason: text("eligibility_reason").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  recipientEmailHash: text("recipient_email_hash").notNull().default(""),
+  idempotencyKey: text("idempotency_key").notNull(),
+  subject: text("subject").notNull().default(""),
+  body: text("body").notNull().default(""),
+  html: text("html").notNull().default(""),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  queuedAt: text("queued_at").notNull(),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_activity_deliveries_event_idx").on(table.eventId, table.audience, table.channel),
+  uniqueIndex("customer_project_activity_deliveries_idempotency_idx").on(table.idempotencyKey),
+  uniqueIndex("customer_project_activity_deliveries_provider_message_idx")
+    .on(table.provider, table.providerMessageId).where(sql`${table.providerMessageId} <> ''`),
+  index("customer_project_activity_deliveries_status_idx").on(table.status, table.nextAttemptAt, table.queuedAt),
+  index("customer_project_activity_deliveries_recipient_idx").on(table.recipientUid, table.audience, table.createdAt),
+]);
+
+export const customerProjectActivityDeliveryEvents = sqliteTable("customer_project_activity_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_project_activity_delivery_events_provider_idx").on(table.providerEventKey),
+  index("customer_project_activity_delivery_events_delivery_idx").on(table.deliveryId, table.occurredAt),
 ]);
 
 export const tradeCrmCalendarEvents = sqliteTable("trade_crm_calendar_events", {

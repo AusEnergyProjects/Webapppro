@@ -43,8 +43,25 @@ test("customer and field activity powers one unread installer review queue", () 
   assert.match(route, /requireInstallerTeamAccess/);
   assert.match(route, /current\.items\.some\(\(item\) => item\.id === notificationKey\)/);
   assert.match(notifications, /30_000/);
-  assert.match(notifications, /unread job updates/);
+  assert.match(notifications, /unread work updates/);
   assert.match(notifications, /jobTab: item\.targetTab/);
+  assert.match(notifications, /ref=\{triggerRef\}/);
+  assert.match(
+    notifications,
+    /ref=\{dialogRef\} tabIndex=\{-1\}[\s\S]*role="dialog"/,
+  );
+  assert.match(
+    notifications,
+    /requestAnimationFrame\(\(\) => dialogRef\.current\?\.focus\(\)\)/,
+  );
+  assert.match(
+    notifications,
+    /const closeNotifications = useCallback\(\(\) => \{[\s\S]*triggerRef\.current\?\.focus\(\)/,
+  );
+  assert.match(
+    notifications,
+    /tabIndex=\{-1\} aria-hidden="true" className="tlink-notification-dismiss"/,
+  );
   assert.match(dashboard, /<TradeJobNotifications/);
 });
 

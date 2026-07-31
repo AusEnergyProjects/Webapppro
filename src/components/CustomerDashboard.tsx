@@ -5164,10 +5164,17 @@ function ProjectDetail({
             </section>
           )}
           {project.quotes.length > 0 && (
-            <section className="customer-detail-panel">
+            <section
+              id="structured-quote-options"
+              className="customer-detail-panel"
+              tabIndex={-1}
+              aria-labelledby="structured-quote-options-heading"
+            >
               <div className="customer-panel-heading">
                 <span>Compare safely</span>
-                <h2>Structured quote options</h2>
+                <h2 id="structured-quote-options-heading">
+                  Structured quote options
+                </h2>
                 <p>
                   Review the verified business behind each option before
                   deciding whether to share your contact details. Product lines
@@ -5966,10 +5973,34 @@ export function CustomerDashboard({
   const [deleteDraftReturnFocus, setDeleteDraftReturnFocus] =
     useState<HTMLButtonElement | null>(null);
   const projectListHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const projectRefreshSequenceRef = useRef(0);
+
+  const refreshProjects = useCallback(async (nextUser: User) => {
+    const refreshSequence = projectRefreshSequenceRef.current + 1;
+    projectRefreshSequenceRef.current = refreshSequence;
+    const token = await nextUser.getIdToken();
+    const projectsResponse = await fetch("/api/customer-projects", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    const projectsResult = await projectsResponse.json().catch(() => ({}));
+    if (!projectsResponse.ok || !projectsResult.ok) {
+      throw new Error(
+        projectsResult.error || "Your projects could not be loaded.",
+      );
+    }
+    const refreshedProjects =
+      (projectsResult.projects || []) as CustomerProject[];
+    if (projectRefreshSequenceRef.current === refreshSequence) {
+      setProjects(refreshedProjects);
+    }
+    return refreshedProjects;
+  }, []);
 
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
+        projectRefreshSequenceRef.current += 1;
         setUser(nextUser);
         setAuthReady(true);
         if (!nextUser) {
@@ -5984,7 +6015,7 @@ export function CustomerDashboard({
     [],
   );
 
-  async function load(nextUser: User) {
+  const load = useCallback(async (nextUser: User) => {
     setLoading(true);
     setStatus("");
     try {
@@ -6007,16 +6038,7 @@ export function CustomerDashboard({
         setView("profile");
         return;
       }
-      const projectsResponse = await fetch("/api/customer-projects", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const projectsResult = await projectsResponse.json().catch(() => ({}));
-      if (!projectsResponse.ok || !projectsResult.ok)
-        throw new Error(
-          projectsResult.error || "Your projects could not be loaded.",
-        );
-      setProjects(projectsResult.projects || []);
+      await refreshProjects(nextUser);
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -6026,13 +6048,29 @@ export function CustomerDashboard({
     } finally {
       setLoading(false);
     }
-  }
+  }, [refreshProjects]);
 
   useEffect(() => {
     if (!user) return;
     const frame = window.requestAnimationFrame(() => void load(user));
     return () => window.cancelAnimationFrame(frame);
-  }, [user]);
+  }, [load, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshProjects(user).catch(() => {});
+    };
+    const intervalId = window.setInterval(refreshWhenVisible, 30_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshProjects, user]);
 
   async function saveProfile(profile: CustomerProfile) {
     setAccount((current) => ({ ...current, profile }));
@@ -6070,6 +6108,7 @@ export function CustomerDashboard({
         });
         const refreshed = await refreshedResponse.json().catch(() => ({}));
         if (refreshedResponse.ok && refreshed.ok) {
+          projectRefreshSequenceRef.current += 1;
           setProjects(refreshed.projects || []);
         }
         throw new Error(PROJECT_REVISION_CONFLICT_MESSAGE);
@@ -6077,6 +6116,7 @@ export function CustomerDashboard({
       throw new Error(result.error || "The project could not be updated.");
     }
     if (Array.isArray(result.projects)) {
+      projectRefreshSequenceRef.current += 1;
       setProjects(result.projects as CustomerProject[]);
     }
     return result;
@@ -6463,6 +6503,9 @@ export function CustomerDashboard({
         action,
         ...extra,
       });
+      if (action === "quote_decision" && user) {
+        void refreshProjects(user).catch(() => {});
+      }
       if (action === "duplicate") {
         setEditingId(result.id);
         setSelectedId("");
@@ -6760,6 +6803,81 @@ export function CustomerDashboard({
     (sum, project) => sum + project.progress.responseCount,
     0,
   );
+  const projectQuotes = useMemo(
+    () =>
+      projects.flatMap((project) =>
+        project.quotes
+          .map((quote) => ({
+            projectId: project.id,
+            projectTitle: project.title,
+            quote,
+          })),
+      ).sort((left, right) =>
+        right.quote.submittedAt.localeCompare(left.quote.submittedAt),
+      ),
+    [projects],
+  );
+  const quotesAwaitingReview = useMemo(
+    () =>
+      projectQuotes.filter(({ quote }) =>
+        ["reviewing", "shortlisted"].includes(quote.customerDecision),
+      ),
+    [projectQuotes],
+  );
+  const quoteReviewCountByProject = useMemo(() => {
+    const counts = new Map<string, number>();
+    quotesAwaitingReview.forEach(({ projectId }) => {
+      counts.set(projectId, (counts.get(projectId) || 0) + 1);
+    });
+    return counts;
+  }, [quotesAwaitingReview]);
+  const visibleProjectsWithQuoteCounts = useMemo(
+    () =>
+      projects
+        .filter((project) => project.status !== "archived")
+        .map((project) => ({
+          project,
+          installerQuoteCount: quoteReviewCountByProject.get(project.id) || 0,
+        })),
+    [projects, quoteReviewCountByProject],
+  );
+  const selectedProjectId = selected?.id || "";
+  const selectedQuoteCount = selected?.quotes.length || 0;
+
+  useEffect(() => {
+    if (
+      !authReady
+      || loading
+      || !user
+      || view !== "detail"
+      || !selectedProjectId
+      || selectedQuoteCount === 0
+      || window.location.hash !== "#structured-quote-options"
+    ) {
+      return;
+    }
+    let focusFrame = 0;
+    const scrollFrame = window.requestAnimationFrame(() => {
+      focusFrame = window.requestAnimationFrame(() => {
+        const target = window.document.getElementById(
+          "structured-quote-options",
+        );
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        target?.focus({ preventScroll: true });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(scrollFrame);
+      if (focusFrame) window.cancelAnimationFrame(focusFrame);
+    };
+  }, [
+    authReady,
+    loading,
+    selectedProjectId,
+    selectedQuoteCount,
+    user,
+    view,
+  ]);
 
   return (
     <main id="main-content" className="wrap customer-account-page">
@@ -6888,10 +7006,18 @@ export function CustomerDashboard({
               Overview
             </a>
             <a
-              className={view === "quotes" ? "active" : ""}
+              className={`customer-nav-quote-link${view === "quotes" ? " active" : ""}`}
               href="/account/quotes"
             >
-              Direct quotes
+              Quotes
+              {quotesAwaitingReview.length > 0 && (
+                <span
+                  className="customer-nav-quote-badge"
+                  aria-label={`${quotesAwaitingReview.length} installer ${quotesAwaitingReview.length === 1 ? "quote" : "quotes"} awaiting review`}
+                >
+                  {quotesAwaitingReview.length}
+                </span>
+              )}
             </a>
             <a
               className={view === "appointments" ? "active" : ""}
@@ -7055,11 +7181,146 @@ export function CustomerDashboard({
               onRecordOutcome={recordProjectOutcome}
             />
           ) : view === "quotes" ? (
-            <CustomerTradeQuotes user={user} />
+            <section
+              className="customer-quote-centre"
+              aria-labelledby="customer-quote-centre-heading"
+            >
+              <header>
+                <div>
+                  <span>Your quote centre</span>
+                  <h2 id="customer-quote-centre-heading">
+                    Your project installer quotes
+                  </h2>
+                  <p>
+                    Compare each response inside its project before choosing a
+                    shortlist or sharing any contact details.
+                  </p>
+                </div>
+                <strong>
+                  {quotesAwaitingReview.length}{" "}
+                  {quotesAwaitingReview.length === 1
+                    ? "quote to review"
+                    : "quotes to review"}
+                </strong>
+              </header>
+              {projectQuotes.length > 0 ? (
+                <div className="customer-project-quote-list">
+                  {projectQuotes.map(
+                    ({ projectId, projectTitle, quote }) => (
+                      <article key={`${projectId}:${quote.id}`}>
+                        <header>
+                          <div>
+                            <span>
+                              {quote.customerDecision === "accepted"
+                                ? "Accepted for the next step"
+                                : quote.customerDecision === "shortlisted"
+                                  ? "Shortlisted, next step ready"
+                                  : quote.customerDecision === "declined"
+                                    ? "Not selected"
+                                    : "Ready to review"}
+                            </span>
+                            <h3>{quote.installerBusinessName}</h3>
+                          </div>
+                          {quote.installerVerified && (
+                            <strong>Verified installer</strong>
+                          )}
+                        </header>
+                        <dl>
+                          <div>
+                            <dt>Project</dt>
+                            <dd>{projectTitle}</dd>
+                          </div>
+                          <div>
+                            <dt>Total including GST</dt>
+                            <dd>
+                              {currency(
+                                Math.round(quote.totalCentsExGst * 1.1),
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Submitted</dt>
+                            <dd>
+                              <time dateTime={quote.submittedAt}>
+                                {new Date(
+                                  quote.submittedAt,
+                                ).toLocaleDateString("en-AU", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </time>
+                            </dd>
+                          </div>
+                        </dl>
+                        <a
+                          href={`/account/projects/${projectId}#structured-quote-options`}
+                        >
+                          {quote.customerDecision === "accepted"
+                            ? "View accepted quote"
+                            : quote.customerDecision === "shortlisted"
+                              ? "Continue with quote"
+                              : quote.customerDecision === "declined"
+                                ? "View quote history"
+                                : "Review quote"}
+                        </a>
+                      </article>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <div className="customer-quote-centre-empty" role="status">
+                  <strong>No project installer quotes yet</strong>
+                  <p>
+                    New installer responses will appear here and on the related
+                    project as soon as they are ready.
+                  </p>
+                </div>
+              )}
+              <section
+                className="customer-quote-centre-secondary"
+                aria-labelledby="customer-direct-quotes-heading"
+              >
+                <div className="customer-panel-heading">
+                  <span>Other quote tools</span>
+                  <h2 id="customer-direct-quotes-heading">
+                    Direct service quotes
+                  </h2>
+                  <p>
+                    Review quote requests created outside a saved home upgrade
+                    project.
+                  </p>
+                </div>
+                <CustomerTradeQuotes user={user} />
+              </section>
+            </section>
           ) : view === "appointments" ? (
             <CustomerAppointmentRescheduling user={user} />
           ) : (
             <>
+              {quotesAwaitingReview.length > 0 && (
+                <section
+                  className="customer-quote-ready-alert"
+                  role="status"
+                  aria-labelledby="customer-quote-ready-heading"
+                >
+                  <div>
+                    <span>Installer quotes ready</span>
+                    <h2 id="customer-quote-ready-heading">
+                      {quotesAwaitingReview.length}{" "}
+                      {quotesAwaitingReview.length === 1
+                        ? "quote is waiting"
+                        : "quotes are waiting"}{" "}
+                      for your review
+                    </h2>
+                    <p>
+                      Compare the details before you shortlist an installer or
+                      share any contact information.
+                    </p>
+                  </div>
+                  <a href="/account/quotes">Review your quotes</a>
+                </section>
+              )}
               <section className="customer-metric-grid">
                 <article>
                   <span>Active projects</span>
@@ -7098,12 +7359,10 @@ export function CustomerDashboard({
                       free account.
                     </p>
                   </div>
-                  {projects.filter((project) => project.status !== "archived")
-                    .length ? (
+                  {visibleProjectsWithQuoteCounts.length ? (
                     <div className="customer-project-list">
-                      {projects
-                        .filter((project) => project.status !== "archived")
-                        .map((project) => (
+                      {visibleProjectsWithQuoteCounts.map(
+                        ({ project, installerQuoteCount }) => (
                           <article key={project.id}>
                             <header>
                               <div>
@@ -7183,17 +7442,29 @@ export function CustomerDashboard({
                                 {!project.deletionPending && (
                                   <a
                                     className="customer-project-card-open"
-                                    href={`/account/projects/${project.id}`}
+                                    href={
+                                      installerQuoteCount > 0
+                                        ? `/account/projects/${project.id}#structured-quote-options`
+                                        : `/account/projects/${project.id}`
+                                    }
+                                    aria-label={
+                                      installerQuoteCount > 0
+                                        ? `Review ${installerQuoteCount} installer ${installerQuoteCount === 1 ? "quote" : "quotes"} for ${project.title}`
+                                        : undefined
+                                    }
                                   >
-                                    {project.status === "draft"
-                                      ? "Continue project"
-                                      : "Open project"}
+                                    {installerQuoteCount > 0
+                                      ? `Review ${installerQuoteCount} installer ${installerQuoteCount === 1 ? "quote" : "quotes"}`
+                                      : project.status === "draft"
+                                        ? "Continue project"
+                                        : "Open project"}
                                   </a>
                                 )}
                               </div>
                             </footer>
                           </article>
-                        ))}
+                        ),
+                      )}
                     </div>
                   ) : (
                     <div className="customer-empty-state">

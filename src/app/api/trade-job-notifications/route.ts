@@ -8,6 +8,8 @@ type Row = Record<string, unknown>;
 type JobTab = "schedule" | "quote" | "field" | "invoice";
 type JobNotification = {
   id: string;
+  targetKind: "job" | "opportunity";
+  targetId: string;
   workOrderId: string;
   workNumber: string;
   title: string;
@@ -47,7 +49,7 @@ function workEventPresentation(eventType: string) {
 async function notifications(access: TeamAccess) {
   const db = getD1();
   const scope = jobScope(access);
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, acceptedProjectQuotes, reads] = await Promise.all([
     db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title
       FROM trade_crm_photo_request_completions completion
@@ -117,6 +119,22 @@ async function notifications(access: TeamAccess) {
         AND (? <> 'technician' OR work.assignee_member_id = ?)
       ORDER BY signoff.signed_at DESC LIMIT 80`)
       .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
+    db.prepare(`SELECT event.id, event.opportunity_match_id, event.occurred_at
+      FROM customer_project_activity_events event
+      JOIN customer_project_quotes quote ON quote.id = event.quote_id
+        AND quote.installer_uid = event.installer_uid
+        AND quote.customer_decision = 'accepted'
+      JOIN customer_project_contact_releases release
+        ON release.quote_id = event.quote_id
+        AND release.opportunity_match_id = event.opportunity_match_id
+        AND release.customer_uid = event.customer_uid
+        AND release.installer_uid = event.installer_uid
+        AND release.status = 'active'
+      WHERE event.installer_uid = ?
+        AND event.event_type = 'customer_installer_accepted'
+        AND ? <> 'technician'
+      ORDER BY event.occurred_at DESC LIMIT 80`)
+      .bind(access.ownerUid, scope.role).all<Row>(),
     db.prepare(`SELECT notification_key FROM trade_job_notification_reads
       WHERE firebase_uid = ? AND read_by_uid = ? ORDER BY read_at DESC LIMIT 500`)
       .bind(access.ownerUid, access.actorUid).all<Row>(),
@@ -124,36 +142,55 @@ async function notifications(access: TeamAccess) {
 
   const items: Omit<JobNotification, "read">[] = [
     ...photoCompletions.results.map((row) => ({ id: `customer-photos-ready:${String(row.id)}`,
+      targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer photos ready",
       summary: `${Number(row.supplied_count)} ${Number(row.supplied_count) === 1 ? "file is" : "files are"} ready to review for ${String(row.title)}.`,
       createdAt: String(row.completed_at), targetTab: "field" as const, source: "customer" as const })),
     ...quoteQuestions.results.map((row) => ({ id: `quote-question:${String(row.id)}`,
+      targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer asked a quote question",
       summary: limitedSummary(row.question, `Open ${String(row.quote_number)} to read and reply.`), createdAt: String(row.asked_at),
       targetTab: "quote" as const, source: "customer" as const })),
     ...quoteDecisions.results.map((row) => { const accepted = row.decision === "accepted"; const amount = Number(row.selected_total_cents || 0);
       return { id: `quote-decision:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
+        targetKind: "job" as const, targetId: String(row.work_order_id),
         title: accepted ? "Quote accepted" : "Quote declined",
         summary: accepted ? `${String(row.quote_number)} was accepted by ${String(row.signer_name || "the customer")} for ${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount / 100)}.`
           : `${String(row.quote_number)} was declined by ${String(row.signer_name || "the customer")}.`, createdAt: String(row.decided_at),
         targetTab: "quote" as const, source: "customer" as const }; }),
     ...quoteViews.results.map((row) => ({ id: `quote-view:${String(row.id)}`,
+      targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer opened quote",
       summary: `${String(row.quote_number)} for ${String(row.title)} was opened.`, createdAt: String(row.occurred_at),
       targetTab: "quote" as const, source: "customer" as const })),
     ...appointmentRequests.results.map((row) => ({ id: `appointment-request:${String(row.id)}`,
+      targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer requested a schedule change",
       summary: limitedSummary(row.summary, "Review the customer's requested appointment change."), createdAt: String(row.created_at),
       targetTab: "schedule" as const, source: "customer" as const })),
     ...fieldEvents.results.map((row) => { const presentation = workEventPresentation(String(row.event_type)); return {
-      id: `field-event:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
+      id: `field-event:${String(row.id)}`, targetKind: "job" as const, targetId: String(row.work_order_id),
+      workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
       title: presentation.title, summary: limitedSummary(row.summary, `Field work changed for ${String(row.title)}.`),
       createdAt: String(row.created_at), targetTab: presentation.targetTab, source: "field" as const }; }),
     ...signoffs.results.map((row) => { const customer = row.signer_role === "customer"; return {
-      id: `job-signoff:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
+      id: `job-signoff:${String(row.id)}`, targetKind: "job" as const, targetId: String(row.work_order_id),
+      workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
       title: customer ? "Customer sign-off recorded" : "Technician sign-off recorded",
       summary: `${String(row.signer_name || (customer ? "Customer" : "Technician"))} signed the field record for ${String(row.title)}.`,
       createdAt: String(row.signed_at), targetTab: "field" as const, source: customer ? "customer" as const : "field" as const }; }),
+    ...acceptedProjectQuotes.results.map((row) => ({
+      id: `platform-quote-accepted:${String(row.id)}`,
+      targetKind: "opportunity" as const,
+      targetId: String(row.opportunity_match_id),
+      workOrderId: "",
+      workNumber: "TLink lead",
+      title: "Quote accepted, contact the customer",
+      summary: "Contact details are ready. Call or email the customer and schedule the next step.",
+      createdAt: String(row.occurred_at),
+      targetTab: "quote" as const,
+      source: "customer" as const,
+    })),
   ];
   const readKeys = new Set(reads.results.map((row) => String(row.notification_key)));
   const visible = items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100)

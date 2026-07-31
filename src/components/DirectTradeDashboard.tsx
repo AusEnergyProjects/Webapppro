@@ -173,6 +173,14 @@ function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
     : "work";
 }
 
+const opportunityMatchIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function opportunityMatchFromSearch(search: string) {
+  const requested = new URLSearchParams(search).get("matchId") || "";
+  return opportunityMatchIdPattern.test(requested) ? requested : "";
+}
+
 const capabilityLabels: Record<string, string> = {
   assessment: "Energy assessment",
   solar: "Rooftop solar",
@@ -462,10 +470,13 @@ export function DirectTradeDashboard() {
   );
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
+  const [opportunityNavigationStatus, setOpportunityNavigationStatus] =
+    useState("");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("");
   const [leadServiceFilter, setLeadServiceFilter] = useState("");
   const [leadStateFilter, setLeadStateFilter] = useState("");
+  const [focusedOpportunityMatchId, setFocusedOpportunityMatchId] = useState("");
   const [workspace, setWorkspace] = useState<DashboardWorkspace>(() =>
     typeof window === "undefined"
       ? "work"
@@ -483,6 +494,11 @@ export function DirectTradeDashboard() {
   const evidenceObjectUrls = useRef(new Set<string>());
   const protectedIdentityUid = useRef<string | null>(null);
   const protectedIdentityRevision = useRef(0);
+  const initialOpportunityMatchId = useRef(
+    typeof window === "undefined"
+      ? ""
+      : opportunityMatchFromSearch(window.location.search),
+  );
 
   const revokeEvidenceObjectUrl = useCallback((url: string) => {
     if (!evidenceObjectUrls.current.delete(url)) return;
@@ -637,6 +653,73 @@ export function DirectTradeDashboard() {
       .filter((item) => !leadServiceFilter || (item.matchedCategories.length ? item.matchedCategories : item.serviceCategories).includes(leadServiceFilter))
       .filter((item) => !term || `${item.title} ${item.summary} ${item.projectType} ${item.distanceBand}`.toLowerCase().includes(term));
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
+
+  const openOpportunityNotification = useCallback(async (matchId: string) => {
+    setLeadSearch("");
+    setLeadStatusFilter("");
+    setLeadServiceFilter("");
+    setLeadStateFilter("");
+    setFocusedOpportunityMatchId(matchId);
+    setWorkspace("leads");
+    setOpportunityNavigationStatus("Opening the accepted lead...");
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/trade-opportunities?matchId=${encodeURIComponent(matchId)}`,
+        {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        },
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || "The accepted lead could not be refreshed.");
+      }
+      const acceptedLead = result.opportunities?.[0];
+      if (!acceptedLead || acceptedLead.matchId !== matchId) {
+        throw new Error("The accepted lead is no longer available.");
+      }
+      setOpportunities((current) => [
+        acceptedLead,
+        ...current.filter((item) => item.matchId !== matchId),
+      ]);
+      setOpportunityNavigationStatus("");
+    } catch (openError) {
+      setOpportunityNavigationStatus(
+        openError instanceof Error
+          ? openError.message
+          : "The accepted lead could not be refreshed.",
+      );
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !initialOpportunityMatchId.current) return;
+    const matchId = initialOpportunityMatchId.current;
+    initialOpportunityMatchId.current = "";
+    void openOpportunityNotification(matchId);
+  }, [openOpportunityNotification, user]);
+
+  useEffect(() => {
+    if (workspace !== "leads" || !focusedOpportunityMatchId) return;
+    if (!opportunities.some((item) => item.matchId === focusedOpportunityMatchId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(
+        `opportunity-${focusedOpportunityMatchId}`,
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+    const timeout = window.setTimeout(
+      () => setFocusedOpportunityMatchId(""),
+      5_000,
+    );
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [focusedOpportunityMatchId, opportunities, workspace]);
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1070,7 +1153,7 @@ export function DirectTradeDashboard() {
             {!isSupplier && <TradeJobNotifications user={user} onNavigate={(target) => {
               setCommandTarget(target);
               setWorkspace(target.workspace);
-            }} />}
+            }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
             <div className="dashboard-account-actions">
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
@@ -1250,6 +1333,14 @@ export function DirectTradeDashboard() {
                       after shortlisting its option.
                     </p>
                   </div>
+                  {opportunityNavigationStatus && (
+                    <p
+                      className="dashboard-settings-status dashboard-opportunity-navigation-status"
+                      role="status"
+                    >
+                      {opportunityNavigationStatus}
+                    </p>
+                  )}
                   {!hasLeadAccess ? (
                     <div className="dashboard-access-locked">
                       <span>Verification required</span>
@@ -1310,7 +1401,9 @@ export function DirectTradeDashboard() {
                       {visibleLeadOpportunities.map((opportunity) => (
                         <article
                           key={opportunity.matchId}
-                          className={`dashboard-opportunity-card status-${opportunity.matchStatus}`}
+                          id={`opportunity-${opportunity.matchId}`}
+                          tabIndex={-1}
+                          className={`dashboard-opportunity-card status-${opportunity.matchStatus}${focusedOpportunityMatchId === opportunity.matchId ? " notification-target" : ""}`}
                         >
                           <header>
                             <div>
@@ -1737,10 +1830,10 @@ export function DirectTradeDashboard() {
                           }
                         />
                         <span>
-                          <strong>Suitable opportunity notices</strong>
+                          <strong>Opportunity and customer response emails</strong>
                           <small>
                             Email the account contact when a reviewed
-                            opportunity is assigned.
+                            opportunity is assigned or a customer accepts a quote.
                           </small>
                         </span>
                       </label>

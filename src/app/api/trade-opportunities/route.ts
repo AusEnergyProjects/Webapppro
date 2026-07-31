@@ -20,9 +20,16 @@ import { createInstallerEnquiryPack } from "@/lib/customer-plan-document.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
+import {
+  CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER,
+  customerProjectActivityStatements,
+} from "@/lib/customer-project-activity-notification-server";
+import { customerProjectQuoteId } from "@/lib/customer-project-activity-notifications";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function distanceBand(value: unknown) {
   const kilometres = Number(value || 0) / 1000;
@@ -104,6 +111,20 @@ function json(body: object, status = 200) {
   });
 }
 
+function activityDispatchJson(
+  body: object,
+  deliveryId: string,
+  status = 200,
+) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      [CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER]: deliveryId,
+    },
+  });
+}
+
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -111,6 +132,46 @@ function sameOrigin(request: Request) {
 
 function tradeAccessCode(error: unknown) {
   return error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+}
+
+function platformQuoteResponse(row: Record<string, unknown> | null) {
+  if (!row?.quote_id) return null;
+  return {
+    id: String(row.quote_id),
+    productListId: String(row.product_list_id || ""),
+    inclusions: parseStoredJson(row.quote_inclusions, []),
+    products: parseStoredJson(row.product_snapshot, []),
+    productSubtotalCentsExGst: Number(row.product_subtotal_cents_ex_gst || 0),
+    labourCentsExGst: Number(row.labour_cents_ex_gst || 0),
+    otherCentsExGst: Number(row.other_cents_ex_gst || 0),
+    totalCentsExGst: Number(row.total_cents_ex_gst || 0),
+    quoteType: String(row.quote_type || "indicative"),
+    startWindow: String(row.start_window || "to_confirm"),
+    durationWeeks: Number(row.duration_weeks || 0),
+    workmanshipWarrantyYears: Number(row.workmanship_warranty_years || 0),
+    status: String(row.quote_status || "submitted"),
+    customerDecision: String(row.customer_decision || "reviewing"),
+    submittedAt: String(row.quote_submitted_at || ""),
+    submissionRevision: Number(row.quote_submission_revision || 0),
+  };
+}
+
+async function authoritativePlatformQuote(
+  db: ReturnType<typeof getD1>,
+  opportunityMatchId: string,
+  installerUid: string,
+) {
+  const row = await db.prepare(`SELECT id quote_id, product_list_id,
+    inclusions quote_inclusions, product_snapshot,
+    product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst,
+    total_cents_ex_gst, quote_type, start_window, duration_weeks,
+    workmanship_warranty_years, status quote_status, customer_decision,
+    submitted_at quote_submitted_at, submission_revision quote_submission_revision
+    FROM customer_project_quotes
+    WHERE opportunity_match_id = ? AND installer_uid = ? LIMIT 1`)
+    .bind(opportunityMatchId, installerUid)
+    .first<Record<string, unknown>>();
+  return platformQuoteResponse(row);
 }
 
 export async function GET(request: Request) {
@@ -134,6 +195,14 @@ export async function GET(request: Request) {
       { ok: false, error: "Complete trade verification before opening marketplace opportunities." },
       403,
     );
+  const matchParameters = new URL(request.url).searchParams.getAll("matchId");
+  if (
+    matchParameters.length > 1
+    || (matchParameters.length === 1 && !UUID_PATTERN.test(matchParameters[0].trim()))
+  ) {
+    return json({ ok: false, error: "Choose one valid opportunity." }, 400);
+  }
+  const requestedMatchId = matchParameters[0]?.trim() || "";
   await expireStaleOpportunities();
   const rows = await db
     .prepare(
@@ -145,6 +214,7 @@ export async function GET(request: Request) {
     q.product_subtotal_cents_ex_gst, q.labour_cents_ex_gst, q.other_cents_ex_gst, q.total_cents_ex_gst,
     q.quote_type, q.start_window, q.duration_weeks, q.workmanship_warranty_years, q.status quote_status,
     q.customer_decision, q.submitted_at quote_submitted_at,
+    q.submission_revision quote_submission_revision,
     r.id contact_release_id, r.customer_name, r.customer_email, r.customer_phone,
     r.address_line_1 contact_address_line_1, r.address_line_2 contact_address_line_2,
     r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
@@ -169,7 +239,8 @@ export async function GET(request: Request) {
     LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = m.id
       AND r.installer_uid = m.firebase_uid AND r.status = 'active'
     LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
-    WHERE m.firebase_uid = ? AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+    WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
+      AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND (
         p.id IS NULL OR EXISTS (
           SELECT 1 FROM customer_consent_receipts matching_consent
@@ -182,7 +253,7 @@ export async function GET(request: Request) {
     ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1 WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END, m.updated_at DESC
     LIMIT 100`,
     )
-    .bind(user.uid)
+    .bind(user.uid, requestedMatchId, requestedMatchId)
     .all<Record<string, unknown>>();
   const evidenceRows = await db.prepare(`SELECT e.id, e.project_id, e.category, e.content_type,
       e.size_bytes, e.created_at, e.fact_keys, e.sharing_scope,
@@ -192,6 +263,7 @@ export async function GET(request: Request) {
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE e.status = 'active' AND e.sharing_scope = 'allocated-installers'
+      AND (? = '' OR m.id = ?)
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND o.status IN ('open', 'paused')
       AND EXISTS (
@@ -199,7 +271,9 @@ export async function GET(request: Request) {
         WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
           AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
       )
-    ORDER BY e.created_at DESC`).bind(user.uid).all<Record<string, unknown>>();
+    ORDER BY e.created_at DESC`)
+    .bind(user.uid, requestedMatchId, requestedMatchId)
+    .all<Record<string, unknown>>();
   const evidenceByMatch = new Map<string, Array<Record<string, unknown>>>();
   for (const item of evidenceRows.results) {
     const matchId = String(item.opportunity_match_id || "");
@@ -280,23 +354,7 @@ export async function GET(request: Request) {
           proposedAt: row.arrival_proposed_at,
           selectedAt: row.arrival_selected_at,
         } : null,
-        quote: row.quote_id ? {
-          id: row.quote_id,
-          productListId: row.product_list_id,
-          inclusions: parseStoredJson(row.quote_inclusions, []),
-          products: parseStoredJson(row.product_snapshot, []),
-          productSubtotalCentsExGst: Number(row.product_subtotal_cents_ex_gst || 0),
-          labourCentsExGst: Number(row.labour_cents_ex_gst || 0),
-          otherCentsExGst: Number(row.other_cents_ex_gst || 0),
-          totalCentsExGst: Number(row.total_cents_ex_gst || 0),
-          quoteType: row.quote_type,
-          startWindow: row.start_window,
-          durationWeeks: Number(row.duration_weeks || 0),
-          workmanshipWarrantyYears: Number(row.workmanship_warranty_years || 0),
-          status: row.quote_status,
-          customerDecision: row.customer_decision,
-          submittedAt: row.quote_submitted_at,
-        } : null,
+        quote: platformQuoteResponse(row),
       };
     }),
   });
@@ -415,11 +473,23 @@ export async function PATCH(request: Request) {
     if (!normalized.ok) return json({ ok: false, error: normalized.error }, 400);
     const quote = normalized.quote;
     if (!quote) return json({ ok: false, error: "Invalid structured quote option." }, 400);
+    const submissionRequestId = String(body.submissionRequestId || "").trim();
+    if (!UUID_PATTERN.test(submissionRequestId)) {
+      return json({ ok: false, error: "Start a fresh quote submission and try again." }, 400);
+    }
+    const expectedSubmissionRevision = Number(body.expectedSubmissionRevision);
+    if (
+      !Number.isInteger(expectedSubmissionRevision)
+      || expectedSubmissionRevision < 0
+      || expectedSubmissionRevision > 1_000_000
+    ) {
+      return json({ ok: false, error: "Refresh the quote before submitting this change." }, 400);
+    }
     const match = await db.prepare(`SELECT m.opportunity_id, m.status, o.source_reference, o.status opportunity_status,
-      p.id project_id, q.customer_decision existing_customer_decision FROM trade_opportunity_matches m
+      p.id project_id, p.firebase_uid customer_uid
+      FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       JOIN customer_projects p ON p.opportunity_id = o.id
-      LEFT JOIN customer_project_quotes q ON q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
       WHERE m.id = ? AND m.firebase_uid = ?`).bind(matchId, user.uid).first<Record<string, unknown>>();
     if (!match) return json({ ok: false, error: "This platform project is not available." }, 404);
     if (!String(match.source_reference || "").startsWith("customer-project:") || match.opportunity_status !== "open") {
@@ -428,8 +498,34 @@ export async function PATCH(request: Request) {
     if (!['interested', 'connected'].includes(String(match.status))) {
       return json({ ok: false, error: "Record your interest before preparing a quote option." }, 409);
     }
-    if (match.existing_customer_decision === "accepted") {
+    const [replay, currentQuote] = await Promise.all([
+      db.prepare(`SELECT submission_revision, quote_snapshot
+        FROM customer_project_quote_submissions
+        WHERE installer_uid = ? AND opportunity_match_id = ? AND submission_request_id = ?
+        LIMIT 1`)
+        .bind(user.uid, matchId, submissionRequestId)
+        .first<Record<string, unknown>>(),
+      authoritativePlatformQuote(db, matchId, user.uid),
+    ]);
+    if (replay) {
+      return json({
+        ok: true,
+        replayed: true,
+        requestRevision: Number(replay.submission_revision || 0),
+        quote: currentQuote || parseStoredJson(replay.quote_snapshot, null),
+      });
+    }
+    if (currentQuote?.customerDecision === "accepted") {
       return json({ ok: false, error: "The accepted quote is locked. Use the reviewed customer change workflow for later scope changes." }, 409);
+    }
+    const currentSubmissionRevision = currentQuote?.submissionRevision || 0;
+    if (currentSubmissionRevision !== expectedSubmissionRevision) {
+      return json({
+        ok: false,
+        code: "QUOTE_REVISION_CHANGED",
+        error: "This quote changed in another tab. The latest saved version is shown.",
+        quote: currentQuote,
+      }, 409);
     }
     let snapshot;
     try {
@@ -442,47 +538,142 @@ export async function PATCH(request: Request) {
     }
     const totalCentsExGst = snapshot.subtotalCentsExGst + quote.labourCentsExGst + quote.otherCentsExGst;
     if (totalCentsExGst <= 0) return json({ ok: false, error: "Add a product, labour or service amount." }, 400);
-    const quoteId = crypto.randomUUID();
-    await db.batch([
-      db.prepare(`INSERT INTO customer_project_quotes
-        (id, project_id, opportunity_id, opportunity_match_id, installer_uid, product_list_id, inclusions,
-         product_snapshot, product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst,
-         total_cents_ex_gst, quote_type, start_window, duration_weeks, workmanship_warranty_years,
-         status, customer_decision, submitted_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', 'reviewing', ?, ?)
-        ON CONFLICT(opportunity_match_id) DO UPDATE SET product_list_id = excluded.product_list_id,
-          inclusions = excluded.inclusions, product_snapshot = excluded.product_snapshot,
-          product_subtotal_cents_ex_gst = excluded.product_subtotal_cents_ex_gst,
-          labour_cents_ex_gst = excluded.labour_cents_ex_gst, other_cents_ex_gst = excluded.other_cents_ex_gst,
-          total_cents_ex_gst = excluded.total_cents_ex_gst, quote_type = excluded.quote_type,
-          start_window = excluded.start_window, duration_weeks = excluded.duration_weeks,
-          workmanship_warranty_years = excluded.workmanship_warranty_years, status = 'submitted',
-          customer_decision = 'reviewing', submitted_at = excluded.submitted_at, updated_at = excluded.updated_at`)
-        .bind(quoteId, match.project_id, match.opportunity_id, matchId, user.uid, quote.productListId,
-          JSON.stringify(quote.inclusions), JSON.stringify(snapshot.products), snapshot.subtotalCentsExGst,
-          quote.labourCentsExGst, quote.otherCentsExGst, totalCentsExGst,
-          quote.quoteType, quote.startWindow, quote.durationWeeks,
-          quote.workmanshipWarrantyYears, now, now),
-      db.prepare("UPDATE customer_projects SET status = 'quote_review', updated_at = ? WHERE id = ? AND status = 'matching'")
-        .bind(now, match.project_id),
-      adminNotificationStatement(db, {
-        eventKey: `installer-quote:${matchId}:${now}`,
-        eventType: "installer.quote_submitted",
-        category: "response",
-        priority: "high",
-        title: "Installer submitted a quote option",
-        summary: `${String(account.business_name || "An installer").slice(0, 160)} submitted a structured platform quote for a customer enquiry.`,
-        entityType: "customer_project_quote",
-        entityId: quoteId,
-        actorType: "installer",
-        actorUid: user.uid,
-        requiresAction: true,
-        metadata: { matchId, opportunityId: match.opportunity_id, projectId: match.project_id, totalCentsExGst },
-        occurredAt: now,
-      }),
-    ]);
-    await dispatchAdminNotificationDeliveries();
-    return json({ ok: true, quote: { totalCentsExGst, productSubtotalCentsExGst: snapshot.subtotalCentsExGst, submittedAt: now } });
+    const quoteId = String(
+      currentQuote?.id
+      || await customerProjectQuoteId(matchId, user.uid),
+    );
+    const submissionRevision = expectedSubmissionRevision + 1;
+    const submittedQuote = {
+      id: quoteId,
+      productListId: quote.productListId,
+      inclusions: quote.inclusions,
+      products: snapshot.products,
+      productSubtotalCentsExGst: snapshot.subtotalCentsExGst,
+      labourCentsExGst: quote.labourCentsExGst,
+      otherCentsExGst: quote.otherCentsExGst,
+      totalCentsExGst,
+      quoteType: quote.quoteType,
+      startWindow: quote.startWindow,
+      durationWeeks: quote.durationWeeks,
+      workmanshipWarrantyYears: quote.workmanshipWarrantyYears,
+      status: "submitted",
+      customerDecision: "reviewing",
+      submittedAt: now,
+      submissionRevision,
+    };
+    const activity = await customerProjectActivityStatements(db, {
+      eventKey: `platform-quote-submitted:${matchId}:${submissionRequestId}`,
+      projectId: String(match.project_id),
+      quoteId,
+      opportunityMatchId: matchId,
+      customerUid: String(match.customer_uid),
+      installerUid: user.uid,
+      eventType: "installer_quote_submitted",
+      audience: "customer",
+      actorType: "installer",
+      actorUid: user.uid,
+      occurredAt: now,
+    });
+    try {
+      const mutationResults = await db.batch([
+        db.prepare(`INSERT INTO customer_project_quotes
+          (id, project_id, opportunity_id, opportunity_match_id, installer_uid,
+           submission_request_id, submission_revision, product_list_id, inclusions,
+           product_snapshot, product_subtotal_cents_ex_gst, labour_cents_ex_gst, other_cents_ex_gst,
+           total_cents_ex_gst, quote_type, start_window, duration_weeks, workmanship_warranty_years,
+           status, customer_decision, submitted_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', 'reviewing', ?, ?)
+          ON CONFLICT(opportunity_match_id) DO UPDATE SET
+            submission_request_id = excluded.submission_request_id,
+            submission_revision = excluded.submission_revision,
+            product_list_id = excluded.product_list_id,
+            inclusions = excluded.inclusions, product_snapshot = excluded.product_snapshot,
+            product_subtotal_cents_ex_gst = excluded.product_subtotal_cents_ex_gst,
+            labour_cents_ex_gst = excluded.labour_cents_ex_gst, other_cents_ex_gst = excluded.other_cents_ex_gst,
+            total_cents_ex_gst = excluded.total_cents_ex_gst, quote_type = excluded.quote_type,
+            start_window = excluded.start_window, duration_weeks = excluded.duration_weeks,
+            workmanship_warranty_years = excluded.workmanship_warranty_years, status = 'submitted',
+            customer_decision = 'reviewing', submitted_at = excluded.submitted_at, updated_at = excluded.updated_at
+          WHERE customer_project_quotes.installer_uid = excluded.installer_uid
+            AND customer_project_quotes.submission_revision = ?
+            AND customer_project_quotes.customer_decision != 'accepted'`)
+          .bind(quoteId, match.project_id, match.opportunity_id, matchId, user.uid,
+            submissionRequestId, submissionRevision, quote.productListId,
+            JSON.stringify(quote.inclusions), JSON.stringify(snapshot.products), snapshot.subtotalCentsExGst,
+            quote.labourCentsExGst, quote.otherCentsExGst, totalCentsExGst,
+            quote.quoteType, quote.startWindow, quote.durationWeeks,
+            quote.workmanshipWarrantyYears, now, now, expectedSubmissionRevision),
+        db.prepare(`INSERT INTO customer_project_quote_submissions
+          (id, opportunity_match_id, installer_uid, submission_request_id, quote_id,
+           submission_revision, quote_snapshot, submitted_at, created_at)
+          VALUES (?, ?, ?, ?, ?, COALESCE((
+            SELECT submission_revision FROM customer_project_quotes
+            WHERE opportunity_match_id = ? AND installer_uid = ?
+              AND submission_request_id = ? AND submission_revision = ?
+          ), 0), ?, ?, ?)`)
+          .bind(crypto.randomUUID(), matchId, user.uid, submissionRequestId, quoteId,
+            matchId, user.uid, submissionRequestId, submissionRevision,
+            JSON.stringify(submittedQuote), now, now),
+        db.prepare("UPDATE customer_projects SET status = 'quote_review', updated_at = ? WHERE id = ? AND status = 'matching'")
+          .bind(now, match.project_id),
+        adminNotificationStatement(db, {
+          eventKey: `installer-quote:${matchId}:${submissionRequestId}`,
+          eventType: "installer.quote_submitted",
+          category: "response",
+          priority: "high",
+          title: "Installer submitted a quote option",
+          summary: `${String(account.business_name || "An installer").slice(0, 160)} submitted a structured platform quote for a customer enquiry.`,
+          entityType: "customer_project_quote",
+          entityId: quoteId,
+          actorType: "installer",
+          actorUid: user.uid,
+          requiresAction: true,
+          metadata: { matchId, opportunityId: match.opportunity_id, projectId: match.project_id, totalCentsExGst, submissionRevision },
+          occurredAt: now,
+        }),
+        ...activity.statements,
+      ]);
+      if (Number(mutationResults[0]?.meta.changes || 0) !== 1) {
+        throw new Error("QUOTE_REVISION_CHANGED");
+      }
+    } catch {
+      const [recordedReplay, latestQuote] = await Promise.all([
+        db.prepare(`SELECT submission_revision, quote_snapshot
+          FROM customer_project_quote_submissions
+          WHERE installer_uid = ? AND opportunity_match_id = ? AND submission_request_id = ?
+          LIMIT 1`)
+          .bind(user.uid, matchId, submissionRequestId)
+          .first<Record<string, unknown>>(),
+        authoritativePlatformQuote(db, matchId, user.uid),
+      ]);
+      if (recordedReplay) {
+        return json({
+          ok: true,
+          replayed: true,
+          requestRevision: Number(recordedReplay.submission_revision || 0),
+          quote: latestQuote || parseStoredJson(recordedReplay.quote_snapshot, null),
+        });
+      }
+      if (
+        latestQuote
+        && (
+          latestQuote.submissionRevision !== expectedSubmissionRevision
+          || latestQuote.customerDecision === "accepted"
+        )
+      ) {
+        return json({
+          ok: false,
+          code: "QUOTE_REVISION_CHANGED",
+          error: "This quote changed in another tab. The latest saved version is shown.",
+          quote: latestQuote,
+        }, 409);
+      }
+      return json({ ok: false, error: "The quote option could not be submitted." }, 500);
+    }
+    return activityDispatchJson({
+      ok: true,
+      quote: submittedQuote,
+    }, activity.deliveryId);
   }
   if (action === "withdraw_quote") {
     const result = await db.prepare(`UPDATE customer_project_quotes SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?

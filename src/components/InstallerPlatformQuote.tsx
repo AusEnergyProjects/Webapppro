@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { platformQuoteOptions as rawPlatformQuoteOptions } from "@/lib/customer-projects.mjs";
 import { Field } from "./ComparatorChrome";
@@ -13,6 +13,7 @@ const platformQuoteOptions = rawPlatformQuoteOptions as {
 };
 
 type SavedQuote = {
+  id?: string;
   productListId: string;
   inclusions: string[];
   productSubtotalCentsExGst: number;
@@ -25,6 +26,8 @@ type SavedQuote = {
   workmanshipWarrantyYears: number;
   status: string;
   customerDecision: string;
+  submittedAt?: string;
+  submissionRevision?: number;
 };
 
 type ProductList = {
@@ -34,6 +37,36 @@ type ProductList = {
 };
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(cents / 100);
+
+function authoritativeSavedQuote(value: unknown): SavedQuote | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const quote = value as Record<string, unknown>;
+  if (
+    typeof quote.productListId !== "string"
+    || !Array.isArray(quote.inclusions)
+    || typeof quote.quoteType !== "string"
+    || typeof quote.startWindow !== "string"
+    || typeof quote.status !== "string"
+    || typeof quote.customerDecision !== "string"
+  ) return null;
+  return {
+    id: typeof quote.id === "string" ? quote.id : undefined,
+    productListId: quote.productListId,
+    inclusions: quote.inclusions.filter((item): item is string => typeof item === "string"),
+    productSubtotalCentsExGst: Number(quote.productSubtotalCentsExGst || 0),
+    labourCentsExGst: Number(quote.labourCentsExGst || 0),
+    otherCentsExGst: Number(quote.otherCentsExGst || 0),
+    totalCentsExGst: Number(quote.totalCentsExGst || 0),
+    quoteType: quote.quoteType,
+    startWindow: quote.startWindow,
+    durationWeeks: Number(quote.durationWeeks || 0),
+    workmanshipWarrantyYears: Number(quote.workmanshipWarrantyYears || 0),
+    status: quote.status,
+    customerDecision: quote.customerDecision,
+    submittedAt: typeof quote.submittedAt === "string" ? quote.submittedAt : "",
+    submissionRevision: Number(quote.submissionRevision || 0),
+  };
+}
 
 export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { matchId: string; initialQuote: SavedQuote | null; onStatus: (message: string) => void }) {
   const [lists, setLists] = useState<ProductList[]>([]);
@@ -49,6 +82,9 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
   const [durationWeeks, setDurationWeeks] = useState(String(initialQuote?.durationWeeks || ""));
   const [warrantyYears, setWarrantyYears] = useState(String(initialQuote?.workmanshipWarrantyYears || ""));
   const [inclusions, setInclusions] = useState<string[]>(initialQuote?.inclusions?.length ? initialQuote.inclusions : ["installation-commissioning", "warranty-handover"]);
+  const [submissionRevision, setSubmissionRevision] = useState(initialQuote?.submissionRevision || 0);
+  const submissionRequestId = useRef("");
+  const submissionExpectedRevision = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +107,19 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
   const estimatedTotal = productSubtotal + Math.round((Number(labourDollars) || 0) * 100) + Math.round((Number(otherDollars) || 0) * 100);
   const toggle = (value: string) => setInclusions((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
 
+  function applyAuthoritativeQuote(quote: SavedQuote) {
+    setSubmissionRevision(quote.submissionRevision || 0);
+    setProductListId(quote.productListId);
+    setInclusions(quote.inclusions);
+    setLabourDollars(String(quote.labourCentsExGst / 100 || ""));
+    setOtherDollars(String(quote.otherCentsExGst / 100 || ""));
+    setQuoteType(quote.quoteType);
+    setStartWindow(quote.startWindow);
+    setDurationWeeks(String(quote.durationWeeks || ""));
+    setWarrantyYears(String(quote.workmanshipWarrantyYears || ""));
+    setSaved(quote.status === "submitted" ? quote : null);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const user = firebaseAuth.currentUser;
@@ -78,9 +127,15 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
     setBusy(true); onStatus("Submitting a structured quote option...");
     try {
       const token = await user.getIdToken();
+      if (!submissionRequestId.current) {
+        submissionRequestId.current = crypto.randomUUID();
+        submissionExpectedRevision.current = submissionRevision;
+      }
       const payload = {
         matchId,
         action: "submit_quote",
+        submissionRequestId: submissionRequestId.current,
+        expectedSubmissionRevision: submissionExpectedRevision.current,
         quoteType,
         productListId,
         inclusions,
@@ -92,8 +147,24 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
       };
       const response = await fetch("/api/trade-opportunities", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
       const result = await response.json().catch(() => ({}));
+      const authoritativeQuote = authoritativeSavedQuote(result.quote);
+      if (
+        response.status === 409
+        && result.code === "QUOTE_REVISION_CHANGED"
+        && authoritativeQuote
+      ) {
+        applyAuthoritativeQuote(authoritativeQuote);
+        submissionRequestId.current = "";
+        submissionExpectedRevision.current = null;
+        setExpanded(false);
+        onStatus(result.error || "This quote changed in another tab. The latest saved version is shown.");
+        return;
+      }
       if (!response.ok || !result.ok) throw new Error(result.error || "The quote option could not be submitted.");
-      setSaved({ productListId, inclusions, productSubtotalCentsExGst: result.quote.productSubtotalCentsExGst, labourCentsExGst: payload.labourCentsExGst, otherCentsExGst: payload.otherCentsExGst, totalCentsExGst: result.quote.totalCentsExGst, quoteType, startWindow, durationWeeks: payload.durationWeeks, workmanshipWarrantyYears: payload.workmanshipWarrantyYears, status: "submitted", customerDecision: "reviewing" });
+      if (!authoritativeQuote) throw new Error("The saved quote could not be confirmed.");
+      applyAuthoritativeQuote(authoritativeQuote);
+      submissionRequestId.current = "";
+      submissionExpectedRevision.current = null;
       setExpanded(false); onStatus("Quote option submitted inside the platform. No customer contact details were released.");
     } catch (error) { onStatus(error instanceof Error ? error.message : "The quote option could not be submitted."); }
     finally { setBusy(false); }
@@ -108,6 +179,8 @@ export function InstallerPlatformQuote({ matchId, initialQuote, onStatus }: { ma
       const response = await fetch("/api/trade-opportunities", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ matchId, action: "withdraw_quote" }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.error || "The quote option could not be withdrawn.");
+      submissionRequestId.current = "";
+      submissionExpectedRevision.current = null;
       setSaved(null); setExpanded(true); onStatus("Quote option withdrawn.");
     } catch (error) { onStatus(error instanceof Error ? error.message : "The quote option could not be withdrawn."); }
     finally { setBusy(false); }

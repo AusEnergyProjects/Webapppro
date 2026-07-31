@@ -7,6 +7,10 @@ import { adminNotificationStatement, createAdminNotification } from "@/lib/admin
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 import { CUSTOMER_OPPORTUNITY_DISPATCH_HEADER } from "@/lib/customer-opportunity-dispatch-server";
+import {
+  CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER,
+  customerProjectActivityStatements,
+} from "@/lib/customer-project-activity-notification-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   buildAnonymizedOpportunity,
@@ -55,6 +59,16 @@ function dispatchJson(body: object, dispatchJobId: string, status = 202) {
     headers: {
       "Cache-Control": "no-store",
       [CUSTOMER_OPPORTUNITY_DISPATCH_HEADER]: dispatchJobId,
+    },
+  });
+}
+
+function activityDispatchJson(body: object, deliveryId: string, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      [CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER]: deliveryId,
     },
   });
 }
@@ -681,6 +695,7 @@ async function customerProjectMutation(
   if (!current) return json({ ok: false, error: "Project not found." }, 404);
   const now = new Date().toISOString();
   let responseProfile: Record<string, unknown> | null = null;
+  let activityDeliveryId = "";
   if (current.status === "deleting" && action !== "delete_draft") {
     return json({
       ok: false,
@@ -2104,8 +2119,49 @@ async function customerProjectMutation(
       WHERE q.id = ? AND q.project_id = ? AND q.status = 'submitted'`)
       .bind(user.uid, quoteId, id).first<Record<string, unknown>>();
     if (!quote) return json({ ok: false, error: "Quote option not found." }, 404);
+    const acceptedChoice = await db.prepare(`SELECT claim.quote_id, quote.customer_decision
+      FROM customer_project_quote_acceptance_claims claim
+      JOIN customer_project_quotes quote ON quote.id = claim.quote_id
+        AND quote.project_id = claim.project_id
+      WHERE claim.project_id = ? AND claim.customer_uid = ? LIMIT 1`)
+      .bind(id, user.uid).first<Record<string, unknown>>();
+    if (acceptedChoice) {
+      if (
+        decision === "accepted"
+        && acceptedChoice.quote_id === quoteId
+        && acceptedChoice.customer_decision === "accepted"
+      ) {
+        return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+      }
+      return json({
+        ok: false,
+        error: "This project already has an accepted installer. That choice is locked for the next step.",
+      }, 409);
+    }
+    if (
+      decision === "accepted"
+      && quote.customer_decision === "accepted"
+      && quote.contact_release_status === "active"
+    ) {
+      return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+    }
+    if (quote.customer_decision === "accepted") {
+      return json({
+        ok: false,
+        error: "This installer is already accepted for the next step.",
+      }, 409);
+    }
     const statements = [];
-    if (decision === "shortlisted") statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = 'reviewing', updated_at = ? WHERE project_id = ? AND status = 'submitted'").bind(now, id));
+    let acceptanceActivity: Awaited<ReturnType<typeof customerProjectActivityStatements>> | null = null;
+    if (decision === "shortlisted") {
+      statements.push(db.prepare(`UPDATE customer_project_quotes
+        SET customer_decision = 'reviewing', updated_at = ?
+        WHERE project_id = ? AND status = 'submitted'
+          AND NOT EXISTS (
+            SELECT 1 FROM customer_project_quote_acceptance_claims claim
+            WHERE claim.project_id = ? AND claim.customer_uid = ?
+          )`).bind(now, id, id, user.uid));
+    }
     if (decision === "accepted") {
       if (raw.confirmInstallerAcceptance !== true) return json({ ok: false, error: "Confirm the named installer selection before continuing." }, 400);
       if (quote.customer_decision !== "shortlisted" || quote.contact_release_status !== "active"
@@ -2116,6 +2172,40 @@ async function customerProjectMutation(
         FROM customer_project_contact_releases WHERE project_id = ? AND customer_uid = ? AND status = 'active'
           AND opportunity_match_id != ?`).bind(id, user.uid, quote.opportunity_match_id).all<Record<string, unknown>>();
       statements.push(
+        db.prepare(`INSERT INTO customer_project_quote_acceptance_claims
+          (project_id, customer_uid, quote_id, opportunity_match_id,
+           contact_release_id, accepted_at, created_at)
+          VALUES (?, ?, COALESCE((
+            SELECT candidate.id
+            FROM customer_project_quotes candidate
+            JOIN trade_opportunity_matches candidate_match
+              ON candidate_match.id = candidate.opportunity_match_id
+              AND candidate_match.firebase_uid = candidate.installer_uid
+            JOIN trade_opportunities candidate_opportunity
+              ON candidate_opportunity.id = candidate.opportunity_id
+            JOIN customer_project_contact_releases candidate_release
+              ON candidate_release.id = ?
+              AND candidate_release.project_id = candidate.project_id
+              AND candidate_release.quote_id = candidate.id
+              AND candidate_release.customer_uid = ?
+              AND candidate_release.installer_uid = candidate.installer_uid
+              AND candidate_release.status = 'active'
+            WHERE candidate.id = ? AND candidate.project_id = ?
+              AND candidate.installer_uid = ?
+              AND candidate.status = 'submitted'
+              AND candidate.customer_decision = 'shortlisted'
+              AND candidate_match.status = 'connected'
+              AND candidate_opportunity.status IN ('open', 'paused')
+              AND NOT EXISTS (
+                SELECT 1 FROM customer_project_quotes accepted
+                WHERE accepted.project_id = candidate.project_id
+                  AND accepted.status = 'submitted'
+                  AND accepted.customer_decision = 'accepted'
+              )
+          ), ''), ?, ?, ?, ?)`)
+          .bind(id, user.uid, quote.contact_release_id, user.uid, quoteId, id,
+            quote.installer_uid, quote.opportunity_match_id,
+            quote.contact_release_id, now, now),
         db.prepare(`UPDATE customer_project_quotes SET customer_decision = 'declined', updated_at = ?
           WHERE project_id = ? AND status = 'submitted' AND id != ?`).bind(now, id, quoteId),
         db.prepare("UPDATE trade_opportunities SET status = 'paused', updated_at = ? WHERE id = ? AND status = 'open'")
@@ -2139,12 +2229,54 @@ async function customerProjectMutation(
             .bind(now, user.uid, id, `matched_installer_contact_release:${release.opportunity_match_id}`),
         );
       }
+      acceptanceActivity = await customerProjectActivityStatements(db, {
+        eventKey: `platform-installer-accepted:${quoteId}`,
+        projectId: id,
+        quoteId,
+        opportunityMatchId: String(quote.opportunity_match_id),
+        customerUid: user.uid,
+        installerUid: String(quote.installer_uid),
+        eventType: "customer_installer_accepted",
+        audience: "installer",
+        actorType: "customer",
+        actorUid: user.uid,
+        occurredAt: now,
+      });
+      statements.push(...acceptanceActivity.statements);
     }
-    statements.push(db.prepare("UPDATE customer_project_quotes SET customer_decision = ?, updated_at = ? WHERE id = ? AND project_id = ?").bind(decision, now, quoteId, id));
-    statements.push(db.prepare("UPDATE customer_projects SET updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(now, id, user.uid));
-    await db.batch(statements);
-    await createAdminNotification({
-      eventKey: `customer-quote-decision:${quoteId}:${decision}:${now}`,
+    const decisionMutationIndex = statements.length;
+    statements.push(decision === "accepted"
+      ? db.prepare(`UPDATE customer_project_quotes
+          SET customer_decision = 'accepted', updated_at = ?
+          WHERE id = ? AND project_id = ? AND customer_decision = 'shortlisted'
+            AND EXISTS (
+              SELECT 1 FROM customer_project_quote_acceptance_claims claim
+              WHERE claim.project_id = ? AND claim.customer_uid = ? AND claim.quote_id = ?
+            )`).bind(now, quoteId, id, id, user.uid, quoteId)
+      : db.prepare(`UPDATE customer_project_quotes
+          SET customer_decision = ?, updated_at = ?
+          WHERE id = ? AND project_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM customer_project_quote_acceptance_claims claim
+              WHERE claim.project_id = ? AND claim.customer_uid = ?
+            )`).bind(decision, now, quoteId, id, id, user.uid));
+    statements.push(decision === "accepted"
+      ? db.prepare(`UPDATE customer_projects SET updated_at = ?
+          WHERE id = ? AND firebase_uid = ?
+            AND EXISTS (
+              SELECT 1 FROM customer_project_quote_acceptance_claims claim
+              WHERE claim.project_id = ? AND claim.customer_uid = ? AND claim.quote_id = ?
+            )`).bind(now, id, user.uid, id, user.uid, quoteId)
+      : db.prepare(`UPDATE customer_projects SET updated_at = ?
+          WHERE id = ? AND firebase_uid = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM customer_project_quote_acceptance_claims claim
+              WHERE claim.project_id = ? AND claim.customer_uid = ?
+            )`).bind(now, id, user.uid, id, user.uid));
+    const adminInput: Parameters<typeof createAdminNotification>[0] = {
+      eventKey: decision === "accepted"
+        ? `customer-quote-decision:${quoteId}:accepted`
+        : `customer-quote-decision:${quoteId}:${decision}:${now}`,
       eventType: `customer.quote_${decision}`,
       category: "customer",
       priority: ["shortlisted", "accepted"].includes(decision) ? "high" : "normal",
@@ -2157,14 +2289,52 @@ async function customerProjectMutation(
       requiresAction: ["shortlisted", "accepted"].includes(decision),
       metadata: { projectId: id, decision },
       occurredAt: now,
-    });
+    };
+    if (decision === "accepted") {
+      statements.push(adminNotificationStatement(db, adminInput));
+    }
+    let decisionResults;
+    try {
+      decisionResults = await db.batch(statements);
+    } catch {
+      const winner = await db.prepare(`SELECT claim.quote_id, quote.customer_decision
+        FROM customer_project_quote_acceptance_claims claim
+        JOIN customer_project_quotes quote ON quote.id = claim.quote_id
+        WHERE claim.project_id = ? AND claim.customer_uid = ? LIMIT 1`)
+        .bind(id, user.uid).first<Record<string, unknown>>();
+      if (
+        decision === "accepted"
+        && winner?.quote_id === quoteId
+        && winner.customer_decision === "accepted"
+      ) {
+        return json({ ok: true, id, projects: await projectsForOwner(user.uid) });
+      }
+      if (winner) {
+        return json({
+          ok: false,
+          error: "This project already has an accepted installer. That choice is locked for the next step.",
+        }, 409);
+      }
+      return json({ ok: false, error: "The quote decision could not be saved." }, 500);
+    }
+    if (Number(decisionResults[decisionMutationIndex]?.meta.changes || 0) !== 1) {
+      return json({
+        ok: false,
+        error: "This project already has an accepted installer. That choice is locked for the next step.",
+      }, 409);
+    }
+    if (decision !== "accepted") await createAdminNotification(adminInput);
+    if (acceptanceActivity) activityDeliveryId = acceptanceActivity.deliveryId;
   } else {
     return json({ ok: false, error: "Choose a valid project action." }, 400);
   }
-  return json({
+  const responseBody = {
     ok: true,
     id,
     ...(responseProfile ? { profile: responseProfile } : {}),
     projects: await projectsForOwner(user.uid),
-  });
+  };
+  return activityDeliveryId
+    ? activityDispatchJson(responseBody, activityDeliveryId)
+    : json(responseBody);
 }

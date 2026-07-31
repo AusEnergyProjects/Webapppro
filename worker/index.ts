@@ -6,6 +6,10 @@ import {
   CUSTOMER_OPPORTUNITY_DISPATCH_HEADER,
   drainCustomerOpportunityDispatchJobs,
 } from "../src/lib/customer-opportunity-dispatch-server";
+import {
+  CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER,
+  drainCustomerProjectActivityDeliveries,
+} from "../src/lib/customer-project-activity-notification-server";
 import { drainOpportunityNotificationDeliveries } from "../src/lib/opportunity-notification-server";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
@@ -64,6 +68,52 @@ function queueCustomerOpportunityDispatch(
   });
 }
 
+function queueCustomerProjectActivityDispatch(
+  response: Response,
+  ctx: ExecutionContext,
+) {
+  const deliveryId =
+    response.headers.get(CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER) || "";
+  if (!deliveryId) return response;
+  const headers = new Headers(response.headers);
+  headers.delete(CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER);
+  ctx.waitUntil(
+    drainCustomerProjectActivityDeliveries({ deliveryId })
+      .then(() => undefined)
+      .catch((error) => {
+        console.error(
+          "Customer project activity delivery failed.",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      }),
+  );
+  ctx.waitUntil(
+    dispatchAdminNotificationDeliveries()
+      .then(() => undefined)
+      .catch((error) => {
+        console.error(
+          "Admin notification delivery failed.",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      }),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function queueBackgroundDispatches(
+  response: Response,
+  ctx: ExecutionContext,
+) {
+  return queueCustomerProjectActivityDispatch(
+    queueCustomerOpportunityDispatch(response, ctx),
+    ctx,
+  );
+}
+
 function canonicalHostRedirect(request: Request) {
   const url = new URL(request.url);
   if (url.hostname !== LEGACY_SITE_HOST) return null;
@@ -98,7 +148,7 @@ const worker = {
 
     if (!isCacheablePageRequest(request)) {
       const handled = await handler.fetch(request, env as never, ctx as never);
-      return secureResponse(queueCustomerOpportunityDispatch(handled, ctx), request);
+      return secureResponse(queueBackgroundDispatches(handled, ctx), request);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
@@ -108,7 +158,7 @@ const worker = {
     }
 
     const handled = await handler.fetch(request, env as never, ctx as never);
-    const response = secureResponse(queueCustomerOpportunityDispatch(handled, ctx), request);
+    const response = secureResponse(queueBackgroundDispatches(handled, ctx), request);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
@@ -123,6 +173,9 @@ const worker = {
         }),
         drainOpportunityNotificationDeliveries().catch((error) => {
           console.error("Opportunity notification delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        drainCustomerProjectActivityDeliveries().catch((error) => {
+          console.error("Customer project activity delivery failed.", error instanceof Error ? error.message : "Unknown error");
         }),
         dispatchAdminNotificationDeliveries().catch((error) => {
           console.error("Admin notification delivery failed.", error instanceof Error ? error.message : "Unknown error");
