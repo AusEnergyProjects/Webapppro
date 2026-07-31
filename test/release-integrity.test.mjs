@@ -91,6 +91,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Customer installer request completion release/);
   assert.match(releaseTruth, /## Customer plan durability, evidence and history release/);
   assert.match(releaseTruth, /## Customer installer request and multi-photo release/);
+  assert.match(releaseTruth, /## Installer enquiry pack, approved evidence and business notification release/);
   assert.match(releaseTruth, /Customer plan evidence and history application source.*Sites version 210/);
   assert.match(releaseTruth, /Professional review, print and comfort application source \| `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` \|[\s\S]{0,150}Sites version 212/);
   assert.match(releaseTruth, /Premium report documentation checkpoint \| `a92e18b9ea79b53eaf6eda8665f37ec02c861972` \|[\s\S]{0,180}Sites version 219/);
@@ -115,9 +116,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_218ad21977748191a3283723f395cadd/);
   assert.match(releaseTruth, /appgdep_6a6be56ca9ac8191918423bd57f0a05d/);
   assert.match(releaseTruth, /Authoritative installer-submit application source \| `7d7a821123d9b70cace08ac632d58ca1d3851b1b` \|[\s\S]{0,180}Sites version 234/);
-  assert.match(releaseTruth, /Sites version 234 from `7d7a821123d9b70cace08ac632d58ca1d3851b1b`/);
+  assert.match(releaseTruth, /Installer enquiry-pack and business-notification application source \| `eeba3679c30789cfe2e633a913a18492270fcc3e` \|[\s\S]{0,180}Sites version 235/);
+  assert.match(releaseTruth, /Sites version 235 from `eeba3679c30789cfe2e633a913a18492270fcc3e`/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_06f96686a8dc8191a0e01c2555c2de1b/);
   assert.match(releaseTruth, /appgdep_6a6bf3695b6081918ce2a9dd77bc3869/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584/);
+  assert.match(releaseTruth, /appgdep_6a6c0908063081919b2e985a27141e34/);
   assert.match(releaseTruth, /a238af3e5f81164e/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_7a589f567528819189cf033456193bda/);
   assert.match(releaseTruth, /appgdep_6a6bcf5c0f7c8191b877d27581f9d82e/);
@@ -152,6 +156,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-DURABILITY-15/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-INSTALLER-PHOTOS-16/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-INSTALLER-SUBMIT-17/);
+  assert.match(roadmap, /## Released milestone: INSTALLER-ENQUIRY-PACK-18/);
   assert.match(roadmap, /Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`[\s\S]{0,250}Sites version 222/);
   assert.match(roadmap, /Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`[\s\S]{0,250}Sites version 224/);
   assert.match(roadmap, /Release status: application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`[\s\S]{0,250}Sites version 227/);
@@ -160,14 +165,15 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Release status: corrective application commit `7e1f0a85214aa505cb83ed9f8c5da9644b57df0d`[\s\S]{0,300}Sites version 232/);
   assert.match(roadmap, /Release status: application commit `5acc4ccf37acd608dc437d3a074410b1d840f706`[\s\S]{0,300}Sites version 233/);
   assert.match(roadmap, /Release status: application commit `7d7a821123d9b70cace08ac632d58ca1d3851b1b`[\s\S]{0,300}Sites version 234/);
+  assert.match(roadmap, /Release status: application commit `eeba3679c30789cfe2e633a913a18492270fcc3e`[\s\S]{0,300}Sites version 235/);
   assert.match(handover, /Status: released implementation milestone/);
-  assert.match(handover, /Milestone ID: `CUSTOMER-INSTALLER-SUBMIT-17`/);
-  assert.match(handover, /Released application for this milestone: Sites version 234 from application commit `7d7a821123d9b70cace08ac632d58ca1d3851b1b`/);
-  assert.match(handover, /Sites application version: 234/);
-  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_06f96686a8dc8191a0e01c2555c2de1b/);
-  assert.match(handover, /appgdep_6a6bf3695b6081918ce2a9dd77bc3869/);
-  assert.match(handover, /a238af3e5f81164e/);
-  assert.match(handover, /0086_customer_evidence_multi_photo_prompts\.sql/);
+  assert.match(handover, /Milestone ID: `INSTALLER-ENQUIRY-PACK-18`/);
+  assert.match(handover, /Released application for this milestone: Sites version 235 from application commit `eeba3679c30789cfe2e633a913a18492270fcc3e`/);
+  assert.match(handover, /Sites application version: 235/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584/);
+  assert.match(handover, /appgdep_6a6c0908063081919b2e985a27141e34/);
+  assert.match(handover, /326DD4224505C9364A8D2852877D4037C397422788F97394B00A0EA9D80D48F1/);
+  assert.match(handover, /0087_trade_opportunity_notifications\.sql/);
   assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_0476874df3f081919c8e4c4acb4fd0f8/);
   assert.match(handover, /appgdep_6a6bd28a71888191be19f89db9b82ca5/);
   assert.match(handover, /2026-07-31-tagged-plan-pdf-v6/);
@@ -184,11 +190,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Real Outlook desktop and assistive-technology acceptance:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Visible photo redaction and persistent resumable queue:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Pan-Unicode PDF font coverage and fallback:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Editable revision labels, notes and richer history sharing:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Pilot readiness telemetry and deferred field test:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Opportunity email delivery health and bounded retries:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Customer share-before-submit review and resilient evidence:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Installer quote-readiness and request-for-information loop:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Outlook desktop and assistive-technology acceptance:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Privacy-safe funnel telemetry, then deferred pilot:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

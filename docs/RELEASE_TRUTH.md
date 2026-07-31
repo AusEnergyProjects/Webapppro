@@ -49,12 +49,13 @@ This is the only current implementation and release-status document. The [dated 
 | Customer plan durability documentation checkpoint | `2c55430757c316b4045e3edd9a26263a24793f14` | Documentation-only child of the version 232 application; historical and not executable |
 | Installer-request and multi-photo application source | `5acc4ccf37acd608dc437d3a074410b1d840f706` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 233 |
 | Authoritative installer-submit application source | `7d7a821123d9b70cace08ac632d58ca1d3851b1b` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 234 |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_06f96686a8dc8191a0e01c2555c2de1b` | Exact saved version 234 built from `7d7a821123d9b70cace08ac632d58ca1d3851b1b` |
-| Current executable application identity | Sites version 234 from `7d7a821123d9b70cace08ac632d58ca1d3851b1b` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a6bf3695b6081918ce2a9dd77bc3869`; saved-version provenance, public deployment, environment revision 19 and live signed-in submission verified on 31 July 2026 |
-| Current source checkpoint | Documentation-only child containing this release record | Its commit is recorded after this file is committed; it does not change the executable version 234 application |
+| Installer enquiry-pack and business-notification application source | `eeba3679c30789cfe2e633a913a18492270fcc3e` | Validated, pushed to GitHub and Sites managed `main`; saved and deployed as Sites version 235 |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584` | Exact saved version 235 built from `eeba3679c30789cfe2e633a913a18492270fcc3e` |
+| Current executable application identity | Sites version 235 from `eeba3679c30789cfe2e633a913a18492270fcc3e` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a6c0908063081919b2e985a27141e34`; saved-version provenance, public deployment and environment revision 19 verified on 31 July 2026; live signed-in and provider acceptance remain incomplete |
+| Current source checkpoint | Documentation-only child containing this release record | Its commit is recorded after this file is committed; it does not change the executable version 235 application |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release, professional-review, browser-native PDF, premium customer-report, technical presentation, spacing, customer-plan trust, customer-project cleanup, customer-roadmap-context, customer-installer-request, customer-plan-durability, installer-request-and-multi-photo and authoritative-installer-submit releases are production. Sites version 234 from `7d7a821123d9b70cace08ac632d58ca1d3851b1b` is the exact executable application source. Version 231 is failed non-live evidence only; it never superseded version 230. Version 214 is historical and superseded because its signed-in action could save the project, process pending images and upload evidence before PDF generation, then attempt a delayed synthetic download. Version 216 established the non-mutating attachment path. Version 218 established the shared premium PDF and email hierarchy, version 220 added the exact AEA mark, technical visual system, truthful completed-plan state and one non-duplicated household or professional evidence boundary, and version 222 applied consistent spacing and rounded surfaces. Version 224 added shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, a tagged-PDF foundation and adaptive email compatibility. Version 227 added compact dashboard and project-detail controls plus guarded permanent deletion for unused private drafts. Version 229 moved recommendation-shaping home and work context before roadmap generation and removed repeated quote-preparation priorities. Version 230 made completed stages explicit and put private profile completion and request recovery into one focused dialog. Version 232 kept guided photos visible where they were added, hardened resumable evidence and deletion, added useful comparison and check-in history, submitted from one request confirmation, and used a worker-safe embedded-font PDF boundary. Version 233 removed the trigger-amplified profile conflict and let each guided section hold several separately controlled photos. Version 234 makes the modal contact authoritative and commits contact plus matching state in one guarded request. Live verification intentionally submitted one working-demo project and confirmed the complete production path. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer home advisor, advisor-context release, independent customer-plan release, customer plan evidence-and-history release, professional-review, browser-native PDF, premium customer-report, technical presentation, spacing, customer-plan trust, customer-project cleanup, customer-roadmap-context, customer-installer-request, customer-plan-durability, installer-request-and-multi-photo, authoritative-installer-submit and installer-enquiry-pack releases are deployed to production. Sites version 235 from `eeba3679c30789cfe2e633a913a18492270fcc3e` is the exact executable application source. Version 231 is failed non-live evidence only; it never superseded version 230. Version 214 is historical and superseded because its signed-in action could save the project, process pending images and upload evidence before PDF generation, then attempt a delayed synthetic download. Version 216 established the non-mutating attachment path. Version 218 established the shared premium PDF and email hierarchy, version 220 added the exact AEA mark, technical visual system, truthful completed-plan state and one non-duplicated household or professional evidence boundary, and version 222 applied consistent spacing and rounded surfaces. Version 224 added shared premium preview, duplicated bottom actions, guided private photos, bounded revision compare and restore, a tagged-PDF foundation and adaptive email compatibility. Version 227 added compact dashboard and project-detail controls plus guarded permanent deletion for unused private drafts. Version 229 moved recommendation-shaping home and work context before roadmap generation and removed repeated quote-preparation priorities. Version 230 made completed stages explicit and put private profile completion and request recovery into one focused dialog. Version 232 kept guided photos visible where they were added, hardened resumable evidence and deletion, added useful comparison and check-in history, submitted from one request confirmation, and used a worker-safe embedded-font PDF boundary. Version 233 removed the trigger-amplified profile conflict and let each guided section hold several separately controlled photos. Version 234 made modal contact authoritative and committed contact plus matching state in one guarded request. Version 235 adds the bounded installer enquiry pack, consent-gated evidence presentation, automatic durable business-notification queue and shorter submit critical path. Live signed-in Leads/photo acceptance, a real provider delivery and measured production submit duration remain unverified for version 235. Earlier free-access and integration boundary checks returned `200`; retired membership, billing, referral and payment-link routes returned `404`; and an unauthenticated trade CRM request returned `401`.
 
 ## Current product model
 
@@ -423,6 +424,33 @@ Sites version 234 is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_
 
 This live verification intentionally changed working-demo data: that project moved from draft to installer matching, transactionally created the opportunity and consent records, and triggered normal administrator-notification and allocation processing. The HTTP `200` submit proves the guarded transaction completed; it does not independently prove downstream allocation rows because allocation failures are intentionally isolated from customer submission. No real customer, trade or wholesaler account was involved.
 
+## Installer enquiry pack, approved evidence and business notification release
+
+`INSTALLER-ENQUIRY-PACK-18` is deployed from exact application commit `eeba3679c30789cfe2e633a913a18492270fcc3e`.
+
+The release:
+
+- derives one bounded installer enquiry pack from the authoritative customer-plan document;
+- shows goals, plan boundary, controlled home context, quote readiness and the first three ordered roadmap steps high in the matching lead;
+- excludes customer and account identity, contact, exact location, private notes, room names and routines, permission notes, adviser identity and review text, arbitrary customer plan items, evidence filenames and meter data;
+- reports the approved-evidence count and lazy-loads images only after the exact allocated installer selects `Show approved photos`;
+- keeps PDFs behind an explicit protected download and reuses the authenticated, audited installer-evidence endpoint;
+- rechecks reviewed-installer access, exact allocation, opportunity state and active evidence-sharing consent at every evidence read;
+- opens notification links directly in the signed-in Leads workspace;
+- enqueues exactly one durable business notification when a new match is created, without backfilling historical matches;
+- dispatches outside the customer request, rechecks installer eligibility, consent, current recipient and suppression immediately before send, retries bounded synchronous delivery failures with frozen content, and treats terminal provider callbacks monotonically;
+- limits the notification email to business name, state, service labels, timing or expiry, approved-evidence count and the signed-in Leads link;
+- stops awaiting the independent administrator webhook during customer submission; and
+- runs independent owner and project hydration reads concurrently before the authoritative transaction.
+
+Focused notification tests pass 10 of 10, the enquiry-pack privacy and UI contract passes 3 of 3, and the related submit, contact and cron regressions pass. Exact application commit `eeba3679c30789cfe2e633a913a18492270fcc3e` passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, 931 total tests with 929 passed and 2 intentionally skipped, all 88 migrations through `0087_trade_opportunity_notifications.sql` against fresh SQLite and Cloudflare D1 paths, the tagged-PDF audit, Vinext production build and Sites server-bundle audit. `git diff --check` passes. Independent implementation and notification reviews were closed before publication.
+
+GitHub `main`, branch `codex/sites-custom-domain-migration` and Sites managed `main` contain the exact application SHA. Local archive `aea-sites-eeba367.tar.gz` is 7,098,588 bytes with SHA-256 `326DD4224505C9364A8D2852877D4037C397422788F97394B00A0EA9D80D48F1`. Sites reports 313 stored files, 27,822,080 bytes and content hash `sha256:7eea5f36d7a31df1213c163a8d0f836b6f02dd18e3bdc6a60cc5cc5831b24121`.
+
+Sites version 235 is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584` and deployed through `appgdep_6a6c0908063081919b2e985a27141e34` with environment revision 19. The required Resend environment names are present and the post-deployment Worker error-only query returns zero events.
+
+No new working-demo match was created after this release, so no opportunity email was sent and the measured production submit duration was not repeated. The pre-release working-demo lead is intentionally not backfilled. Chrome control could list but not reliably claim the existing signed-in trade tab; the stable in-app browser reached the expected signed-out account gate. The automated privacy, API, UI, migration and delivery contracts pass, but live signed-in Leads/photo presentation, real provider delivery and the reduced production submit duration remain unverified. Deployment identity is verified; release acceptance is incomplete until those bounded checks are performed with dedicated non-customer fixtures.
+
 ## Local validation evidence
 
 The last complete shared-worktree validation was recorded before the release was split into compatible expansion, application activation and contract cleanup:
@@ -502,7 +530,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 234 is:
+The current verified deployed topology for Sites version 235 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -510,6 +538,7 @@ The current verified deployed topology for Sites version 234 is:
 - Authentication: Firebase Authentication with application roles and tenant controls in D1.
 - Source record: GitHub.
 - Operational relay: Google Apps Script and Google Workspace.
+- Opportunity-email provider: Resend configuration is present; live version-235 delivery is not yet verified.
 - Active public deployment target: Sites.
 - Inactive deployment targets: Netlify and Vercel.
 
@@ -526,7 +555,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt and one authoritative installer-submit transaction. Those capabilities are live in Sites version 234 alongside the earlier owner Database Console.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt, one authoritative installer-submit transaction, a bounded installer enquiry pack, consent-gated approved evidence and durable business-notification delivery. Those capabilities are deployed in Sites version 235 alongside the earlier owner Database Console; the version-235 signed-in and provider acceptance checks remain incomplete as recorded above.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 
@@ -548,6 +577,9 @@ The audit recommends withdrawing the generic Database Console because broad cata
 - Durable application telemetry, approved service objectives, load evidence and disaster-recovery exercises.
 - Physical iOS and Android distribution, signing, device and accessibility acceptance.
 - Full WCAG 2.2 AA evidence.
+- Live version-235 Resend delivery, callback and business-inbox receipt for a dedicated non-customer opportunity fixture.
+- Measured version-235 production submit duration after removing the administrator-webhook wait.
+- Signed-in version-235 Leads enquiry-pack, approved-photo thumbnail and protected-document presentation.
 - Delivered rendering and clipping acceptance in controlled non-customer Gmail and Outlook inboxes.
 - Independent tagged-PDF reading-order, link, assistive-technology and PDF/UA conformance evidence.
 
@@ -567,7 +599,7 @@ Before this document can claim a new deployment:
 8. Public health, relevant signed-in journeys, authorization denials, responsive behavior and provider-error evidence are checked.
 9. This identity table is updated with the exact source, saved version, deployment, environment revision, checks and known deviations.
 
-Until all nine steps are evidenced, the correct status is local implementation or validated source, not deployed.
+Steps 1 through 7 prove whether an exact deployment occurred. When those steps pass but a relevant step-8 acceptance check cannot be completed, record the application as deployed with acceptance incomplete and list the exact unverified journey or provider evidence. Do not promote that missing evidence to a passing claim.
 
 ## Release policy
 

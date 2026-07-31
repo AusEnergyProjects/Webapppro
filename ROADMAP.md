@@ -541,7 +541,41 @@ Make the installer-response modal the single source of truth. The contact detail
 - The local archive is 7,086,533 bytes with SHA-256 `22DE94F3E9B22493FF79ED9DC70FF62F6D8B7259DC02AEB93E33B28445EEF2C3`; Sites reports 312 stored files, 27,770,880 bytes and content hash `sha256:3ffeb4fb493c6426cb78aceb8792de7e2e65830181d410c23d53ea9a8a87cc9f`.
 - Signed-in production verification submits working-demo project `154aee4d-3648-4c7c-b393-c6715c518b24`: request `a238af3e5f81164e` returns HTTP `200`, the dialog reports `Request sent`, the overview reports `Installer matching`, and the recent Worker error-only query returns zero events.
 
-All listed acceptance gates are met. Version 234 is the current executable source; version 233 remains historical release evidence.
+All listed acceptance gates are met for that milestone. Version 234 is now historical executable evidence after version 235 superseded it; version 233 remains earlier historical evidence.
+
+## Released milestone: INSTALLER-ENQUIRY-PACK-18
+
+Release status: application commit `eeba3679c30789cfe2e633a913a18492270fcc3e` is validated, pushed to GitHub and the Sites managed source branch, and deployed publicly as Sites version 235 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_0fac9e3297808191afc57d58d9377584` and deployment `appgdep_6a6c0908063081919b2e985a27141e34` report the exact commit and environment revision 19.
+
+### Outcome
+
+Give an allocated, approved installer enough privacy-safe information to understand a new enquiry before expressing interest, make customer-approved evidence visible in the matching lead, notify the business automatically, and remove avoidable notification work from the customer's submit wait.
+
+### In scope
+
+- Derive one bounded installer enquiry pack from the authoritative customer-plan document instead of maintaining a second recommendation source.
+- Show goals, plan boundary, controlled home context, quote readiness and the first three ordered roadmap steps high in each matching lead.
+- Keep identity, exact location, contact, project-private text, room names and routines, permission notes, adviser identity, customer-written plan items, evidence filenames and meter data out of the matching projection.
+- Show an approved-evidence count, load image thumbnails only after the allocated installer selects `Show approved photos`, and keep PDFs behind an explicit protected download.
+- Require the exact allocated business, active reviewed-installer access, current allocation and active evidence-sharing consent for every evidence read.
+- Open notification links directly in the Leads workspace.
+- Enqueue one durable business-email notification when a new match is created, dispatch it outside the customer request, recheck access and consent before sending, and suppress bounced or complained-about addresses by hash.
+- Keep the notification email itself minimal: business name, state, service labels, timing or expiry, approved-evidence count and the signed-in Leads link.
+- Stop awaiting the independent administrator webhook in the customer submit request and run independent owner/project hydration reads concurrently.
+- Apply `0087_trade_opportunity_notifications.sql` without backfilling or emailing historical matches.
+
+### Acceptance gates
+
+- Privacy-canary tests prove the lead pack and business email exclude customer identity, exact location, contact, private notes, room and permission details, adviser text, arbitrary customer items, filenames and meter data.
+- Approved images are requested only for the selected lead through the existing authenticated and audited evidence endpoint; PDFs remain deliberate downloads.
+- Notification creation is exactly-once per new match, delivery is idempotent, synchronous delivery failures retry at most three times with frozen content, terminal provider callbacks are monotonic, and stale matches cannot send.
+- Customer submission does not await either the administrator webhook or the business-email provider.
+- Focused notification, enquiry-pack and submit-performance regressions pass. The complete release gate passes type checking, warning-free lint, 31 of 31 integration tests, 931 total tests with 929 passed and 2 intentionally skipped, all 88 migrations through `0087_trade_opportunity_notifications.sql`, the tagged-PDF audit, Vinext build and Sites server-bundle audit.
+- GitHub `main`, the working branch, Sites managed source, saved-version provenance and public deployment all resolve to application commit `eeba3679c30789cfe2e633a913a18492270fcc3e`.
+- The local archive is 7,098,588 bytes with SHA-256 `326DD4224505C9364A8D2852877D4037C397422788F97394B00A0EA9D80D48F1`; Sites reports 313 stored files, 27,822,080 bytes and content hash `sha256:7eea5f36d7a31df1213c163a8d0f836b6f02dd18e3bdc6a60cc5cc5831b24121`.
+- Sites deployment succeeds with environment revision 19, the required Resend configuration names are present, and the post-deployment Worker error-only query returns zero events.
+
+The executable and deployment gates are met. No new working-demo match was created after version 235, so live provider delivery, the reduced submit duration and the signed-in Leads photo presentation remain explicitly unverified in production. The pre-release working-demo lead is not backfilled; the notification trigger applies to new matches only.
 
 ## Forward phases
 
@@ -642,11 +676,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Real Outlook desktop and assistive-technology acceptance:** verify the delivered report in Outlook desktop's Word rendering engine and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
-2. **Visible photo redaction and persistent resumable queue:** add customer-visible crop, blur, redaction or annotation controls and restore resumable upload state across a full page reload without exposing private evidence.
-3. **Pan-Unicode PDF font coverage and fallback:** add approved font coverage or deterministic fallback for CJK, Arabic, Devanagari, Vietnamese and other supported customer scripts while retaining fail-before-save for anything still unsupported.
-4. **Editable revision labels, notes and richer history sharing:** let customers name revisions, add bounded private context and share or export selected comparisons without broadening restore or installer-access scope.
-5. **Pilot readiness telemetry and deferred field test:** define privacy-safe completion, upload, PDF, email and request telemetry, then run the household and experienced-assessor field test only when the product owner resumes the pilot.
+1. **Opportunity email delivery health and bounded retries:** expose current, failed, suppressed and retriable enquiry notifications to authorised operations staff without creating a generic command surface.
+2. **Customer share-before-submit review and resilient evidence:** show the exact installer-safe projection before submission, add visible crop, blur or redaction controls, and keep a resumable upload queue across reloads.
+3. **Installer quote-readiness and request-for-information loop:** let an allocated installer identify a small controlled set of missing details or evidence without learning customer identity or opening unrestricted messaging.
+4. **Outlook desktop and assistive-technology acceptance:** verify customer reports and opportunity emails in Outlook desktop's Word renderer and representative screen-reader and keyboard workflows using dedicated non-customer fixtures.
+5. **Privacy-safe funnel telemetry, then deferred pilot:** measure submit, allocation, notification, lead-view, evidence-view and response outcomes without exposing household data, then run the pilot only when the product owner resumes it.
 
 ## Global stop conditions
 
