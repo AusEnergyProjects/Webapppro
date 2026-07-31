@@ -7,7 +7,7 @@ type OpportunityNotificationDraftInput = {
   matchedCategories: string[];
   timing: string;
   expiresAt: string;
-  approvedEvidenceCount: number;
+  customerSharedEvidenceCount: number;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -83,10 +83,15 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
   const state = broadState(input.state);
   const services = serviceLabels(input.matchedCategories);
   const timing = TIMING_LABELS[bounded(input.timing, 40)] || "Planning";
-  const evidenceCount = Math.max(0, Math.min(999, Math.floor(Number(input.approvedEvidenceCount) || 0)));
-  const evidence = evidenceCount === 1
-    ? "1 customer-approved evidence item"
-    : `${evidenceCount} customer-approved evidence items`;
+  const evidenceCount = Math.max(
+    0,
+    Math.min(999, Math.floor(Number(input.customerSharedEvidenceCount) || 0)),
+  );
+  const evidence = evidenceCount === 0
+    ? "No customer-shared photos or documents are attached yet."
+    : `The complete set of ${evidenceCount} customer-shared ${
+      evidenceCount === 1 ? "photo or document" : "photos or documents"
+    } is available after sign-in.`;
   const subject = `New TLink opportunity in ${state}`.slice(0, 160);
   const body = [
     `Hello ${businessName},`,
@@ -97,7 +102,8 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
     `Matched services: ${services.join(", ")}`,
     `Timing: ${timing}`,
     `Opportunity closes: ${expiryLabel(input.expiresAt)}`,
-    `Customer-approved evidence: ${evidence} available after sign-in.`,
+    "Complete privacy-safe customer plan: available after sign-in.",
+    `Customer-shared evidence: ${evidence}`,
     "",
     `Review the opportunity: ${OPPORTUNITY_INBOX_URL}`,
     "",

@@ -28,7 +28,11 @@ test("every worker response receives baseline browser security headers", () => {
   assert.match(worker, /Referrer-Policy/);
   assert.match(worker, /Permissions-Policy/);
   assert.match(worker, /Strict-Transport-Security/);
-  assert.match(worker, /secureResponse\(await handler\.fetch/);
+  assert.match(worker, /const handled = await handler\.fetch/);
+  assert.match(
+    worker,
+    /secureResponse\(queueCustomerOpportunityDispatch\(handled, ctx\), request\)/,
+  );
 });
 
 test("the generated Sites hostname permanently redirects to the custom domain", () => {

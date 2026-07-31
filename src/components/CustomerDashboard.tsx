@@ -57,6 +57,7 @@ import { CustomerDraftDeleteDialog } from "./CustomerDraftDeleteDialog";
 import {
   CustomerInstallerRequestDialog,
   type CustomerInstallerRequestContact,
+  type CustomerInstallerRequestProgress,
 } from "./CustomerInstallerRequestDialog";
 import {
   CustomerPlanShareDialog,
@@ -943,7 +944,6 @@ function ProjectEditor({
   existingId,
   existingPlanRevision,
   storedEvidence,
-  evidenceSharingConsent,
   emailVerified,
   profile,
   onCancel,
@@ -960,7 +960,6 @@ function ProjectEditor({
   existingId?: string;
   existingPlanRevision?: number;
   storedEvidence: CustomerProject["evidence"];
-  evidenceSharingConsent: boolean;
   emailVerified: boolean;
   profile: CustomerProfile;
   onCancel: () => void;
@@ -992,7 +991,7 @@ function ProjectEditor({
   onRequestInstallerResponses: (
     projectId: string,
     expectedPlanRevision: number,
-    confirmInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
     contact: CustomerInstallerRequestContact,
     recoverCommittedSubmit?: boolean,
   ) => Promise<void>;
@@ -1038,8 +1037,6 @@ function ProjectEditor({
   const [uploadedEvidence, setUploadedEvidence] = useState<
     CustomerProject["evidence"]
   >([]);
-  const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
-    useState(evidenceSharingConsent);
   const visibleStoredEvidence = useMemo(() => {
     const merged = new Map(
       storedEvidence.map((item) => [item.id, item]),
@@ -1048,12 +1045,20 @@ function ProjectEditor({
     return [...merged.values()];
   }, [storedEvidence, uploadedEvidence]);
   const storedEvidenceCount = visibleStoredEvidence.length;
-  const storedInstallerEvidenceCount = visibleStoredEvidence.filter(
-    (item) => item.sharingScope === "allocated-installers",
+  const pendingReplacementEvidenceIds = new Set(
+    pendingEvidence.flatMap((item) =>
+      item.replaceEvidenceId ? [item.replaceEvidenceId] : [],
+    ),
+  );
+  const storedProjectPhotoCount = visibleStoredEvidence.filter(
+    (item) =>
+      item.contentType.startsWith("image/")
+      && !pendingReplacementEvidenceIds.has(item.id),
   ).length;
-  const pendingInstallerEvidenceCount = pendingEvidence.filter(
-    (item) => item.sharingScope === "allocated-installers",
+  const pendingProjectPhotoCount = pendingEvidence.filter(
+    (item) => item.file.type.startsWith("image/"),
   ).length;
+  const projectPhotoCount = storedProjectPhotoCount + pendingProjectPhotoCount;
   const answeredHomeQuestionCount = homeFeatureQuestions.filter((question) =>
     question.options.some(([value]) => draft.existingFeatures.includes(value)),
   ).length;
@@ -2029,41 +2034,86 @@ function ProjectEditor({
     projectId: string,
     evidence: PendingProjectEvidence[],
     confirmInstallerSharing: boolean,
+    reportRequestProgress?: (
+      progress: CustomerInstallerRequestProgress,
+    ) => void,
   ) {
-    const stored: CustomerProject["evidence"] = [];
-    for (const item of evidence) {
-      try {
-        const uploaded = await onUploadEvidence(
-          projectId,
-          [item],
-          confirmInstallerSharing,
-          updateEvidenceUploadProgress,
-        );
-        if (!uploaded.length) {
-          throw new Error(`${item.file.name} did not finish saving.`);
+    const storedByIndex: Array<CustomerProject["evidence"] | undefined> =
+      new Array(evidence.length);
+    const photoItems = evidence.filter(
+      (item) => item.file.type.startsWith("image/"),
+    );
+    const photoNumberById = new Map(
+      photoItems.map((item, index) => [item.id, index + 1]),
+    );
+    let nextIndex = 0;
+    let firstError: unknown = null;
+
+    const storeNext = async () => {
+      while (nextIndex < evidence.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const item = evidence[index];
+        const photoNumber = photoNumberById.get(item.id);
+        if (photoNumber) {
+          reportRequestProgress?.({
+            phase: "securing-photo",
+            current: photoNumber,
+            total: photoItems.length,
+            progress: 0,
+          });
         }
-        stored.push(...uploaded);
-        setUploadedEvidence((current) => {
-          const merged = new Map(current.map((entry) => [entry.id, entry]));
-          uploaded.forEach((entry) => merged.set(entry.id, entry));
-          return [...merged.values()];
-        });
-        setPendingEvidence((current) =>
-          current.filter((entry) => entry.id !== item.id),
-        );
-      } catch (error) {
-        const message = error instanceof Error
-          ? error.message
-          : `${item.file.name} could not be saved.`;
-        updateEvidenceUploadProgress(item.id, {
-          status: "failed",
-          progress: item.uploadProgress || 0,
-          error: message,
-        });
-        throw error;
+        try {
+          const uploaded = await onUploadEvidence(
+            projectId,
+            [item],
+            confirmInstallerSharing,
+            (evidenceId, progress) => {
+              updateEvidenceUploadProgress(evidenceId, progress);
+              if (photoNumber) {
+                reportRequestProgress?.({
+                  phase: "securing-photo",
+                  current: photoNumber,
+                  total: photoItems.length,
+                  progress: progress.progress,
+                });
+              }
+            },
+          );
+          if (!uploaded.length) {
+            throw new Error(`${item.file.name} did not finish saving.`);
+          }
+          storedByIndex[index] = uploaded;
+          setUploadedEvidence((current) => {
+            const merged = new Map(current.map((entry) => [entry.id, entry]));
+            uploaded.forEach((entry) => merged.set(entry.id, entry));
+            return [...merged.values()];
+          });
+          setPendingEvidence((current) =>
+            current.filter((entry) => entry.id !== item.id),
+          );
+        } catch (error) {
+          const message = error instanceof Error
+            ? error.message
+            : `${item.file.name} could not be saved.`;
+          updateEvidenceUploadProgress(item.id, {
+            status: "failed",
+            progress: item.uploadProgress || 0,
+            error: message,
+          });
+          firstError ||= error;
+        }
       }
-    }
-    return stored;
+    };
+
+    await Promise.all(
+      Array.from(
+        { length: Math.min(2, evidence.length) },
+        () => storeNext(),
+      ),
+    );
+    if (firstError) throw firstError;
+    return storedByIndex.flatMap((items) => items || []);
   }
 
   async function saveDraft() {
@@ -2392,16 +2442,16 @@ function ProjectEditor({
 
   async function completeInstallerRequest(
     contact: CustomerInstallerRequestContact,
-    modalInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
+    reportProgress: (progress: CustomerInstallerRequestProgress) => void,
   ) {
-    const installerPhotoSharing =
-      modalInstallerPhotoSharing || confirmInstallerPhotoSharing;
     const requestFingerprint = installerRequestFingerprint(
       contact,
-      installerPhotoSharing,
+      confirmAllProjectPhotoSharing,
     );
     const saveGeneration = editGeneration.current;
     try {
+      reportProgress({ phase: "checking-previous-request" });
       const uncertainSubmit = uncertainInstallerSubmit.current;
       if (uncertainSubmit) {
         const submittedProject = await onCheckInstallerRequestSubmitted(
@@ -2419,7 +2469,7 @@ function ProjectEditor({
           await onRequestInstallerResponses(
             uncertainSubmit.projectId,
             uncertainSubmit.planRevision,
-            installerPhotoSharing,
+            confirmAllProjectPhotoSharing,
             contact,
             false,
           );
@@ -2427,6 +2477,7 @@ function ProjectEditor({
         }
         uncertainInstallerSubmit.current = null;
       }
+      reportProgress({ phase: "saving-plan" });
       const saved = await onSave(
         draftWithPlan(),
         savedId || undefined,
@@ -2437,10 +2488,16 @@ function ProjectEditor({
       );
       setSavedId(saved.id);
       setSavedPlanRevision(saved.planRevision);
+      const submissionEvidence = pendingEvidence.map((item) =>
+        item.file.type.startsWith("image/")
+          ? { ...item, sharingScope: "allocated-installers" as const }
+          : item,
+      );
       await storePendingEvidence(
         saved.id,
-        pendingEvidence,
-        installerPhotoSharing,
+        submissionEvidence,
+        confirmAllProjectPhotoSharing,
+        reportProgress,
       );
       uncertainInstallerSubmit.current = {
         projectId: saved.id,
@@ -2448,16 +2505,16 @@ function ProjectEditor({
         editGeneration: editGeneration.current,
         requestFingerprint,
       };
+      reportProgress({ phase: "sending-request" });
       await onRequestInstallerResponses(
         saved.id,
         saved.planRevision,
-        installerPhotoSharing,
+        confirmAllProjectPhotoSharing,
         contact,
       );
       uncertainInstallerSubmit.current = null;
       if (editGeneration.current === saveGeneration) setDirty(false);
       setRevisionConflict(false);
-      setConfirmInstallerPhotoSharing(installerPhotoSharing);
     } catch (error) {
       throw new Error(describeEditorError(
         error,
@@ -4329,11 +4386,9 @@ function ProjectEditor({
                     </dd>
                   </div>
                   <div>
-                    <dt>Files shared for quoting</dt>
+                    <dt>Photos included with the enquiry</dt>
                     <dd>
-                      {storedInstallerEvidenceCount
-                        + pendingInstallerEvidenceCount
-                        || "None attached"}
+                      {projectPhotoCount || "None attached"}
                     </dd>
                   </div>
                   <div>
@@ -4353,22 +4408,11 @@ function ProjectEditor({
                 </ul>
               </aside>
             </div>
-            {storedInstallerEvidenceCount + pendingInstallerEvidenceCount > 0 && (
-              <label className="customer-submit-consent">
-                <input
-                  type="checkbox"
-                  checked={confirmInstallerPhotoSharing}
-                  onChange={(event) =>
-                    setConfirmInstallerPhotoSharing(event.target.checked)
-                  }
-                />
-                <span>
-                  I understand that every verified installer allocated to this
-                  enquiry can view each file marked for installer sharing.
-                  Files marked private to my plan stay owner-only.
-                </span>
-              </label>
-            )}
+            <p className="customer-submit-consent">
+              You will confirm the privacy-safe plan and all project photos in
+              the final request window. Other documents keep the sharing choice
+              shown on each file.
+            </p>
           </section>
         )}
       </div>
@@ -4441,10 +4485,7 @@ function ProjectEditor({
         }}
         projectPostcode={draft.postcode}
         projectState={draft.addressState}
-        installerEvidenceConfirmationRequired={
-          storedInstallerEvidenceCount + pendingInstallerEvidenceCount > 0
-          && !confirmInstallerPhotoSharing
-        }
+        projectPhotoCount={projectPhotoCount}
         onClose={() => setInstallerRequestOpen(false)}
         onSubmit={completeInstallerRequest}
         onComplete={onRequestComplete}
@@ -4630,7 +4671,7 @@ function ProjectDetail({
   onRequestInstallerResponses: (
     projectId: string,
     expectedPlanRevision: number,
-    confirmInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
     contact: CustomerInstallerRequestContact,
     recoverCommittedSubmit?: boolean,
   ) => Promise<void>;
@@ -4696,22 +4737,30 @@ function ProjectDetail({
     ["Quote option ready", project.quotes.length > 0],
     ["Digital handover published", project.handoverPacks.length > 0],
   ] as const;
-  const installerEvidenceConfirmationRequired =
-    !project.evidenceSharingConsent
-    && project.evidence.some(
-      (item) => item.sharingScope === "allocated-installers",
-    );
+  const projectPhotos = project.evidence.filter(
+    (item) => item.contentType.startsWith("image/"),
+  );
+  const privateProjectPhotoCount = projectPhotos.filter(
+    (item) => item.sharingScope === "private-plan",
+  ).length;
+  const projectPhotoSharingRepairAvailable =
+    projectPhotos.length > 0
+    && (
+      privateProjectPhotoCount > 0
+      || !project.evidenceSharingConsent
+    )
+    && ["matching", "quote_review"].includes(project.status);
 
   async function completeInstallerRequest(
     contact: CustomerInstallerRequestContact,
-    confirmInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
+    reportProgress: (progress: CustomerInstallerRequestProgress) => void,
   ) {
-    const installerPhotoSharing =
-      confirmInstallerPhotoSharing || project.evidenceSharingConsent;
     const requestFingerprint = installerRequestFingerprint(
       contact,
-      installerPhotoSharing,
+      confirmAllProjectPhotoSharing,
     );
+    reportProgress({ phase: "checking-previous-request" });
     const uncertainSubmit = uncertainInstallerSubmit.current;
     if (uncertainSubmit) {
       const submittedProject = await onCheckInstallerRequestSubmitted(
@@ -4729,7 +4778,7 @@ function ProjectDetail({
         await onRequestInstallerResponses(
           uncertainSubmit.projectId,
           uncertainSubmit.planRevision,
-          installerPhotoSharing,
+          confirmAllProjectPhotoSharing,
           contact,
           false,
         );
@@ -4743,10 +4792,11 @@ function ProjectDetail({
       editGeneration: 0,
       requestFingerprint,
     };
+    reportProgress({ phase: "sending-request" });
     await onRequestInstallerResponses(
       project.id,
       project.planRevision,
-      installerPhotoSharing,
+      confirmAllProjectPhotoSharing,
       contact,
     );
     uncertainInstallerSubmit.current = null;
@@ -5772,6 +5822,25 @@ function ProjectDetail({
                   : "Verify email to submit"}
               </button>
             )}
+            {projectPhotoSharingRepairAvailable && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const confirmed = window.confirm(
+                    `Share all ${projectPhotos.length} ${
+                      projectPhotos.length === 1 ? "project photo" : "project photos"
+                    } with the verified installers allocated to this enquiry? Other uploaded documents keep their current sharing setting.`,
+                  );
+                  if (!confirmed) return;
+                  void onAction("share_all_photos", {
+                    confirmAllProjectPhotoSharing: true,
+                  });
+                }}
+              >
+                Share all project photos with matched installers
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void onAction("duplicate")}
@@ -5827,9 +5896,7 @@ function ProjectDetail({
         }}
         projectPostcode={project.postcode}
         projectState={project.addressState}
-        installerEvidenceConfirmationRequired={
-          installerEvidenceConfirmationRequired
-        }
+        projectPhotoCount={projectPhotos.length}
         onClose={() => setInstallerRequestOpen(false)}
         onSubmit={completeInstallerRequest}
         onComplete={onRequestComplete}
@@ -6009,7 +6076,9 @@ export function CustomerDashboard({
       }
       throw new Error(result.error || "The project could not be updated.");
     }
-    setProjects(result.projects || []);
+    if (Array.isArray(result.projects)) {
+      setProjects(result.projects as CustomerProject[]);
+    }
     return result;
   }
 
@@ -6189,25 +6258,49 @@ export function CustomerDashboard({
   async function requestInstallerResponses(
     projectId: string,
     expectedPlanRevision: number,
-    confirmInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
     contact: CustomerInstallerRequestContact,
     recoverCommittedSubmit = true,
   ) {
     const keepAuthoritativeContact = (
-      savedProfile?: CustomerProfile,
+      savedProfile?: Partial<CustomerProfile> & {
+        serviceStreet?: string;
+        serviceUnit?: string;
+        serviceSuburb?: string;
+        servicePostcode?: string;
+        serviceState?: string;
+      },
       submittedProject?: CustomerProject,
     ) => {
       setAccount((current) => {
         if (!current.profile) return current;
         return {
           ...current,
-          profile: savedProfile || {
+          profile: {
             ...current.profile,
-            ...contact,
+            phone: savedProfile?.phone || contact.phone,
+            addressLine1:
+              savedProfile?.addressLine1
+              || savedProfile?.serviceStreet
+              || contact.addressLine1,
+            addressLine2:
+              savedProfile?.addressLine2
+              || savedProfile?.serviceUnit
+              || contact.addressLine2,
+            suburb:
+              savedProfile?.suburb
+              || savedProfile?.serviceSuburb
+              || contact.suburb,
             postcode:
-              submittedProject?.postcode || current.profile.postcode,
+              savedProfile?.postcode
+              || savedProfile?.servicePostcode
+              || submittedProject?.postcode
+              || current.profile.postcode,
             addressState:
-              submittedProject?.addressState || current.profile.addressState,
+              savedProfile?.addressState
+              || savedProfile?.serviceState
+              || submittedProject?.addressState
+              || current.profile.addressState,
           },
         };
       });
@@ -6216,11 +6309,53 @@ export function CustomerDashboard({
       const result = await projectRequest("PATCH", {
         id: projectId,
         action: "submit",
-        confirmInstallerPhotoSharing,
+        confirmAllProjectPhotoSharing,
         expectedPlanRevision,
         contact,
       });
-      keepAuthoritativeContact(result.profile as CustomerProfile | undefined);
+      const compactProject = (
+        result.project && typeof result.project === "object"
+          ? result.project
+          : {
+              id: projectId,
+              status: "matching",
+              submittedAt: new Date().toISOString(),
+              planRevision: expectedPlanRevision,
+            }
+      ) as Partial<CustomerProject> & { id: string };
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === projectId
+            ? {
+                ...project,
+                status: compactProject.status || "matching",
+                displayStatus:
+                  compactProject.displayStatus || "Installer matching",
+                submittedAt:
+                  compactProject.submittedAt
+                  || project.submittedAt
+                  || new Date().toISOString(),
+                planRevision: Number(
+                  compactProject.planRevision || project.planRevision,
+                ),
+                progress: compactProject.progress
+                  ? { ...project.progress, ...compactProject.progress }
+                  : project.progress,
+              }
+            : project,
+        ),
+      );
+      keepAuthoritativeContact(
+        result.profile as (
+          Partial<CustomerProfile> & {
+            serviceStreet?: string;
+            serviceUnit?: string;
+            serviceSuburb?: string;
+            servicePostcode?: string;
+            serviceState?: string;
+          }
+        ) | undefined,
+      );
     } catch (error) {
       if (!recoverCommittedSubmit) throw error;
       try {
@@ -6328,8 +6463,6 @@ export function CustomerDashboard({
         action,
         ...extra,
       });
-      const nextProjects = result.projects || [];
-      setProjects(nextProjects);
       if (action === "duplicate") {
         setEditingId(result.id);
         setSelectedId("");
@@ -6377,7 +6510,29 @@ export function CustomerDashboard({
         setStatus(
           `Version ${String(result.restoredFromRevision || "")} restored as new current version ${String(result.planRevision || "")}. Private notes, evidence and installer activity were not changed.`,
         );
-      else setStatus("Project updated.");
+      else if (action === "share_all_photos") {
+        setProjects((current) =>
+          current.map((currentProject) =>
+            currentProject.id === project.id
+              ? {
+                  ...currentProject,
+                  evidenceSharingConsent: true,
+                  evidence: currentProject.evidence.map((item) =>
+                    item.contentType.startsWith("image/")
+                      ? {
+                          ...item,
+                          sharingScope: "allocated-installers" as const,
+                        }
+                      : item,
+                  ),
+                }
+              : currentProject,
+          ),
+        );
+        setStatus(
+          "All project photos are now available to verified installers allocated to this enquiry. Other documents kept their existing sharing setting.",
+        );
+      } else setStatus("Project updated.");
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -6862,9 +7017,6 @@ export function CustomerDashboard({
               existingId={editing?.id}
               existingPlanRevision={editing?.planRevision}
               storedEvidence={editing?.evidence || []}
-              evidenceSharingConsent={Boolean(
-                editing?.evidenceSharingConsent,
-              )}
               emailVerified={account.emailVerified}
               profile={account.profile}
               onCancel={() => {

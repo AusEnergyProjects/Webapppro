@@ -15,6 +15,7 @@ type DeliveryRow = Record<string, unknown>;
 
 type DrainOptions = {
   limit?: number;
+  opportunityId?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -65,7 +66,7 @@ async function deliveryContext(deliveryId: string) {
               AND consent.purpose = 'installer_evidence_sharing'
               AND consent.withdrawn_at = ''
           )
-      ), 0) approved_evidence_count
+      ), 0) customer_shared_evidence_count
     FROM trade_opportunity_notification_deliveries delivery
     JOIN trade_opportunity_matches assignment ON assignment.id = delivery.match_id
     JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
@@ -93,7 +94,7 @@ function ineligibility(context: DeliveryRow) {
   if (!Number.isFinite(effectiveExpiry) || effectiveExpiry <= Date.now()) {
     return "The opportunity has expired.";
   }
-  if (!["offered", "viewed"].includes(String(context.match_status))) {
+  if (!["offered", "viewed", "interested", "connected"].includes(String(context.match_status))) {
     return "The opportunity offer is no longer active.";
   }
   if (!validEmail(context.email)) {
@@ -172,7 +173,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
       matchedCategories: list(context.matched_categories),
       timing: String(context.timing || ""),
       expiresAt: String(context.expires_at || ""),
-      approvedEvidenceCount: Number(context.approved_evidence_count || 0),
+      customerSharedEvidenceCount: Number(context.customer_shared_evidence_count || 0),
     });
   const attempts = previousAttempts + 1;
   const attemptedAt = new Date().toISOString();
@@ -191,7 +192,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
         JOIN trade_opportunities current_opportunity ON current_opportunity.id = current_match.opportunity_id
         JOIN trade_accounts current_account ON current_account.firebase_uid = current_match.firebase_uid
         WHERE current_match.id = trade_opportunity_notification_deliveries.match_id
-          AND current_match.status IN ('offered', 'viewed')
+          AND current_match.status IN ('offered', 'viewed', 'interested', 'connected')
           AND current_opportunity.status = 'open'
           AND (
             (current_opportunity.expires_at <> '' AND current_opportunity.expires_at > ?)
@@ -267,6 +268,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
 
 export async function drainOpportunityNotificationDeliveries({
   limit = 20,
+  opportunityId = "",
   fetchImpl = fetch,
 }: DrainOptions = {}) {
   const db = getD1();
@@ -278,14 +280,24 @@ export async function drainOpportunityNotificationDeliveries({
     WHERE status = 'sending' AND last_attempt_at <> '' AND last_attempt_at <= ?`)
     .bind(now, now, staleClaimCutoff).run();
   const boundedLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
-  const rows = await db.prepare(`SELECT id, status, attempts
+  const opportunityFilter = opportunityId
+    ? ` AND EXISTS (
+        SELECT 1 FROM trade_opportunity_matches assignment
+        WHERE assignment.id = trade_opportunity_notification_deliveries.match_id
+          AND assignment.opportunity_id = ?
+      )`
+    : "";
+  const statement = db.prepare(`SELECT id, status, attempts
     FROM trade_opportunity_notification_deliveries
     WHERE status IN ('pending', 'failed', 'waiting_for_channel')
       AND attempts < ?
       AND (next_attempt_at = '' OR next_attempt_at <= ?)
+      ${opportunityFilter}
     ORDER BY enqueued_at, id
-    LIMIT ?`)
-    .bind(MAX_ATTEMPTS, now, boundedLimit).all<DeliveryRow>();
+    LIMIT ?`);
+  const rows = opportunityId
+    ? await statement.bind(MAX_ATTEMPTS, now, opportunityId, boundedLimit).all<DeliveryRow>()
+    : await statement.bind(MAX_ATTEMPTS, now, boundedLimit).all<DeliveryRow>();
   const outcomes = await Promise.all(rows.results.map((row) => dispatchDelivery(row, fetchImpl)));
   return {
     attempted: rows.results.length,

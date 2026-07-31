@@ -43,13 +43,16 @@ test("opportunity email copy contains only the bounded business summary and sign
     matchedCategories: ["solar", "battery"],
     timing: "within_3_months",
     expiresAt: "2026-08-31T00:00:00.000Z",
-    approvedEvidenceCount: 2,
+    customerSharedEvidenceCount: 2,
   });
   assert.match(draft.subject, /New TLink opportunity in NSW/);
   for (const value of ["Example Energy", "Broad location: NSW", "Rooftop solar", "Home battery",
-    "Within 3 months", "2 customer-approved evidence items", OPPORTUNITY_INBOX_URL]) {
+    "Within 3 months", "Complete privacy-safe customer plan: available after sign-in.",
+    "The complete set of 2 customer-shared photos or documents is available after sign-in.",
+    OPPORTUNITY_INBOX_URL]) {
     assert.match(draft.body, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.doesNotMatch(draft.body, /approved evidence|customer-approved/i);
   assert.doesNotMatch(draft.body, /2000|distance|customer name|customer email|customer phone|filename|meter|usage|token|match id/i);
   assert.ok(draft.subject.length <= 160 && draft.body.length <= 1800);
 });
@@ -156,7 +159,7 @@ test("delivery storage has unique match, provider idempotency, event replay and 
 test("dispatch rechecks authoritative access, consent, current email and live offer state", () => {
   for (const boundary of ["verifiedTradeAccountPredicate", "account.email", "account.consent_at",
     "account.email_opportunities", "opportunity.status opportunity_status", "assignment.status match_status",
-    "\"offered\", \"viewed\"", "evidence.sharing_scope = 'allocated-installers'",
+    "\"offered\", \"viewed\", \"interested\", \"connected\"", "evidence.sharing_scope = 'allocated-installers'",
     "consent.purpose = 'installer_evidence_sharing'", "consent.withdrawn_at = ''",
     "trade_opportunity_email_suppressions"]) {
     assert.match(deliveryServer, new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -193,6 +196,7 @@ test("minute delivery drain is separate from the existing daily maintenance cron
   assert.match(vite, /\["\* \* \* \* \*", "15 20 \* \* \*"\]/);
   assert.match(worker, /drainOpportunityNotificationDeliveries\(\)/);
   assert.match(worker, /dispatchAdminNotificationDeliveries\(\)/);
+  assert.match(worker, /drainCustomerOpportunityDispatchJobs\(\)/);
   assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
   assert.match(worker, /controller\.cron === DAILY_MAINTENANCE_CRON/);
   assert.match(worker, /const NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);

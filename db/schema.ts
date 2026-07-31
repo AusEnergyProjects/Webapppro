@@ -1066,6 +1066,24 @@ export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", 
   index("trade_opportunity_matches_status_idx").on(table.status),
 ]);
 
+export const customerOpportunityDispatchJobs = sqliteTable("customer_opportunity_dispatch_jobs", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  adminNotificationId: text("admin_notification_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  claimedAt: text("claimed_at").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("customer_opportunity_dispatch_jobs_opportunity_idx").on(table.opportunityId),
+  index("customer_opportunity_dispatch_jobs_status_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+]);
+
 export const tradeOpportunityNotificationDeliveries = sqliteTable("trade_opportunity_notification_deliveries", {
   id: text("id").primaryKey(),
   matchId: text("match_id").notNull(),

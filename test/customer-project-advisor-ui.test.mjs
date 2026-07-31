@@ -386,12 +386,13 @@ test("quote preparation is simpler, safer and keeps errors beside the action", (
   assert.match(photoCapture, /capture="environment"/);
   assert.match(photoCapture, /Photos are optional/);
   assert.match(dashboard, /customer-action-error/);
-  assert.match(dashboard, /storedInstallerEvidenceCount \+ pendingInstallerEvidenceCount > 0/);
+  assert.match(dashboard, /const projectPhotoCount = storedProjectPhotoCount \+ pendingProjectPhotoCount/);
   assert.match(dashboard, /sharingScope === "private-plan"/);
   assert.match(dashboard, /homeFeatureQuestions\.length/);
-  assert.match(dashboard, /useState\(evidenceSharingConsent\)/);
   assert.match(dashboard, /uploadCustomerProjectEvidence/);
-  assert.match(dashboard, /confirmInstallerPhotoSharing/);
+  assert.match(dashboard, /confirmAllProjectPhotoSharing/);
+  assert.match(dashboard, /projectPhotoCount=\{projectPhotoCount\}/);
+  assert.match(dashboard, /Photos included with the enquiry/);
   assert.match(dashboard, /onLoadStoredPreview=\{loadStoredEvidencePreview\}/);
   assert.match(dashboard, /Generated installer summary/);
   assert.match(dashboard, /Site considerations/);
@@ -433,15 +434,15 @@ test("both installer request entry points submit the modal contact as the author
   assert.doesNotMatch(dashboard, /key=\{`installer-request-\$\{profile\.updatedAt\}`\}/);
   assert.match(
     dashboard,
-    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,\s*installerPhotoSharing,\s*contact,/,
+    /onRequestInstallerResponses\(\s*saved\.id,\s*saved\.planRevision,\s*confirmAllProjectPhotoSharing,\s*contact,/,
   );
   assert.match(
     dashboard,
-    /onRequestInstallerResponses\(\s*project\.id,\s*project\.planRevision,\s*installerPhotoSharing,\s*contact,/,
+    /onRequestInstallerResponses\(\s*project\.id,\s*project\.planRevision,\s*confirmAllProjectPhotoSharing,\s*contact,/,
   );
   assert.match(
     dashboard,
-    /action: "submit",[\s\S]{0,180}confirmInstallerPhotoSharing,[\s\S]{0,120}expectedPlanRevision,[\s\S]{0,80}contact,/,
+    /action: "submit",[\s\S]{0,180}confirmAllProjectPhotoSharing,[\s\S]{0,120}expectedPlanRevision,[\s\S]{0,80}contact,/,
   );
   assert.doesNotMatch(dashboard, /saveInstallerRequestProfileWithOneConflictRetry/);
   assert.doesNotMatch(dashboard, /confirmSubmittedProjectContactUpdate/);
@@ -519,14 +520,37 @@ test("both installer request entry points submit the modal contact as the author
   assert.doesNotMatch(dashboard, /private profile changed|safely reconciled/i);
   assert.match(
     dashboard,
-    /keepAuthoritativeContact\(result\.profile as CustomerProfile \| undefined\)/,
+    /serviceStreet\?: string[\s\S]*servicePostcode\?: string/,
   );
+  assert.match(dashboard, /if \(Array\.isArray\(result\.projects\)\)/);
+  assert.match(dashboard, /result\.project && typeof result\.project === "object"/);
+  assert.match(dashboard, /status: compactProject\.status \|\| "matching"/);
   assert.doesNotMatch(
     dashboard,
     /disabled=\{busy \|\| !project\.contactReady\}/,
   );
   assert.match(dashboard, /window\.history\.replaceState\(\{\}, "", "\/account"\)/);
   assert.match(dashboard, /projectListHeadingRef\.current\?\.focus\(\)/);
+});
+
+test("installer request saves photos two at a time and preserves upload progress", () => {
+  assert.match(dashboard, /const storedByIndex:[\s\S]*new Array\(evidence\.length\)/);
+  assert.match(dashboard, /Math\.min\(2, evidence\.length\)/);
+  assert.match(dashboard, /await Promise\.all/);
+  assert.match(dashboard, /storedByIndex\.flatMap/);
+  assert.match(dashboard, /phase: "securing-photo"/);
+  assert.match(dashboard, /progress: progress\.progress/);
+  assert.match(dashboard, /reportProgress\(\{ phase: "saving-plan" \}\)/);
+  assert.match(dashboard, /reportProgress\(\{ phase: "sending-request" \}\)/);
+});
+
+test("submitted demo projects can share all current photos without another workflow", () => {
+  assert.match(dashboard, /projectPhotoSharingRepairAvailable/);
+  assert.match(dashboard, /Share all project photos with matched installers/);
+  assert.match(dashboard, /onAction\("share_all_photos"/);
+  assert.match(dashboard, /confirmAllProjectPhotoSharing: true/);
+  assert.match(dashboard, /evidenceSharingConsent: true/);
+  assert.match(dashboard, /sharingScope: "allocated-installers"/);
 });
 
 test("roadmap preparation links explain requirements instead of opening another project", () => {

@@ -9,10 +9,12 @@ export function CustomerPlanReportPreviewDialog({
   open,
   report,
   onClose,
+  context = "customer",
 }: {
   open: boolean;
   report: CustomerPlanReportView;
   onClose: () => void;
+  context?: "customer" | "installer-enquiry";
 }) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLElement>(null);
@@ -30,6 +32,7 @@ export function CustomerPlanReportPreviewDialog({
   }, [onClose, open]);
 
   if (!open) return null;
+  const installerView = context === "installer-enquiry";
 
   const trapFocus = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -71,9 +74,17 @@ export function CustomerPlanReportPreviewDialog({
       >
         <header className={styles.toolbar}>
           <div>
-            <span>Full customer report</span>
-            <h2 id="customer-plan-preview-title">Preview before you share</h2>
-            <p>This is the same report structure used for email and PDF.</p>
+            <span>
+              {installerView ? "Complete privacy-safe plan" : "Full customer report"}
+            </span>
+            <h2 id="customer-plan-preview-title">
+              {installerView ? "Review the complete plan" : "Preview before you share"}
+            </h2>
+            <p>
+              {installerView
+                ? "This complete plan excludes customer identity, exact location and private notes."
+                : "This is the same report structure used for email and PDF."}
+            </p>
           </div>
           <button ref={closeButton} type="button" onClick={onClose}>
             Close preview

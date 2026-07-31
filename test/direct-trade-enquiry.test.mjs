@@ -14,6 +14,7 @@ const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
 const customerDashboard = read("../src/components/CustomerDashboard.tsx");
 const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
 const customerProjectsRoute = read("../src/app/api/customer-projects/route.ts");
+const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispatch-server.ts");
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const customerProjectRules = read("../src/lib/customer-projects.mjs");
 
@@ -50,8 +51,10 @@ test("customer project records require an authenticated owner and stay out of th
   assert.match(customerProjectsRoute, /if \(!user\.emailVerified && !Boolean\(current\.is_synthetic\)\)/);
   assert.match(customerProjectsRoute, /COALESCE\(is_synthetic, 0\) is_synthetic/);
   assert.match(customerProjectsRoute, /buildAnonymizedOpportunity/);
-  assert.match(customerProjectsRoute, /const opportunityId = `customer-project:\$\{id\}`/);
-  assert.match(customerProjectsRoute, /allocateNearestInstallers/);
+  assert.match(customerProjectsRoute, /current\.opportunity_id \|\| `customer-project:\$\{id\}`/);
+  assert.match(customerProjectsRoute, /INSERT INTO customer_opportunity_dispatch_jobs/);
+  assert.doesNotMatch(customerProjectsRoute, /await allocateNearestInstallers/);
+  assert.match(customerOpportunityDispatch, /await allocateNearestInstallers/);
   assert.doesNotMatch(customerProjectsRoute, /\/api\/leads|script\.google\.com|LEAD_WEBHOOK/);
 });
 

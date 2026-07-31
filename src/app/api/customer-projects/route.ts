@@ -2,10 +2,11 @@ import { getD1 } from "../../../../db";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { postcodeMatchesState } from "@/lib/australian-postcodes.mjs";
 import { postcodeCoordinate } from "@/lib/postcode-distance";
-import { allocateNearestInstallers, DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, opportunityExpiry } from "@/lib/opportunity-server";
+import { DEFAULT_CONNECTED_INSTALLERS, DEFAULT_CONTACT_LIMIT, opportunityExpiry } from "@/lib/opportunity-server";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
 import { dispatchAdminNotificationDeliveries } from "@/lib/admin-notification-delivery";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
+import { CUSTOMER_OPPORTUNITY_DISPATCH_HEADER } from "@/lib/customer-opportunity-dispatch-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import {
   buildAnonymizedOpportunity,
@@ -46,6 +47,76 @@ const UUID_PATTERN =
 
 function json(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function dispatchJson(body: object, dispatchJobId: string, status = 202) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      [CUSTOMER_OPPORTUNITY_DISPATCH_HEADER]: dispatchJobId,
+    },
+  });
+}
+
+function projectPhotoSharingStatements(
+  db: ReturnType<typeof getD1>,
+  {
+    projectId,
+    customerUid,
+    occurredAt,
+  }: {
+    projectId: string;
+    customerUid: string;
+    occurredAt: string;
+  },
+) {
+  return [
+    db.prepare(`INSERT OR IGNORE INTO customer_project_evidence_events
+      (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
+      SELECT 'installer-photo-share:' || id || ':' || revision, id, project_id, customer_uid,
+        '', 'customer', ?, 'shared_with_allocated_installers', ?
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+        AND LOWER(content_type) LIKE 'image/%'
+        AND updated_at <= ?
+        AND sharing_scope <> 'allocated-installers'`)
+      .bind(customerUid, occurredAt, projectId, customerUid, occurredAt),
+    db.prepare(`UPDATE customer_project_evidence
+      SET sharing_scope = 'allocated-installers', revision = revision + 1, updated_at = ?
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+        AND LOWER(content_type) LIKE 'image/%'
+        AND updated_at <= ?
+        AND sharing_scope <> 'allocated-installers'`)
+      .bind(occurredAt, projectId, customerUid, occurredAt),
+    db.prepare(`INSERT INTO customer_consent_receipts
+      (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
+      SELECT ?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?
+      WHERE EXISTS (
+        SELECT 1 FROM customer_projects
+        WHERE id = ? AND firebase_uid = ? AND status IN ('matching', 'quote_review')
+      ) AND EXISTS (
+        SELECT 1 FROM customer_project_evidence
+        WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+          AND LOWER(content_type) LIKE 'image/%'
+          AND updated_at <= ?
+      )
+      ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
+        granted_at = excluded.granted_at, withdrawn_at = ''`)
+      .bind(
+        `customer-evidence-share:${projectId}`,
+        customerUid,
+        projectId,
+        CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION,
+        occurredAt,
+        occurredAt,
+        projectId,
+        customerUid,
+        projectId,
+        customerUid,
+        occurredAt,
+      ),
+  ];
 }
 
 function planRevisionConflict(error: string) {
@@ -1145,6 +1216,45 @@ async function customerProjectMutation(
       planRevision: nextPlanRevision,
       projects: await projectsForOwner(user.uid),
     });
+  } else if (action === "share_all_photos") {
+    if (!["matching", "quote_review"].includes(String(current.status))) {
+      return json({
+        ok: false,
+        error: "Photos can be shared only for an active installer enquiry.",
+      }, 409);
+    }
+    if (raw.confirmAllProjectPhotoSharing !== true) {
+      return json({
+        ok: false,
+        error: "Confirm that all active project photos can be shared with the verified installers allocated to this enquiry.",
+      }, 400);
+    }
+    const photos = await db.prepare(`SELECT COUNT(*) photo_count,
+      SUM(CASE WHEN sharing_scope <> 'allocated-installers' THEN 1 ELSE 0 END) private_photo_count
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+        AND LOWER(content_type) LIKE 'image/%'
+        AND updated_at <= ?`)
+      .bind(id, user.uid, now)
+      .first<{ photo_count: number; private_photo_count: number }>();
+    const photoCount = Number(photos?.photo_count || 0);
+    if (!photoCount) {
+      return json({
+        ok: false,
+        error: "Add at least one project photo before sharing photos with installers.",
+      }, 409);
+    }
+    const results = await db.batch(projectPhotoSharingStatements(db, {
+      projectId: id,
+      customerUid: user.uid,
+      occurredAt: now,
+    }));
+    return json({
+      ok: true,
+      id,
+      sharedPhotoCount: Number(results[1]?.meta.changes || 0),
+      totalPhotoCount: photoCount,
+    });
   } else if (action === "submit") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) return json({ ok: false, error: "Verify your account email before requesting installer responses." }, 403);
     const activeSubmitRetry = ["matching", "quote_review"].includes(
@@ -1225,58 +1335,165 @@ async function customerProjectMutation(
       createdAt: contactAccount.created_at,
       updatedAt: contactUpdatedAt,
     };
+    const photos = await db.prepare(`SELECT COUNT(*) photo_count,
+      SUM(CASE WHEN sharing_scope <> 'allocated-installers' THEN 1 ELSE 0 END) private_photo_count
+      FROM customer_project_evidence
+      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
+        AND LOWER(content_type) LIKE 'image/%'
+        AND updated_at <= ?`)
+      .bind(id, user.uid, now)
+      .first<{ photo_count: number; private_photo_count: number }>();
+    const photoCount = Number(photos?.photo_count || 0);
+    const privatePhotoCount = Number(photos?.private_photo_count || 0);
+    const evidenceConsent = await db.prepare(`SELECT id FROM customer_consent_receipts
+      WHERE firebase_uid = ? AND project_id = ? AND purpose = 'installer_evidence_sharing'
+        AND notice_version = ? AND withdrawn_at = '' LIMIT 1`)
+      .bind(user.uid, id, CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION)
+      .first<{ id: string }>();
+    const photoConfirmationRequired = (
+      photoCount > 0
+      && (privatePhotoCount > 0 || !evidenceConsent)
+    );
+    if (
+      photoConfirmationRequired
+      && raw.confirmAllProjectPhotoSharing !== true
+    ) {
+      return json({
+        ok: false,
+        error: "Confirm that all active project photos can be shared with the verified installers allocated to this enquiry.",
+      }, 400);
+    }
+    const opportunityId = String(current.opportunity_id || `customer-project:${id}`);
+    const existingAdminNotification = await db.prepare(
+      "SELECT id FROM admin_notifications WHERE event_key = ? LIMIT 1",
+    ).bind(`customer-enquiry:${id}`).first<{ id: string }>();
+    const adminNotificationId = existingAdminNotification?.id
+      || `customer-enquiry-notification:${id}`;
+    const dispatchJobId = `customer-opportunity-dispatch:${id}`;
     if (activeSubmitRetry) {
-      const contactUpdate = await db.prepare(`UPDATE customer_accounts
-        SET phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?,
-          postcode = ?, address_state = ?, updated_at = ?
-        WHERE firebase_uid = ? AND account_status = 'active'
-          AND EXISTS (
+      const retryStatements = [
+        db.prepare(`UPDATE customer_accounts
+          SET phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?,
+            postcode = ?, address_state = ?, updated_at = ?
+          WHERE firebase_uid = ? AND account_status = 'active'
+            AND EXISTS (
+              SELECT 1 FROM customer_projects
+              WHERE id = ? AND firebase_uid = ?
+                AND status IN ('matching', 'quote_review')
+            )`)
+          .bind(
+            authoritativeContact.phone,
+            authoritativeContact.addressLine1,
+            authoritativeContact.addressLine2,
+            authoritativeContact.suburb,
+            authoritativeContact.postcode,
+            authoritativeContact.addressState,
+            contactUpdatedAt,
+            user.uid,
+            id,
+            user.uid,
+          ),
+        adminNotificationStatement(db, {
+          eventKey: `customer-enquiry:${id}`,
+          eventType: "customer.enquiry_submitted",
+          category: "customer",
+          priority: "high",
+          title: "Customer enquiry submitted",
+          summary: `${String(current.title).slice(0, 120)} is ready for anonymised installer matching and operations oversight.`,
+          entityType: "customer_project",
+          entityId: id,
+          actorType: "customer",
+          actorUid: user.uid,
+          requiresAction: true,
+          metadata: { opportunityId },
+          occurredAt: String(current.submitted_at || now),
+        }, adminNotificationId),
+        db.prepare(`INSERT INTO customer_opportunity_dispatch_jobs
+          (id, opportunity_id, admin_notification_id, status, attempts, next_attempt_at,
+           claimed_at, completed_at, failed_at, last_error, created_at, updated_at)
+          SELECT ?, ?, ?, 'pending', 0, '', '', '', '', '', ?, ?
+          WHERE EXISTS (
             SELECT 1 FROM customer_projects
-            WHERE id = ? AND firebase_uid = ?
-              AND status IN ('matching', 'quote_review')
-          )`)
-        .bind(
-          authoritativeContact.phone,
-          authoritativeContact.addressLine1,
-          authoritativeContact.addressLine2,
-          authoritativeContact.suburb,
-          authoritativeContact.postcode,
-          authoritativeContact.addressState,
-          contactUpdatedAt,
-          user.uid,
-          id,
-          user.uid,
-        )
-        .run();
-      if (Number(contactUpdate.meta.changes || 0) < 1) {
+            WHERE id = ? AND firebase_uid = ? AND status IN ('matching', 'quote_review')
+              AND opportunity_id = ?
+          )
+          ON CONFLICT(opportunity_id) DO UPDATE SET
+            admin_notification_id = excluded.admin_notification_id,
+            status = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.status
+              ELSE 'pending'
+            END,
+            next_attempt_at = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.next_attempt_at
+              ELSE ''
+            END,
+            attempts = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.attempts
+              ELSE 0
+            END,
+            claimed_at = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.claimed_at
+              ELSE ''
+            END,
+            completed_at = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.completed_at
+              ELSE ''
+            END,
+            failed_at = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.failed_at
+              ELSE ''
+            END,
+            last_error = CASE
+              WHEN customer_opportunity_dispatch_jobs.status IN ('completed', 'processing')
+                THEN customer_opportunity_dispatch_jobs.last_error
+              ELSE ''
+            END,
+            updated_at = excluded.updated_at`)
+          .bind(
+            dispatchJobId,
+            opportunityId,
+            adminNotificationId,
+            now,
+            now,
+            id,
+            user.uid,
+            opportunityId,
+          ),
+      ];
+      if (
+        photoCount > 0
+        && raw.confirmAllProjectPhotoSharing === true
+      ) {
+        retryStatements.push(...projectPhotoSharingStatements(db, {
+          projectId: id,
+          customerUid: user.uid,
+          occurredAt: now,
+        }));
+      }
+      const retryResults = await db.batch(retryStatements);
+      if (Number(retryResults[0]?.meta.changes || 0) < 1) {
         return json({
           ok: false,
           error: "Your service contact details could not be saved. Try again.",
         }, 503);
       }
-      return json({
+      return dispatchJson({
         ok: true,
-        id,
+        project: {
+          id,
+          status: String(current.status),
+          submittedAt: String(current.submitted_at || now),
+          planRevision: currentPlanRevision,
+        },
         profile: responseProfile,
-        projects: await projectsForOwner(user.uid),
-      });
-    }
-    const evidenceCount = await db.prepare(`SELECT COUNT(*) count
-      FROM customer_project_evidence
-      WHERE project_id = ? AND customer_uid = ? AND status = 'active'
-        AND sharing_scope = 'allocated-installers'`)
-      .bind(id, user.uid)
-      .first<{ count: number }>();
-    const evidenceConsent = await db.prepare(`SELECT id FROM customer_consent_receipts
-      WHERE firebase_uid = ? AND project_id = ? AND purpose = 'installer_evidence_sharing'
-        AND withdrawn_at = '' LIMIT 1`)
-      .bind(user.uid, id).first<{ id: string }>();
-    if (
-      Number(evidenceCount?.count || 0) > 0
-      && !evidenceConsent
-      && raw.confirmInstallerPhotoSharing !== true
-    ) {
-      return json({ ok: false, error: "Confirm that attached quoting photos can be shared with the verified installers allocated to this enquiry." }, 400);
+        dispatch: { status: "queued" },
+      }, dispatchJobId);
     }
     const stored = {
       ...current,
@@ -1311,7 +1528,6 @@ async function customerProjectMutation(
       .bind(user.uid).first<{ count: number }>();
     if (Number(open?.count || 0) >= MAX_OPEN_CUSTOMER_OPPORTUNITIES) return json({ ok: false, error: "Finish or withdraw an active enquiry before submitting another one." }, 409);
     const opportunity = buildAnonymizedOpportunity(stored, id);
-    const opportunityId = `customer-project:${id}`;
     const submittedAt = now;
     const submitStatements = [
       db.prepare(`UPDATE customer_accounts
@@ -1405,27 +1621,39 @@ async function customerProjectMutation(
           serviceCategories: opportunity.serviceCategories,
         },
         occurredAt: submittedAt,
-      }),
+      }, adminNotificationId),
+      db.prepare(`INSERT INTO customer_opportunity_dispatch_jobs
+        (id, opportunity_id, admin_notification_id, status, attempts, next_attempt_at,
+         claimed_at, completed_at, failed_at, last_error, created_at, updated_at)
+        SELECT ?, ?, ?, 'pending', 0, '', '', '', '', '', ?, ?
+        FROM customer_projects
+        WHERE id = ? AND firebase_uid = ? AND status = 'matching'
+          AND opportunity_id = ? AND submitted_at = ?
+          AND plan_revision = ? AND updated_at = ?
+        ON CONFLICT(opportunity_id) DO NOTHING`)
+        .bind(
+          dispatchJobId,
+          opportunityId,
+          adminNotificationId,
+          submittedAt,
+          submittedAt,
+          id,
+          user.uid,
+          opportunityId,
+          submittedAt,
+          expectedPlanRevision,
+          submittedAt,
+        ),
     ];
     if (
-      Number(evidenceCount?.count || 0) > 0
-      && !evidenceConsent
-      && raw.confirmInstallerPhotoSharing === true
+      photoCount > 0
+      && raw.confirmAllProjectPhotoSharing === true
     ) {
-      submitStatements.push(
-        db.prepare(`INSERT INTO customer_consent_receipts
-          (id, firebase_uid, project_id, purpose, notice_version, granted_at, withdrawn_at, created_at)
-          SELECT ?, ?, ?, 'installer_evidence_sharing', ?, ?, '', ?
-          FROM customer_projects
-          WHERE id = ? AND firebase_uid = ? AND status = 'matching'
-            AND opportunity_id = ? AND submitted_at = ?
-            AND plan_revision = ? AND updated_at = ?
-          ON CONFLICT(id) DO UPDATE SET notice_version = excluded.notice_version,
-            granted_at = excluded.granted_at, withdrawn_at = ''`)
-          .bind(`customer-evidence-share:${id}`, user.uid, id,
-            CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION, submittedAt, submittedAt,
-            id, user.uid, opportunityId, submittedAt, expectedPlanRevision, submittedAt),
-      );
+      submitStatements.push(...projectPhotoSharingStatements(db, {
+        projectId: id,
+        customerUid: user.uid,
+        occurredAt: submittedAt,
+      }));
     }
     const submitResults = await db.batch(submitStatements);
     if (
@@ -1435,7 +1663,17 @@ async function customerProjectMutation(
     ) {
       return planRevisionConflict("This plan changed in another tab. Review the latest version before submitting.");
     }
-    await allocateNearestInstallers(opportunityId, "customer-platform").catch(() => null);
+    return dispatchJson({
+      ok: true,
+      project: {
+        id,
+        status: "matching",
+        submittedAt,
+        planRevision: currentPlanRevision,
+      },
+      profile: responseProfile,
+      dispatch: { status: "queued" },
+    }, dispatchJobId);
   } else if (action === "release_contact") {
     if (!user.emailVerified && !Boolean(current.is_synthetic)) {
       return json({ ok: false, error: "Verify your account email before sharing contact details with an installer." }, 403);

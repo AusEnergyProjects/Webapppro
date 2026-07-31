@@ -19,13 +19,13 @@ test("installer request dialog exposes one reusable, typed request contract", ()
   assert.match(dialog, /initialContact: CustomerInstallerRequestContact/);
   assert.match(dialog, /projectPostcode: string/);
   assert.match(dialog, /projectState: string/);
+  assert.match(dialog, /projectPhotoCount: number/);
+  assert.match(dialog, /export type CustomerInstallerRequestProgress/);
+  assert.match(dialog, /phase: "checking-previous-request" \| "saving-plan" \| "sending-request"/);
+  assert.match(dialog, /phase: "securing-photo"/);
   assert.match(
     dialog,
-    /installerEvidenceConfirmationRequired\?: boolean/,
-  );
-  assert.match(
-    dialog,
-    /onSubmit: \(\s*contact: CustomerInstallerRequestContact,\s*confirmInstallerPhotoSharing: boolean,\s*\) => Promise<string \| void>/s,
+    /onSubmit: \(\s*contact: CustomerInstallerRequestContact,\s*confirmAllProjectPhotoSharing: boolean,\s*onProgress: \(progress: CustomerInstallerRequestProgress\) => void,\s*\) => Promise<string \| void>/s,
   );
   assert.match(dialog, /onComplete: \(\) => void/);
 });
@@ -77,28 +77,29 @@ test("installer request dialog labels and validates all profile fields", () => {
   assert.match(dialog, /aria-invalid=\{invalidField === "suburb"\}/);
 });
 
-test("installer evidence needs an explicit confirmation only when required", () => {
-  assert.match(
-    dialog,
-    /installerEvidenceConfirmationRequired &&\s*!confirmInstallerPhotoSharing/s,
-  );
-  assert.match(
-    dialog,
-    /installerEvidenceConfirmationRequired && \(/,
-  );
+test("the complete safe plan and current photos need one explicit confirmation", () => {
+  assert.match(dialog, /if \(!confirmAllProjectPhotoSharing\)/);
   assert.match(dialog, /ref=\{evidenceRef\}/);
   assert.match(dialog, /type="checkbox"/);
   assert.match(
     dialog,
-    /photos and documents I selected for\s*quoting can be shared with matched installers/,
+    /privacy-safe generated plan and all \$\{projectPhotoCount\}/,
   );
   assert.match(
     dialog,
-    /onSubmit\(\s*result\.contact,\s*confirmInstallerPhotoSharing,\s*\)/,
+    /There are currently no project photos to share/,
+  );
+  assert.match(
+    dialog,
+    /Other uploaded documents stay private unless I already\s*marked them for installer sharing/,
+  );
+  assert.match(
+    dialog,
+    /onSubmit\(\s*result\.contact,\s*confirmAllProjectPhotoSharing,\s*setProgress,/,
   );
 });
 
-test("installer request dialog traps focus and restores the request control", () => {
+test("installer request dialog traps focus, blocks busy dismissal and restores focus", () => {
   assert.match(dialog, /role="dialog"/);
   assert.match(dialog, /aria-modal="true"/);
   assert.match(dialog, /aria-labelledby=\{titleId\}/);
@@ -109,6 +110,8 @@ test("installer request dialog traps focus and restores the request control", ()
   assert.match(dialog, /event\.shiftKey/);
   assert.match(dialog, /querySelectorAll<HTMLElement>/);
   assert.match(dialog, /event\.currentTarget === event\.target && dismissible/);
+  assert.match(dialog, /const dismissible = !busy && !complete/);
+  assert.match(dialog, /disabled=\{busy\}/);
   assert.match(dialog, /document\.body\.style\.overflow = "hidden"/);
   assert.match(dialog, /returnTarget\?\.isConnected/);
   assert.match(dialog, /returnTarget\.focus\(\)/);
@@ -117,6 +120,23 @@ test("installer request dialog traps focus and restores the request control", ()
   assert.match(dialog, /!initialContact\.phone\.trim\(\)/);
   assert.match(dialog, /!initialContact\.addressLine1\.trim\(\)/);
   assert.match(dialog, /!initialContact\.suburb\.trim\(\)/);
+});
+
+test("installer request dialog reports truthful staged and delayed progress", () => {
+  assert.match(dialog, /setProgress\(\{ phase: "checking-previous-request" \}\)/);
+  assert.match(dialog, /phase === "saving-plan"/);
+  assert.match(dialog, /Securing photo \$\{progress\.current\} of \$\{progress\.total\}/);
+  assert.match(dialog, /: "Sending your request"/);
+  assert.match(dialog, /window\.setTimeout\(\(\) => setDelayLevel\(1\), 8_000\)/);
+  assert.match(dialog, /window\.setTimeout\(\(\) => setDelayLevel\(2\), 25_000\)/);
+  assert.match(dialog, /Please do not submit it again/);
+  assert.match(dialog, /role="progressbar"/);
+  assert.match(dialog, /aria-valuenow=/);
+  assert.match(dialog, /progress\.phase === "securing-photo"/);
+  assert.match(dialog, /aria-busy=\{busy\}/);
+  assert.match(styles, /\.progressRegion/);
+  assert.match(styles, /\.progressTrack\.indeterminate/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
 test("installer request dialog remains compact and touch friendly", () => {

@@ -170,6 +170,15 @@ export async function GET(request: Request) {
       AND r.installer_uid = m.firebase_uid AND r.status = 'active'
     LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
     WHERE m.firebase_uid = ? AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND (
+        p.id IS NULL OR EXISTS (
+          SELECT 1 FROM customer_consent_receipts matching_consent
+          WHERE matching_consent.project_id = p.id
+            AND matching_consent.firebase_uid = p.firebase_uid
+            AND matching_consent.purpose = 'anonymized_installer_matching'
+            AND matching_consent.withdrawn_at = ''
+        )
+      )
     ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1 WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END, m.updated_at DESC
     LIMIT 100`,
     )

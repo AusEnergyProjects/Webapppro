@@ -17,16 +17,28 @@ export type CustomerInstallerRequestContact = {
   suburb: string;
 };
 
+export type CustomerInstallerRequestProgress =
+  | {
+      phase: "checking-previous-request" | "saving-plan" | "sending-request";
+    }
+  | {
+      phase: "securing-photo";
+      current: number;
+      total: number;
+      progress: number;
+    };
+
 export type CustomerInstallerRequestDialogProps = {
   open: boolean;
   initialContact: CustomerInstallerRequestContact;
   projectPostcode: string;
   projectState: string;
-  installerEvidenceConfirmationRequired?: boolean;
+  projectPhotoCount: number;
   onClose: () => void;
   onSubmit: (
     contact: CustomerInstallerRequestContact,
-    confirmInstallerPhotoSharing: boolean,
+    confirmAllProjectPhotoSharing: boolean,
+    onProgress: (progress: CustomerInstallerRequestProgress) => void,
   ) => Promise<string | void>;
   onComplete: () => void;
 };
@@ -53,7 +65,7 @@ function OpenCustomerInstallerRequestDialog({
   initialContact,
   projectPostcode,
   projectState,
-  installerEvidenceConfirmationRequired = false,
+  projectPhotoCount,
   onClose,
   onSubmit,
   onComplete,
@@ -74,18 +86,19 @@ function OpenCustomerInstallerRequestDialog({
         ? "addressLine1"
         : !initialContact.suburb.trim()
           ? "suburb"
-          : installerEvidenceConfirmationRequired
-            ? "evidence"
-            : "",
+          : "evidence",
   );
   const [contact, setContact] =
     useState<CustomerInstallerRequestContact>(initialContact);
-  const [confirmInstallerPhotoSharing, setConfirmInstallerPhotoSharing] =
+  const [confirmAllProjectPhotoSharing, setConfirmAllProjectPhotoSharing] =
     useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [invalidField, setInvalidField] = useState<ContactField>("");
   const [complete, setComplete] = useState(false);
+  const [progress, setProgress] =
+    useState<CustomerInstallerRequestProgress | null>(null);
+  const [delayLevel, setDelayLevel] = useState<0 | 1 | 2>(0);
   const [completionMessage, setCompletionMessage] = useState(
     defaultCompletionMessage,
   );
@@ -126,6 +139,16 @@ function OpenCustomerInstallerRequestDialog({
     });
     return () => window.cancelAnimationFrame(focusFrame);
   }, [complete]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const stillWorkingTimer = window.setTimeout(() => setDelayLevel(1), 8_000);
+    const takingLongerTimer = window.setTimeout(() => setDelayLevel(2), 25_000);
+    return () => {
+      window.clearTimeout(stillWorkingTimer);
+      window.clearTimeout(takingLongerTimer);
+    };
+  }, [busy]);
 
   const dismissible = !busy && !complete;
 
@@ -207,15 +230,12 @@ function OpenCustomerInstallerRequestDialog({
         error: "Add the service suburb.",
       };
     }
-    if (
-      installerEvidenceConfirmationRequired &&
-      !confirmInstallerPhotoSharing
-    ) {
+    if (!confirmAllProjectPhotoSharing) {
       return {
         contact: nextContact,
         field: "evidence" as const,
         error:
-          "Confirm that the selected evidence can be shared for installer quoting.",
+          "Confirm the privacy-safe plan and project photos can be shared with allocated verified installers.",
       };
     }
     return { contact: nextContact, field: "" as const, error: "" };
@@ -242,13 +262,16 @@ function OpenCustomerInstallerRequestDialog({
     }
 
     submittingRef.current = true;
+    setDelayLevel(0);
     setBusy(true);
+    setProgress({ phase: "checking-previous-request" });
     setError("");
     setInvalidField("");
     try {
       const nextCompletionMessage = await onSubmit(
         result.contact,
-        confirmInstallerPhotoSharing,
+        confirmAllProjectPhotoSharing,
+        setProgress,
       );
       if (nextCompletionMessage) {
         setCompletionMessage(nextCompletionMessage);
@@ -259,8 +282,22 @@ function OpenCustomerInstallerRequestDialog({
     } finally {
       submittingRef.current = false;
       setBusy(false);
+      setProgress(null);
     }
   };
+
+  const progressLabel = progress?.phase === "checking-previous-request"
+    ? "Checking whether an earlier request finished"
+    : progress?.phase === "saving-plan"
+      ? "Saving your plan"
+      : progress?.phase === "securing-photo"
+        ? `Securing photo ${progress.current} of ${progress.total}`
+        : "Sending your request";
+  const delayMessage = delayLevel === 2
+    ? "This is taking longer than usual. Your request is still working. Please do not submit it again."
+    : delayLevel === 1
+      ? "Still working. Please keep this window open."
+      : "";
 
   return (
     <div
@@ -325,7 +362,10 @@ function OpenCustomerInstallerRequestDialog({
               </button>
             </header>
 
-            <form onSubmit={(event) => void submit(event)}>
+            <form
+              aria-busy={busy}
+              onSubmit={(event) => void submit(event)}
+            >
               <div className={styles.body}>
                 <p id={descriptionId} className={styles.intro}>
                   Add the contact details needed to finish this request. They
@@ -427,27 +467,30 @@ function OpenCustomerInstallerRequestDialog({
                   the service area in your private profile.
                 </p>
 
-                {installerEvidenceConfirmationRequired && (
-                  <label className={styles.evidenceConfirmation}>
-                    <input
-                      ref={evidenceRef}
-                      aria-invalid={invalidField === "evidence"}
-                      checked={confirmInstallerPhotoSharing}
-                      type="checkbox"
-                      onChange={(event) => {
-                        setConfirmInstallerPhotoSharing(event.target.checked);
-                        if (invalidField === "evidence") {
-                          setInvalidField("");
-                          setError("");
-                        }
-                      }}
-                    />
-                    <span>
-                      I confirm that the photos and documents I selected for
-                      quoting can be shared with matched installers.
-                    </span>
-                  </label>
-                )}
+                <label className={styles.evidenceConfirmation}>
+                  <input
+                    ref={evidenceRef}
+                    aria-invalid={invalidField === "evidence"}
+                    checked={confirmAllProjectPhotoSharing}
+                    type="checkbox"
+                    onChange={(event) => {
+                      setConfirmAllProjectPhotoSharing(event.target.checked);
+                      if (invalidField === "evidence") {
+                        setInvalidField("");
+                        setError("");
+                      }
+                    }}
+                  />
+                  <span>
+                    {projectPhotoCount === 0
+                      ? "I confirm the privacy-safe generated plan can be shared with verified installers allocated to this enquiry. There are currently no project photos to share."
+                      : `I confirm the privacy-safe generated plan and all ${projectPhotoCount} ${
+                          projectPhotoCount === 1 ? "current project photo" : "current project photos"
+                        } can be shared with verified installers allocated to this enquiry.`}{" "}
+                    Other uploaded documents stay private unless I already
+                    marked them for installer sharing.
+                  </span>
+                </label>
 
                 {error && (
                   <p className={styles.error} role="alert">
@@ -457,6 +500,54 @@ function OpenCustomerInstallerRequestDialog({
               </div>
 
               <footer className={styles.actions}>
+                {busy && progress && (
+                  <div
+                    className={styles.progressRegion}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className={styles.progressHeading}>
+                      <strong>{progressLabel}</strong>
+                      {progress.phase === "securing-photo" && (
+                        <span>{Math.round(progress.progress)}%</span>
+                      )}
+                    </div>
+                    <div
+                      aria-label={progressLabel}
+                      aria-valuemax={
+                        progress.phase === "securing-photo" ? 100 : undefined
+                      }
+                      aria-valuemin={
+                        progress.phase === "securing-photo" ? 0 : undefined
+                      }
+                      aria-valuenow={
+                        progress.phase === "securing-photo"
+                          ? Math.round(progress.progress)
+                          : undefined
+                      }
+                      className={`${styles.progressTrack} ${
+                        progress.phase === "securing-photo"
+                          ? ""
+                          : styles.indeterminate
+                      }`}
+                      role="progressbar"
+                    >
+                      <span
+                        style={
+                          progress.phase === "securing-photo"
+                            ? {
+                                width: `${Math.max(
+                                  0,
+                                  Math.min(100, progress.progress),
+                                )}%`,
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                    <p>{delayMessage || "Please keep this window open."}</p>
+                  </div>
+                )}
                 <button disabled={busy} type="button" onClick={onClose}>
                   Cancel
                 </button>
@@ -467,7 +558,7 @@ function OpenCustomerInstallerRequestDialog({
                   type="submit"
                 >
                   {busy
-                    ? "Saving and sending..."
+                    ? "Request in progress"
                     : "Save details and request responses"}
                 </button>
               </footer>

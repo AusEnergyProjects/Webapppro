@@ -228,7 +228,7 @@ test("customer devices use guided safe capture plus separate supporting evidence
   );
   assert.match(
     customerUi,
-    /each file marked for installer sharing/,
+    /privacy-safe plan and all project photos in\s+the final request window/,
   );
   assert.match(customerUi, /pendingEvidence=\{pendingEvidence\}/);
   assert.match(
@@ -236,8 +236,9 @@ test("customer devices use guided safe capture plus separate supporting evidence
     /pendingEvidence\.some\(\s*\(item\) =>\s*!item\.captureSlot \|\| item\.captureSlot\.startsWith\("other:"\),\s*\)/,
   );
   assert.match(customerRoute, /purpose = 'installer_evidence_sharing'/);
-  assert.match(customerRoute, /Number\(evidenceCount\?\.count \|\| 0\) > 0/);
-  assert.match(customerRoute, /confirmInstallerPhotoSharing !== true/);
+  assert.match(customerRoute, /photoCount > 0/);
+  assert.match(customerRoute, /privatePhotoCount > 0 \|\| !evidenceConsent/);
+  assert.match(customerRoute, /confirmAllProjectPhotoSharing !== true/);
   assert.match(customerUi, /Accept installer for next step/);
   assert.match(arrivalUi, /Provide arrival windows for the customer/);
   assert.match(arrivalUi, /data-date-range-group=/);

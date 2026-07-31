@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   createInstallerEnquiryPack,
+  createInstallerPlanReportView,
   INSTALLER_ENQUIRY_PACK_VERSION,
 } from "../src/lib/customer-plan-document.mjs";
 import {
@@ -15,6 +16,7 @@ const read = (path) => fs.readFileSync(
 );
 
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
+const opportunityPlanRoute = read("../src/app/api/trade-opportunity-plan/route.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const styles = read("../src/app/globals.css");
 
@@ -113,9 +115,8 @@ test("installer enquiry pack is derived from the safe plan and remains non-ident
   assert.equal(pack.homeContext.tenure, "I rent the home");
   assert.equal(pack.homeContext.state, "VIC");
   assert.ok(pack.readiness.total > 0);
-  assert.ok(pack.firstSteps.length > 0);
-  assert.ok(pack.firstSteps.length <= 3);
-  assert.ok(pack.firstSteps.every((step) => !step.title.startsWith("SECRET")));
+  assert.ok(pack.actionCount > 0);
+  assert.equal("firstSteps" in pack, false);
 
   const serialized = JSON.stringify(pack);
   for (const privateValue of [
@@ -142,6 +143,47 @@ test("installer enquiry pack is derived from the safe plan and remains non-ident
   }
 });
 
+test("complete installer report includes every controlled step and removes professional identity", () => {
+  const completePlanProject = {
+    ...privateProject,
+    plan_snapshot: JSON.stringify({}),
+  };
+  const report = createInstallerPlanReportView(completePlanProject, {
+    preparedAt: "2026-07-31T00:00:00.000Z",
+  });
+  const pack = createInstallerEnquiryPack(completePlanProject, {
+    preparedAt: "2026-07-31T00:00:00.000Z",
+  });
+
+  assert.equal(report.actions.length, pack.actionCount);
+  assert.ok(report.actions.length > 3);
+  assert.equal(report.professionalReview, null);
+  assert.equal(report.professionalPresentation, null);
+  assert.match(report.privacyNote, /professional adviser identity or notes/);
+  for (const privateValue of [
+    "3006",
+    "private-owner-id",
+    "SECRET ADVISER NAME",
+    "SECRET ADVISER SCHEME",
+    "SECRET-REFERENCE",
+    "SECRET PROFESSIONAL REVIEW NOTE",
+    "SECRET PROJECT NAME",
+    "SECRET HOME NAME",
+    "SECRET PRIVATE NOTE",
+    "SECRET BEDROOM NAME",
+    "overnight",
+    "SECRET PERMISSION TITLE",
+    "SECRET PERMISSION NOTE",
+    "SECRET CUSTOMER REVIEW",
+    "SECRET CUSTOM STAGE",
+    "SECRET CUSTOM TITLE",
+    "SECRET CUSTOM TEXT",
+    "SECRET-NMI-NEM12.csv",
+  ]) {
+    assert.doesNotMatch(JSON.stringify(report), new RegExp(privateValue));
+  }
+});
+
 test("verified exact-match opportunity API projects the pack and approved file count", () => {
   assert.match(opportunityRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
   assert.match(opportunityRoute, /accountHasFeature\(user\.uid, "installer", "installer_leads"\)/);
@@ -157,9 +199,24 @@ test("verified exact-match opportunity API projects the pack and approved file c
   assert.match(opportunityRoute, /fileName: installerEvidenceName\(item\)/);
   assert.doesNotMatch(opportunityRoute, /p\.title|p\.home_nickname|p\.private_notes/);
   assert.doesNotMatch(opportunityRoute, /fileName: item\.file_name/);
+  assert.match(opportunityRoute, /purpose = 'anonymized_installer_matching'/);
 });
 
-test("lead card puts the enquiry pack before actions and lazy opens only selected lead photos", () => {
+test("complete plan endpoint keeps exact-match and privacy boundaries", () => {
+  assert.match(opportunityPlanRoute, /requireVerifiedTradeAccess\(request, \{[\s\S]*partnerTypes: \["installer"\]/);
+  assert.match(opportunityPlanRoute, /accountHasFeature\([\s\S]*"installer_leads"/);
+  assert.match(opportunityPlanRoute, /m\.id = \? AND m\.firebase_uid = \?/);
+  assert.match(opportunityPlanRoute, /m\.status IN \('offered', 'viewed', 'interested', 'connected'\)/);
+  assert.match(opportunityPlanRoute, /o\.status IN \('open', 'paused'\)/);
+  assert.match(opportunityPlanRoute, /purpose = 'anonymized_installer_matching'/);
+  assert.match(opportunityPlanRoute, /withdrawn_at = ''/);
+  assert.match(opportunityPlanRoute, /createInstallerPlanReportView/);
+  assert.match(opportunityPlanRoute, /Household plans are never available to wholesaler accounts/);
+  assert.match(opportunityPlanRoute, /ACCOUNT_INACTIVE/);
+  assert.doesNotMatch(opportunityPlanRoute, /p\.title|p\.home_nickname|p\.private_notes/);
+});
+
+test("lead card opens the complete plan and represents every returned shared file", () => {
   const leadCard = dashboard.slice(
     dashboard.indexOf("visibleLeadOpportunities.map"),
   );
@@ -170,8 +227,15 @@ test("lead card puts the enquiry pack before actions and lazy opens only selecte
 
   assert.ok(packPosition > -1);
   assert.ok(actionPosition > packPosition);
-  assert.match(dashboard, /Show approved photos/);
+  assert.match(dashboard, /Open complete plan/);
+  assert.match(dashboard, /Download complete plan PDF/);
+  assert.match(dashboard, /trade-opportunity-plan\?matchId=/);
+  assert.match(dashboard, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(dashboard, /Show all shared photos/);
   assert.match(dashboard, /toggleOpportunityPhotos\(opportunity/);
+  assert.match(dashboard, /Promise\.allSettled\(missingPhotos\.map/);
+  assert.match(dashboard, /photos\.map\(\(item\) =>/);
+  assert.match(dashboard, /documents\.map\(\(item\) =>/);
   assert.match(
     dashboard,
     /customer-project-evidence\?download=\$\{encodeURIComponent\(item\.id\)\}/,
@@ -180,7 +244,7 @@ test("lead card puts the enquiry pack before actions and lazy opens only selecte
   assert.match(dashboard, /Protected PDF download/);
   assert.match(
     dashboard,
-    /No customer-approved photos or documents are shared with this\s+enquiry\./,
+    /No photos or documents are shared with this enquiry\./,
   );
   assert.match(
     dashboard,
@@ -189,4 +253,56 @@ test("lead card puts the enquiry pack before actions and lazy opens only selecte
   assert.match(dashboard, /"leads",/);
   assert.match(styles, /\.dashboard-enquiry-pack/);
   assert.match(styles, /\.dashboard-enquiry-thumbnails img/);
+});
+
+test("protected installer plan and evidence state is cleared before an auth identity transition renders", () => {
+  const authTransition = dashboard.slice(
+    dashboard.indexOf("onAuthStateChanged(firebaseAuth"),
+    dashboard.indexOf("useEffect(() => {\n    if (!user) return;"),
+  );
+  const clearState = dashboard.slice(
+    dashboard.indexOf("const clearProtectedInstallerState"),
+    dashboard.indexOf("useEffect(() => {\n    const frame"),
+  );
+  const revokeAllUrls = dashboard.slice(
+    dashboard.indexOf("const revokeAllEvidenceObjectUrls"),
+    dashboard.indexOf("const clearProtectedInstallerState"),
+  );
+
+  assert.match(
+    authTransition,
+    /if \(protectedIdentityUid\.current !== nextUid\) \{[\s\S]*protectedIdentityRevision\.current \+= 1;[\s\S]*clearProtectedInstallerState\(\);[\s\S]*\}[\s\S]*setUser\(nextUser\)/,
+  );
+  assert.ok(
+    authTransition.indexOf("clearProtectedInstallerState();") <
+      authTransition.indexOf("setUser(nextUser);"),
+  );
+  for (const stateReset of [
+    "setInstallerPlanPreview(null)",
+    'setInstallerPlanBusy("")',
+    "setInstallerPlanErrors({})",
+    "setVisibleEvidenceMatches({})",
+    "setEvidencePhotoUrls({})",
+    'setEvidencePhotoBusy("")',
+    "setEvidencePhotoErrors({})",
+  ]) {
+    assert.match(clearState, new RegExp(stateReset.replace(/[(){}]/g, "\\$&")));
+  }
+  assert.match(
+    revokeAllUrls,
+    /for \(const url of evidenceObjectUrls\.current\) URL\.revokeObjectURL\(url\);[\s\S]*evidenceObjectUrls\.current\.clear\(\)/,
+  );
+  assert.match(clearState, /revokeAllEvidenceObjectUrls\(\)/);
+  assert.equal(
+    (dashboard.match(/evidenceObjectUrls\.current\.add\(url\)/g) || []).length,
+    2,
+  );
+  assert.match(
+    dashboard,
+    /\{authReady && user && installerPlanPreview && \(/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /\{installerPlanPreview && \(/,
+  );
 });

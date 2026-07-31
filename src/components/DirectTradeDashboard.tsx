@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -10,6 +17,9 @@ import { TLinkBrand, TLinkHeader } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
 import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
+import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
+import { downloadCustomerPlanPdf } from "@/lib/customer-plan-pdf-client";
+import type { CustomerPlanReportView } from "@/lib/customer-plan-report";
 import {
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
@@ -96,14 +106,7 @@ type DashboardOpportunity = {
       message: string;
       boundary: string;
     };
-    firstSteps: Array<{
-      number: number;
-      stage: string;
-      title: string;
-      description: string;
-      guideLabel: string;
-      guideHref: string;
-    }>;
+    actionCount: number;
     privacyNote: string;
     adviceBoundary: string;
   };
@@ -195,8 +198,12 @@ function EnquiryPack({
   photoBusy,
   photoError,
   downloadBusy,
+  planBusy,
+  planError,
   onTogglePhotos,
   onDownload,
+  onOpenPlan,
+  onDownloadPlan,
 }: {
   opportunity: DashboardOpportunity;
   photoUrls: Record<string, string>;
@@ -204,8 +211,12 @@ function EnquiryPack({
   photoBusy: boolean;
   photoError: string;
   downloadBusy: string;
+  planBusy: boolean;
+  planError: string;
   onTogglePhotos: () => void;
   onDownload: (item: DashboardOpportunity["evidence"][number]) => void;
+  onOpenPlan: () => void;
+  onDownloadPlan: () => void;
 }) {
   const pack = opportunity.enquiryPack;
   if (!pack) return null;
@@ -226,7 +237,7 @@ function EnquiryPack({
           {pack.summary && <p>{pack.summary}</p>}
         </div>
         <strong>
-          {sharedFileCount} approved file{sharedFileCount === 1 ? "" : "s"}
+          {sharedFileCount} shared file{sharedFileCount === 1 ? "" : "s"}
         </strong>
       </div>
 
@@ -263,38 +274,39 @@ function EnquiryPack({
         </div>
       </div>
 
-      {pack.firstSteps.length > 0 && (
-        <div className="dashboard-enquiry-first-steps">
-          <div>
-            <span>Ordered first steps</span>
-            <small>Use these priorities to shape a clear written scope.</small>
-          </div>
-          <ol>
-            {pack.firstSteps.map((step) => (
-              <li key={`${step.number}-${step.title}`}>
-                <b>{step.number.toString().padStart(2, "0")}</b>
-                <div>
-                  <span>{step.stage}</span>
-                  <strong>{step.title}</strong>
-                  <p>{step.description}</p>
-                  {step.guideHref && (
-                    <a href={step.guideHref}>{step.guideLabel}</a>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+      <div className="dashboard-enquiry-plan-actions">
+        <div>
+          <span>Complete privacy-safe plan</span>
+          <strong>
+            {pack.actionCount} ordered step{pack.actionCount === 1 ? "" : "s"}
+          </strong>
+          <small>
+            Open the complete customer plan before preparing a scope or quote.
+          </small>
         </div>
-      )}
+        <div>
+          <button type="button" disabled={planBusy} onClick={onOpenPlan}>
+            {planBusy ? "Opening complete plan..." : "Open complete plan"}
+          </button>
+          <button type="button" disabled={planBusy} onClick={onDownloadPlan}>
+            Download complete plan PDF
+          </button>
+        </div>
+        {planError && (
+          <p className="dashboard-enquiry-plan-error" role="alert">
+            {planError}
+          </p>
+        )}
+      </div>
 
       <div className="dashboard-enquiry-evidence">
         <div className="dashboard-enquiry-evidence-heading">
           <div>
-            <span>Customer-approved shared files</span>
+            <span>Customer-shared files</span>
             <strong>
               {sharedFileCount
                 ? `${sharedFileCount} protected file${sharedFileCount === 1 ? "" : "s"} available`
-                : "No approved shared evidence"}
+                : "No files shared with this enquiry"}
             </strong>
           </div>
           {photos.length > 0 && (
@@ -304,18 +316,17 @@ function EnquiryPack({
               onClick={onTogglePhotos}
             >
               {photoBusy
-                ? "Opening approved photos..."
+                ? "Opening shared photos..."
                 : photosVisible
-                  ? "Hide approved photos"
-                  : `Show approved photos (${photos.length})`}
+                  ? "Hide shared photos"
+                  : `Show all shared photos (${photos.length})`}
             </button>
           )}
         </div>
 
         {!sharedFileCount ? (
           <p>
-            No customer-approved photos or documents are shared with this
-            enquiry.
+            No photos or documents are shared with this enquiry.
           </p>
         ) : (
           <p>
@@ -333,11 +344,17 @@ function EnquiryPack({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={photoUrls[item.id]}
-                    alt={`Customer-approved ${item.category.replaceAll("-", " ")} photo`}
+                    alt={`Customer-shared ${item.category.replaceAll("-", " ")} photo`}
                   />
                 )}
+                {!photoUrls[item.id] && (
+                  <div className="dashboard-enquiry-thumbnail-unavailable">
+                    Preview unavailable. The protected download may still be
+                    available.
+                  </div>
+                )}
                 <div>
-                  <span>Approved quoting photo</span>
+                  <span>Customer-shared quoting photo</span>
                   <strong>{item.category.replaceAll("-", " ")}</strong>
                   <small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small>
                 </div>
@@ -358,7 +375,7 @@ function EnquiryPack({
             {documents.map((item) => (
               <article key={item.id}>
                 <div>
-                  <span>Approved project document</span>
+                  <span>Customer-shared project document</span>
                   <strong>{item.category.replaceAll("-", " ")}</strong>
                   <small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small>
                 </div>
@@ -460,7 +477,33 @@ export function DirectTradeDashboard() {
   const [evidencePhotoUrls, setEvidencePhotoUrls] = useState<Record<string, Record<string, string>>>({});
   const [evidencePhotoBusy, setEvidencePhotoBusy] = useState("");
   const [evidencePhotoErrors, setEvidencePhotoErrors] = useState<Record<string, string>>({});
+  const [installerPlanBusy, setInstallerPlanBusy] = useState("");
+  const [installerPlanErrors, setInstallerPlanErrors] = useState<Record<string, string>>({});
+  const [installerPlanPreview, setInstallerPlanPreview] = useState<CustomerPlanReportView | null>(null);
   const evidenceObjectUrls = useRef(new Set<string>());
+  const protectedIdentityUid = useRef<string | null>(null);
+  const protectedIdentityRevision = useRef(0);
+
+  const revokeEvidenceObjectUrl = useCallback((url: string) => {
+    if (!evidenceObjectUrls.current.delete(url)) return;
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const revokeAllEvidenceObjectUrls = useCallback(() => {
+    for (const url of evidenceObjectUrls.current) URL.revokeObjectURL(url);
+    evidenceObjectUrls.current.clear();
+  }, []);
+
+  const clearProtectedInstallerState = useCallback(() => {
+    revokeAllEvidenceObjectUrls();
+    setInstallerPlanPreview(null);
+    setInstallerPlanBusy("");
+    setInstallerPlanErrors({});
+    setVisibleEvidenceMatches({});
+    setEvidencePhotoUrls({});
+    setEvidencePhotoBusy("");
+    setEvidencePhotoErrors({});
+  }, [revokeAllEvidenceObjectUrls]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -476,14 +519,20 @@ export function DirectTradeDashboard() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  useEffect(() => () => {
-    for (const url of evidenceObjectUrls.current) URL.revokeObjectURL(url);
-    evidenceObjectUrls.current.clear();
-  }, []);
+  useEffect(
+    () => () => revokeAllEvidenceObjectUrls(),
+    [revokeAllEvidenceObjectUrls],
+  );
 
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
+        const nextUid = nextUser?.uid || null;
+        if (protectedIdentityUid.current !== nextUid) {
+          protectedIdentityUid.current = nextUid;
+          protectedIdentityRevision.current += 1;
+          clearProtectedInstallerState();
+        }
         setUser(nextUser);
         setAuthReady(true);
         if (!nextUser) {
@@ -491,7 +540,7 @@ export function DirectTradeDashboard() {
           setOpportunities([]);
         }
       }),
-    [],
+    [clearProtectedInstallerState],
   );
 
   useEffect(() => {
@@ -727,7 +776,13 @@ export function DirectTradeDashboard() {
   }
 
   async function toggleOpportunityPhotos(opportunity: DashboardOpportunity) {
-    if (!user) return;
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () =>
+      protectedIdentityUid.current === identityUid &&
+      protectedIdentityRevision.current === identityRevision;
     const photos = opportunity.evidence.filter((item) =>
       item.contentType.startsWith("image/")
     );
@@ -748,9 +803,10 @@ export function DirectTradeDashboard() {
     }));
     const createdUrls: string[] = [];
     try {
-      const token = await user.getIdToken();
-      const nextUrls: Record<string, string> = {};
-      for (const item of photos) {
+      const token = await activeUser.getIdToken();
+      const nextUrls: Record<string, string> = { ...(existing || {}) };
+      const missingPhotos = photos.filter((item) => !nextUrls[item.id]);
+      const results = await Promise.allSettled(missingPhotos.map(async (item) => {
         const response = await fetch(
           `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`,
           {
@@ -761,13 +817,25 @@ export function DirectTradeDashboard() {
         if (!response.ok) {
           const result = await response.json().catch(() => ({}));
           throw new Error(
-            result.error || "The approved photo could not be opened.",
+            result.error || "The shared photo could not be opened.",
           );
         }
         const url = URL.createObjectURL(await response.blob());
-        createdUrls.push(url);
         evidenceObjectUrls.current.add(url);
-        nextUrls[item.id] = url;
+        return { id: item.id, url };
+      }));
+      let failed = 0;
+      for (const result of results) {
+        if (result.status === "rejected") {
+          failed += 1;
+          continue;
+        }
+        createdUrls.push(result.value.url);
+        nextUrls[result.value.id] = result.value.url;
+      }
+      if (!identityIsCurrent()) {
+        for (const url of createdUrls) revokeEvidenceObjectUrl(url);
+        return;
       }
       setEvidencePhotoUrls((current) => ({
         ...current,
@@ -777,41 +845,155 @@ export function DirectTradeDashboard() {
         ...current,
         [opportunity.matchId]: true,
       }));
-    } catch (previewError) {
-      for (const url of createdUrls) {
-        URL.revokeObjectURL(url);
-        evidenceObjectUrls.current.delete(url);
+      if (failed > 0) {
+        setEvidencePhotoErrors((current) => ({
+          ...current,
+          [opportunity.matchId]:
+            `${Object.keys(nextUrls).length} of ${photos.length} shared photos opened. ${failed} preview${failed === 1 ? "" : "s"} could not be opened. Protected download remains available for each file.`,
+        }));
       }
+    } catch (previewError) {
+      for (const url of createdUrls) revokeEvidenceObjectUrl(url);
+      if (!identityIsCurrent()) return;
       setEvidencePhotoErrors((current) => ({
         ...current,
         [opportunity.matchId]: previewError instanceof Error
           ? previewError.message
-          : "The approved photos could not be opened.",
+          : "The shared photos could not be opened.",
       }));
     } finally {
-      setEvidencePhotoBusy("");
+      if (identityIsCurrent()) setEvidencePhotoBusy("");
+    }
+  }
+
+  async function installerPlanReport(
+    opportunity: DashboardOpportunity,
+    activeUser: User,
+  ): Promise<CustomerPlanReportView> {
+    if (protectedIdentityUid.current !== activeUser.uid) {
+      throw new Error("Sign in to open this household plan.");
+    }
+    const token = await activeUser.getIdToken();
+    const response = await fetch(
+      `/api/trade-opportunity-plan?matchId=${encodeURIComponent(opportunity.matchId)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok || !result.report) {
+      throw new Error(result.error || "The complete household plan could not be opened.");
+    }
+    return result.report as CustomerPlanReportView;
+  }
+
+  async function openInstallerPlan(opportunity: DashboardOpportunity) {
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () =>
+      protectedIdentityUid.current === identityUid &&
+      protectedIdentityRevision.current === identityRevision;
+    setInstallerPlanBusy(opportunity.matchId);
+    setInstallerPlanErrors((current) => ({
+      ...current,
+      [opportunity.matchId]: "",
+    }));
+    try {
+      const report = await installerPlanReport(opportunity, activeUser);
+      if (identityIsCurrent()) setInstallerPlanPreview(report);
+    } catch (planError) {
+      if (!identityIsCurrent()) return;
+      setInstallerPlanErrors((current) => ({
+        ...current,
+        [opportunity.matchId]: planError instanceof Error
+          ? planError.message
+          : "The complete household plan could not be opened.",
+      }));
+    } finally {
+      if (identityIsCurrent()) setInstallerPlanBusy("");
+    }
+  }
+
+  async function downloadInstallerPlan(opportunity: DashboardOpportunity) {
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () =>
+      protectedIdentityUid.current === identityUid &&
+      protectedIdentityRevision.current === identityRevision;
+    setInstallerPlanBusy(opportunity.matchId);
+    setInstallerPlanErrors((current) => ({
+      ...current,
+      [opportunity.matchId]: "",
+    }));
+    try {
+      const report = await installerPlanReport(opportunity, activeUser);
+      if (identityIsCurrent()) {
+        downloadCustomerPlanPdf(report);
+        setOpportunityStatus("The complete privacy-safe plan PDF download started.");
+      }
+    } catch (planError) {
+      if (!identityIsCurrent()) return;
+      setInstallerPlanErrors((current) => ({
+        ...current,
+        [opportunity.matchId]: planError instanceof Error
+          ? planError.message
+          : "The complete plan PDF could not be downloaded.",
+      }));
+    } finally {
+      if (identityIsCurrent()) setInstallerPlanBusy("");
     }
   }
 
   async function downloadOpportunityEvidence(item: DashboardOpportunity["evidence"][number]) {
-    if (!user) return;
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () =>
+      protectedIdentityUid.current === identityUid &&
+      protectedIdentityRevision.current === identityRevision;
     setOpportunityBusy(item.id); setOpportunityStatus("Preparing protected customer evidence...");
     try {
-      const token = await user.getIdToken();
+      const token = await activeUser.getIdToken();
       const response = await fetch(`/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`, {
         headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
       });
       if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "The project file could not be downloaded."); }
       const url = URL.createObjectURL(await response.blob()); const anchor = window.document.createElement("a");
-      anchor.href = url; anchor.download = item.fileName; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      evidenceObjectUrls.current.add(url);
+      if (!identityIsCurrent()) {
+        revokeEvidenceObjectUrl(url);
+        return;
+      }
+      anchor.href = url; anchor.download = item.fileName; anchor.click();
       setOpportunityStatus("Protected project file download started and access was audited.");
-    } catch (error) { setOpportunityStatus(error instanceof Error ? error.message : "The project file could not be downloaded."); }
-    finally { setOpportunityBusy(""); }
+      setTimeout(() => revokeEvidenceObjectUrl(url), 1000);
+    } catch (error) {
+      if (identityIsCurrent()) {
+        setOpportunityStatus(error instanceof Error ? error.message : "The project file could not be downloaded.");
+      }
+    }
+    finally {
+      if (identityIsCurrent()) setOpportunityBusy("");
+    }
   }
 
   return (
     <main className="wrap direct-trade-dashboard-page">
       <TLinkHeader active="dashboard" />
+      {authReady && user && installerPlanPreview && (
+        <CustomerPlanReportPreviewDialog
+          context="installer-enquiry"
+          open
+          report={installerPlanPreview}
+          onClose={() => setInstallerPlanPreview(null)}
+        />
+      )}
       {!authReady || loading ? (
         <section className="dashboard-state-card" aria-live="polite">
           <p>Preparing your TLink dashboard...</p>
@@ -1154,8 +1336,12 @@ export function DirectTradeDashboard() {
                               photoBusy={evidencePhotoBusy === opportunity.matchId}
                               photoError={evidencePhotoErrors[opportunity.matchId] || ""}
                               downloadBusy={opportunityBusy}
+                              planBusy={installerPlanBusy === opportunity.matchId}
+                              planError={installerPlanErrors[opportunity.matchId] || ""}
                               onTogglePhotos={() => void toggleOpportunityPhotos(opportunity)}
                               onDownload={(item) => void downloadOpportunityEvidence(item)}
+                              onOpenPlan={() => void openInstallerPlan(opportunity)}
+                              onDownloadPlan={() => void downloadInstallerPlan(opportunity)}
                             />
                           )}
                           {opportunity.platformOnly && !opportunity.enquiryPack && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}

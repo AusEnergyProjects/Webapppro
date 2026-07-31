@@ -559,24 +559,6 @@ export function createInstallerEnquiryPack(row, options = {}) {
   const sourceActions = Array.isArray(document.actions)
     ? document.actions
     : [];
-  const remainingActions = sourceActions.filter(
-    (action) => action?.completed !== true,
-  );
-  const firstSteps = (remainingActions.length ? remainingActions : sourceActions)
-    .slice(0, 3)
-    .map((action, index) => ({
-      number: Number.isFinite(Number(action?.number))
-        ? Number(action.number)
-        : index + 1,
-      stage: boundedText(action?.stage, 100),
-      title: boundedText(action?.title, 180),
-      description: boundedText(action?.description, 360),
-      guideLabel: safeGuideHref(action?.guideHref)
-        ? boundedText(action?.guideLabel, 120) || "Open the related guide"
-        : "",
-      guideHref: safeGuideHref(action?.guideHref),
-    }))
-    .filter((action) => action.title);
   const readinessBoundary = document.professionalReview
     ? "These home answers were marked as reviewed by a self-declared accredited adviser. Australian Energy Assessments has not independently checked that review."
     : boundedText(readiness.boundary, 420);
@@ -610,10 +592,34 @@ export function createInstallerEnquiryPack(row, options = {}) {
       message: boundedText(readiness.message, 360),
       boundary: readinessBoundary,
     },
-    firstSteps,
+    actionCount: sourceActions.length,
     privacyNote: "This enquiry pack excludes the exact postcode, private project and account details, contact details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.",
     adviceBoundary: boundedText(document.adviceBoundary, 700),
   };
+}
+
+/**
+ * Build the complete installer-facing report only after the caller has
+ * established an exact authorised match. The customer document has already
+ * removed private project fields, custom notes, room names and file names.
+ * Professional identity and declaration details are also removed here because
+ * they are not needed to prepare a quote.
+ *
+ * @param {any} row
+ * @param {{preparedAt?: string, evidence?: Array<Record<string, unknown>>}} [options]
+ */
+export function createInstallerPlanReportView(row, options = {}) {
+  const document = createCustomerPlanDocument(row, options);
+  const installerDocument = {
+    ...document,
+    professionalReview: null,
+    readiness: {
+      ...document.readiness,
+      boundary: "These home details were supplied for planning. Confirm the relevant site conditions before quoting or carrying out work.",
+    },
+    privacyNote: "This installer copy excludes the exact postcode, private project and account details, contact details, private notes, room names and routines, permission notes, evidence filenames, meter information, customer review text and professional adviser identity or notes.",
+  };
+  return createCustomerPlanReportView(installerDocument);
 }
 
 export function normalizeCustomerPlanEmailRequest(raw) {
