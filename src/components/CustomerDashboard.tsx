@@ -17,6 +17,7 @@ import {
   type User,
 } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { customerEmailVerificationSettings } from "@/lib/firebase-email-actions";
 import {
   buildAnonymizedOpportunity,
   CUSTOMER_LEGACY_PLAN_VERSIONS,
@@ -5998,6 +5999,13 @@ export function CustomerDashboard({
     return refreshedProjects;
   }, []);
 
+  const refreshEmailVerification = useCallback(async (nextUser: User) => {
+    await nextUser.reload();
+    if (!nextUser.emailVerified) return false;
+    await nextUser.getIdToken(true);
+    return true;
+  }, []);
+
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
@@ -6053,15 +6061,32 @@ export function CustomerDashboard({
 
   useEffect(() => {
     if (!user) return;
-    const frame = window.requestAnimationFrame(() => void load(user));
+    const frame = window.requestAnimationFrame(() => {
+      void refreshEmailVerification(user)
+        .catch(() => false)
+        .then(() => load(user));
+    });
     return () => window.cancelAnimationFrame(frame);
-  }, [load, user]);
+  }, [load, refreshEmailVerification, user]);
 
   useEffect(() => {
     if (!user) return;
     const refreshWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
-      void refreshProjects(user).catch(() => {});
+      if (account.emailVerified) {
+        void refreshProjects(user).catch(() => {});
+        return;
+      }
+      void refreshEmailVerification(user)
+        .catch(() => false)
+        .then(async (changed) => {
+          if (changed) {
+            await load(user);
+          } else {
+            await refreshProjects(user);
+          }
+        })
+        .catch(() => {});
     };
     const intervalId = window.setInterval(refreshWhenVisible, 30_000);
     window.addEventListener("focus", refreshWhenVisible);
@@ -6071,7 +6096,13 @@ export function CustomerDashboard({
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [refreshProjects, user]);
+  }, [
+    account.emailVerified,
+    load,
+    refreshEmailVerification,
+    refreshProjects,
+    user,
+  ]);
 
   async function saveProfile(profile: CustomerProfile) {
     setAccount((current) => ({ ...current, profile }));
@@ -6799,7 +6830,10 @@ export function CustomerDashboard({
     if (!user) return;
     setBusy(true);
     try {
-      await sendEmailVerification(user);
+      await sendEmailVerification(
+        user,
+        customerEmailVerificationSettings(window.location.origin),
+      );
       setStatus(
         "A fresh verification link has been sent to your account email.",
       );

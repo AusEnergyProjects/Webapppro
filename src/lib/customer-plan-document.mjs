@@ -59,6 +59,7 @@ const evidenceSourceLabels = new Map([
 const readinessFactKeyByQuestion = new Map([
   ["comfort-concerns", "draughts"],
   ["ventilation-features", "ventilation"],
+  ["exhaust-fans", "ventilation"],
   ["heating-cooling-systems", "heating-cooling"],
 ]);
 

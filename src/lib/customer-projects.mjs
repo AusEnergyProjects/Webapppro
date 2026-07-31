@@ -156,7 +156,7 @@ export const customerHomeFeatureSections = [
   {
     id: "ventilation",
     title: "Draughts and ventilation",
-    description: "Record fixed openings and what you safely know about exhaust fans so the plan does not mistake required ventilation for an unwanted draught.",
+    description: "Record fixed openings and the exhaust fans you can see so the plan does not mistake required ventilation for an unwanted draught.",
     questions: [
       {
         id: "ventilation-features",
@@ -174,30 +174,17 @@ export const customerHomeFeatureSections = [
         ],
       },
       {
-        id: "exhaust-discharge",
-        label: "What do you know about the kitchen and bathroom exhaust fans?",
-        help: "Choose all that apply because different fans can discharge to different places. Use only visible grilles, safe observations or existing records. Do not enter a roof or ceiling cavity or dismantle a fan.",
+        id: "exhaust-fans",
+        label: "Which kitchen or bathroom exhaust fans are fitted?",
+        help: "Choose the fans you can see. You do not need to know where they vent or whether they have a shutter or damper.",
         mode: "multiple",
         noneValue: "exhaust-fans-none",
         unknownValue: "exhaust-fans-unknown",
         options: [
-          ["exhaust-discharge-outside", "At least one exhaust fan is ducted outdoors"],
-          ["exhaust-discharge-cavity", "At least one is known or suspected to discharge into a roof or ceiling cavity"],
-          ["exhaust-discharge-unknown", "A fan is fitted, but I do not know where it discharges"],
-          ["exhaust-fans-none", "No kitchen or bathroom exhaust fan is fitted"],
-          ["exhaust-fans-unknown", "Not sure whether exhaust fans are fitted"],
-        ],
-      },
-      {
-        id: "exhaust-damper",
-        label: "Are self-closing shutters or backdraft dampers known?",
-        help: "Answer only from something safely visible or recorded. Do not remove a grille or enter a roof or ceiling cavity to check.",
-        mode: "single",
-        unknownValue: "exhaust-damper-unknown",
-        options: [
-          ["exhaust-damper-known", "A self-closing shutter or backdraft damper is visible or recorded"],
-          ["exhaust-damper-none-known", "No self-closing shutter or backdraft damper that I know of"],
-          ["exhaust-damper-unknown", "Not sure"],
+          ["kitchen-exhaust-fan", "Kitchen exhaust fan or rangehood"],
+          ["bathroom-exhaust-fan", "Bathroom exhaust fan"],
+          ["exhaust-fans-none", "No kitchen or bathroom exhaust fans"],
+          ["exhaust-fans-unknown", "Not sure"],
         ],
       },
     ],
@@ -335,6 +322,12 @@ const legacyHomeFeatureValues = new Set([
   "internal-window-coverings",
   "gas-hot-water",
   "exhaust-ducted-outside",
+  "exhaust-discharge-outside",
+  "exhaust-discharge-cavity",
+  "exhaust-discharge-unknown",
+  "exhaust-damper-known",
+  "exhaust-damper-none-known",
+  "exhaust-damper-unknown",
 ]);
 
 function questionHasSelection(question, selected) {
@@ -376,8 +369,18 @@ function migrateLegacyHomeFeatures(value) {
   if (selected.has("gas-hot-water")) {
     addWhenUnanswered("hot-water", "gas-hot-water-type-unknown");
   }
-  if (selected.has("exhaust-ducted-outside")) {
-    addWhenUnanswered("exhaust-discharge", "exhaust-discharge-outside");
+  if (
+    [
+      "exhaust-ducted-outside",
+      "exhaust-discharge-outside",
+      "exhaust-discharge-cavity",
+      "exhaust-discharge-unknown",
+      "exhaust-damper-known",
+      "exhaust-damper-none-known",
+      "exhaust-damper-unknown",
+    ].some((feature) => selected.has(feature))
+  ) {
+    addWhenUnanswered("exhaust-fans", "exhaust-fans-unknown");
   }
   for (const legacy of legacyHomeFeatureValues) selected.delete(legacy);
   return selected;
@@ -750,17 +753,13 @@ const homeFeatureFactRules = new Map([
       "evaporative-ducts",
       "mechanical-ventilation",
       "ventilation-none-known",
-      "exhaust-discharge-outside",
-      "exhaust-discharge-cavity",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
       "exhaust-fans-none",
-      "exhaust-damper-known",
-      "exhaust-damper-none-known",
     ]),
     unknown: new Set([
       "ventilation-unknown",
-      "exhaust-discharge-unknown",
       "exhaust-fans-unknown",
-      "exhaust-damper-unknown",
     ]),
     requiredGroups: [
       {
@@ -774,21 +773,11 @@ const homeFeatureFactRules = new Map([
       },
       {
         answered: new Set([
-          "exhaust-discharge-outside",
-          "exhaust-discharge-cavity",
+          "kitchen-exhaust-fan",
+          "bathroom-exhaust-fan",
           "exhaust-fans-none",
         ]),
-        unknown: new Set([
-          "exhaust-discharge-unknown",
-          "exhaust-fans-unknown",
-        ]),
-      },
-      {
-        answered: new Set([
-          "exhaust-damper-known",
-          "exhaust-damper-none-known",
-        ]),
-        unknown: new Set(["exhaust-damper-unknown"]),
+        unknown: new Set(["exhaust-fans-unknown"]),
       },
     ],
   }],
@@ -1562,14 +1551,6 @@ const advisorRecommendations = {
     href: "/guides/insulation-draught-proofing",
     action: "Review moisture and ventilation guidance",
   },
-  exhaustCavity: {
-    id: "exhaust-discharge-review",
-    stage: "Confirm moisture discharge",
-    title: "Confirm and correct exhausts that may discharge into a roof or ceiling cavity",
-    text: "The household reports that at least one kitchen or bathroom exhaust may discharge into a roof or ceiling cavity. Do not enter the cavity or dismantle the fan to check. Have a suitably qualified person confirm the discharge path and any correction needed before relying on the fan for moisture control or making the home more airtight.",
-    href: "/guides/insulation-draught-proofing",
-    action: "Review moisture and ventilation guidance",
-  },
   electricalSupply: {
     id: "electrical-supply-check",
     stage: "Confirm electrical capacity",
@@ -1700,19 +1681,15 @@ const everydayActionCatalogue = [
     id: "moisture-safe-routine",
     category: "Moisture and ventilation",
     title: "Control moisture at the source and keep required ventilation working",
-    text: "Use functioning kitchen and bathroom exhausts only where their discharge path is suitable and safely understood, contain steam and moisture at the source, and air the home only when outdoor humidity, smoke, weather and security make it suitable. A fan known or suspected to discharge into a roof or ceiling cavity needs qualified confirmation and any necessary correction. Do not enter the cavity to check, block fixed vents or seal unexplained gaps before their purpose and any combustion-safety need are understood.",
+    text: "Use kitchen and bathroom exhaust fans while cooking or showering when they operate safely. If steam, smells or moisture do not clear, ask the property manager or a suitably qualified trade to check the fan. Air the home only when outdoor humidity, smoke, weather and security make it suitable. Do not enter a roof or ceiling cavity, block fixed vents or seal unexplained gaps before their purpose and any combustion-safety need are understood.",
     matches: ({ features, selectedGoals }) => (
       features.some((item) => [
         "condensation-moisture",
         "open-wall-vents",
         "evaporative-ducts",
-        "exhaust-discharge-outside",
-        "exhaust-discharge-cavity",
-        "exhaust-discharge-unknown",
+        "kitchen-exhaust-fan",
+        "bathroom-exhaust-fan",
         "exhaust-fans-unknown",
-        "exhaust-damper-known",
-        "exhaust-damper-none-known",
-        "exhaust-damper-unknown",
         "mechanical-ventilation",
         "ventilation-unknown",
       ].includes(item))
@@ -2360,7 +2337,6 @@ function createAdvisorPlan({
   }
   if (situation === "renter" || selectedGoals.includes("renter-friendly")) addContext(advisorRecommendations.renter);
   if (features.includes("condensation-moisture") || selectedGoals.includes("healthier-home")) addContext(advisorRecommendations.moisture);
-  if (features.includes("exhaust-discharge-cavity")) addContext(advisorRecommendations.exhaustCavity);
   if (
     selectedGoals.includes("improve-comfort")
     || features.some((item) => [
@@ -2421,7 +2397,6 @@ function createAdvisorPlan({
         "room-comfort-profile",
         "climate-sequence",
         "moisture-ventilation",
-        "exhaust-discharge-review",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2433,7 +2408,6 @@ function createAdvisorPlan({
           "electrical-supply-check",
           "room-comfort-profile",
           "moisture-ventilation",
-          "exhaust-discharge-review",
           "draught-proofing",
           "insulation-review",
           "windows-glazing",
@@ -2449,7 +2423,6 @@ function createAdvisorPlan({
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
-        "exhaust-discharge-review",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2461,7 +2434,6 @@ function createAdvisorPlan({
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
-        "exhaust-discharge-review",
         "draught-proofing",
         "insulation-review",
         "windows-glazing",

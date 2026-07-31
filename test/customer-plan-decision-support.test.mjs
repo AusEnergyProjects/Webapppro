@@ -134,11 +134,11 @@ test("roof and switchboard questions return to the roadmap intake before the pla
   );
 });
 
-test("electrical supply and exhaust details return to their shared home questions", () => {
+test("electrical supply and exhaust fan details return to their shared home questions", () => {
   const questions = createNextBestQuestions({
     items: [
       { id: "electrical-supply-check" },
-      { id: "exhaust-discharge-review" },
+      { id: "moisture-ventilation" },
     ],
     factEvidence: [
       { factKey: "electrical-supply", source: "unknown" },
@@ -147,8 +147,7 @@ test("electrical supply and exhaust details return to their shared home question
     ],
     homeFeatures: [
       "ventilation-none-known",
-      "exhaust-discharge-unknown",
-      "exhaust-damper-none-known",
+      "exhaust-fans-unknown",
     ],
     situation: "owner",
     approvalContext: "none",
@@ -171,18 +170,19 @@ test("electrical supply and exhaust details return to their shared home question
       {
         id: "fact-ventilation",
         targetStep: 2,
-        targetAnchor: "customer-home-feature-exhaust-discharge",
+        targetAnchor: "customer-home-feature-exhaust-fans",
       },
     ],
   );
   assert.match(questions[0].whyItMatters, /licensed electrician/i);
-  assert.match(questions[1].prompt, /discharge/i);
-  assert.match(questions[1].prompt, /backdraft damper/i);
+  assert.match(questions[1].prompt, /kitchen exhaust fan/i);
+  assert.match(questions[1].prompt, /bathroom exhaust fan/i);
+  assert.doesNotMatch(questions[1].prompt, /discharge|damper/i);
 });
 
 test("ventilation follow-ups target the first unresolved related question", () => {
   const targetFor = (homeFeatures) => createNextBestQuestions({
-    items: [{ id: "exhaust-discharge-review" }],
+    items: [{ id: "moisture-ventilation" }],
     factEvidence: [{ factKey: "ventilation", source: "unknown" }],
     homeFeatures,
     situation: "owner",
@@ -194,26 +194,24 @@ test("ventilation follow-ups target the first unresolved related question", () =
 
   assert.equal(
     targetFor([
-      "exhaust-discharge-outside",
-      "exhaust-damper-known",
+      "kitchen-exhaust-fan",
     ]),
     "customer-home-feature-ventilation-features",
   );
   assert.equal(
     targetFor([
       "ventilation-none-known",
-      "exhaust-discharge-unknown",
-      "exhaust-damper-known",
+      "exhaust-fans-unknown",
     ]),
-    "customer-home-feature-exhaust-discharge",
+    "customer-home-feature-exhaust-fans",
   );
   assert.equal(
     targetFor([
       "ventilation-none-known",
-      "exhaust-discharge-outside",
-      "exhaust-damper-unknown",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
     ]),
-    "customer-home-feature-exhaust-damper",
+    "customer-home-feature-section-ventilation",
   );
 });
 

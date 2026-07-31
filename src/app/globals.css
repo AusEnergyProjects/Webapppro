@@ -3206,23 +3206,39 @@ body input[type="number"]::-webkit-outer-spin-button {
 .customer-auth-intro h2 { color: var(--color-aea-ink); font-size: 1.65rem; line-height: 1.15; margin-top: 7px; }
 .customer-auth-intro p,
 .customer-auth-benefits { color: var(--color-aea-muted); font-size: .82rem; }
-.customer-auth-panel { min-width: 0; }
-.customer-google-button { align-items: center; background: #fff; border: 1px solid #bdcec6; border-radius: 12px; color: #17332b; cursor: pointer; display: flex; font-weight: 800; gap: 10px; justify-content: center; min-height: 48px; width: 100%; }
+.customer-auth-panel { background: #f7fcfa; border: 1px solid #b9ddcf; border-radius: 18px; min-width: 0; padding: 22px; }
+.customer-google-button { align-items: center; background: #fff; border: 1.5px solid #4f8fcf; border-radius: var(--radius-control); color: #16436b; cursor: pointer; display: flex; font-weight: 800; gap: 10px; justify-content: center; min-height: 48px; padding: 10px 14px; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; width: 100%; }
+.customer-google-button:hover { border-color: #1d63a5; box-shadow: 0 7px 18px rgba(25, 88, 145, .12); transform: translateY(-1px); }
 .customer-google-button img { height: 19px; width: 19px; }
+.customer-google-button:disabled, .customer-auth-submit:disabled, .customer-reset-link:disabled { cursor: wait; opacity: .65; }
 .customer-auth-divider { align-items: center; color: #71837b; display: flex; font-size: .68rem; gap: 10px; margin: 14px 0; }
 .customer-auth-divider::before,
 .customer-auth-divider::after { background: #d7e5df; content: ""; flex: 1; height: 1px; }
-.customer-auth-tabs { background: #edf5f1; border-radius: 11px; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; }
-.customer-auth-tabs button { background: transparent; border: 0; border-radius: 9px; color: #526961; cursor: pointer; font-size: .74rem; font-weight: 800; min-height: 42px; }
-.customer-auth-tabs button.selected { background: #fff; box-shadow: 0 3px 12px rgba(9, 49, 38, .1); color: #08794c; }
+.customer-auth-tabs { align-items: stretch; background: #e8f3ef; border: 1px solid #c2ddd3; border-radius: 13px; display: grid; gap: 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; width: 100%; }
+.customer-auth-tabs button { align-items: center; background: transparent; border: 1.5px solid transparent; border-radius: 9px; color: #415f55; cursor: pointer; display: flex; font-family: inherit; font-size: .78rem; font-weight: 850; justify-content: center; line-height: 1.25; min-height: 46px; min-width: 0; padding: 10px 12px; text-align: center; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease; width: 100%; }
+.customer-auth-tabs button:not(.selected):hover { background: rgba(255, 255, 255, .68); border-color: #9fc9ba; color: #164d3d; }
+.customer-auth-tabs button.selected { background: #08794c; border-color: #08794c; box-shadow: 0 4px 12px rgba(8, 121, 76, .2); color: #fff; }
+.customer-google-button:focus-visible,
+.customer-auth-tabs button:focus-visible,
+.customer-reset-link:focus-visible { outline: 3px solid rgba(32, 203, 184, .35); outline-offset: 2px; }
 .customer-email-form { display: grid; gap: 12px; margin-top: 15px; }
-.customer-email-form .f { margin: 0; }
+.customer-email-form .f { color: var(--color-aea-ink); font-size: .76rem; font-weight: 800; margin: 0; min-width: 0; }
+.customer-email-form .field-control { display: block; margin-top: 6px; }
+.customer-email-form .field-control > input { background: #fff; border: 1.5px solid #91b7a8; border-radius: var(--radius-control); box-shadow: inset 0 1px 2px rgba(7, 59, 44, .04); box-sizing: border-box; color: var(--color-aea-text); display: block; font-family: inherit; font-size: .95rem; line-height: 1.3; min-height: 48px; padding: 11px 13px; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; width: 100%; }
+.customer-email-form .field-control > input:hover { border-color: #5a9d87; }
+.customer-email-form .field-control > input:focus { background: #fff; border-color: var(--color-aea-green); box-shadow: 0 0 0 3px rgba(20, 168, 100, .14); outline: none; }
+.customer-email-form .field-control > input[aria-invalid="true"] { background: #fffafa; border-color: #c34c3f; }
+.customer-auth-field { display: grid; gap: 5px; min-width: 0; }
+.customer-auth-field-help { color: #61766e; font-size: .7rem; line-height: 1.45; margin: 0; }
 .customer-auth-submit { width: 100%; }
-.customer-reset-link { background: transparent; border: 0; color: #08794c; cursor: pointer; font-size: .72rem; font-weight: 800; min-height: 38px; text-decoration: underline; }
+.customer-reset-link { background: transparent; border: 0; color: #08794c; cursor: pointer; font-size: .72rem; font-weight: 800; justify-self: center; min-height: 38px; padding: 3px; text-decoration: underline; text-underline-offset: 3px; }
 .customer-auth-status,
 .customer-inline-status,
 .customer-dashboard-status,
 .customer-editor-status { background: #edf8f3; border: 1px solid #b9ddce; border-radius: 11px; color: #075f42; font-size: .77rem; margin: 13px 0 0; padding: 11px 13px; }
+.customer-auth-status.info { background: #edf6fb; border-color: #b7d7e8; color: #164d69; }
+.customer-auth-status.error { background: #fff1ef; border-color: #ecc8c3; color: #9f2f22; }
+.customer-auth-status.success { background: #edf8f3; border-color: #b9ddce; color: #075f42; }
 .customer-auth-benefits { background: #f1f8f5; border-radius: 16px; padding: 20px; }
 .customer-auth-benefits strong { color: var(--color-aea-ink); font-family: "Source Serif 4", Georgia, serif; font-size: 1rem; }
 .customer-auth-benefits ul { display: grid; gap: 8px; margin: 12px 0 0; padding-left: 18px; }
@@ -4228,6 +4244,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .customer-account-hero h1,
   .customer-project-entry-hero h1 { font-size: 2.15rem; }
   .customer-auth-card { grid-template-columns: 1fr; padding: 20px; }
+  .customer-auth-panel { padding: 17px; }
+  .customer-auth-tabs button { padding-inline: 8px; }
   .planner-trade-enquiry { padding: 17px; }
   .planner-trade-enquiry-actions .planner-save-account { text-align: center; width: 100%; }
   .customer-public-benefits,

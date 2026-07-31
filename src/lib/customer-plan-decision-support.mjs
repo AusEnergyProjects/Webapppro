@@ -25,7 +25,6 @@ const ITEM_FACTS = {
   "room-comfort-profile": [],
   "home-planning-context": ["roof", "switchboard", "electrical-supply"],
   "electrical-supply-check": ["electrical-supply", "switchboard"],
-  "exhaust-discharge-review": ["ventilation"],
   "moisture-ventilation": ["ventilation"],
   authority: [],
   assessment: [],
@@ -108,8 +107,8 @@ const FACT_QUESTIONS = {
     whyItMatters: "Orientation-specific external shade can reduce summer heat before cooling equipment or glazing changes are considered.",
   },
   ventilation: {
-    prompt: "Where do the kitchen and bathroom exhaust fans discharge, and is any self-closing shutter or backdraft damper known?",
-    whyItMatters: "The discharge path, fixed ventilation and sealing mechanism can change moisture control and draught-proofing advice.",
+    prompt: "Does the home have a kitchen exhaust fan, a bathroom exhaust fan, both or neither?",
+    whyItMatters: "Knowing which rooms have an exhaust fan helps shape moisture-control advice. A qualified person can check where a fan vents later if that matters.",
   },
   ev: {
     prompt: "Is an electric vehicle already used or likely during this plan?",
@@ -157,24 +156,13 @@ const VENTILATION_QUESTION_TARGETS = [
     unknown: new Set(["ventilation-unknown"]),
   },
   {
-    targetAnchor: "customer-home-feature-exhaust-discharge",
+    targetAnchor: "customer-home-feature-exhaust-fans",
     answered: new Set([
-      "exhaust-discharge-outside",
-      "exhaust-discharge-cavity",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
       "exhaust-fans-none",
     ]),
-    unknown: new Set([
-      "exhaust-discharge-unknown",
-      "exhaust-fans-unknown",
-    ]),
-  },
-  {
-    targetAnchor: "customer-home-feature-exhaust-damper",
-    answered: new Set([
-      "exhaust-damper-known",
-      "exhaust-damper-none-known",
-    ]),
-    unknown: new Set(["exhaust-damper-unknown"]),
+    unknown: new Set(["exhaust-fans-unknown"]),
   },
 ];
 

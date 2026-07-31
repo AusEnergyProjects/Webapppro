@@ -77,24 +77,18 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
     ],
   );
   assert.deepEqual(
-    question("exhaust-discharge").options.map(([value]) => value),
+    question("exhaust-fans").options.map(([value]) => value),
     [
-      "exhaust-discharge-outside",
-      "exhaust-discharge-cavity",
-      "exhaust-discharge-unknown",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
       "exhaust-fans-none",
       "exhaust-fans-unknown",
     ],
   );
-  assert.match(question("exhaust-discharge").help, /do not enter a roof or ceiling cavity/i);
-  assert.deepEqual(
-    question("exhaust-damper").options.map(([value]) => value),
-    [
-      "exhaust-damper-known",
-      "exhaust-damper-none-known",
-      "exhaust-damper-unknown",
-    ],
-  );
+  assert.match(question("exhaust-fans").label, /which kitchen or bathroom exhaust fans/i);
+  assert.match(question("exhaust-fans").help, /do not need to know where they vent/i);
+  assert.equal(question("exhaust-discharge"), undefined);
+  assert.equal(question("exhaust-damper"), undefined);
   assert.equal(question("comfort-concerns").unknownValue, "comfort-unknown");
   assert.ok(
     question("comfort-concerns").options.some(
@@ -155,19 +149,17 @@ test("single-answer questions and multiple-answer sentinels cannot contradict", 
   );
   assert.deepEqual(
     normalizeHomeFeatureSelections([
-      "exhaust-discharge-outside",
-      "exhaust-discharge-cavity",
-      "exhaust-discharge-unknown",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
     ]),
     [
-      "exhaust-discharge-outside",
-      "exhaust-discharge-cavity",
-      "exhaust-discharge-unknown",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
     ],
   );
   assert.deepEqual(
     normalizeHomeFeatureSelections([
-      "exhaust-discharge-outside",
+      "kitchen-exhaust-fan",
       "exhaust-fans-unknown",
     ]),
     ["exhaust-fans-unknown"],
@@ -258,9 +250,23 @@ test("legacy home features map deterministically without inventing insulation qu
       "exhaust-ducted-outside",
     ]),
     [
-      "exhaust-discharge-outside",
+      "exhaust-fans-unknown",
       "gas-hot-water-type-unknown",
     ],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "exhaust-discharge-cavity",
+      "exhaust-damper-known",
+    ]),
+    ["exhaust-fans-unknown"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "exhaust-discharge-outside",
+      "bathroom-exhaust-fan",
+    ]),
+    ["bathroom-exhaust-fan"],
   );
   assert.deepEqual(
     updateHomeFeatureSelection(
@@ -357,23 +363,23 @@ test("electrical supply is a household planning clue and never capacity proof", 
   );
 });
 
-test("suspected cavity exhaust discharge triggers a safe qualified confirmation step", () => {
+test("plain exhaust fan answers provide useful advice without asking technical fan details", () => {
   const plan = createCustomerProjectPlan({
     goals: ["healthier-home"],
     situation: "owner",
-    features: ["exhaust-discharge-cavity", "exhaust-damper-unknown"],
+    features: ["kitchen-exhaust-fan", "bathroom-exhaust-fan"],
   });
-  const dischargeStep = plan.items.find(
-    (item) => item.id === "exhaust-discharge-review",
+  assert.equal(
+    plan.items.some((item) => item.id === "exhaust-discharge-review"),
+    false,
   );
-  assert.ok(dischargeStep);
-  assert.match(dischargeStep.title, /roof or ceiling cavity/i);
-  assert.match(dischargeStep.text, /do not enter the cavity or dismantle the fan/i);
-  assert.match(dischargeStep.text, /suitably qualified person/i);
-  assert.match(dischargeStep.text, /any correction needed/i);
   assert.match(
     plan.everydayActions.find((item) => item.id === "moisture-safe-routine").text,
-    /needs qualified confirmation/i,
+    /while cooking or showering/i,
+  );
+  assert.match(
+    plan.everydayActions.find((item) => item.id === "moisture-safe-routine").text,
+    /do not enter a roof or ceiling cavity/i,
   );
 });
 
@@ -392,8 +398,8 @@ test("answered canonical facts become customer reported without weakening strong
       "ceiling-insulation-limited",
       "wall-insulation-unknown",
       "ventilation-none-known",
-      "exhaust-discharge-cavity",
-      "exhaust-damper-none-known",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
       "heating-cooling-none",
       "electrical-supply-single-phase",
       "solar-none",
@@ -449,38 +455,35 @@ test("ventilation evidence stays unknown until every related question is address
       (item) => item.factKey === "ventilation",
     ).source;
   };
-  assert.equal(sourceFor(["exhaust-damper-known"]), "unknown");
+  assert.equal(sourceFor(["kitchen-exhaust-fan"]), "unknown");
   assert.equal(
     sourceFor([
       "ventilation-none-known",
-      "exhaust-discharge-outside",
-      "exhaust-damper-none-known",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
     ]),
     "customer-reported",
   );
   assert.equal(
     sourceFor([
       "ventilation-unknown",
-      "exhaust-discharge-outside",
-      "exhaust-damper-none-known",
+      "bathroom-exhaust-fan",
     ]),
     "unknown",
   );
   assert.equal(
     sourceFor([
       "ventilation-none-known",
-      "exhaust-discharge-unknown",
-      "exhaust-damper-none-known",
+      "exhaust-fans-unknown",
     ]),
     "unknown",
   );
   assert.equal(
     sourceFor([
       "ventilation-none-known",
-      "exhaust-discharge-outside",
-      "exhaust-damper-unknown",
+      "exhaust-fans-none",
     ]),
-    "unknown",
+    "customer-reported",
   );
 });
 
@@ -520,7 +523,7 @@ test("current Not sure answers override stale photo or document source labels", 
     existingFeatures: [
       "glazing-unknown",
       "ceiling-insulation-unknown",
-      "exhaust-discharge-unknown",
+      "exhaust-fans-unknown",
       "electrical-supply-unknown",
     ],
     propertyContext: {
