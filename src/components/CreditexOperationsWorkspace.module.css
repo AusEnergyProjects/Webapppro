@@ -1,5 +1,6 @@
 .workspace {
   color: var(--portal-text, #29453d);
+  padding-bottom: 86px;
 }
 
 .workspaceHeader,
@@ -1227,15 +1228,19 @@
 
 .privateAccessBanner h4 {
   color: var(--portal-ink, #102b25);
-  font-size: .7rem;
+  font-size: .85rem;
   margin: 3px 0;
+}
+
+.privateAccessBanner .kicker {
+  font-size: .7rem;
 }
 
 .privateAccessBanner p,
 .privateDetailGrid article > p,
 .privateSubList p {
   color: var(--portal-muted, #62766f);
-  font-size: .53rem;
+  font-size: .72rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -1251,7 +1256,7 @@
 .privateAccessState > span:not(.statusPill),
 .privateAccessState small {
   color: #315d50;
-  font-size: .49rem;
+  font-size: .7rem;
 }
 
 .privateDetailGrid {
@@ -1270,7 +1275,7 @@
 
 .privateDetailGrid h5 {
   color: var(--portal-ink, #102b25);
-  font-size: .63rem;
+  font-size: .78rem;
   margin: 0 0 7px;
 }
 
@@ -1289,14 +1294,14 @@
 
 .privateDetailGrid dt {
   color: var(--portal-muted, #62766f);
-  font-size: .45rem;
+  font-size: .7rem;
   font-weight: 850;
   text-transform: uppercase;
 }
 
 .privateDetailGrid dd {
   color: var(--portal-text, #29453d);
-  font-size: .52rem;
+  font-size: .75rem;
   line-height: 1.4;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1311,7 +1316,7 @@
 
 .privateSubList > strong {
   color: #315d50;
-  font-size: .51rem;
+  font-size: .72rem;
 }
 
 .privateSubList > div {
@@ -1330,7 +1335,7 @@
 
 .privateSubList small {
   color: var(--portal-muted, #62766f);
-  font-size: .47rem;
+  font-size: .7rem;
   line-height: 1.4;
 }
 
@@ -1338,16 +1343,20 @@
   align-items: stretch;
   background: #eef5f2;
   border: 1px solid #b7cec5;
-  border-radius: 12px 12px 0 0;
-  bottom: 0;
+  border-radius: 12px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
   box-shadow: 0 -8px 28px rgba(23, 63, 51, .1);
   display: flex;
   gap: 5px;
-  margin: 13px 0 0;
+  left: 50%;
+  margin: 0;
   overflow-x: auto;
   padding: 6px;
-  position: sticky;
-  z-index: 20;
+  position: fixed;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 44px), 1480px);
+  z-index: 100;
 }
 
 .programTabs button {
@@ -1366,14 +1375,14 @@
 }
 
 .programTabs button span {
-  font-size: .54rem;
+  font-size: .75rem;
   font-weight: 850;
   white-space: nowrap;
 }
 
 .programTabs button small {
   color: #72837d;
-  font-size: .45rem;
+  font-size: .7rem;
   white-space: nowrap;
 }
 
@@ -1390,7 +1399,7 @@
 .programTabsEmpty {
   align-self: center;
   color: #62766f;
-  font-size: .48rem;
+  font-size: .7rem;
   line-height: 1.35;
   max-width: 480px;
   padding: 4px 8px;
@@ -1552,7 +1561,7 @@
   }
 
   .programTabs {
-    margin-left: -13px;
-    margin-right: -13px;
+    margin: 0;
+    width: calc(100vw - 24px);
   }
 }

@@ -6,23 +6,32 @@ const route = fs.readFileSync(
   new URL("../src/app/api/creditex/activities/route.ts", import.meta.url),
   "utf8",
 );
+const governanceServer = fs.readFileSync(
+  new URL("../src/lib/creditex-compliance-server.ts", import.meta.url),
+  "utf8",
+);
 
 test("program and activity governance mutations are atomically audited", () => {
-  assert.match(route, /INSERT INTO compliance_write_guards/);
-  assert.match(route, /CASE WHEN changes\(\) = 1 THEN 1 ELSE 0 END/);
-  assert.match(route, /INSERT INTO compliance_audit_events/);
+  assert.match(route, /runComplianceGovernanceMutation/);
+  assert.match(governanceServer, /INSERT INTO compliance_write_guards/);
+  assert.match(
+    governanceServer,
+    /CASE WHEN changes\(\) = 1 THEN 1 ELSE 0 END/,
+  );
+  assert.match(governanceServer, /INSERT INTO compliance_audit_events/);
   for (const eventType of [
     "program.created",
-    "program.published",
     "program.withdrawn",
     "program.draft_deleted",
     "activity.created",
-    "activity.published",
     "activity.withdrawn",
     "activity.draft_deleted",
   ]) {
     assert.match(route, new RegExp(`eventType: "${eventType.replaceAll(".", "\\.")}"`));
   }
+  assert.match(route, /\$\{targetType\}\.publication_requested/);
+  assert.match(route, /\$\{targetType\}\.published/);
+  assert.match(route, /\$\{targetType\}\.publication_rejected/);
   assert.doesNotMatch(route, /prepared\.statement\.run\(\)/);
 });
 

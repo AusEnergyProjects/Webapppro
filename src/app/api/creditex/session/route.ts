@@ -84,6 +84,7 @@ export async function GET(request: Request) {
         email: member.email,
         displayName: member.displayName,
         role: member.role,
+        governanceIdentityVerified: member.governanceIdentityVerified,
         organisation: {
           code: member.organisationCode,
           legalName: member.organisationLegalName,

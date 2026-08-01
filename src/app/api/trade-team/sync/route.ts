@@ -1,12 +1,12 @@
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
-import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileAppPolicy, mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, MOBILE_CONTRACT_VERSION,
   requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
 import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form-library.mjs";
 import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
-import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
+import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
 
 export const runtime = "edge";
@@ -14,12 +14,52 @@ export const runtime = "edge";
 const CONTRACT_VERSION = MOBILE_CONTRACT_VERSION;
 const MAX_ACTIONS = 50;
 const MAX_CHANGES = 200;
-const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const TASK_STATUSES = new Set(["pending", "done"]);
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
+const FIELD_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const FIELD_DOCUMENT_CONTENT_TYPES = [...FIELD_IMAGE_CONTENT_TYPES, "application/pdf"] as const;
+const CAMERA_EVIDENCE_TYPES = new Set(["photo", "product", "serial", "decommission", "location"]);
+const DOCUMENT_EVIDENCE_TYPES = new Set(["document", "licence", "invoice", "payment"]);
+const FIELD_TRANSITIONS = {
+  start_travel: { from: "scheduled", to: "en_route", timestamp: "travel_started_at", label: "Start travel" },
+  arrive: { from: "en_route", to: "arrived", timestamp: "arrived_at", label: "Arrive" },
+  start_work: { from: "arrived", to: "in_progress", timestamp: "work_started_at", label: "Start work" },
+  finish: { from: "in_progress", to: "completed", timestamp: "completed_at", label: "Finish" },
+} as const;
+const WORK_STAGE_TRANSITIONS: Readonly<Record<string, ReadonlySet<string>>> = {
+  backlog: new Set(["ready", "scheduled", "blocked"]),
+  ready: new Set(["backlog", "scheduled", "blocked"]),
+  scheduled: new Set(["ready", "blocked"]),
+  in_progress: new Set(["blocked"]),
+  blocked: new Set(["ready", "scheduled", "in_progress"]),
+  completed: new Set(),
+  cancelled: new Set(),
+};
+const TERMINAL_WORK_STAGES = new Set(["completed", "cancelled"]);
 
 type OfflineAction = Record<string, unknown>;
+
+function terminalJobResult(clientActionId: string) {
+  return {
+    clientActionId,
+    status: "rejected",
+    code: "JOB_TERMINAL",
+    error: "Completed and cancelled jobs are immutable. Create corrective follow-up work instead.",
+  };
+}
+
+async function workOrderMutationState(
+  access: TeamAccess,
+  workOrderId: string,
+) {
+  return getD1().prepare(`SELECT stage, revision
+    FROM trade_work_orders
+    WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer'
+      AND record_status = 'active'`)
+    .bind(workOrderId, access.ownerUid)
+    .first<Record<string, unknown>>();
+}
 
 function syncError(error: unknown) {
   const mobile = mobileErrorResponse(error);
@@ -57,6 +97,90 @@ async function payloadHash(action: OfflineAction) {
 
 function privateDataDetected(value: string) {
   return EMAIL_PATTERN.test(value) || PHONE_PATTERN.test(value);
+}
+
+function jsonStringArray(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasConfiguredJson(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return !parsed
+      || typeof parsed !== "object"
+      || Array.isArray(parsed)
+      || Object.keys(parsed as Record<string, unknown>).length > 0;
+  } catch {
+    return true;
+  }
+}
+
+function evidenceCaptureCompatibility(item: Record<string, unknown>) {
+  const evidenceType = String(item.evidence_type || "");
+  const allowedContentTypes = jsonStringArray(item.allowed_content_types);
+  const requiresConditionEvaluation = hasConfiguredJson(item.condition_snapshot);
+  const requiresDynamicFieldSchema = hasConfiguredJson(item.field_schema);
+  const requiresSignatureCapture = Number(item.installer_signature_required) === 1
+    || Number(item.customer_signature_required) === 1;
+  const blockers: string[] = [];
+  if (Number(item.original_required) === 1) {
+    blockers.push(
+      "Trusted original-camera attestation is not supported by this field app version.",
+    );
+  }
+  if (requiresConditionEvaluation) {
+    blockers.push("Conditional evidence rules are not supported by this field app version.");
+  }
+  if (requiresSignatureCapture) {
+    blockers.push("Installer or customer signature capture is not supported by this field app version.");
+  }
+  if (requiresDynamicFieldSchema) {
+    blockers.push("Dynamic evidence forms are not supported by this field app version.");
+  }
+
+  const allowed = new Set(allowedContentTypes);
+  const accepts = (candidates: readonly string[]) =>
+    allowed.size === 0 || candidates.some((contentType) => allowed.has(contentType));
+  const acceptsCameraOutput = allowed.size === 0 || allowed.has("image/jpeg");
+  const captureModes: Array<"camera" | "document"> = [];
+  if (!blockers.length && CAMERA_EVIDENCE_TYPES.has(evidenceType)) {
+    if (acceptsCameraOutput) captureModes.push("camera");
+  } else if (!blockers.length && DOCUMENT_EVIDENCE_TYPES.has(evidenceType)) {
+    if (Number(item.gps_required) === 1 || Number(item.metadata_required) === 1) {
+      if (acceptsCameraOutput) {
+        captureModes.push("camera");
+      } else {
+        blockers.push(
+          "This requirement needs in-app camera evidence, but JPEG camera output is not allowed.",
+        );
+      }
+    } else if (accepts(FIELD_DOCUMENT_CONTENT_TYPES)) {
+      captureModes.push("document");
+    }
+  } else if (!blockers.length) {
+    blockers.push(`Evidence type ${evidenceType || "unknown"} is not supported by this field app version.`);
+  }
+  if (!blockers.length && !captureModes.length) {
+    blockers.push("The allowed file types cannot be captured by this field app version.");
+  }
+  return {
+    allowedContentTypes,
+    captureModes,
+    compatibility: {
+      captureSupported: blockers.length === 0 && captureModes.length > 0,
+      requiresConditionEvaluation,
+      requiresSignatureCapture,
+      requiresDynamicFieldSchema,
+      blockers,
+    },
+  };
 }
 
 function cursorValue(value: string | null) {
@@ -117,9 +241,12 @@ async function accessibleJobs(access: TeamAccess) {
         a.activity_key, a.registry_activity_code, a.title activity_title,
         p.id evidence_policy_version_id,
         r.id requirement_id, r.requirement_code, r.title requirement_title,
+        r.description requirement_description,
         r.evidence_type, r.capture_timing, r.minimum_count, r.maximum_count,
         r.original_required, r.metadata_required, r.gps_required,
-        r.date_stamp_required,
+        r.date_stamp_required, r.installer_signature_required,
+        r.customer_signature_required, r.allowed_content_types,
+        r.condition_snapshot, r.field_schema,
         SUM(CASE WHEN e.status = 'accepted' THEN 1 ELSE 0 END) accepted_count,
         SUM(CASE WHEN e.status IN ('received', 'under_review', 'accepted') THEN 1 ELSE 0 END) submitted_count
       FROM compliance_cases c
@@ -141,9 +268,12 @@ async function accessibleJobs(access: TeamAccess) {
       GROUP BY
         c.work_order_id, c.id, c.case_number, c.activity_version_id,
         a.activity_key, a.registry_activity_code, a.title, p.id,
-        r.id, r.requirement_code, r.title, r.evidence_type, r.capture_timing,
+        r.id, r.requirement_code, r.title, r.description,
+        r.evidence_type, r.capture_timing,
         r.minimum_count, r.maximum_count, r.original_required,
-        r.metadata_required, r.gps_required, r.date_stamp_required
+        r.metadata_required, r.gps_required, r.date_stamp_required,
+        r.installer_signature_required, r.customer_signature_required,
+        r.allowed_content_types, r.condition_snapshot, r.field_schema
       ORDER BY c.updated_at DESC, r.sort_order, r.requirement_code`)
       .bind(access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
   ]);
@@ -217,18 +347,25 @@ async function accessibleJobs(access: TeamAccess) {
             const minimumCount = Number(item.minimum_count || 0);
             const acceptedCount = Number(item.accepted_count || 0);
             const submittedCount = Number(item.submitted_count || 0);
+            const captureCompatibility = evidenceCaptureCompatibility(item);
             return {
               id: item.requirement_id,
               code: item.requirement_code,
               title: item.requirement_title,
+              description: item.requirement_description || "",
               evidenceType: item.evidence_type,
               captureTiming: item.capture_timing,
               minimumCount,
               maximumCount: Number(item.maximum_count || 0),
+              acceptedCount,
+              submittedCount,
               originalRequired: Number(item.original_required) === 1,
               metadataRequired: Number(item.metadata_required) === 1,
               gpsRequired: Number(item.gps_required) === 1,
               dateStampRequired: Number(item.date_stamp_required) === 1,
+              installerSignatureRequired: Number(item.installer_signature_required) === 1,
+              customerSignatureRequired: Number(item.customer_signature_required) === 1,
+              ...captureCompatibility,
               status: acceptedCount >= minimumCount
                 ? "complete"
                 : submittedCount >= minimumCount
@@ -314,12 +451,133 @@ function actionReceiptStatement(
   baseRevision: number,
   resultRevision: number,
   now: string,
+  successCondition: string,
+  successValues: unknown[],
 ) {
   return db.prepare(`UPDATE trade_offline_actions SET result_revision = ?, status = 'applied', lease_until = '',
     error_code = '', updated_at = ? WHERE owner_uid = ? AND client_action_id = ? AND payload_hash = ?
-      AND device_id = ? AND entity_id = ? AND base_revision = ? AND status = 'processing'`)
+      AND device_id = ? AND entity_id = ? AND base_revision = ? AND status = 'processing'
+      AND (${successCondition})`)
     .bind(resultRevision, now, access.ownerUid, cleanAdminText(action.clientActionId, 120), hash,
-      deviceId, entityId, baseRevision);
+      deviceId, entityId, baseRevision, ...successValues);
+}
+
+function appliedActionGuardValues(
+  access: TeamAccess,
+  deviceId: string,
+  action: OfflineAction,
+  hash: string,
+  entityId: string,
+  baseRevision: number,
+  resultRevision: number,
+) {
+  return [
+    access.ownerUid,
+    cleanAdminText(action.clientActionId, 120),
+    hash,
+    deviceId,
+    entityId,
+    baseRevision,
+    resultRevision,
+  ];
+}
+
+const APPLIED_ACTION_GUARD = `EXISTS (
+  SELECT 1 FROM trade_offline_actions receipt
+  WHERE receipt.owner_uid = ? AND receipt.client_action_id = ?
+    AND receipt.payload_hash = ? AND receipt.device_id = ?
+    AND receipt.entity_id = ? AND receipt.base_revision = ?
+    AND receipt.result_revision = ? AND receipt.status = 'applied'
+)`;
+
+function guardedJobSyncChangeStatements(
+  db: D1Database,
+  change: {
+    ownerUid: string;
+    workOrderId: string;
+    revision: number;
+    changedAt: string;
+    audienceMemberId?: string;
+  },
+  guardValues: unknown[],
+) {
+  const statements = [
+    db.prepare(`INSERT INTO trade_team_sync_changes
+      (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
+      SELECT ?, '', 'job', ?, 'upsert', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
+      .bind(
+        change.ownerUid,
+        change.workOrderId,
+        change.revision,
+        change.changedAt,
+        ...guardValues,
+      ),
+  ];
+  const audienceMemberId = change.audienceMemberId || "";
+  if (audienceMemberId) {
+    statements.push(
+      db.prepare(`INSERT INTO trade_team_sync_changes
+        (owner_uid, audience_member_id, entity_type, entity_id, operation, revision, changed_at)
+        SELECT ?, ?, 'job', ?, 'upsert', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
+        .bind(
+          change.ownerUid,
+          audienceMemberId,
+          change.workOrderId,
+          change.revision,
+          change.changedAt,
+          ...guardValues,
+        ),
+      db.prepare(`INSERT OR IGNORE INTO trade_mobile_push_outbox
+        (id, owner_uid, audience_member_id, event_key, event_type,
+         entity_type, entity_id, payload, status, attempts,
+         next_attempt_at, created_at, updated_at)
+        SELECT ?, ?, ?, ?, 'job_changed', 'job', ?, ?, 'pending', 0, '', ?, ?
+        WHERE ${APPLIED_ACTION_GUARD}`)
+        .bind(
+          crypto.randomUUID(),
+          change.ownerUid,
+          audienceMemberId,
+          `${change.ownerUid}:${audienceMemberId}:${change.workOrderId}:${change.revision}:upsert`,
+          change.workOrderId,
+          JSON.stringify({ contractVersion: 2, reason: "sync_required" }),
+          change.changedAt,
+          change.changedAt,
+          ...guardValues,
+        ),
+    );
+  }
+  return statements;
+}
+
+function failClosedActionGuardStatement(
+  db: D1Database,
+  access: TeamAccess,
+  workOrderId: string,
+  guardValues: unknown[],
+) {
+  return db.prepare(`UPDATE trade_work_orders SET revision = NULL
+    WHERE id = ? AND firebase_uid = ?
+      AND NOT ${APPLIED_ACTION_GUARD}`)
+    .bind(workOrderId, access.ownerUid, ...guardValues);
+}
+
+async function atomicActionBatch(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+  finalGuard: D1PreparedStatement,
+) {
+  try {
+    return await db.batch([...statements, finalGuard]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("NOT NULL")
+      && message.includes("trade_work_orders.revision")
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function replayResult(access: TeamAccess, action: OfflineAction, hash: string) {
@@ -341,8 +599,59 @@ async function replayResult(access: TeamAccess, action: OfflineAction, hash: str
     return { clientActionId, status: "retry", code: "ACTION_IN_PROGRESS",
       retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(String(existing.lease_until)) - Date.now()) / 1000)) };
   }
-  if (existing.status === "conflict") return { clientActionId, status: "conflict", code: existing.error_code || "REVISION_CONFLICT",
-    entityId: existing.entity_id, baseRevision: Number(existing.base_revision), currentRevision: Number(existing.result_revision) };
+  if (existing.status === "conflict") {
+    const actionType = String(existing.action_type || "");
+    const workOrderId = cleanAdminText(action.workOrderId, 180)
+      || cleanAdminText(existing.entity_id, 180);
+    if (workOrderId) await assignedJob(access, workOrderId);
+    const childId = actionType === "set_task_status"
+      ? cleanAdminText(action.taskId, 180)
+      : actionType === "save_job_form"
+        ? cleanAdminText(action.formId, 180)
+        : "";
+    if (workOrderId && childId) {
+      const child = actionType === "set_task_status"
+        ? await getD1().prepare(`SELECT task.revision child_revision,
+              work_order.revision job_revision
+            FROM trade_work_order_tasks task
+            JOIN trade_work_orders work_order
+              ON work_order.id = task.work_order_id
+              AND work_order.firebase_uid = task.firebase_uid
+            WHERE task.id = ? AND task.work_order_id = ?
+              AND task.firebase_uid = ?`)
+          .bind(childId, workOrderId, access.ownerUid)
+          .first<Record<string, unknown>>()
+        : await getD1().prepare(`SELECT form.revision child_revision,
+              work_order.revision job_revision
+            FROM trade_job_forms form
+            JOIN trade_work_orders work_order
+              ON work_order.id = form.work_order_id
+              AND work_order.firebase_uid = form.firebase_uid
+            WHERE form.id = ? AND form.work_order_id = ?
+              AND form.firebase_uid = ?`)
+          .bind(childId, workOrderId, access.ownerUid)
+          .first<Record<string, unknown>>();
+      if (child) {
+        return {
+          clientActionId,
+          status: "conflict",
+          code: existing.error_code || "REVISION_CONFLICT",
+          entityId: childId,
+          baseRevision: Number(existing.base_revision),
+          currentRevision: Number(child.child_revision),
+          currentJobRevision: Number(child.job_revision),
+        };
+      }
+    }
+    return {
+      clientActionId,
+      status: "conflict",
+      code: existing.error_code || "REVISION_CONFLICT",
+      entityId: existing.entity_id,
+      baseRevision: Number(existing.base_revision),
+      currentRevision: Number(existing.result_revision),
+    };
+  }
   return { clientActionId, status: "duplicate", actionType: existing.action_type, entityId: existing.entity_id,
     resultRevision: Number(existing.result_revision), appliedAt: existing.updated_at || existing.created_at };
 }
@@ -367,22 +676,186 @@ async function releaseConflict(access: TeamAccess, action: OfflineAction, curren
     .bind(currentRevision, now, access.ownerUid, cleanAdminText(action.clientActionId, 120)).run();
 }
 
-async function fieldFinishBlockers(ownerUid: string, workOrderId: string) {
+const PHOTO_MEDIA_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_group_array(json(photo_media.item))
+  FROM (
+    SELECT json_object(
+      'id', media.id,
+      'photoRequirementId', media.photo_requirement_id,
+      'createdAt', media.created_at
+    ) item
+    FROM trade_crm_job_media media
+    WHERE media.firebase_uid = finish_request.firebase_uid
+      AND media.work_order_id = finish_request.work_order_id
+      AND media.photo_request_id = finish_request.id
+      AND media.source = 'customer_request'
+    ORDER BY media.created_at, media.id
+  ) photo_media
+), '[]')`;
+
+const PHOTO_REVIEW_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_group_array(json(photo_review.item))
+  FROM (
+    SELECT json_object(
+      'id', review.id,
+      'photoRequirementId', review.photo_requirement_id,
+      'status', review.status,
+      'reasonCode', review.reason_code,
+      'guidance', review.guidance,
+      'reviewRevision', review.review_revision,
+      'reviewedUploadCount', review.reviewed_upload_count,
+      'createdAt', review.created_at
+    ) item
+    FROM trade_crm_photo_requirement_reviews review
+    WHERE review.firebase_uid = finish_request.firebase_uid
+      AND review.work_order_id = finish_request.work_order_id
+      AND review.photo_request_id = finish_request.id
+      AND review.request_revision = finish_request.revision
+    ORDER BY review.review_revision, review.id
+  ) photo_review
+), '[]')`;
+
+const PHOTO_COMPLETION_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_object(
+    'id', completion.id,
+    'completionRevision', completion.completion_revision,
+    'checklistVersion', completion.checklist_version,
+    'evidenceKey', completion.evidence_key,
+    'requiredCount', completion.required_count,
+    'suppliedCount', completion.supplied_count,
+    'completedAt', completion.completed_at
+  )
+  FROM trade_crm_photo_request_completions completion
+  WHERE completion.firebase_uid = finish_request.firebase_uid
+    AND completion.work_order_id = finish_request.work_order_id
+    AND completion.photo_request_id = finish_request.id
+    AND completion.request_revision = finish_request.revision
+  ORDER BY completion.completion_revision DESC
+  LIMIT 1
+), '')`;
+
+type PhotoFinishGuard = {
+  kind: "none";
+} | {
+  kind: "active";
+  requestId: string;
+  revision: number;
+  status: string;
+  requirements: string;
+  mediaSnapshot: string;
+  reviewSnapshot: string;
+  completionSnapshot: string;
+};
+
+async function photoFinishState(
+  db: D1Database,
+  ownerUid: string,
+  workOrderId: string,
+) {
+  const request = await db.prepare(`SELECT
+      finish_request.id,
+      finish_request.revision,
+      finish_request.requirements,
+      finish_request.status,
+      ${PHOTO_MEDIA_SNAPSHOT_SQL} media_snapshot,
+      ${PHOTO_REVIEW_SNAPSHOT_SQL} review_snapshot,
+      ${PHOTO_COMPLETION_SNAPSHOT_SQL} completion_snapshot
+    FROM trade_crm_photo_requests finish_request
+    WHERE finish_request.work_order_id = ?
+      AND finish_request.firebase_uid = ?
+    LIMIT 1`)
+    .bind(workOrderId, ownerUid)
+    .first<Record<string, unknown>>();
+  if (!request || String(request.status) === "revoked") {
+    return {
+      ready: true,
+      guard: { kind: "none" } as PhotoFinishGuard,
+    };
+  }
+  const guard: PhotoFinishGuard = {
+    kind: "active",
+    requestId: String(request.id),
+    revision: Number(request.revision),
+    status: String(request.status),
+    requirements: String(request.requirements || "[]"),
+    mediaSnapshot: String(request.media_snapshot || "[]"),
+    reviewSnapshot: String(request.review_snapshot || "[]"),
+    completionSnapshot: String(request.completion_snapshot || ""),
+  };
+  try {
+    const requirements = normalisePhotoRequirements(
+      JSON.parse(guard.requirements),
+    );
+    const mediaRows = JSON.parse(guard.mediaSnapshot) as Array<
+      Record<string, unknown>
+    >;
+    const reviewRows = JSON.parse(guard.reviewSnapshot) as Array<
+      Record<string, unknown>
+    >;
+    const completion = guard.completionSnapshot
+      ? JSON.parse(guard.completionSnapshot) as Record<string, unknown>
+      : null;
+    if (
+      !Array.isArray(mediaRows)
+      || !Array.isArray(reviewRows)
+      || !completion
+    ) {
+      return { ready: false, guard };
+    }
+    const uploadCounts = new Map<string, number>();
+    for (const media of mediaRows) {
+      const requirementId = String(media.photoRequirementId || "");
+      uploadCounts.set(
+        requirementId,
+        Number(uploadCounts.get(requirementId) || 0) + 1,
+      );
+    }
+    const latestReviews = new Map<string, Record<string, unknown>>();
+    for (const review of reviewRows) {
+      latestReviews.set(String(review.photoRequirementId || ""), review);
+    }
+    const unresolvedRetake = [...latestReviews.values()].some((review) => (
+      String(review.status) === "retake_requested"
+      && Number(uploadCounts.get(String(review.photoRequirementId || "")) || 0)
+        <= Number(review.reviewedUploadCount || 0)
+    ));
+    const requiredReviewed = requirements
+      .filter((requirement) => requirement.required)
+      .every((requirement) => {
+        const status = String(latestReviews.get(requirement.id)?.status || "");
+        return status === "accepted" || status === "not_needed";
+      });
+    const evidenceKey = await photoRequestEvidenceKey({
+      requestId: guard.requestId,
+      requestRevision: guard.revision,
+      checklistVersion: String(completion.checklistVersion || ""),
+      mediaIds: mediaRows.map((media) => String(media.id || "")),
+    });
+    return {
+      ready:
+        String(completion.evidenceKey || "") === evidenceKey
+        && !unresolvedRetake
+        && requiredReviewed,
+      guard,
+    };
+  } catch {
+    return { ready: false, guard };
+  }
+}
+
+async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
-  const [tasks, forms, issues, plan, request] = await Promise.all([
+  const [tasks, forms, issues, plan, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
-    db.prepare("SELECT id, revision, requirements, status FROM trade_crm_photo_requests WHERE work_order_id = ? AND firebase_uid = ?").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    photoFinishState(db, ownerUid, workOrderId),
   ]);
   const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
-  if (request && request.status !== "revoked") {
-    try { const proof = await photoRequestProofOverview({ ownerUid, workOrderId, requestId: String(request.id), requestRevision: Number(request.revision), requirements: normalisePhotoRequirements(JSON.parse(String(request.requirements || "[]"))) }); if (!proof.proofReady) blockers.push("required photo proof"); }
-    catch { blockers.push("required photo proof"); }
-  }
-  return blockers;
+  if (!photo.ready) blockers.push("required photo proof");
+  return { blockers, photoGuard: photo.guard };
 }
 
 async function applyAction(access: TeamAccess, deviceId: string, action: OfflineAction) {
@@ -398,59 +871,269 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
 
   if (actionType === "advance_field_job") {
     const workOrderId = cleanAdminText(action.workOrderId, 180); const transitionName = cleanAdminText(action.transition, 30);
-    const transitions: Record<string, { from: string; to: string; timestamp: string; label: string }> = {
-      start_travel: { from: "scheduled", to: "en_route", timestamp: "travel_started_at", label: "Start travel" },
-      arrive: { from: "en_route", to: "arrived", timestamp: "arrived_at", label: "Arrive" },
-      start_work: { from: "arrived", to: "in_progress", timestamp: "work_started_at", label: "Start work" },
-      finish: { from: "in_progress", to: "completed", timestamp: "completed_at", label: "Finish" },
-    };
-    const transition = transitions[transitionName]; const baseRevision = Number(action.baseRevision);
+    const transition = FIELD_TRANSITIONS[transitionName as keyof typeof FIELD_TRANSITIONS];
+    const baseRevision = Number(action.baseRevision);
     if (!transition || !Number.isInteger(baseRevision) || baseRevision < 1) return { clientActionId, status: "rejected", code: "INVALID_FIELD_TRANSITION", error: "Use the next available field-job action." };
     const job = await assignedJob(access, workOrderId);
     if (Number(job.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId, baseRevision, currentRevision: Number(job.revision) };
+    const jobState = await workOrderMutationState(access, workOrderId);
+    if (!jobState || Number(jobState.revision) !== baseRevision) {
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(jobState?.revision || job.revision),
+      };
+    }
+    const capturedJobStage = String(jobState.stage || "");
+    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) {
+      return terminalJobResult(clientActionId);
+    }
     const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
       AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed') ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, starts_at DESC LIMIT 1`)
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
     if (!appointment) return { clientActionId, status: "rejected", code: "APPOINTMENT_REQUIRED", error: "Schedule this job before starting field work." };
     if (appointment.status !== transition.from) return { clientActionId, status: "rejected", code: "OUT_OF_ORDER", error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` };
-    if (transitionName === "finish") { const blockers = await fieldFinishBlockers(access.ownerUid, workOrderId); if (blockers.length) return { clientActionId, status: "rejected", code: "FINISH_BLOCKED", error: `Complete ${blockers.join(", ")} before finishing.` }; }
+    const finishState = transitionName === "finish"
+      ? await fieldFinishState(access.ownerUid, workOrderId)
+      : {
+          blockers: [],
+          photoGuard: { kind: "none" } as PhotoFinishGuard,
+        };
+    if (finishState.blockers.length) {
+      return {
+        clientActionId,
+        status: "rejected",
+        code: "FINISH_BLOCKED",
+        error: `Complete ${finishState.blockers.join(", ")} before finishing.`,
+      };
+    }
     const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now); if (reserved) return reserved;
     const resultRevision = nextJobRevision(job.revision);
-    const guard = `EXISTS (SELECT 1 FROM trade_crm_appointments fa WHERE fa.id = ? AND fa.firebase_uid = ?
-      AND fa.status = ? AND fa.${transition.timestamp} = ? AND fa.last_transition_by_uid = ?)`;
-    const results = await db.batch([
+    const expectedJobStage = transitionName === "start_work"
+      ? "in_progress"
+      : transitionName === "finish"
+        ? "completed"
+        : capturedJobStage;
+    const appointmentAppliedGuard = `EXISTS (
+      SELECT 1 FROM trade_crm_appointments field_appointment
+      WHERE field_appointment.id = ? AND field_appointment.firebase_uid = ?
+        AND field_appointment.status = ? AND field_appointment.${transition.timestamp} = ?
+        AND field_appointment.last_transition_by_uid = ?
+    )`;
+    const finishBlockerGuard = `(
+      ? <> 'finish'
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM trade_work_order_tasks blocker
+          WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+            AND blocker.status <> 'done'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM trade_job_forms blocker
+          WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+            AND blocker.status <> 'complete'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM trade_crm_job_notes blocker
+          WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+            AND blocker.note_type = 'issue' AND blocker.issue_status = 'open'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM trade_crm_job_plan_requirements blocker
+          JOIN trade_crm_job_plans blocker_plan
+            ON blocker_plan.id = blocker.job_plan_id
+            AND blocker_plan.firebase_uid = blocker.firebase_uid
+          WHERE blocker_plan.work_order_id = ? AND blocker_plan.firebase_uid = ?
+            AND blocker.status NOT IN (
+              'installed', 'complete', 'completed', 'done', 'not_required'
+            )
+        )
+        AND (
+          (
+            ? = 'none'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM trade_crm_photo_requests finish_request
+              WHERE finish_request.work_order_id = ?
+                AND finish_request.firebase_uid = ?
+                AND finish_request.status <> 'revoked'
+            )
+          )
+          OR (
+            ? = 'active'
+            AND EXISTS (
+              SELECT 1
+              FROM trade_crm_photo_requests finish_request
+              WHERE finish_request.work_order_id = ?
+                AND finish_request.firebase_uid = ?
+                AND finish_request.id = ?
+                AND finish_request.revision = ?
+                AND finish_request.status = ?
+                AND finish_request.status <> 'revoked'
+                AND finish_request.requirements = ?
+                AND ${PHOTO_MEDIA_SNAPSHOT_SQL} = ?
+                AND ${PHOTO_REVIEW_SNAPSHOT_SQL} = ?
+                AND ${PHOTO_COMPLETION_SNAPSHOT_SQL} = ?
+            )
+          )
+        )
+      )
+    )`;
+    const photoGuard = finishState.photoGuard;
+    const finishBlockerValues = [
+      transitionName,
+      workOrderId,
+      access.ownerUid,
+      workOrderId,
+      access.ownerUid,
+      workOrderId,
+      access.ownerUid,
+      workOrderId,
+      access.ownerUid,
+      photoGuard.kind,
+      workOrderId,
+      access.ownerUid,
+      photoGuard.kind,
+      workOrderId,
+      access.ownerUid,
+      photoGuard.kind === "active" ? photoGuard.requestId : "",
+      photoGuard.kind === "active" ? photoGuard.revision : 0,
+      photoGuard.kind === "active" ? photoGuard.status : "",
+      photoGuard.kind === "active" ? photoGuard.requirements : "",
+      photoGuard.kind === "active" ? photoGuard.mediaSnapshot : "",
+      photoGuard.kind === "active" ? photoGuard.reviewSnapshot : "",
+      photoGuard.kind === "active" ? photoGuard.completionSnapshot : "",
+    ];
+    const receiptGuardValues = appliedActionGuardValues(
+      access,
+      deviceId,
+      action,
+      hash,
+      workOrderId,
+      baseRevision,
+      resultRevision,
+    );
+    const statements = [
       db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${transition.timestamp} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
-        WHERE id = ? AND firebase_uid = ? AND status = ?`).bind(transition.to, now, access.actorUid, now, appointment.id, access.ownerUid, transition.from),
+        WHERE id = ? AND firebase_uid = ? AND status = ?
+          AND EXISTS (
+            SELECT 1 FROM trade_work_orders work_order
+            WHERE work_order.id = ? AND work_order.firebase_uid = ?
+              AND work_order.record_status = 'active'
+              AND work_order.revision = ?
+              AND work_order.stage = ?
+              AND work_order.stage NOT IN ('completed', 'cancelled')
+          )
+          AND ${finishBlockerGuard}`)
+        .bind(
+          transition.to,
+          now,
+          access.actorUid,
+          now,
+          appointment.id,
+          access.ownerUid,
+          transition.from,
+          workOrderId,
+          access.ownerUid,
+          baseRevision,
+          capturedJobStage,
+          ...finishBlockerValues,
+        ),
       db.prepare(`UPDATE trade_work_orders SET stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'completed' ELSE stage END,
-        revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND ${guard}`)
-        .bind(transitionName, transitionName, resultRevision, now, workOrderId, access.ownerUid, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+        revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?
+          AND revision = ? AND stage = ?
+          AND stage NOT IN ('completed', 'cancelled')
+          AND ${appointmentAppliedGuard}`)
+        .bind(transitionName, transitionName, resultRevision, now, workOrderId, access.ownerUid,
+          baseRevision, capturedJobStage, appointment.id, access.ownerUid,
+          transition.to, now, access.actorUid),
+      actionReceiptStatement(
+        db,
+        access,
+        deviceId,
+        action,
+        hash,
+        workOrderId,
+        baseRevision,
+        resultRevision,
+        now,
+        `EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.revision = ? AND work_order.updated_at = ?
+            AND work_order.stage = ?
+        ) AND ${appointmentAppliedGuard}`,
+        [
+          workOrderId,
+          access.ownerUid,
+          resultRevision,
+          now,
+          expectedJobStage,
+          appointment.id,
+          access.ownerUid,
+          transition.to,
+          now,
+          access.actorUid,
+        ],
+      ),
       db.prepare(`UPDATE trade_crm_job_details SET pipeline_stage = CASE WHEN ? = 'start_work' THEN 'in_progress' WHEN ? = 'finish' THEN 'complete' ELSE pipeline_stage END,
-        updated_at = ? WHERE work_order_id = ? AND firebase_uid = ? AND ${guard}`)
-        .bind(transitionName, transitionName, now, workOrderId, access.ownerUid, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+        updated_at = ? WHERE work_order_id = ? AND firebase_uid = ? AND ${APPLIED_ACTION_GUARD}`)
+        .bind(transitionName, transitionName, now, workOrderId, access.ownerUid, ...receiptGuardValues),
       db.prepare(`UPDATE trade_crm_job_plans SET status = 'completed', completed_at = ?, updated_at = ?
-        WHERE work_order_id = ? AND firebase_uid = ? AND ? = 'finish' AND ${guard}`)
-        .bind(now, now, workOrderId, access.ownerUid, transitionName, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+        WHERE work_order_id = ? AND firebase_uid = ? AND ? = 'finish'
+          AND ${APPLIED_ACTION_GUARD}`)
+        .bind(now, now, workOrderId, access.ownerUid, transitionName, ...receiptGuardValues),
       db.prepare(`UPDATE trade_crm_job_plan_phases SET status = 'completed', completed_at = ?, updated_at = ?
         WHERE firebase_uid = ? AND job_plan_id IN (SELECT id FROM trade_crm_job_plans WHERE work_order_id = ? AND firebase_uid = ?)
-        AND ? = 'finish' AND ${guard}`)
-        .bind(now, now, access.ownerUid, workOrderId, access.ownerUid, transitionName, appointment.id, access.ownerUid, transition.to, now, access.actorUid),
-      db.prepare(`UPDATE trade_offline_actions SET result_revision = ?, status = 'applied', lease_until = '', error_code = '', updated_at = ?
-        WHERE owner_uid = ? AND client_action_id = ? AND payload_hash = ? AND device_id = ? AND entity_id = ? AND base_revision = ?
-        AND status = 'processing' AND ${guard}`)
-        .bind(resultRevision, now, access.ownerUid, clientActionId, hash, deviceId, workOrderId, baseRevision,
-          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+        AND ? = 'finish' AND ${APPLIED_ACTION_GUARD}`)
+        .bind(now, now, access.ownerUid, workOrderId, access.ownerUid, transitionName, ...receiptGuardValues),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        SELECT ?, ?, ?, 'field_state_changed', ?, ? WHERE ${guard}`)
+        SELECT ?, ?, ?, 'field_state_changed', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${transition.label} recorded in the field app.`, now,
-          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
+          ...receiptGuardValues),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
         SELECT ?, ?, ?, 'job_completed', 'Required work, forms, proof and blockers cleared. Invoice and handover preparation are ready.', ?
-        WHERE ? = 'finish' AND ${guard}`)
+        WHERE ? = 'finish' AND ${APPLIED_ACTION_GUARD}`)
         .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, transitionName,
-          appointment.id, access.ownerUid, transition.to, now, access.actorUid),
-    ]);
-    if (!results[0]?.meta.changes) { await releaseConflict(access, action, Number(job.revision), now); return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId }; }
-    await db.batch(jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: resultRevision, changedAt: now, audienceMemberId: job.assignee_member_id }));
+          ...receiptGuardValues),
+      ...guardedJobSyncChangeStatements(
+        db,
+        {
+          ownerUid: access.ownerUid,
+          workOrderId,
+          revision: resultRevision,
+          changedAt: now,
+          audienceMemberId: job.assignee_member_id,
+        },
+        receiptGuardValues,
+      ),
+    ];
+    const results = await atomicActionBatch(
+      db,
+      statements,
+      failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+    );
+    if (
+      !results
+      || !results[0]?.meta.changes
+      || !results[1]?.meta.changes
+      || !results[2]?.meta.changes
+    ) {
+      const current = await assignedJob(access, workOrderId);
+      await releaseConflict(access, action, Number(current.revision), now);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(current.revision),
+      };
+    }
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, resultRevision, appliedAt: now };
   }
 
@@ -458,27 +1141,141 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const workOrderId = cleanAdminText(action.workOrderId, 180);
     const stage = cleanAdminText(action.stage, 30);
     const baseRevision = Number(action.baseRevision);
-    if (!WORK_STAGES.has(stage) || !Number.isInteger(baseRevision) || baseRevision < 1) {
+    if (!Object.hasOwn(WORK_STAGE_TRANSITIONS, stage)
+      || !Number.isInteger(baseRevision)
+      || baseRevision < 1) {
       return { clientActionId, status: "rejected", code: "INVALID_JOB_UPDATE", error: "Add a valid job stage and base revision." };
     }
     const job = await assignedJob(access, workOrderId);
     if (Number(job.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
       entityId: workOrderId, baseRevision, currentRevision: Number(job.revision) };
+    const current = await db.prepare(`SELECT stage, revision
+      FROM trade_work_orders
+      WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer'
+        AND record_status = 'active'`)
+      .bind(workOrderId, access.ownerUid)
+      .first<Record<string, unknown>>();
+    if (!current || Number(current.revision) !== baseRevision) {
+      const currentRevision = Number(current?.revision || job.revision);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision,
+      };
+    }
+    const currentStage = String(current.stage || "");
+    if (TERMINAL_WORK_STAGES.has(currentStage)) {
+      return {
+        clientActionId,
+        status: "rejected",
+        code: "JOB_TERMINAL",
+        error: "Completed and cancelled jobs are immutable. Create corrective follow-up work instead.",
+      };
+    }
+    if (stage === "completed") {
+      const finishState = await fieldFinishState(access.ownerUid, workOrderId);
+      if (finishState.blockers.length) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "FINISH_BLOCKED",
+          error: `Complete ${finishState.blockers.join(", ")} before finishing.`,
+        };
+      }
+      return {
+        clientActionId,
+        status: "rejected",
+        code: "CONTROLLED_FIELD_TRANSITION_REQUIRED",
+        error: "Finish the active appointment through the next field-job action.",
+      };
+    }
+    if (stage === "cancelled") {
+      return {
+        clientActionId,
+        status: "rejected",
+        code: "DISPATCH_CANCELLATION_REQUIRED",
+        error: "Job cancellation requires dispatch review and cannot be recorded as an offline stage change.",
+      };
+    }
+    if (!WORK_STAGE_TRANSITIONS[currentStage]?.has(stage)) {
+      return {
+        clientActionId,
+        status: "rejected",
+        code: "INVALID_JOB_TRANSITION",
+        error: `A job cannot move from ${currentStage.replaceAll("_", " ")} to ${stage.replaceAll("_", " ")}.`,
+      };
+    }
     const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
     if (reserved) return reserved;
     const resultRevision = nextJobRevision(job.revision);
-    const update = await db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?
-      WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(stage, resultRevision, now, workOrderId, access.ownerUid, baseRevision).run();
-    if (!update.meta.changes) { await releaseConflict(access, action, Number(job.revision), now);
-      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: workOrderId }; }
-    await db.batch([
-      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, resultRevision, now),
+    const receiptGuardValues = appliedActionGuardValues(
+      access,
+      deviceId,
+      action,
+      hash,
+      workOrderId,
+      baseRevision,
+      resultRevision,
+    );
+    const statements = [
+      db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND revision = ? AND stage = ?`)
+        .bind(stage, resultRevision, now, workOrderId, access.ownerUid, baseRevision, currentStage),
+      actionReceiptStatement(
+        db,
+        access,
+        deviceId,
+        action,
+        hash,
+        workOrderId,
+        baseRevision,
+        resultRevision,
+        now,
+        `EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.stage = ? AND work_order.revision = ?
+            AND work_order.updated_at = ?
+        )`,
+        [workOrderId, access.ownerUid, stage, resultRevision, now],
+      ),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, 'offline_stage_update', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid,
-        `Field app changed the job stage to ${stage.replaceAll("_", " ")}.`, now),
-      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: resultRevision,
-        changedAt: now, audienceMemberId: job.assignee_member_id }),
-    ]);
+        SELECT ?, ?, ?, 'offline_stage_update', ?, ? WHERE ${APPLIED_ACTION_GUARD}`)
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid,
+          `Field app changed the job stage to ${stage.replaceAll("_", " ")}.`, now,
+          ...receiptGuardValues),
+      ...guardedJobSyncChangeStatements(
+        db,
+        {
+          ownerUid: access.ownerUid,
+          workOrderId,
+          revision: resultRevision,
+          changedAt: now,
+          audienceMemberId: job.assignee_member_id,
+        },
+        receiptGuardValues,
+      ),
+    ];
+    const results = await atomicActionBatch(
+      db,
+      statements,
+      failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+    );
+    if (!results || !results[0]?.meta.changes || !results[1]?.meta.changes) {
+      const latest = await assignedJob(access, workOrderId);
+      await releaseConflict(access, action, Number(latest.revision), now);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(latest.revision),
+      };
+    }
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, resultRevision, appliedAt: now };
   }
 
@@ -495,27 +1292,137 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
       .bind(taskId, access.ownerUid, access.ownerUid).first<Record<string, unknown>>();
     if (!task) return { clientActionId, status: "rejected", code: "TASK_NOT_FOUND", error: "The checklist item is no longer available." };
     const workOrderId = String(task.work_order_id); const job = await assignedJob(access, workOrderId);
+    const jobState = await workOrderMutationState(access, workOrderId);
+    if (!jobState || Number(jobState.revision) !== Number(job.revision)) {
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: taskId,
+        baseRevision,
+        currentRevision: Number(task.revision),
+        currentJobRevision: Number(jobState?.revision || job.revision),
+      };
+    }
+    const capturedJobStage = String(jobState.stage || "");
+    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) {
+      return terminalJobResult(clientActionId);
+    }
     if (Number(task.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
-      entityId: taskId, baseRevision, currentRevision: Number(task.revision) };
+      entityId: taskId, baseRevision, currentRevision: Number(task.revision),
+      currentJobRevision: Number(job.revision) };
     const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
     if (reserved) return reserved;
     const taskRevision = nextJobRevision(task.revision);
-    const update = await db.prepare(`UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ?
-      WHERE id = ? AND firebase_uid = ? AND revision = ?`)
-      .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid, baseRevision).run();
-    if (!update.meta.changes) { await releaseConflict(access, action, Number(task.revision), now);
-      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: taskId }; }
     const jobRevision = nextJobRevision(job.revision);
-    await db.batch([
-      db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(jobRevision, now, workOrderId, access.ownerUid),
-      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, jobRevision, now),
+    const receiptGuardValues = appliedActionGuardValues(
+      access,
+      deviceId,
+      action,
+      hash,
+      workOrderId,
+      baseRevision,
+      jobRevision,
+    );
+    const statements = [
+      db.prepare(`UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND revision = ?
+          AND EXISTS (
+            SELECT 1 FROM trade_work_orders work_order
+            WHERE work_order.id = trade_work_order_tasks.work_order_id
+              AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid
+              AND work_order.record_status = 'active'
+              AND work_order.revision = ?
+              AND work_order.stage = ?
+              AND work_order.stage NOT IN ('completed', 'cancelled')
+          )`)
+        .bind(status, status === "done" ? now : "", taskRevision, now, taskId,
+          access.ownerUid, baseRevision, Number(job.revision), capturedJobStage),
+      db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND revision = ?
+          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND EXISTS (
+            SELECT 1 FROM trade_work_order_tasks task
+            WHERE task.id = ? AND task.work_order_id = trade_work_orders.id
+              AND task.firebase_uid = trade_work_orders.firebase_uid
+              AND task.revision = ? AND task.updated_at = ?
+          )`)
+        .bind(jobRevision, now, workOrderId, access.ownerUid, Number(job.revision),
+          capturedJobStage, taskId, taskRevision, now),
+      actionReceiptStatement(
+        db,
+        access,
+        deviceId,
+        action,
+        hash,
+        workOrderId,
+        baseRevision,
+        jobRevision,
+        now,
+        `EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          JOIN trade_work_order_tasks task
+            ON task.work_order_id = work_order.id
+            AND task.firebase_uid = work_order.firebase_uid
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.revision = ? AND work_order.updated_at = ?
+            AND work_order.stage = ?
+            AND task.id = ? AND task.revision = ? AND task.updated_at = ?
+        )`,
+        [
+          workOrderId,
+          access.ownerUid,
+          jobRevision,
+          now,
+          capturedJobStage,
+          taskId,
+          taskRevision,
+          now,
+        ],
+      ),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, 'offline_task_update', 'Field app updated a checklist item.', ?)`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now),
-      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: jobRevision,
-        changedAt: now, audienceMemberId: job.assignee_member_id }),
-    ]);
+        SELECT ?, ?, ?, 'offline_task_update', 'Field app updated a checklist item.', ?
+        WHERE ${APPLIED_ACTION_GUARD}`)
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, ...receiptGuardValues),
+      ...guardedJobSyncChangeStatements(
+        db,
+        {
+          ownerUid: access.ownerUid,
+          workOrderId,
+          revision: jobRevision,
+          changedAt: now,
+          audienceMemberId: job.assignee_member_id,
+        },
+        receiptGuardValues,
+      ),
+    ];
+    const results = await atomicActionBatch(
+      db,
+      statements,
+      failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+    );
+    if (
+      !results
+      || !results[0]?.meta.changes
+      || !results[1]?.meta.changes
+      || !results[2]?.meta.changes
+    ) {
+      const latestTask = await db.prepare(`SELECT revision FROM trade_work_order_tasks
+        WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`)
+        .bind(taskId, workOrderId, access.ownerUid)
+        .first<Record<string, unknown>>();
+      const latestJob = await assignedJob(access, workOrderId);
+      await releaseConflict(access, action, Number(latestJob.revision), now);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: taskId,
+        baseRevision,
+        currentRevision: Number(latestTask?.revision || task.revision),
+        currentJobRevision: Number(latestJob.revision),
+      };
+    }
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, taskId, resultRevision: jobRevision,
       taskRevision, appliedAt: now };
   }
@@ -532,9 +1439,26 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const form = await db.prepare(`SELECT id, template_key, template_snapshot, status, revision FROM trade_job_forms
       WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`).bind(formId, workOrderId, access.ownerUid).first<Record<string, unknown>>();
     if (!form) return { clientActionId, status: "rejected", code: "FORM_NOT_FOUND", error: "The field form is no longer available." };
+    const jobState = await workOrderMutationState(access, workOrderId);
+    if (!jobState || Number(jobState.revision) !== Number(job.revision)) {
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: formId,
+        baseRevision,
+        currentRevision: Number(form.revision),
+        currentJobRevision: Number(jobState?.revision || job.revision),
+      };
+    }
+    const capturedJobStage = String(jobState.stage || "");
+    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) {
+      return terminalJobResult(clientActionId);
+    }
     if (form.status === "complete") return { clientActionId, status: "rejected", code: "FORM_LOCKED", error: "This completed form is locked." };
     if (Number(form.revision) !== baseRevision) return { clientActionId, status: "conflict", code: "REVISION_CONFLICT",
-      entityId: formId, baseRevision, currentRevision: Number(form.revision) };
+      entityId: formId, baseRevision, currentRevision: Number(form.revision),
+      currentJobRevision: Number(job.revision) };
     let template: Record<string, unknown>;
     try { template = JSON.parse(String(form.template_snapshot || "{}")) as Record<string, unknown>; }
     catch { return { clientActionId, status: "rejected", code: "INVALID_FORM", error: "The saved form template is invalid." }; }
@@ -547,15 +1471,18 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
     if (reserved) return reserved;
     const formRevision = nextJobRevision(form.revision);
-    const update = await db.prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, revision = ?, completed_by_uid = ?,
-      completed_at = ?, updated_at = ? WHERE id = ? AND work_order_id = ? AND firebase_uid = ? AND revision = ?`)
-      .bind(JSON.stringify(answers), complete ? "complete" : "draft", formRevision, complete ? access.actorUid : "",
-        complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision).run();
-    if (!update.meta.changes) {
-      await releaseConflict(access, action, Number(form.revision), now);
-      return { clientActionId, status: "conflict", code: "REVISION_CONFLICT", entityId: formId };
-    }
     const jobRevision = nextJobRevision(job.revision);
+    const answerJson = JSON.stringify(answers);
+    const formStatus = complete ? "complete" : "draft";
+    const receiptGuardValues = appliedActionGuardValues(
+      access,
+      deviceId,
+      action,
+      hash,
+      workOrderId,
+      baseRevision,
+      jobRevision,
+    );
     const lifecycle: D1PreparedStatement[] = [];
     if (complete && form.template_key === "service-visit-support" && job.source_type === "recurring_service" && job.source_reference) {
       const plan = await db.prepare(`SELECT id, asset_id, handover_pack_id, work_order_id, cadence_months
@@ -567,58 +1494,278 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
             (id, service_plan_id, asset_id, handover_pack_id, work_order_id, firebase_uid, event_type,
              serviced_at, summary, provider_reference, next_due_at, created_at, updated_at)
             SELECT ?, ?, ?, ?, ?, ?, 'service_completed', ?, 'Scheduled service form completed.', ?, ?, ?, ?
-            WHERE NOT EXISTS (SELECT 1 FROM trade_asset_service_events WHERE service_plan_id = ? AND event_type = 'service_completed' AND provider_reference = ?)`)
+            WHERE ${APPLIED_ACTION_GUARD}
+              AND NOT EXISTS (SELECT 1 FROM trade_asset_service_events WHERE service_plan_id = ? AND event_type = 'service_completed' AND provider_reference = ?)`)
             .bind(crypto.randomUUID(), plan.id, plan.asset_id, plan.handover_pack_id, plan.work_order_id, access.ownerUid,
-              servicedAt, workOrderId, nextDueAt, now, now, plan.id, workOrderId),
-          db.prepare("UPDATE trade_asset_service_plans SET next_due_at = ?, status = 'active', updated_at = ? WHERE id = ? AND firebase_uid = ?")
-            .bind(nextDueAt, now, plan.id, access.ownerUid),
+              servicedAt, workOrderId, nextDueAt, now, now, ...receiptGuardValues, plan.id, workOrderId),
+          db.prepare(`UPDATE trade_asset_service_plans
+            SET next_due_at = ?, status = 'active', updated_at = ?
+            WHERE id = ? AND firebase_uid = ? AND ${APPLIED_ACTION_GUARD}`)
+            .bind(nextDueAt, now, plan.id, access.ownerUid, ...receiptGuardValues),
         );
       }
     }
-    await db.batch([
-      db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?").bind(jobRevision, now, workOrderId, access.ownerUid),
-      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, baseRevision, jobRevision, now),
+    const statements = [
+      db.prepare(`UPDATE trade_job_forms SET answers = ?, status = ?, revision = ?, completed_by_uid = ?,
+        completed_at = ?, updated_at = ?
+        WHERE id = ? AND work_order_id = ? AND firebase_uid = ? AND revision = ?
+          AND status <> 'complete'
+          AND EXISTS (
+            SELECT 1 FROM trade_work_orders work_order
+            WHERE work_order.id = trade_job_forms.work_order_id
+              AND work_order.firebase_uid = trade_job_forms.firebase_uid
+              AND work_order.record_status = 'active'
+              AND work_order.revision = ?
+              AND work_order.stage = ?
+              AND work_order.stage NOT IN ('completed', 'cancelled')
+          )`)
+        .bind(answerJson, formStatus, formRevision, complete ? access.actorUid : "",
+          complete ? now : "", now, formId, workOrderId, access.ownerUid, baseRevision,
+          Number(job.revision), capturedJobStage),
+      db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND revision = ?
+          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND EXISTS (
+            SELECT 1 FROM trade_job_forms form
+            WHERE form.id = ? AND form.work_order_id = trade_work_orders.id
+              AND form.firebase_uid = trade_work_orders.firebase_uid
+              AND form.answers = ? AND form.status = ?
+              AND form.revision = ? AND form.updated_at = ?
+          )`)
+        .bind(jobRevision, now, workOrderId, access.ownerUid, Number(job.revision),
+          capturedJobStage, formId, answerJson, formStatus, formRevision, now),
+      actionReceiptStatement(
+        db,
+        access,
+        deviceId,
+        action,
+        hash,
+        workOrderId,
+        baseRevision,
+        jobRevision,
+        now,
+        `EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          JOIN trade_job_forms form
+            ON form.work_order_id = work_order.id
+            AND form.firebase_uid = work_order.firebase_uid
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.revision = ? AND work_order.updated_at = ?
+            AND work_order.stage = ?
+            AND form.id = ? AND form.answers = ? AND form.status = ?
+            AND form.revision = ? AND form.updated_at = ?
+        )`,
+        [
+          workOrderId,
+          access.ownerUid,
+          jobRevision,
+          now,
+          capturedJobStage,
+          formId,
+          answerJson,
+          formStatus,
+          formRevision,
+          now,
+        ],
+      ),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid,
+        SELECT ?, ?, ?, ?, ?, ? WHERE ${APPLIED_ACTION_GUARD}`).bind(crypto.randomUUID(), workOrderId, access.ownerUid,
           complete ? "offline_field_form_completed" : "offline_field_form_saved",
-          complete ? `${String(template.name || "Field form")} completed in the field app.` : `${String(template.name || "Field form")} saved in the field app.`, now),
-      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: jobRevision,
-        changedAt: now, audienceMemberId: job.assignee_member_id }), ...lifecycle,
-    ]);
+          complete ? `${String(template.name || "Field form")} completed in the field app.` : `${String(template.name || "Field form")} saved in the field app.`,
+          now,
+          ...receiptGuardValues),
+      ...guardedJobSyncChangeStatements(
+        db,
+        {
+          ownerUid: access.ownerUid,
+          workOrderId,
+          revision: jobRevision,
+          changedAt: now,
+          audienceMemberId: job.assignee_member_id,
+        },
+        receiptGuardValues,
+      ),
+      ...lifecycle,
+    ];
+    const results = await atomicActionBatch(
+      db,
+      statements,
+      failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+    );
+    if (
+      !results
+      || !results[0]?.meta.changes
+      || !results[1]?.meta.changes
+      || !results[2]?.meta.changes
+    ) {
+      const latestForm = await db.prepare(`SELECT revision FROM trade_job_forms
+        WHERE id = ? AND work_order_id = ? AND firebase_uid = ?`)
+        .bind(formId, workOrderId, access.ownerUid)
+        .first<Record<string, unknown>>();
+      const latestJob = await assignedJob(access, workOrderId);
+      await releaseConflict(access, action, Number(latestJob.revision), now);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: formId,
+        baseRevision,
+        currentRevision: Number(latestForm?.revision || form.revision),
+        currentJobRevision: Number(latestJob.revision),
+      };
+    }
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, formId,
       resultRevision: jobRevision, formRevision, appliedAt: now };
   }
 
   if (actionType === "add_time_entry") {
     const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const baseRevision = Number(action.baseRevision);
     const workDate = cleanAdminText(action.workDate, 10);
     const durationMinutes = Number(action.durationMinutes);
     const notes = cleanAdminText(action.notes, 500);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate) || Number.isNaN(Date.parse(`${workDate}T00:00:00Z`)) ||
-      !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+      !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440
+      || !Number.isInteger(baseRevision) || baseRevision < 1) {
       return { clientActionId, status: "rejected", code: "INVALID_TIME_ENTRY", error: "Add a valid work date and duration." };
     }
     const job = await assignedJob(access, workOrderId);
+    const jobState = await workOrderMutationState(access, workOrderId);
+    if (!jobState || Number(jobState.revision) !== Number(job.revision)) {
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(jobState?.revision || job.revision),
+      };
+    }
+    const capturedJobStage = String(jobState.stage || "");
+    if (TERMINAL_WORK_STAGES.has(capturedJobStage)) {
+      return terminalJobResult(clientActionId);
+    }
+    if (Number(job.revision) !== baseRevision) {
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(job.revision),
+      };
+    }
     if (job.source_type === "opportunity" && privateDataDetected(notes)) {
       return { clientActionId, status: "rejected", code: "PROTECTED_CUSTOMER_DATA", error: "Remove contact details from protected job notes." };
     }
-    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, Number(job.revision), now);
+    const reserved = await reserveAction(access, deviceId, action, hash, workOrderId, baseRevision, now);
     if (reserved) return reserved;
     const resultRevision = nextJobRevision(job.revision);
-    await db.batch([
+    const timeEntryId = crypto.randomUUID();
+    const receiptGuardValues = appliedActionGuardValues(
+      access,
+      deviceId,
+      action,
+      hash,
+      workOrderId,
+      baseRevision,
+      resultRevision,
+    );
+    const statements = [
       db.prepare(`INSERT INTO trade_crm_time_entries
         (id, work_order_id, firebase_uid, staff_label, work_date, duration_minutes, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, access.displayName, workDate, durationMinutes, notes, now, now),
-      db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(resultRevision, now, workOrderId, access.ownerUid),
-      actionReceiptStatement(db, access, deviceId, action, hash, workOrderId, Number(job.revision), resultRevision, now),
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.record_status = 'active'
+            AND work_order.revision = ?
+            AND work_order.stage = ?
+            AND work_order.stage NOT IN ('completed', 'cancelled')
+        )`)
+        .bind(timeEntryId, workOrderId, access.ownerUid, access.displayName, workDate,
+          durationMinutes, notes, now, now, workOrderId, access.ownerUid,
+          baseRevision, capturedJobStage),
+      db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND revision = ?
+          AND stage = ? AND stage NOT IN ('completed', 'cancelled')
+          AND EXISTS (
+            SELECT 1 FROM trade_crm_time_entries entry
+            WHERE entry.id = ? AND entry.work_order_id = trade_work_orders.id
+              AND entry.firebase_uid = trade_work_orders.firebase_uid
+              AND entry.created_at = ? AND entry.updated_at = ?
+          )`)
+        .bind(resultRevision, now, workOrderId, access.ownerUid, baseRevision,
+          capturedJobStage, timeEntryId, now, now),
+      actionReceiptStatement(
+        db,
+        access,
+        deviceId,
+        action,
+        hash,
+        workOrderId,
+        baseRevision,
+        resultRevision,
+        now,
+        `EXISTS (
+          SELECT 1 FROM trade_work_orders work_order
+          JOIN trade_crm_time_entries entry
+            ON entry.work_order_id = work_order.id
+            AND entry.firebase_uid = work_order.firebase_uid
+          WHERE work_order.id = ? AND work_order.firebase_uid = ?
+            AND work_order.revision = ? AND work_order.updated_at = ?
+            AND work_order.stage = ?
+            AND entry.id = ? AND entry.created_at = ? AND entry.updated_at = ?
+        )`,
+        [
+          workOrderId,
+          access.ownerUid,
+          resultRevision,
+          now,
+          capturedJobStage,
+          timeEntryId,
+          now,
+          now,
+        ],
+      ),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-        VALUES (?, ?, ?, 'offline_time_added', 'Field app added a technician time entry.', ?)`)
-        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now),
-      ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision: resultRevision,
-        changedAt: now, audienceMemberId: job.assignee_member_id }),
-    ]);
+        SELECT ?, ?, ?, 'offline_time_added', 'Field app added a technician time entry.', ?
+        WHERE ${APPLIED_ACTION_GUARD}`)
+        .bind(crypto.randomUUID(), workOrderId, access.ownerUid, now, ...receiptGuardValues),
+      ...guardedJobSyncChangeStatements(
+        db,
+        {
+          ownerUid: access.ownerUid,
+          workOrderId,
+          revision: resultRevision,
+          changedAt: now,
+          audienceMemberId: job.assignee_member_id,
+        },
+        receiptGuardValues,
+      ),
+    ];
+    const results = await atomicActionBatch(
+      db,
+      statements,
+      failClosedActionGuardStatement(db, access, workOrderId, receiptGuardValues),
+    );
+    if (
+      !results
+      || !results[0]?.meta.changes
+      || !results[1]?.meta.changes
+      || !results[2]?.meta.changes
+    ) {
+      const latest = await assignedJob(access, workOrderId);
+      await releaseConflict(access, action, Number(latest.revision), now);
+      return {
+        clientActionId,
+        status: "conflict",
+        code: "REVISION_CONFLICT",
+        entityId: workOrderId,
+        baseRevision,
+        currentRevision: Number(latest.revision),
+      };
+    }
     return { clientActionId, status: "applied", actionType, entityId: workOrderId, resultRevision, appliedAt: now };
   }
 

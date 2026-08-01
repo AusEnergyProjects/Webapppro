@@ -4,7 +4,13 @@ import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 import { nextTlinkJobNumber, nextTradeWorkNumber } from "@/lib/trade-job-number-server";
 import type { PartnerType } from "@/lib/direct-trade-entitlements";
-import { jobSyncChangeStatements, nextJobRevision, type SyncOperation } from "@/lib/trade-team-sync-server";
+import {
+  guardedOnlineChildMutationBatch,
+  guardedOnlineJobMutationBatch,
+  jobSyncChangeStatements,
+  nextJobRevision,
+  type SyncOperation,
+} from "@/lib/trade-team-sync-server";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 
 export const runtime = "edge";
@@ -117,6 +123,8 @@ function errorResponse(error: unknown) {
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record changed elsewhere. Refresh it before saving." }, 409);
   if (code === "SOURCE_NOT_FOUND") return adminJson({ ok: false, error: "That platform work item is no longer available to convert." }, 404);
   if (code === "SOURCE_ALREADY_USED") return adminJson({ ok: false, error: "That platform work item already has a Business Hub record." }, 409);
   if (code === "PRIVATE_DATA") return adminJson({ ok: false, error: "Keep names, email addresses and phone numbers out of Business Hub labels and checklists." }, 400);
@@ -314,24 +322,53 @@ export async function POST(request: Request) {
       const dueAt = dateValue(body.dueAt);
       if (!workOrderId || !title) return adminJson({ ok: false, error: "Add a checklist item." }, 400);
       if (privateDataDetected(title)) throw new Error("PRIVATE_DATA");
-      const order = await db.prepare("SELECT id, revision, assignee_member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'")
+      const order = await db.prepare(`SELECT id, stage, revision, assignee_member_id
+        FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (!order) throw new Error("WORK_NOT_FOUND");
+      if (["completed", "cancelled"].includes(String(order.stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const count = await db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ?")
         .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
       if (Number(count?.count || 0) >= MEMBER_TASK_LIMIT) throw new Error("TASK_LIMIT_REACHED");
       const taskId = crypto.randomUUID();
       const revision = nextJobRevision(order.revision);
-      await db.batch([
+      const jobStage = String(order.stage);
+      await guardedOnlineChildMutationBatch(db, [
         db.prepare(`INSERT INTO trade_work_order_tasks
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, sort_order, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 'pending', '', ?, ?, ?)`)
-          .bind(taskId, workOrderId, identity.uid, title, dueAt, Number(count?.count || 0), now, now),
-        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(revision, now, workOrderId, identity.uid),
+          SELECT ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM trade_work_orders work_order
+            WHERE work_order.id = ? AND work_order.firebase_uid = ?
+              AND work_order.record_status = 'active'
+              AND work_order.stage = ?
+              AND work_order.stage NOT IN ('completed', 'cancelled')
+              AND work_order.revision = ?
+          )`)
+          .bind(taskId, workOrderId, identity.uid, title, dueAt, Number(count?.count || 0), now, now,
+            workOrderId, identity.uid, jobStage, Number(order.revision)),
+        db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_work_order_tasks child
+              WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
+                AND child.firebase_uid = trade_work_orders.firebase_uid
+                AND child.revision = 1 AND child.updated_at = ?
+            )`)
+          .bind(revision, now, workOrderId, identity.uid, jobStage, Number(order.revision), taskId, now),
         eventStatement(db, identity.uid, workOrderId, "task_added", `Checklist item added: ${title}`, now),
         ...offlineSyncStatements(db, identity, workOrderId, revision, now, String(order.assignee_member_id || "")),
-      ]);
+      ], {
+        childKind: "task",
+        childId: taskId,
+        childRevision: 1,
+        jobRevision: revision,
+        jobStage,
+        ownerUid: identity.uid,
+        updatedAt: now,
+        workOrderId,
+      });
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
 
@@ -480,22 +517,54 @@ export async function PATCH(request: Request) {
       const taskId = cleanAdminText(body.taskId, 180);
       const status = cleanAdminText(body.status, 20);
       if (!taskId || !["pending", "done"].includes(status)) return adminJson({ ok: false, error: "Choose a valid checklist status." }, 400);
-      const task = await db.prepare(`SELECT t.work_order_id, t.title, t.revision, w.revision job_revision, w.assignee_member_id
+      const task = await db.prepare(`SELECT t.work_order_id, t.title, t.revision, w.stage job_stage,
+          w.revision job_revision, w.assignee_member_id
         FROM trade_work_order_tasks t
         JOIN trade_work_orders w ON w.id = t.work_order_id
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!task) throw new Error("WORK_NOT_FOUND");
+      if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
-      await db.batch([
-        db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, identity.uid),
-        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(jobRevision, now, task.work_order_id, identity.uid),
+      const jobStage = String(task.job_stage);
+      await guardedOnlineChildMutationBatch(db, [
+        db.prepare(`UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_work_orders work_order
+              WHERE work_order.id = trade_work_order_tasks.work_order_id
+                AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid
+                AND work_order.record_status = 'active'
+                AND work_order.stage = ?
+                AND work_order.stage NOT IN ('completed', 'cancelled')
+                AND work_order.revision = ?
+            )`)
+          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, identity.uid,
+            Number(task.revision), jobStage, Number(task.job_revision)),
+        db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_work_order_tasks child
+              WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
+                AND child.firebase_uid = trade_work_orders.firebase_uid
+                AND child.revision = ? AND child.updated_at = ?
+            )`)
+          .bind(jobRevision, now, task.work_order_id, identity.uid, jobStage,
+            Number(task.job_revision), taskId, taskRevision, now),
         eventStatement(db, identity.uid, String(task.work_order_id), status === "done" ? "task_completed" : "task_reopened", `${status === "done" ? "Completed" : "Reopened"}: ${String(task.title)}`, now),
         ...offlineSyncStatements(db, identity, String(task.work_order_id), jobRevision, now,
           String(task.assignee_member_id || "")),
-      ]);
+      ], {
+        childKind: "task",
+        childId: taskId,
+        childRevision: taskRevision,
+        jobRevision,
+        jobStage,
+        ownerUid: identity.uid,
+        updatedAt: now,
+        workOrderId: String(task.work_order_id),
+      });
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
 
@@ -522,6 +591,7 @@ export async function PATCH(request: Request) {
       return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
     }
     if (action !== "update_work_order") return adminJson({ ok: false, error: "Unsupported Business Hub update." }, 400);
+    if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
 
     const requestedStage = body.stage === undefined ? String(current.stage) : cleanAdminText(body.stage, 30);
     const requestedPriority = body.priority === undefined ? String(current.priority) : cleanAdminText(body.priority, 20);
@@ -543,14 +613,30 @@ export async function PATCH(request: Request) {
     if (scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end) changes.push("Schedule updated.");
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
     const revision = nextJobRevision(current.revision);
-    await db.batch([
+    await guardedOnlineJobMutationBatch(db, [
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
-        assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
-        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId, assigneeLabel, revision, now, workOrderId, identity.uid),
+        assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+          AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
+        .bind(requestedStage, requestedPriority, scheduledStart, scheduledEnd, assigneeMemberId,
+          assigneeLabel, revision, now, workOrderId, identity.uid,
+          String(current.stage), Number(current.revision)),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
       ...offlineSyncStatements(db, identity, workOrderId, revision, now, assigneeMemberId,
         String(current.assignee_member_id || "")),
-    ]);
+    ], {
+      kind: "work_order",
+      assigneeLabel,
+      assigneeMemberId,
+      jobPriority: requestedPriority,
+      jobRevision: revision,
+      jobStage: requestedStage,
+      ownerUid: identity.uid,
+      scheduledEnd,
+      scheduledStart,
+      updatedAt: now,
+      workOrderId,
+    });
     return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
   } catch (error) {
     return errorResponse(error);

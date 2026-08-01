@@ -4,6 +4,10 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { nextJobRevision } from "@/lib/trade-team-sync-server";
 import { mobileErrorResponse, MOBILE_CLIENT_ID_PATTERN, requireRegisteredMobileDevice } from "@/lib/trade-mobile-server";
+import {
+  type JpegExifVerification,
+  verifyJpegExif,
+} from "@/lib/jpeg-exif-verifier";
 
 export const runtime = "edge";
 
@@ -15,8 +19,19 @@ const MEDIA_CATEGORIES = new Set(["before", "progress", "after", "document"]);
 const PRIVATE_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|(?:\+?\d[\s().-]*){8,}/i;
 const MAX_LOCATION_ACCURACY_METRES = 100;
 const MAX_LOCATION_CAPTURE_SKEW_MILLISECONDS = 15 * 60 * 1000;
+const MAX_EXIF_CAPTURE_SKEW_MILLISECONDS = 15 * 60 * 1000;
+const MAX_GOVERNED_CAPTURE_AGE_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+const MAX_GOVERNED_FUTURE_SKEW_MILLISECONDS = 15 * 60 * 1000;
+const MAX_EVIDENCE_ENVELOPE_BYTES = 65_536;
+const MAX_CLIENT_EVIDENCE_ENVELOPE_BYTES = 60 * 1024;
+const CLEANUP_PENDING_PREFIX = "cleanup_pending:";
+const CLEANUP_CLAIMED_PREFIX = "cleanup_claimed:";
+const CLEANUP_CLAIM_LEASE_MILLISECONDS = 5 * 60 * 1000;
+const MAX_CLEANUP_SWEEP = 10;
 const FINALISATION_CLAIM_STEP = 1;
 const FINALISATION_VERIFIED_STEP = 2;
+const CAMERA_EVIDENCE_TYPES = new Set(["photo", "product", "serial", "decommission", "location"]);
+const DOCUMENT_EVIDENCE_TYPES = new Set(["document", "licence", "invoice", "payment"]);
 
 type UploadedPart = { partNumber: number; etag: string };
 type MultipartUpload = {
@@ -38,6 +53,7 @@ type UploadSession = {
   content_type: string; size_bytes: number; category: string; caption: string; part_size_bytes: number;
   evidence_envelope: string; original_sha256: string;
   status: string; media_id: string; expires_at: string; completed_at: string;
+  last_error: string; created_at: string; updated_at: string;
 };
 type EvidenceLink = {
   organisationId: string;
@@ -51,6 +67,11 @@ type EvidenceContract = {
   envelopeJson: string;
   originalSha256: string;
   link: EvidenceLink | null;
+};
+type TrustedFileInspection = {
+  contentType: string;
+  originalSha256: string;
+  jpegExif: JpegExifVerification | null;
 };
 type RegisteredDeviceContext = {
   id: string;
@@ -81,12 +102,31 @@ function bucket() {
 }
 
 async function cleanupClaimedUploadObject(objectKey: string, uploadId: string) {
+  let assembledObject: unknown | null;
+  try {
+    assembledObject = await bucket().head(objectKey);
+  } catch {
+    return false;
+  }
+  if (assembledObject) {
+    try {
+      await bucket().delete(objectKey);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   try {
     await bucket().resumeMultipartUpload(objectKey, uploadId).abort();
-  } catch { /* the multipart upload may already be assembled or absent */ }
-  try {
-    if (await bucket().head(objectKey)) await bucket().delete(objectKey);
-  } catch { /* a claimed terminal upload may already be absent */ }
+    return true;
+  } catch (error) {
+    const status = objectValue(error)?.status;
+    const message = error instanceof Error ? error.message : String(error);
+    if (status === 404 || /not found|no such upload|does not exist/i.test(message)) {
+      return true;
+    }
+    return false;
+  }
 }
 
 function safeName(value: string) {
@@ -113,9 +153,87 @@ function exactText(value: unknown, maximum = 180) {
   return typeof value === "string" && value.length <= maximum ? value.trim() : "";
 }
 
+function jsonByteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function serverVerifiedEnvelopeJson(
+  rawEnvelope: string,
+  trustedFile: TrustedFileInspection,
+) {
+  let envelope: Record<string, unknown>;
+  try {
+    envelope = objectValue(JSON.parse(rawEnvelope)) || {};
+  } catch {
+    envelope = {};
+  }
+  if (Object.keys(envelope).length === 0) return "{}";
+  delete envelope.serverVerification;
+  const original = objectValue(envelope.original);
+  if (original) {
+    original.exifAuthority = trustedFile.jpegExif?.status === "valid"
+      ? "server_parsed_embedded_bytes"
+      : "server_checked_not_verified";
+  }
+  envelope.serverVerification = {
+    schemaVersion: 1,
+    authority: "server_parsed_assembled_bytes",
+    contentType: trustedFile.contentType,
+    originalSha256: trustedFile.originalSha256,
+    embeddedJpegExif: trustedFile.jpegExif,
+  };
+  const envelopeJson = JSON.stringify(envelope);
+  if (jsonByteLength(envelopeJson) > MAX_EVIDENCE_ENVELOPE_BYTES) {
+    throw new EvidenceContractError(
+      "EVIDENCE_ENVELOPE_INVALID",
+      "The evidence metadata contract is too large after server verification.",
+    );
+  }
+  return envelopeJson;
+}
+
 function validDateTime(value: unknown) {
   const text = exactText(value, 60);
   return text !== "" && Number.isFinite(Date.parse(text));
+}
+
+function validCaptureTimeZone(capture: Record<string, unknown>) {
+  const utcOffsetMinutes = capture.utcOffsetMinutes;
+  const timeZone = exactText(capture.timeZone, 100);
+  return typeof utcOffsetMinutes === "number"
+    && Number.isInteger(utcOffsetMinutes)
+    && utcOffsetMinutes >= -14 * 60
+    && utcOffsetMinutes <= 14 * 60
+    && timeZone !== "unknown"
+    && (
+      timeZone === "UTC"
+      || timeZone === "GMT"
+      || /^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)+$/.test(timeZone)
+    );
+}
+
+function embeddedExifTimestampUtc(
+  timestamp: string,
+  utcOffsetMinutes: number,
+) {
+  const match =
+    /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(timestamp);
+  if (!match) return Number.NaN;
+  const [, year, month, day, hour, minute, second] = match;
+  return Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  ) - utcOffsetMinutes * 60_000;
+}
+
+function localDateAtOffset(timestamp: number, utcOffsetMinutes: number) {
+  return new Date(timestamp + utcOffsetMinutes * 60_000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function finiteNumber(value: unknown): value is number {
@@ -136,6 +254,24 @@ function validCapturedLocation(location: Record<string, unknown>) {
     && validDateTime(location.observedAtUtc);
 }
 
+function distanceMetres(
+  firstLatitude: number,
+  firstLongitude: number,
+  secondLatitude: number,
+  secondLongitude: number,
+) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const latitudeDelta = radians(secondLatitude - firstLatitude);
+  const longitudeDelta = radians(secondLongitude - firstLongitude);
+  const firstLatitudeRadians = radians(firstLatitude);
+  const secondLatitudeRadians = radians(secondLatitude);
+  const chord = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(firstLatitudeRadians)
+      * Math.cos(secondLatitudeRadians)
+      * Math.sin(longitudeDelta / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
+}
+
 function parseStringArray(value: unknown) {
   try {
     const parsed = JSON.parse(String(value || "[]"));
@@ -143,6 +279,64 @@ function parseStringArray(value: unknown) {
   } catch {
     return [];
   }
+}
+
+function hasConfiguredJson(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return !parsed
+      || typeof parsed !== "object"
+      || Array.isArray(parsed)
+      || Object.keys(parsed as Record<string, unknown>).length > 0;
+  } catch {
+    return true;
+  }
+}
+
+function evidenceCaptureMode(row: Record<string, unknown>) {
+  if (Number(row.original_required) === 1) {
+    throw new EvidenceContractError(
+      "EVIDENCE_REQUIREMENT_UNSUPPORTED",
+      "This evidence requirement needs trusted original-camera attestation that this field app version does not yet provide.",
+      409,
+    );
+  }
+  if (hasConfiguredJson(row.condition_snapshot)) {
+    throw new EvidenceContractError(
+      "EVIDENCE_REQUIREMENT_UNSUPPORTED",
+      "This evidence requirement has conditional rules that this field app version cannot evaluate.",
+      409,
+    );
+  }
+  if (
+    Number(row.installer_signature_required) === 1
+    || Number(row.customer_signature_required) === 1
+  ) {
+    throw new EvidenceContractError(
+      "EVIDENCE_REQUIREMENT_UNSUPPORTED",
+      "This evidence requirement needs a signature capture workflow that this field app version does not support.",
+      409,
+    );
+  }
+  if (hasConfiguredJson(row.field_schema)) {
+    throw new EvidenceContractError(
+      "EVIDENCE_REQUIREMENT_UNSUPPORTED",
+      "This evidence requirement needs a dynamic field form that this field app version does not support.",
+      409,
+    );
+  }
+  const evidenceType = String(row.evidence_type || "");
+  if (CAMERA_EVIDENCE_TYPES.has(evidenceType)) return "in_app_camera";
+  if (DOCUMENT_EVIDENCE_TYPES.has(evidenceType)) {
+    return Number(row.gps_required) === 1 || Number(row.metadata_required) === 1
+      ? "in_app_camera"
+      : "document_picker";
+  }
+  throw new EvidenceContractError(
+    "EVIDENCE_REQUIREMENT_UNSUPPORTED",
+    `Evidence type ${evidenceType || "unknown"} is not supported by this field app version.`,
+    409,
+  );
 }
 
 function hexDigest(bytes: Uint8Array) {
@@ -207,7 +401,9 @@ async function validateEvidenceContract(
   contentType: string,
   sizeBytes: number,
   rawEnvelope: unknown,
+  trustedAtUtc: string,
   registeredDevice?: RegisteredDeviceContext,
+  trustedFile?: TrustedFileInspection,
 ): Promise<EvidenceContract> {
   const envelope = objectValue(rawEnvelope);
   if (!envelope || Object.keys(envelope).length === 0) {
@@ -219,6 +415,7 @@ async function validateEvidenceContract(
     }
     return { envelopeJson: "{}", originalSha256: "", link: null };
   }
+  delete envelope.serverVerification;
   if (envelope.schemaVersion !== 1) {
     throw new EvidenceContractError("EVIDENCE_ENVELOPE_INVALID", "The evidence metadata contract is invalid.");
   }
@@ -244,6 +441,12 @@ async function validateEvidenceContract(
     exactText(identifiers.jobId, 180) !== workOrderId) {
     throw new EvidenceContractError("EVIDENCE_ENVELOPE_INVALID", "The evidence metadata contract is invalid.");
   }
+  if (!validCaptureTimeZone(capture)) {
+    throw new EvidenceContractError(
+      "EVIDENCE_CAPTURE_TIME_ZONE_INVALID",
+      "Governed evidence must retain a valid capture timezone and UTC offset.",
+    );
+  }
   const linkValues = {
     caseId: exactText(identifiers.complianceCaseId, 180),
     activityVersionId: exactText(identifiers.complianceActivityVersionId, 180),
@@ -254,7 +457,7 @@ async function validateEvidenceContract(
   const hasComplianceLink = Object.values(linkValues).some(Boolean);
   if (!hasComplianceLink) {
     const envelopeJson = JSON.stringify(envelope);
-    if (envelopeJson.length > 65_536) {
+    if (jsonByteLength(envelopeJson) > MAX_CLIENT_EVIDENCE_ENVELOPE_BYTES) {
       throw new EvidenceContractError("EVIDENCE_ENVELOPE_INVALID", "The evidence metadata contract is invalid.");
     }
     if (await complianceCaseForWorkOrder(access, workOrderId)) {
@@ -309,14 +512,24 @@ async function validateEvidenceContract(
   }
   original.exifAuthority = "client_supplied_non_authoritative";
   const envelopeJson = JSON.stringify(envelope);
-  if (envelopeJson.length > 65_536) {
+  if (jsonByteLength(envelopeJson) > MAX_CLIENT_EVIDENCE_ENVELOPE_BYTES) {
     throw new EvidenceContractError("EVIDENCE_ENVELOPE_INVALID", "The evidence metadata contract is invalid.");
   }
   const row = await getD1().prepare(`SELECT
       c.organisation_id, c.id case_id, c.activity_version_id,
+      c.activity_date, a.effective_from, a.effective_to,
       p.id policy_version_id, r.id requirement_id, r.requirement_code,
+      r.evidence_type, r.capture_timing, r.maximum_count,
       r.allowed_content_types, r.original_required, r.metadata_required,
-      r.gps_required, r.date_stamp_required
+      r.gps_required, r.date_stamp_required,
+      r.installer_signature_required, r.customer_signature_required,
+      r.condition_snapshot, r.field_schema,
+      (SELECT COUNT(DISTINCT current_evidence.original_sha256)
+       FROM compliance_case_evidence current_evidence
+       WHERE current_evidence.organisation_id = c.organisation_id
+         AND current_evidence.case_id = c.id
+         AND current_evidence.requirement_id = r.id
+         AND current_evidence.status IN ('received', 'under_review', 'accepted')) submitted_count
     FROM compliance_cases c
     JOIN compliance_activity_versions a
       ON a.id = c.activity_version_id AND a.publish_state IN ('published', 'withdrawn')
@@ -342,20 +555,104 @@ async function validateEvidenceContract(
       409,
     );
   }
+  if (String(row.capture_timing) !== "any") {
+    throw new EvidenceContractError(
+      "EVIDENCE_CAPTURE_TIMING_UNSUPPORTED",
+      "This evidence timing rule is not supported by the current field workflow. Creditex must keep it unavailable until the required job milestone can be verified.",
+      409,
+    );
+  }
+  const requiredCaptureSource = evidenceCaptureMode(row);
+  const trustedAt = Date.parse(trustedAtUtc);
+  if (!Number.isFinite(trustedAt)) {
+    throw new Error("INVALID_TRUSTED_EVIDENCE_TIME");
+  }
+  const earliestAcceptedAt =
+    trustedAt - MAX_GOVERNED_CAPTURE_AGE_MILLISECONDS;
+  const latestAcceptedAt =
+    trustedAt + MAX_GOVERNED_FUTURE_SKEW_MILLISECONDS;
+  if (
+    captureObservedAt < earliestAcceptedAt
+    || captureObservedAt > latestAcceptedAt
+    || integrityComputedAt < earliestAcceptedAt
+    || integrityComputedAt > latestAcceptedAt
+    || (
+      Number.isFinite(locationObservedAt)
+      && (
+        locationObservedAt < earliestAcceptedAt
+        || locationObservedAt > latestAcceptedAt
+      )
+    )
+  ) {
+    throw new EvidenceContractError(
+      "EVIDENCE_CAPTURE_TIME_OUT_OF_RANGE",
+      "Governed evidence capture times must be recent and cannot be future-dated.",
+      409,
+    );
+  }
+  const activityDate = String(row.activity_date || "");
+  if (
+    requiredCaptureSource === "in_app_camera" && localDateAtOffset(
+      captureObservedAt,
+      Number(capture.utcOffsetMinutes),
+    ) !== activityDate
+  ) {
+    throw new EvidenceContractError(
+      "EVIDENCE_ACTIVITY_DATE_MISMATCH",
+      "The governed evidence capture date does not match the case activity date.",
+      409,
+    );
+  }
+  const effectiveFrom = String(row.effective_from || "");
+  const effectiveTo = String(row.effective_to || "");
+  if (
+    activityDate < effectiveFrom
+    || (effectiveTo !== "" && activityDate > effectiveTo)
+  ) {
+    throw new EvidenceContractError(
+      "EVIDENCE_ACTIVITY_VERSION_DATE_INVALID",
+      "The case activity date is outside the selected activity version.",
+      409,
+    );
+  }
+  if (source !== requiredCaptureSource) {
+    throw new EvidenceContractError(
+      "EVIDENCE_CONTENT_TYPE_INVALID",
+      requiredCaptureSource === "in_app_camera"
+        ? "Use the in-app camera for this evidence requirement."
+        : "Choose the original document file for this evidence requirement.",
+    );
+  }
   const allowedTypes = parseStringArray(row.allowed_content_types);
   if (allowedTypes.length > 0 && !allowedTypes.includes(contentType)) {
     throw new EvidenceContractError("EVIDENCE_CONTENT_TYPE_INVALID", "This file type is not allowed for the selected evidence requirement.");
+  }
+  const maximumCount = Number(row.maximum_count);
+  if (
+    Number.isInteger(maximumCount)
+    && maximumCount > 0
+    && Number(row.submitted_count || 0) >= maximumCount
+  ) {
+    throw new EvidenceContractError(
+      "EVIDENCE_MAXIMUM_REACHED",
+      `The policy maximum of ${maximumCount} submitted evidence file${maximumCount === 1 ? "" : "s"} has been reached for this requirement.`,
+      409,
+    );
   }
   if (Number(row.original_required) === 1 &&
     (original.preservedWithoutAppTransformation !== true || original.editingApplied !== false)) {
     throw new EvidenceContractError("EVIDENCE_ORIGINAL_REQUIRED", "Capture and upload the unedited original file for this requirement.");
   }
   const exif = objectValue(original.exif);
-  if (Number(row.metadata_required) === 1 && (
-    exactText(original.exifState, 40) !== "available"
-    || !exif
-    || Object.keys(exif).length === 0
-  )) {
+  if (
+    requiredCaptureSource === "in_app_camera"
+    && Number(row.metadata_required) === 1
+    && (
+      exactText(original.exifState, 40) !== "available"
+      || !exif
+      || Object.keys(exif).length === 0
+    )
+  ) {
     throw new EvidenceContractError("EVIDENCE_METADATA_REQUIRED", "This requirement needs original capture metadata.");
   }
   const hasCapturedLocation = location.state === "captured";
@@ -377,6 +674,102 @@ async function validateEvidenceContract(
   }
   if (Number(row.date_stamp_required) === 1 && !validDateTime(capture.observedAtUtc)) {
     throw new EvidenceContractError("EVIDENCE_CAPTURE_TIME_REQUIRED", "Capture time is required for this evidence requirement.");
+  }
+  if (trustedFile) {
+    if (
+      trustedFile.contentType !== contentType
+      || trustedFile.originalSha256 !== digestHex
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_SERVER_VERIFICATION_INVALID",
+        "The server-verified evidence facts do not match this upload.",
+        409,
+      );
+    }
+    const jpegExif = trustedFile.jpegExif;
+    if (
+      requiredCaptureSource === "in_app_camera"
+      && Number(row.metadata_required) === 1
+      && (
+        contentType !== "image/jpeg"
+        || jpegExif?.status !== "valid"
+        || !jpegExif.exifPresent
+      )
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_EMBEDDED_METADATA_REQUIRED",
+        "The uploaded JPEG bytes do not contain valid embedded EXIF metadata.",
+        409,
+      );
+    }
+    if (
+      requiredCaptureSource === "in_app_camera"
+      && Number(row.gps_required) === 1
+      && (
+        contentType !== "image/jpeg"
+        || jpegExif?.status !== "valid"
+        || !jpegExif.gps
+      )
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_EMBEDDED_GPS_REQUIRED",
+        "The uploaded JPEG bytes do not contain a valid embedded GPS location.",
+        409,
+      );
+    }
+    if (
+      requiredCaptureSource === "in_app_camera"
+      && Number(row.gps_required) === 1
+      && jpegExif?.gps
+      && capturedLocationValid
+      && distanceMetres(
+          Number(location.latitude),
+          Number(location.longitude),
+          jpegExif.gps.latitude,
+          jpegExif.gps.longitude,
+        ) > Math.max(
+          250,
+          Number(location.accuracyMetres) + MAX_LOCATION_ACCURACY_METRES,
+        )
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_LOCATION_MISMATCH",
+        "The embedded JPEG location does not match the registered device location captured for this evidence.",
+        409,
+      );
+    }
+    if (
+      requiredCaptureSource === "in_app_camera"
+      && Number(row.date_stamp_required) === 1
+      && (
+        contentType !== "image/jpeg"
+        || jpegExif?.status !== "valid"
+        || !jpegExif.captureTimestamp
+      )
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_EMBEDDED_CAPTURE_TIME_REQUIRED",
+        "The uploaded JPEG bytes do not contain a valid embedded capture timestamp.",
+        409,
+      );
+    }
+    if (
+      requiredCaptureSource === "in_app_camera"
+      && Number(row.date_stamp_required) === 1
+      && jpegExif?.captureTimestamp
+      && Math.abs(
+        embeddedExifTimestampUtc(
+          jpegExif.captureTimestamp,
+          Number(capture.utcOffsetMinutes),
+        ) - captureObservedAt
+      ) > MAX_EXIF_CAPTURE_SKEW_MILLISECONDS
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_EMBEDDED_CAPTURE_TIME_MISMATCH",
+        "The embedded JPEG capture time does not match the registered device capture time.",
+        409,
+      );
+    }
   }
   return {
     envelopeJson,
@@ -509,25 +902,159 @@ async function safeDuplicateResponse(
   });
 }
 
-async function expireSessions(access: TeamAccess, deviceId: string) {
-  const now = new Date().toISOString();
-  const rows = await getD1().prepare(`SELECT id, object_key, upload_id FROM trade_mobile_upload_sessions
-    WHERE owner_uid = ? AND actor_uid = ? AND device_id = ? AND status IN ('initiated', 'uploading')
-      AND expires_at <= ? LIMIT 10`).bind(access.ownerUid, access.actorUid, deviceId, now).all<Record<string, unknown>>();
-  for (const row of rows.results) {
-    const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
-      SET status = 'expired', last_error = 'expired', updated_at = ?
-      WHERE id = ? AND owner_uid = ? AND actor_uid = ? AND device_id = ?
-        AND status IN ('initiated', 'uploading') AND media_id = ''`)
-      .bind(now, row.id, access.ownerUid, access.actorUid, deviceId).run();
-    if (Number(claim.meta.changes || 0) !== 1) continue;
-    await cleanupClaimedUploadObject(String(row.object_key), String(row.upload_id));
+type CleanupSession = Pick<
+  UploadSession,
+  "id" | "owner_uid" | "object_key" | "upload_id" | "status" | "last_error"
+>;
+
+function pendingCleanupReason(lastError: string) {
+  if (lastError.startsWith(CLEANUP_PENDING_PREFIX)) {
+    return lastError.slice(CLEANUP_PENDING_PREFIX.length);
+  }
+  if (lastError.startsWith(CLEANUP_CLAIMED_PREFIX)) {
+    const separator = lastError.lastIndexOf("|");
+    return separator >= CLEANUP_CLAIMED_PREFIX.length
+      ? lastError.slice(separator + 1)
+      : "";
+  }
+  return "";
+}
+
+async function finishTerminalUploadCleanup(session: CleanupSession) {
+  const reason = pendingCleanupReason(session.last_error);
+  if (!reason) return true;
+  const claimedAt = new Date().toISOString();
+  const claimedError =
+    `${CLEANUP_CLAIMED_PREFIX}${claimedAt}|${reason}`;
+  let claimed: D1Result;
+  try {
+    claimed = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+      SET last_error = ?, updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND object_key = ? AND upload_id = ?
+        AND status = ? AND status IN ('aborted', 'rejected', 'expired')
+        AND media_id = '' AND last_error = ?`)
+      .bind(
+        claimedError,
+        claimedAt,
+        session.id,
+        session.owner_uid,
+        session.object_key,
+        session.upload_id,
+        session.status,
+        session.last_error,
+      ).run();
+  } catch {
+    return false;
+  }
+  if (Number(claimed.meta.changes || 0) !== 1) return false;
+  if (!await cleanupClaimedUploadObject(session.object_key, session.upload_id)) {
+    try {
+      await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+        SET last_error = ?, updated_at = ?
+        WHERE id = ? AND owner_uid = ? AND object_key = ? AND upload_id = ?
+          AND status = ? AND status IN ('aborted', 'rejected', 'expired')
+          AND media_id = '' AND last_error = ?`)
+        .bind(
+          `${CLEANUP_PENDING_PREFIX}${reason}`,
+          new Date().toISOString(),
+          session.id,
+          session.owner_uid,
+          session.object_key,
+          session.upload_id,
+          session.status,
+          claimedError,
+        ).run();
+    } catch {
+      // A stale cleanup claim is lease-recoverable by the global sweep.
+    }
+    return false;
+  }
+  try {
     await getD1().prepare("DELETE FROM trade_mobile_upload_parts WHERE session_id = ?")
-      .bind(row.id).run();
+      .bind(session.id).run();
+    const completed = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+      SET last_error = ?, updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND object_key = ? AND upload_id = ?
+        AND media_id = ''
+        AND status IN ('aborted', 'rejected', 'expired')
+        AND status = ? AND last_error = ?`)
+      .bind(
+        reason === "aborted" ? "" : reason,
+        new Date().toISOString(),
+        session.id,
+        session.owner_uid,
+        session.object_key,
+        session.upload_id,
+        session.status,
+        claimedError,
+      ).run();
+    return Number(completed.meta.changes || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function sweepTerminalUploadCleanup() {
+  const now = new Date().toISOString();
+  const staleClaimBefore = new Date(
+    Date.parse(now) - CLEANUP_CLAIM_LEASE_MILLISECONDS,
+  ).toISOString();
+  const rows = await getD1().prepare(`SELECT
+      id, owner_uid, object_key, upload_id, status, last_error
+    FROM trade_mobile_upload_sessions
+    WHERE media_id = '' AND (
+        (status IN ('initiated', 'uploading', 'completing') AND expires_at <= ?)
+        OR (
+          status IN ('aborted', 'rejected', 'expired')
+          AND (
+            last_error LIKE 'cleanup_pending:%'
+            OR (
+              last_error LIKE 'cleanup_claimed:%'
+              AND updated_at <= ?
+            )
+          )
+        )
+      )
+    ORDER BY updated_at, id
+    LIMIT ?`)
+    .bind(
+      now,
+      staleClaimBefore,
+      MAX_CLEANUP_SWEEP,
+    )
+    .all<CleanupSession>();
+  for (const row of rows.results) {
+    let cleanupSession = row;
+    if (["initiated", "uploading", "completing"].includes(row.status)) {
+      const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+        SET status = 'expired', last_error = ?, updated_at = ?
+        WHERE id = ? AND owner_uid = ? AND object_key = ? AND upload_id = ?
+          AND status = ? AND status IN ('initiated', 'uploading', 'completing')
+          AND media_id = '' AND expires_at <= ? AND last_error = ?`)
+        .bind(
+          `${CLEANUP_PENDING_PREFIX}expired`,
+          now,
+          row.id,
+          row.owner_uid,
+          row.object_key,
+          row.upload_id,
+          row.status,
+          now,
+          row.last_error,
+        ).run();
+      if (Number(claim.meta.changes || 0) !== 1) continue;
+      cleanupSession = {
+        ...row,
+        status: "expired",
+        last_error: `${CLEANUP_PENDING_PREFIX}expired`,
+      };
+    }
+    await finishTerminalUploadCleanup(cleanupSession);
   }
 }
 
 async function initiate(request: Request, access: TeamAccess, body: Record<string, unknown>) {
+  const now = new Date().toISOString();
   const deviceId = cleanAdminText(body.deviceId, 120);
   const registeredDevice = await requireRegisteredMobileDevice(
     request,
@@ -536,7 +1063,7 @@ async function initiate(request: Request, access: TeamAccess, body: Record<strin
     cleanAdminText(body.platform, 20),
     cleanAdminText(body.appVersion, 40),
   );
-  await expireSessions(access, deviceId);
+  await sweepTerminalUploadCleanup();
   const clientUploadId = cleanAdminText(body.clientUploadId, 120);
   const workOrderId = cleanAdminText(body.workOrderId, 180);
   const fileName = safeName(cleanAdminText(body.fileName, 180));
@@ -559,6 +1086,7 @@ async function initiate(request: Request, access: TeamAccess, body: Record<strin
     contentType,
     sizeBytes,
     body.evidenceEnvelope,
+    now,
     registeredDevice,
   );
   const metadata = {
@@ -574,7 +1102,7 @@ async function initiate(request: Request, access: TeamAccess, body: Record<strin
     return adminJson({ ok: true, duplicate: true, contractVersion: 3, upload: await sessionPayload(existing) });
   }
   const id = crypto.randomUUID(); const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${id}`;
-  const now = new Date().toISOString(); const expiresAt = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.parse(now) + SESSION_HOURS * 60 * 60 * 1000).toISOString();
   const multipart = await bucket().createMultipartUpload(objectKey, { httpMetadata: { contentType },
     customMetadata: {
       owner: access.ownerUid,
@@ -613,6 +1141,7 @@ async function initiate(request: Request, access: TeamAccess, body: Record<strin
 async function uploadPart(request: Request, access: TeamAccess, form: FormData) {
   const deviceId = cleanAdminText(form.get("deviceId"), 120);
   await requireRegisteredMobileDevice(request, access, deviceId, cleanAdminText(form.get("platform"), 20), cleanAdminText(form.get("appVersion"), 40));
+  await sweepTerminalUploadCleanup();
   const session = await findSession(access, cleanAdminText(form.get("sessionId"), 180));
   if (session.device_id !== deviceId) return adminJson({ ok: false, error: "This upload belongs to a different device." }, 403);
   if (!["initiated", "uploading"].includes(session.status)) return adminJson({ ok: false, error: "This upload is no longer accepting parts." }, 409);
@@ -685,7 +1214,17 @@ async function finalise(
   access: TeamAccess,
   session: UploadSession,
   registeredDevice: RegisteredDeviceContext,
+  trustedFile: TrustedFileInspection,
 ) {
+  const existingCompletion = await completedUpload(access, session.id, true);
+  if (existingCompletion) {
+    return {
+      revision: Number(existingCompletion.job_revision),
+      mediaId: existingCompletion.media_id,
+      completedAt: existingCompletion.completed_at,
+      duplicate: true,
+    };
+  }
   const job = await assignedJob(access, session.work_order_id);
   const now = new Date().toISOString();
   const evidence = await validateEvidenceContract(
@@ -697,7 +1236,9 @@ async function finalise(
       try { return JSON.parse(session.evidence_envelope || "{}") as unknown; }
       catch { return {}; }
     })(),
+    session.created_at,
     registeredDevice,
+    trustedFile,
   );
   const currentRevision = Number(job.revision);
   const revision = nextJobRevision(currentRevision);
@@ -860,6 +1401,7 @@ async function finalise(
           AND p.publish_state IN ('published', 'withdrawn')
         JOIN compliance_evidence_requirements r
           ON r.id = ? AND r.organisation_id = c.organisation_id AND r.policy_version_id = p.id
+          AND r.capture_timing = 'any'
         JOIN trade_mobile_upload_finalisation_guards claim
           ON claim.id = ? AND claim.owner_uid = ?
           AND claim.session_id = ? AND claim.step_number = ?
@@ -1331,6 +1873,40 @@ async function finalise(
         duplicate: true,
       };
     }
+    if (
+      error instanceof Error
+      && error.message.includes("COMPLIANCE_EVIDENCE_MAXIMUM_REACHED")
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_MAXIMUM_REACHED",
+        "The policy maximum has already been reached for this evidence requirement.",
+        409,
+      );
+    }
+    if (
+      error instanceof Error
+      && (
+        error.message.includes("COMPLIANCE_EVIDENCE_DUPLICATE_ORIGINAL")
+        || error.message.includes(
+          "compliance_case_evidence_active_original_idx",
+        )
+        || (
+          error.message.includes("UNIQUE constraint failed")
+          && error.message.includes(
+            "compliance_case_evidence.organisation_id",
+          )
+          && error.message.includes(
+            "compliance_case_evidence.original_sha256",
+          )
+        )
+      )
+    ) {
+      throw new EvidenceContractError(
+        "EVIDENCE_DUPLICATE_ORIGINAL",
+        "This exact evidence original is already active for the selected case requirement.",
+        409,
+      );
+    }
     throw error;
   }
   const failedChange = expectedChanges.find(({ index }) =>
@@ -1373,12 +1949,13 @@ async function rejectAssembledUpload(
   session: UploadSession,
   lastError: string,
 ) {
+  const pendingError = `${CLEANUP_PENDING_PREFIX}${lastError}`;
   const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
     SET status = 'rejected', last_error = ?, updated_at = ?
     WHERE id = ? AND owner_uid = ? AND actor_uid = ? AND member_id = ?
       AND device_id = ? AND status = 'completing' AND media_id = ''`)
     .bind(
-      lastError,
+      pendingError,
       new Date().toISOString(),
       session.id,
       access.ownerUid,
@@ -1387,9 +1964,14 @@ async function rejectAssembledUpload(
       session.device_id,
     ).run();
   if (Number(claim.meta.changes || 0) !== 1) return false;
-  await cleanupClaimedUploadObject(session.object_key, session.upload_id);
-  await getD1().prepare("DELETE FROM trade_mobile_upload_parts WHERE session_id = ?")
-    .bind(session.id).run();
+  await finishTerminalUploadCleanup({
+    id: session.id,
+    owner_uid: access.ownerUid,
+    object_key: session.object_key,
+    upload_id: session.upload_id,
+    status: "rejected",
+    last_error: pendingError,
+  });
   return true;
 }
 
@@ -1402,6 +1984,7 @@ async function complete(request: Request, access: TeamAccess, body: Record<strin
     cleanAdminText(body.platform, 20),
     cleanAdminText(body.appVersion, 40),
   );
+  await sweepTerminalUploadCleanup();
   let session = await findSession(access, cleanAdminText(body.sessionId, 180));
   if (session.device_id !== deviceId) return adminJson({ ok: false, error: "This upload belongs to a different device." }, 403);
   if (session.status === "completed") {
@@ -1411,6 +1994,9 @@ async function complete(request: Request, access: TeamAccess, body: Record<strin
       code: "UPLOAD_FINALISATION_UNVERIFIED",
       error: "The completed upload could not be matched to its stored job media.",
     }, 409);
+  }
+  if (session.status === "expired") {
+    return adminJson({ ok: false, code: "UPLOAD_EXPIRED", error: "This upload expired. Start it again." }, 410);
   }
   if (!["initiated", "uploading", "completing"].includes(session.status)) return adminJson({ ok: false, error: "This upload cannot be completed." }, 409);
   if (session.expires_at <= new Date().toISOString()) return adminJson({ ok: false, code: "UPLOAD_EXPIRED", error: "This upload expired. Start it again." }, 410);
@@ -1524,6 +2110,13 @@ async function complete(request: Request, access: TeamAccess, body: Record<strin
       error: "The uploaded file bytes do not match the declared JPEG, PNG, WebP or PDF type.",
     }, 409);
   }
+  const trustedFile: TrustedFileInspection = {
+    contentType: session.content_type,
+    originalSha256: assembledSha256,
+    jpegExif: session.content_type === "image/jpeg"
+      ? verifyJpegExif(new Uint8Array(assembledBytes))
+      : null,
+  };
   if (session.original_sha256 === "") {
     const hashUpdate = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
       SET original_sha256 = ?, updated_at = ?
@@ -1552,7 +2145,90 @@ async function complete(request: Request, access: TeamAccess, body: Record<strin
       session = { ...session, original_sha256: assembledSha256 };
     }
   }
-  const result = await finalise(access, session, registeredDevice);
+  let verifiedEnvelopeJson: string;
+  try {
+    verifiedEnvelopeJson = serverVerifiedEnvelopeJson(
+      session.evidence_envelope,
+      trustedFile,
+    );
+  } catch (error) {
+    if (error instanceof EvidenceContractError) {
+      await rejectAssembledUpload(
+        access,
+        session,
+        "server_verification_envelope_invalid",
+      );
+    }
+    throw error;
+  }
+  if (verifiedEnvelopeJson !== session.evidence_envelope) {
+    const envelopeUpdate = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+      SET evidence_envelope = ?, updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND status = 'completing'
+        AND media_id = ''`)
+      .bind(
+        verifiedEnvelopeJson,
+        new Date().toISOString(),
+        session.id,
+        access.ownerUid,
+      )
+      .run();
+    if (Number(envelopeUpdate.meta.changes || 0) !== 1) {
+      const latest = await findSession(access, session.id);
+      if (latest.status === "completed") {
+        const duplicate = await safeDuplicateResponse(access, latest.id);
+        return duplicate || adminJson({
+          ok: false,
+          code: "UPLOAD_FINALISATION_UNVERIFIED",
+          error: "The completed upload could not be matched to its stored job media.",
+        }, 409);
+      }
+      if (
+        latest.status !== "completing"
+        || latest.evidence_envelope !== verifiedEnvelopeJson
+      ) {
+        return adminJson({
+          ok: false,
+          code: "EVIDENCE_VERIFICATION_STATE_CHANGED",
+          error: "The server-verified evidence envelope changed during completion.",
+        }, 409);
+      }
+      session = latest;
+    } else {
+      session = { ...session, evidence_envelope: verifiedEnvelopeJson };
+    }
+  }
+  let result: Awaited<ReturnType<typeof finalise>>;
+  try {
+    result = await finalise(access, session, registeredDevice, trustedFile);
+  } catch (error) {
+    if (error instanceof EvidenceContractError) {
+      const rejectionReasons: Record<string, string> = {
+        EVIDENCE_CAPTURE_TIME_ZONE_INVALID:
+          "capture_time_zone_invalid",
+        EVIDENCE_CAPTURE_TIME_OUT_OF_RANGE:
+          "capture_time_out_of_range",
+        EVIDENCE_ACTIVITY_DATE_MISMATCH:
+          "activity_date_mismatch",
+        EVIDENCE_ACTIVITY_VERSION_DATE_INVALID:
+          "activity_version_date_invalid",
+        EVIDENCE_MAXIMUM_REACHED: "maximum_count_reached",
+        EVIDENCE_DUPLICATE_ORIGINAL: "duplicate_original",
+        EVIDENCE_REQUIREMENT_UNSUPPORTED: "requirement_unsupported",
+        EVIDENCE_SERVER_VERIFICATION_INVALID: "server_verification_invalid",
+        EVIDENCE_EMBEDDED_METADATA_REQUIRED: "embedded_metadata_missing",
+        EVIDENCE_EMBEDDED_GPS_REQUIRED: "embedded_gps_missing",
+        EVIDENCE_EMBEDDED_CAPTURE_TIME_REQUIRED:
+          "embedded_capture_time_missing",
+        EVIDENCE_EMBEDDED_CAPTURE_TIME_MISMATCH:
+          "embedded_capture_time_mismatch",
+        EVIDENCE_LOCATION_MISMATCH: "embedded_location_mismatch",
+      };
+      const reason = rejectionReasons[error.code];
+      if (reason) await rejectAssembledUpload(access, session, reason);
+    }
+    throw error;
+  }
   const completed = await findSession(access, session.id);
   return adminJson(
     { ok: true, duplicate: result.duplicate, contractVersion: 3, result, upload: await sessionPayload(completed) },
@@ -1566,6 +2242,7 @@ export async function GET(request: Request) {
     const access = await requireInstallerTeamAccess(request); const url = new URL(request.url);
     const deviceId = cleanAdminText(url.searchParams.get("deviceId"), 120);
     await requireRegisteredMobileDevice(request, access, deviceId);
+  await sweepTerminalUploadCleanup();
     const session = await findSession(access, cleanAdminText(url.searchParams.get("sessionId"), 180));
     if (session.device_id !== deviceId) return adminJson({ ok: false, error: "This upload belongs to a different device." }, 403);
     await assignedJob(access, session.work_order_id);
@@ -1604,15 +2281,18 @@ export async function DELETE(request: Request) {
     const access = await requireInstallerTeamAccess(request); const url = new URL(request.url);
     const deviceId = cleanAdminText(url.searchParams.get("deviceId"), 120);
     await requireRegisteredMobileDevice(request, access, deviceId);
+    await sweepTerminalUploadCleanup();
     const session = await findSession(access, cleanAdminText(url.searchParams.get("sessionId"), 180));
     if (session.device_id !== deviceId) return adminJson({ ok: false, error: "This upload belongs to a different device." }, 403);
     const now = new Date().toISOString();
+    const pendingError = `${CLEANUP_PENDING_PREFIX}aborted`;
     const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
-      SET status = 'aborted', last_error = '', updated_at = ?
+      SET status = 'aborted', last_error = ?, updated_at = ?
       WHERE id = ? AND owner_uid = ? AND actor_uid = ? AND member_id = ?
         AND device_id = ? AND status IN ('initiated', 'uploading', 'completing')
         AND media_id = ''`)
       .bind(
+        pendingError,
         now,
         session.id,
         access.ownerUid,
@@ -1621,12 +2301,18 @@ export async function DELETE(request: Request) {
         deviceId,
       ).run();
     const aborted = Number(claim.meta.changes || 0) === 1;
+    let cleanupPending = false;
     if (aborted) {
-      await cleanupClaimedUploadObject(session.object_key, session.upload_id);
-      await getD1().prepare("DELETE FROM trade_mobile_upload_parts WHERE session_id = ?")
-        .bind(session.id).run();
+      cleanupPending = !await finishTerminalUploadCleanup({
+        id: session.id,
+        owner_uid: access.ownerUid,
+        object_key: session.object_key,
+        upload_id: session.upload_id,
+        status: "aborted",
+        last_error: pendingError,
+      });
     }
-    return adminJson({ ok: true, aborted });
+    return adminJson({ ok: true, aborted, cleanupPending });
   } catch (error) {
     if (error instanceof Error && error.message === "UPLOAD_NOT_FOUND") return adminJson({ ok: false, error: "Upload session not found." }, 404);
     return mediaError(error);

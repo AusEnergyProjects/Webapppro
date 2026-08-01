@@ -31,6 +31,7 @@ export type ComplianceMembershipRecord = {
   displayName: string;
   role: string;
   membershipStatus: string;
+  governanceIdentityVerified: boolean;
   lastLoginAt: string;
 };
 
@@ -42,6 +43,7 @@ export type ComplianceIdentity = FirebaseIdentity & {
   organisationTradingName: string;
   displayName: string;
   role: ComplianceRole;
+  governanceIdentityVerified: boolean;
 };
 
 export class ComplianceAccessError extends Error {
@@ -125,6 +127,7 @@ export function assertActiveComplianceMembership(
     organisationTradingName: membership.organisationTradingName,
     displayName: membership.displayName,
     role: membership.role,
+    governanceIdentityVerified: membership.governanceIdentityVerified,
   };
 }
 
@@ -141,6 +144,7 @@ function membershipProjection(row: Record<string, unknown>): ComplianceMembershi
     displayName: String(row.display_name || ""),
     role: String(row.role),
     membershipStatus: String(row.membership_status),
+    governanceIdentityVerified: Number(row.governance_identity_verified) === 1,
     lastLoginAt: String(row.last_login_at || ""),
   };
 }
@@ -207,9 +211,12 @@ export async function claimPendingComplianceInvitation(
   await database.batch([
     database.prepare(`INSERT INTO compliance_users (
         id, organisation_id, firebase_uid, email, display_name, role, status,
+        governance_identity_verified, governance_identity_verified_by_uid,
+        governance_identity_verified_at,
+        governance_identity_verification_basis,
         created_by_uid, last_login_at, created_at, updated_at
       )
-      SELECT ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?
+      SELECT ?, ?, ?, ?, ?, ?, 'active', 0, '', '', '', ?, ?, ?, ?
       WHERE EXISTS (
         SELECT 1 FROM compliance_invitations
         WHERE id = ? AND status = 'pending' AND expires_at > ?
@@ -311,6 +318,7 @@ export async function requireComplianceIdentity(
       member.display_name,
       member.role,
       member.status membership_status,
+      member.governance_identity_verified,
       member.last_login_at,
       organisation.organisation_code,
       organisation.legal_name organisation_legal_name,

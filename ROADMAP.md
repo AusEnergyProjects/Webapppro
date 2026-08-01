@@ -830,6 +830,35 @@ Exact application commit `7b08cb600bde30273774a544e07039acc6de1c03` passes the p
 
 Sites saved version 248 from the exact application commit and deployed it through `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` with environment revision 19 at `https://compare.ausenergyassessments.com`. Signed-in live QA confirmed the administrator dashboard, Dataforce-parity advanced filter groups, persistent program bar, access controls and separate program and activity governance. Intermediate version 247 restored sign-in but exposed one local-SQLite-only compound aggregate; version 248 replaced it with a bounded D1-compatible aggregate and loaded the live operations endpoint successfully. No case was auto-selected and no production data changed. The post-release Sites Worker error-only query returned zero events. Physical-device capture, hosted production evidence viewing, non-admin production acceptance, backup and restore, private rule-pack accuracy, approved calculator provenance and registry behavior remain unverified or blocked until separately accepted.
 
+## Active milestone: CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26
+
+Status: implementation complete, validation and release pending
+
+### Outcome
+
+Make the Creditex rules workspace genuinely activity agnostic and safe to extend. Administrators can author program-scoped, effective-dated activity versions and complete evidence-policy drafts, keep each program in a persistent bottom workspace, narrow work to one activity version and move an exact sealed policy through independent publication review. AEA Field receives only published requirements it can currently execute. The server verifies assembled evidence bytes rather than trusting client-supplied EXIF claims.
+
+### In scope
+
+- Program workspaces remain separate bottom tabs. Activity code, specification part, product category and scenario remain separate fields and activity-scoped filters inside each program.
+- Draft evidence-policy authoring includes ordered requirement code, evidence type, capture timing, minimum and maximum count, original, metadata, GPS and date requirements, signature flags, allowed file types, conditional JSON, dynamic-field JSON and exact source citation.
+- Policy and publication-history queues are independently paginated and scoped by program and activity. Terminal decisions remain visible as immutable history.
+- Publication requires a named administrator request and a different named administrator decision over the same canonical snapshot and SHA-256. The shared bootstrap mailbox can maintain drafts but cannot request or approve publication.
+- Database guards enforce pending-only request creation, immutable terminal decisions, sealed content during review, publication provenance, immutable published content and atomic required write steps.
+- Governed field capture accepts only policy types and file formats supported by the current app. Unsupported signatures, conditions, dynamic fields, evidence types and trusted-original requirements block publication.
+- JPEG evidence is parsed again from the assembled server bytes. Required embedded EXIF, GPS and capture time must exist; embedded GPS must agree with the registered-device reading; embedded local time must agree with the retained timezone, UTC offset and device capture time. The server-stamped verification result and exact byte hash are retained with the evidence envelope.
+- Finite evidence maxima are enforced both during initiation and atomically at evidence insertion.
+
+### Deliberate safety boundaries
+
+- No public research row is activated as a real Creditex rule. The production catalogue remains empty until Creditex supplies and approves its exact private authority, interpretations and current effective rule packs.
+- Embedded EXIF proves only what is present in the uploaded bytes. It does not prove that a camera created the bytes, that the file was never edited or that the device is regulator accepted. Any policy requiring trusted original-camera attestation remains blocked.
+- PNG, WebP and PDF signatures are checked from assembled bytes, but governed metadata, GPS and capture-time requirements currently require a valid JPEG.
+- Certificate quantities, rebate values, customer price reductions, product eligibility, registry actions, certificate creation, trading and settlement remain disabled without separately approved calculators and connectors.
+- The complete Dataforce and Runabout inventory is still unknown. Observed filter families remain visible, but a subfilter with no authoritative TLink relationship stays explicitly unavailable rather than being inferred.
+
+VEU `6(23)` remains a test example only. It has no privileged implementation path.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -931,8 +960,8 @@ VEU `6(23)` remains a useful test example only. It is not a privileged implement
 
 ## Next five logical product steps
 
-1. **Reconcile the national authoritative catalogue:** obtain Creditex's private authoritative rule packs for every federal, state and territory program, activity, category and scenario intended in scope; import them as effective-dated drafts; and reconcile complete coverage against official public discovery sources and Creditex's signed inventory before any publication.
-2. **Drive field capture from each governed activity:** translate every approved activity and evidence-policy version into dynamic installer and field-app requirements, preserving original bytes, hashes, capture time and timezone, geolocation, device provenance, offline recovery, upload receipts and correction history.
+1. **Import and reconcile Creditex's private national rule packs:** obtain the signed program, activity, category, scenario, evidence and authority inventory for every intended federal, state and territory path; import it as effective-dated drafts; and reconcile it against official discovery sources before any publication.
+2. **Prove trusted physical-device evidence and expand the requirement engine:** add platform-backed device and camera attestation, representative iOS and Android acceptance, and governed support for the remaining evidence types, signatures, conditions and dynamic fields while unsupported policies continue to fail closed.
 3. **Verify calculators and output contracts per method:** implement immutable method-specific inputs, formulas, product and climate lookups, units, caps, rounding, test vectors and typed outputs; obtain independent reconciliation and Creditex approval for each method while every unverified calculator remains disabled.
 4. **Build provider-neutral connectors per program:** define versioned batch, submission, response, issuance and reconciliation contracts once, then add separately authorised program adapters with dry-run validation, idempotency, immutable artifacts, dual control and exception handling.
 5. **Inventory legacy data and phase the cutover:** obtain authorised Dataforce and Runabout exports, field dictionaries, screen and report inventories, role maps and a Runabout walkthrough; preserve source records through repeatable imports; then reconcile counts, hashes and exceptions in bounded parallel cohorts by program with explicit rollback and acceptance.

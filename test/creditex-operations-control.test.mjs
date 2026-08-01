@@ -16,6 +16,7 @@ const operationsMigrationSources = [
   "../drizzle/0095_creditex_operations_workflows.sql",
   "../drizzle/0096_creditex_operations_integrity.sql",
   "../drizzle/0097_creditex_operations_lifecycle.sql",
+  "../drizzle/0098_creditex_rule_governance.sql",
 ].map(read);
 const operationsMigration = operationsMigrationSources.join("\n--> statement-breakpoint\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
@@ -114,6 +115,18 @@ test("Sites migration inputs keep one complete SQLite statement per physical lin
 function databaseWithComplianceOperations({ installGuards = true } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
+    CREATE TABLE admin_users (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL UNIQUE,
+      email text NOT NULL UNIQUE,
+      display_name text DEFAULT '' NOT NULL,
+      role text DEFAULT 'support' NOT NULL,
+      status text DEFAULT 'active' NOT NULL,
+      invited_by_uid text DEFAULT '' NOT NULL,
+      last_login_at text DEFAULT '' NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    );
     CREATE TABLE trade_work_orders (
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
@@ -216,13 +229,15 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
 test("runtime schema bootstrap installs every governed trigger before compliance access", async () => {
   const database = databaseWithComplianceOperations({ installGuards: false });
   const d1 = testD1(database);
+  const expectedRemaining = (installed) =>
+    CREDITEX_SCHEMA_GUARD_DEFINITIONS.length - installed;
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
     0,
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:92/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(40)}`),
   );
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
@@ -230,11 +245,15 @@ test("runtime schema bootstrap installs every governed trigger before compliance
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:52/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(80)}`),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:12/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(120)}`),
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(d1),
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(160)}`),
   );
   await ensureCreditexSchemaGuards(d1);
   assert.equal(
@@ -253,17 +272,23 @@ test("runtime schema bootstrap accepts legacy multiline guards across stateless 
     .replace(" BEGIN ", "\nBEGIN\n")
     .replace(/;\s*$/, "");
   database.exec(legacy);
+  const expectedRemaining = (installed) =>
+    CREDITEX_SCHEMA_GUARD_DEFINITIONS.length - installed;
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:91/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(41)}`),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:51/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(81)}`),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    /CREDITEX_SCHEMA_GUARDS_INSTALLING:11/,
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(121)}`),
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(161)}`),
   );
   await ensureCreditexSchemaGuards(testD1(database));
   assert.equal(
@@ -329,6 +354,83 @@ function seedOrganisation(database, {
     .run(id, code, legalName, tradingName, TEST_NOW, TEST_NOW);
 }
 
+function seedApprovedPublication(database, {
+  organisationId,
+  targetType,
+  targetId,
+  key,
+}) {
+  const requesterUid = `governance-author-${key}`;
+  const reviewerUid = `governance-reviewer-${key}`;
+  const verifierUid = `governance-verifier-${organisationId}`;
+  database.prepare(`INSERT OR IGNORE INTO admin_users
+    (id, firebase_uid, email, display_name, role, status, invited_by_uid,
+     last_login_at, created_at, updated_at)
+    VALUES (?, ?, ?, 'Governance identity verifier', 'owner', 'active',
+      'test', '', ?, ?)`)
+    .run(
+      `${organisationId}-governance-verifier`,
+      verifierUid,
+      `${verifierUid}@example.com`,
+      TEST_NOW,
+      TEST_NOW,
+    );
+  for (const [uid, displayName] of [
+    [requesterUid, `Governance Author ${key}`],
+    [reviewerUid, `Governance Reviewer ${key}`],
+  ]) {
+    database.prepare(`INSERT OR IGNORE INTO compliance_users
+      (id, organisation_id, firebase_uid, email, display_name, role, status,
+       governance_identity_verified, governance_identity_verified_by_uid,
+       governance_identity_verified_at,
+       governance_identity_verification_basis,
+       created_by_uid, last_login_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'admin', 'active', 1, ?, ?,
+        'Test fixture identity verification', 'test', '', ?, ?)`)
+      .run(
+        `${organisationId}-${uid}`,
+        organisationId,
+        uid,
+        `${uid}@example.com`,
+        displayName,
+        verifierUid,
+        TEST_NOW,
+        TEST_NOW,
+        TEST_NOW,
+      );
+  }
+  const requestId = `governance-${targetType}-${key}`;
+  database.prepare(`INSERT INTO compliance_governance_requests
+    (id, organisation_id, target_type, target_id, action, sealed_snapshot,
+     sealed_snapshot_sha256, status, request_reason, requested_by_uid,
+     requested_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'publish', '{}', ?, 'pending',
+      'Fixture publication review', ?, ?, ?, ?)`)
+    .run(
+      requestId,
+      organisationId,
+      targetType,
+      targetId,
+      TEST_HASH,
+      requesterUid,
+      TEST_NOW,
+      TEST_NOW,
+      TEST_NOW,
+    );
+  database.prepare(`UPDATE compliance_governance_requests
+    SET status = 'approved', reviewed_by_uid = ?, reviewed_at = ?,
+      review_note = 'Fixture independently approved', updated_at = ?
+    WHERE id = ? AND organisation_id = ? AND status = 'pending'`)
+    .run(
+      reviewerUid,
+      TEST_NOW,
+      TEST_NOW,
+      requestId,
+      organisationId,
+    );
+  return { requestId, reviewerUid };
+}
+
 function seedGovernedActivity(database, {
   organisationId = "org_creditex_au",
   programId = "program",
@@ -349,8 +451,8 @@ function seedGovernedActivity(database, {
      official_source_checked_at, publish_state, published_by_uid, published_at,
      created_by_uid, created_at, updated_at)
     VALUES (?, ?, ?, ?, 'certificate', 'AU', 'Test regulator',
-      'https://regulator.example', 'Test rule', '1', ?, ?, 'published',
-      'approver', ?, 'author', ?, ?)`)
+      'https://regulator.example', 'Test rule', '1', ?, ?, 'draft',
+      '', '', 'author', ?, ?)`)
     .run(
       programId,
       organisationId,
@@ -360,7 +462,25 @@ function seedGovernedActivity(database, {
       TEST_NOW,
       TEST_NOW,
       TEST_NOW,
+    );
+  const programPublication = seedApprovedPublication(database, {
+    organisationId,
+    targetType: "program",
+    targetId: programId,
+    key: `${key}-program`,
+  });
+  database.prepare(`UPDATE compliance_programs
+    SET publish_state = 'published', publication_request_id = ?,
+      publication_snapshot_sha256 = ?, published_by_uid = ?,
+      published_at = ?, updated_at = ?
+    WHERE id = ?`)
+    .run(
+      programPublication.requestId,
+      TEST_HASH,
+      programPublication.reviewerUid,
       TEST_NOW,
+      TEST_NOW,
+      programId,
     );
   database.prepare(`INSERT INTO compliance_activity_versions
     (id, program_id, activity_key, version, title, service_category,
@@ -372,8 +492,8 @@ function seedGovernedActivity(database, {
      created_by_uid, created_at, updated_at)
     VALUES (?, ?, ?, 1, ?, 'hot-water', 'T1', 'Part T', 'test-product',
       'S1', 'Test scenario', 'VIC', '2026-01-01', '',
-      'https://regulator.example', 'Test rule', '1', ?, ?, '{}', 'published',
-      ?, 'approver', ?, 'author', ?, ?)`)
+      'https://regulator.example', 'Test rule', '1', ?, ?, '{}', 'draft',
+      ?, '', '', 'author', ?, ?)`)
     .run(
       activityVersionId,
       programId,
@@ -384,7 +504,25 @@ function seedGovernedActivity(database, {
       calculationApprovalState,
       TEST_NOW,
       TEST_NOW,
+    );
+  const activityPublication = seedApprovedPublication(database, {
+    organisationId,
+    targetType: "activity",
+    targetId: activityVersionId,
+    key: `${key}-activity`,
+  });
+  database.prepare(`UPDATE compliance_activity_versions
+    SET publish_state = 'published', publication_request_id = ?,
+      publication_snapshot_sha256 = ?, published_by_uid = ?,
+      published_at = ?, updated_at = ?
+    WHERE id = ?`)
+    .run(
+      activityPublication.requestId,
+      TEST_HASH,
+      activityPublication.reviewerUid,
       TEST_NOW,
+      TEST_NOW,
+      activityVersionId,
     );
   database.prepare(`INSERT INTO compliance_evidence_policy_versions
     (id, organisation_id, activity_version_id, version, title,
@@ -410,14 +548,32 @@ function seedGovernedActivity(database, {
      installer_signature_required, customer_signature_required,
      allowed_content_types, condition_snapshot, field_schema, source_citation,
      sort_order, created_by_uid, created_at, updated_at)
-    VALUES (?, ?, ?, 'PHOTO-BEFORE', 'Before photo', 'photo', 'pre_install',
+    VALUES (?, ?, ?, 'PHOTO-BEFORE', 'Before photo', 'photo', 'any',
       1, 1, 1, 1, 1, 1, 0, 0, '["image/jpeg"]', '{}', '{}',
       'Rule clause 1', 1, 'admin-uid', ?, ?)`)
     .run(requirementId, organisationId, policyVersionId, TEST_NOW, TEST_NOW);
   database.prepare(`UPDATE compliance_evidence_policy_versions
-    SET requirements_complete = 1, publish_state = 'published',
-      published_by_uid = 'admin-uid', published_at = ?, updated_at = ?
-    WHERE id = ?`).run(TEST_NOW, TEST_NOW, policyVersionId);
+    SET requirements_complete = 1, updated_at = ?
+    WHERE id = ?`).run(TEST_NOW, policyVersionId);
+  const policyPublication = seedApprovedPublication(database, {
+    organisationId,
+    targetType: "evidence_policy",
+    targetId: policyVersionId,
+    key: `${key}-policy`,
+  });
+  database.prepare(`UPDATE compliance_evidence_policy_versions
+    SET publish_state = 'published', publication_request_id = ?,
+      publication_snapshot_sha256 = ?, published_by_uid = ?,
+      published_at = ?, updated_at = ?
+    WHERE id = ?`)
+    .run(
+      policyPublication.requestId,
+      TEST_HASH,
+      policyPublication.reviewerUid,
+      TEST_NOW,
+      TEST_NOW,
+      policyVersionId,
+    );
   return {
     organisationId,
     programId,
@@ -539,11 +695,16 @@ function seedComplianceUser(database, {
   firebaseUid,
   role,
   organisationId = "org_creditex_au",
+  governanceVerified = false,
+  governanceVerifierUid = `governance-verifier-${organisationId}`,
 }) {
   database.prepare(`INSERT INTO compliance_users
     (id, organisation_id, firebase_uid, email, display_name, role, status,
+     governance_identity_verified, governance_identity_verified_by_uid,
+     governance_identity_verified_at,
+     governance_identity_verification_basis,
      created_by_uid, last_login_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'active', 'test', '', ?, ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 'test', '', ?, ?)`)
     .run(
       id,
       organisationId,
@@ -551,6 +712,10 @@ function seedComplianceUser(database, {
       `${firebaseUid}@example.com`,
       firebaseUid,
       role,
+      governanceVerified ? 1 : 0,
+      governanceVerified ? governanceVerifierUid : "",
+      governanceVerified ? TEST_NOW : "",
+      governanceVerified ? "Test fixture identity verification" : "",
       TEST_NOW,
       TEST_NOW,
   );
@@ -743,6 +908,18 @@ test("the verified bootstrap identity claims the invitation exactly once", async
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM compliance_users WHERE firebase_uid = ?",
   ).get(identity.uid).count, 1);
+  assert.deepEqual({
+    ...database.prepare(`SELECT governance_identity_verified,
+        governance_identity_verified_by_uid,
+        governance_identity_verified_at,
+        governance_identity_verification_basis
+      FROM compliance_users WHERE firebase_uid = ?`).get(identity.uid),
+  }, {
+    governance_identity_verified: 0,
+    governance_identity_verified_by_uid: "",
+    governance_identity_verified_at: "",
+    governance_identity_verification_basis: "",
+  });
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM compliance_audit_events WHERE event_type = 'membership.invitation_claimed'",
   ).get().count, 1);
@@ -757,6 +934,52 @@ test("the verified bootstrap identity claims the invitation exactly once", async
   assert.throws(() => database.prepare(`UPDATE compliance_users
     SET status = 'suspended' WHERE firebase_uid = ?`).run(identity.uid),
   /COMPLIANCE_FINAL_ADMIN_REQUIRED/);
+});
+
+test("ordinary Creditex administrators cannot confer governance identity", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule(
+    "../src/lib/creditex-operations-server.ts",
+  );
+  seedComplianceUser(database, {
+    id: "bootstrap-admin",
+    firebaseUid: "bootstrap-admin",
+    role: "admin",
+  });
+  seedComplianceUser(database, {
+    id: "unverified-person",
+    firebaseUid: "person-one",
+    role: "admin",
+  });
+  const bootstrap = {
+    uid: "bootstrap-admin",
+    role: "admin",
+    organisationId: "org_creditex_au",
+  };
+  await assert.rejects(
+    operations.executeCreditexAccessAction(
+      testD1(database),
+      bootstrap,
+      {
+        action: "verify_member_identity",
+        memberId: "unverified-person",
+        verificationBasis: "Attempted Creditex-admin certification.",
+      },
+    ),
+    (error) => error.code === "CREDITEX_ACCESS_ACTION_INVALID",
+  );
+  assert.equal(database.prepare(`SELECT governance_identity_verified
+    FROM compliance_users
+    WHERE id = 'unverified-person'`).get().governance_identity_verified, 0);
+  const access = await operations.loadCreditexAccess(
+    testD1(database),
+    "org_creditex_au",
+  );
+  const person = access.members.find((member) => member.id === "unverified-person");
+  assert.equal(person.governanceIdentityVerified, false);
+  assert.equal("governanceIdentityVerifiedByUid" in person, false);
+  assert.equal("governanceIdentityVerifiedAt" in person, false);
+  assert.equal("governanceIdentityVerificationBasis" in person, false);
 });
 
 test("operations dashboard and access queries execute against the operations schema", async () => {
@@ -1363,6 +1586,7 @@ test("withdrawn pinned policies remain auditable but block downstream approval",
     id: "withdrawn-admin-member",
     firebaseUid: "withdrawn-admin",
     role: "admin",
+    governanceVerified: true,
   });
   database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'withdrawn', withdrawn_by_uid = ?,
@@ -1562,7 +1786,7 @@ test("evidence policies require complete requirements and become immutable when 
       'admin-1', ?, ?)`).run(hash, now, now, now);
   assert.throws(() => database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'published', published_by_uid = 'admin-1', published_at = ?
-    WHERE id = 'policy'`).run(now), /POLICY_INCOMPLETE/);
+    WHERE id = 'policy'`).run(now), /COMPLIANCE_DUAL_CONTROL_REQUIRED/);
   database.prepare(`INSERT INTO compliance_evidence_requirements
     (id, organisation_id, policy_version_id, requirement_code, title,
      evidence_type, capture_timing, minimum_count, maximum_count,
@@ -1571,13 +1795,25 @@ test("evidence policies require complete requirements and become immutable when 
      allowed_content_types, condition_snapshot, field_schema, source_citation,
      sort_order, created_by_uid, created_at, updated_at)
     VALUES ('requirement', 'org_creditex_au', 'policy', 'PHOTO-BEFORE',
-      'Before photo', 'photo', 'pre_install', 1, 1, 1, 1, 1, 1, 0, 0,
+      'Before photo', 'photo', 'any', 1, 1, 1, 1, 1, 1, 0, 0,
       '[\"image/jpeg\"]', '{}', '{}', 'Rule clause 1', 1, 'admin-1', ?, ?)`)
     .run(now, now);
   database.prepare("UPDATE compliance_evidence_policy_versions SET requirements_complete = 1 WHERE id = 'policy'").run();
+  const publication = seedApprovedPublication(database, {
+    organisationId: "org_creditex_au",
+    targetType: "evidence_policy",
+    targetId: "policy",
+    key: "policy-manual",
+  });
   database.prepare(`UPDATE compliance_evidence_policy_versions
-    SET publish_state = 'published', published_by_uid = 'admin-1', published_at = ?
-    WHERE id = 'policy'`).run(now);
+    SET publish_state = 'published', publication_request_id = ?,
+      publication_snapshot_sha256 = ?, published_by_uid = ?, published_at = ?
+    WHERE id = 'policy'`).run(
+      publication.requestId,
+      TEST_HASH,
+      publication.reviewerUid,
+      now,
+    );
   assert.throws(() => database.prepare(
     "UPDATE compliance_evidence_requirements SET title = 'Changed' WHERE id = 'requirement'",
   ).run(), /IMMUTABLE/);
@@ -1604,9 +1840,9 @@ test("evidence policies require complete requirements and become immutable when 
     /EVIDENCE_REQUIREMENT_IMMUTABLE/,
   );
   database.prepare(`UPDATE compliance_evidence_policy_versions
-    SET publish_state = 'withdrawn', withdrawn_by_uid = 'admin-1',
+    SET publish_state = 'withdrawn', withdrawn_by_uid = ?,
       withdrawn_at = ?, updated_at = ?
-    WHERE id = 'policy'`).run(now, now);
+    WHERE id = 'policy'`).run(publication.reviewerUid, now, now);
   assert.throws(() => database.prepare(`UPDATE compliance_evidence_policy_versions
     SET withdrawn_by_uid = 'other-admin',
       withdrawn_at = '2026-08-02T00:00:00.000Z',
@@ -2283,6 +2519,588 @@ test("operations child records reject missing or cross-organisation parents at i
   for (const { sql, values, pattern } of invalidWrites) {
     assert.throws(() => database.prepare(sql).run(...values), pattern);
   }
+});
+
+test("publication requires two different named administrators and a sealed approved request", async () => {
+  const database = databaseWithComplianceOperations();
+  const d1 = testD1(database);
+  const domain = loadTypescriptModule(
+    "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+    },
+  );
+  database.prepare(`INSERT INTO admin_users
+    (id, firebase_uid, email, display_name, role, status, invited_by_uid,
+     last_login_at, created_at, updated_at)
+    VALUES ('identity-verifier', 'identity-verifier',
+      'owner@example.com', 'Operations owner', 'owner', 'active', 'test', '',
+      ?, ?)`).run(TEST_NOW, TEST_NOW);
+  for (const [id, uid, email, displayName, verified] of [
+    [
+      "shared-admin",
+      "shared-admin",
+      "info+reviewer@example.com",
+      "Shared mailbox",
+      false,
+    ],
+    [
+      "backoffice-admin",
+      "backoffice-admin",
+      "backoffice@example.com",
+      "Backoffice Team",
+      false,
+    ],
+    [
+      "author-admin",
+      "author-admin",
+      "alex.author@example.com",
+      "Alex Author",
+      true,
+    ],
+    [
+      "reviewer-admin",
+      "reviewer-admin",
+      "riley.reviewer@example.com",
+      "Riley Reviewer",
+      true,
+    ],
+  ]) {
+    database.prepare(`INSERT INTO compliance_users
+      (id, organisation_id, firebase_uid, email, display_name, role, status,
+       governance_identity_verified, governance_identity_verified_by_uid,
+       governance_identity_verified_at,
+       governance_identity_verification_basis,
+       created_by_uid, last_login_at, created_at, updated_at)
+      VALUES (?, 'org_creditex_au', ?, ?, ?, 'admin', 'active', ?, ?, ?, ?,
+        'test', '', ?, ?)`)
+      .run(
+        id,
+        uid,
+        email,
+        displayName,
+        verified ? 1 : 0,
+        verified ? "identity-verifier" : "",
+        verified ? TEST_NOW : "",
+        verified ? "Government-issued identity checked in person." : "",
+        TEST_NOW,
+        TEST_NOW,
+      );
+  }
+  const program = domain.prepareComplianceProgramCreateStatement(d1, {
+    id: "dual-control-program",
+    organisationId: "org_creditex_au",
+    programCode: "DUAL",
+    name: "Dual control program",
+    schemeKind: "certificate",
+    jurisdiction: "AU",
+    administeringBody: "Test regulator",
+    officialSourceUrl: "https://regulator.example/dual",
+    officialSourceTitle: "Dual control rule",
+    officialSourceVersion: "1",
+    officialSourceSha256: TEST_HASH,
+    officialSourceCheckedAt: TEST_NOW,
+    actorUid: "author-admin",
+    createdAt: TEST_NOW,
+  });
+  await program.statement.run();
+  await assert.rejects(
+    domain.prepareCompliancePublicationRequestStatements(d1, {
+      organisationId: "org_creditex_au",
+      targetType: "program",
+      targetId: program.id,
+      requestReason: "Shared mailbox must not be a governance control.",
+      actorUid: "shared-admin",
+      requestedAt: TEST_NOW,
+    }),
+    (error) => error.code === "NAMED_ADMIN_REQUESTER_REQUIRED",
+  );
+  await assert.rejects(
+    domain.prepareCompliancePublicationRequestStatements(d1, {
+      organisationId: "org_creditex_au",
+      targetType: "program",
+      targetId: program.id,
+      requestReason: "An unverified backoffice mailbox must not qualify.",
+      actorUid: "backoffice-admin",
+      requestedAt: TEST_NOW,
+    }),
+    (error) => error.code === "NAMED_ADMIN_REQUESTER_REQUIRED",
+  );
+  assert.throws(() => database.prepare(`INSERT INTO compliance_governance_requests
+    (id, organisation_id, target_type, target_id, action, sealed_snapshot,
+     sealed_snapshot_sha256, status, request_reason, requested_by_uid,
+     requested_at, created_at, updated_at)
+    VALUES ('shared-request', 'org_creditex_au', 'program',
+      'dual-control-program', 'publish', '{}', ?, 'pending', 'Invalid shared',
+      'shared-admin', ?, ?, ?)`)
+    .run(TEST_HASH, TEST_NOW, TEST_NOW, TEST_NOW),
+  /COMPLIANCE_NAMED_ADMIN_REQUESTER_REQUIRED/);
+  const request = await domain.prepareCompliancePublicationRequestStatements(
+    d1,
+    {
+      organisationId: "org_creditex_au",
+      targetType: "program",
+      targetId: program.id,
+      requestReason: "Exact source and program identity independently checked.",
+      actorUid: "author-admin",
+      requestedAt: TEST_NOW,
+    },
+  );
+  await d1.batch(request.statements);
+  assert.throws(() => database.prepare(`UPDATE compliance_programs
+    SET publish_state = 'published', published_by_uid = 'reviewer-admin',
+      published_at = ?
+    WHERE id = ?`).run(TEST_NOW, program.id),
+  /COMPLIANCE_DUAL_CONTROL_REQUIRED/);
+  await assert.rejects(
+    domain.prepareCompliancePublicationDecisionStatements(d1, {
+      organisationId: "org_creditex_au",
+      requestId: request.id,
+      outcome: "approved",
+      reviewNote: "Self approval is forbidden.",
+      actorUid: "author-admin",
+      reviewedAt: TEST_NOW,
+    }),
+    (error) => error.code === "PUBLICATION_SELF_REVIEW_FORBIDDEN",
+  );
+  const decision = await domain.prepareCompliancePublicationDecisionStatements(
+    d1,
+    {
+      organisationId: "org_creditex_au",
+      requestId: request.id,
+      outcome: "approved",
+      reviewNote: "Source identity and sealed snapshot independently reviewed.",
+      actorUid: "reviewer-admin",
+      reviewedAt: TEST_NOW,
+    },
+  );
+  await d1.batch(decision.statements);
+  const published = database.prepare(`SELECT publish_state,
+      publication_request_id, publication_snapshot_sha256, published_by_uid
+    FROM compliance_programs WHERE id = ?`).get(program.id);
+  assert.deepEqual({ ...published }, {
+    publish_state: "published",
+    publication_request_id: request.id,
+    publication_snapshot_sha256: request.sealedSnapshotSha256,
+    published_by_uid: "reviewer-admin",
+  });
+});
+
+test("evidence policy governance blocks unverified originals and publishes one immutable sealed version", async () => {
+  const database = databaseWithComplianceOperations();
+  const d1 = testD1(database);
+  const domain = loadTypescriptModule(
+    "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+    },
+  );
+  const governed = seedGovernedActivity(database, {
+    key: "policy-lifecycle",
+  });
+  seedComplianceUser(database, {
+    id: "policy-lifecycle-author",
+    firebaseUid: "policy-lifecycle-author",
+    role: "admin",
+    governanceVerified: true,
+  });
+  seedComplianceUser(database, {
+    id: "policy-lifecycle-reviewer",
+    firebaseUid: "policy-lifecycle-reviewer",
+    role: "admin",
+    governanceVerified: true,
+  });
+  const author = {
+    uid: "policy-lifecycle-author",
+    organisationId: governed.organisationId,
+  };
+  const reviewer = {
+    uid: "policy-lifecycle-reviewer",
+    organisationId: governed.organisationId,
+  };
+  const policyHash = "b".repeat(64);
+  const policyId = "policy-lifecycle-draft";
+  let requirementId = "";
+  const created = domain.prepareComplianceEvidencePolicyCreateStatement(d1, {
+    id: policyId,
+    organisationId: governed.organisationId,
+    activityVersionId: governed.activityVersionId,
+    version: 2,
+    title: "Lifecycle JPEG evidence policy",
+    officialSourceUrl: "https://regulator.example/policy-lifecycle",
+    officialSourceTitle: "Lifecycle evidence rule",
+    officialSourceVersion: "2",
+    officialSourceSha256: policyHash,
+    officialSourceCheckedAt: TEST_NOW,
+    actorUid: author.uid,
+    createdAt: TEST_NOW,
+  });
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    [created.statement],
+    {
+      eventType: "evidence_policy.created",
+      targetType: "compliance_evidence_policy",
+      targetId: created.id,
+      summary: "Lifecycle policy created.",
+    },
+    {},
+    TEST_NOW,
+  );
+
+  const requirementInput = (originalRequired, captureTiming = "any") => ({
+    organisationId: governed.organisationId,
+    policyId,
+    ...(requirementId ? { requirementId } : {}),
+    requirementCode: "POST-INSTALL-JPEG",
+    title: "Post-install JPEG",
+    description: "Capture the completed installation in one JPEG image.",
+    evidenceType: "photo",
+    captureTiming,
+    minimumCount: 1,
+    maximumCount: 2,
+    originalRequired,
+    metadataRequired: false,
+    gpsRequired: false,
+    dateStampRequired: true,
+    installerSignatureRequired: false,
+    customerSignatureRequired: false,
+    allowedContentTypes: ["image/jpeg"],
+    conditionSnapshot: {},
+    fieldSchema: {},
+    sourceCitation: "Lifecycle rule clause 2",
+    sortOrder: 1,
+    actorUid: author.uid,
+    updatedAt: TEST_NOW,
+  });
+  const compatibleRequirement =
+    await domain.prepareComplianceEvidenceRequirementSaveStatements(
+      d1,
+      requirementInput(false),
+    );
+  requirementId = compatibleRequirement.id;
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    compatibleRequirement.statements,
+    {
+      eventType: "evidence_requirement.created",
+      targetType: "compliance_evidence_requirement",
+      targetId: requirementId,
+      summary: "Compatible JPEG requirement created.",
+    },
+    { optionalStatementIndexes: [0] },
+    TEST_NOW,
+  );
+
+  const readyPage = await domain.listComplianceEvidencePolicies(
+    d1,
+    governed.organisationId,
+    {
+      programId: governed.programId,
+      activityVersionId: governed.activityVersionId,
+      page: 1,
+      pageSize: 1,
+    },
+  );
+  assert.equal(readyPage.pagination.total, 2);
+  assert.equal(readyPage.pagination.hasNext, true);
+  assert.equal(readyPage.items[0].id, policyId);
+  assert.equal(readyPage.items[0].readiness.ready, true);
+  assert.deepEqual(readyPage.items[0].readiness.blockers, []);
+  assert.deepEqual(readyPage.items[0].requirements[0].allowedContentTypes, [
+    "image/jpeg",
+  ]);
+
+  for (const captureTiming of [
+    "pre_install",
+    "during_install",
+    "post_install",
+    "periodic",
+  ]) {
+    const unsupportedTiming =
+      await domain.prepareComplianceEvidenceRequirementSaveStatements(
+        d1,
+        requirementInput(false, captureTiming),
+      );
+    await domain.runComplianceGovernanceMutation(
+      d1,
+      author,
+      unsupportedTiming.statements,
+      {
+        eventType: "evidence_requirement.updated",
+        targetType: "compliance_evidence_requirement",
+        targetId: requirementId,
+        summary: "Unenforced capture timing tested.",
+      },
+      { optionalStatementIndexes: [0] },
+      TEST_NOW,
+    );
+    const timingPage = await domain.listComplianceEvidencePolicies(
+      d1,
+      governed.organisationId,
+      {
+        programId: governed.programId,
+        activityVersionId: governed.activityVersionId,
+        page: 1,
+        pageSize: 10,
+      },
+    );
+    const timingPolicy = timingPage.items.find((item) => item.id === policyId);
+    assert.equal(timingPolicy.readiness.ready, false, captureTiming);
+    assert.ok(timingPolicy.readiness.blockers.some(
+      (blocker) =>
+        blocker.code === "POLICY_CAPTURE_TIMING_UNSUPPORTED"
+        && blocker.requirementId === requirementId,
+    ), captureTiming);
+    await assert.rejects(
+      domain.prepareCompliancePublicationRequestStatements(d1, {
+        organisationId: governed.organisationId,
+        targetType: "evidence_policy",
+        targetId: policyId,
+        requestReason: "Attempt to publish unenforced capture timing.",
+        actorUid: author.uid,
+        requestedAt: TEST_NOW,
+      }),
+      (error) =>
+        error.code === "GOVERNANCE_TARGET_NOT_READY"
+        && /cannot yet enforce/i.test(error.message),
+      captureTiming,
+    );
+  }
+  const restoredTiming =
+    await domain.prepareComplianceEvidenceRequirementSaveStatements(
+      d1,
+      requirementInput(false),
+    );
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    restoredTiming.statements,
+    {
+      eventType: "evidence_requirement.updated",
+      targetType: "compliance_evidence_requirement",
+      targetId: requirementId,
+      summary: "Capture timing returned to the supported any state.",
+    },
+    { optionalStatementIndexes: [0] },
+    TEST_NOW,
+  );
+
+  const unverifiedOriginal =
+    await domain.prepareComplianceEvidenceRequirementSaveStatements(
+      d1,
+      requirementInput(true),
+    );
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    unverifiedOriginal.statements,
+    {
+      eventType: "evidence_requirement.updated",
+      targetType: "compliance_evidence_requirement",
+      targetId: requirementId,
+      summary: "Original attestation requirement tested.",
+    },
+    { optionalStatementIndexes: [0] },
+    TEST_NOW,
+  );
+  const blockedPage = await domain.listComplianceEvidencePolicies(
+    d1,
+    governed.organisationId,
+    {
+      programId: governed.programId,
+      activityVersionId: governed.activityVersionId,
+      page: 1,
+      pageSize: 10,
+    },
+  );
+  const blockedPolicy = blockedPage.items.find((item) => item.id === policyId);
+  assert.equal(blockedPolicy.readiness.ready, false);
+  assert.ok(blockedPolicy.readiness.blockers.some(
+    (blocker) =>
+      blocker.code === "POLICY_ORIGINAL_ATTESTATION_REQUIRED"
+      && blocker.requirementId === requirementId,
+  ));
+
+  const restoredRequirement =
+    await domain.prepareComplianceEvidenceRequirementSaveStatements(
+      d1,
+      requirementInput(false),
+    );
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    restoredRequirement.statements,
+    {
+      eventType: "evidence_requirement.updated",
+      targetType: "compliance_evidence_requirement",
+      targetId: requirementId,
+      summary: "Requirement returned to a field-compatible state.",
+    },
+    { optionalStatementIndexes: [0] },
+    TEST_NOW,
+  );
+  const restoredPage = await domain.listComplianceEvidencePolicies(
+    d1,
+    governed.organisationId,
+    {
+      programId: governed.programId,
+      activityVersionId: governed.activityVersionId,
+      page: 1,
+      pageSize: 10,
+    },
+  );
+  assert.equal(
+    restoredPage.items.find((item) => item.id === policyId).readiness.ready,
+    true,
+  );
+
+  const publication =
+    await domain.prepareCompliancePublicationRequestStatements(d1, {
+      organisationId: governed.organisationId,
+      targetType: "evidence_policy",
+      targetId: policyId,
+      requestReason: "JPEG evidence rule independently ready for review.",
+      actorUid: author.uid,
+      requestedAt: TEST_NOW,
+    });
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    author,
+    publication.statements,
+    {
+      eventType: "evidence_policy.publication_requested",
+      targetType: "compliance_evidence_policy",
+      targetId: policyId,
+      summary: "Lifecycle policy publication requested.",
+    },
+    {},
+    TEST_NOW,
+  );
+  const requestPage = await domain.listComplianceGovernanceRequests(
+    d1,
+    governed.organisationId,
+    author.uid,
+    {
+      programId: governed.programId,
+      activityVersionId: governed.activityVersionId,
+      page: 1,
+      pageSize: 1,
+    },
+  );
+  assert.equal(requestPage.pagination.total, 3);
+  assert.equal(requestPage.pagination.pending, 1);
+  assert.equal(requestPage.pagination.hasNext, true);
+  assert.equal(requestPage.items[0].id, publication.id);
+  assert.equal(requestPage.items[0].status, "pending");
+  assert.equal(requestPage.items[0].canReview, false);
+
+  const decision =
+    await domain.prepareCompliancePublicationDecisionStatements(d1, {
+      organisationId: governed.organisationId,
+      requestId: publication.id,
+      outcome: "approved",
+      reviewNote: "JPEG requirement and exact sealed source reviewed.",
+      actorUid: reviewer.uid,
+      reviewedAt: TEST_NOW,
+    });
+  await domain.runComplianceGovernanceMutation(
+    d1,
+    reviewer,
+    decision.statements,
+    {
+      eventType: "evidence_policy.published",
+      targetType: "compliance_evidence_policy",
+      targetId: policyId,
+      summary: "Lifecycle policy independently published.",
+    },
+    {},
+    TEST_NOW,
+  );
+
+  const published = database.prepare(`SELECT publish_state,
+      publication_request_id, publication_snapshot_sha256,
+      official_source_sha256, requirements_complete, published_by_uid
+    FROM compliance_evidence_policy_versions WHERE id = ?`).get(policyId);
+  assert.deepEqual({ ...published }, {
+    publish_state: "published",
+    publication_request_id: publication.id,
+    publication_snapshot_sha256: publication.sealedSnapshotSha256,
+    official_source_sha256: policyHash,
+    requirements_complete: 1,
+    published_by_uid: reviewer.uid,
+  });
+  const provenance = database.prepare(`SELECT sealed_snapshot,
+      sealed_snapshot_sha256, status, requested_by_uid, requested_at,
+      reviewed_by_uid, reviewed_at, review_note
+    FROM compliance_governance_requests WHERE id = ?`).get(publication.id);
+  assert.equal(
+    await domain.complianceSnapshotSha256(provenance.sealed_snapshot),
+    publication.sealedSnapshotSha256,
+  );
+  assert.deepEqual(
+    {
+      sealed_snapshot_sha256: provenance.sealed_snapshot_sha256,
+      status: provenance.status,
+      requested_by_uid: provenance.requested_by_uid,
+      requested_at: provenance.requested_at,
+      reviewed_by_uid: provenance.reviewed_by_uid,
+      reviewed_at: provenance.reviewed_at,
+      review_note: provenance.review_note,
+    },
+    {
+      sealed_snapshot_sha256: publication.sealedSnapshotSha256,
+      status: "approved",
+      requested_by_uid: author.uid,
+      requested_at: TEST_NOW,
+      reviewed_by_uid: reviewer.uid,
+      reviewed_at: TEST_NOW,
+      review_note: "JPEG requirement and exact sealed source reviewed.",
+    },
+  );
+  const sealed = JSON.parse(provenance.sealed_snapshot);
+  assert.equal(sealed.evidencePolicy.officialSourceSha256, policyHash);
+  assert.equal(sealed.requirements[0].id, requirementId);
+  assert.equal(sealed.requirements[0].originalRequired, false);
+  assert.deepEqual(sealed.requirements[0].allowedContentTypes, ["image/jpeg"]);
+  assert.throws(
+    () => database.prepare(`UPDATE compliance_evidence_policy_versions
+      SET title = 'Changed after publication' WHERE id = ?`).run(policyId),
+    /COMPLIANCE_EVIDENCE_POLICY_IMMUTABLE/,
+  );
+  assert.throws(
+    () => database.prepare(`UPDATE compliance_evidence_requirements
+      SET title = 'Changed after publication' WHERE id = ?`).run(requirementId),
+    /COMPLIANCE_EVIDENCE_REQUIREMENT_IMMUTABLE/,
+  );
+});
+
+test("finite evidence maxima are atomic while valid status review transitions remain possible", () => {
+  const database = databaseWithComplianceOperations();
+  const governed = seedGovernedActivity(database, { key: "maximum" });
+  seedTradeJob(database, { key: "maximum" });
+  seedGovernedCase(database, governed, {
+    caseId: "case-maximum",
+    caseNumber: "CASE-MAXIMUM",
+    workOrderId: "job",
+  });
+  seedEvidenceRecord(database, governed, {
+    caseId: "case-maximum",
+    evidenceId: "maximum-evidence-1",
+  });
+  assert.throws(() => seedEvidenceRecord(database, governed, {
+    caseId: "case-maximum",
+    evidenceId: "maximum-evidence-2",
+  }), /COMPLIANCE_EVIDENCE_MAXIMUM_REACHED/);
+  assert.equal(database.prepare(`UPDATE compliance_case_evidence
+    SET status = 'under_review', updated_at = ?
+    WHERE id = 'maximum-evidence-1'`).run(TEST_NOW).changes, 1);
 });
 
 test("field upload and sync source close the evidence custody contract", () => {

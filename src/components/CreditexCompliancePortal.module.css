@@ -251,6 +251,10 @@
   padding: 18px;
 }
 
+.governancePanel {
+  padding-bottom: 104px;
+}
+
 .panelHeader {
   align-items: flex-end;
   display: flex;
@@ -432,6 +436,45 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.governanceScope {
+  align-items: end;
+  background: linear-gradient(135deg, #0b604d, #0b7659);
+  border-radius: 14px;
+  color: #fff;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .5fr);
+  margin-bottom: 14px;
+  padding: 15px;
+}
+
+.governanceScope > div > span {
+  color: #c8eadf;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.governanceScope h3 {
+  font-size: .95rem;
+  margin: 4px 0 0;
+}
+
+.governanceScope p {
+  color: #d8f0e7;
+  font-size: .72rem;
+  line-height: 1.5;
+  margin: 5px 0 0;
+  max-width: 760px;
+}
+
+.governanceScope label {
+  display: grid;
+  font-size: .7rem;
+  font-weight: 800;
+  gap: 6px;
+}
+
 .formCard {
   background: var(--portal-soft);
   border: 1px solid var(--portal-line);
@@ -449,7 +492,7 @@
 .formGrid label {
   color: var(--portal-ink);
   display: grid;
-  font-size: .61rem;
+  font-size: .68rem;
   font-weight: 800;
   gap: 5px;
 }
@@ -462,7 +505,7 @@
   background: #fff7df;
   border-left: 4px solid #d5972a;
   color: #6a4a0e;
-  font-size: .62rem;
+  font-size: .68rem;
   line-height: 1.5;
   margin: 13px 0 0;
   padding: 10px 11px;
@@ -493,7 +536,7 @@
 
 .record p {
   color: var(--portal-muted);
-  font-size: .59rem;
+  font-size: .66rem;
   line-height: 1.45;
   margin: 4px 0 0;
 }
@@ -508,11 +551,87 @@
 .textButton {
   background: transparent;
   color: var(--portal-green-dark);
-  font-size: .64rem;
+  font-size: .68rem;
   font-weight: 850;
   padding: 7px;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.governanceProgramTabs {
+  align-items: center;
+  background: rgba(255, 255, 255, .97);
+  border: 1px solid var(--portal-line);
+  border-radius: 13px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  box-shadow: 0 10px 32px rgba(16, 43, 37, .14);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  left: 50%;
+  margin: 0;
+  padding: 10px;
+  position: fixed;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 44px), 1480px);
+  z-index: 100;
+}
+
+.governanceProgramTabs > span {
+  color: var(--portal-muted);
+  font-size: .68rem;
+  font-weight: 900;
+  padding: 0 4px;
+  text-transform: uppercase;
+}
+
+.governanceProgramTabs > div {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+.governanceProgramTabs button {
+  background: #edf5f2;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--portal-green-dark);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  min-width: 140px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.governanceProgramTabs button[data-selected="true"] {
+  background: var(--portal-green);
+  border-color: var(--portal-green);
+  color: #fff;
+}
+
+.governanceProgramTabs button strong,
+.governanceProgramTabs button small {
+  display: block;
+}
+
+.governanceProgramTabs button strong {
+  font-size: .72rem;
+}
+
+.governanceProgramTabs button small,
+.governanceProgramTabs > div > small {
+  font-size: .66rem;
+  margin-top: 2px;
+}
+
+.governanceProgramTabs button:focus-visible {
+  outline: 3px solid rgba(29, 141, 105, .35);
+  outline-offset: 2px;
 }
 
 .signInWrap {
@@ -634,7 +753,8 @@
   }
 
   .filters,
-  .governanceGrid {
+  .governanceGrid,
+  .governanceScope {
     grid-template-columns: 1fr;
   }
 
@@ -674,5 +794,15 @@
   .pagination {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .governanceProgramTabs {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    width: calc(100vw - 24px);
+  }
+
+  .governancePanel {
+    padding-bottom: 122px;
   }
 }

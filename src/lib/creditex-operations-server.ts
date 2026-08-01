@@ -1839,9 +1839,11 @@ export async function loadCreditexOperationsDashboard(
           SELECT COUNT(*)
           FROM compliance_activity_versions workspace_activity
           WHERE workspace_activity.program_id = workspace_program.id
+            AND workspace_activity.publish_state = 'published'
         ) activity_version_count
       FROM compliance_programs workspace_program
       WHERE workspace_program.organisation_id = ?
+        AND workspace_program.publish_state = 'published'
       ORDER BY workspace_program.jurisdiction,
         workspace_program.name, workspace_program.id`, [
       ...caseContext.bindings,
@@ -1870,6 +1872,8 @@ export async function loadCreditexOperationsDashboard(
       JOIN compliance_programs workspace_program
         ON workspace_program.id = workspace_activity.program_id
         AND workspace_program.organisation_id = ?
+        AND workspace_program.publish_state = 'published'
+      WHERE workspace_activity.publish_state = 'published'
       ORDER BY workspace_program.jurisdiction,
         workspace_program.name, workspace_activity.activity_key,
         workspace_activity.version DESC, workspace_activity.id`, [
@@ -2966,7 +2970,7 @@ function recomputeEvidenceStatusStatement(
             WHERE requirement.policy_version_id = evidence_policy_version_id
               AND requirement.organisation_id = compliance_cases.organisation_id
               AND (
-                SELECT COUNT(*)
+                SELECT COUNT(DISTINCT evidence.original_sha256)
                 FROM compliance_case_evidence evidence
                 WHERE evidence.case_id = compliance_cases.id
                   AND evidence.organisation_id = compliance_cases.organisation_id
@@ -3022,7 +3026,7 @@ async function requireEvidenceReady(
         policy.publish_state,
         COUNT(requirement.id) requirement_count,
         SUM(CASE WHEN (
-          SELECT COUNT(*)
+          SELECT COUNT(DISTINCT evidence.original_sha256)
           FROM compliance_case_evidence evidence
           WHERE evidence.case_id = compliance_case.id
             AND evidence.organisation_id = compliance_case.organisation_id
@@ -4623,6 +4627,7 @@ export async function loadCreditexAccess(
 ) {
   const [memberRows, invitationRows] = await Promise.all([
     rows(database, `SELECT id, email, display_name, role, status,
+        governance_identity_verified,
         last_login_at, created_at, updated_at
       FROM compliance_users
       WHERE organisation_id = ?
@@ -4636,7 +4641,11 @@ export async function loadCreditexAccess(
       LIMIT 250`, [organisationId]),
   ]);
   return {
-    members: projectRows(memberRows),
+    members: projectRows(memberRows).map((member) => ({
+      ...member,
+      governanceIdentityVerified:
+        Number(member.governanceIdentityVerified) === 1,
+    })),
     invitations: projectRows(invitationRows),
   };
 }

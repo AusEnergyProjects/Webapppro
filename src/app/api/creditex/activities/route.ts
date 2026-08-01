@@ -9,12 +9,14 @@ import {
   listCompliancePrograms,
   prepareComplianceActivityCreateStatement,
   prepareComplianceActivityDraftDeleteStatement,
-  prepareComplianceActivityPublishStatement,
   prepareComplianceActivityWithdrawStatement,
+  prepareCompliancePublicationDecisionStatements,
+  prepareCompliancePublicationRequestStatements,
+  prepareCompliancePublicationSupersedeStatement,
   prepareComplianceProgramCreateStatement,
   prepareComplianceProgramDraftDeleteStatement,
-  prepareComplianceProgramPublishStatement,
   prepareComplianceProgramWithdrawStatement,
+  runComplianceGovernanceMutation,
 } from "@/lib/creditex-compliance-server";
 
 export const runtime = "edge";
@@ -104,47 +106,46 @@ function requirementsSnapshot(value: unknown): Record<string, unknown> {
   }
 }
 
+function requiredReason(
+  value: unknown,
+  code: string,
+  label: string,
+) {
+  const reason = String(value || "").trim();
+  if (!reason || reason.length > 4_000) {
+    throw new ComplianceDomainError(
+      code,
+      400,
+      `Enter ${label.toLowerCase()} (up to 4,000 characters).`,
+    );
+  }
+  return reason;
+}
+
 async function runStateChange(
   database: D1Database,
   member: { uid: string; organisationId: string },
-  statement: D1PreparedStatement,
+  statementOrStatements: D1PreparedStatement | D1PreparedStatement[],
   audit: {
     eventType: string;
-    targetType: "compliance_program" | "compliance_activity_version";
+    targetType: string;
     targetId: string;
     summary: string;
     metadata?: Record<string, unknown>;
   },
+  options: {
+    optionalStatementIndexes?: readonly number[];
+  } = {},
 ) {
-  const now = new Date().toISOString();
-  const operationId = crypto.randomUUID();
-  await database.batch([
-    statement,
-    database.prepare(`INSERT INTO compliance_write_guards (
-        id, organisation_id, operation_id, step_number, verified, created_at
-      ) VALUES (?, ?, ?, 1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END, ?)`)
-      .bind(
-        crypto.randomUUID(),
-        member.organisationId,
-        operationId,
-        now,
-      ),
-    database.prepare(`INSERT INTO compliance_audit_events (
-        id, organisation_id, actor_type, actor_uid, event_type,
-        target_type, target_id, summary, metadata, created_at
-      ) VALUES (?, ?, 'compliance', ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(
-        crypto.randomUUID(),
-        member.organisationId,
-        member.uid,
-        audit.eventType,
-        audit.targetType,
-        audit.targetId,
-        audit.summary,
-        JSON.stringify(audit.metadata || {}),
-        now,
-      ),
-  ]);
+  await runComplianceGovernanceMutation(
+    database,
+    member,
+    Array.isArray(statementOrStatements)
+      ? statementOrStatements
+      : [statementOrStatements],
+    audit,
+    options,
+  );
 }
 
 async function draftProgramSnapshot(
@@ -291,32 +292,134 @@ export async function POST(request: Request) {
       return json({ ok: true, id: prepared.id }, 201);
     }
 
-    if (action === "publish_program") {
-      const programId = String(body.programId || "");
-      await runStateChange(
+    if (
+      action === "request_program_publication"
+      || action === "request_activity_publication"
+    ) {
+      const targetType = action === "request_program_publication"
+        ? "program"
+        : "activity";
+      const targetId = String(
+        targetType === "program" ? body.programId : body.activityId,
+      );
+      const requestReason = requiredReason(
+        body.requestReason,
+        "PUBLICATION_REASON_REQUIRED",
+        "a publication-review reason",
+      );
+      const prepared = await prepareCompliancePublicationRequestStatements(
         database,
-        member,
-        prepareComplianceProgramPublishStatement(
-          database,
-          member.organisationId,
-          programId,
-          member.uid,
-        ),
         {
-          eventType: "program.published",
-          targetType: "compliance_program",
-          targetId: programId,
-          summary: "A reviewed compliance program was published.",
+          organisationId: member.organisationId,
+          targetType,
+          targetId,
+          requestReason,
+          actorUid: member.uid,
         },
       );
-      return json({ ok: true });
+      await runStateChange(database, member, prepared.statements, {
+        eventType: `${targetType}.publication_requested`,
+        targetType: targetType === "program"
+          ? "compliance_program"
+          : "compliance_activity_version",
+        targetId,
+        summary: targetType === "program"
+          ? "A sealed compliance program publication review was requested."
+          : "A sealed compliance activity publication review was requested.",
+        metadata: {
+          requestId: prepared.id,
+          sealedSnapshotSha256: prepared.sealedSnapshotSha256,
+          requestReason,
+        },
+      });
+      return json({
+        ok: true,
+        requestId: prepared.id,
+        sealedSnapshotSha256: prepared.sealedSnapshotSha256,
+      }, 201);
+    }
+
+    if (
+      action === "approve_program_publication"
+      || action === "reject_program_publication"
+      || action === "approve_activity_publication"
+      || action === "reject_activity_publication"
+    ) {
+      const targetType = action.includes("_program_")
+        ? "program"
+        : "activity";
+      const outcome = action.startsWith("approve_")
+        ? "approved"
+        : "rejected";
+      const reviewNote = requiredReason(
+        body.reviewNote,
+        "PUBLICATION_REVIEW_NOTE_REQUIRED",
+        "a publication-review note",
+      );
+      const prepared = await prepareCompliancePublicationDecisionStatements(
+        database,
+        {
+          organisationId: member.organisationId,
+          requestId: String(body.requestId || ""),
+          outcome,
+          reviewNote,
+          actorUid: member.uid,
+        },
+      );
+      if (prepared.targetType !== targetType) {
+        throw new ComplianceDomainError(
+          "PUBLICATION_REQUEST_TARGET_MISMATCH",
+          409,
+          "This publication request belongs to a different governed record.",
+        );
+      }
+      await runStateChange(database, member, prepared.statements, {
+        eventType: outcome === "approved"
+          ? `${targetType}.published`
+          : `${targetType}.publication_rejected`,
+        targetType: targetType === "program"
+          ? "compliance_program"
+          : "compliance_activity_version",
+        targetId: prepared.targetId,
+        summary: outcome === "approved"
+          ? targetType === "program"
+            ? "A different named administrator approved and published the sealed compliance program."
+            : "A different named administrator approved and published the sealed compliance activity."
+          : targetType === "program"
+            ? "A named administrator rejected the compliance program publication request."
+            : "A named administrator rejected the compliance activity publication request.",
+        metadata: {
+          requestId: prepared.requestId,
+          outcome,
+          reviewNote,
+        },
+      });
+      return json({
+        ok: true,
+        requestId: prepared.requestId,
+        outcome,
+        targetId: prepared.targetId,
+      });
+    }
+
+    if (action === "publish_program") {
+      throw new ComplianceDomainError(
+        "COMPLIANCE_DUAL_CONTROL_REQUIRED",
+        409,
+        "Submit this program for review by a different named administrator.",
+      );
     }
     if (action === "withdraw_program") {
       const programId = String(body.programId || "");
+      const reason = requiredReason(
+        body.reason,
+        "WITHDRAWAL_REASON_REQUIRED",
+        "a withdrawal reason",
+      );
       await runStateChange(
         database,
         member,
-        prepareComplianceProgramWithdrawStatement(
+        await prepareComplianceProgramWithdrawStatement(
           database,
           member.organisationId,
           programId,
@@ -327,36 +430,29 @@ export async function POST(request: Request) {
           targetType: "compliance_program",
           targetId: programId,
           summary: "A published compliance program was withdrawn.",
+          metadata: { reason },
         },
       );
       return json({ ok: true });
     }
     if (action === "publish_activity") {
-      const activityId = String(body.activityId || "");
-      await runStateChange(
-        database,
-        member,
-        prepareComplianceActivityPublishStatement(
-          database,
-          member.organisationId,
-          activityId,
-          member.uid,
-        ),
-        {
-          eventType: "activity.published",
-          targetType: "compliance_activity_version",
-          targetId: activityId,
-          summary: "A reviewed compliance activity version was published.",
-        },
+      throw new ComplianceDomainError(
+        "COMPLIANCE_DUAL_CONTROL_REQUIRED",
+        409,
+        "Submit this activity for review by a different named administrator.",
       );
-      return json({ ok: true });
     }
     if (action === "withdraw_activity") {
       const activityId = String(body.activityId || "");
+      const reason = requiredReason(
+        body.reason,
+        "WITHDRAWAL_REASON_REQUIRED",
+        "a withdrawal reason",
+      );
       await runStateChange(
         database,
         member,
-        prepareComplianceActivityWithdrawStatement(
+        await prepareComplianceActivityWithdrawStatement(
           database,
           member.organisationId,
           activityId,
@@ -367,6 +463,7 @@ export async function POST(request: Request) {
           targetType: "compliance_activity_version",
           targetId: activityId,
           summary: "A published compliance activity version was withdrawn.",
+          metadata: { reason },
         },
       );
       return json({ ok: true });
@@ -388,11 +485,21 @@ export async function POST(request: Request) {
       await runStateChange(
         database,
         member,
-        prepareComplianceProgramDraftDeleteStatement(
-          database,
-          member.organisationId,
-          programId,
-        ),
+        [
+          prepareCompliancePublicationSupersedeStatement(
+            database,
+            member.organisationId,
+            "program",
+            programId,
+            new Date().toISOString(),
+            "The compliance program draft was deleted.",
+          ),
+          prepareComplianceProgramDraftDeleteStatement(
+            database,
+            member.organisationId,
+            programId,
+          ),
+        ],
         {
           eventType: "program.draft_deleted",
           targetType: "compliance_program",
@@ -400,6 +507,7 @@ export async function POST(request: Request) {
           summary: "A compliance program draft was deleted with its source identity retained in audit.",
           metadata: { deletedSnapshot },
         },
+        { optionalStatementIndexes: [0] },
       );
       return json({ ok: true });
     }
@@ -420,11 +528,21 @@ export async function POST(request: Request) {
       await runStateChange(
         database,
         member,
-        prepareComplianceActivityDraftDeleteStatement(
-          database,
-          member.organisationId,
-          activityId,
-        ),
+        [
+          prepareCompliancePublicationSupersedeStatement(
+            database,
+            member.organisationId,
+            "activity",
+            activityId,
+            new Date().toISOString(),
+            "The compliance activity draft was deleted.",
+          ),
+          prepareComplianceActivityDraftDeleteStatement(
+            database,
+            member.organisationId,
+            activityId,
+          ),
+        ],
         {
           eventType: "activity.draft_deleted",
           targetType: "compliance_activity_version",
@@ -432,6 +550,7 @@ export async function POST(request: Request) {
           summary: "A compliance activity draft was deleted with its source identity retained in audit.",
           metadata: { deletedSnapshot },
         },
+        { optionalStatementIndexes: [0] },
       );
       return json({ ok: true });
     }

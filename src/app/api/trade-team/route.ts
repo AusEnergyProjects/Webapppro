@@ -2,7 +2,12 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { assignedJob, canDispatch, canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
-import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
+import {
+  guardedOnlineChildMutationBatch,
+  guardedOnlineJobMutationBatch,
+  jobSyncChangeStatements,
+  nextJobRevision,
+} from "@/lib/trade-team-sync-server";
 
 export const runtime = "edge";
 
@@ -23,6 +28,8 @@ function errorResponse(error: unknown) {
   if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Your team role does not allow dispatch changes." }, 403);
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to your team account." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job changed elsewhere. Refresh it before saving." }, 409);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Team member not found." }, 404);
   if (code === "TEAM_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its 50 member team limit." }, 409);
   return adminJson({ ok: false, error: "The team request could not be completed." }, 500);
@@ -83,6 +90,29 @@ async function teamPayload(access: TeamAccess) {
           revision: Number(task.revision || 1) })) };
     }),
   };
+}
+
+async function mutableAssignedJobState(
+  db: D1Database,
+  access: TeamAccess,
+  workOrderId: string,
+) {
+  const assigned = await assignedJob(access, workOrderId);
+  const current = await db.prepare(`SELECT stage, revision, assignee_member_id, assignee_label
+    FROM trade_work_orders
+    WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer'
+      AND record_status = 'active'`)
+    .bind(workOrderId, access.ownerUid)
+    .first<{
+      stage: string;
+      revision: number;
+      assignee_member_id: string;
+      assignee_label: string;
+    }>();
+  if (!current) throw new Error("JOB_NOT_FOUND");
+  if (Number(current.revision) !== Number(assigned.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
+  if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+  return current;
 }
 
 export async function GET(request: Request) {
@@ -224,7 +254,7 @@ export async function PATCH(request: Request) {
     } else if (action === "assign_job") {
       if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
       const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180);
-      const job = await assignedJob(access, workOrderId);
+      const job = await mutableAssignedJobState(db, access, workOrderId);
       let label = ""; let memberStatus = "";
       if (memberId) {
         const member = await db.prepare(`SELECT display_name, status FROM trade_team_members
@@ -232,9 +262,14 @@ export async function PATCH(request: Request) {
         if (!member) throw new Error("MEMBER_NOT_FOUND"); label = String(member.display_name); memberStatus = String(member.status);
       }
       const revision = nextJobRevision(job.revision);
-      await db.batch([
-        db.prepare("UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(memberId, label, revision, now, workOrderId, access.ownerUid),
+      const jobStage = String(job.stage);
+      await guardedOnlineJobMutationBatch(db, [
+        db.prepare(`UPDATE trade_work_orders
+          SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
+          .bind(memberId, label, revision, now, workOrderId, access.ownerUid,
+            jobStage, Number(job.revision)),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'team_assignment', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, access.ownerUid, memberId
@@ -242,35 +277,89 @@ export async function PATCH(request: Request) {
             : "Team assignment cleared.", now),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
           audienceMemberId: memberId, previousAudienceMemberId: job.assignee_member_id }),
-      ]);
+      ], {
+        kind: "assignment",
+        assigneeLabel: label,
+        assigneeMemberId: memberId,
+        jobRevision: revision,
+        jobStage,
+        ownerUid: access.ownerUid,
+        updatedAt: now,
+        workOrderId,
+      });
     } else if (action === "update_job") {
-      const workOrderId = cleanAdminText(body.workOrderId, 180); const job = await assignedJob(access, workOrderId);
+      const workOrderId = cleanAdminText(body.workOrderId, 180);
+      const job = await mutableAssignedJobState(db, access, workOrderId);
       const stage = cleanAdminText(body.stage, 30);
       if (!WORK_STAGES.has(stage)) return adminJson({ ok: false, error: "Choose a valid job stage." }, 400);
       const revision = nextJobRevision(job.revision);
-      await db.batch([
-        db.prepare("UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(stage, revision, now, workOrderId, access.ownerUid),
+      await guardedOnlineJobMutationBatch(db, [
+        db.prepare(`UPDATE trade_work_orders SET stage = ?, revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?`)
+          .bind(stage, revision, now, workOrderId, access.ownerUid,
+            String(job.stage), Number(job.revision)),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
           audienceMemberId: job.assignee_member_id }),
-      ]);
+      ], {
+        kind: "stage",
+        jobRevision: revision,
+        jobStage: stage,
+        ownerUid: access.ownerUid,
+        updatedAt: now,
+        workOrderId,
+      });
     } else if (action === "update_task") {
       const taskId = cleanAdminText(body.taskId, 180); const status = cleanAdminText(body.status, 20);
       if (!["pending", "done"].includes(status)) return adminJson({ ok: false, error: "Choose a valid task status." }, 400);
-      const task = await db.prepare(`SELECT t.work_order_id, t.revision, w.revision job_revision, w.assignee_member_id
+      const task = await db.prepare(`SELECT t.work_order_id, t.revision, w.stage job_stage,
+          w.revision job_revision, w.assignee_member_id
         FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, access.ownerUid, access.ownerUid).first<Record<string, unknown>>();
-      if (!task) throw new Error("JOB_NOT_FOUND"); await assignedJob(access, String(task.work_order_id));
+      if (!task) throw new Error("JOB_NOT_FOUND");
+      if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
+      const job = await assignedJob(access, String(task.work_order_id));
+      if (Number(job.revision) !== Number(task.job_revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
-      await db.batch([
-        db.prepare("UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid),
-        db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-          .bind(jobRevision, now, task.work_order_id, access.ownerUid),
+      const jobStage = String(task.job_stage);
+      await guardedOnlineChildMutationBatch(db, [
+        db.prepare(`UPDATE trade_work_order_tasks SET status = ?, completed_at = ?, revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_work_orders work_order
+              WHERE work_order.id = trade_work_order_tasks.work_order_id
+                AND work_order.firebase_uid = trade_work_order_tasks.firebase_uid
+                AND work_order.record_status = 'active'
+                AND work_order.stage = ?
+                AND work_order.stage NOT IN ('completed', 'cancelled')
+                AND work_order.revision = ?
+            )`)
+          .bind(status, status === "done" ? now : "", taskRevision, now, taskId, access.ownerUid,
+            Number(task.revision), jobStage, Number(task.job_revision)),
+        db.prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
+            AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND revision = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_work_order_tasks child
+              WHERE child.id = ? AND child.work_order_id = trade_work_orders.id
+                AND child.firebase_uid = trade_work_orders.firebase_uid
+                AND child.revision = ? AND child.updated_at = ?
+            )`)
+          .bind(jobRevision, now, task.work_order_id, access.ownerUid, jobStage,
+            Number(task.job_revision), taskId, taskRevision, now),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId: String(task.work_order_id),
           revision: jobRevision, changedAt: now, audienceMemberId: String(task.assignee_member_id || "") }),
-      ]);
+      ], {
+        childKind: "task",
+        childId: taskId,
+        childRevision: taskRevision,
+        jobRevision,
+        jobStage,
+        ownerUid: access.ownerUid,
+        updatedAt: now,
+        workOrderId: String(task.work_order_id),
+      });
     } else return adminJson({ ok: false, error: "Unsupported team update." }, 400);
     return adminJson({ ok: true, ...(await teamPayload(access)) });
   } catch (error) { return errorResponse(error); }

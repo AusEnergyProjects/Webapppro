@@ -111,6 +111,14 @@ function applyFoundation(database) {
 
 function applyEvidencePolicyFixtureSchema(database) {
   database.exec(`
+    ALTER TABLE compliance_programs
+      ADD publication_request_id text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_programs
+      ADD publication_snapshot_sha256 text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_activity_versions
+      ADD publication_request_id text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_activity_versions
+      ADD publication_snapshot_sha256 text DEFAULT '' NOT NULL;
     ALTER TABLE compliance_cases
       ADD evidence_policy_version_id text DEFAULT '' NOT NULL;
     CREATE TABLE compliance_evidence_policy_versions (
@@ -128,6 +136,14 @@ function applyEvidencePolicyFixtureSchema(database) {
       id text PRIMARY KEY NOT NULL,
       organisation_id text NOT NULL,
       policy_version_id text NOT NULL
+    );
+    CREATE TABLE compliance_governance_requests (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      target_type text NOT NULL,
+      target_id text NOT NULL,
+      action text NOT NULL,
+      status text NOT NULL
     );
   `);
 }
@@ -218,6 +234,31 @@ test("published programs and activity versions are source-backed, immutable, and
   applyFoundation(database);
   applyEvidencePolicyFixtureSchema(database);
   insertOrganisation(database);
+  database.exec(`
+    ALTER TABLE compliance_users
+      ADD governance_identity_verified integer DEFAULT 0 NOT NULL;
+    ALTER TABLE compliance_users
+      ADD governance_identity_verified_by_uid text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_users
+      ADD governance_identity_verified_at text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_users
+      ADD governance_identity_verification_basis text DEFAULT '' NOT NULL;
+    INSERT INTO compliance_users
+      (id, organisation_id, firebase_uid, email, display_name, role, status,
+       governance_identity_verified, governance_identity_verified_by_uid,
+       governance_identity_verified_at, governance_identity_verification_basis,
+       created_by_uid, created_at, updated_at)
+      VALUES
+      ('shared-admin', 'creditex-org', 'shared-admin',
+        'info@ausenergyassessments.com', 'Shared operations inbox', 'admin',
+        'active', 0, '', '', '', 'platform-owner',
+        '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+      ('verified-admin', 'creditex-org', 'creditex-admin',
+        'casey.admin@example.com', 'Casey Admin', 'admin', 'active', 1,
+        'platform-owner', '2026-08-01T00:00:00.000Z',
+        'Identity checked by platform owner', 'platform-owner',
+        '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z');
+  `);
   const d1 = testD1(database);
   const domain = loadTypescriptModule(
     "../src/lib/creditex-compliance-server.ts",
@@ -577,20 +618,30 @@ test("published programs and activity versions are source-backed, immutable, and
   assert.throws(() => database.prepare(
     "UPDATE compliance_activity_versions SET publish_state = 'withdrawn' WHERE id = ?",
   ).run(activity.id), /check constraint/i);
-  assert.equal((await domain.prepareComplianceActivityWithdrawStatement(
+  await assert.rejects(
+    domain.prepareComplianceActivityWithdrawStatement(
+      d1,
+      "creditex-org",
+      activity.id,
+      "shared-admin",
+      "2026-08-01T00:07:00.000Z",
+    ),
+    (error) => error.code === "NAMED_ADMIN_WITHDRAWER_REQUIRED",
+  );
+  assert.equal((await (await domain.prepareComplianceActivityWithdrawStatement(
     d1,
     "creditex-org",
     activity.id,
     "creditex-admin",
     "2026-08-01T00:07:00.000Z",
-  ).run()).meta.changes, 1);
-  assert.equal((await domain.prepareComplianceProgramWithdrawStatement(
+  )).run()).meta.changes, 1);
+  assert.equal((await (await domain.prepareComplianceProgramWithdrawStatement(
     d1,
     "creditex-org",
     program.id,
     "creditex-admin",
     "2026-08-01T00:08:00.000Z",
-  ).run()).meta.changes, 1);
+  )).run()).meta.changes, 1);
   assert.throws(() => database.prepare(
     "UPDATE compliance_programs SET withdrawn_at = '2026-08-01T00:09:00.000Z' WHERE id = ?",
   ).run(program.id), /immutable/i);
@@ -825,6 +876,9 @@ test("case creation derives the organisation, snapshots the exact rule date, and
 test("compliance access requires a verified exact identity, active organisation, active membership, and bounded role", async () => {
   const database = new DatabaseSync(":memory:");
   applyFoundation(database);
+  database.exec(`ALTER TABLE compliance_users
+    ADD governance_identity_verified integer DEFAULT 0 NOT NULL
+      CHECK (governance_identity_verified IN (0, 1))`);
   insertOrganisation(database);
   database.prepare(`INSERT INTO compliance_users
     (id, organisation_id, firebase_uid, email, display_name, role, status,
@@ -860,6 +914,7 @@ test("compliance access requires a verified exact identity, active organisation,
   );
   assert.equal(reviewer.organisationId, "creditex-org");
   assert.equal(reviewer.role, "reviewer");
+  assert.equal(reviewer.governanceIdentityVerified, false);
   assert.ok(
     database.prepare("SELECT last_login_at FROM compliance_users WHERE id = 'member-1'").get().last_login_at,
   );

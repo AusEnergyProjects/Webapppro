@@ -44,14 +44,28 @@ export type ComplianceEvidenceRequirement = {
   id: string;
   code: string;
   title: string;
+  description: string;
   evidenceType: string;
   captureTiming: string;
   minimumCount: number;
   maximumCount: number;
+  acceptedCount: number;
+  submittedCount: number;
   originalRequired: boolean;
   metadataRequired: boolean;
   gpsRequired: boolean;
   dateStampRequired: boolean;
+  installerSignatureRequired: boolean;
+  customerSignatureRequired: boolean;
+  allowedContentTypes: string[];
+  captureModes: Array<'camera' | 'document'>;
+  compatibility: {
+    captureSupported: boolean;
+    requiresConditionEvaluation: boolean;
+    requiresSignatureCapture: boolean;
+    requiresDynamicFieldSchema: boolean;
+    blockers: string[];
+  };
   status: string;
 };
 

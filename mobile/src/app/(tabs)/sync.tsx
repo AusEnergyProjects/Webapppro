@@ -12,7 +12,7 @@ import {
   getJob,
   listProblemActions,
   listProblemUploads,
-  queueAction,
+  retryConflict,
 } from '@/lib/database';
 import { colours, radius, spacing } from '@/lib/theme';
 import type { OfflineAction, QueueRow, UploadRow } from '@/lib/types';
@@ -48,10 +48,15 @@ export default function SyncScreen() {
     if (!job) return discardAction(item.id);
     const currentRevision = action.type === 'set_task_status'
       ? job.tasks.find((task) => task.id === action.taskId)?.revision
-      : job.revision;
+      : action.type === 'save_job_form'
+        ? job.forms.find((form) => form.id === action.formId)?.revision
+        : job.revision;
     if (!currentRevision) return;
-    await discardAction(item.id);
-    await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}`, baseRevision: currentRevision });
+    await retryConflict(item.id, {
+      ...action,
+      clientActionId: `act-${Crypto.randomUUID()}`,
+      baseRevision: currentRevision,
+    });
     await refreshLocal(); await syncNow(); await load();
   }
 

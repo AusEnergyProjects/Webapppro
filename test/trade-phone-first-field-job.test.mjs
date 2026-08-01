@@ -115,8 +115,11 @@ test("finish uses genuine blockers and exposes invoice and handover paths", () =
     assert.match(source, /trade_job_forms/);
     assert.match(source, /trade_crm_job_notes/);
     assert.match(source, /trade_crm_job_plan_requirements/);
-    assert.match(source, /photoRequestProofOverview/);
   }
+  assert.match(fieldRoute, /photoRequestProofOverview/);
+  assert.match(syncRoute, /photoFinishState/);
+  assert.match(syncRoute, /PHOTO_MEDIA_SNAPSHOT_SQL/);
+  assert.match(syncRoute, /finishBlockerGuard/);
   assert.match(fieldRoute, /Unsynchronised field changes need attention/);
   assert.match(fieldPanel, /Prepare invoice/);
   assert.match(fieldPanel, /Open handover/);

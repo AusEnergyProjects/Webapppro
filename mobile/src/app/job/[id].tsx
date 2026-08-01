@@ -34,8 +34,29 @@ const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'st
 const PENDING_PHOTO_SETTING = 'pending_evidence_photo_v1';
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const DEFAULT_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+
+function maximumReached(requirement: ComplianceEvidenceRequirement) {
+  return requirement.maximumCount > 0 && requirement.submittedCount >= requirement.maximumCount;
+}
+
+function captureBlocker(requirement: ComplianceEvidenceRequirement, mode: 'camera' | 'document') {
+  const configuredBlocker = requirement.compatibility?.blockers?.[0];
+  if (!requirement.compatibility?.captureSupported || configuredBlocker) {
+    return configuredBlocker || 'This governed evidence requirement is not supported by this field app version.';
+  }
+  if (!requirement.captureModes?.includes(mode)) {
+    return mode === 'camera'
+      ? 'This requirement must be supplied as an original document.'
+      : 'This requirement must be captured with the in-app camera.';
+  }
+  if (maximumReached(requirement)) {
+    return `The policy maximum of ${requirement.maximumCount} submitted file${requirement.maximumCount === 1 ? '' : 's'} has been reached.`;
+  }
+  return '';
+}
 
 function evidenceCategory(requirement?: ComplianceEvidenceRequirement) {
   const timing = requirement?.captureTiming.toLowerCase() || '';
@@ -217,6 +238,10 @@ export default function JobScreen() {
 
   async function capturePhoto(requirement?: ComplianceEvidenceRequirement) {
     if (!job || launchingCamera.current) return;
+    if (requirement) {
+      const blocker = captureBlocker(requirement, 'camera');
+      if (blocker) return Alert.alert('Camera capture is unavailable', blocker);
+    }
     launchingCamera.current = true;
     setBusy(`photo:${requirement?.id || 'general'}`);
     try {
@@ -274,7 +299,16 @@ export default function JobScreen() {
 
   async function chooseDocument(requirement?: ComplianceEvidenceRequirement) {
     if (!job) return;
-    const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], copyToCacheDirectory: true, multiple: false });
+    if (requirement) {
+      const blocker = captureBlocker(requirement, 'document');
+      if (blocker) return Alert.alert('Document capture is unavailable', blocker);
+    }
+    const configuredTypes = requirement?.allowedContentTypes?.filter((contentType) => ALLOWED_EVIDENCE_TYPES.has(contentType)) || [];
+    const result = await DocumentPicker.getDocumentAsync({
+      type: configuredTypes.length ? configuredTypes : DEFAULT_DOCUMENT_TYPES,
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
     if (result.canceled) return;
     const asset = result.assets[0];
     const file = new File(asset.uri);
@@ -282,6 +316,9 @@ export default function JobScreen() {
     if (file.size > MAX_EVIDENCE_BYTES) return Alert.alert('File is too large', 'Choose a photo or PDF no larger than 50 MB.');
     const contentType = asset.mimeType || file.type || 'application/pdf';
     if (!ALLOWED_EVIDENCE_TYPES.has(contentType)) return Alert.alert('File type is not supported', 'Choose the original JPEG, PNG, WebP or PDF file.');
+    if (configuredTypes.length && !configuredTypes.includes(contentType)) {
+      return Alert.alert('File type is not allowed', 'Choose a file type listed for this governed evidence requirement.');
+    }
     const envelope = await buildEvidenceEnvelope({
       captureSessionId: captureSessionId(),
       source: 'document_picker',
@@ -365,30 +402,72 @@ export default function JobScreen() {
               <Text style={styles.meta}>Case {job.compliance.caseNumber || job.compliance.caseId} | Evidence policy {job.compliance.evidencePolicyVersionId || 'not assigned'}</Text>
             </View>
           </View>
-          {complianceRequirements.length ? complianceRequirements.map((requirement) => (
-            <View key={requirement.id} style={styles.requirement}>
-              <View style={styles.requirementHeading}>
-                <View style={styles.flex}><Text style={styles.taskTitle}>{requirement.code} | {requirement.title}</Text><Text style={styles.meta}>{readable(requirement.captureTiming || 'timing not specified')} | Minimum {requirement.minimumCount} | {readable(requirement.status || 'pending')}</Text></View>
-                {requirement.gpsRequired ? <View style={styles.gpsBadge}><Text style={styles.gpsBadgeText}>GPS required</Text></View> : null}
+          {complianceRequirements.length ? complianceRequirements.map((requirement) => {
+            const atMaximum = maximumReached(requirement);
+            const captureModes = requirement.captureModes || [];
+            const compatibilityBlockers = requirement.compatibility?.blockers || [
+              'This requirement was saved by an older field contract. Sync the job before capturing evidence.',
+            ];
+            const maximumLabel = requirement.maximumCount > 0
+              ? `Maximum ${requirement.maximumCount}`
+              : 'No policy maximum';
+            return (
+              <View key={requirement.id} style={styles.requirement}>
+                <View style={styles.requirementHeading}>
+                  <View style={styles.flex}>
+                    <Text style={styles.taskTitle}>{requirement.code} | {requirement.title}</Text>
+                    <Text style={styles.meta}>
+                      {readable(requirement.captureTiming || 'timing not specified')} | Accepted {requirement.acceptedCount || 0}/{requirement.minimumCount} | Submitted {requirement.submittedCount || 0} | {maximumLabel} | {readable(requirement.status || 'pending')}
+                    </Text>
+                  </View>
+                  {requirement.gpsRequired ? <View style={styles.gpsBadge}><Text style={styles.gpsBadgeText}>GPS required</Text></View> : null}
+                </View>
+                {requirement.description ? <Text style={styles.body}>{requirement.description}</Text> : null}
+                <Text style={styles.meta}>
+                  {requirement.originalRequired ? 'Original file required. ' : ''}
+                  {requirement.metadataRequired ? 'Camera metadata required. ' : ''}
+                  {requirement.dateStampRequired ? 'Capture date and time required. ' : ''}
+                  {readable(requirement.evidenceType || 'evidence')} evidence. Creditex review remains required.
+                </Text>
+                {requirement.allowedContentTypes?.length
+                  ? <Text style={styles.meta}>Allowed file types: {requirement.allowedContentTypes.join(', ')}</Text>
+                  : <Text style={styles.meta}>Allowed file types: standard field JPEG, PNG, WebP or PDF as compatible with this evidence type.</Text>}
+                {compatibilityBlockers.map((blocker) => (
+                  <Text key={blocker} style={styles.warningText}>{blocker}</Text>
+                ))}
+                {atMaximum
+                  ? <Text style={styles.warningText}>The policy maximum has been submitted. Wait for Creditex review before adding another file.</Text>
+                  : null}
+                {!compatibilityBlockers.length && !atMaximum && captureModes.length ? (
+                  <View style={styles.row}>
+                    {captureModes.includes('camera') ? (
+                      <FieldButton
+                        variant="secondary"
+                        loading={busy === `photo:${requirement.id}`}
+                        style={styles.flex}
+                        onPress={() => void capturePhoto(requirement)}
+                      >
+                        Take photo
+                      </FieldButton>
+                    ) : null}
+                    {captureModes.includes('document') ? (
+                      <FieldButton
+                        variant="secondary"
+                        loading={busy === `document:${requirement.id}`}
+                        style={styles.flex}
+                        onPress={() => void chooseDocument(requirement)}
+                      >
+                        Add original file
+                      </FieldButton>
+                    ) : null}
+                  </View>
+                ) : null}
+                {!compatibilityBlockers.length && captureModes.includes('camera') && (requirement.gpsRequired || requirement.metadataRequired)
+                  ? <Text style={styles.meta}>Use Take photo so the app can capture the required location or camera metadata.</Text>
+                  : null}
               </View>
-              <Text style={styles.meta}>{requirement.originalRequired ? 'Original file required. ' : ''}{readable(requirement.evidenceType || 'evidence')} evidence. Creditex review remains required.</Text>
-              <View style={styles.row}>
-                <FieldButton variant="secondary" loading={busy === `photo:${requirement.id}`} style={styles.flex} onPress={() => void capturePhoto(requirement)}>Take photo</FieldButton>
-                <FieldButton
-                  variant="secondary"
-                  disabled={requirement.gpsRequired || requirement.metadataRequired}
-                  loading={busy === `document:${requirement.id}`}
-                  style={styles.flex}
-                  onPress={() => void chooseDocument(requirement)}
-                >
-                  {requirement.gpsRequired || requirement.metadataRequired ? 'Camera required' : 'Add file'}
-                </FieldButton>
-              </View>
-              {requirement.gpsRequired || requirement.metadataRequired
-                ? <Text style={styles.meta}>Use Take photo so the app can capture the required location or camera metadata.</Text>
-                : null}
-            </View>
-          )) : <Text style={styles.body}>No governed evidence requirements have been assigned. Do not treat general uploads as compliance evidence.</Text>}
+            );
+          }) : <Text style={styles.body}>No governed evidence requirements have been assigned. Do not treat general uploads as compliance evidence.</Text>}
         </View> : null}
         <Text style={styles.inputLabel}>{job.compliance ? 'General job files' : 'Job files'}</Text>
         <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View>
@@ -470,6 +549,7 @@ const styles = StyleSheet.create({
   gpsBadge: { backgroundColor: colours.forest, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },
   gpsBadgeText: { color: colours.white, fontSize: 11, fontWeight: '800' },
   meta: { color: colours.muted, fontSize: 12, lineHeight: 17 },
+  warningText: { color: colours.red, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   inputLabel: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },
   input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontSize: 16, color: colours.ink, backgroundColor: '#fbfdfc' },

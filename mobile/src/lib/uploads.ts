@@ -123,6 +123,8 @@ export async function processUploadQueue() {
         'EVIDENCE_GPS_REQUIRED',
         'EVIDENCE_GPS_MOCKED',
         'EVIDENCE_CAPTURE_TIME_REQUIRED',
+        'EVIDENCE_MAXIMUM_REACHED',
+        'EVIDENCE_REQUIREMENT_UNSUPPORTED',
         'IDEMPOTENCY_MISMATCH',
       ]);
       await updateUpload(upload.id, {

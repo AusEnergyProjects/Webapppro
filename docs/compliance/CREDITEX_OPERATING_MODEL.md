@@ -94,6 +94,8 @@ An activity can be published only when the controlling and operational sources a
 
 Published versions are never edited or deleted. A correction creates a new version and an explicit effective date. Withdrawal immediately prevents new selection but preserves historical cases. A case upgrade is an audited, explicit decision that keeps both snapshots and never silently recalculates prior work.
 
+The TLink governance workspace implements one data-driven path for every program and activity. Administrators author complete evidence-policy drafts and ordered requirements inside the selected program and activity scope. Publication seals a canonical snapshot and SHA-256, then requires a different named administrator to approve that exact snapshot. Terminal decisions remain immutable. The bootstrap `info@ausenergyassessments.com` membership can maintain drafts and invite named users, but a shared mailbox cannot request or approve a governed publication.
+
 ## Original photo and metadata custody
 
 Every compliance photo or file is evidence first and a display asset second.
@@ -109,7 +111,9 @@ Every compliance photo or file is evidence first and a display asset second.
 - Apply the Creditex-approved retention schedule and legal hold. A legal hold blocks expiry and deletion until formally released.
 - Treat missing, denied, inaccurate, internally inconsistent or edited metadata as an explicit review fact. Never silently manufacture a geotag or timestamp.
 
-The working-tree mobile foundation can capture exact original bytes, a SHA-256 and an evidence envelope, but production custody still requires proven server receipt validation, object immutability, backup and restore, retention, legal hold, access logging and real-device testing.
+The current evidence boundary preserves the exact picked bytes and client-calculated SHA-256 through encrypted offline staging and resumable upload. At completion, the server reassembles the object, recalculates its SHA-256, checks the declared JPEG, PNG, WebP or PDF signature and stores a server-stamped verification result. For governed JPEG requirements it parses EXIF again from the assembled bytes. Required embedded metadata, GPS and capture time must exist; embedded GPS must agree with the registered device reading; embedded local time must agree with the retained timezone, UTC offset and device capture time. Missing, malformed or inconsistent bytes are rejected and the unusable assembled object is removed.
+
+Those checks verify byte content and internal consistency. They do not prove that a camera created the file, that an editor never touched it or that a physical device is accepted by a regulator. A policy with `original required` therefore remains blocked from publication until TLink has platform-backed device and camera attestation plus representative-device acceptance. Production custody also still requires approved object immutability, backup and restore, retention, legal hold, access logging and operating tests.
 
 ## Participant, product, licence and decommissioning controls
 

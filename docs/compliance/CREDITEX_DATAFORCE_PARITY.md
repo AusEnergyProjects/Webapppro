@@ -61,6 +61,8 @@ The right-side advanced search panel exposed search type, bulk actions, date-fil
 
 TLink parity requires each applicable dimension to be available as a deterministic server-side filter, composable across groups, reflected in result counts and export cohorts, and saveable as an organisation or named-user view. A legacy label may map to a clearer TLink term, but no source value can be silently discarded. Filters whose authoritative relationship does not yet exist must be shown as unavailable with the reason, not emulated from unrelated data.
 
+The TLink portal now keeps every observed filter family in the advanced-search workflow. Facets backed by authoritative TLink relationships are interactive and server-side. Observed Dataforce subfilters that still lack a verified field or mapping remain visible as unavailable with the reason. Complete parity is therefore not claimed: Creditex must supply its current saved-filter inventory, field dictionary, enumeration values and representative exports before those gaps can be closed.
+
 ### New Job and customer intake
 
 The observed `New Job` flow first searches for an existing customer by customer ID, person name, company, ABN or ACN, email, phone or external job ID. It also offers `Create New Customer`.
@@ -98,7 +100,7 @@ The observed create-customer intake includes title, first name, surname, email, 
 | Certificate inventory, trading, fees and settlement | Required extension | Certificate lots, trades and settlements linked to regulator-issued outcomes | Dual-controlled inventory and money reconciliation. Do not infer issued quantity from an estimate or accepted case. |
 | Runabout field capture and offline behaviour | Unknown | Requirement-led TLink field capture with original bytes, metadata envelope, offline queue and upload receipt | Full parity requires an authorised Runabout walkthrough, sample export and representative device tests. |
 
-The working-tree operations data model represents invitations and audit events; evidence policies and requirements; participants and abilities; assignments, tasks, evidence, findings and decisions; equipment; calculator versions, vectors and runs; batches, items, artifacts and responses; and certificate lots, trades and settlements. Data-model coverage is not proof of finished screens, live registry integration, correct formulas or production readiness.
+The TLink operations data model represents invitations and audit events; evidence policies and requirements; participants and abilities; assignments, tasks, evidence, findings and decisions; equipment; calculator versions, vectors and runs; batches, items, artifacts and responses; and certificate lots, trades and settlements. The rules workspace now authors and independently publishes the program, activity and evidence-policy portion with scoped pagination and immutable history. Data-model coverage is not proof of a complete private catalogue, finished legacy parity, live registry integration, correct formulas or production readiness.
 
 ## Better Creditex workflow
 
@@ -136,6 +138,8 @@ Default queues should surface:
 ### Governed evidence instead of generic forms
 
 The installer sees only requirements from the exact published evidence-policy version. Each capture is linked to one requirement at capture time. Creditex sees the original, metadata, deterministic checks and any prior superseded evidence together. A policy change creates a new version and does not silently alter an installed case.
+
+Current field compatibility is explicit. Photo and document requirements can be published only when their capture mode and file types are supported. Signatures, conditional logic, dynamic fields, other evidence types and trusted-original requirements remain publication blockers. JPEG metadata, GPS and capture time are verified again from assembled bytes; these checks do not establish original-camera authenticity.
 
 ### Deliberately separated external steps
 

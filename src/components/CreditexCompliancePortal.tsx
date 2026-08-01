@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
+import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
 import styles from "./CreditexCompliancePortal.module.css";
 
@@ -29,6 +30,7 @@ type ComplianceSession = {
   email: string;
   displayName: string;
   role: ComplianceRole;
+  governanceIdentityVerified: boolean;
   organisation: {
     code: string;
     legalName: string;
@@ -75,6 +77,7 @@ type ProgramRecord = {
   officialSourceVersion: string;
   officialSourceCheckedAt: string;
   publishState: "draft" | "published" | "withdrawn";
+  pendingPublicationRequestId: string;
   publishedAt: string;
   withdrawnAt: string;
   createdAt: string;
@@ -103,6 +106,7 @@ type ActivityRecord = {
   officialSourceVersion: string;
   officialSourceCheckedAt: string;
   publishState: "draft" | "published" | "withdrawn";
+  pendingPublicationRequestId: string;
   calculationApprovalState: string;
   publishedAt: string;
   withdrawnAt: string;
@@ -156,6 +160,13 @@ const AUSTRALIAN_JURISDICTIONS = [
   "VIC",
   "WA",
 ] as const;
+
+function canControlPublication(session: ComplianceSession | null) {
+  return Boolean(
+    session?.role === "admin"
+    && session.governanceIdentityVerified
+  );
+}
 
 function readable(value: string) {
   return value
@@ -251,7 +262,11 @@ export function CreditexCompliancePortal() {
   const [loadingMessage, setLoadingMessage] = useState(
     "Loading the protected compliance workspace...",
   );
-  const workspaceLoadRef = useRef<Promise<void> | null>(null);
+  const authUidRef = useRef("");
+  const workspaceLoadRef = useRef<{
+    uid: string;
+    promise: Promise<void>;
+  } | null>(null);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"info" | "success" | "error">(
@@ -274,14 +289,25 @@ export function CreditexCompliancePortal() {
   const [programForm, setProgramForm] = useState(emptyProgramForm);
   const [activityForm, setActivityForm] = useState(emptyActivityForm);
   const [activityHasEndDate, setActivityHasEndDate] = useState(false);
+  const [governanceRefreshToken, setGovernanceRefreshToken] = useState(0);
+  const [governanceProgramId, setGovernanceProgramId] = useState("");
+  const [governanceActivityId, setGovernanceActivityId] = useState("");
+  const canRequestPublication = canControlPublication(session);
 
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
     const activeUser = firebaseAuth.currentUser;
     if (!activeUser) throw new Error("Sign in to continue.");
+    const activeUid = activeUser.uid;
     const headers = new Headers(init.headers);
+    const idToken = await activeUser.getIdToken(
+      path === "/api/creditex/session",
+    );
+    if (firebaseAuth.currentUser?.uid !== activeUid) {
+      throw new Error("The signed-in account changed. Loading the new workspace.");
+    }
     headers.set(
       "Authorization",
-      `Bearer ${await activeUser.getIdToken(path === "/api/creditex/session")}`,
+      `Bearer ${idToken}`,
     );
     if (init.body && !headers.has("Content-Type"))
       headers.set("Content-Type", "application/json");
@@ -311,6 +337,11 @@ export function CreditexCompliancePortal() {
         error?: string;
         code?: string;
       };
+      if (firebaseAuth.currentUser?.uid !== activeUid) {
+        throw new Error(
+          "The signed-in account changed. Loading the new workspace.",
+        );
+      }
       if (
         response.status === 503
         && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
@@ -326,6 +357,11 @@ export function CreditexCompliancePortal() {
         await new Promise((resolve) =>
           window.setTimeout(resolve, retryAfterMilliseconds)
         );
+        if (firebaseAuth.currentUser?.uid !== activeUid) {
+          throw new Error(
+            "The signed-in account changed. Loading the new workspace.",
+          );
+        }
         continue;
       }
       if (!response.ok || result.ok === false) {
@@ -381,18 +417,25 @@ export function CreditexCompliancePortal() {
   }, [api]);
 
   const loadWorkspace = useCallback(() => {
-    if (workspaceLoadRef.current) return workspaceLoadRef.current;
+    const activeUser = firebaseAuth.currentUser;
+    if (!activeUser) return Promise.resolve();
+    const activeUid = activeUser.uid;
+    if (workspaceLoadRef.current?.uid === activeUid) {
+      return workspaceLoadRef.current.promise;
+    }
     const request = (async () => {
       setLoading(true);
       setLoadingMessage("Verifying Creditex access...");
       setNotice("");
       try {
         const result = await api("/api/creditex/session");
+        if (firebaseAuth.currentUser?.uid !== activeUid) return;
         const nextSession = result.member as ComplianceSession;
         setSession(nextSession);
         setCaseStatus("open");
         setCaseQuery("");
         await loadCases({ status: "open" });
+        if (firebaseAuth.currentUser?.uid !== activeUid) return;
         if (nextSession.role === "admin") await loadGovernance();
         else {
           setPrograms([]);
@@ -400,17 +443,20 @@ export function CreditexCompliancePortal() {
           setTab("cases");
         }
       } catch (error) {
+        if (firebaseAuth.currentUser?.uid !== activeUid) return;
         setSession(null);
         setNotice(authMessage(error));
         setNoticeKind("error");
       } finally {
-        setLoading(false);
-        setLoadingMessage("Loading the protected compliance workspace...");
+        if (firebaseAuth.currentUser?.uid === activeUid) {
+          setLoading(false);
+          setLoadingMessage("Loading the protected compliance workspace...");
+        }
       }
     })();
-    workspaceLoadRef.current = request;
+    workspaceLoadRef.current = { uid: activeUid, promise: request };
     void request.finally(() => {
-      if (workspaceLoadRef.current === request) {
+      if (workspaceLoadRef.current?.promise === request) {
         workspaceLoadRef.current = null;
       }
     });
@@ -420,15 +466,32 @@ export function CreditexCompliancePortal() {
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
-        setUser(nextUser);
-        setAuthReady(true);
-        if (nextUser) void loadWorkspace();
-        else {
+        const nextUid = nextUser?.uid || "";
+        const identityChanged = authUidRef.current !== nextUid;
+        authUidRef.current = nextUid;
+        if (identityChanged) {
+          if (workspaceLoadRef.current?.uid !== nextUid) {
+            workspaceLoadRef.current = null;
+          }
           setSession(null);
           setCases([]);
           setCasePagination({ pageSize: 50, hasNext: false, nextCursor: "" });
           setPrograms([]);
           setActivities([]);
+          setCaseStatus("open");
+          setCaseQuery("");
+          setGovernanceProgramId("");
+          setGovernanceActivityId("");
+          setTab("cases");
+          setNotice("");
+        }
+        setUser(nextUser);
+        setAuthReady(true);
+        if (nextUser) {
+          setLoading(true);
+          void loadWorkspace();
+        }
+        else {
           setLoading(false);
         }
       }),
@@ -439,6 +502,41 @@ export function CreditexCompliancePortal() {
     () => cases.filter((item) => caseMatches(item, caseQuery)),
     [caseQuery, cases],
   );
+  const selectedGovernanceProgram = useMemo(
+    () =>
+      programs.find((program) => program.id === governanceProgramId)
+      || programs[0]
+      || null,
+    [governanceProgramId, programs],
+  );
+  const governanceProgramActivities = useMemo(
+    () =>
+      selectedGovernanceProgram
+        ? activities.filter(
+          (activity) => activity.programId === selectedGovernanceProgram.id,
+        )
+        : [],
+    [activities, selectedGovernanceProgram],
+  );
+  const effectiveGovernanceActivityId = governanceProgramActivities.some(
+    (activity) => activity.id === governanceActivityId,
+  )
+    ? governanceActivityId
+    : "";
+  const visibleGovernanceActivities = useMemo(
+    () =>
+      effectiveGovernanceActivityId
+        ? governanceProgramActivities.filter(
+          (activity) => activity.id === effectiveGovernanceActivityId,
+        )
+        : governanceProgramActivities,
+    [effectiveGovernanceActivityId, governanceProgramActivities],
+  );
+
+  function chooseGovernanceProgram(programId: string) {
+    setGovernanceProgramId(programId);
+    setGovernanceActivityId("");
+  }
 
   async function changeCaseStatus(
     nextStatus: (typeof CASE_STATUSES)[number],
@@ -594,24 +692,45 @@ export function CreditexCompliancePortal() {
     id: string,
     action: "publish" | "withdraw",
   ) {
-    const warning =
+    const reason = window.prompt(
       action === "publish"
-        ? "Publish this governed record? Confirm the official source, effective dates and version are correct. Publication only controls catalogue availability."
-        : "Withdraw this governed record? Existing case snapshots remain unchanged, but the record cannot return to draft or published state.";
-    if (!window.confirm(warning)) return;
+        ? "State why this exact source-backed record is ready for independent publication review."
+        : "Record the emergency withdrawal reason. Existing case snapshots remain unchanged.",
+    )?.trim();
+    if (!reason) return;
+    if (
+      action === "withdraw"
+      && !window.confirm(
+        "Withdraw this governed record immediately? It cannot return to draft or published state.",
+      )
+    ) return;
     setBusy(`${action}:${entity}:${id}`);
-    setNotice(`${readable(action)}ing the ${entity}...`);
+    setNotice(
+      action === "publish"
+        ? `Sealing the ${entity} for independent review...`
+        : `Withdrawing the ${entity}...`,
+    );
     setNoticeKind("info");
     try {
       await api("/api/creditex/activities", {
         method: "POST",
         body: JSON.stringify({
-          action: `${action}_${entity}`,
+          action: action === "publish"
+            ? `request_${entity}_publication`
+            : `withdraw_${entity}`,
           [`${entity}Id`]: id,
+          ...(action === "publish"
+            ? { requestReason: reason }
+            : { reason }),
         }),
       });
       await loadGovernance();
-      setNotice(`${readable(entity)} ${action === "publish" ? "published" : "withdrawn"}.`);
+      setGovernanceRefreshToken((current) => current + 1);
+      setNotice(
+        action === "publish"
+          ? `${readable(entity)} sealed. A different named administrator must approve the unchanged snapshot before publication.`
+          : `${readable(entity)} withdrawn. Existing case snapshots remain retained.`,
+      );
       setNoticeKind("success");
     } catch (error) {
       setNotice(authMessage(error));
@@ -933,7 +1052,7 @@ export function CreditexCompliancePortal() {
 
         {tab === "governance" && session.role === "admin" && (
           <section
-            className={styles.panel}
+            className={`${styles.panel} ${styles.governancePanel}`}
             id="creditex-panel-governance"
             role="tabpanel"
             aria-labelledby="creditex-tab-governance"
@@ -947,6 +1066,43 @@ export function CreditexCompliancePortal() {
                 </p>
               </div>
             </header>
+
+            <section
+              className={styles.governanceScope}
+              aria-labelledby="governance-scope-title"
+            >
+              <div>
+                <span>ACTIVE PROGRAM WORKSPACE</span>
+                <h3 id="governance-scope-title">
+                  {selectedGovernanceProgram
+                    ? `${selectedGovernanceProgram.programCode} | ${selectedGovernanceProgram.name}`
+                    : "No governed program selected"}
+                </h3>
+                <p>
+                  Program tabs keep rule packs, activity versions and evidence
+                  decisions separated. Use the activity filter to narrow this
+                  workspace to one effective-dated activity version.
+                </p>
+              </div>
+              <label>
+                Activity version
+                <select
+                  className={styles.select}
+                  value={effectiveGovernanceActivityId}
+                  disabled={!governanceProgramActivities.length}
+                  onChange={(event) =>
+                    setGovernanceActivityId(event.target.value)}
+                >
+                  <option value="">All activities in this program</option>
+                  {governanceProgramActivities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.registryActivityCode || activity.activityKey}
+                      {" "}| Version {activity.version} | {activity.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
 
             <div className={styles.governanceGrid}>
               <section className={styles.formCard}>
@@ -1490,16 +1646,43 @@ export function CreditexCompliancePortal() {
             </div>
 
             <p className={styles.warning}>
-              Publishing makes a governed record available for downstream
-              catalogue selection. It does not authorise an outcome for any
-              installation. Withdrawn records stay immutable and existing case
-              snapshots are retained.
+              Publication requires a second named administrator reviewing the
+              exact sealed snapshot. It controls catalogue availability only
+              and does not authorise an installation outcome. Emergency
+              withdrawal remains immediate, audited and irreversible.
             </p>
+            {!canRequestPublication && (
+              <p className={styles.warning}>
+                This shared account may administer drafts but cannot request
+                or approve publication. Invite at least two named Creditex
+                administrators to operate the independent publication
+                controls.
+              </p>
+            )}
+
+            <CreditexEvidencePolicyGovernance
+              key={`${selectedGovernanceProgram?.id || "none"}:${
+                effectiveGovernanceActivityId || "all"
+              }`}
+              api={api}
+              activities={visibleGovernanceActivities}
+              programs={
+                selectedGovernanceProgram ? [selectedGovernanceProgram] : []
+              }
+              selectedProgramId={selectedGovernanceProgram?.id || ""}
+              selectedActivityVersionId={effectiveGovernanceActivityId}
+              refreshToken={governanceRefreshToken}
+              onChanged={loadGovernance}
+              canRequestPublication={canRequestPublication}
+            />
 
             <section className={styles.formCard}>
-              <h3>Programs</h3>
+              <h3>Selected program</h3>
               <div className={styles.records}>
-                {programs.map((program) => (
+                {(selectedGovernanceProgram
+                  ? [selectedGovernanceProgram]
+                  : []
+                ).map((program) => (
                   <article className={styles.record} key={program.id}>
                     <div>
                       <h4>
@@ -1530,7 +1713,11 @@ export function CreditexCompliancePortal() {
                           <button
                             className={styles.button}
                             type="button"
-                            disabled={Boolean(busy)}
+                            disabled={
+                              Boolean(busy)
+                              || !canRequestPublication
+                              || Boolean(program.pendingPublicationRequestId)
+                            }
                             onClick={() =>
                               void changePublishState(
                                 "program",
@@ -1539,7 +1726,9 @@ export function CreditexCompliancePortal() {
                               )
                             }
                           >
-                            Publish
+                            {program.pendingPublicationRequestId
+                              ? "Waiting for review"
+                              : "Request publication"}
                           </button>
                           <button
                             className={styles.dangerButton}
@@ -1557,7 +1746,9 @@ export function CreditexCompliancePortal() {
                         <button
                           className={styles.dangerButton}
                           type="button"
-                          disabled={Boolean(busy)}
+                          disabled={
+                            Boolean(busy) || !canRequestPublication
+                          }
                           onClick={() =>
                             void changePublishState(
                               "program",
@@ -1572,16 +1763,20 @@ export function CreditexCompliancePortal() {
                     </div>
                   </article>
                 ))}
-                {!programs.length && (
+                {!selectedGovernanceProgram && (
                   <div className={styles.empty}>No governed programs yet.</div>
                 )}
               </div>
             </section>
 
             <section className={styles.formCard}>
-              <h3>Activity versions</h3>
+              <h3>
+                {effectiveGovernanceActivityId
+                  ? "Selected activity version"
+                  : "Activity versions in this program"}
+              </h3>
               <div className={styles.records}>
-                {activities.map((activity) => (
+                {visibleGovernanceActivities.map((activity) => (
                   <article className={styles.record} key={activity.id}>
                     <div>
                       <h4>
@@ -1613,7 +1808,11 @@ export function CreditexCompliancePortal() {
                           <button
                             className={styles.button}
                             type="button"
-                            disabled={Boolean(busy)}
+                            disabled={
+                              Boolean(busy)
+                              || !canRequestPublication
+                              || Boolean(activity.pendingPublicationRequestId)
+                            }
                             onClick={() =>
                               void changePublishState(
                                 "activity",
@@ -1622,7 +1821,9 @@ export function CreditexCompliancePortal() {
                               )
                             }
                           >
-                            Publish
+                            {activity.pendingPublicationRequestId
+                              ? "Waiting for review"
+                              : "Request publication"}
                           </button>
                           <button
                             className={styles.dangerButton}
@@ -1640,7 +1841,9 @@ export function CreditexCompliancePortal() {
                         <button
                           className={styles.dangerButton}
                           type="button"
-                          disabled={Boolean(busy)}
+                          disabled={
+                            Boolean(busy) || !canRequestPublication
+                          }
                           onClick={() =>
                             void changePublishState(
                               "activity",
@@ -1655,13 +1858,40 @@ export function CreditexCompliancePortal() {
                     </div>
                   </article>
                 ))}
-                {!activities.length && (
+                {!visibleGovernanceActivities.length && (
                   <div className={styles.empty}>
-                    No governed activity versions yet.
+                    No governed activity versions in this program.
                   </div>
                 )}
               </div>
             </section>
+
+            <nav
+              className={styles.governanceProgramTabs}
+              aria-label="Governance program workspaces"
+            >
+              <span>Programs</span>
+              <div>
+                {programs.map((program) => {
+                  const selected = program.id === selectedGovernanceProgram?.id;
+                  return (
+                    <button
+                      key={program.id}
+                      type="button"
+                      aria-pressed={selected}
+                      data-selected={selected}
+                      onClick={() => chooseGovernanceProgram(program.id)}
+                    >
+                      <strong>{program.programCode}</strong>
+                      <small>{program.name}</small>
+                    </button>
+                  );
+                })}
+                {!programs.length && (
+                  <small>No governed programs have been created.</small>
+                )}
+              </div>
+            </nav>
           </section>
         )}
       </div>

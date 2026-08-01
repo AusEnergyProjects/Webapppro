@@ -267,13 +267,25 @@ export async function resolveAction(
   );
 }
 
-export async function retryConflict(id: string) {
+export async function retryConflict(id: string, action: OfflineAction) {
   const db = await getDatabase();
-  await db.runAsync(
-    "UPDATE action_queue SET status = 'queued', retry_after = '', error_code = '', error_message = '', updated_at = ? WHERE id = ?",
-    new Date().toISOString(),
+  const now = new Date().toISOString();
+  const result = await db.runAsync(
+    `UPDATE action_queue
+      SET id = ?, work_order_id = ?, payload = ?, status = 'queued', attempts = 0,
+        retry_after = '', error_code = '', error_message = '', created_at = ?, updated_at = ?
+      WHERE id = ? AND work_order_id = ? AND status = 'conflict'`,
+    action.clientActionId,
+    action.workOrderId,
+    JSON.stringify(action),
+    now,
+    now,
     id,
+    action.workOrderId,
   );
+  if (result.changes !== 1) {
+    throw new Error('This saved change was updated before it could be retried.');
+  }
 }
 
 export async function discardAction(id: string) {

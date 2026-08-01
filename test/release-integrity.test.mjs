@@ -210,6 +210,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-ACCOUNT-TRUST-23/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-TRADE-LOCALITY-24/);
   assert.match(roadmap, /## Released milestone: CREDITEX-COMPLIANCE-OPERATIONS-25/);
+  assert.match(roadmap, /## Active milestone: CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26/);
   assert.match(roadmap, /Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`[\s\S]{0,250}Sites version 222/);
   assert.match(roadmap, /Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`[\s\S]{0,250}Sites version 224/);
   assert.match(roadmap, /Release status: application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`[\s\S]{0,250}Sites version 227/);
@@ -226,7 +227,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Release status: application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`[\s\S]{0,300}Sites version 241/);
   assert.match(roadmap, /Release status: application commit `399b04f4a5d680080610f9e88b994506bb60c16f`[\s\S]{0,300}Sites version 242/);
   assert.match(roadmap, /Exact application commit `7b08cb600bde30273774a544e07039acc6de1c03`[\s\S]{0,2500}Sites saved version 248/);
-  assert.match(handover, /Status: released activity-agnostic Creditex operations portal with an empty governed catalogue/);
+  assert.match(handover, /Status: Creditex evidence-policy governance implementation complete, validation and release pending/);
+  assert.match(handover, /Milestone ID: `CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26`/);
   assert.match(handover, /Current production: Sites version 248 from application commit `7b08cb600bde30273774a544e07039acc6de1c03`/);
   assert.match(handover, /appgdep_6a6d733ea23c81918f4ccd8e4f30f98b/);
   assert.match(handover, /Status: released implementation milestone/);
@@ -266,8 +268,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Reconcile the national authoritative catalogue:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Drive field capture from each governed activity:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Import and reconcile Creditex's private national rule packs:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Prove trusted physical-device evidence and expand the requirement engine:/);
   assert.match(roadmapNextFive, /\n3\. \*\*Verify calculators and output contracts per method:/);
   assert.match(roadmapNextFive, /\n4\. \*\*Build provider-neutral connectors per program:/);
   assert.match(roadmapNextFive, /\n5\. \*\*Inventory legacy data and phase the cutover:/);

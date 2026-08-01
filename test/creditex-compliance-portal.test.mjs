@@ -5,14 +5,28 @@ import fs from "node:fs";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const page = read("../src/app/creditex/compliance/page.tsx");
 const portal = read("../src/components/CreditexCompliancePortal.tsx");
+const evidenceGovernance = read(
+  "../src/components/CreditexEvidencePolicyGovernance.tsx",
+);
+const evidenceGovernanceStyles = read(
+  "../src/components/CreditexEvidencePolicyGovernance.module.css",
+);
 const operations = read("../src/components/CreditexOperationsWorkspace.tsx");
+const operationsStyles = read(
+  "../src/components/CreditexOperationsWorkspace.module.css",
+);
 const sessionRoute = read("../src/app/api/creditex/session/route.ts");
 const caseRoute = read("../src/app/api/creditex/cases/route.ts");
 const activityRoute = read("../src/app/api/creditex/activities/route.ts");
+const evidencePolicyRoute = read(
+  "../src/app/api/creditex/evidence-policies/route.ts",
+);
 const evidenceRoute = read("../src/app/api/creditex/evidence/[id]/route.ts");
 const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
-const routeSource = `${sessionRoute}\n${caseRoute}\n${activityRoute}`;
-const surfaceSource = `${page}\n${portal}\n${routeSource}`;
+const routeSource =
+  `${sessionRoute}\n${caseRoute}\n${activityRoute}\n${evidencePolicyRoute}`;
+const surfaceSource =
+  `${page}\n${portal}\n${evidenceGovernance}\n${routeSource}`;
 
 test("Creditex compliance page is excluded from search and archival", () => {
   for (const directive of [
@@ -34,7 +48,11 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   ]) assert.match(portal, contract);
   assert.doesNotMatch(surfaceSource, /createUserWithEmailAndPassword|signUp|bootstrap|seed_/i);
   assert.doesNotMatch(sessionRoute, /export async function POST/);
-  assert.match(portal, /workspaceLoadRef = useRef<Promise<void> \| null>/);
+  assert.match(portal, /authUidRef = useRef\(""\)/);
+  assert.match(portal, /workspaceLoadRef = useRef<\{[\s\S]*uid: string;[\s\S]*promise: Promise<void>/);
+  assert.match(portal, /workspaceLoadRef\.current\?\.uid === activeUid/);
+  assert.match(portal, /firebaseAuth\.currentUser\?\.uid !== activeUid/);
+  assert.match(portal, /identityChanged[\s\S]*setSession\(null\)[\s\S]*setCases\(\[\]\)[\s\S]*setPrograms\(\[\]\)/);
   assert.match(portal, /await signInWithEmailAndPassword[\s\S]*await loadWorkspace\(\)/);
   assert.match(portal, /await signInWithPopup[\s\S]*await loadWorkspace\(\)/);
 });
@@ -54,7 +72,12 @@ test("first access installs schema guards in quota-safe batches and retries visi
 });
 
 test("every Creditex endpoint enforces same-origin no-store verified membership access", () => {
-  for (const route of [sessionRoute, caseRoute, activityRoute]) {
+  for (const route of [
+    sessionRoute,
+    caseRoute,
+    activityRoute,
+    evidencePolicyRoute,
+  ]) {
     assert.match(route, /if \(!sameOrigin\(request\)\)/);
     assert.match(route, /requireComplianceAccess\(request/);
     assert.match(route, /"Cache-Control": "private, no-store"/);
@@ -63,6 +86,7 @@ test("every Creditex endpoint enforces same-origin no-store verified membership 
   assert.match(sessionRoute, /"admin", "case_manager", "reviewer", "auditor"/);
   assert.match(caseRoute, /"admin", "case_manager", "reviewer", "auditor"/);
   assert.match(activityRoute, /allowedRoles: \["admin"\]/);
+  assert.match(evidencePolicyRoute, /allowedRoles: \["admin"\]/);
 });
 
 test("case queue is read-only and returns only the approved privacy-minimised projection", () => {
@@ -126,10 +150,19 @@ test("case queue is read-only and returns only the approved privacy-minimised pr
 
 test("governance is admin-only with bounded draft, publish and withdraw actions", () => {
   assert.match(portal, /session\.role === "admin"/);
+  assert.match(portal, /session\.governanceIdentityVerified/);
+  assert.match(sessionRoute, /governanceIdentityVerified: member\.governanceIdentityVerified/);
+  assert.doesNotMatch(portal, /SHARED_GOVERNANCE_EMAIL_LOCAL_PARTS/);
   assert.match(portal, /window\.confirm\(warning\)/);
   for (const action of [
     "create_program",
     "create_activity",
+    "request_program_publication",
+    "approve_program_publication",
+    "reject_program_publication",
+    "request_activity_publication",
+    "approve_activity_publication",
+    "reject_activity_publication",
     "publish_program",
     "withdraw_program",
     "publish_activity",
@@ -139,14 +172,36 @@ test("governance is admin-only with bounded draft, publish and withdraw actions"
   ]) assert.match(activityRoute, new RegExp(`"${action}"`));
   for (const helper of [
     "prepareComplianceProgramCreateStatement",
-    "prepareComplianceProgramPublishStatement",
     "prepareComplianceProgramWithdrawStatement",
     "prepareComplianceActivityCreateStatement",
-    "prepareComplianceActivityPublishStatement",
     "prepareComplianceActivityWithdrawStatement",
     "prepareComplianceProgramDraftDeleteStatement",
     "prepareComplianceActivityDraftDeleteStatement",
+    "prepareCompliancePublicationRequestStatements",
+    "prepareCompliancePublicationDecisionStatements",
+    "runComplianceGovernanceMutation",
   ]) assert.match(activityRoute, new RegExp(helper));
+  assert.match(activityRoute, /COMPLIANCE_DUAL_CONTROL_REQUIRED/);
+  assert.match(
+    activityRoute,
+    /await prepareComplianceProgramWithdrawStatement/,
+  );
+  assert.match(
+    activityRoute,
+    /await prepareComplianceActivityWithdrawStatement/,
+  );
+  assert.match(
+    evidencePolicyRoute,
+    /await prepareComplianceEvidencePolicyWithdrawStatement/,
+  );
+  assert.match(
+    portal,
+    /disabled=\{\s*Boolean\(busy\) \|\| !canRequestPublication\s*\}/,
+  );
+  assert.match(
+    evidenceGovernance,
+    /disabled=\{Boolean\(busy\) \|\| !canRequestPublication\}/,
+  );
   assert.match(activityRoute, /calculationApprovalState: "not_assessed"/);
   assert.match(portal, /Permanently delete this draft program/);
   assert.match(portal, /Permanently delete this draft activity version/);
@@ -358,6 +413,90 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.match(operations, /aria-describedby=\{reasonId\}/);
   assert.match(operations, /className=\{styles\.disabledReason\}/);
+});
+
+test("governance keeps program workspaces separate with scoped pagination and decision history", () => {
+  for (const contract of [
+    /className=\{styles\.governanceProgramTabs\}/,
+    /aria-label="Governance program workspaces"/,
+    /chooseGovernanceProgram\(program\.id\)/,
+    /governanceActivityId/,
+    /visibleGovernanceActivities/,
+    /selectedProgramId=\{selectedGovernanceProgram\?\.id \|\| ""\}/,
+    /selectedActivityVersionId=\{effectiveGovernanceActivityId\}/,
+  ]) assert.match(portal, contract);
+  for (const contract of [
+    /programId: query\.programId/,
+    /activityVersionId: query\.activityVersionId/,
+    /page: query\.policyPage/,
+    /page: query\.requestPage/,
+    /pageSize: query\.pageSize/,
+    /publicationRequests\.items/,
+    /policies\.items\.map/,
+    /policies: policies\.pagination/,
+    /publicationRequests: publicationRequests\.pagination/,
+  ]) assert.match(evidencePolicyRoute, contract);
+  for (const contract of [
+    /policyPage: String\(policyPage\)/,
+    /requestPage: String\(requestPage\)/,
+    /query\.set\("programId", selectedProgramId\)/,
+    /query\.set\("activityVersionId", selectedActivityVersionId\)/,
+    /Immutable publication decision history/,
+    /request\.reviewedByName/,
+    /request\.reviewedAt \|\| request\.updatedAt/,
+    /request\.reviewNote/,
+    /request\.sealedSnapshotSha256/,
+    /Previous requests/,
+    /Next requests/,
+    /Previous policies/,
+    /Next policies/,
+    /Waiting for review/,
+  ]) assert.match(evidenceGovernance, contract);
+  assert.match(evidenceGovernanceStyles, /:focus-visible/);
+  assert.doesNotMatch(`${portal}\n${evidenceGovernance}`, /6\(23\)/);
+  assert.doesNotMatch(
+    `${portal}\n${evidenceGovernance}`,
+    /Dataforce-parity|automatically eligible|certificate quantity/i,
+  );
+});
+
+test("governance fails closed when scoped records are loading or unavailable", () => {
+  for (const contract of [
+    /type GovernanceLoadState = "loading" \| "loaded" \| "blocked"/,
+    /setLoadState\("loading"\)/,
+    /setLoadState\("loaded"\)/,
+    /setLoadState\("blocked"\)/,
+    /aria-busy=\{loadState === "loading"\}/,
+    /loadState === "loaded" && \(/,
+    /No empty-state or policy count is shown/,
+    /Authoring and publication controls remain locked/,
+    /Retry governed records/,
+    /role=\{noticeKind === "error" \? "alert" : "status"\}/,
+    /if \(loadState !== "loaded"\)/,
+  ]) assert.match(evidenceGovernance, contract);
+  assert.match(evidenceGovernanceStyles, /\.loadState button:focus-visible/);
+});
+
+test("Creditex program rails remain reachable and critical audit text is legible", () => {
+  assert.match(portal, /className=\{`\$\{styles\.panel\} \$\{styles\.governancePanel\}`\}/);
+  for (const contract of [
+    /\.governancePanel\s*\{[^}]*padding-bottom:/s,
+    /\.governanceProgramTabs\s*\{[^}]*position: fixed;/s,
+    /\.governanceProgramTabs\s*\{[^}]*width: min\(/s,
+    /\.governanceProgramTabs\s*\{[^}]*env\(safe-area-inset-bottom\)/s,
+  ]) assert.match(
+    read("../src/components/CreditexCompliancePortal.module.css"),
+    contract,
+  );
+  for (const contract of [
+    /\.workspace\s*\{[^}]*padding-bottom:/s,
+    /\.programTabs\s*\{[^}]*position: fixed;/s,
+    /\.programTabs\s*\{[^}]*width: min\(/s,
+    /\.programTabs button span\s*\{[^}]*font-size: \.75rem/s,
+    /\.programTabs button small\s*\{[^}]*font-size: \.7rem/s,
+    /\.privateDetailGrid dt\s*\{[^}]*font-size: \.7rem/s,
+    /\.privateDetailGrid dd\s*\{[^}]*font-size: \.75rem/s,
+  ]) assert.match(operationsStyles, contract);
 });
 
 test("named member access can be changed without enabling shared team credentials", () => {

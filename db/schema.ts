@@ -2999,6 +2999,10 @@ export const complianceUsers = sqliteTable("compliance_users", {
   displayName: text("display_name").notNull().default(""),
   role: text("role").notNull(),
   status: text("status").notNull().default("active"),
+  governanceIdentityVerified: integer("governance_identity_verified").notNull().default(0),
+  governanceIdentityVerifiedByUid: text("governance_identity_verified_by_uid").notNull().default(""),
+  governanceIdentityVerifiedAt: text("governance_identity_verified_at").notNull().default(""),
+  governanceIdentityVerificationBasis: text("governance_identity_verification_basis").notNull().default(""),
   createdByUid: text("created_by_uid").notNull(),
   lastLoginAt: text("last_login_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -3008,8 +3012,10 @@ export const complianceUsers = sqliteTable("compliance_users", {
   uniqueIndex("compliance_users_org_email_idx").on(table.organisationId, sql`${table.email} COLLATE NOCASE`),
   index("compliance_users_uid_status_idx").on(table.firebaseUid, table.status),
   index("compliance_users_org_role_status_idx").on(table.organisationId, table.role, table.status),
+  index("compliance_users_org_governance_identity_idx").on(table.organisationId, table.governanceIdentityVerified, table.role, table.status),
   check("compliance_users_role_check", sql`${table.role} IN ('admin', 'case_manager', 'reviewer', 'auditor')`),
   check("compliance_users_status_check", sql`${table.status} IN ('active', 'suspended', 'revoked')`),
+  check("compliance_users_governance_identity_check", sql`(${table.governanceIdentityVerified} = 0 AND ${table.governanceIdentityVerifiedByUid} = '' AND ${table.governanceIdentityVerifiedAt} = '' AND ${table.governanceIdentityVerificationBasis} = '') OR (${table.governanceIdentityVerified} = 1 AND trim(${table.governanceIdentityVerifiedByUid}) <> '' AND ${table.governanceIdentityVerifiedByUid} <> ${table.firebaseUid} AND trim(${table.governanceIdentityVerifiedAt}) <> '' AND trim(${table.governanceIdentityVerificationBasis}) <> '')`),
 ]);
 
 export const compliancePrograms = sqliteTable("compliance_programs", {
@@ -3026,6 +3032,8 @@ export const compliancePrograms = sqliteTable("compliance_programs", {
   officialSourceSha256: text("official_source_sha256").notNull().default(""),
   officialSourceCheckedAt: text("official_source_checked_at").notNull(),
   publishState: text("publish_state").notNull().default("draft"),
+  publicationRequestId: text("publication_request_id").notNull().default(""),
+  publicationSnapshotSha256: text("publication_snapshot_sha256").notNull().default(""),
   publishedByUid: text("published_by_uid").notNull().default(""),
   publishedAt: text("published_at").notNull().default(""),
   withdrawnByUid: text("withdrawn_by_uid").notNull().default(""),
@@ -3040,6 +3048,7 @@ export const compliancePrograms = sqliteTable("compliance_programs", {
   check("compliance_programs_publish_state_check", sql`${table.publishState} IN ('draft', 'published', 'withdrawn')`),
   check("compliance_programs_jurisdiction_check", sql`${table.jurisdiction} IN ('AU', 'ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA')`),
   check("compliance_programs_source_hash_check", sql`(${table.officialSourceSha256} = '' OR (length(${table.officialSourceSha256}) = 64 AND ${table.officialSourceSha256} NOT GLOB '*[^0-9a-fA-F]*')) AND (${table.publishState} = 'draft' OR length(${table.officialSourceSha256}) = 64)`),
+  check("compliance_programs_publication_hash_check", sql`${table.publicationSnapshotSha256} = '' OR (length(${table.publicationSnapshotSha256}) = 64 AND lower(${table.publicationSnapshotSha256}) NOT GLOB '*[^0-9a-f]*')`),
   check("compliance_programs_provenance_check", sql`(${table.publishState} = 'draft' AND ${table.publishedByUid} = '' AND ${table.publishedAt} = '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'published' AND trim(${table.publishedByUid}) <> '' AND trim(${table.publishedAt}) <> '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'withdrawn' AND trim(${table.publishedByUid}) <> '' AND trim(${table.publishedAt}) <> '' AND trim(${table.withdrawnByUid}) <> '' AND trim(${table.withdrawnAt}) <> '')`),
 ]);
 
@@ -3065,6 +3074,8 @@ export const complianceActivityVersions = sqliteTable("compliance_activity_versi
   officialSourceCheckedAt: text("official_source_checked_at").notNull(),
   requirementsSnapshot: text("requirements_snapshot").notNull().default("{}"),
   publishState: text("publish_state").notNull().default("draft"),
+  publicationRequestId: text("publication_request_id").notNull().default(""),
+  publicationSnapshotSha256: text("publication_snapshot_sha256").notNull().default(""),
   calculationApprovalState: text("calculation_approval_state").notNull().default("not_assessed"),
   publishedByUid: text("published_by_uid").notNull().default(""),
   publishedAt: text("published_at").notNull().default(""),
@@ -3085,6 +3096,7 @@ export const complianceActivityVersions = sqliteTable("compliance_activity_versi
   check("compliance_activity_versions_calculation_state_check", sql`${table.calculationApprovalState} IN ('not_assessed', 'approved', 'rejected', 'not_applicable')`),
   check("compliance_activity_versions_date_check", sql`date(${table.effectiveFrom}) = ${table.effectiveFrom} AND (${table.effectiveTo} = '' OR (date(${table.effectiveTo}) = ${table.effectiveTo} AND ${table.effectiveTo} >= ${table.effectiveFrom}))`),
   check("compliance_activity_versions_source_hash_check", sql`(${table.officialSourceSha256} = '' OR (length(${table.officialSourceSha256}) = 64 AND ${table.officialSourceSha256} NOT GLOB '*[^0-9a-fA-F]*')) AND (${table.publishState} = 'draft' OR length(${table.officialSourceSha256}) = 64)`),
+  check("compliance_activity_versions_publication_hash_check", sql`${table.publicationSnapshotSha256} = '' OR (length(${table.publicationSnapshotSha256}) = 64 AND lower(${table.publicationSnapshotSha256}) NOT GLOB '*[^0-9a-f]*')`),
   check("compliance_activity_versions_requirements_check", sql`json_valid(${table.requirementsSnapshot})`),
   check("compliance_activity_versions_provenance_check", sql`(${table.publishState} = 'draft' AND ${table.publishedByUid} = '' AND ${table.publishedAt} = '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'published' AND trim(${table.publishedByUid}) <> '' AND trim(${table.publishedAt}) <> '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'withdrawn' AND trim(${table.publishedByUid}) <> '' AND trim(${table.publishedAt}) <> '' AND trim(${table.withdrawnByUid}) <> '' AND trim(${table.withdrawnAt}) <> '')`),
 ]);
@@ -3238,6 +3250,39 @@ export const complianceWriteGuards = sqliteTable("compliance_write_guards", {
   check("compliance_write_guards_verified_check", sql`${table.verified} = 1`),
 ]);
 
+export const complianceGovernanceRequests = sqliteTable("compliance_governance_requests", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  action: text("action").notNull(),
+  sealedSnapshot: text("sealed_snapshot").notNull(),
+  sealedSnapshotSha256: text("sealed_snapshot_sha256").notNull(),
+  status: text("status").notNull().default("pending"),
+  requestReason: text("request_reason").notNull(),
+  requestedByUid: text("requested_by_uid").notNull(),
+  requestedAt: text("requested_at").notNull(),
+  reviewedByUid: text("reviewed_by_uid").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  reviewNote: text("review_note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_governance_requests_pending_idx")
+    .on(table.organisationId, table.targetType, table.targetId, table.action)
+    .where(sql`${table.status} = 'pending'`),
+  index("compliance_governance_requests_org_status_idx")
+    .on(table.organisationId, table.status, table.requestedAt, table.id),
+  index("compliance_governance_requests_target_idx")
+    .on(table.organisationId, table.targetType, table.targetId, table.requestedAt, table.id),
+  check("compliance_governance_requests_target_check", sql`${table.targetType} IN ('program', 'activity', 'evidence_policy')`),
+  check("compliance_governance_requests_action_check", sql`${table.action} = 'publish'`),
+  check("compliance_governance_requests_snapshot_check", sql`json_valid(${table.sealedSnapshot}) AND length(${table.sealedSnapshotSha256}) = 64 AND lower(${table.sealedSnapshotSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_governance_requests_status_check", sql`${table.status} IN ('pending', 'approved', 'rejected', 'superseded')`),
+  check("compliance_governance_requests_reason_check", sql`trim(${table.requestReason}) <> '' AND trim(${table.requestedByUid}) <> ''`),
+  check("compliance_governance_requests_review_check", sql`(${table.status} = 'pending' AND ${table.reviewedByUid} = '' AND ${table.reviewedAt} = '' AND ${table.reviewNote} = '') OR (${table.status} IN ('approved', 'rejected') AND trim(${table.reviewedByUid}) <> '' AND ${table.reviewedByUid} <> ${table.requestedByUid} AND trim(${table.reviewedAt}) <> '' AND trim(${table.reviewNote}) <> '') OR (${table.status} = 'superseded' AND ${table.reviewedByUid} = '' AND trim(${table.reviewedAt}) <> '' AND trim(${table.reviewNote}) <> '')`),
+]);
+
 export const complianceEvidencePolicyVersions = sqliteTable("compliance_evidence_policy_versions", {
   id: text("id").primaryKey(),
   organisationId: text("organisation_id").notNull(),
@@ -3251,6 +3296,9 @@ export const complianceEvidencePolicyVersions = sqliteTable("compliance_evidence
   officialSourceCheckedAt: text("official_source_checked_at").notNull(),
   requirementsComplete: integer("requirements_complete", { mode: "boolean" }).notNull().default(false),
   publishState: text("publish_state").notNull().default("draft"),
+  publicationRequestId: text("publication_request_id").notNull().default(""),
+  publicationSnapshotSha256: text("publication_snapshot_sha256").notNull().default(""),
+  contentRevision: integer("content_revision").notNull().default(1),
   publishedByUid: text("published_by_uid").notNull().default(""),
   publishedAt: text("published_at").notNull().default(""),
   withdrawnByUid: text("withdrawn_by_uid").notNull().default(""),
@@ -3262,8 +3310,10 @@ export const complianceEvidencePolicyVersions = sqliteTable("compliance_evidence
   uniqueIndex("compliance_evidence_policies_activity_version_idx").on(table.activityVersionId, table.version),
   index("compliance_evidence_policies_org_state_idx").on(table.organisationId, table.publishState, table.updatedAt),
   check("compliance_evidence_policies_version_check", sql`${table.version} > 0`),
+  check("compliance_evidence_policies_content_revision_check", sql`${table.contentRevision} > 0`),
   check("compliance_evidence_policies_state_check", sql`${table.publishState} IN ('draft', 'published', 'withdrawn')`),
   check("compliance_evidence_policies_source_hash_check", sql`length(${table.officialSourceSha256}) = 64 AND lower(${table.officialSourceSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_evidence_policies_publication_hash_check", sql`${table.publicationSnapshotSha256} = '' OR (length(${table.publicationSnapshotSha256}) = 64 AND lower(${table.publicationSnapshotSha256}) NOT GLOB '*[^0-9a-f]*')`),
   check("compliance_evidence_policies_complete_check", sql`${table.requirementsComplete} IN (0, 1)`),
   check("compliance_evidence_policies_provenance_check", sql`(${table.publishState} = 'draft' AND ${table.publishedByUid} = '' AND ${table.publishedAt} = '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'published' AND ${table.publishedByUid} <> '' AND ${table.publishedAt} <> '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.publishState} = 'withdrawn' AND ${table.publishedByUid} <> '' AND ${table.publishedAt} <> '' AND ${table.withdrawnByUid} <> '' AND ${table.withdrawnAt} <> '')`),
 ]);
@@ -3417,6 +3467,9 @@ export const complianceCaseEvidence = sqliteTable("compliance_case_evidence", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("compliance_case_evidence_job_media_idx").on(table.jobMediaId).where(sql`${table.jobMediaId} <> ''`),
+  uniqueIndex("compliance_case_evidence_active_original_idx")
+    .on(table.organisationId, table.caseId, table.requirementId, table.originalSha256)
+    .where(sql`${table.originalSha256} <> '' AND ${table.status} IN ('received', 'under_review', 'accepted')`),
   index("compliance_case_evidence_case_requirement_idx").on(table.caseId, table.requirementId, table.status, table.receivedAt),
   index("compliance_case_evidence_review_idx").on(table.organisationId, table.status, table.receivedAt),
   check("compliance_case_evidence_source_check", sql`${table.sourceType} IN ('field_app', 'installer_upload', 'customer_upload', 'import', 'registry')`),
