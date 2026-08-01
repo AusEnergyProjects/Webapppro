@@ -654,12 +654,13 @@ export function CreditexEvidencePolicyGovernance({
     >
       <section className={styles.intro}>
         <div>
-          <span>RULE PACK CONTROL</span>
-          <h3>Evidence policy authoring</h3>
+          <span>GOVERNMENT SOURCE CONTROL</span>
+          <h3>Evidence requirement transcription</h3>
           <p>
-            Translate each approved activity rule pack into the exact evidence
-            the installer must collect. Publication seals the policy and
-            requires a different named administrator.
+            Transcribe each effective government or regulator requirement into
+            the exact evidence the installer must collect. Creditex verifies
+            the transcription for its operating workflow. A different named
+            administrator must approve the sealed version.
           </p>
         </div>
         <dl>
@@ -739,8 +740,9 @@ export function CreditexEvidencePolicyGovernance({
                 : "Create draft evidence policy"}
             </h4>
             <p>
-              The source hash identifies the exact public and Creditex-approved
-              rule pack used for this version.
+              The source hash identifies the exact government or regulator
+              instrument used for this version. Creditex approval confirms the
+              transcription and operational use, not authorship of the rule.
             </p>
           </header>
           <form className={styles.formGrid} onSubmit={savePolicy}>

@@ -19,6 +19,14 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  COMPLIANCE_OUTCOME_CLASSES,
+  GOVERNMENT_ACTIVITY_TEMPLATES,
+  GOVERNMENT_CATALOGUE_REVIEWED_ON,
+  GOVERNMENT_PROGRAM_TEMPLATES,
+  governmentActivityTemplates,
+  governmentProgramTemplate,
+} from "@/lib/australian-government-program-catalogue";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
@@ -288,6 +296,8 @@ export function CreditexCompliancePortal() {
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
   const [programForm, setProgramForm] = useState(emptyProgramForm);
   const [activityForm, setActivityForm] = useState(emptyActivityForm);
+  const [programTemplateId, setProgramTemplateId] = useState("");
+  const [activityTemplateId, setActivityTemplateId] = useState("");
   const [activityHasEndDate, setActivityHasEndDate] = useState(false);
   const [governanceRefreshToken, setGovernanceRefreshToken] = useState(0);
   const [governanceProgramId, setGovernanceProgramId] = useState("");
@@ -482,6 +492,10 @@ export function CreditexCompliancePortal() {
           setCaseQuery("");
           setGovernanceProgramId("");
           setGovernanceActivityId("");
+          setProgramTemplateId("");
+          setActivityTemplateId("");
+          setProgramForm(emptyProgramForm());
+          setActivityForm(emptyActivityForm());
           setTab("cases");
           setNotice("");
         }
@@ -532,10 +546,90 @@ export function CreditexCompliancePortal() {
         : governanceProgramActivities,
     [effectiveGovernanceActivityId, governanceProgramActivities],
   );
+  const selectedProgramTemplate = useMemo(
+    () => governmentProgramTemplate(programTemplateId) || null,
+    [programTemplateId],
+  );
+  const selectedActivityProgram = useMemo(
+    () => programs.find((program) => program.id === activityForm.programId) || null,
+    [activityForm.programId, programs],
+  );
+  const availableActivityTemplates = useMemo(
+    () => governmentActivityTemplates(selectedActivityProgram?.programCode || ""),
+    [selectedActivityProgram],
+  );
+  const selectedActivityTemplate = useMemo(
+    () =>
+      availableActivityTemplates.find(
+        (activityTemplate) => activityTemplate.templateId === activityTemplateId,
+      ) || null,
+    [activityTemplateId, availableActivityTemplates],
+  );
+  const catalogueByJurisdiction = useMemo(
+    () =>
+      AUSTRALIAN_JURISDICTIONS.map((jurisdiction) => ({
+        jurisdiction,
+        programs: GOVERNMENT_PROGRAM_TEMPLATES.filter(
+          (program) => program.jurisdiction === jurisdiction,
+        ),
+      })).filter((group) => group.programs.length > 0),
+    [],
+  );
 
   function chooseGovernanceProgram(programId: string) {
     setGovernanceProgramId(programId);
     setGovernanceActivityId("");
+  }
+
+  function chooseProgramTemplate(templateId: string) {
+    setProgramTemplateId(templateId);
+    const template = governmentProgramTemplate(templateId);
+    if (!template) {
+      setProgramForm(emptyProgramForm());
+      return;
+    }
+    setProgramForm({
+      ...emptyProgramForm(),
+      programCode: template.programCode,
+      name: template.name,
+      schemeKind: template.outcomeClass,
+      jurisdiction: template.jurisdiction,
+      administeringBody: template.administeringBody,
+      officialSourceUrl: template.officialSourceUrl,
+      officialSourceTitle: template.officialSourceTitle,
+      officialSourceCheckedAt: GOVERNMENT_CATALOGUE_REVIEWED_ON,
+    });
+  }
+
+  function chooseActivityTemplate(templateId: string) {
+    setActivityTemplateId(templateId);
+    const template = availableActivityTemplates.find(
+      (activityTemplate) => activityTemplate.templateId === templateId,
+    );
+    if (!template || !selectedActivityProgram) {
+      setActivityForm((current) => ({
+        ...emptyActivityForm(),
+        programId: current.programId,
+        jurisdiction: selectedActivityProgram?.jurisdiction || "",
+      }));
+      return;
+    }
+    setActivityForm((current) => ({
+      ...emptyActivityForm(),
+      programId: current.programId,
+      activityKey: template.activityKey,
+      title: template.title,
+      serviceCategory: template.serviceCategory,
+      registryActivityCode: template.registryActivityCode,
+      specificationPart: template.specificationPart,
+      productCategory: template.productCategory,
+      scenarioCode: template.scenarioCode,
+      scenario: template.scenario,
+      jurisdiction: selectedActivityProgram.jurisdiction,
+      officialSourceUrl: selectedActivityProgram.officialSourceUrl,
+      officialSourceTitle: selectedActivityProgram.officialSourceTitle,
+      officialSourceCheckedAt: GOVERNMENT_CATALOGUE_REVIEWED_ON,
+    }));
   }
 
   async function changeCaseStatus(
@@ -647,6 +741,7 @@ export function CreditexCompliancePortal() {
         body: JSON.stringify({ action: "create_program", ...programForm }),
       });
       setProgramForm(emptyProgramForm());
+      setProgramTemplateId("");
       await loadGovernance();
       setNotice("Draft program saved. Review its official source before publication.");
       setNoticeKind("success");
@@ -673,6 +768,7 @@ export function CreditexCompliancePortal() {
         }),
       });
       setActivityForm(emptyActivityForm());
+      setActivityTemplateId("");
       setActivityHasEndDate(false);
       await loadGovernance();
       setNotice(
@@ -1020,7 +1116,7 @@ export function CreditexCompliancePortal() {
                 onClick={() => setTab("governance")}
                 onKeyDown={handleWorkspaceTabKeyDown}
               >
-              Activity rules
+              Government rules
             </button>
           )}
         </nav>
@@ -1079,9 +1175,9 @@ export function CreditexCompliancePortal() {
                     : "No governed program selected"}
                 </h3>
                 <p>
-                  Program tabs keep rule packs, activity versions and evidence
-                  decisions separated. Use the activity filter to narrow this
-                  workspace to one effective-dated activity version.
+                  Program and activity tabs keep every government-source
+                  version and evidence decision separated. Creditex verifies
+                  the operational transcription but does not author the rule.
                 </p>
               </div>
               <label>
@@ -1104,6 +1200,82 @@ export function CreditexCompliancePortal() {
               </label>
             </section>
 
+            <section
+              className={styles.cataloguePanel}
+              aria-labelledby="government-catalogue-title"
+            >
+              <div className={styles.catalogueHeader}>
+                <div>
+                  <span className={styles.eyebrow}>OFFICIAL DISCOVERY CATALOGUE</span>
+                  <h3 id="government-catalogue-title">
+                    Australian government program pathways
+                  </h3>
+                  <p>
+                    Reviewed {dateOnly(GOVERNMENT_CATALOGUE_REVIEWED_ON)}.
+                    These controlled templates separate certificates, retailer
+                    obligations, rebates, grants, loans, tariffs and specialist
+                    project pathways. A template is not an activated rule.
+                  </p>
+                </div>
+                <div className={styles.catalogueSummary}>
+                  <strong>{GOVERNMENT_PROGRAM_TEMPLATES.length}</strong>
+                  <span>program pathways</span>
+                  <strong>{GOVERNMENT_ACTIVITY_TEMPLATES.length}</strong>
+                  <span>activity templates</span>
+                </div>
+              </div>
+              <div className={styles.catalogueGrid}>
+                {catalogueByJurisdiction.map((group) => (
+                  <section key={group.jurisdiction}>
+                    <h4>
+                      {group.jurisdiction === "AU"
+                        ? "Australia-wide"
+                        : group.jurisdiction}
+                    </h4>
+                    <div>
+                      {group.programs.map((program) => {
+                        const activityCount = governmentActivityTemplates(
+                          program.programCode,
+                        ).length;
+                        return (
+                          <article key={program.templateId}>
+                            <div>
+                              <strong>{program.programCode}</strong>
+                              <span data-state={program.catalogueState}>
+                                {readable(program.catalogueState)}
+                              </span>
+                            </div>
+                            <h5>{program.name}</h5>
+                            <p>
+                              {readable(program.outcomeClass)}
+                              {" | "}
+                              {activityCount} controlled{" "}
+                              {activityCount === 1 ? "activity" : "activities"}
+                            </p>
+                            <p>{program.operatingNote}</p>
+                            <a
+                              href={program.officialSourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open official source
+                            </a>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <p className={styles.catalogueCaveat}>
+                Before publication, a named administrator must capture the
+                exact effective instrument, source version, dates, content hash,
+                evidence policy and any Creditex accreditation or connector
+                restriction. Closed, future, limited and specialist routes stay
+                unavailable to installers unless independently verified.
+              </p>
+            </section>
+
             <div className={styles.governanceGrid}>
               <section className={styles.formCard}>
                 <h3>Create draft program</h3>
@@ -1112,6 +1284,55 @@ export function CreditexCompliancePortal() {
                   action below.
                 </p>
                 <form className={styles.formGrid} onSubmit={createProgram}>
+                  <label className={styles.wide}>
+                    Government program template
+                    <select
+                      className={styles.select}
+                      value={programTemplateId}
+                      onChange={(event) =>
+                        chooseProgramTemplate(event.target.value)}
+                    >
+                      <option value="">Start from a controlled template</option>
+                      {AUSTRALIAN_JURISDICTIONS.map((jurisdiction) => {
+                        const templates = GOVERNMENT_PROGRAM_TEMPLATES.filter(
+                          (program) => program.jurisdiction === jurisdiction,
+                        );
+                        return templates.length ? (
+                          <optgroup
+                            key={jurisdiction}
+                            label={
+                              jurisdiction === "AU"
+                                ? "Australia-wide"
+                                : jurisdiction
+                            }
+                          >
+                            {templates.map((program) => (
+                              <option
+                                key={program.templateId}
+                                value={program.templateId}
+                              >
+                                {program.programCode} | {program.name} |{" "}
+                                {readable(program.outcomeClass)}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null;
+                      })}
+                    </select>
+                  </label>
+                  {selectedProgramTemplate && (
+                    <div className={`${styles.templateNotice} ${styles.wide}`}>
+                      <strong>
+                        {readable(selectedProgramTemplate.catalogueState)} source
+                        template
+                      </strong>
+                      <p>{selectedProgramTemplate.operatingNote}</p>
+                      <p>
+                        Template values are a research starting point. Add the
+                        exact source version and SHA-256 before saving a draft.
+                      </p>
+                    </div>
+                  )}
                   <label>
                     Program code
                     <input
@@ -1164,11 +1385,10 @@ export function CreditexCompliancePortal() {
                     />
                   </label>
                   <label>
-                    Scheme kind
-                    <input
-                      className={styles.input}
+                    Outcome class
+                    <select
+                      className={styles.select}
                       required
-                      maxLength={100}
                       value={programForm.schemeKind}
                       onChange={(event) =>
                         setProgramForm((current) => ({
@@ -1176,7 +1396,14 @@ export function CreditexCompliancePortal() {
                           schemeKind: event.target.value,
                         }))
                       }
-                    />
+                    >
+                      <option value="">Choose the government outcome</option>
+                      {COMPLIANCE_OUTCOME_CLASSES.map((outcomeClass) => (
+                        <option key={outcomeClass} value={outcomeClass}>
+                          {readable(outcomeClass)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Administering body
@@ -1296,14 +1523,13 @@ export function CreditexCompliancePortal() {
                         const selected = programs.find(
                           (program) => program.id === event.target.value,
                         );
-                        setActivityForm((current) => ({
-                          ...current,
+                        setActivityTemplateId("");
+                        setActivityHasEndDate(false);
+                        setActivityForm({
+                          ...emptyActivityForm(),
                           programId: event.target.value,
-                          jurisdiction:
-                            current.jurisdiction ||
-                            selected?.jurisdiction ||
-                            "",
-                        }));
+                          jurisdiction: selected?.jurisdiction || "",
+                        });
                       }}
                     >
                       <option value="">Choose a program</option>
@@ -1316,6 +1542,51 @@ export function CreditexCompliancePortal() {
                         ))}
                     </select>
                   </label>
+                  <label className={styles.wide}>
+                    Government activity template
+                    <select
+                      className={styles.select}
+                      value={activityTemplateId}
+                      disabled={!activityForm.programId}
+                      onChange={(event) =>
+                        chooseActivityTemplate(event.target.value)}
+                    >
+                      <option value="">
+                        {activityForm.programId
+                          ? availableActivityTemplates.length
+                            ? "Choose a controlled activity"
+                            : "No controlled activity template is available"
+                          : "Choose a program first"}
+                      </option>
+                      {availableActivityTemplates.map((activityTemplate) => (
+                        <option
+                          key={activityTemplate.templateId}
+                          value={activityTemplate.templateId}
+                          disabled={
+                            activityTemplate.catalogueState === "closed"
+                            || activityTemplate.catalogueState === "future"
+                          }
+                        >
+                          {activityTemplate.registryActivityCode} |{" "}
+                          {activityTemplate.title} |{" "}
+                          {readable(activityTemplate.catalogueState)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedActivityTemplate && (
+                    <div className={`${styles.templateNotice} ${styles.wide}`}>
+                      <strong>
+                        {selectedActivityTemplate.registryActivityCode} |{" "}
+                        {readable(selectedActivityTemplate.catalogueState)}
+                      </strong>
+                      <p>
+                        Confirm the exact official product category, scenario,
+                        effective dates, source version and evidence requirements.
+                        This selection does not calculate or create an outcome.
+                      </p>
+                    </div>
+                  )}
                   <label>
                     Activity key
                     <input
@@ -1868,7 +2139,7 @@ export function CreditexCompliancePortal() {
 
             <nav
               className={styles.governanceProgramTabs}
-              aria-label="Governance program workspaces"
+              aria-label="Governance program and activity workspaces"
             >
               <span>Programs</span>
               <div>
@@ -1891,6 +2162,44 @@ export function CreditexCompliancePortal() {
                   <small>No governed programs have been created.</small>
                 )}
               </div>
+              {selectedGovernanceProgram && (
+                <>
+                  <span>Activities</span>
+                  <div>
+                    <button
+                      type="button"
+                      aria-pressed={!effectiveGovernanceActivityId}
+                      data-selected={!effectiveGovernanceActivityId}
+                      onClick={() => setGovernanceActivityId("")}
+                    >
+                      <strong>All activities</strong>
+                      <small>{governanceProgramActivities.length} versions</small>
+                    </button>
+                    {governanceProgramActivities.map((activity) => {
+                      const selected =
+                        activity.id === effectiveGovernanceActivityId;
+                      return (
+                        <button
+                          key={activity.id}
+                          type="button"
+                          aria-pressed={selected}
+                          data-selected={selected}
+                          onClick={() =>
+                            setGovernanceActivityId(activity.id)}
+                        >
+                          <strong>
+                            {activity.registryActivityCode
+                              || activity.activityKey}
+                          </strong>
+                          <small>
+                            {activity.title} | version {activity.version}
+                          </small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </nav>
           </section>
         )}

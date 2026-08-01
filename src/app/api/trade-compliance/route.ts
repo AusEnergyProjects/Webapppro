@@ -60,6 +60,7 @@ export async function GET(request: Request) {
       ok: true,
       activities: activities.map((activity) => ({
         id: activity.id,
+        programId: activity.programId,
         organisationName: activity.organisationName,
         programName: activity.programName,
         programCode: activity.programCode,

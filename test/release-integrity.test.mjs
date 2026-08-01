@@ -285,11 +285,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Import and reconcile Creditex's private national rule packs:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Prove trusted physical-device evidence and expand the requirement engine:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Verify calculators and output contracts per method:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Build provider-neutral connectors per program:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Inventory legacy data and phase the cutover:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Import and independently verify official instruments:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Complete controlled operational lookups:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Prove original evidence end to end:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Verify calculators and typed output contracts:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Authorise connectors and reconcile legacy cutover:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

@@ -4,13 +4,13 @@ Status: controlled discovery baseline, not an eligibility or calculation authori
 
 Reviewed: 1 August 2026
 
-Owner: TLink compliance domain with Creditex review required before publication
+Owner: TLink compliance domain with independent source verification and Creditex operational review required before publication
 
 ## Purpose and use boundary
 
 This register identifies Australian certificate, retailer-obligation, grant, loan, tariff and network programs that can affect a trade-led energy upgrade. It is the discovery input for the versioned TLink compliance catalogue. It must not be used by itself to decide eligibility, calculate an incentive, set a customer price, create a certificate or submit a claim.
 
-Every operational activity must be entered as an immutable, effective-dated activity version with its own official source, content SHA-256, jurisdiction, scenario, product rules, evidence rules and Creditex approval. A program appearing here does not make it selectable in TLink.
+Every operational activity must be entered as an immutable, effective-dated activity version with its own official source, content SHA-256, jurisdiction, scenario and exact government product, evidence and calculation rules. Creditex approves the accuracy and operational use of that transcription within its accreditation and contractual scope; it does not author a private scheme rule. A program appearing here does not make it selectable in TLink.
 
 The public sources reviewed do not support the claim that every Australian incentive creates a carbon certificate. The output types are materially different:
 
@@ -57,7 +57,7 @@ Current eligible system families:
 
 The system, product-register entry, recall state, installer and designer credentials, installation date, assignment, address, component serials, safety certificate, declarations and evidence all affect a claim. Certificates must be created within 12 months of installation. Required documents can be requested for five years after certificate creation. The applicable deeming period and formula must be effective-dated. TLink must retain official-calculator inputs and output, not only the resulting count.
 
-Cheaper Home Batteries operates through SRES rather than creating a separate certificate type. Tiered battery incentives commenced 1 May 2026. The federal battery evidence path requires original geotagged and timestamped images across installation stages, including battery and inverter serial evidence. Those requirements must be authored as an effective-dated battery policy and must not be copied onto unrelated SRES activities.
+Cheaper Home Batteries operates through SRES rather than creating a separate certificate type. Tiered battery incentives commenced 1 May 2026. The federal battery evidence path requires original geotagged and timestamped images across installation stages, including battery and inverter serial evidence. Those official requirements must be transcribed into an effective-dated battery policy and must not be copied onto unrelated SRES activities.
 
 Sources: [CER eligible small-scale systems](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems), [CER certificate creation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates), [CER registered-agent obligations](https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/registered-agents), [CER entitlement calculation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements), [CER solar batteries](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries) and [CER 1 May 2026 battery changes](https://cer.gov.au/news-and-media/media/2026/march/battery-rebates-are-changing-1-may-2026).
 
@@ -249,7 +249,7 @@ Current and historical activity codes:
 - lighting: 4.1 residential lighting variants a to e and 4.2 commercial lighting linked to the NSW method;
 - appliances: 5.1 decommission refrigerator or freezer, 5.2 efficient refrigerator or freezer, 5.3 dryer, 5.4 television, 5.5 standby controller revoked, 5.6 pool pump at or above seven stars and 5.7 refrigerated display cabinet.
 
-Activity 4.2 must remain blocked pending legal confirmation because NSW commercial-lighting certificate creation ended 31 March 2026. Retailer and Approved Energy Savings Provider plans may add evidence beyond the statutory code.
+Activity 4.2 must remain blocked pending legal confirmation because NSW commercial-lighting certificate creation ended 31 March 2026. Any additional retailer or Approved Energy Savings Provider intake evidence must be labelled as a contractual delivery or connector requirement, not as an EEIS scheme rule, and cannot weaken or vary the government requirements.
 
 Sources: [EEIS overview](https://www.climatechoices.act.gov.au/policy-programs/energy-efficiency-improvement-scheme), [Approved Energy Savings Provider register](https://www.climatechoices.act.gov.au/policy-programs/energy-efficiency-improvement-scheme/approved-energy-savings-providers), [legislation hub](https://www.climatechoices.act.gov.au/policy-programs/energy-efficiency-improvement-scheme/legislation), [current Act](https://www.legislation.act.gov.au/a/2012-17/), [Eligible Activities DI2023-299](https://www.legislation.act.gov.au/DownloadFile/di/2023-299/current/PDF/2023-299.PDF), [Activity Code NI2025-184](https://www.legislation.act.gov.au/DownloadFile/ni/2025-184/current/PDF/2025-184.PDF) and [Record and Reporting Code NI2025-254](https://www.legislation.act.gov.au/DownloadFile/ni/2025-254/current/PDF/2025-254.PDF).
 
@@ -376,20 +376,20 @@ The inspected tenant exposed only a limited configured subset of activities, so 
 ## Unresolved hard gates
 
 1. NSW Home Energy Saver discount guidelines, activity specification, evidence payload and Creditex operating interface are unpublished.
-2. Creditex, Dataforce and Runabout private field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification.
+2. Creditex, Dataforce and Runabout provider-owned field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification, and a connector specification is not a scheme rule.
 3. The final NSW July 2026 evidence and method-guide consultation outcome is not published. Consultation text is not effective law.
 4. The exact July 2026 PDRS rule source must supersede or reconcile the public April 2026 PDF before an activity version is published.
 5. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
-6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled, retailer and provider plans may impose additional evidence, and activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
+6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
 7. The public SA provider register lists Creditex only for WH1, HC2A and HC2B. Other REPS activity codes remain disabled without an obliged retailer's authorised current scope. Plenti, Brighte, QRIDA, GrantsNT, SmartyGrants, NILS, REPS-R and TESSA do not expose a verified public claim API contract in the reviewed sources.
 8. Product, participant, licence, recall, suspension and rule status must be revalidated at installation and again at claim or certificate creation where required.
-9. No certificate count may be hardcoded from this document. Every calculator needs a versioned implementation, regulator or Creditex test vectors, reconciliation against the official tool and independent approval.
+9. No certificate count may be hardcoded from this document. Every calculator needs a versioned implementation, official test vectors or independently derived expected values approved for Creditex operations, reconciliation against the official tool and independent approval.
 10. No real case can start until Creditex approves the role matrix, legal data-sharing boundary, customer notice and consent, retention schedule, incident process and evidence-custody design.
 
 ## Required release controls
 
-- Four-eyes approval for activity rules, formulas and publication.
-- Exact source citation and SHA-256 on every published rule pack.
+- Four-eyes approval for the operational transcription of government activity rules and formulas before publication.
+- Exact official source citation and SHA-256 on every published government-source version.
 - Automated effective-date, suspension, withdrawal and cross-tenant denial tests.
 - An immediate kill switch for a suspended activity or product list.
 - Original-evidence immutability, audited access, retention and legal hold.

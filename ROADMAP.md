@@ -802,15 +802,15 @@ Establish the first case-centred Creditex operations slice in TLink across every
 - A no-index Creditex portal with exception-led queues, bounded searches and filters, case workspace, evidence review, audited same-user evidence-view receipts, corrections, dual-control decisions, access administration and provider-neutral batch staging.
 - A persistent bottom Dashboard and governed-program workspace bar, with activity, category and scenario remaining separate program-scoped dimensions.
 - Dataforce-equivalent advanced filter families and deliberate audited access to private customer, installer, site, appointment and commercial case detail.
-- Server-derived decision bases that pin the exact revision, rule and source hashes, canonical evidence digests, findings and any verified calculation run. A withdrawn policy remains available for correction and audit but blocks approval and staging.
+- Server-derived decision bases that pin the exact revision, government-rule and source hashes, canonical evidence digests, findings and any verified calculation run. A withdrawn policy remains available for correction and audit but blocks approval and staging.
 - Data models and read-only portal projections for participants, abilities, equipment, calculators, batches, artifacts, responses, certificate lots, trades and settlements. External execution remains disabled.
 - A controlled [Australian program source register](./docs/compliance/AUSTRALIAN_PROGRAM_SOURCE_REGISTER.md), [Creditex operating model](./docs/compliance/CREDITEX_OPERATING_MODEL.md) and [Dataforce and Runabout parity record](./docs/compliance/CREDITEX_DATAFORCE_PARITY.md).
 
 ### Excluded until later governed milestones
 
-- Publication of any real activity or evidence policy before Creditex supplies and approves its private authority, evidence interpretation and current effective source pack.
+- Publication of any real activity or evidence policy before the exact effective government instruments are independently verified and Creditex approves the transcription for use within its current accreditation, contractual operating authority and connector scope.
 - Unverified certificate or rebate calculations, customer price promises, registry submission, certificate creation, trading, settlement or manually asserted external responses.
-- A live Dataforce or Runabout import, connector, cutover or retirement. Complete private parity remains blocked on authorised exports, field dictionaries, reports, formulas and a Runabout walkthrough.
+- A live Dataforce or Runabout import, connector, cutover or retirement. Complete parity remains blocked on authorised exports, field dictionaries, reports, formulas and a Runabout walkthrough.
 - Production regulated cases. The production catalogue starts with no published activities or evidence policies and therefore cannot open a live claim.
 - Approved retention, legal hold, backup, restore, real-device acceptance, regulator connector credentials or a broad Creditex team rollout.
 
@@ -828,7 +828,7 @@ Establish the first case-centred Creditex operations slice in TLink across every
 
 Exact application commit `7b08cb600bde30273774a544e07039acc6de1c03` passes the post-review 54-test Creditex portal, API and operations-control set, the final 38-test D1 aggregate subset and the complete `npm.cmd run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, 1,089 main tests with 1,087 passed, 2 intentionally skipped and 0 failed, all 98 migrations through `0097_creditex_operations_lifecycle.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. Runtime trigger verification now ignores formatting-only whitespace outside quoted SQL while remaining fail-closed on substantive changes. Independent release review found and closed two P1 access/privacy defects and one P2 stale-response defect before the current deployment.
 
-Sites saved version 248 from the exact application commit and deployed it through `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` with environment revision 19 at `https://compare.ausenergyassessments.com`. Signed-in live QA confirmed the administrator dashboard, Dataforce-parity advanced filter groups, persistent program bar, access controls and separate program and activity governance. Intermediate version 247 restored sign-in but exposed one local-SQLite-only compound aggregate; version 248 replaced it with a bounded D1-compatible aggregate and loaded the live operations endpoint successfully. No case was auto-selected and no production data changed. The post-release Sites Worker error-only query returned zero events. Physical-device capture, hosted production evidence viewing, non-admin production acceptance, backup and restore, private rule-pack accuracy, approved calculator provenance and registry behavior remain unverified or blocked until separately accepted.
+Sites saved version 248 from the exact application commit and deployed it through `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` with environment revision 19 at `https://compare.ausenergyassessments.com`. Signed-in live QA confirmed the administrator dashboard, Dataforce-parity advanced filter groups, persistent program bar, access controls and separate program and activity governance. Intermediate version 247 restored sign-in but exposed one local-SQLite-only compound aggregate; version 248 replaced it with a bounded D1-compatible aggregate and loaded the live operations endpoint successfully. No case was auto-selected and no production data changed. The post-release Sites Worker error-only query returned zero events. Physical-device capture, hosted production evidence viewing, non-admin production acceptance, backup and restore, government-source transcription accuracy, approved calculator provenance and registry behavior remain unverified or blocked until separately accepted.
 
 ## Released milestone: CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26
 
@@ -838,12 +838,12 @@ Release status: application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` is
 
 ### Outcome
 
-Make the Creditex rules workspace genuinely activity agnostic and safe to extend. Administrators can author program-scoped, effective-dated activity versions and complete evidence-policy drafts, keep each program in a persistent bottom workspace, narrow work to one activity version and move an exact sealed policy through independent publication review. AEA Field receives only published requirements it can currently execute. The server verifies assembled evidence bytes rather than trusting client-supplied EXIF claims.
+Make the Creditex government-source workspace genuinely activity agnostic and safe to extend. Administrators can transcribe verified, program-scoped, effective-dated activity and evidence requirements into drafts, keep each program in a persistent bottom workspace, narrow work to one activity version and move an exact sealed transcription through independent publication review. Creditex verifies and operates that transcription within its accreditation and contractual scope; it does not author private program rules. AEA Field receives only published requirements it can currently execute. The server verifies assembled evidence bytes rather than trusting client-supplied EXIF claims.
 
 ### In scope
 
 - Program workspaces remain separate bottom tabs. Activity code, specification part, product category and scenario remain separate fields and activity-scoped filters inside each program.
-- Draft evidence-policy authoring includes ordered requirement code, evidence type, capture timing, minimum and maximum count, original, metadata, GPS and date requirements, signature flags, allowed file types, conditional JSON, dynamic-field JSON and exact source citation.
+- Draft evidence-policy transcription includes ordered requirement code, evidence type, capture timing, minimum and maximum count, original, metadata, GPS and date requirements, signature flags, allowed file types, conditional JSON, dynamic-field JSON and exact official source citation.
 - Policy and publication-history queues are independently paginated and scoped by program and activity. Terminal decisions remain visible as immutable history.
 - Publication requires a named administrator request and a different named administrator decision over the same canonical snapshot and SHA-256. The shared bootstrap mailbox can maintain drafts but cannot request or approve publication.
 - Database guards enforce pending-only request creation, immutable terminal decisions, sealed content during review, publication provenance, immutable published content and atomic required write steps.
@@ -853,7 +853,7 @@ Make the Creditex rules workspace genuinely activity agnostic and safe to extend
 
 ### Deliberate safety boundaries
 
-- No public research row is activated as a real Creditex rule. The production catalogue remains empty until Creditex supplies and approves its exact private authority, interpretations and current effective rule packs.
+- No public research row is activated as a real government requirement. The production catalogue remains empty until exact effective official instruments are independently verified and Creditex approves their operational transcription within its accreditation, contractual operating authority and connector scope.
 - Embedded EXIF proves only what is present in the uploaded bytes. It does not prove that a camera created the bytes, that the file was never edited or that the device is regulator accepted. Any policy requiring trusted original-camera attestation remains blocked.
 - PNG, WebP and PDF signatures are checked from assembled bytes, but governed metadata, GPS and capture-time requirements currently require a valid JPEG.
 - Certificate quantities, rebate values, customer price reductions, product eligibility, registry actions, certificate creation, trading and settlement remain disabled without separately approved calculators and connectors.
@@ -865,7 +865,7 @@ Exact application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` passes the c
 
 The 7,352,352-byte local package has SHA-256 `4E9087A40A00613E4BBDD111D8D5E1CA4A3A5AED01BCF3DA8DD9635396CF920F`. Sites stored 332 files and 29,276,160 bytes with content hash `sha256:3e66780f5d61ae46c650df39c711a9a26166f75f7d9eb58cf8461a39dc7bc123`. Saved version 249 reports the exact application source and deployment `appgdep_6a6da8704be08191a4d310adb523e0f3` succeeded. The provider URL is `https://aea-energy-comparison.info294029.chatgpt.site`.
 
-Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity rules, evidence-policy authoring, four-eyes notice and Access membership screen loaded. The real production catalogue and case inventory remains deliberately empty at 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
+Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity-source governance, evidence-policy transcription, four-eyes notice and Access membership screen loaded. The real production catalogue and case inventory remains deliberately empty at 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
 
 ## Forward phases
 
@@ -968,11 +968,11 @@ VEU `6(23)` remains a useful test example only. It is not a privileged implement
 
 ## Next five logical product steps
 
-1. **Import and reconcile Creditex's private national rule packs:** obtain the signed program, activity, category, scenario, evidence and authority inventory for every intended federal, state and territory path; import it as effective-dated drafts; and reconcile it against official discovery sources before any publication.
-2. **Prove trusted physical-device evidence and expand the requirement engine:** add platform-backed device and camera attestation, representative iOS and Android acceptance, and governed support for the remaining evidence types, signatures, conditions and dynamic fields while unsupported policies continue to fail closed.
-3. **Verify calculators and output contracts per method:** implement immutable method-specific inputs, formulas, product and climate lookups, units, caps, rounding, test vectors and typed outputs; obtain independent reconciliation and Creditex approval for each method while every unverified calculator remains disabled.
-4. **Build provider-neutral connectors per program:** define versioned batch, submission, response, issuance and reconciliation contracts once, then add separately authorised program adapters with dry-run validation, idempotency, immutable artifacts, dual control and exception handling.
-5. **Inventory legacy data and phase the cutover:** obtain authorised Dataforce and Runabout exports, field dictionaries, screen and report inventories, role maps and a Runabout walkthrough; preserve source records through repeatable imports; then reconcile counts, hashes and exceptions in bounded parallel cohorts by program with explicit rollback and acceptance.
+1. **Import and independently verify official instruments:** capture every intended federal, state and territory program, activity, category, scenario, evidence and calculation instrument as an effective-dated, source-hashed draft; independently verify the transcription before any production publication.
+2. **Complete controlled operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension lookups, controlled dropdown values and official-source monitoring so case selection and submission rechecks fail closed.
+3. **Prove original evidence end to end:** complete platform-backed camera and device attestation, representative iOS and Android acceptance, hosted original-evidence viewing, retention and restore checks, plus the remaining governed evidence types, signatures, conditions and dynamic fields.
+4. **Verify calculators and typed output contracts:** implement method-specific inputs, formulas, official product and climate lookups, units, caps, rounding and typed outcomes; reconcile official or independently approved test vectors while every unverified calculator remains disabled.
+5. **Authorise connectors and reconcile legacy cutover:** build versioned registry and program connectors with dry-run, idempotency, immutable artifacts and response reconciliation, then map authorised Dataforce and Runabout exports through bounded parallel cohorts with counts, hashes, exceptions, rollback and acceptance.
 
 ## Global stop conditions
 

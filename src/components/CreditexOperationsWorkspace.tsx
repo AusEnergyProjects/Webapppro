@@ -2387,6 +2387,19 @@ export function CreditexOperationsWorkspace({
     applyFilters(nextFilters);
   }
 
+  function chooseActivity(activityVersionId: string) {
+    const activity = operations.workspace.activities.find(
+      (item) => item.activityVersionId === activityVersionId,
+    );
+    const nextFilters = {
+      ...appliedFilters,
+      program: activity?.programId || appliedFilters.program,
+      activity: activityVersionId,
+    };
+    setShowAdvancedFilters(false);
+    applyFilters(nextFilters);
+  }
+
   async function runOperation(
     action: string,
     body: Record<string, unknown>,
@@ -4876,38 +4889,83 @@ export function CreditexOperationsWorkspace({
         className={styles.programTabs}
         aria-label="Compliance program workspaces"
       >
-        <button
-          type="button"
-          aria-current={!appliedFilters.program ? "page" : undefined}
-          onClick={() => chooseProgram("")}
-        >
-          <span>Dashboard</span>
-          <small>{operations.workspace.total} matching cases</small>
-        </button>
-        {operations.workspace.programs.map((program) => (
+        <div className={styles.programTabRow}>
           <button
-            key={program.programId}
             type="button"
-            aria-current={
-              appliedFilters.program === program.programId ? "page" : undefined
-            }
-            onClick={() => chooseProgram(program.programId)}
+            aria-current={!appliedFilters.program ? "page" : undefined}
+            onClick={() => chooseProgram("")}
           >
-            <span>
-              {program.programCode || program.jurisdiction} ·{" "}
-              {program.programName}
-            </span>
-            <small>
-              {program.caseCount} cases · {program.activityVersionCount}{" "}
-              activity versions
-            </small>
+            <span>Dashboard</span>
+            <small>{operations.workspace.total} matching cases</small>
           </button>
-        ))}
-        {!operations.workspace.programs.length && operations.loaded && (
-          <span className={styles.programTabsEmpty}>
-            Governed program tabs appear here after Creditex approves a
-            source-pinned program record. No public research is auto-published.
-          </span>
+          {operations.workspace.programs.map((program) => (
+            <button
+              key={program.programId}
+              type="button"
+              aria-current={
+                appliedFilters.program === program.programId
+                  && !appliedFilters.activity
+                  ? "page"
+                  : undefined
+              }
+              onClick={() => chooseProgram(program.programId)}
+            >
+              <span>
+                {program.programCode || program.jurisdiction} ·{" "}
+                {program.programName}
+              </span>
+              <small>
+                {program.caseCount} cases · {program.activityVersionCount}{" "}
+                activity versions
+              </small>
+            </button>
+          ))}
+          {!operations.workspace.programs.length && operations.loaded && (
+            <span className={styles.programTabsEmpty}>
+              Governed program tabs appear here after Creditex verifies and
+              activates a government-source program record.
+            </span>
+          )}
+        </div>
+        {appliedFilters.program && (
+          <div
+            className={styles.activityTabRow}
+            aria-label="Activities in the selected program"
+          >
+            <span>Activities</span>
+            <button
+              type="button"
+              aria-current={!appliedFilters.activity ? "page" : undefined}
+              onClick={() => chooseProgram(appliedFilters.program)}
+            >
+              <span>All activities</span>
+              <small>Keep this program selected</small>
+            </button>
+            {operations.workspace.activities
+              .filter((activity) =>
+                activity.programId === appliedFilters.program)
+              .map((activity) => (
+                <button
+                  key={activity.activityVersionId}
+                  type="button"
+                  aria-current={
+                    appliedFilters.activity === activity.activityVersionId
+                      ? "page"
+                      : undefined
+                  }
+                  onClick={() =>
+                    chooseActivity(activity.activityVersionId)}
+                >
+                  <span>
+                    {activity.registryActivityCode || activity.activityKey}
+                    {" "}| {activity.title}
+                  </span>
+                  <small>
+                    {activity.caseCount} cases | version {activity.version}
+                  </small>
+                </button>
+              ))}
+          </div>
         )}
       </nav>
       {evidenceViewer && (

@@ -77,10 +77,16 @@ test("guided compliance intake binds an approved activity to the exact installat
   assert.match(form, /seenCursors/);
   assert.match(form, /pagination\?\.hasNext/);
   assert.match(form, /seenCursors\.has\(nextCursor\)/);
-  assert.match(form, /Date and start time[\s\S]*Government program or certificate activity/);
+  assert.match(form, /Date and start time[\s\S]*Government program activity/);
+  assert.match(form, /<span>Program<\/span><select/);
+  assert.match(form, /<span>Activity<\/span><select/);
+  assert.match(form, /<span>Product category<\/span><select/);
+  assert.match(form, /<span>Activity scenario<\/span><select/);
+  assert.match(form, /<span>Effective source version<\/span><select/);
   assert.match(form, /name="complianceActivityVersionId"/);
+  assert.match(form, /A certificate or external program ID is recorded later only if the government pathway issues one/);
   assert.match(form, /setAppointmentType\("installation"\)/);
-  assert.match(form, /does not yet decide eligibility, calculate an incentive or promise certificates/);
+  assert.match(form, /does not decide eligibility, calculate an incentive or promise certificates/);
   assert.match(complianceCatalogue, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
   assert.match(complianceCatalogue, /listInstallerSelectableActivities/);
   assert.match(complianceCatalogue, /AUSTRALIAN_SITE_JURISDICTIONS\.includes/);

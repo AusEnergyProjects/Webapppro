@@ -15,6 +15,11 @@ const operations = read("../src/components/CreditexOperationsWorkspace.tsx");
 const operationsStyles = read(
   "../src/components/CreditexOperationsWorkspace.module.css",
 );
+const governmentCatalogue = read(
+  "../src/lib/australian-government-program-catalogue.ts",
+);
+const tradeNewJobForm = read("../src/components/TradeNewJobForm.tsx");
+const tradeComplianceRoute = read("../src/app/api/trade-compliance/route.ts");
 const sessionRoute = read("../src/app/api/creditex/session/route.ts");
 const caseRoute = read("../src/app/api/creditex/cases/route.ts");
 const activityRoute = read("../src/app/api/creditex/activities/route.ts");
@@ -366,6 +371,8 @@ test("operations UI is activity-agnostic with program tabs and Dataforce-parity 
     /aria-label="Compliance program workspaces"/,
     /operations\.workspace\.programs\.map/,
     /chooseProgram\(program\.programId\)/,
+    /className=\{styles\.activityTabRow\}/,
+    /chooseActivity\(activity\.activityVersionId\)/,
     /activity\.activityVersionId/,
     /Dataforce-parity search/,
     /Status filters/,
@@ -378,9 +385,73 @@ test("operations UI is activity-agnostic with program tabs and Dataforce-parity 
     /Product filters/,
     /Audit filters/,
     /Other filters/,
-    /No public research is auto-published/,
+    /Creditex verifies and[\s\S]*activates a government-source program record/,
   ]) assert.match(operations, contract);
   assert.doesNotMatch(operations, /6\(23\)/);
+});
+
+test("government catalogue distinguishes national outcomes and remains discovery-only", () => {
+  for (const contract of [
+    /GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-01"/,
+    /"tradable_certificate"/,
+    /"retailer_obligation_credit"/,
+    /"rebate"/,
+    /"grant"/,
+    /"loan"/,
+    /"project_credit"/,
+    /"tariff_only"/,
+    /"procurement_only"/,
+    /programCode: "SRES"/,
+    /programCode: "VEU"/,
+    /programCode: "NSW-ESS"/,
+    /programCode: "NSW-PDRS"/,
+    /programCode: "ACT-EEIS"/,
+    /programCode: "SA-REPS"/,
+    /jurisdiction: "QLD"/,
+    /jurisdiction: "WA"/,
+    /jurisdiction: "TAS"/,
+    /jurisdiction: "NT"/,
+    /catalogueState: "closed"/,
+    /catalogueState: "future"/,
+    /catalogueState: "specialist"/,
+  ]) assert.match(governmentCatalogue, contract);
+  assert.match(portal, /A template is not an activated rule/);
+  assert.match(portal, /does not author the rule/);
+  assert.match(portal, /Creditex accreditation or connector[\s\S]*restriction/);
+  assert.match(portal, /Government program template/);
+  assert.match(portal, /Government activity template/);
+  assert.match(portal, /COMPLIANCE_OUTCOME_CLASSES\.map/);
+  assert.doesNotMatch(
+    `${portal}\n${governmentCatalogue}\n${evidenceGovernance}`,
+    /private rule|private national rule|Creditex private authority/i,
+  );
+  assert.doesNotMatch(
+    governmentCatalogue,
+    /certificateQuantity|certificateCount|estimatedCertificates|rebateAmount|incentiveAmount/,
+  );
+  assert.equal(
+    (governmentCatalogue.match(/"6\(23\)"/g) || []).length,
+    1,
+    "the example activity must be one controlled template, not a special-case workflow",
+  );
+});
+
+test("installer intake uses chained governed dropdowns and binds the exact source version", () => {
+  for (const contract of [
+    /const \[complianceProgramId, setComplianceProgramId\]/,
+    /const \[complianceActivityKey, setComplianceActivityKey\]/,
+    /const \[complianceProductCategory, setComplianceProductCategory\]/,
+    /const \[complianceScenario, setComplianceScenario\]/,
+    /<span>Program<\/span><select/,
+    /<span>Activity<\/span><select/,
+    /<span>Product category<\/span><select/,
+    /<span>Activity scenario<\/span><select/,
+    /<span>Effective source version<\/span><select/,
+    /name="complianceActivityVersionId"/,
+    /exact government source, activity, product category, scenario and evidence requirement version/,
+  ]) assert.match(tradeNewJobForm, contract);
+  assert.match(tradeComplianceRoute, /programId: activity\.programId/);
+  assert.doesNotMatch(tradeNewJobForm, /6\(23\)/);
 });
 
 test("authorised case detail renders private CRM data only after audited case access", () => {
@@ -418,7 +489,7 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
 test("governance keeps program workspaces separate with scoped pagination and decision history", () => {
   for (const contract of [
     /className=\{styles\.governanceProgramTabs\}/,
-    /aria-label="Governance program workspaces"/,
+    /aria-label="Governance program and activity workspaces"/,
     /chooseGovernanceProgram\(program\.id\)/,
     /governanceActivityId/,
     /visibleGovernanceActivities/,
