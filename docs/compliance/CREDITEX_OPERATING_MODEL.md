@@ -50,6 +50,30 @@ Public research is discovery evidence only. It is not authority to activate clai
 | 12. Issuance, trade and settlement | Authorised Creditex users | Record regulator-issued identifiers and quantities separately from estimates, then record inventory, trade and settlement events. | Quantity and money reconcile to source artifacts and dual-controlled approvals. |
 | 13. Close and retain | Creditex and TLink | Close only after findings, submission outcomes, financial records and retention instructions are complete. | Audit package can be reproduced without Dataforce or Runabout. |
 
+## Proposed installer post-acceptance handoff
+
+This is the smallest proposed installer integration and is not a statement of current runtime delivery. It constrains the first ordinary trade workflow even though the broader case model above may later support separately governed stacking or specialist pathways.
+
+1. The installer first creates the ordinary CRM customer, site, job and quote. Initial job creation must not create a Creditex case or ask the installer to choose a compliance activity.
+2. The customer must accept an immutable quote version and exact scope before compliance intake becomes available. Draft, expired, superseded or declined quotes cannot open a case.
+3. TLink derives the owning installer, job, service site, jurisdiction, planned installation date and accepted scope on the server. The browser cannot override those facts.
+4. TLink then offers controlled, pre-populated `Program -> Activity -> Product category -> Scenario -> effective source version` dropdowns. Only published versions effective for the derived jurisdiction and activity date are selectable; the selector does not promise eligibility, certificate quantity or rebate value.
+5. One confirmed selection creates exactly one active Creditex case for the job and pins the accepted quote reference, governing source versions and evidence-policy version. Retries return the same case, while a different second active case is blocked until a separately governed supersession or stacking workflow exists.
+6. AEA Field receives the pinned, ordered evidence checklist for the assigned field user. Captures remain linked to the exact case and requirement and retain the original-file and metadata controls defined below.
+7. The installer sees only the case number, lifecycle status, controlling source and evidence checklist or completion state. Creditex assignment, reviewer findings, internal audit history, decision controls and regulator or provider connector fields remain private to authorised Creditex users.
+
+Production currently has zero published governed programs available to this handoff. The correct production state is therefore a clear, non-selectable empty state explaining that no governed activity is available, not test options, inferred eligibility or a bypass.
+
+Marketplace-protected customer work remains outside this first slice. A direct-trade installer may use the handoff only for a job and accepted quote it owns; marketplace customer identity, site and consent data cannot be copied into the installer or Creditex workflow until the existing customer-controlled release and purpose boundary authorises it.
+
+The smallest implementation and test sequence is:
+
+1. remove compliance selection and case creation from initial CRM job setup, and reject any client attempt to submit it there;
+2. add an owner-scoped handoff read contract that derives the accepted quote, site, jurisdiction, date and scope and returns only eligible published selector options;
+3. add an idempotent handoff create contract with a database-enforced one-active-case-per-job guard, then publish the case revision to the assigned AEA Field user;
+4. add the compact installer handoff panel and keep all Creditex-private fields out of its response contract; and
+5. test acceptance gating, tenant and marketplace isolation, server-derived facts, published/effective filtering, empty production inventory, concurrent retries, field-sync delivery and private-field exclusion before any runtime release.
+
 ## Nationwide coverage contract
 
 Coverage means TLink must understand and correctly classify the program. It does not mean every row is an enabled Creditex claim path.

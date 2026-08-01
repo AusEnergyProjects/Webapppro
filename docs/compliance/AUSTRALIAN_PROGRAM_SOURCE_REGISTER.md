@@ -123,7 +123,38 @@ If `6(23)` appears in a legacy export, it must remain an unverified external
 label until the owning system supplies an authoritative field dictionary. It
 must not select a rule, formula or certificate quantity.
 
-The current document wrapper is Specifications Version 25, effective 21 July 2026, but its Part 6 changes do not apply until 30 September 2026. A 1 August 2026 installation therefore needs the pre-30 September Part 6 clauses. TLink must support clause-level effective dates, not only a document version.
+Specifications Version 25 is already operative. It came into effect on 21 July
+2026 and states that Versions 0.1 to 24.0 were no longer in effect from that
+date. Version 25 itself contains both the Part 6 branch applicable until
+29 September 2026 and the branch applicable from 30 September 2026. A
+1 August 2026 installation therefore resolves to the through-29-September
+clauses within Version 25, not to Version 24. Version 24 is retained only as
+the superseded comparison source for the Version 25 change.
+
+The published Part 6 minimum co-payment branches are:
+
+| Product classification | Applicable until 29 Sep 2026 | Applicable from 30 Sep 2026 |
+| --- | ---: | ---: |
+| Multi-split with total rated cooling capacity below 10 kW, categories 6A, 6D and 6E | $1,000 including GST per installed product | $1,000 including GST per installed product |
+| Multi-split with total rated cooling capacity at or above 10 kW, categories 6B, 6C, 6F and 6G | $1,000 including GST per installed product | $3,000 including GST per installed product |
+| All ducted air conditioners, categories 6A to 6C | $1,000 including GST per installed product | $3,000 including GST per installed product |
+| Other non-ducted air conditioners below 10 kW, categories 6D and 6E | $200 including GST per installed product | $200 including GST per installed product |
+| Other non-ducted air conditioners at or above 10 kW, categories 6F and 6G | $1,000 including GST per installed product | $1,000 including GST per installed product |
+
+For multi-split calculations in both branches, the heating or cooling capacity
+input is the sum of the rated capacities of the installed indoor units, capped
+at the registered rated capacity of the installed outdoor unit. From
+30 September 2026, Version 25 adds a maximum 20 kW heating input and a maximum
+20 kW cooling input for installations in residential premises. The marked
+20 kW maxima do not apply before that date or to non-residential premises.
+The scenario-specific 2.4 kW and 15 kW limits for scenarios (i) to (iv) still
+apply.
+
+These are source-register facts, not active TLink rules. This register does
+not establish which approved case event selects the effective-date branch,
+retain any exact source bytes or hashes, approve a clause transcription, or
+activate a calculator. Those controls remain fail-closed pending exact-byte
+retention and independent approval.
 
 Current deemed-activity inventory:
 
@@ -166,7 +197,74 @@ Parts 5, 7, 9, 10 and 23 expired in January 2024. Part 12 was revoked in April 2
 
 VEU also has current project-based Measurement and Verification and Benchmark Rating paths. They require explicit project boundaries, baseline and operating periods, raw meter data, models, variables, calibration, qualified professionals, reports, certificate periods and persistence calculations.
 
-Sources: [VEU industry specifications](https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/industry-specifications), [Specifications Version 25](https://www.energy.vic.gov.au/__data/assets/pdf_file/0041/795488/Victorian-Energy-Upgrades-Specifications-2018-Version-25.pdf), [VEET Regulations](https://www.legislation.vic.gov.au/in-force/statutory-rules/victorian-energy-efficiency-target-regulations-2018/020), [VEU installer pathway](https://www.energy.vic.gov.au/victorian-energy-upgrades/installers), [VEU public registry](https://veu.esc.vic.gov.au/vpr/s/public-registry), [Measurement and Verification Version 8](https://www.energy.vic.gov.au/__data/assets/pdf_file/0036/755487/Measurement-and-Verification-Specifications-Version-8.0.pdf) and [Benchmark Rating Version 2](https://www.energy.vic.gov.au/__data/assets/pdf_file/0034/755485/Benchmark-Rating-Specifications-Version-2.0.pdf).
+#### VEU source classes and retention status
+
+The source pack below was reviewed against official Victorian Government and
+Essential Services Commission sources on 2 August 2026. A URL, title or
+effective date in this register is not evidence that TLink has retained or
+independently approved the exact bytes.
+
+Authoritative instruments:
+
+- [Victorian Energy Efficiency Target Act 2007, Authorised Version 023](https://content.legislation.vic.gov.au/sites/default/files/2025-07/07-70aa023-authorised.pdf),
+  incorporating amendments as at 1 July 2025;
+- [Victorian Energy Efficiency Target Regulations 2018, Authorised Version 020](https://content.legislation.vic.gov.au/sites/default/files/2026-06/18-145sra020-authorised.pdf),
+  effective 30 June 2026, including Schedule 2 Part 6, Schedule 4 installation
+  limits and the authoritative Code of Conduct in Schedule 6;
+- [Victorian Energy Upgrades Specifications 2018, Version 25.0](https://www.energy.vic.gov.au/__data/assets/pdf_file/0041/795488/Victorian-Energy-Upgrades-Specifications-2018-Version-25.pdf),
+  effective 21 July 2026 and containing both Part 6 date branches described
+  above;
+- [Victorian Energy Upgrades Specifications 2018, Version 24.0](https://www.energy.vic.gov.au/__data/assets/pdf_file/0031/792904/victorian-energy-upgrades-specifications-2018-version-24.pdf),
+  effective 30 June 2026 and superseded from 21 July 2026, retained for
+  comparison only; and
+- [Victorian Energy Efficiency Target Guidelines, Version 16](https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20VEET%20guidelines%20v16%20-%2020260416.pdf),
+  effective 16 April 2026.
+
+Current public guidance and mandatory consumer documents:
+
+- [Water Heating and Space Heating and Cooling Activity Guide, Version 3.17](https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.17%20-%2020250901.pdf),
+  effective 1 September 2025. It predates Version 25 and cannot independently
+  establish the 30 September 2026 branch;
+- [Obligations and Program Guide for Accredited Persons, Version 3.8](https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Obligations%20and%20Program%20Guide%20for%20Accredited%20Persons%20-%20V%203.8%20-%2020260324.pdf),
+  published 24 March 2026;
+- [VEET Code of Conduct Guideline, Version 1.3](https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20VEU%20code%20of%20conduct%20-%20Code%20of%20Conduct%20Guideline%201.3%2020240801.pdf),
+  published 1 August 2024. This is guidance only; Schedule 6 of the
+  Regulations is authoritative;
+- [Application Guide for Product Applicants, Version 2.0](https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20Application%20Guide%20for%20Product%20Applicants%20-%20V%202.0%20-%2020250603.pdf)
+  and [Water Heating and Space Heating/Cooling Product Application Guide, Version 3.0](https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Product%20Application%20Guide%20-%20V%203.0%20-%2020250603.pdf),
+  both published 3 June 2025; and
+- the mandatory [Consumer rights under the Victorian Energy Upgrades program](https://www.energy.vic.gov.au/__data/assets/pdf_file/0028/585154/Victorian-Energy-Efficiency-Target-scheme-consumer-factsheet.pdf),
+  published April 2024, and [Choosing the right size reverse cycle air conditioner](https://www.energy.vic.gov.au/__data/assets/pdf_file/0027/712809/VEU-space-heating-and-cooling-consumer-factsheet.pdf),
+  Version 1, 2023. The [VEU industry program documents page](https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-program-documents)
+  requires consumers to receive current copies before agreeing to the
+  applicable activity.
+
+Dynamic official sources:
+
+- the [VEU public registry](https://veu.esc.vic.gov.au/vpr/s/public-registry);
+  and
+- the [VEU Register of Products](https://veu.esc.vic.gov.au/vpr/s/productregister).
+
+These live sources require effective-dated snapshots or exports with source
+timestamps and fail-closed rechecks. A saved landing-page URL is not an
+authoritative participant, accreditation, suspension or product record.
+
+Unavailable provider-portal artefacts:
+
+- the exact current VEEC assignment form;
+- Part 6 certificate-creation fields and upload schemas;
+- declarations, evidence templates and field dictionaries; and
+- current accredited-provider notices and program-specific instructions.
+
+The official [VEU industry program documents page](https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-program-documents)
+directs program-specific documents to the accredited-provider portal. Public
+guidance must not be used to infer those private artefacts. They require an
+authorised portal export, exact-byte retention and independent approval before
+any regulated-case onboarding or connector mapping.
+
+Separate project-based sources are [Measurement and Verification Specifications Version 8](https://www.energy.vic.gov.au/__data/assets/pdf_file/0036/755487/Measurement-and-Verification-Specifications-Version-8.0.pdf)
+and [Benchmark Rating Specifications Version 2](https://www.energy.vic.gov.au/__data/assets/pdf_file/0034/755485/Benchmark-Rating-Specifications-Version-2.0.pdf).
+They are not Part 6 deemed-activity authorities.
 
 ### Victorian non-certificate programs
 

@@ -2136,11 +2136,21 @@ test("job detail keeps each D1 projection within the 100-column limit", () => {
   assert.match(privateQuery, /pilotJobNotFound\(\)/);
 });
 
-test("Creditex UI surfaces all five priorities, controlled dropdowns and activity tabs", () => {
+test("Creditex UI surfaces all five priorities, compact quick filters and controlled job menus", () => {
   const priorities = sourceSection(
     server,
     "function pilotPriorities",
     "export async function startCreditexVeuPilot",
+  );
+  const advancedFilters = sourceSection(
+    workspace,
+    "function AdvancedPilotFilters",
+    "export function CreditexVeuPilotWorkspace",
+  );
+  const sortHeader = sourceSection(
+    workspace,
+    "function PilotSortHeader",
+    "const PILOT_STATUS_COLUMN_KEYS",
   );
   assert.deepEqual(
     Array.from(priorities.matchAll(/key: "([^"]+)"/g), (match) => match[1]),
@@ -2169,9 +2179,11 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   }
   assert.match(workspace, /snapshot\.priorities\.map/);
   assert.match(workspace, /snapshot\.activities \|\| \[\]\)\.map/);
-  assert.match(workspace, /aria-label="VEU activity tabs"/);
-  assert.match(workspace, /activityTemplateId: activity\.activityTemplateId/);
-  assert.match(workspace, /snapshot\.installers\.map/);
+  assert.match(
+    workspace,
+    /onChange\(\{ activityTemplateId: event\.target\.value \}\)/,
+  );
+  assert.match(workspace, /\(snapshot\.installers \|\| \[\]\)\.map/);
   assert.match(workspace, /technicians\.map/);
   assert.match(workspace, /snapshot\.filters\.evidenceStatuses/);
   assert.match(workspace, /snapshot\.filters\.lookupStatuses/);
@@ -2194,6 +2206,23 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   );
   assert.match(workspace, /Actions for \$\{job\.jobNumber\}/);
   assert.match(workspace, /className=\{styles\.advancedFilters\}/);
+  assert.match(workspace, /className=\{styles\.quickFilters\}/);
+  assert.match(workspace, /type="search"/);
+  assert.match(workspace, /Installer company/);
+  assert.match(workspace, /VEU activity/);
+  assert.ok(
+    advancedFilters.indexOf("styles.quickFilters")
+      < advancedFilters.indexOf("<details>"),
+  );
+  assert.equal((advancedFilters.match(/Installer company/g) || []).length, 1);
+  assert.equal((advancedFilters.match(/VEU activity/g) || []).length, 1);
+  assert.doesNotMatch(advancedFilters, /<details open>/);
+  assert.doesNotMatch(advancedFilters, /Search type|Bulk actions/);
+  assert.match(workspace, /aria-label="VEU activity tabs"/);
+  assert.match(workspace, /activityTemplateId: activity\.activityTemplateId/);
+  assert.doesNotMatch(workspace, /className=\{styles\.roster\}/);
+  assert.match(workspaceStyles, /\.activityRail/);
+  assert.doesNotMatch(workspaceStyles, /\.rosterGrid/);
   for (const label of [
     "Status filters",
     "Work &amp; personnel",
@@ -2239,11 +2268,27 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   assert.match(workspaceStyles, /\.tableViewport\s*\{[\s\S]*overflow:\s*auto/);
   assert.match(
     workspaceStyles,
+    /\.jobTable\s*\{[\s\S]*font-size:\s*0\.75rem/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.jobWorkspace\[data-density="comfortable"\] \.jobTable\s*\{[\s\S]*font-size:\s*0\.8rem/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.statusCell,[\s\S]*\.mappingCell\s*\{[\s\S]*font-size:\s*0\.72rem/,
+  );
+  assert.match(
+    workspaceStyles,
     /\.filterDrawer\s*\{[\s\S]*position:\s*absolute[\s\S]*transform:\s*translateX\(102%\)/,
   );
   assert.match(
     workspaceStyles,
     /\.filterDrawer\[data-open="true"\]\s*\{[\s\S]*transform:\s*translateX\(0\)/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.filterDrawer\s*\{[\s\S]*width:\s*min\(19rem,/,
   );
   assert.match(
     workspace,
@@ -2280,6 +2325,38 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   assert.match(
     workspace,
     /className=\{styles\.panelTabs\}[\s\S]{0,120}inert=\{filtersOpen\}/,
+  );
+  assert.match(
+    workspace,
+    /document\.addEventListener\([\s\S]*"pointerdown"[\s\S]*closeSortMenuOnOutsidePointer[\s\S]*true/,
+  );
+  assert.match(
+    workspace,
+    /target\?\.closest\("\[data-sort-menu\]"\)/,
+  );
+  assert.match(
+    workspace,
+    /aria-expanded=\{open\}/,
+  );
+  assert.match(
+    workspace,
+    /event\.key !== "Escape" \|\| !open[\s\S]*closeAndRestoreFocus\(\)/,
+  );
+  assert.equal(
+    (sortHeader.match(/closeAndRestoreFocus\(\)/g) || []).length,
+    5,
+  );
+  assert.match(
+    sortHeader,
+    /onSort\(column\.sortKey!, "asc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
+  );
+  assert.match(
+    sortHeader,
+    /onSort\(column\.sortKey!, "desc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
+  );
+  assert.match(
+    sortHeader,
+    /onSort\("jobNumber", "asc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
   );
   assert.match(
     workspace,

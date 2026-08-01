@@ -672,26 +672,53 @@ function sortState(
 function PilotSortHeader({
   column,
   filters,
+  open,
+  onToggle,
+  onClose,
   onSort,
 }: {
   column: PilotColumn;
   filters: Filters;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
   onSort: (sortBy: PilotSortKey, sortDirection: "asc" | "desc") => void;
 }) {
   const state = sortState(column, filters);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  function closeAndRestoreFocus() {
+    onClose();
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
   return (
     <th
       scope="col"
       aria-sort={state === "none" ? undefined : state}
       title={column.description || column.label}
     >
-      <details className={styles.sortMenu}>
-        <summary
+      <div
+        className={styles.sortMenu}
+        data-sort-menu={column.key}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || !open) return;
+          event.preventDefault();
+          closeAndRestoreFocus();
+        }}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          className={styles.sortMenuTrigger}
           aria-label={
             column.sortKey
               ? `Sort ${column.label}`
               : `${column.label} mapping information`
           }
+          aria-expanded={open}
+          aria-controls={`pilot-sort-options-${column.key}`}
+          onClick={onToggle}
         >
           <span>{column.label}</span>
           <b aria-hidden="true">
@@ -703,34 +730,49 @@ function PilotSortHeader({
               ? "▼"
               : "↕"}
           </b>
-        </summary>
-        <div>
-          {column.sortKey ? (
-            <>
-              <button
-                type="button"
-                onClick={() => onSort(column.sortKey!, "asc")}
-              >
-                Sort ascending
-              </button>
-              <button
-                type="button"
-                onClick={() => onSort(column.sortKey!, "desc")}
-              >
-                Sort descending
-              </button>
-              <button
-                type="button"
-                onClick={() => onSort("jobNumber", "asc")}
-              >
-                Clear sort
-              </button>
-            </>
-          ) : (
-            <p>{column.description || "This column is not sortable."}</p>
-          )}
-        </div>
-      </details>
+        </button>
+        {open && (
+          <div
+            id={`pilot-sort-options-${column.key}`}
+            role="group"
+            aria-label={`${column.label} column options`}
+          >
+            {column.sortKey ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSort(column.sortKey!, "asc");
+                    closeAndRestoreFocus();
+                  }}
+                >
+                  Sort ascending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSort(column.sortKey!, "desc");
+                    closeAndRestoreFocus();
+                  }}
+                >
+                  Sort descending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSort("jobNumber", "asc");
+                    closeAndRestoreFocus();
+                  }}
+                >
+                  Clear sort
+                </button>
+              </>
+            ) : (
+              <p>{column.description || "This column is not sortable."}</p>
+            )}
+          </div>
+        )}
+      </div>
     </th>
   );
 }
@@ -1145,21 +1187,91 @@ function AdvancedPilotFilters({
         </button>
       </header>
 
-      <label>
-        Search type
-        <select value="jobs" disabled>
-          <option value="jobs">Show jobs</option>
-        </select>
-      </label>
-      <label>
-        Bulk actions
-        <select value="" disabled>
-          <option value="">Disabled for synthetic records</option>
-        </select>
-        <small>External and certificate actions remain blocked.</small>
-      </label>
+      <p className={styles.filterBoundary}>
+        Jobs only. Regulated bulk actions remain blocked for test records.
+      </p>
 
-      <details open>
+      <section
+        className={styles.quickFilters}
+        aria-labelledby="creditex-quick-filters-title"
+      >
+        <div className={styles.quickFilterHeading}>
+          <strong id="creditex-quick-filters-title">Quick filters</strong>
+          <small>Filter this job register without leaving the workspace.</small>
+        </div>
+        <label className={styles.quickFilterWide}>
+          Search jobs
+          <input
+            type="search"
+            value={filters.query}
+            placeholder="Job, customer, address or activity"
+            onChange={(event) => onChange({ query: event.target.value })}
+          />
+        </label>
+        <label className={styles.quickFilterWide}>
+          Installer company
+          <select
+            value={filters.installerId}
+            onChange={(event) =>
+              onChange({
+                installerId: event.target.value,
+                technicianId: "",
+              })}
+          >
+            <option value="">All test installers</option>
+            {(snapshot.installers || []).map((installer) => (
+              <option key={installer.id} value={installer.id}>
+                {installer.companyCode} | {installer.businessName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.quickFilterWide}>
+          VEU activity
+          <select
+            value={filters.activityTemplateId}
+            onChange={(event) =>
+              onChange({ activityTemplateId: event.target.value })}
+          >
+            <option value="">All activity families</option>
+            {(snapshot.activities || []).map((activity) => (
+              <option
+                key={activity.activityTemplateId}
+                value={activity.activityTemplateId}
+              >
+                {activity.registryActivityCode} | {activity.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Review
+          <select
+            value={filters.reviewStatus}
+            onChange={(event) => onChange({ reviewStatus: event.target.value })}
+          >
+            <option value="">All review states</option>
+            {snapshot.filters.reviewStatuses.map((option) => (
+              <option key={option} value={option}>{readable(option)}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Evidence
+          <select
+            value={filters.evidenceStatus}
+            onChange={(event) =>
+              onChange({ evidenceStatus: event.target.value })}
+          >
+            <option value="">All evidence states</option>
+            {snapshot.filters.evidenceStatuses.map((option) => (
+              <option key={option} value={option}>{readable(option)}</option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      <details>
         <summary>Date filters</summary>
         <div>
           <label>
@@ -1200,12 +1312,10 @@ function AdvancedPilotFilters({
         </div>
       </details>
 
-      <details open>
+      <details>
         <summary>Status filters</summary>
         <div>
           {[
-            ["reviewStatus", "Review", snapshot.filters.reviewStatuses],
-            ["evidenceStatus", "Evidence", snapshot.filters.evidenceStatuses],
             ["lookupStatus", "Lookup", snapshot.filters.lookupStatuses],
             ["ruleStatus", "Rules", snapshot.filters.ruleStatuses],
             [
@@ -1263,24 +1373,6 @@ function AdvancedPilotFilters({
               <option value="">All service categories</option>
               {snapshot.filters.serviceCategories.map((option) => (
                 <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Installer
-            <select
-              value={filters.installerId}
-              onChange={(event) =>
-                onChange({
-                  installerId: event.target.value,
-                  technicianId: "",
-                })}
-            >
-              <option value="">All test installers</option>
-              {(snapshot.installers || []).map((installer) => (
-                <option key={installer.id} value={installer.id}>
-                  {installer.companyCode} | {installer.businessName}
-                </option>
               ))}
             </select>
           </label>
@@ -1371,14 +1463,6 @@ function AdvancedPilotFilters({
         <summary>Job filters</summary>
         <div>
           <label>
-            Search jobs
-            <input
-              value={filters.query}
-              placeholder="Job, case, customer, address or activity"
-              onChange={(event) => onChange({ query: event.target.value })}
-            />
-          </label>
-          <label>
             Job stage
             <select
               value={filters.workStage}
@@ -1446,24 +1530,6 @@ function AdvancedPilotFilters({
       <details>
         <summary>Product filters</summary>
         <div>
-          <label>
-            VEU activity
-            <select
-              value={filters.activityTemplateId}
-              onChange={(event) =>
-                onChange({ activityTemplateId: event.target.value })}
-            >
-              <option value="">All activity families</option>
-              {(snapshot.activities || []).map((activity) => (
-                <option
-                  key={activity.activityTemplateId}
-                  value={activity.activityTemplateId}
-                >
-                  {activity.registryActivityCode} | {activity.title}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             Product category
             <select
@@ -1562,6 +1628,7 @@ export function CreditexVeuPilotWorkspace({
   const [jobDetailError, setJobDetailError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [openSortColumn, setOpenSortColumn] = useState("");
   const [density, setDensity] = useState<"compact" | "comfortable">("compact");
   const [confirmation, setConfirmation] = useState("");
   const [archiveConfirmation, setArchiveConfirmation] = useState("");
@@ -1653,6 +1720,28 @@ export function CreditexVeuPilotWorkspace({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!openSortColumn) return;
+
+    function closeSortMenuOnOutsidePointer(event: PointerEvent) {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-sort-menu]")) return;
+      setOpenSortColumn("");
+    }
+
+    document.addEventListener(
+      "pointerdown",
+      closeSortMenuOnOutsidePointer,
+      true,
+    );
+    return () =>
+      document.removeEventListener(
+        "pointerdown",
+        closeSortMenuOnOutsidePointer,
+        true,
+      );
+  }, [openSortColumn]);
 
   const selectedJob = useMemo(
     () => snapshot?.jobs?.find((job) => job.id === selectedJobId) || null,
@@ -2195,39 +2284,6 @@ export function CreditexVeuPilotWorkspace({
             </small>
           </section>
 
-          {snapshot.installers && snapshot.installers.length > 0 && (
-            <section className={styles.roster}>
-              <div className={styles.sectionHeading}>
-                <span>SYNTHETIC ROSTER</span>
-                <h3>Installer companies and assigned workload</h3>
-              </div>
-              <div className={styles.rosterGrid}>
-                {snapshot.installers.map((installer) => (
-                  <button
-                    key={installer.id}
-                    type="button"
-                    onClick={() => {
-                      const next = {
-                        ...EMPTY_FILTERS,
-                        installerId: installer.id,
-                      };
-                      setDraftFilters(next);
-                      setFilters(next);
-                      setPanel("jobs");
-                    }}
-                  >
-                    <span>{installer.companyCode}</span>
-                    <strong>{installer.businessName}</strong>
-                    <small>
-                      {installer.technicianCount} technicians |{" "}
-                      {installer.jobCount} jobs
-                    </small>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
           <section className={styles.audit}>
             <div className={styles.sectionHeading}>
               <span>APPEND-ONLY HISTORY</span>
@@ -2282,7 +2338,10 @@ export function CreditexVeuPilotWorkspace({
                   className={styles.filterToggle}
                   aria-expanded={filtersOpen}
                   aria-controls="creditex-veu-advanced-filters"
-                  onClick={() => setFiltersOpen((current) => !current)}
+                  onClick={() => {
+                    setOpenSortColumn("");
+                    setFiltersOpen((current) => !current);
+                  }}
                 >
                   Advanced search
                   {appliedFilterCount > 0 && (
@@ -2314,6 +2373,11 @@ export function CreditexVeuPilotWorkspace({
                         key={column.key}
                         column={column}
                         filters={filters}
+                        open={openSortColumn === column.key}
+                        onToggle={() =>
+                          setOpenSortColumn((current) =>
+                            current === column.key ? "" : column.key)}
+                        onClose={() => setOpenSortColumn("")}
                         onSort={(sortBy, sortDirection) => {
                           const next = {
                             ...filters,
@@ -2841,6 +2905,7 @@ export function CreditexVeuPilotWorkspace({
           ))}
         </nav>
       )}
+
     </section>
   );
 }

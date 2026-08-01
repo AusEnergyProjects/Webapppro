@@ -2,7 +2,7 @@
   display: grid;
   min-width: 0;
   gap: 1.2rem;
-  padding-bottom: 7rem;
+  padding-bottom: 0;
   color: #16342f;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .workspace[data-panel="jobs"] .kicker {
-  font-size: 0.55rem;
+  font-size: 0.66rem;
 }
 
 .workspace[data-panel="jobs"] .mode {
@@ -54,7 +54,7 @@
 .workspace[data-panel="jobs"] .mode strong,
 .workspace[data-panel="jobs"] .mode small {
   margin: 0;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
 }
 
 .workspace[data-panel="jobs"] .panelTabs {
@@ -69,7 +69,7 @@
   min-height: 29px;
   border-radius: 0.35rem;
   padding: 0.28rem 0.65rem;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
 }
 
 .header,
@@ -77,8 +77,7 @@
 .safety,
 .dataPanel,
 .jobWorkspace,
-.audit,
-.roster {
+.audit {
   border: 1px solid #c9ddd7;
   border-radius: 1.1rem;
   background: #fff;
@@ -375,7 +374,7 @@
 
 .safety dt {
   color: #617872;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .safety dd {
@@ -389,7 +388,6 @@
   color: #687e79;
 }
 
-.roster,
 .audit,
 .dataPanel {
   padding: 1.35rem;
@@ -402,35 +400,6 @@
 .sectionHeading p {
   max-width: 74rem;
   color: #5f7771;
-}
-
-.rosterGrid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.7rem;
-}
-
-.rosterGrid button {
-  display: grid;
-  gap: 0.28rem;
-  min-height: 7.5rem;
-  border: 1px solid #c8ddd6;
-  border-radius: 0.8rem;
-  background: #f6fbf9;
-  color: #16342f;
-  padding: 0.9rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.rosterGrid button > span {
-  color: #0d7a62;
-  font-size: 0.72rem;
-  font-weight: 850;
-}
-
-.rosterGrid small {
-  color: #637b75;
 }
 
 .audit > div:last-child {
@@ -508,20 +477,20 @@
 
 .jobRegister > header span {
   color: #0d7a62;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 850;
   letter-spacing: 0.11em;
 }
 
 .jobRegister > header h3 {
   margin: 0.1rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.86rem;
 }
 
 .jobRegister > header p {
   margin: 0.12rem 0 0;
   color: #617a73;
-  font-size: 0.6rem;
+  font-size: 0.69rem;
 }
 
 .registerTools {
@@ -534,7 +503,7 @@
   display: grid;
   gap: 1px;
   color: #45625a;
-  font-size: 0.55rem;
+  font-size: 0.68rem;
   font-weight: 800;
 }
 
@@ -547,7 +516,7 @@
   color: #16463c;
   padding: 0.28rem 0.55rem;
   font: inherit;
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 800;
 }
 
@@ -595,7 +564,7 @@
   border-spacing: 0;
   border-collapse: separate;
   color: #173b34;
-  font-size: 0.61rem;
+  font-size: 0.75rem;
 }
 
 .jobTable caption {
@@ -611,11 +580,11 @@
 .jobTable td {
   min-width: 6.4rem;
   max-width: 15rem;
-  height: 1.72rem;
+  height: 1.9rem;
   border-right: 1px solid #dbe7e3;
   border-bottom: 1px solid #e3ece9;
   background: #fff;
-  padding: 0.16rem 0.32rem;
+  padding: 0.18rem 0.35rem;
   vertical-align: middle;
 }
 
@@ -623,7 +592,7 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 2rem;
+  height: 2.12rem;
   border-bottom-color: #9fc0b7;
   background: #0e6655;
   color: #fff;
@@ -653,7 +622,7 @@
 }
 
 .jobWorkspace[data-density="comfortable"] .jobTable {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
 }
 
 .jobWorkspace[data-density="comfortable"] .jobTable th,
@@ -743,7 +712,7 @@
   max-width: 100%;
   border-radius: 999px;
   padding: 0.23rem 0.46rem;
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-weight: 800;
 }
 
@@ -776,23 +745,32 @@
   position: relative;
 }
 
-.sortMenu summary {
+.sortMenu > .sortMenuTrigger {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 0.55rem;
   min-height: 2rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
   padding: 0.25rem 0.35rem;
+  font: inherit;
   font-weight: 850;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
 }
 
-.sortMenu summary::-webkit-details-marker {
-  display: none;
+.sortMenu > .sortMenuTrigger:hover,
+.sortMenu > .sortMenuTrigger:focus-visible {
+  outline: 2px solid #9ef0d7;
+  outline-offset: -2px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.sortMenu summary b {
+.sortMenu > .sortMenuTrigger b {
   color: #79e0c3;
   font-size: 0.68rem;
 }
@@ -836,7 +814,7 @@
   color: #163f36;
   padding: 0.35rem 0.5rem;
   font: inherit;
-  font-size: 0.69rem;
+  font-size: 0.74rem;
   text-align: left;
   cursor: pointer;
 }
@@ -940,7 +918,7 @@
   gap: 0.45rem;
   background: #f4f8f7;
   padding: 3px 8px;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
 }
 
 .registerFooter button {
@@ -957,8 +935,9 @@
   height: 100%;
   max-height: none;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: #f4faf8;
-  padding: 0.85rem;
+  padding: 0.58rem;
   scrollbar-gutter: stable;
 }
 
@@ -966,8 +945,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.9rem;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
 }
 
 .closeFilters {
@@ -990,7 +969,7 @@
   position: absolute;
   z-index: 70;
   inset: 0 0 0 auto;
-  width: min(22rem, calc(100% - 2.8rem));
+  width: min(19rem, calc(100% - 2.2rem));
   border-left: 1px solid #9fc0b7;
   background: #f4faf8;
   box-shadow: -18px 0 46px rgba(7, 55, 45, 0.2);
@@ -1017,26 +996,66 @@
 
 .advancedFilters > header span {
   color: #0d7a62;
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
 
 .advancedFilters > header h3 {
-  margin: 0.2rem 0 0;
-  font-size: 1rem;
+  margin: 0.12rem 0 0;
+  font-size: 0.92rem;
 }
 
 .advancedFilters > header b {
   border-radius: 999px;
   background: #dceee8;
   color: #0a624f;
-  padding: 0.3rem 0.48rem;
-  font-size: 0.65rem;
+  padding: 0.22rem 0.38rem;
+  font-size: 0.7rem;
 }
 
-.advancedFilters > label {
-  margin-bottom: 0.75rem;
+.filterBoundary {
+  margin: 0 0 0.45rem;
+  border-radius: 0.38rem;
+  background: #e4f1ed;
+  color: #49655e;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.quickFilters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid #afd0c6;
+  border-radius: 0.55rem;
+  background: #fff;
+  padding: 0.48rem;
+}
+
+.quickFilterHeading,
+.quickFilterWide {
+  grid-column: 1 / -1;
+}
+
+.quickFilterHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.quickFilterHeading strong {
+  color: #155b4c;
+  font-size: 0.76rem;
+}
+
+.quickFilterHeading small {
+  color: #647b75;
+  font-size: 0.7rem;
+  text-align: right;
 }
 
 .advancedFilters label small,
@@ -1051,24 +1070,24 @@
 }
 
 .advancedFilters details > summary {
-  padding: 0.72rem 0.15rem;
+  padding: 0.48rem 0.1rem;
   color: #244e45;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 850;
   cursor: pointer;
 }
 
 .advancedFilters details > div {
   display: grid;
-  gap: 0.65rem;
-  padding: 0 0.1rem 0.75rem;
+  gap: 0.4rem;
+  padding: 0 0.1rem 0.5rem;
 }
 
 .advancedFilters input,
 .advancedFilters select {
-  min-height: 2.35rem;
-  padding: 0.42rem 0.55rem;
-  font-size: 0.76rem;
+  min-height: 2rem;
+  padding: 0.32rem 0.45rem;
+  font-size: 0.74rem;
 }
 
 .advancedFilters .filterActions {
@@ -1077,8 +1096,14 @@
   z-index: 4;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  padding-top: 0.8rem;
+  padding-top: 0.5rem;
   background: #f4faf8;
+}
+
+.advancedFilters .filterActions button {
+  min-height: 2rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.74rem;
 }
 
 .empty,
@@ -1304,7 +1329,7 @@
   gap: 0;
   min-width: 5.5rem;
   padding: 0.22rem 0.48rem;
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   text-align: left;
 }
 
@@ -1314,8 +1339,8 @@
 }
 
 .activityRail small {
-  opacity: 0.75;
-  font-size: 0.56rem;
+  opacity: 0.8;
+  font-size: 0.7rem;
 }
 
 .workspace[data-panel="jobs"] .activityRail {
@@ -1328,8 +1353,7 @@
 
 @media (max-width: 1100px) {
   .metrics,
-  .priorities,
-  .rosterGrid {
+  .priorities {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1370,7 +1394,6 @@
 
   .metrics,
   .priorities,
-  .rosterGrid,
   .filters,
   .controlGrid,
   .evidenceGrid,
@@ -1407,7 +1430,7 @@
   }
 
   .filterDrawer {
-    width: min(22rem, calc(100% - 1.2rem));
+    width: min(19rem, calc(100% - 1.2rem));
   }
 
   .sourceRows article {
