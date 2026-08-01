@@ -1171,12 +1171,8 @@ function AdvancedPilotFilters({
       <header>
         <div>
           <span>ADVANCED SEARCH</span>
-          <h3 id="creditex-advanced-filters-title">Filter all VEU jobs</h3>
+          <h3 id="creditex-advanced-filters-title">All VEU jobs</h3>
         </div>
-        <b>
-          {PILOT_JOB_COLUMNS.length - 1} columns ·{" "}
-          {PILOT_SORT_KEYS.length} sortable
-        </b>
         <button
           className={styles.closeFilters}
           type="button"

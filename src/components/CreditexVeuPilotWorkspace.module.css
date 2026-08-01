@@ -1006,14 +1006,6 @@
   font-size: 0.92rem;
 }
 
-.advancedFilters > header b {
-  border-radius: 999px;
-  background: #dceee8;
-  color: #0a624f;
-  padding: 0.22rem 0.38rem;
-  font-size: 0.7rem;
-}
-
 .filterBoundary {
   margin: 0 0 0.45rem;
   border-radius: 0.38rem;
