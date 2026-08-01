@@ -1,18 +1,18 @@
 # Next task handover
 
-Status: `CREDITEX-GOVERNMENT-ACTIVITY-WORKFLOW-27` released; independently verified official instrument import is next
+Status: `CREDITEX-VEU-SYNTHETIC-PILOT-28` released and live; independently verified VEU instrument retention is next
 
 Prepared: 1 August 2026
 
-Milestone ID: `CREDITEX-GOVERNMENT-ACTIVITY-WORKFLOW-27`
+Milestone ID: `CREDITEX-VEU-SYNTHETIC-PILOT-28`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `a33b7053301a64bea4bbcbe76713067a2c1782dd`
+Released application source commit: `3ac6c72057a8afea61e85817ba566ec543079886`
 
-Previous production application source: `d40c803bfa0b614ed806624a375a1fa47bd0e5a4`
+Previous production application source: `a33b7053301a64bea4bbcbe76713067a2c1782dd`
 
-Current production: Sites version 251 from application commit `a33b7053301a64bea4bbcbe76713067a2c1782dd`
+Current production: Sites version 252 from application commit `3ac6c72057a8afea61e85817ba566ec543079886`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -20,113 +20,95 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 251 is the current production identity. It exposes a discovery-only national reference catalogue of 32 program pathways and 207 controlled activity templates. The governed production database remains deliberately empty at 0 published programs, 0 activity versions, 0 policies and 0 cases. It does not calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 252 is the current production identity. It retains the discovery-only national catalogue and adds one isolated VEU synthetic workflow pilot. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
 ## Released milestone outcome
 
-Release the national government-activity discovery and installer handoff baseline across every program and activity, not one example activity. Installers can start from controlled program, activity, outcome, product-category, scenario and exact effective-version selectors; the portal separates programs and activities into persistent tabs; and Creditex administrators can reach the complete audited private case workspace after deliberate purpose-bound access. Government and regulators remain the sole rule authors. The reference catalogue supports discovery and draft creation only: every unverified official-source transcription, unsupported evidence contract, unverified formula and external execution path remains disabled.
+Create a controlled production pilot that Creditex can use to test the future installer-to-compliance workflow without creating a real claim. The live dataset contains 10 clearly labelled synthetic installer companies, three assignment-only field technicians per installer and ten VEU jobs per technician: 10 installers, 30 technicians and 300 jobs. The jobs are balanced across all 34 current VEU activity families represented by the pilot catalogue. Government and regulator instruments remain the sole rule authority; Creditex does not own a private rule pack.
 
-## Owning workflow and expected files
+The portal now provides:
 
-- Domain and control migrations: `db/schema.ts`, `drizzle/0093_creditex_compliance_foundation.sql`, bounded operations migrations `drizzle/0094_creditex_operations_control.sql` through `drizzle/0097_creditex_operations_lifecycle.sql`, rule-governance migration `drizzle/0098_creditex_rule_governance.sql`, prepared runtime guards in `src/lib/creditex-schema-guards.ts`, `src/lib/compliance-access-server.ts`, `src/lib/creditex-compliance-server.ts` and `src/lib/creditex-operations-server.ts`.
-- Installer and field intake: the trade CRM, work-order and sync routes, guided job setup, AEA Field evidence capture, exact-byte encryption and resumable media finalisation.
-- Creditex workspace: no-index `/creditex/compliance`, session, governance and operations APIs, the bounded evidence viewer and Creditex-specific portal components.
-- Regulatory and migration control: the Australian program source register, Creditex operating model and Dataforce and Runabout parity matrix.
-- Tests: schema replay, invitation and role controls, tenant denial, immutable governance, evidence custody and races, viewer receipts, decision integrity, corrections and batch staging.
+- a `VEU test pilot` workspace beside Operations and Government rules;
+- separate Pilot control, Jobs, Sources, Lookups, Evidence, Calculators and Connectors work areas;
+- pre-populated installer, technician, activity, evidence, lookup, review and page-size selectors;
+- a persistent bottom Dashboard plus one tab per VEU activity family;
+- deterministic synthetic population and an immutable 300-item dry-run manifest;
+- controlled test-only job audit states and append-only history; and
+- database guards that reject any attempt to link a synthetic pilot work order to a regulated case or submission item.
 
-## In scope
+The official VEU family is Part `6`. Categories such as `6A` and scenarios such as `(i)` to `(xi)` are separate governed dimensions whose valid combinations must come from the official instruments. `6(23)` was only an informal example and is not an official activity identifier or implementation path.
 
-- Invitation-only compliance organisations and named server-enforced administrator, case-manager, reviewer and auditor roles, isolated from installer and platform-administrator authority.
-- Immutable effective-dated program, activity and evidence-policy versions with exact source hashes and separate registry code, specification part, product category and scenario.
-- Atomic installer job, exact case snapshot and initial event; multiple governed cases per job only through explicit selection.
-- Participant and ability records, assignments, tasks, equipment, findings, correction requests, decisions and append-only audit history.
-- Complete evidence-policy draft transcription with ordered government evidence requirements, timing, counts, original, metadata, GPS, date and signature flags, allowed types, conditions, dynamic fields, exact official source citation, readiness blockers and independently reviewed sealed publication.
-- AEA Field evidence with exact-byte SHA-256, encrypted offline queue, capture and location envelope, registered physical-device binding, resumable upload, server byte-signature validation, server-parsed JPEG EXIF, GPS and capture-time consistency checks and correction supersession.
-- A privacy-minimised Creditex queue and case workspace with audited evidence viewing. Original bytes are streamed only after an authorised case-purpose check and the returned receipt is required for accept or reject.
-- A persistent bottom workspace bar with Dashboard plus one tab for each source-pinned governed program. Activity, category and scenario selection remain separate fields and filters inside the program workspace.
-- A discovery-only national reference catalogue reviewed on 1 August 2026, covering 32 federal, state and territory program pathways and 207 controlled activity templates without activating any template as a published rule.
-- Chained installer job selectors for program, activity, product category, scenario and exact effective governed version. The quote and customer-acceptance journey remains outside Creditex; compliance starts when the installer creates the activity-linked job and case.
-- Separate persistent program and activity tab rows in the Creditex operations workspace, with controlled selection rather than a hard-coded route for VEU `6(23)` or any other activity.
-- Dataforce-equivalent advanced filter families for status, work and personnel, client and agent, customer and address, job, appointment, tag, product, audit and other dimensions. Unsupported fields remain explicit unavailable facets until TLink has an authoritative source.
-- Organisation-wide private case visibility for Creditex administrators. Non-admin case visibility and every case-specific mutation require a current active assignment.
-- Server-derived, dual-controlled decision bases pinned to the exact case revision, activity, policy, source hashes, accepted evidence and verified calculation run where required.
-- Provider-neutral batch staging plus read-only projections for submissions, responses, certificates, trades and settlements. External execution remains disabled.
-- One bootstrap invitation for `info@ausenergyassessments.com`, expiring 31 August 2026, solely to create the first named Creditex administrators.
+## Owning workflow and files
 
-## Out of scope
+- Schema and migration: `db/schema.ts`, `drizzle/0099_creditex_synthetic_pilot.sql` and prepared runtime guards in `src/lib/creditex-schema-guards.ts`.
+- Pilot contracts and server: `src/lib/creditex-veu-pilot-contract.ts`, `src/lib/creditex-veu-pilot-server.ts` and `src/app/api/creditex/pilot/route.ts`.
+- Portal: `src/components/CreditexCompliancePortal.tsx`, `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Government-source reference: `src/lib/australian-government-program-catalogue.ts`.
+- Tests: `test/creditex-veu-pilot.test.mjs`, the Creditex portal and operations suites, and the Australian programme catalogue suite.
 
-- Any real activity or evidence-policy publication before the exact effective government instruments are independently verified and Creditex approves their operational transcription within its accreditation, contractual operating authority and connector scope.
-- Any unverified certificate, rebate, deemed-saving or incentive calculator, customer price promise, registry submission, certificate creation, trade or settlement.
-- Manual assertion of an external response, live Dataforce or Runabout import, connector, cutover or retirement.
-- Production regulated cases; no activity or evidence policy is seeded as published.
-- Approved retention, legal-hold, backup, restore, strong authentication, platform-backed device or camera attestation, or representative physical-device acceptance. Embedded EXIF does not prove an original camera file.
-- Changes to the immutable dated audit.
+## Delivered safety boundaries
 
-## Acceptance criteria
+- All synthetic companies, technicians, customers, sites, appointments and jobs are isolated and visibly marked `TEST`.
+- Synthetic emails use `example.invalid`; no real customer contact, Australian Business Number, Firebase field identity, evidence object or regulator certificate identifier is fabricated.
+- Synthetic trade accounts remain under review, unverified and paused.
+- The pilot creates no regulated compliance case, evidence object, certificate lot, submission, trade or settlement.
+- Recent administrator authentication and an exact confirmation phrase are required to create or archive the dataset.
+- A prior unarchived seed blocks a successor; archive and seed lifecycle events are append-only.
+- The dry-run manifest hashes immutable population fields only, so later controlled workflow-state changes do not invalidate the population proof.
+- Pilot state writes use compare-and-swap revision control, remain organisation scoped and are unavailable to auditors.
+- External submission, Dataforce import and Runabout import remain disabled.
 
-- Creditex access is rejected unless the Firebase identity is email verified and has an active membership in an active compliance organisation with an allowed role.
-- Installer and platform-administrator identities do not inherit Creditex access, and Creditex identities do not inherit installer or platform-administrator authority.
-- Published activity identity preserves registry code, specification part, product category and scenario as distinct values.
-- Published programs and activities require an exact official-source SHA-256 and become immutable; withdrawal cannot return them to draft or published state.
-- Draft, withdrawn, future and expired activity versions cannot be selected for a new job. A case pinned to a later-withdrawn policy remains correctable and auditable, but approval and staging fail with `CREDITEX_POLICY_WITHDRAWN`.
-- A selected activity cannot create a case against a different TLink work category, service-site jurisdiction or appointment type, and its planned installation date is immutable.
-- A selected activity, its case snapshot, the TLink job and the initial append-only event are committed together or not at all.
-- No unapproved application path emits a certificate count, rebate amount, external eligibility result or submission success.
-- General Creditex queues do not expose customer name, email, phone, exact address, private notes, object keys, evidence filenames or raw geolocation.
-- An evidence accept or reject action requires a recent same-user, same-organisation audited view receipt and an active reviewer assignment unless the user is an administrator.
-- Original evidence remains immutable, rejected evidence is retained and an atomic replacement points to the rejected item.
-- Caller-authored decision basis is ignored; a secondary approval cannot replace the server-derived primary basis.
-- Auditors are read-only, reviewers and auditors need active case assignments to open originals, and the final active administrator cannot remove the last administrative control.
-- Loading or filtering a queue does not select the first case, fetch private details or manufacture a private-detail audit. Opening private details is always deliberate.
-- An older dashboard or case response cannot overwrite a newer program, filter or case selection.
-- Migration replay, focused security and behavior tests, type checking, lint, full validation, production build and `git diff --check` pass before the milestone can be described as validated.
+## Live production evidence
+
+- The authenticated AEA Creditex administrator created seed `veu-v25-2026-08-01-synthetic-v2`.
+- The portal reported exactly `10 / 10` installers, `30 / 30` technicians, `300 / 300` jobs and `34 / 34` activity families.
+- The bottom activity rail included Dashboard plus all 34 family tabs and displayed Part `6`, not `6(23)`.
+- Filtering installer `I01` plus activity `6` returned one matching synthetic job.
+- Job `TEST-VEU-B5BA21F9-I01-T01-J01` was deliberately changed to `in_review`, `in_progress` evidence transport and `blocked` authoritative lookups. Refresh returned the same three values and the append-only `Pilot.Job Status Changed` event.
+- The connector workspace reported one deterministic 300-item dry-run manifest, zero regulator acceptances, zero rejected, zero unmatched and external submission blocked.
+- Structural safety counters remained 0 regulated cases, 0 Firebase test users and 0 certificates.
+- Desktop and 390-pixel Chrome inspection passed. The mobile check reported a 390-pixel viewport, 375-pixel root width and 375-pixel scroll width, so there was no page-level horizontal overflow.
+- Production Worker evidence showed successful `201` pilot mutations and `200` reads. The only recent error event was the expected `403` from the first create attempt before recent reauthentication; no production `5xx` was observed.
 
 ## Validation and release evidence
 
-- Exact application commit `a33b7053301a64bea4bbcbe76713067a2c1782dd` passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, the complete main test suite, all 99 migrations through `0098_creditex_rule_governance.sql` against fresh local D1, the customer-plan PDF audit, production build and Sites server-bundle audit.
-- The national catalogue focused suite passed 30 of 30 tests. The final private-access wording and portal regression suite passed 21 of 21 tests. `git diff --check` passed before release.
-- The 6,790,614-byte local release package has SHA-256 `B14686D098A1FF76D8DBF1F2CA26DE2AABB6D600D991289891A9CF31C6E50FFB`. Sites stored 178 files and 18,227,200 bytes with content hash `sha256:917cf16e38b0a69e2081992a8f2944699bf9492b78f40c8ce4745b55612bf285`.
-- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_a8b4368a16a88191be90ea1a3ce33481` reports exact application source `a33b7053301a64bea4bbcbe76713067a2c1782dd`. Sites version 251 deployment `appgdep_6a6dbc598f0c81918d1e6656addd0463` succeeded with environment revision 19.
-- Signed-in Chrome QA as the AEA Creditex administrator confirmed successful reload into Operations, the 32-program and 207-activity government-source workspace, controlled template and outcome selectors, separate program and activity tabs, audited-private-case wording and the shared-account publication boundary. QA performed no production mutation.
-- The post-release Sites Worker error-only query returned zero events.
+- Exact application commit `3ac6c72057a8afea61e85817ba566ec543079886` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,176 main tests with 1,174 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused pilot suite passed 13 of 13 tests. The focused Creditex portal suite passed 21 of 21. The catalogue and API focused set passed 18 of 18. `git diff --check` passed.
+- Independent security review found and closed the prior-seed lifecycle and mutable-manifest defects. Final review found no remaining P0 or P1 issue in the pilot change.
+- The 7,419,988-byte local release package has SHA-256 `CF7F72704BCAA585110FF3C9ADE8E1C4B212240CEE9BDD0B0F9673ACDB4B0727`.
+- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_6ead08734a6c8191b018dc5a952acd33` reports exact application source `3ac6c72057a8afea61e85817ba566ec543079886`. Sites stored 333 files and 29,624,320 bytes with content hash `sha256:be656467751fb195f2c381c2c450df8d9bfb74256a52d29650eaebc3bfe97eaf`.
+- Sites version 252 deployment `appgdep_6a6dd491dde88191bc862e69a2e59580` succeeded with environment revision 19.
 
-The underlying evidence-policy governance release remains verified:
+## Important limits and unverified areas
 
-- Exact application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` passes the complete `npm run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, 1,157 main tests with 1,155 passed, 2 intentionally skipped and 0 failed, all 99 migrations through `0098_creditex_rule_governance.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit.
-- AEA Field passes type checking, lint, 8 of 8 tests and Android and iOS export. Expo Doctor reports 19 of 20 because of dependency patch drift. Physical signed builds and representative physical devices remain unverified.
-- The 7,352,352-byte local release package has SHA-256 `4E9087A40A00613E4BBDD111D8D5E1CA4A3A5AED01BCF3DA8DD9635396CF920F`. Sites stored 332 files and 29,276,160 bytes with content hash `sha256:3e66780f5d61ae46c650df39c711a9a26166f75f7d9eb58cf8461a39dc7bc123`.
-- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bf90b67a89508191bbea3f1a2d926719` reports exact application source `d40c803bfa0b614ed806624a375a1fa47bd0e5a4`. Sites version 249 deployment `appgdep_6a6da8704be08191a4d310adb523e0f3` succeeded. The custom production route is `https://compare.ausenergyassessments.com/creditex/compliance` and the provider URL is `https://aea-energy-comparison.info294029.chatgpt.site`.
-- Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity-source governance, evidence-policy transcription, four-eyes notice and Access membership screen loaded.
-- Current real catalogue and case counts are 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
-- The Firebase account and claimed bootstrap membership for `info@ausenergyassessments.com` are active. The live portal displays the account as `AEA Creditex administrator` with the administrator role. It must be replaced for routine use by named individual Creditex accounts; suspend the bootstrap membership after two named administrators are active.
-
-The milestone is released. The national discovery catalogue, controlled installer handoff, separate program and activity workspaces, audited organisation-wide administrator case access, government-source evidence-policy transcription, sealed publication, database guards, exact-byte JPEG verification, server finalisation, mobile field capture and the direct terminal-job mutation boundary are included in the validated application source.
-
-Physical iOS or Android acceptance on representative devices, platform-backed original-camera attestation, hosted production original-evidence viewing, non-admin production acceptance, government-source transcription accuracy, approved calculator provenance, retention, legal hold, backup and restore, and any real registry, certificate, trade or settlement behavior remain unverified or blocked. Named reviewer, auditor and case-manager rollout remains gated on Creditex's approved role matrix, data-sharing purpose and operating controls, not on an organisation-wide dashboard projection or unassigned mutation path.
+- The source workspace records official URLs, hierarchy and transition dates, but exact instrument bytes are not yet retained in TLink. Source publication therefore remains blocked pending independent review.
+- Lookup contracts are populated, but live participant, accreditation, licence, product, recall and suspension sources are not connected.
+- Evidence transport slots define original-byte, metadata, GPS, timing and signature capability. Government shot lists, platform camera attestation, representative devices, retention and restore remain unverified.
+- All 34 activity families have typed calculator contracts, but verified formulas and reconciled golden vectors remain 0. No VEEC quantity or rebate is calculated.
+- The registry connector is dry-run only. No regulator request was sent and no Dataforce or Runabout data was imported.
+- Part 45 is retained only as a closed-family test path. No new regulated Part 45 job can be created.
+- Google popup authentication succeeded in the existing Chrome session. The in-app browser separately returned Firebase `auth/network-request-failed`; that surface remains an authentication-compatibility risk and does not change the verified Chrome or server results.
+- The shared `info@ausenergyassessments.com` account is a bootstrap administrator. Routine operations still require named individual Creditex users and least privilege.
 
 ## Stop conditions
 
-Stop before release or regulated-case onboarding when:
+Stop before any regulated-case onboarding when:
 
-- Creditex has not approved its legal organisation identity, role matrix, data-sharing purpose, customer notice and consent, retention schedule or incident process;
-- an activity lacks a current official source, exact effective dates or Creditex approval to publish;
-- a published activity or existing case snapshot can be mutated;
-- an authorisation or cross-tenant denial test fails;
-- original photo bytes, cryptographic file hashes, capture time and timezone, device provenance, location accuracy and controlled metadata cannot be retained together;
-- evidence linked to a submitted case can still be physically deleted or silently replaced;
-- real-device camera, GPS and offline/resume acceptance has not passed;
-- a formula, eligibility decision, price promise or registry submission would rely on an unapproved rule version; or
-- D1/R2 ownership, backup, export, point-in-time recovery and restore testing remain operationally unproved for regulated evidence.
-
-VEU `6(23)` remains a useful test example only. It is not a privileged implementation path; the platform contract is program, activity, category and scenario agnostic.
+- an exact current instrument and its effective dates are not retained and independently verified;
+- an activity category and scenario combination is inferred rather than sourced;
+- an authorisation, tenant-isolation or synthetic-leakage guard fails;
+- original photo bytes, cryptographic hashes, capture time, timezone, device provenance, location accuracy and controlled metadata cannot be retained together;
+- a calculator would use unverified equations, tables, units, caps or rounding;
+- a connector would assert a regulator response without an authorised request and immutable response artifact; or
+- D1/R2 ownership, backup, export, recovery and restore remain unproved for regulated evidence.
 
 ## Next five logical product steps
 
-1. **Import and independently verify official instruments:** capture every intended federal, state and territory program, activity, category, scenario, evidence and calculation instrument as an effective-dated, source-hashed draft; independently verify the transcription before any production publication.
-2. **Complete controlled operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension lookups, controlled dropdown values and official-source monitoring so case selection and submission rechecks fail closed.
-3. **Prove original evidence end to end:** complete platform-backed camera and device attestation, representative iOS and Android acceptance, hosted original-evidence viewing, retention and restore checks, plus the remaining governed evidence types, signatures, conditions and dynamic fields.
-4. **Verify calculators and typed output contracts:** implement method-specific inputs, formulas, official product and climate lookups, units, caps, rounding and typed outcomes; reconcile official or independently approved test vectors while every unverified calculator remains disabled.
-5. **Authorise connectors and reconcile legacy cutover:** build versioned registry and program connectors with dry-run, idempotency, immutable artifacts and response reconciliation, then map authorised Dataforce and Runabout exports through bounded parallel cohorts with counts, hashes, exceptions, rollback and acceptance.
+1. **Retain and independently verify exact VEU instruments:** store the exact authorised instrument bytes in R2, hash them, transcribe bounded activity, category, scenario, evidence and effective-date rules, and require a different named reviewer before publication.
+2. **Connect authoritative operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension snapshots with source timestamps and fail-closed job and submission rechecks.
+3. **Prove AEA Field evidence on real devices:** run representative iOS and Android staging with platform-backed camera attestation, milestone timing, original-byte restore, GPS and EXIF consistency, offline resume and required signatures.
+4. **Verify versioned VEU calculators:** implement official equations, tables, units, caps and rounding behind effective-date versions, then reconcile independently approved golden vectors before enabling any VEEC output.
+5. **Run an authorised connector and legacy parallel pilot:** obtain a registry sandbox or approved interface plus authorised Dataforce and Runabout exports, map exact fields and states, and reconcile counts, hashes, exceptions, rollback and acceptance without touching real certificate inventory.
 
 ## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
 
