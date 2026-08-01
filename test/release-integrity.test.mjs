@@ -142,7 +142,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_2149679b0df08191a77cd91ac13d9cc7/);
   assert.match(releaseTruth, /appgdep_6a6caabc547c81919c4642b1f7cfcde1/);
   assert.match(releaseTruth, /Protected trade locality and reciprocal navigation application source \| `399b04f4a5d680080610f9e88b994506bb60c16f` \|[\s\S]{0,180}Sites version 242/);
-  assert.match(releaseTruth, /Sites version 242 from `399b04f4a5d680080610f9e88b994506bb60c16f`/);
+  assert.match(releaseTruth, /Creditex compliance operations foundation application source \| `2ef8ce19fd5423fd95652a7bc88265e80d7b827f` \|[\s\S]{0,180}Sites version 246/);
+  assert.match(releaseTruth, /Sites version 246 from `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_3cef6ddd92e88191a54d034d3a6e72e3/);
+  assert.match(releaseTruth, /appgdep_6a6d5c42819081919d81dcd9451338bd/);
+  assert.match(releaseTruth, /sha256:9d6ac6f6e5a3036ba8fedf14c94b0fdc61e608b32b203346fc327a8119f625ea/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0/);
   assert.match(releaseTruth, /appgdep_6a6cc08dc6f881919a349de607f5a8a9/);
   assert.match(releaseTruth, /sha256:3d7535003e6b3fae6b2b7f4f86b5c69a59737a8aa607ba7feabdbd407fd890f0/);
@@ -200,6 +204,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: CUSTOMER-PLAN-TRADE-ENQUIRY-22/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-ACCOUNT-TRUST-23/);
   assert.match(roadmap, /## Released milestone: CUSTOMER-TRADE-LOCALITY-24/);
+  assert.match(roadmap, /## Released milestone: CREDITEX-COMPLIANCE-OPERATIONS-25/);
   assert.match(roadmap, /Release status: application commit `e74c2d95889a381cb3bb434607bc6584e54cf722`[\s\S]{0,250}Sites version 222/);
   assert.match(roadmap, /Release status: application commit `bc427d295b3106907904a3c0b7bf9f2945561cd1`[\s\S]{0,250}Sites version 224/);
   assert.match(roadmap, /Release status: application commit `da35ce60295d6c7150cddd9b35e33fcf64c8521b`[\s\S]{0,250}Sites version 227/);
@@ -215,6 +220,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Release status: application commit `b40c101939eec44b178b34ccb6397a989d2467d0`[\s\S]{0,300}Sites version 240/);
   assert.match(roadmap, /Release status: application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`[\s\S]{0,300}Sites version 241/);
   assert.match(roadmap, /Release status: application commit `399b04f4a5d680080610f9e88b994506bb60c16f`[\s\S]{0,300}Sites version 242/);
+  assert.match(roadmap, /Exact application commit `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`[\s\S]{0,2500}Sites saved version 246/);
+  assert.match(handover, /Status: released empty invitation-gated foundation and preview/);
+  assert.match(handover, /Current production: Sites version 246 from application commit `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`/);
+  assert.match(handover, /appgdep_6a6d5c42819081919d81dcd9451338bd/);
   assert.match(handover, /Status: released implementation milestone/);
   assert.match(handover, /(?:Milestone ID|Prior released milestone record): `CUSTOMER-ACCOUNT-TRUST-23`/);
   assert.match(handover, /Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`/);
