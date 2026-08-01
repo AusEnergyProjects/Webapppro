@@ -1,18 +1,18 @@
 # Next task handover
 
-Status: `CREDITEX-VEU-SYNTHETIC-PILOT-28` released and live; independently verified VEU instrument retention is next
+Status: `CREDITEX-VEU-DENSE-REGISTER-29` released and live; independently verified VEU instrument retention is next
 
 Prepared: 1 August 2026
 
-Milestone ID: `CREDITEX-VEU-SYNTHETIC-PILOT-28`
+Milestone ID: `CREDITEX-VEU-DENSE-REGISTER-29`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `ebae330dab6c42881c14bc57548095b111d9c850`
+Released application source commit: `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`
 
-Previous production application source: `3ac6c72057a8afea61e85817ba566ec543079886`
+Previous production application source: `ebae330dab6c42881c14bc57548095b111d9c850`
 
-Current production: Sites version 253 from application commit `ebae330dab6c42881c14bc57548095b111d9c850`
+Current production: Sites version 254 from application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -20,17 +20,20 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 253 is the current production identity. It retains the discovery-only national catalogue and isolated VEU synthetic workflow pilot and hardens the authentication-to-workspace transition. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 254 is the current production identity. It retains the discovery-only national catalogue and isolated VEU synthetic workflow pilot, then adds the Dataforce-style dense job register and advanced filter rail. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
 ## Released milestone outcome
 
-Create a controlled production pilot that Creditex can use to test the future installer-to-compliance workflow without creating a real claim. The live dataset contains 10 clearly labelled synthetic installer companies, three assignment-only field technicians per installer and ten VEU jobs per technician: 10 installers, 30 technicians and 300 jobs. The jobs are balanced across all 34 current VEU activity families represented by the pilot catalogue. Government and regulator instruments remain the sole rule authority; Creditex does not own a private rule pack.
+Make the controlled VEU pilot usable as a Creditex compliance register without creating a real claim. The live dataset still contains 10 clearly labelled synthetic installer companies, three assignment-only field technicians per installer and ten VEU jobs per technician: 10 installers, 30 technicians and 300 jobs. Every job is now one table row, all screenshot-derived Dataforce columns remain visible, TLink installer and governed compliance fields are added, and the advanced filter rail remains beside the register. Government and regulator instruments remain the sole rule authority; Creditex does not own a private rule pack.
 
 The portal now provides:
 
 - a `VEU test pilot` workspace beside Operations and Government rules;
 - separate Pilot control, Jobs, Sources, Lookups, Evidence, Calculators and Connectors work areas;
-- pre-populated installer, technician, activity, evidence, lookup, review and page-size selectors;
+- a 300-row default register with 49 data columns plus one per-row action column;
+- all 23 screenshot-derived Dataforce columns, TLink installer and technician identity, activity, compliance-state, workflow and audit dates;
+- one dropdown menu on every column header and one action dropdown on every returned row;
+- an always-available advanced filter rail with 12 filter groups, 27 pre-populated selectors and a governed date range;
 - a persistent bottom Dashboard plus one tab per VEU activity family;
 - deterministic synthetic population and an immutable 300-item dry-run manifest;
 - controlled test-only job audit states and append-only history; and
@@ -62,23 +65,27 @@ The official VEU family is Part `6`. Categories such as `6A` and scenarios such 
 
 - The authenticated AEA Creditex administrator created seed `veu-v25-2026-08-01-synthetic-v2`.
 - The portal reported exactly `10 / 10` installers, `30 / 30` technicians, `300 / 300` jobs and `34 / 34` activity families.
+- The Jobs workspace reported `300 shown of 300 matching jobs`; the semantic table contained exactly 300 body rows, 50 visible columns, 50 header dropdowns and 300 row action dropdowns.
+- The 49 data columns include all 23 screenshot-derived Dataforce headings. Unsupported legacy semantics remain visible as `Mapping required`, and certificate quantity remains `Blocked: no issued VEECs` rather than being fabricated.
+- The right rail contained 12 advanced-filter groups, 27 pre-populated selectors and two bounded date inputs. Selecting installer `I01` returned exactly 30 rows belonging only to `[TEST] VEU Installer Company 01`; clearing returned all 300.
+- Selecting Job ID descending changed the first returned job from `TEST-VEU-B5BA21F9-I01-T01-J01` to `TEST-VEU-B5BA21F9-I10-T03-J10` and exposed `aria-sort="descending"`.
 - The bottom activity rail included Dashboard plus all 34 family tabs and displayed Part `6`, not `6(23)`.
 - Filtering installer `I01` plus activity `6` returned one matching synthetic job.
 - Job `TEST-VEU-B5BA21F9-I01-T01-J01` was deliberately changed to `in_review`, `in_progress` evidence transport and `blocked` authoritative lookups. Refresh returned the same three values and the append-only `Pilot.Job Status Changed` event.
 - The connector workspace reported one deterministic 300-item dry-run manifest, zero regulator acceptances, zero rejected, zero unmatched and external submission blocked.
 - Structural safety counters remained 0 regulated cases, 0 Firebase test users and 0 certificates.
-- Desktop and 390-pixel Chrome inspection passed. The mobile check reported a 390-pixel viewport, 375-pixel root width and 375-pixel scroll width, so there was no page-level horizontal overflow.
-- Production Worker evidence showed successful `201` pilot mutations and `200` reads. The only recent error event was the expected `403` from the first create attempt before recent reauthentication; no production `5xx` was observed.
+- Desktop and 390-pixel Chrome inspection passed. At 390 pixels, the page remained 375 pixels wide while the 8,413-pixel register stayed inside its 334-pixel local scroll viewport; the advanced filter rail stacked below at 349.6 pixels wide.
+- Production Worker evidence showed four successful `200` VEU pilot reads plus successful Creditex session, access, operations, activities and cases reads. Two cutover-time asset requests from Cloudflare browser rendering returned `404`; the authenticated application and pilot API remained operational and no production `5xx` was observed.
 - After the version-253 authentication correction, a signed-in Chrome reload returned directly to the protected dashboard and reopened the VEU pilot without another login. The Jobs workspace showed all populated filter menus and the complete 300-job queue. Browser logging contained only the Chrome extension's closed asynchronous message-channel warning, not an application exception.
 
 ## Validation and release evidence
 
-- Exact application commit `ebae330dab6c42881c14bc57548095b111d9c850` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
-- The focused pilot suite passed 13 of 13 tests. The focused Creditex portal suite passed 25 of 25. The catalogue and API focused set passed 18 of 18. `git diff --check` passed.
+- Exact application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete main test suite, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused pilot suite passed 13 of 13 tests after the final review corrections. The earlier integrated Creditex, catalogue and API focused set passed 56 of 56. `git diff HEAD^ --check` passed.
 - Independent security review found and closed the prior-seed lifecycle and mutable-manifest defects. Independent authentication review found the recovery path bounded to one forced refresh after an authentication-specific `401`, protected against identity races and free of remaining P0, P1 or P2 findings.
-- The 7,420,447-byte local release package has SHA-256 `51DF880CF8C919FA0386B891BC98C18064491988325049B59CC3F4A4BCE370DA`.
-- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c` reports exact application source `ebae330dab6c42881c14bc57548095b111d9c850`. Sites stored 333 files and 29,624,320 bytes with content hash `sha256:20934a09b4658dafbd2b9c420c402028a3619a9fc9216bd2cb154ebcf12b1e98`.
-- Sites version 253 deployment `appgdep_6a6dde1747308191bf5c78bd4f674030` succeeded with environment revision 19.
+- No local release archive was supplied for this source-only Sites save, so package size, package hash, stored-file count and package content hash are not claimed.
+- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_d9dff81ff0c4819185def4ad16b9a889` reports exact application source `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`.
+- Sites version 254 deployment `appgdep_6a6dec1ba16c8191b572bf49dc958aa7` succeeded with environment revision 19.
 
 ## Important limits and unverified areas
 
@@ -88,7 +95,7 @@ The official VEU family is Part `6`. Categories such as `6A` and scenarios such 
 - All 34 activity families have typed calculator contracts, but verified formulas and reconciled golden vectors remain 0. No VEEC quantity or rebate is calculated.
 - The registry connector is dry-run only. No regulator request was sent and no Dataforce or Runabout data was imported.
 - Part 45 is retained only as a closed-family test path. No new regulated Part 45 job can be created.
-- Sites version 253 removes the unconditional forced Firebase token refresh, retries once with a forced refresh only after an authentication-specific `401`, preserves the signed-in identity on workspace/network failure and exposes a bounded workspace retry. Signed-in Chrome reload and workspace recovery are verified; a fresh in-app-browser-specific failure was not reproduced separately.
+- Sites version 254 retains the bounded authentication recovery introduced in version 253. Signed-in Chrome reload, workspace recovery and the complete Jobs register are verified; the in-app-browser tab remained signed out and was not used as authenticated release evidence.
 - The shared `info@ausenergyassessments.com` account is a bootstrap administrator. Routine operations still require named individual Creditex users and least privilege.
 
 ## Stop conditions
