@@ -867,6 +867,33 @@ The 7,352,352-byte local package has SHA-256 `4E9087A40A00613E4BBDD111D8D5E1CA4A
 
 Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity-source governance, evidence-policy transcription, four-eyes notice and Access membership screen loaded. The real production catalogue and case inventory remains deliberately empty at 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
 
+## Released milestone: CREDITEX-GOVERNMENT-ACTIVITY-WORKFLOW-27
+
+Status: released national activity discovery and controlled compliance handoff
+
+Release status: application commit `a33b7053301a64bea4bbcbe76713067a2c1782dd` is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 251. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_a8b4368a16a88191be90ea1a3ce33481` and deployment `appgdep_6a6dbc598f0c81918d1e6656addd0463` report the exact application commit.
+
+### Outcome
+
+Replace the single-activity mental model with a national, program- and activity-agnostic baseline. The signed-in Creditex portal now exposes a discovery-only catalogue of 32 Australian government program pathways and 207 controlled activity templates, grouped across federal, state and territory jurisdictions. Installers create the compliance handoff only after the separate customer quote and acceptance journey, using chained program, activity, product-category, scenario and exact effective-version dropdowns. Creditex administrators then operate the complete audited case workflow, including deliberate access to private customer, installer, site, appointment, evidence-original and metadata detail.
+
+Government departments, regulators and scheme administrators remain the sole authors of program rules. Creditex verifies the exact operational transcription, audits evidence, manages corrections and performs authorised program actions within its accreditation and contractual connector scope. The reference catalogue does not activate a rule, calculate an outcome or create a certificate. It distinguishes tradable certificates and project credits from retailer obligations, rebates, grants, loans, tariffs and procurement outcomes.
+
+### Delivered controls
+
+- Persistent program and activity tab rows mirror the useful Dataforce separation while keeping all activities in one typed workflow.
+- Controlled program, activity-template and outcome-class selectors replace free-text entry where authoritative options exist.
+- Guided job setup chains program, activity, product category, scenario and effective governed version. VEU `6(23)` remains one ordinary test template and has no privileged path.
+- The administrator dashboard states and enforces deliberate, audited organisation-wide access to private case data; default queues remain privacy minimised.
+- The shared `info@ausenergyassessments.com` account can maintain drafts and invite named members but cannot request or approve publication. Publication still requires two different independently verified named administrators.
+- The public reference catalogue is source-linked and reviewed as at 1 August 2026. Production governed records remain at 0 programs, 0 activity versions, 0 policies and 0 cases until exact instruments are independently verified and imported.
+
+Exact application commit `a33b7053301a64bea4bbcbe76713067a2c1782dd` passes the complete `npm.cmd run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, the complete main test suite, all 99 migrations through `0098_creditex_rule_governance.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. The catalogue-focused suite passed 30 of 30 tests, the final portal regression set passed 21 of 21, and `git diff --check` passed.
+
+The 6,790,614-byte local package has SHA-256 `B14686D098A1FF76D8DBF1F2CA26DE2AABB6D600D991289891A9CF31C6E50FFB`. Sites stored 178 files and 18,227,200 bytes with content hash `sha256:917cf16e38b0a69e2081992a8f2944699bf9492b78f40c8ce4745b55612bf285`. Deployment `appgdep_6a6dbc598f0c81918d1e6656addd0463` succeeded with environment revision 19.
+
+Signed-in production QA confirmed the dashboard no longer stalls at sign-in, the 32-program and 207-activity source catalogue, controlled template and outcome selectors, separate program and activity tabs, corrected audited-private-case wording and the shared-account governance boundary. No production records were changed. The post-release Sites Worker error-only query returned zero events.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
