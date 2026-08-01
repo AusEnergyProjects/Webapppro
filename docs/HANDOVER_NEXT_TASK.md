@@ -26,7 +26,7 @@ Deliver the first safe Creditex operations slice inside TLink: exact activity an
 
 ## Owning workflow and expected files
 
-- Domain and control migrations: `db/schema.ts`, `drizzle/0093_creditex_compliance_foundation.sql`, `drizzle/0094_creditex_operations_control.sql`, `src/lib/compliance-access-server.ts`, `src/lib/creditex-compliance-server.ts` and `src/lib/creditex-operations-server.ts`.
+- Domain and control migrations: `db/schema.ts`, `drizzle/0093_creditex_compliance_foundation.sql`, bounded operations migrations `drizzle/0094_creditex_operations_control.sql` through `drizzle/0097_creditex_operations_lifecycle.sql`, `src/lib/compliance-access-server.ts`, `src/lib/creditex-compliance-server.ts` and `src/lib/creditex-operations-server.ts`.
 - Installer and field intake: the trade CRM, work-order and sync routes, guided job setup, AEA Field evidence capture, exact-byte encryption and resumable media finalisation.
 - Creditex workspace: no-index `/creditex/compliance`, session, governance and operations APIs, the bounded evidence viewer and Creditex-specific portal components.
 - Regulatory and migration control: the Australian program source register, Creditex operating model and Dataforce and Runabout parity matrix.
@@ -73,7 +73,7 @@ Deliver the first safe Creditex operations slice inside TLink: exact activity an
 ## Validation and release evidence
 
 - Focused Creditex, governance, access, viewer, field-evidence, guided-job, photo and database-console tests pass 76 of 76.
-- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,072 main tests with 1,070 passed, 2 intentionally skipped and 0 failed, all 95 migrations through `0094_creditex_operations_control.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit.
+- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,072 main tests with 1,070 passed, 2 intentionally skipped and 0 failed, all 98 migrations through `0097_creditex_operations_lifecycle.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. The operations SQL is split into sub-25 KB inputs after Sites rejected the original 82,864-byte migration before production activation.
 - AEA Field passes 6 of 6 tests, lint, type checking and Android and iOS export. Expo printed non-fatal Google-services config parse warnings after both exports; physical signed builds and devices remain unverified.
 - The independent final audit found and closed two P0 evidence-policy immutability defects. Its final verdict permits only an empty, invitation-gated foundation and preview.
 - Final exact Git and Sites identities and production portal checks remain to be recorded before the milestone status changes to released.

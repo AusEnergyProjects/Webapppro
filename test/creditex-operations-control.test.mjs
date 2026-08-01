@@ -6,7 +6,12 @@ import ts from "typescript";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
-const operationsMigration = read("../drizzle/0094_creditex_operations_control.sql");
+const operationsMigration = [
+  "../drizzle/0094_creditex_operations_control.sql",
+  "../drizzle/0095_creditex_operations_workflows.sql",
+  "../drizzle/0096_creditex_operations_integrity.sql",
+  "../drizzle/0097_creditex_operations_lifecycle.sql",
+].map(read).join("\n--> statement-breakpoint\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 
@@ -502,7 +507,7 @@ function seedSubmissionBatch(database, governed, {
     );
 }
 
-test("0094 provisions only the Creditex organisation and bootstrap invitation", () => {
+test("operations migrations provision only the Creditex organisation and bootstrap invitation", () => {
   const database = databaseWithComplianceOperations();
   const organisation = database.prepare(`SELECT organisation_code, legal_name, abn
     FROM compliance_organisations`).get();
@@ -565,7 +570,7 @@ test("the verified bootstrap identity claims the invitation exactly once", async
   /COMPLIANCE_FINAL_ADMIN_REQUIRED/);
 });
 
-test("operations dashboard and access queries execute against the 0094 schema", async () => {
+test("operations dashboard and access queries execute against the operations schema", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule(
     "../src/lib/creditex-operations-server.ts",
@@ -1607,7 +1612,7 @@ test("compliance member identity is immutable while reviewed access and last-log
   ).run(), /NO_DELETE/);
 });
 
-test("0094 child records reject missing or cross-organisation parents at insert time", () => {
+test("operations child records reject missing or cross-organisation parents at insert time", () => {
   const database = databaseWithComplianceOperations();
   const governed = seedGovernedActivity(database);
   seedTradeJob(database);

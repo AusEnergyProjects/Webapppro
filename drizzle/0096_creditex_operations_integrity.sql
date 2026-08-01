@@ -1,0 +1,729 @@
+CREATE TRIGGER `compliance_case_assignments_links_guard`
+BEFORE INSERT ON `compliance_case_assignments`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` compliance_user
+    WHERE compliance_user.`id` = NEW.`compliance_user_id`
+      AND compliance_user.`organisation_id` = NEW.`organisation_id`
+      AND (
+        (NEW.`assignment_role` = 'case_manager'
+          AND compliance_user.`role` IN ('admin', 'case_manager'))
+        OR (NEW.`assignment_role` IN ('primary_reviewer', 'secondary_reviewer')
+          AND compliance_user.`role` IN ('admin', 'reviewer'))
+        OR (NEW.`assignment_role` = 'auditor'
+          AND compliance_user.`role` IN ('admin', 'auditor'))
+      )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_ASSIGNMENT_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_tasks_links_insert_guard`
+BEFORE INSERT ON `compliance_case_tasks`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+  )
+  OR (
+    NEW.`assignee_user_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_users` compliance_user
+      WHERE compliance_user.`id` = NEW.`assignee_user_id`
+        AND compliance_user.`organisation_id` = NEW.`organisation_id`
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_TASK_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_tasks_assignee_update_guard`
+BEFORE UPDATE OF `assignee_user_id` ON `compliance_case_tasks`
+WHEN (
+  NEW.`assignee_user_id` <> ''
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` compliance_user
+    WHERE compliance_user.`id` = NEW.`assignee_user_id`
+      AND compliance_user.`organisation_id` = NEW.`organisation_id`
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_TASK_ASSIGNEE_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_evidence_links_guard`
+BEFORE INSERT ON `compliance_case_evidence`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    JOIN `compliance_evidence_requirements` requirement
+      ON requirement.`id` = NEW.`requirement_id`
+      AND requirement.`organisation_id` = compliance_case.`organisation_id`
+      AND requirement.`policy_version_id`
+        = compliance_case.`evidence_policy_version_id`
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+  )
+  OR (
+    NEW.`job_media_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `trade_crm_job_media` media
+      JOIN `compliance_cases` compliance_case
+        ON compliance_case.`id` = NEW.`case_id`
+      WHERE media.`id` = NEW.`job_media_id`
+        AND media.`work_order_id` = compliance_case.`work_order_id`
+        AND media.`firebase_uid` = compliance_case.`installer_uid`
+        AND compliance_case.`organisation_id` = NEW.`organisation_id`
+    )
+  )
+  OR (
+    NEW.`supersedes_evidence_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_case_evidence` superseded
+      WHERE superseded.`id` = NEW.`supersedes_evidence_id`
+        AND superseded.`organisation_id` = NEW.`organisation_id`
+        AND superseded.`case_id` = NEW.`case_id`
+        AND superseded.`requirement_id` = NEW.`requirement_id`
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_EVIDENCE_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_findings_links_guard`
+BEFORE INSERT ON `compliance_case_findings`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+  )
+  OR (
+    NEW.`evidence_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_case_evidence` evidence
+      WHERE evidence.`id` = NEW.`evidence_id`
+        AND evidence.`organisation_id` = NEW.`organisation_id`
+        AND evidence.`case_id` = NEW.`case_id`
+        AND (
+          NEW.`requirement_id` = ''
+          OR evidence.`requirement_id` = NEW.`requirement_id`
+        )
+    )
+  )
+  OR (
+    NEW.`requirement_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_cases` compliance_case
+      JOIN `compliance_evidence_requirements` requirement
+        ON requirement.`id` = NEW.`requirement_id`
+        AND requirement.`organisation_id` = compliance_case.`organisation_id`
+        AND requirement.`policy_version_id`
+          = compliance_case.`evidence_policy_version_id`
+      WHERE compliance_case.`id` = NEW.`case_id`
+        AND compliance_case.`organisation_id` = NEW.`organisation_id`
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_FINDING_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_decisions_links_guard`
+BEFORE INSERT ON `compliance_case_decisions`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+      AND compliance_case.`revision` = NEW.`case_revision`
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` reviewer
+    WHERE reviewer.`firebase_uid` = NEW.`primary_reviewer_uid`
+      AND reviewer.`organisation_id` = NEW.`organisation_id`
+      AND reviewer.`status` = 'active'
+      AND reviewer.`role` IN ('admin', 'reviewer')
+  )
+  OR (
+    NEW.`secondary_reviewer_uid` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_users` reviewer
+      WHERE reviewer.`firebase_uid` = NEW.`secondary_reviewer_uid`
+        AND reviewer.`organisation_id` = NEW.`organisation_id`
+        AND reviewer.`status` = 'active'
+        AND reviewer.`role` IN ('admin', 'reviewer')
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_DECISION_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_decision_requests_links_guard`
+BEFORE INSERT ON `compliance_decision_requests`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+      AND compliance_case.`revision` = NEW.`case_revision`
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` reviewer
+    WHERE reviewer.`firebase_uid` = NEW.`primary_reviewer_uid`
+      AND reviewer.`organisation_id` = NEW.`organisation_id`
+      AND reviewer.`status` = 'active'
+      AND reviewer.`role` IN ('admin', 'reviewer')
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_DECISION_REQUEST_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_decision_requests_secondary_update_guard`
+BEFORE UPDATE OF `status`, `secondary_reviewer_uid`
+ON `compliance_decision_requests`
+WHEN (
+  NEW.`status` = 'approved'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` primary_reviewer
+    WHERE primary_reviewer.`firebase_uid` = NEW.`primary_reviewer_uid`
+      AND primary_reviewer.`organisation_id` = NEW.`organisation_id`
+      AND primary_reviewer.`status` = 'active'
+      AND primary_reviewer.`role` IN ('admin', 'reviewer')
+  )
+)
+OR (
+  NEW.`status` = 'approved'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `compliance_cases` compliance_case
+    WHERE compliance_case.`id` = NEW.`case_id`
+      AND compliance_case.`organisation_id` = NEW.`organisation_id`
+      AND compliance_case.`revision` = NEW.`case_revision`
+  )
+)
+OR (
+  NEW.`secondary_reviewer_uid` <> ''
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` secondary_reviewer
+    WHERE secondary_reviewer.`firebase_uid` = NEW.`secondary_reviewer_uid`
+      AND secondary_reviewer.`organisation_id` = NEW.`organisation_id`
+      AND secondary_reviewer.`status` = 'active'
+      AND secondary_reviewer.`role` IN ('admin', 'reviewer')
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_DECISION_REQUEST_REVIEWER_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_equipment_records_case_guard`
+BEFORE INSERT ON `compliance_equipment_records`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_cases` compliance_case
+  WHERE compliance_case.`id` = NEW.`case_id`
+    AND compliance_case.`organisation_id` = NEW.`organisation_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_EQUIPMENT_CASE_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_versions_activity_insert_guard`
+BEFORE INSERT ON `compliance_calculator_versions`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_activity_versions` activity
+  JOIN `compliance_programs` program
+    ON program.`id` = activity.`program_id`
+  WHERE activity.`id` = NEW.`activity_version_id`
+    AND program.`organisation_id` = NEW.`organisation_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_ACTIVITY_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_versions_activity_update_guard`
+BEFORE UPDATE OF `organisation_id`, `activity_version_id`
+ON `compliance_calculator_versions`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_activity_versions` activity
+  JOIN `compliance_programs` program
+    ON program.`id` = activity.`program_id`
+  WHERE activity.`id` = NEW.`activity_version_id`
+    AND program.`organisation_id` = NEW.`organisation_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_ACTIVITY_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_vectors_parent_guard`
+BEFORE INSERT ON `compliance_calculator_test_vectors`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_calculator_versions` calculator
+  WHERE calculator.`id` = NEW.`calculator_version_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_VECTOR_PARENT_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculation_runs_links_guard`
+BEFORE INSERT ON `compliance_calculation_runs`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_cases` compliance_case
+  JOIN `compliance_calculator_versions` calculator
+    ON calculator.`id` = NEW.`calculator_version_id`
+    AND calculator.`organisation_id` = compliance_case.`organisation_id`
+    AND calculator.`activity_version_id` = compliance_case.`activity_version_id`
+  WHERE compliance_case.`id` = NEW.`case_id`
+    AND compliance_case.`organisation_id` = NEW.`organisation_id`
+    AND compliance_case.`revision` = NEW.`case_revision`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATION_RUN_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_submission_batches_program_guard`
+BEFORE INSERT ON `compliance_submission_batches`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_programs` program
+  WHERE program.`id` = NEW.`program_id`
+    AND program.`organisation_id` = NEW.`organisation_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SUBMISSION_BATCH_PROGRAM_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_submission_items_links_guard`
+BEFORE INSERT ON `compliance_submission_batch_items`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_submission_batches` batch
+  JOIN `compliance_cases` compliance_case
+    ON compliance_case.`id` = NEW.`case_id`
+    AND compliance_case.`organisation_id` = batch.`organisation_id`
+    AND compliance_case.`program_id` = batch.`program_id`
+    AND compliance_case.`revision` = NEW.`case_revision`
+  WHERE batch.`id` = NEW.`batch_id`
+    AND batch.`organisation_id` = NEW.`organisation_id`
+    AND EXISTS (
+      SELECT 1
+      FROM `compliance_case_decisions` decision
+      WHERE decision.`id` = (
+        SELECT latest.`id`
+        FROM `compliance_case_decisions` latest
+        WHERE latest.`case_id` = compliance_case.`id`
+          AND latest.`organisation_id` = compliance_case.`organisation_id`
+          AND latest.`case_revision` = NEW.`case_revision`
+          AND latest.`decision_type` = 'ready_to_submit'
+        ORDER BY latest.`decided_at` DESC, latest.`id` DESC
+        LIMIT 1
+      )
+        AND decision.`outcome` = 'approved'
+    )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SUBMISSION_ITEM_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_submission_artifacts_batch_guard`
+BEFORE INSERT ON `compliance_submission_artifacts`
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM `compliance_submission_batches` batch
+  WHERE batch.`id` = NEW.`batch_id`
+    AND batch.`organisation_id` = NEW.`organisation_id`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SUBMISSION_ARTIFACT_BATCH_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_submission_responses_links_guard`
+BEFORE INSERT ON `compliance_submission_responses`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_submission_batches` batch
+    WHERE batch.`id` = NEW.`batch_id`
+      AND batch.`organisation_id` = NEW.`organisation_id`
+  )
+  OR (
+    NEW.`batch_item_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_submission_batch_items` item
+      WHERE item.`id` = NEW.`batch_item_id`
+        AND item.`batch_id` = NEW.`batch_id`
+        AND item.`organisation_id` = NEW.`organisation_id`
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SUBMISSION_RESPONSE_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_certificate_lots_links_guard`
+BEFORE INSERT ON `compliance_certificate_lots`
+WHEN (
+  NOT EXISTS (
+    SELECT 1
+    FROM `compliance_programs` program
+    WHERE program.`id` = NEW.`program_id`
+      AND program.`organisation_id` = NEW.`organisation_id`
+  )
+  OR (
+    NEW.`batch_id` <> ''
+    AND NOT EXISTS (
+      SELECT 1
+      FROM `compliance_submission_batches` batch
+      WHERE batch.`id` = NEW.`batch_id`
+        AND batch.`organisation_id` = NEW.`organisation_id`
+        AND batch.`program_id` = NEW.`program_id`
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CERTIFICATE_LOT_LINK_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_invitations_no_delete`
+BEFORE DELETE ON `compliance_invitations`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_INVITATION_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_invitations_original_no_update`
+BEFORE UPDATE ON `compliance_invitations`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`email` <> OLD.`email`
+  OR NEW.`role` <> OLD.`role`
+  OR NEW.`invited_by_uid` <> OLD.`invited_by_uid`
+  OR NEW.`expires_at` <> OLD.`expires_at`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_INVITATION_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_invitations_transition_guard`
+BEFORE UPDATE OF `status` ON `compliance_invitations`
+WHEN NOT (
+  OLD.`status` = NEW.`status`
+  OR (
+    OLD.`status` = 'pending'
+    AND NEW.`status` IN ('claimed', 'revoked', 'expired')
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_INVITATION_TRANSITION_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_invitations_claim_no_update`
+BEFORE UPDATE ON `compliance_invitations`
+WHEN OLD.`status` = 'claimed' AND (
+  NEW.`claimed_by_uid` <> OLD.`claimed_by_uid`
+  OR NEW.`claimed_at` <> OLD.`claimed_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_INVITATION_CLAIM_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_users_no_delete`
+BEFORE DELETE ON `compliance_users`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_USER_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_users_identity_no_update`
+BEFORE UPDATE ON `compliance_users`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`firebase_uid` <> OLD.`firebase_uid`
+  OR NEW.`email` <> OLD.`email`
+  OR NEW.`created_by_uid` <> OLD.`created_by_uid`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_USER_IDENTITY_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_users_status_transition_guard`
+BEFORE UPDATE OF `status` ON `compliance_users`
+WHEN NOT (
+  OLD.`status` = NEW.`status`
+  OR (
+    OLD.`status` = 'active'
+    AND NEW.`status` IN ('suspended', 'revoked')
+  )
+  OR (
+    OLD.`status` = 'suspended'
+    AND NEW.`status` IN ('active', 'revoked')
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_USER_STATUS_TRANSITION_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_users_final_admin_guard`
+BEFORE UPDATE OF `role`, `status` ON `compliance_users`
+WHEN OLD.`role` = 'admin'
+  AND OLD.`status` = 'active'
+  AND (NEW.`role` <> 'admin' OR NEW.`status` <> 'active')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `compliance_users` other_admin
+    WHERE other_admin.`organisation_id` = OLD.`organisation_id`
+      AND other_admin.`id` <> OLD.`id`
+      AND other_admin.`role` = 'admin'
+      AND other_admin.`status` = 'active'
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_FINAL_ADMIN_REQUIRED');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_assignments_original_no_update`
+BEFORE UPDATE ON `compliance_case_assignments`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`case_id` <> OLD.`case_id`
+  OR NEW.`compliance_user_id` <> OLD.`compliance_user_id`
+  OR NEW.`assignment_role` <> OLD.`assignment_role`
+  OR NEW.`assigned_by_uid` <> OLD.`assigned_by_uid`
+  OR NEW.`assigned_at` <> OLD.`assigned_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_ASSIGNMENT_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_assignments_no_delete`
+BEFORE DELETE ON `compliance_case_assignments`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_ASSIGNMENT_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_tasks_original_no_update`
+BEFORE UPDATE ON `compliance_case_tasks`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`case_id` <> OLD.`case_id`
+  OR NEW.`task_type` <> OLD.`task_type`
+  OR NEW.`title` <> OLD.`title`
+  OR NEW.`detail` <> OLD.`detail`
+  OR NEW.`created_by_uid` <> OLD.`created_by_uid`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_TASK_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_tasks_no_delete`
+BEFORE DELETE ON `compliance_case_tasks`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_TASK_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_findings_original_no_update`
+BEFORE UPDATE ON `compliance_case_findings`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`case_id` <> OLD.`case_id`
+  OR NEW.`evidence_id` <> OLD.`evidence_id`
+  OR NEW.`requirement_id` <> OLD.`requirement_id`
+  OR NEW.`finding_code` <> OLD.`finding_code`
+  OR NEW.`severity` <> OLD.`severity`
+  OR NEW.`description` <> OLD.`description`
+  OR NEW.`raised_by_uid` <> OLD.`raised_by_uid`
+  OR NEW.`raised_at` <> OLD.`raised_at`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_FINDING_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_case_findings_no_delete`
+BEFORE DELETE ON `compliance_case_findings`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_FINDING_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_participants_no_delete`
+BEFORE DELETE ON `compliance_participants`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_PARTICIPANT_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_participants_organisation_no_update`
+BEFORE UPDATE OF `organisation_id` ON `compliance_participants`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_PARTICIPANT_ORGANISATION_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_participant_abilities_original_no_update`
+BEFORE UPDATE ON `compliance_participant_abilities`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`participant_id` <> OLD.`participant_id`
+  OR NEW.`program_id` <> OLD.`program_id`
+  OR NEW.`activity_version_id` <> OLD.`activity_version_id`
+  OR NEW.`ability_code` <> OLD.`ability_code`
+  OR NEW.`ability_role` <> OLD.`ability_role`
+  OR NEW.`effective_from` <> OLD.`effective_from`
+  OR NEW.`effective_to` <> OLD.`effective_to`
+  OR NEW.`evidence_snapshot` <> OLD.`evidence_snapshot`
+  OR NEW.`created_by_uid` <> OLD.`created_by_uid`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_ABILITY_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_participant_abilities_no_delete`
+BEFORE DELETE ON `compliance_participant_abilities`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_ABILITY_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_equipment_records_no_delete`
+BEFORE DELETE ON `compliance_equipment_records`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_EQUIPMENT_NO_DELETE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_equipment_records_original_no_update`
+BEFORE UPDATE ON `compliance_equipment_records`
+WHEN (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`case_id` <> OLD.`case_id`
+  OR NEW.`record_type` <> OLD.`record_type`
+  OR NEW.`manufacturer` <> OLD.`manufacturer`
+  OR NEW.`model` <> OLD.`model`
+  OR NEW.`serial_number` <> OLD.`serial_number`
+  OR NEW.`product_registry` <> OLD.`product_registry`
+  OR NEW.`product_reference` <> OLD.`product_reference`
+  OR NEW.`quantity` <> OLD.`quantity`
+  OR NEW.`recorded_by_uid` <> OLD.`recorded_by_uid`
+  OR NEW.`recorded_at` <> OLD.`recorded_at`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_EQUIPMENT_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_transition_guard`
+BEFORE UPDATE OF `approval_state` ON `compliance_calculator_versions`
+WHEN NOT (
+  OLD.`approval_state` = NEW.`approval_state`
+  OR (
+    OLD.`approval_state` = 'draft'
+    AND NEW.`approval_state` IN ('testing', 'blocked', 'withdrawn')
+  )
+  OR (
+    OLD.`approval_state` = 'testing'
+    AND NEW.`approval_state` IN ('approved', 'blocked', 'withdrawn')
+  )
+  OR (
+    OLD.`approval_state` = 'approved'
+    AND NEW.`approval_state` IN ('blocked', 'withdrawn')
+  )
+  OR (
+    OLD.`approval_state` = 'blocked'
+    AND NEW.`approval_state` = 'withdrawn'
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_TRANSITION_INVALID');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_non_draft_content_no_update`
+BEFORE UPDATE ON `compliance_calculator_versions`
+WHEN OLD.`approval_state` <> 'draft' AND (
+  NEW.`organisation_id` <> OLD.`organisation_id`
+  OR NEW.`activity_version_id` <> OLD.`activity_version_id`
+  OR NEW.`calculator_key` <> OLD.`calculator_key`
+  OR NEW.`version` <> OLD.`version`
+  OR NEW.`title` <> OLD.`title`
+  OR NEW.`output_type` <> OLD.`output_type`
+  OR NEW.`specification` <> OLD.`specification`
+  OR NEW.`rounding_policy` <> OLD.`rounding_policy`
+  OR NEW.`official_source_url` <> OLD.`official_source_url`
+  OR NEW.`official_source_version` <> OLD.`official_source_version`
+  OR NEW.`official_source_sha256` <> OLD.`official_source_sha256`
+  OR NEW.`created_by_uid` <> OLD.`created_by_uid`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_CONTENT_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_non_draft_no_delete`
+BEFORE DELETE ON `compliance_calculator_versions`
+WHEN OLD.`approval_state` <> 'draft'
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_vectors_original_no_update`
+BEFORE UPDATE ON `compliance_calculator_test_vectors`
+WHEN (
+  NEW.`calculator_version_id` <> OLD.`calculator_version_id`
+  OR NEW.`vector_key` <> OLD.`vector_key`
+  OR NEW.`input_snapshot` <> OLD.`input_snapshot`
+  OR NEW.`expected_output` <> OLD.`expected_output`
+  OR NEW.`tolerance_snapshot` <> OLD.`tolerance_snapshot`
+  OR NEW.`source_citation` <> OLD.`source_citation`
+  OR NEW.`created_by_uid` <> OLD.`created_by_uid`
+  OR NEW.`created_at` <> OLD.`created_at`
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_VECTOR_ORIGINAL_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_calculator_vectors_published_no_delete`
+BEFORE DELETE ON `compliance_calculator_test_vectors`
+WHEN EXISTS (
+  SELECT 1 FROM `compliance_calculator_versions` calculator
+  WHERE calculator.`id` = OLD.`calculator_version_id`
+    AND calculator.`approval_state` <> 'draft'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_CALCULATOR_VECTOR_IMMUTABLE');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `compliance_submission_batches_no_delete`
+BEFORE DELETE ON `compliance_submission_batches`
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SUBMISSION_BATCH_NO_DELETE');
+END;

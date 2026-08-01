@@ -7,7 +7,12 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const server = read("../src/lib/creditex-operations-server.ts");
 const operationsRoute = read("../src/app/api/creditex/operations/route.ts");
 const accessRoute = read("../src/app/api/creditex/access/route.ts");
-const migration = read("../drizzle/0094_creditex_operations_control.sql");
+const migration = [
+  "../drizzle/0094_creditex_operations_control.sql",
+  "../drizzle/0095_creditex_operations_workflows.sql",
+  "../drizzle/0096_creditex_operations_integrity.sql",
+  "../drizzle/0097_creditex_operations_lifecycle.sql",
+].map(read).join("\n--> statement-breakpoint\n");
 
 function loadServer() {
   const output = ts.transpileModule(server, {
@@ -88,7 +93,7 @@ test("every supported write has a fixed role policy and forbidden roles fail bef
   );
 });
 
-test("queries and writes are organisation scoped and dashboard coverage spans every 0094 domain", () => {
+test("queries and writes are organisation scoped and dashboard coverage spans every operations domain", () => {
   for (const table of [
     "compliance_invitations",
     "compliance_audit_events",
