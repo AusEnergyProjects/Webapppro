@@ -287,6 +287,17 @@ function sourceSection(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
+function projectionColumnCount(source) {
+  const selectIndex = source.indexOf("SELECT");
+  assert.notEqual(selectIndex, -1, "Missing SELECT projection");
+  return source
+    .slice(selectIndex + "SELECT".length)
+    .split(",")
+    .map((column) => column.trim())
+    .filter(Boolean)
+    .length;
+}
+
 test("migration creates a constrained, synthetic-only pilot domain", (t) => {
   const database = new DatabaseSync(":memory:");
   t.after(() => database.close());
@@ -2071,6 +2082,58 @@ test("job detail projection is fail-closed, owner-scoped and read-only", () => {
   assert.match(detail, /pilotJobNotFound\(\)/);
   assert.match(detail, /externalSubmissionEnabled: false/);
   assert.doesNotMatch(detail, /object_key|evidence_envelope AS|provider_message_id/i);
+});
+
+test("job detail keeps each D1 projection within the 100-column limit", () => {
+  const detail = sourceSection(
+    server,
+    "export async function loadCreditexVeuPilotJobWorkspace",
+    "export async function loadCreditexVeuPilotDashboard",
+  );
+  const jobCoreProjection = sourceSection(
+    detail,
+    "const jobCore = await database.prepare(`SELECT",
+    "    FROM compliance_pilot_jobs job",
+  );
+  const privateProjection = sourceSection(
+    detail,
+    "const privateDetail = await database.prepare(`SELECT",
+    "    FROM trade_crm_job_details detail",
+  );
+  assert.ok(
+    projectionColumnCount(jobCoreProjection) <= 100,
+    "The synthetic job core projection exceeds D1's 100-column limit.",
+  );
+  assert.ok(
+    projectionColumnCount(privateProjection) <= 100,
+    "The private CRM projection exceeds D1's 100-column limit.",
+  );
+
+  const jobCoreQuery = sourceSection(
+    detail,
+    "const jobCore = await database.prepare(`SELECT",
+    "  const privateDetail = await database.prepare(`SELECT",
+  );
+  assert.doesNotMatch(
+    jobCoreQuery,
+    /trade_crm_(?:job_details|customers|service_sites)/,
+  );
+
+  const privateQuery = sourceSection(
+    detail,
+    "const privateDetail = await database.prepare(`SELECT",
+    "  const job: Record<string, unknown>",
+  );
+  assert.match(privateQuery, /detail\.work_order_id = \?/);
+  assert.match(privateQuery, /detail\.firebase_uid = \?/);
+  assert.match(
+    privateQuery,
+    /customer\.firebase_uid = detail\.firebase_uid/,
+  );
+  assert.match(privateQuery, /customer\.record_status = 'active'/);
+  assert.match(privateQuery, /site\.firebase_uid = detail\.firebase_uid/);
+  assert.match(privateQuery, /site\.record_status = 'active'/);
+  assert.match(privateQuery, /pilotJobNotFound\(\)/);
 });
 
 test("Creditex UI surfaces all five priorities, controlled dropdowns and activity tabs", () => {

@@ -2059,7 +2059,7 @@ export async function loadCreditexVeuPilotJobWorkspace(
   }
   await assertRunContract(run);
 
-  const job = await database.prepare(`SELECT
+  const jobCore = await database.prepare(`SELECT
       job.id, job.pilot_run_id, job.work_order_id, job.case_number,
       job.job_number, job.activity_template_id, job.activity_key,
       job.registry_activity_code, job.specification_part, job.title,
@@ -2091,29 +2091,7 @@ export async function loadCreditexVeuPilotJobWorkspace(
       work.service_categories, work.site_area, work.stage AS work_stage,
       work.priority, work.scheduled_start, work.scheduled_end,
       work.assignee_member_id, work.assignee_label,
-      work.revision AS work_revision, work.record_status AS work_record_status,
-      detail.id AS job_detail_id, detail.customer_source,
-      detail.pipeline_stage, detail.building_type, detail.description,
-      detail.customer_reference, detail.next_action, detail.tags,
-      detail.estimated_value_cents, detail.quoted_value_cents,
-      detail.invoiced_value_cents, detail.paid_value_cents,
-      detail.quote_status, detail.invoice_status, detail.payment_due_at,
-      customer.id AS customer_id, customer.customer_number,
-      customer.customer_type, customer.first_name, customer.last_name,
-      customer.business_name AS customer_business_name,
-      customer.business_number, customer.email AS customer_email,
-      customer.phone AS customer_phone,
-      customer.address_line_1 AS customer_address_line_1,
-      customer.address_line_2 AS customer_address_line_2,
-      customer.suburb AS customer_suburb,
-      customer.address_state AS customer_address_state,
-      customer.postcode AS customer_postcode,
-      customer.tags AS customer_tags, customer.private_notes,
-      site.id AS service_site_id, site.site_label,
-      site.address_line_1, site.address_line_2, site.suburb,
-      site.address_state, site.postcode,
-      site.access_instructions, site.parking_instructions,
-      site.hazard_notes, site.is_primary
+      work.revision AS work_revision, work.record_status AS work_record_status
     FROM compliance_pilot_jobs job
     JOIN compliance_pilot_installers installer
       ON installer.id = job.installer_id
@@ -2136,31 +2114,64 @@ export async function loadCreditexVeuPilotJobWorkspace(
       AND work.source_type = 'synthetic_pilot'
       AND work.source_reference = job.pilot_run_id
       AND work.record_status = 'active'
-    JOIN trade_crm_job_details detail
-      ON detail.work_order_id = work.id
-      AND detail.firebase_uid = work.firebase_uid
-    JOIN trade_crm_customers customer
-      ON customer.id = detail.crm_customer_id
-      AND customer.firebase_uid = work.firebase_uid
-      AND customer.record_status = 'active'
-    JOIN trade_crm_service_sites site
-      ON site.id = detail.service_site_id
-      AND site.customer_id = customer.id
-      AND site.firebase_uid = work.firebase_uid
-      AND site.record_status = 'active'
     WHERE job.id = ?
       AND job.pilot_run_id = ?
       AND job.record_mode = 'synthetic_test'
     LIMIT 1`).bind(jobId, run.id).first<Record<string, unknown>>();
-  if (!job) {
+  if (!jobCore) {
     pilotJobNotFound();
   }
 
-  const workOrderId = String(job.work_order_id);
-  const firebaseUid = String(job.installer_owner_uid || "");
+  const workOrderId = String(jobCore.work_order_id);
+  const firebaseUid = String(jobCore.installer_owner_uid || "");
   if (!firebaseUid) {
     pilotJobNotFound();
   }
+  const privateDetail = await database.prepare(`SELECT
+      detail.id AS job_detail_id, detail.customer_source,
+      detail.pipeline_stage, detail.building_type, detail.description,
+      detail.customer_reference, detail.next_action, detail.tags,
+      detail.estimated_value_cents, detail.quoted_value_cents,
+      detail.invoiced_value_cents, detail.paid_value_cents,
+      detail.quote_status, detail.invoice_status, detail.payment_due_at,
+      customer.id AS customer_id, customer.customer_number,
+      customer.customer_type, customer.first_name, customer.last_name,
+      customer.business_name AS customer_business_name,
+      customer.business_number, customer.email AS customer_email,
+      customer.phone AS customer_phone,
+      customer.address_line_1 AS customer_address_line_1,
+      customer.address_line_2 AS customer_address_line_2,
+      customer.suburb AS customer_suburb,
+      customer.address_state AS customer_address_state,
+      customer.postcode AS customer_postcode,
+      customer.tags AS customer_tags, customer.private_notes,
+      site.id AS service_site_id, site.site_label,
+      site.address_line_1, site.address_line_2, site.suburb,
+      site.address_state, site.postcode,
+      site.access_instructions, site.parking_instructions,
+      site.hazard_notes, site.is_primary
+    FROM trade_crm_job_details detail
+    JOIN trade_crm_customers customer
+      ON customer.id = detail.crm_customer_id
+      AND customer.firebase_uid = detail.firebase_uid
+      AND customer.record_status = 'active'
+    JOIN trade_crm_service_sites site
+      ON site.id = detail.service_site_id
+      AND site.customer_id = customer.id
+      AND site.firebase_uid = detail.firebase_uid
+      AND site.record_status = 'active'
+    WHERE detail.work_order_id = ?
+      AND detail.firebase_uid = ?
+    LIMIT 1`)
+    .bind(workOrderId, firebaseUid)
+    .first<Record<string, unknown>>();
+  if (!privateDetail) {
+    pilotJobNotFound();
+  }
+  const job: Record<string, unknown> = {
+    ...jobCore,
+    ...privateDetail,
+  };
   const customerId = String(job.customer_id);
   const activityTemplateId = String(job.activity_template_id);
 
