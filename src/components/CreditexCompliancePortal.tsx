@@ -27,6 +27,7 @@ import {
   governmentActivityTemplates,
   governmentProgramTemplate,
 } from "@/lib/australian-government-program-catalogue";
+import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
@@ -127,6 +128,17 @@ type ApiFailure = Error & {
   result?: { error?: string; code?: string };
 };
 
+type ApiResult = {
+  ok?: boolean;
+  error?: string;
+  code?: string;
+};
+
+type ApiAttempt = {
+  response: Response;
+  result: ApiResult;
+};
+
 const CASE_STATUSES = [
   "open",
   "all",
@@ -197,6 +209,9 @@ function authMessage(error: unknown) {
     typeof error === "object" && error && "code" in error
       ? String(error.code)
       : "";
+  if (code.includes("network-request-failed")) {
+    return "The secure sign-in service could not be reached. Check your connection and retry.";
+  }
   if (code.includes("invalid-credential") || code.includes("wrong-password"))
     return "The email or password was not recognised.";
   if (code.includes("popup-closed"))
@@ -206,6 +221,19 @@ function authMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "The secure compliance request could not be completed.";
+}
+
+function workspaceMessage(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String(error.code)
+      : "";
+  if (code.includes("network-request-failed")) {
+    return "The secure sign-in service could not be reached. Check your connection, then retry the workspace.";
+  }
+  return error instanceof Error
+    ? error.message
+    : "The protected Creditex workspace could not be loaded.";
 }
 
 function caseMatches(item: CaseQueueItem, query: string) {
@@ -310,81 +338,87 @@ export function CreditexCompliancePortal() {
     if (!activeUser) throw new Error("Sign in to continue.");
     const activeUid = activeUser.uid;
     const headers = new Headers(init.headers);
-    const idToken = await activeUser.getIdToken(
-      path === "/api/creditex/session",
-    );
-    if (firebaseAuth.currentUser?.uid !== activeUid) {
-      throw new Error("The signed-in account changed. Loading the new workspace.");
-    }
-    headers.set(
-      "Authorization",
-      `Bearer ${idToken}`,
-    );
     if (init.body && !headers.has("Content-Type"))
       headers.set("Content-Type", "application/json");
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const controller = new AbortController();
-      const requestTimeout = window.setTimeout(() => controller.abort(), 20_000);
-      let response: Response;
-      try {
-        response = await fetch(path, {
-          ...init,
-          headers,
-          cache: "no-store",
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+
+    const { response, result } =
+      await requestWithCreditexTokenRecovery<ApiAttempt>({
+        user: activeUser,
+        currentUid: () => firebaseAuth.currentUser?.uid,
+        isUnauthorized: (attempt) => attempt.response.status === 401,
+        request: async (idToken) => {
+          headers.set("Authorization", `Bearer ${idToken}`);
+          for (let attempt = 0; attempt < 10; attempt += 1) {
+            const controller = new AbortController();
+            const requestTimeout = window.setTimeout(
+              () => controller.abort(),
+              20_000,
+            );
+            let response: Response;
+            try {
+              response = await fetch(path, {
+                ...init,
+                headers,
+                cache: "no-store",
+                signal: controller.signal,
+              });
+            } catch (error) {
+              if (error instanceof DOMException && error.name === "AbortError") {
+                throw new Error(
+                  "The compliance service did not respond within 20 seconds. Retry the workspace.",
+                );
+              }
+              throw error;
+            } finally {
+              window.clearTimeout(requestTimeout);
+            }
+            const result =
+              (await response.json().catch(() => ({}))) as ApiResult;
+            if (firebaseAuth.currentUser?.uid !== activeUid) {
+              throw new Error(
+                "The signed-in account changed. Loading the new workspace.",
+              );
+            }
+            if (
+              response.status === 503
+              && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
+              && attempt < 9
+            ) {
+              const retryAfterSeconds = Number(
+                response.headers.get("Retry-After"),
+              );
+              const retryAfterMilliseconds = Number.isFinite(retryAfterSeconds)
+                ? Math.min(Math.max(retryAfterSeconds * 1_000, 1_000), 5_000)
+                : 1_000;
+              setLoadingMessage(
+                `Preparing governed compliance controls (${attempt + 1} of 10)...`,
+              );
+              await new Promise((resolve) =>
+                window.setTimeout(resolve, retryAfterMilliseconds)
+              );
+              if (firebaseAuth.currentUser?.uid !== activeUid) {
+                throw new Error(
+                  "The signed-in account changed. Loading the new workspace.",
+                );
+              }
+              continue;
+            }
+            return { response, result };
+          }
           throw new Error(
-            "The compliance service did not respond within 20 seconds. Retry the workspace.",
+            "The governed Creditex workspace could not be prepared.",
           );
-        }
-        throw error;
-      } finally {
-        window.clearTimeout(requestTimeout);
-      }
-      const result = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        code?: string;
-      };
-      if (firebaseAuth.currentUser?.uid !== activeUid) {
-        throw new Error(
-          "The signed-in account changed. Loading the new workspace.",
-        );
-      }
-      if (
-        response.status === 503
-        && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
-        && attempt < 9
-      ) {
-        const retryAfterSeconds = Number(response.headers.get("Retry-After"));
-        const retryAfterMilliseconds = Number.isFinite(retryAfterSeconds)
-          ? Math.min(Math.max(retryAfterSeconds * 1_000, 1_000), 5_000)
-          : 1_000;
-        setLoadingMessage(
-          `Preparing governed compliance controls (${attempt + 1} of 10)...`,
-        );
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, retryAfterMilliseconds)
-        );
-        if (firebaseAuth.currentUser?.uid !== activeUid) {
-          throw new Error(
-            "The signed-in account changed. Loading the new workspace.",
-          );
-        }
-        continue;
-      }
-      if (!response.ok || result.ok === false) {
-        const error = new Error(
-          result.error || "The compliance request could not be completed.",
-        ) as ApiFailure;
-        error.result = result;
-        throw error;
-      }
-      return result as Record<string, unknown>;
+        },
+      });
+
+    if (!response.ok || result.ok === false) {
+      const error = new Error(
+        result.error || "The compliance request could not be completed.",
+      ) as ApiFailure;
+      error.result = result;
+      throw error;
     }
-    throw new Error("The governed Creditex workspace could not be prepared.");
+    return result as Record<string, unknown>;
   }, []);
 
   const loadCases = useCallback(async ({
@@ -456,7 +490,7 @@ export function CreditexCompliancePortal() {
       } catch (error) {
         if (firebaseAuth.currentUser?.uid !== activeUid) return;
         setSession(null);
-        setNotice(authMessage(error));
+        setNotice(workspaceMessage(error));
         setNoticeKind("error");
       } finally {
         if (firebaseAuth.currentUser?.uid === activeUid) {
@@ -644,7 +678,7 @@ export function CreditexCompliancePortal() {
     } catch (error) {
       setCases([]);
       setCasePagination({ pageSize: 50, hasNext: false, nextCursor: "" });
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -658,7 +692,7 @@ export function CreditexCompliancePortal() {
       setNotice("Case queue refreshed from the first page.");
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -675,7 +709,7 @@ export function CreditexCompliancePortal() {
         append: true,
       });
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -684,6 +718,8 @@ export function CreditexCompliancePortal() {
 
   async function signInEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy === "auth") return;
+    setBusy("auth");
     setNotice("Signing in...");
     setNoticeKind("info");
     try {
@@ -693,34 +729,40 @@ export function CreditexCompliancePortal() {
         password,
       );
       setPassword("");
-      await loadWorkspace();
     } catch (error) {
       setNotice(authMessage(error));
       setNoticeKind("error");
+    } finally {
+      setBusy("");
     }
   }
 
   async function signInGoogle() {
+    if (busy === "auth") return;
+    setBusy("auth");
     setNotice("Opening secure Google sign-in...");
     setNoticeKind("info");
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(firebaseAuth, provider);
-      await loadWorkspace();
     } catch (error) {
       setNotice(authMessage(error));
       setNoticeKind("error");
+    } finally {
+      setBusy("");
     }
   }
 
   async function resetPassword() {
+    if (busy === "auth") return;
     const accountEmail = email.trim().toLowerCase();
     if (!accountEmail) {
       setNotice("Enter your compliance account email first.");
       setNoticeKind("error");
       return;
     }
+    setBusy("auth");
     try {
       await sendPasswordResetEmail(firebaseAuth, accountEmail);
       setNotice("Password reset instructions have been sent.");
@@ -728,6 +770,8 @@ export function CreditexCompliancePortal() {
     } catch (error) {
       setNotice(authMessage(error));
       setNoticeKind("error");
+    } finally {
+      setBusy("");
     }
   }
 
@@ -747,7 +791,7 @@ export function CreditexCompliancePortal() {
       setNotice("Draft program saved. Review its official source before publication.");
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -777,7 +821,7 @@ export function CreditexCompliancePortal() {
       );
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -830,7 +874,7 @@ export function CreditexCompliancePortal() {
       );
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -865,7 +909,7 @@ export function CreditexCompliancePortal() {
       setNotice(`Draft ${entity} deleted.`);
       setNoticeKind("success");
     } catch (error) {
-      setNotice(authMessage(error));
+      setNotice(workspaceMessage(error));
       setNoticeKind("error");
     } finally {
       setBusy("");
@@ -935,7 +979,11 @@ export function CreditexCompliancePortal() {
                 Firebase identity.
               </p>
             </div>
-            <form className={styles.signInForm} onSubmit={signInEmail}>
+            <form
+              className={styles.signInForm}
+              onSubmit={signInEmail}
+              aria-busy={busy === "auth"}
+            >
               <h2 id="creditex-sign-in-title">Sign in</h2>
               <p>
                 Use the email already assigned to your compliance membership.
@@ -971,6 +1019,7 @@ export function CreditexCompliancePortal() {
                       type="email"
                       autoComplete="username"
                       required
+                      disabled={busy === "auth"}
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
                     />
@@ -982,16 +1031,22 @@ export function CreditexCompliancePortal() {
                       type="password"
                       autoComplete="current-password"
                       required
+                      disabled={busy === "auth"}
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                     />
                   </label>
-                  <button className={styles.button} type="submit">
-                    Sign in securely
+                  <button
+                    className={styles.button}
+                    type="submit"
+                    disabled={busy === "auth"}
+                  >
+                    {busy === "auth" ? "Signing in..." : "Sign in securely"}
                   </button>
                   <button
                     className={styles.textButton}
                     type="button"
+                    disabled={busy === "auth"}
                     onClick={resetPassword}
                   >
                     Reset password
@@ -1000,6 +1055,7 @@ export function CreditexCompliancePortal() {
                   <button
                     className={styles.secondaryButton}
                     type="button"
+                    disabled={busy === "auth"}
                     onClick={signInGoogle}
                   >
                     Continue with Google

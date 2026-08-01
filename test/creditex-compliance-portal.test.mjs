@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import {
+  requestWithCreditexTokenRecovery,
+} from "../src/lib/creditex-auth-token.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const page = read("../src/app/creditex/compliance/page.tsx");
@@ -58,8 +61,112 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   assert.match(portal, /workspaceLoadRef\.current\?\.uid === activeUid/);
   assert.match(portal, /firebaseAuth\.currentUser\?\.uid !== activeUid/);
   assert.match(portal, /identityChanged[\s\S]*setSession\(null\)[\s\S]*setCases\(\[\]\)[\s\S]*setPrograms\(\[\]\)/);
-  assert.match(portal, /await signInWithEmailAndPassword[\s\S]*await loadWorkspace\(\)/);
-  assert.match(portal, /await signInWithPopup[\s\S]*await loadWorkspace\(\)/);
+  assert.doesNotMatch(
+    portal.slice(
+      portal.indexOf("async function signInEmail"),
+      portal.indexOf("async function resetPassword"),
+    ),
+    /await loadWorkspace\(\)/,
+  );
+  assert.match(
+    portal,
+    /onAuthStateChanged[\s\S]*if \(nextUser\)[\s\S]*void loadWorkspace\(\)/,
+  );
+});
+
+test("Creditex requests use the cached token first without forcing refresh", async () => {
+  const tokenCalls = [];
+  const requestTokens = [];
+  const user = {
+    uid: "creditex-user",
+    getIdToken: async (...args) => {
+      tokenCalls.push(args);
+      return "cached-token";
+    },
+  };
+
+  const result = await requestWithCreditexTokenRecovery({
+    user,
+    currentUid: () => "creditex-user",
+    request: async (idToken) => {
+      requestTokens.push(idToken);
+      return { status: 200 };
+    },
+    isUnauthorized: (attempt) => attempt.status === 401,
+  });
+
+  assert.deepEqual(result, { status: 200 });
+  assert.deepEqual(tokenCalls, [[]]);
+  assert.deepEqual(requestTokens, ["cached-token"]);
+});
+
+test("an authentication 401 triggers exactly one forced token refresh", async () => {
+  const tokenCalls = [];
+  const requestTokens = [];
+  const user = {
+    uid: "creditex-user",
+    getIdToken: async (...args) => {
+      tokenCalls.push(args);
+      return args[0] === true ? "refreshed-token" : "cached-token";
+    },
+  };
+
+  const result = await requestWithCreditexTokenRecovery({
+    user,
+    currentUid: () => "creditex-user",
+    request: async (idToken) => {
+      requestTokens.push(idToken);
+      return { status: requestTokens.length === 1 ? 401 : 200 };
+    },
+    isUnauthorized: (attempt) => attempt.status === 401,
+  });
+
+  assert.deepEqual(result, { status: 200 });
+  assert.deepEqual(tokenCalls, [[], [true]]);
+  assert.deepEqual(requestTokens, ["cached-token", "refreshed-token"]);
+});
+
+test("network failures preserve the signed-in identity and expose workspace recovery", async () => {
+  let currentUid = "creditex-user";
+  const user = {
+    uid: currentUid,
+    getIdToken: async () => "cached-token",
+  };
+
+  await assert.rejects(
+    requestWithCreditexTokenRecovery({
+      user,
+      currentUid: () => currentUid,
+      request: async () => {
+        const error = new Error("network unavailable");
+        error.code = "auth/network-request-failed";
+        throw error;
+      },
+      isUnauthorized: () => false,
+    }),
+    /network unavailable/,
+  );
+
+  assert.equal(currentUid, "creditex-user");
+  assert.match(portal, /network-request-failed/);
+  assert.match(portal, /retry the workspace/);
+  assert.match(portal, /Firebase is signed in as \{user\.email/);
+  assert.match(portal, /Retry workspace/);
+});
+
+test("workspace failures are not labelled as invalid credentials", () => {
+  const workspaceMessageSource = portal.slice(
+    portal.indexOf("function workspaceMessage"),
+    portal.indexOf("function caseMatches"),
+  );
+  const workspaceLoaderSource = portal.slice(
+    portal.indexOf("const loadWorkspace"),
+    portal.indexOf("useEffect(", portal.indexOf("const loadWorkspace")),
+  );
+
+  assert.doesNotMatch(workspaceMessageSource, /email or password/i);
+  assert.match(workspaceLoaderSource, /setNotice\(workspaceMessage\(error\)\)/);
+  assert.doesNotMatch(workspaceLoaderSource, /setNotice\(authMessage\(error\)\)/);
 });
 
 test("first access installs schema guards in quota-safe batches and retries visibly", () => {
