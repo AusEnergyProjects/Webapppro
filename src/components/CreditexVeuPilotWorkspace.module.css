@@ -1,5 +1,6 @@
 .workspace {
   display: grid;
+  min-width: 0;
   gap: 1.2rem;
   padding-bottom: 7rem;
   color: #16342f;
@@ -161,6 +162,7 @@
 
 .createPanel label,
 .filters label,
+.advancedFilters label,
 .jobDetail label,
 .controlGrid label {
   display: grid;
@@ -172,6 +174,8 @@
 .createPanel input,
 .filters input,
 .filters select,
+.advancedFilters input,
+.advancedFilters select,
 .jobDetail select,
 .controlGrid select {
   width: 100%;
@@ -188,6 +192,11 @@
 .filterActions button,
 .jobList header button,
 .jobList footer button,
+.jobRegister > header button,
+.registerFooter button,
+.sortMenu button,
+.rowMenu button,
+.closeDrawer,
 .jobDetail section button {
   min-height: 2.75rem;
   border: 0;
@@ -406,17 +415,18 @@
 
 .jobWorkspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(21rem, 0.7fr);
-  min-height: 45rem;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  align-items: start;
+  min-height: 52rem;
+  overflow: clip;
 }
 
-.jobList {
+.jobRegister {
   min-width: 0;
   border-right: 1px solid #d7e6e1;
 }
 
-.jobList > header {
+.jobRegister > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -424,74 +434,271 @@
   padding: 1.1rem;
 }
 
-.jobList header span {
+.jobRegister > header span {
   color: #0d7a62;
   font-size: 0.7rem;
   font-weight: 850;
   letter-spacing: 0.11em;
 }
 
-.jobList header h3 {
+.jobRegister > header h3 {
   margin: 0.25rem 0 0;
 }
 
-.jobRows {
-  border-top: 1px solid #d7e6e1;
+.jobRegister > header p {
+  margin: 0.3rem 0 0;
+  color: #617a73;
+  font-size: 0.78rem;
 }
 
-.jobRows > button {
-  display: grid;
-  grid-template-columns: auto 1.1fr 1.6fr 0.8fr 0.8fr;
-  gap: 0.7rem;
-  align-items: center;
+.tableViewport {
   width: 100%;
-  border: 0;
-  border-bottom: 1px solid #e1ece8;
+  max-height: 68vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid #c7dbd5;
   background: #fff;
-  color: #16342f;
-  padding: 0.82rem 0.9rem;
+}
+
+.jobTable {
+  width: max-content;
+  min-width: 100%;
+  border-spacing: 0;
+  border-collapse: separate;
+  color: #173b34;
+  font-size: 0.72rem;
+}
+
+.jobTable caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.jobTable th,
+.jobTable td {
+  min-width: 9.5rem;
+  max-width: 19rem;
+  height: 2.55rem;
+  border-right: 1px solid #dbe7e3;
+  border-bottom: 1px solid #e3ece9;
+  background: #fff;
+  padding: 0.34rem 0.48rem;
+  vertical-align: middle;
+}
+
+.jobTable th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 2.9rem;
+  border-bottom-color: #9fc0b7;
+  background: #0e6655;
+  color: #fff;
+  padding: 0;
   text-align: left;
-  cursor: pointer;
 }
 
-.jobRows > button:hover,
-.jobRows > button[data-selected="true"] {
-  background: #ecf8f4;
+.jobTable th:first-child,
+.jobTable td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  min-width: 3.2rem;
+  width: 3.2rem;
+  max-width: 3.2rem;
+  text-align: center;
 }
 
-.jobRows button span:not(.testBadge) {
-  min-width: 0;
+.jobTable th:nth-child(3),
+.jobTable td:nth-child(3) {
+  position: sticky;
+  left: 3.2rem;
+  z-index: 4;
+  min-width: 15rem;
+  width: 15rem;
+  box-shadow: 6px 0 10px rgba(16, 73, 61, 0.08);
 }
 
-.jobRows strong,
-.jobRows small {
+.jobTable th:first-child,
+.jobTable th:nth-child(3) {
+  z-index: 7;
+}
+
+.jobTable th:nth-child(29),
+.jobTable td:nth-child(29),
+.jobTable th:nth-child(30),
+.jobTable td:nth-child(30),
+.jobTable th:nth-child(31),
+.jobTable td:nth-child(31),
+.jobTable th:nth-child(32),
+.jobTable td:nth-child(32) {
+  min-width: 18rem;
+}
+
+.jobTable tbody tr:nth-child(even) td {
+  background: #f8fbfa;
+}
+
+.jobTable tbody tr:hover td,
+.jobTable tbody tr[data-selected="true"] td {
+  background: #e4f7f0;
+}
+
+.jobTable td > span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.jobRows small {
-  margin-top: 0.22rem;
-  color: #6a807a;
-  font-size: 0.72rem;
+.jobLink {
+  max-width: 100%;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #075e4b;
+  padding: 0;
+  font: inherit;
+  font-weight: 850;
+  text-decoration: underline;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.testBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.statusCell,
+.mappingCell {
   width: fit-content;
+  max-width: 100%;
   border-radius: 999px;
-  background: #fde8a7;
-  color: #694e00;
-  padding: 0.25rem 0.42rem;
-  font-size: 0.64rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  padding: 0.23rem 0.46rem;
+  font-size: 0.66rem;
+  font-weight: 800;
 }
 
-.jobList > footer {
+.statusCell {
+  background: #e5eeeb;
+  color: #315c53;
+}
+
+.statusCell[data-tone="ready"] {
+  background: #dff4ed;
+  color: #075e4b;
+}
+
+.statusCell[data-tone="blocked"] {
+  background: #fff0c7;
+  color: #715300;
+}
+
+.statusCell[data-tone="attention"] {
+  background: #ffe1df;
+  color: #812a24;
+}
+
+.mappingCell {
+  background: #fff0c7;
+  color: #715300;
+}
+
+.sortMenu {
+  position: relative;
+}
+
+.sortMenu summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  min-height: 2.9rem;
+  padding: 0.52rem 0.58rem;
+  font-weight: 850;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sortMenu summary::-webkit-details-marker,
+.rowMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.sortMenu summary b {
+  color: #79e0c3;
+  font-size: 0.68rem;
+}
+
+.sortMenu > div,
+.rowMenu > div {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  min-width: 12rem;
+  border: 1px solid #9fc0b7;
+  border-radius: 0.62rem;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(7, 53, 44, 0.2);
+  padding: 0.38rem;
+}
+
+.sortMenu > div {
+  top: calc(100% + 0.2rem);
+  left: 0;
+}
+
+.sortMenu button,
+.rowMenu button {
+  min-height: 2.15rem;
+  border-radius: 0.42rem;
+  background: transparent;
+  color: #16463c;
+  padding: 0.38rem 0.5rem;
+  text-align: left;
+}
+
+.sortMenu button:hover,
+.rowMenu button:hover {
+  background: #e8f6f1;
+}
+
+.sortMenu p,
+.rowMenu span {
+  margin: 0;
+  color: #687f79;
+  padding: 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.rowMenu {
+  position: relative;
+}
+
+.rowMenu summary {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid #a9c8bf;
+  border-radius: 0.45rem;
+  background: #fff;
+  color: #0d6a56;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rowMenu > div {
+  top: calc(100% + 0.2rem);
+  left: 0;
+  text-align: left;
+}
+
+.registerFooter {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -499,9 +706,109 @@
   padding: 0.9rem;
 }
 
-.jobList footer button {
+.registerFooter button {
   min-height: 2.2rem;
   padding: 0.4rem 0.8rem;
+}
+
+.advancedFilters {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: #f4faf8;
+  padding: 0.85rem;
+  scrollbar-gutter: stable;
+}
+
+.advancedFilters > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.advancedFilters > header span {
+  color: #0d7a62;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.advancedFilters > header h3 {
+  margin: 0.2rem 0 0;
+  font-size: 1rem;
+}
+
+.advancedFilters > header b {
+  border-radius: 999px;
+  background: #dceee8;
+  color: #0a624f;
+  padding: 0.3rem 0.48rem;
+  font-size: 0.65rem;
+}
+
+.advancedFilters > label {
+  margin-bottom: 0.75rem;
+}
+
+.advancedFilters label small,
+.advancedFilters details small {
+  color: #6b817b;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.advancedFilters details {
+  border-top: 1px solid #c9ddd7;
+}
+
+.advancedFilters details > summary {
+  padding: 0.72rem 0.15rem;
+  color: #244e45;
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.advancedFilters details > div {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0 0.1rem 0.75rem;
+}
+
+.advancedFilters input,
+.advancedFilters select {
+  min-height: 2.35rem;
+  padding: 0.42rem 0.55rem;
+  font-size: 0.76rem;
+}
+
+.advancedFilters .filterActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding-top: 0.8rem;
+  background: #f4faf8;
+}
+
+.jobDrawer {
+  position: relative;
+  border-top: 1px solid #c7dbd5;
+  background: #f8fbfa;
+  padding: 1.2rem;
+}
+
+.closeDrawer {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  min-height: 2.15rem;
+  background: #dceee8;
+  color: #0c5d4c;
 }
 
 .jobDetail {
@@ -812,9 +1119,15 @@
     grid-template-columns: 1fr;
   }
 
-  .jobList {
+  .jobRegister {
     border-right: 0;
     border-bottom: 1px solid #d7e6e1;
+  }
+
+  .advancedFilters {
+    position: static;
+    max-height: none;
+    border-top: 1px solid #c9ddd7;
   }
 }
 
@@ -847,12 +1160,18 @@
     grid-template-columns: 1fr;
   }
 
-  .jobRows > button {
-    grid-template-columns: auto 1fr;
+  .jobRegister > header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  .jobRows > button span:nth-child(n + 4) {
-    display: none;
+  .tableViewport {
+    max-height: 65vh;
+  }
+
+  .jobTable th,
+  .jobTable td {
+    min-width: 8.5rem;
   }
 
   .sourceRows article {

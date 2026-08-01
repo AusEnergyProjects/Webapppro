@@ -111,12 +111,17 @@ Sources: [Cheaper Home Batteries](https://www.dcceew.gov.au/energy/programs/chea
 
 Status: current certificate scheme. Only an Accredited Person can create VEECs.
 
-The VEU registry label `6(23)` is not a complete calculation key. It must be stored as:
+Part 6 is not one activity scenario and `6(23)` is not an official Version 25
+calculation key. TLink stores the official structure as:
 
-- registry activity code `6(23)`;
+- registry activity code `6`;
 - specification part `6`;
 - product category `6A` to `6G`; and
 - scenario `(i)` to `(xi)`.
+
+If `6(23)` appears in a legacy export, it must remain an unverified external
+label until the owning system supplies an authoritative field dictionary. It
+must not select a rule, formula or certificate quantity.
 
 The current document wrapper is Specifications Version 25, effective 21 July 2026, but its Part 6 changes do not apply until 30 September 2026. A 1 August 2026 installation therefore needs the pre-30 September Part 6 clauses. TLink must support clause-level effective dates, not only a document version.
 
@@ -126,7 +131,7 @@ Current deemed-activity inventory:
 | --- | --- | --- |
 | 1 | Solar or heat-pump water heater replacing electric resistance, 1C and 1D | Current |
 | 3 | Heat-pump or solar water heater replacing gas or LPG, 3C and 3D | Current |
-| 6 / 6(23) | High-efficiency air conditioning, 6A to 6G and scenarios i to xi | Current, with 30 Sep 2026 clause transition |
+| 6 | High-efficiency air conditioning, 6A to 6G and scenarios i to xi | Current, with 30 Sep 2026 clause transition |
 | 13 | External single glazing replaced with WERS-rated double glazing | Current |
 | 14 | Secondary glazing, acrylic panel or insulating film | Current |
 | 15 | Draught sealing for doors, windows, exhaust fans, vents, fireplaces, chimneys and evaporative-cooler outlets | Current |

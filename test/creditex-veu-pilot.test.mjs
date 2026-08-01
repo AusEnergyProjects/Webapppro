@@ -18,6 +18,9 @@ const contractSource = read("../src/lib/creditex-veu-pilot-contract.ts");
 const server = read("../src/lib/creditex-veu-pilot-server.ts");
 const route = read("../src/app/api/creditex/pilot/route.ts");
 const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
+const workspaceStyles = read(
+  "../src/components/CreditexVeuPilotWorkspace.module.css",
+);
 const portal = read("../src/components/CreditexCompliancePortal.tsx");
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const completeMigrationChain = fs.readdirSync(migrationDirectory)
@@ -733,6 +736,96 @@ test("complete migration chain provisions and reconciles the governed 10/30/300 
     fieldLoginStatus:
       "Blocked. Assignment-only technicians have no Firebase identity.",
   });
+  assert.equal(dashboard.jobs[0].appointment.appointmentType, "installation");
+  assert.equal(dashboard.jobs[0].work.workType, "job");
+  assert.equal(dashboard.jobs[0].customer.customerType, "residential");
+  assert.equal(dashboard.jobs[0].site.state, "VIC");
+  assert.equal(dashboard.jobs[0].site.postcode, "3000");
+  assert.equal(dashboard.jobs[0].customer.email, "");
+  assert.equal(dashboard.jobs[0].customer.phone, "");
+  assert.ok(dashboard.jobs[0].workOrderId);
+  assert.ok(dashboard.jobs[0].createdAt);
+
+  const allRowsFilters = pilotServer.parseCreditexPilotFilters(
+    new URLSearchParams({
+      page: "0",
+      pageSize: "300",
+      sortBy: "activityDate",
+      sortDirection: "desc",
+      customerType: "residential",
+      postcode: "3000",
+    }),
+  );
+  const allRowsDashboard = await pilotServer.loadCreditexVeuPilotDashboard(
+    d1,
+    member,
+    allRowsFilters,
+  );
+  assert.equal(allRowsDashboard.jobs.length, 300);
+  assert.equal(allRowsDashboard.pagination.total, 300);
+  assert.equal(allRowsDashboard.pagination.pageCount, 1);
+  assert.equal(
+    new Set(allRowsDashboard.jobs.map((job) => job.id)).size,
+    300,
+  );
+  assert.deepEqual(
+    allRowsDashboard.jobs.map((job) => job.activityDate),
+    allRowsDashboard.jobs
+      .map((job) => job.activityDate)
+      .toSorted()
+      .reverse(),
+  );
+
+  const firstPilotWork = database.prepare(`SELECT work.id, work.firebase_uid
+      FROM compliance_pilot_jobs job
+      JOIN trade_work_orders work ON work.id = job.work_order_id
+      WHERE job.pilot_run_id = ?
+      ORDER BY job.job_number
+      LIMIT 1`).get(started.runId);
+  database.prepare(`INSERT INTO trade_crm_appointments (
+      id, work_order_id, firebase_uid, appointment_type, title, starts_at,
+      ends_at, assignee_member_id, assignee_label, status,
+      travel_started_at, arrived_at, work_started_at, completed_at,
+      last_transition_by_uid, notes, revision, created_at, updated_at
+    ) VALUES (
+      'synthetic-latest-appointment', ?, ?, 'installation',
+      'Latest synthetic appointment', '2026-12-31T09:00:00+11:00',
+      '2026-12-31T11:00:00+11:00', '', '', 'scheduled', '', '', '', '',
+      '', 'TEST ONLY', 1, '2026-08-01T00:00:00.000Z',
+      '2026-08-01T00:00:00.000Z'
+    )`).run(firstPilotWork.id, firstPilotWork.firebase_uid);
+  const afterSecondAppointment =
+    await pilotServer.loadCreditexVeuPilotDashboard(
+      d1,
+      member,
+      pilotServer.parseCreditexPilotFilters(
+        new URLSearchParams({
+          page: "0",
+          pageSize: "300",
+          sortBy: "jobNumber",
+          sortDirection: "asc",
+        }),
+      ),
+    );
+  assert.equal(afterSecondAppointment.jobs.length, 300);
+  assert.equal(afterSecondAppointment.pagination.total, 300);
+  assert.equal(
+    afterSecondAppointment.jobs[0].appointment.id,
+    "synthetic-latest-appointment",
+  );
+
+  assert.throws(
+    () => pilotServer.parseCreditexPilotFilters(
+      new URLSearchParams({
+        sortBy: "job.job_number; DROP TABLE compliance_pilot_jobs",
+      }),
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_FILTER_INVALID");
+      assert.equal(error.status, 400);
+      return true;
+    },
+  );
 
   const firstWorkOrder = database.prepare(`SELECT work_order_id
       FROM compliance_pilot_jobs
@@ -1590,12 +1683,72 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   assert.match(workspace, /aria-label="VEU activity tabs"/);
   assert.match(workspace, /activityTemplateId: activity\.activityTemplateId/);
   assert.match(workspace, /snapshot\.installers\.map/);
-  assert.match(workspace, /visibleTechnicians\.map/);
-  assert.match(workspace, /snapshot\.filters\.evidenceStatuses\.map/);
+  assert.match(workspace, /technicians\.map/);
+  assert.match(workspace, /snapshot\.filters\.evidenceStatuses/);
   assert.match(workspace, /snapshot\.filters\.lookupStatuses/);
   assert.match(workspace, /snapshot\.filters\.reviewStatuses/);
   assert.match(workspace, /Object\.entries\(snapshot\.controls \|\| \{\}\)/);
   assert.ok((workspace.match(/<select/g) || []).length >= 8);
+  assert.match(workspace, /<table className=\{styles\.jobTable\}>/);
+  assert.match(workspace, /<caption>/);
+  assert.match(workspace, /<thead>/);
+  assert.match(workspace, /<tbody>/);
+  assert.match(workspace, /scope="col"/);
+  assert.match(workspace, /aria-sort=\{state === "none" \? undefined : state\}/);
+  assert.match(
+    workspace,
+    /data-date-range-group="creditex-veu-pilot-jobs"[\s\S]*data-date-range-role="start"/,
+  );
+  assert.match(
+    workspace,
+    /data-date-range-group="creditex-veu-pilot-jobs"[\s\S]*data-date-range-role="end"/,
+  );
+  assert.match(workspace, /Actions for \$\{job\.jobNumber\}/);
+  assert.match(workspace, /className=\{styles\.advancedFilters\}/);
+  for (const label of [
+    "Status filters",
+    "Work &amp; personnel",
+    "Client &amp; agent",
+    "Customer &amp; address",
+    "Job filters",
+    "Appointment filters",
+    "Tag filters",
+    "Product filters",
+    "Audit filters",
+    "Other filters",
+    "Custom quick filters",
+  ]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  for (const legacyColumn of [
+    "Appt ID",
+    "Job ID",
+    "SubStatus",
+    "Balance",
+    "Certificates \\(VEECs\\)",
+    "Field Worker",
+    "Company Name",
+    "Ref Cust No\\?",
+    "Mobile",
+    "Postcode",
+  ]) {
+    assert.match(workspace, new RegExp(`label: "${legacyColumn}"`));
+  }
+  for (const readinessColumn of [
+    "Rules",
+    "Lookups",
+    "Evidence",
+    "Calculator",
+    "Submission",
+  ]) {
+    assert.match(workspace, new RegExp(`label: "${readinessColumn}"`));
+  }
+  assert.doesNotMatch(
+    workspaceStyles,
+    /\.jobTable[\s\S]{0,200}display:\s*none/,
+  );
+  assert.match(workspaceStyles, /\.tableViewport\s*\{[\s\S]*overflow:\s*auto/);
+  assert.match(workspaceStyles, /\.advancedFilters\s*\{[\s\S]*position:\s*sticky/);
   assert.match(
     workspace,
     /Exercise every VEU activity family across synthetic installer\s*records, field assignments and Creditex compliance workflow\s*structure/,

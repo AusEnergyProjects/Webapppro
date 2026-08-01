@@ -14,7 +14,7 @@ import {
   calculatorOutputSchema,
 } from "./creditex-veu-pilot-contract";
 
-const PILOT_PAGE_SIZES = new Set([25, 50, 100]);
+const PILOT_PAGE_SIZES = new Set([25, 50, 100, 300]);
 const REVIEW_STATUSES = new Set([
   "test_ready",
   "in_review",
@@ -29,6 +29,101 @@ const EVIDENCE_STATUSES = new Set([
   "changes_required",
 ]);
 const LOOKUP_STATUSES = new Set(["not_checked", "blocked", "verified"]);
+const RULE_STATUSES = new Set([
+  "blocked_pending_independent_review",
+  "verified",
+]);
+const CALCULATOR_STATUSES = new Set([
+  "blocked_unverified_formula",
+  "verified",
+]);
+const CONNECTOR_STATUSES = new Set([
+  "not_staged",
+  "dry_run_staged",
+  "dry_run_reconciled",
+]);
+const WORK_STAGES = new Set([
+  "backlog",
+  "scheduled",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+const WORK_PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
+const APPOINTMENT_TYPES = new Set([
+  "installation",
+  "site_visit",
+  "assessment",
+  "service",
+]);
+const APPOINTMENT_STATUSES = new Set([
+  "scheduled",
+  "travelling",
+  "arrived",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+const CUSTOMER_TYPES = new Set(["residential", "business"]);
+const SERVICE_CATEGORIES: Set<string> = new Set(
+  CREDITEX_VEU_PILOT_ACTIVITIES.map((activity) => activity.serviceCategory),
+);
+const PRODUCT_CATEGORIES: Set<string> = new Set(
+  CREDITEX_VEU_PILOT_ACTIVITIES
+    .map((activity) => activity.productCategory)
+    .filter(Boolean),
+);
+const PILOT_DATE_FIELDS = {
+  activityDate: "job.activity_date",
+  scheduledStart: "appointment.starts_at",
+  createdAt: "job.created_at",
+  updatedAt: "job.updated_at",
+} as const;
+const PILOT_SORT_COLUMNS = {
+  appointmentId: "appointment.id",
+  jobNumber: "job.job_number",
+  caseNumber: "job.case_number",
+  reviewStatus: "job.review_status",
+  evidenceStatus: "job.evidence_status",
+  workType: "work.work_type",
+  scheduledStart: "appointment.starts_at",
+  scheduledEnd: "appointment.ends_at",
+  connectorStatus: "job.connector_status",
+  activityDate: "job.activity_date",
+  technician: "technician.display_name",
+  technicianCode: "technician.technician_code",
+  installer: "installer.business_name",
+  installerCode: "installer.company_code",
+  customer: "customer.last_name",
+  companyName: "customer.business_name",
+  customerNumber: "customer.customer_number",
+  phone: "customer.phone",
+  email: "customer.email",
+  address: "site.address_line_1",
+  suburb: "site.suburb",
+  state: "site.address_state",
+  postcode: "site.postcode",
+  registryActivityCode: "job.registry_activity_code",
+  specificationPart: "job.specification_part",
+  activityTitle: "job.title",
+  serviceCategory: "job.service_category",
+  productCategory: "job.product_category",
+  scenario: "job.scenario",
+  ruleStatus: "job.rule_status",
+  lookupStatus: "job.lookup_status",
+  calculatorStatus: "job.calculator_status",
+  workStage: "work.stage",
+  priority: "work.priority",
+  appointmentType: "appointment.appointment_type",
+  appointmentStatus: "appointment.status",
+  pipelineStage: "detail.pipeline_stage",
+  quoteStatus: "detail.quote_status",
+  invoiceStatus: "detail.invoice_status",
+  createdAt: "job.created_at",
+  updatedAt: "job.updated_at",
+} as const;
+type PilotSortKey = keyof typeof PILOT_SORT_COLUMNS;
+type PilotDateField = keyof typeof PILOT_DATE_FIELDS;
 
 type PilotRunRow = {
   id: string;
@@ -62,9 +157,27 @@ export type CreditexPilotFilters = {
   reviewStatus: string;
   evidenceStatus: string;
   lookupStatus: string;
+  ruleStatus: string;
+  calculatorStatus: string;
+  connectorStatus: string;
+  workStage: string;
+  workType: string;
+  priority: string;
+  appointmentType: string;
+  appointmentStatus: string;
+  customerType: string;
+  serviceCategory: string;
+  productCategory: string;
+  postcode: string;
+  tag: string;
+  dateField: PilotDateField;
+  dateFrom: string;
+  dateTo: string;
+  sortBy: PilotSortKey;
+  sortDirection: "asc" | "desc";
   query: string;
   page: number;
-  pageSize: 25 | 50 | 100;
+  pageSize: 25 | 50 | 100 | 300;
 };
 
 export class CreditexVeuPilotError extends Error {
@@ -206,10 +319,53 @@ export function parseCreditexPilotFilters(
   const reviewStatus = textValue(searchParams.get("reviewStatus"), 40);
   const evidenceStatus = textValue(searchParams.get("evidenceStatus"), 40);
   const lookupStatus = textValue(searchParams.get("lookupStatus"), 40);
+  const ruleStatus = textValue(searchParams.get("ruleStatus"), 64);
+  const calculatorStatus = textValue(
+    searchParams.get("calculatorStatus"),
+    64,
+  );
+  const connectorStatus = textValue(searchParams.get("connectorStatus"), 40);
+  const workStage = textValue(searchParams.get("workStage"), 40);
+  const workType = textValue(searchParams.get("workType"), 40);
+  const priority = textValue(searchParams.get("priority"), 40);
+  const appointmentType = textValue(searchParams.get("appointmentType"), 40);
+  const appointmentStatus = textValue(
+    searchParams.get("appointmentStatus"),
+    40,
+  );
+  const customerType = textValue(searchParams.get("customerType"), 40);
+  const serviceCategory = textValue(searchParams.get("serviceCategory"), 80);
+  const productCategory = textValue(searchParams.get("productCategory"), 80);
+  const dateField =
+    textValue(searchParams.get("dateField"), 40) || "activityDate";
+  const dateFrom = textValue(searchParams.get("dateFrom"), 10);
+  const dateTo = textValue(searchParams.get("dateTo"), 10);
+  const sortBy = textValue(searchParams.get("sortBy"), 40) || "jobNumber";
+  const sortDirection =
+    textValue(searchParams.get("sortDirection"), 4) || "asc";
+  const validDate = (value: string) =>
+    !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
   if (
     (reviewStatus && !REVIEW_STATUSES.has(reviewStatus))
     || (evidenceStatus && !EVIDENCE_STATUSES.has(evidenceStatus))
     || (lookupStatus && !LOOKUP_STATUSES.has(lookupStatus))
+    || (ruleStatus && !RULE_STATUSES.has(ruleStatus))
+    || (calculatorStatus && !CALCULATOR_STATUSES.has(calculatorStatus))
+    || (connectorStatus && !CONNECTOR_STATUSES.has(connectorStatus))
+    || (workStage && !WORK_STAGES.has(workStage))
+    || (workType && workType !== "job")
+    || (priority && !WORK_PRIORITIES.has(priority))
+    || (appointmentType && !APPOINTMENT_TYPES.has(appointmentType))
+    || (appointmentStatus && !APPOINTMENT_STATUSES.has(appointmentStatus))
+    || (customerType && !CUSTOMER_TYPES.has(customerType))
+    || (serviceCategory && !SERVICE_CATEGORIES.has(serviceCategory))
+    || (productCategory && !PRODUCT_CATEGORIES.has(productCategory))
+    || !(dateField in PILOT_DATE_FIELDS)
+    || !validDate(dateFrom)
+    || !validDate(dateTo)
+    || (dateFrom && dateTo && dateFrom > dateTo)
+    || !(sortBy in PILOT_SORT_COLUMNS)
+    || !["asc", "desc"].includes(sortDirection)
   ) {
     throw new CreditexVeuPilotError(
       "CREDITEX_PILOT_FILTER_INVALID",
@@ -227,9 +383,27 @@ export function parseCreditexPilotFilters(
     reviewStatus,
     evidenceStatus,
     lookupStatus,
+    ruleStatus,
+    calculatorStatus,
+    connectorStatus,
+    workStage,
+    workType,
+    priority,
+    appointmentType,
+    appointmentStatus,
+    customerType,
+    serviceCategory,
+    productCategory,
+    postcode: textValue(searchParams.get("postcode"), 12),
+    tag: textValue(searchParams.get("tag"), 80),
+    dateField: dateField as PilotDateField,
+    dateFrom,
+    dateTo,
+    sortBy: sortBy as PilotSortKey,
+    sortDirection: sortDirection as "asc" | "desc",
     query: textValue(searchParams.get("q"), 100),
     page,
-    pageSize: pageSize as 25 | 50 | 100,
+    pageSize: pageSize as 25 | 50 | 100 | 300,
   };
 }
 
@@ -1604,6 +1778,21 @@ export async function loadCreditexVeuPilotDashboard(
         reviewStatuses: Array.from(REVIEW_STATUSES),
         evidenceStatuses: Array.from(EVIDENCE_STATUSES),
         lookupStatuses: Array.from(LOOKUP_STATUSES),
+        ruleStatuses: Array.from(RULE_STATUSES),
+        calculatorStatuses: Array.from(CALCULATOR_STATUSES),
+        connectorStatuses: Array.from(CONNECTOR_STATUSES),
+        workStages: Array.from(WORK_STAGES),
+        workTypes: ["job"],
+        priorities: Array.from(WORK_PRIORITIES),
+        appointmentTypes: Array.from(APPOINTMENT_TYPES),
+        appointmentStatuses: Array.from(APPOINTMENT_STATUSES),
+        customerTypes: Array.from(CUSTOMER_TYPES),
+        serviceCategories: Array.from(SERVICE_CATEGORIES),
+        productCategories: Array.from(PRODUCT_CATEGORIES),
+        postcodes: ["3000"],
+        tags: ["synthetic_test", "VEU"],
+        dateFields: Object.keys(PILOT_DATE_FIELDS),
+        sortColumns: Object.keys(PILOT_SORT_COLUMNS),
         pageSizes: Array.from(PILOT_PAGE_SIZES),
       },
     };
@@ -1635,6 +1824,71 @@ export async function loadCreditexVeuPilotDashboard(
     conditions.push("job.lookup_status = ?");
     bindings.push(filters.lookupStatus);
   }
+  if (filters.ruleStatus) {
+    conditions.push("job.rule_status = ?");
+    bindings.push(filters.ruleStatus);
+  }
+  if (filters.calculatorStatus) {
+    conditions.push("job.calculator_status = ?");
+    bindings.push(filters.calculatorStatus);
+  }
+  if (filters.connectorStatus) {
+    conditions.push("job.connector_status = ?");
+    bindings.push(filters.connectorStatus);
+  }
+  if (filters.workStage) {
+    conditions.push("work.stage = ?");
+    bindings.push(filters.workStage);
+  }
+  if (filters.workType) {
+    conditions.push("work.work_type = ?");
+    bindings.push(filters.workType);
+  }
+  if (filters.priority) {
+    conditions.push("work.priority = ?");
+    bindings.push(filters.priority);
+  }
+  if (filters.appointmentType) {
+    conditions.push("appointment.appointment_type = ?");
+    bindings.push(filters.appointmentType);
+  }
+  if (filters.appointmentStatus) {
+    conditions.push("appointment.status = ?");
+    bindings.push(filters.appointmentStatus);
+  }
+  if (filters.customerType) {
+    conditions.push("customer.customer_type = ?");
+    bindings.push(filters.customerType);
+  }
+  if (filters.serviceCategory) {
+    conditions.push("job.service_category = ?");
+    bindings.push(filters.serviceCategory);
+  }
+  if (filters.productCategory) {
+    conditions.push("job.product_category = ?");
+    bindings.push(filters.productCategory);
+  }
+  if (filters.postcode) {
+    conditions.push("site.postcode = ?");
+    bindings.push(filters.postcode);
+  }
+  if (filters.tag) {
+    conditions.push("detail.tags LIKE ? ESCAPE '\\'");
+    const escapedTag = filters.tag
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
+    bindings.push(`%${escapedTag}%`);
+  }
+  const dateExpression = PILOT_DATE_FIELDS[filters.dateField];
+  if (filters.dateFrom) {
+    conditions.push(`substr(${dateExpression}, 1, 10) >= ?`);
+    bindings.push(filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    conditions.push(`substr(${dateExpression}, 1, 10) <= ?`);
+    bindings.push(filters.dateTo);
+  }
   if (filters.query) {
     conditions.push(`(
       job.job_number LIKE ? ESCAPE '\\'
@@ -1643,16 +1897,56 @@ export async function loadCreditexVeuPilotDashboard(
       OR job.title LIKE ? ESCAPE '\\'
       OR installer.business_name LIKE ? ESCAPE '\\'
       OR technician.display_name LIKE ? ESCAPE '\\'
+      OR customer.customer_number LIKE ? ESCAPE '\\'
+      OR customer.first_name LIKE ? ESCAPE '\\'
+      OR customer.last_name LIKE ? ESCAPE '\\'
+      OR detail.customer_reference LIKE ? ESCAPE '\\'
+      OR site.address_line_1 LIKE ? ESCAPE '\\'
+      OR site.postcode LIKE ? ESCAPE '\\'
     )`);
     const escaped = filters.query
       .replaceAll("\\", "\\\\")
       .replaceAll("%", "\\%")
       .replaceAll("_", "\\_");
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 12; index += 1) {
       bindings.push(`%${escaped}%`);
     }
   }
   const whereSql = conditions.join(" AND ");
+  const pilotJobJoins = `FROM compliance_pilot_jobs job
+      JOIN compliance_pilot_installers installer
+        ON installer.id = job.installer_id
+        AND installer.pilot_run_id = job.pilot_run_id
+      JOIN compliance_pilot_technicians technician
+        ON technician.id = job.technician_id
+        AND technician.pilot_run_id = job.pilot_run_id
+      JOIN trade_work_orders work
+        ON work.id = job.work_order_id
+        AND work.firebase_uid = installer.trade_account_uid
+        AND work.source_type = 'synthetic_pilot'
+        AND work.source_reference = job.pilot_run_id
+      LEFT JOIN trade_crm_job_details detail
+        ON detail.work_order_id = work.id
+        AND detail.firebase_uid = work.firebase_uid
+      LEFT JOIN trade_crm_customers customer
+        ON customer.id = detail.crm_customer_id
+        AND customer.firebase_uid = work.firebase_uid
+        AND customer.record_status = 'active'
+      LEFT JOIN trade_crm_service_sites site
+        ON site.id = detail.service_site_id
+        AND site.firebase_uid = work.firebase_uid
+        AND site.record_status = 'active'
+      LEFT JOIN trade_crm_appointments appointment
+        ON appointment.id = (
+          SELECT candidate.id
+          FROM trade_crm_appointments candidate
+          WHERE candidate.work_order_id = work.id
+            AND candidate.firebase_uid = work.firebase_uid
+          ORDER BY candidate.starts_at DESC, candidate.id DESC
+          LIMIT 1
+        )`;
+  const sortExpression = PILOT_SORT_COLUMNS[filters.sortBy];
+  const sortDirection = filters.sortDirection === "desc" ? "DESC" : "ASC";
   const countBindings = [...bindings];
   const listBindings = [
     ...bindings,
@@ -1753,30 +2047,46 @@ export async function loadCreditexVeuPilotDashboard(
           THEN CAST(registry_activity_code AS INTEGER) ELSE 999 END,
         registry_activity_code`).bind(run.id).all(),
     database.prepare(`SELECT COUNT(*) AS total
-      FROM compliance_pilot_jobs job
-      JOIN compliance_pilot_installers installer
-        ON installer.id = job.installer_id
-      JOIN compliance_pilot_technicians technician
-        ON technician.id = job.technician_id
+      ${pilotJobJoins}
       WHERE ${whereSql}`).bind(...countBindings).first<{ total: number }>(),
-    database.prepare(`SELECT job.id, job.case_number, job.job_number,
-        job.activity_template_id, job.activity_key,
+    database.prepare(`SELECT job.id, job.work_order_id, job.case_number,
+        job.job_number, job.activity_template_id, job.activity_key,
         job.registry_activity_code, job.specification_part, job.title,
         job.service_category, job.product_category, job.scenario_code,
         job.scenario, job.catalogue_state, job.activity_date, job.record_mode,
         job.rule_status, job.lookup_status, job.evidence_status,
         job.calculator_status, job.connector_status, job.review_status,
-        job.updated_at,
+        job.created_at, job.updated_at,
         installer.id AS installer_id, installer.company_code,
         installer.business_name, technician.id AS technician_id,
-        technician.technician_code, technician.display_name
-      FROM compliance_pilot_jobs job
-      JOIN compliance_pilot_installers installer
-        ON installer.id = job.installer_id
-      JOIN compliance_pilot_technicians technician
-        ON technician.id = job.technician_id
+        technician.technician_code, technician.display_name,
+        work.work_type, work.source_type, work.source_reference,
+        work.stage AS work_stage, work.priority,
+        work.scheduled_start, work.scheduled_end,
+        work.assignee_label,
+        detail.customer_source, detail.pipeline_stage, detail.building_type,
+        detail.customer_reference, detail.tags,
+        detail.estimated_value_cents, detail.quoted_value_cents,
+        detail.invoiced_value_cents, detail.paid_value_cents,
+        detail.quote_status, detail.invoice_status,
+        appointment.id AS appointment_id,
+        appointment.appointment_type, appointment.starts_at,
+        appointment.ends_at, appointment.status AS appointment_status,
+        customer.id AS customer_id, customer.customer_number,
+        customer.customer_type, customer.first_name, customer.last_name,
+        customer.business_name AS customer_business_name,
+        customer.business_number, customer.email, customer.phone,
+        site.id AS service_site_id, site.site_label,
+        site.address_line_1, site.address_line_2, site.suburb,
+        site.address_state, site.postcode
+      ${pilotJobJoins}
       WHERE ${whereSql}
-      ORDER BY job.job_number
+      ORDER BY
+        CASE WHEN ${sortExpression} IS NULL OR ${sortExpression} = ''
+          THEN 1 ELSE 0 END,
+        ${sortExpression} COLLATE NOCASE ${sortDirection},
+        job.job_number COLLATE NOCASE ASC,
+        job.id ASC
       LIMIT ? OFFSET ?`).bind(...listBindings).all(),
     database.prepare(`SELECT event_type, actor_uid, summary, metadata,
         created_at
@@ -1900,6 +2210,7 @@ export async function loadCreditexVeuPilotDashboard(
     })),
     jobs: jobs.results.map((row) => ({
       id: String(row.id),
+      workOrderId: String(row.work_order_id),
       caseNumber: String(row.case_number),
       jobNumber: String(row.job_number),
       activityTemplateId: String(row.activity_template_id),
@@ -1920,7 +2231,58 @@ export async function loadCreditexVeuPilotDashboard(
       calculatorStatus: String(row.calculator_status),
       connectorStatus: String(row.connector_status),
       reviewStatus: String(row.review_status),
+      createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
+      work: {
+        workType: String(row.work_type || ""),
+        sourceType: String(row.source_type || ""),
+        sourceReference: String(row.source_reference || ""),
+        stage: String(row.work_stage || ""),
+        priority: String(row.priority || ""),
+        scheduledStart: String(row.scheduled_start || ""),
+        scheduledEnd: String(row.scheduled_end || ""),
+        assigneeLabel: String(row.assignee_label || ""),
+      },
+      crm: {
+        customerSource: String(row.customer_source || ""),
+        pipelineStage: String(row.pipeline_stage || ""),
+        buildingType: String(row.building_type || ""),
+        customerReference: String(row.customer_reference || ""),
+        tags: JSON.parse(String(row.tags || "[]")) as unknown,
+        estimatedValueCents: Number(row.estimated_value_cents || 0),
+        quotedValueCents: Number(row.quoted_value_cents || 0),
+        invoicedValueCents: Number(row.invoiced_value_cents || 0),
+        paidValueCents: Number(row.paid_value_cents || 0),
+        quoteStatus: String(row.quote_status || ""),
+        invoiceStatus: String(row.invoice_status || ""),
+      },
+      appointment: {
+        id: String(row.appointment_id || ""),
+        appointmentType: String(row.appointment_type || ""),
+        startsAt: String(row.starts_at || ""),
+        endsAt: String(row.ends_at || ""),
+        status: String(row.appointment_status || ""),
+      },
+      customer: {
+        id: String(row.customer_id || ""),
+        customerNumber: String(row.customer_number || ""),
+        customerType: String(row.customer_type || ""),
+        firstName: String(row.first_name || ""),
+        lastName: String(row.last_name || ""),
+        businessName: String(row.customer_business_name || ""),
+        businessNumber: String(row.business_number || ""),
+        email: String(row.email || ""),
+        phone: String(row.phone || ""),
+      },
+      site: {
+        id: String(row.service_site_id || ""),
+        siteLabel: String(row.site_label || ""),
+        addressLine1: String(row.address_line_1 || ""),
+        addressLine2: String(row.address_line_2 || ""),
+        suburb: String(row.suburb || ""),
+        state: String(row.address_state || ""),
+        postcode: String(row.postcode || ""),
+      },
       installer: {
         id: String(row.installer_id),
         companyCode: String(row.company_code),
@@ -1949,6 +2311,21 @@ export async function loadCreditexVeuPilotDashboard(
       reviewStatuses: Array.from(REVIEW_STATUSES),
       evidenceStatuses: Array.from(EVIDENCE_STATUSES),
       lookupStatuses: Array.from(LOOKUP_STATUSES),
+      ruleStatuses: Array.from(RULE_STATUSES),
+      calculatorStatuses: Array.from(CALCULATOR_STATUSES),
+      connectorStatuses: Array.from(CONNECTOR_STATUSES),
+      workStages: Array.from(WORK_STAGES),
+      workTypes: ["job"],
+      priorities: Array.from(WORK_PRIORITIES),
+      appointmentTypes: Array.from(APPOINTMENT_TYPES),
+      appointmentStatuses: Array.from(APPOINTMENT_STATUSES),
+      customerTypes: Array.from(CUSTOMER_TYPES),
+      serviceCategories: Array.from(SERVICE_CATEGORIES),
+      productCategories: Array.from(PRODUCT_CATEGORIES),
+      postcodes: ["3000"],
+      tags: ["synthetic_test", "VEU"],
+      dateFields: Object.keys(PILOT_DATE_FIELDS),
+      sortColumns: Object.keys(PILOT_SORT_COLUMNS),
       pageSizes: Array.from(PILOT_PAGE_SIZES),
     },
     boundaries: {

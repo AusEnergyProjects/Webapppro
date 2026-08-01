@@ -16,9 +16,11 @@ type Api = (
 
 type PilotJob = {
   id: string;
+  workOrderId: string;
   caseNumber: string;
   jobNumber: string;
   activityTemplateId: string;
+  activityKey: string;
   registryActivityCode: string;
   specificationPart: string;
   title: string;
@@ -35,7 +37,58 @@ type PilotJob = {
   calculatorStatus: string;
   connectorStatus: string;
   reviewStatus: string;
+  createdAt: string;
   updatedAt: string;
+  work: {
+    workType: string;
+    sourceType: string;
+    sourceReference: string;
+    stage: string;
+    priority: string;
+    scheduledStart: string;
+    scheduledEnd: string;
+    assigneeLabel: string;
+  };
+  crm: {
+    customerSource: string;
+    pipelineStage: string;
+    buildingType: string;
+    customerReference: string;
+    tags: string[];
+    estimatedValueCents: number;
+    quotedValueCents: number;
+    invoicedValueCents: number;
+    paidValueCents: number;
+    quoteStatus: string;
+    invoiceStatus: string;
+  };
+  appointment: {
+    id: string;
+    appointmentType: string;
+    startsAt: string;
+    endsAt: string;
+    status: string;
+  };
+  customer: {
+    id: string;
+    customerNumber: string;
+    customerType: string;
+    firstName: string;
+    lastName: string;
+    businessName: string;
+    businessNumber: string;
+    email: string;
+    phone: string;
+  };
+  site: {
+    id: string;
+    siteLabel: string;
+    addressLine1: string;
+    addressLine2: string;
+    suburb: string;
+    state: string;
+    postcode: string;
+  };
   installer: {
     id: string;
     companyCode: string;
@@ -202,6 +255,21 @@ type PilotSnapshot = {
     reviewStatuses: string[];
     evidenceStatuses: string[];
     lookupStatuses: string[];
+    ruleStatuses: string[];
+    calculatorStatuses: string[];
+    connectorStatuses: string[];
+    workStages: string[];
+    workTypes: string[];
+    priorities: string[];
+    appointmentTypes: string[];
+    appointmentStatuses: string[];
+    customerTypes: string[];
+    serviceCategories: string[];
+    productCategories: string[];
+    postcodes: string[];
+    tags: string[];
+    dateFields: string[];
+    sortColumns: string[];
     pageSizes: number[];
   };
   boundaries?: {
@@ -217,6 +285,192 @@ type PilotSnapshot = {
   };
 };
 
+const PILOT_SORT_KEYS = [
+  "appointmentId",
+  "jobNumber",
+  "caseNumber",
+  "reviewStatus",
+  "evidenceStatus",
+  "workType",
+  "scheduledStart",
+  "scheduledEnd",
+  "connectorStatus",
+  "activityDate",
+  "technician",
+  "technicianCode",
+  "installer",
+  "installerCode",
+  "customer",
+  "companyName",
+  "customerNumber",
+  "phone",
+  "email",
+  "address",
+  "suburb",
+  "state",
+  "postcode",
+  "registryActivityCode",
+  "specificationPart",
+  "activityTitle",
+  "serviceCategory",
+  "productCategory",
+  "scenario",
+  "ruleStatus",
+  "lookupStatus",
+  "calculatorStatus",
+  "workStage",
+  "priority",
+  "appointmentType",
+  "appointmentStatus",
+  "pipelineStage",
+  "quoteStatus",
+  "invoiceStatus",
+  "createdAt",
+  "updatedAt",
+] as const;
+type PilotSortKey = typeof PILOT_SORT_KEYS[number];
+
+type PilotColumn = {
+  key: string;
+  label: string;
+  sortKey?: PilotSortKey;
+  description?: string;
+};
+
+const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
+  { key: "actions", label: "Row" },
+  { key: "appointmentId", label: "Appt ID", sortKey: "appointmentId" },
+  { key: "jobNumber", label: "Job ID", sortKey: "jobNumber" },
+  { key: "reviewStatus", label: "Status", sortKey: "reviewStatus" },
+  {
+    key: "legacySubStatus",
+    label: "SubStatus",
+    description: "Dataforce SubStatus semantics are not yet mapped.",
+  },
+  {
+    key: "legacyType",
+    label: "Type",
+    description: "Dataforce Type semantics are not yet mapped.",
+  },
+  { key: "workType", label: "Work Type", sortKey: "workType" },
+  {
+    key: "scheduledStart",
+    label: "Scheduled Date/Time",
+    sortKey: "scheduledStart",
+  },
+  {
+    key: "legacyBalance",
+    label: "Balance",
+    description: "Dataforce Balance semantics require a field dictionary.",
+  },
+  {
+    key: "certificates",
+    label: "Certificates (VEECs)",
+    description: "Only regulator-issued quantities may appear here.",
+  },
+  { key: "connectorStatus", label: "Submission", sortKey: "connectorStatus" },
+  {
+    key: "legacyInstalled",
+    label: "Installed",
+    description: "Dataforce Installed semantics require a field dictionary.",
+  },
+  { key: "technician", label: "Field Worker", sortKey: "technician" },
+  {
+    key: "technicianCode",
+    label: "Field Worker Code",
+    sortKey: "technicianCode",
+  },
+  { key: "installer", label: "TLink Installer", sortKey: "installer" },
+  {
+    key: "installerCode",
+    label: "Installer Code",
+    sortKey: "installerCode",
+  },
+  {
+    key: "agent",
+    label: "Agent",
+    description: "No authoritative pilot agent relationship is stored.",
+  },
+  {
+    key: "client",
+    label: "Client",
+    description: "No authoritative pilot client relationship is stored.",
+  },
+  { key: "customer", label: "Customer", sortKey: "customer" },
+  { key: "companyName", label: "Company Name", sortKey: "companyName" },
+  {
+    key: "customerNumber",
+    label: "Ref Cust No?",
+    sortKey: "customerNumber",
+    description: "TLink customer number is shown; legacy equivalence is pending.",
+  },
+  { key: "phone", label: "Phone", sortKey: "phone" },
+  {
+    key: "mobile",
+    label: "Mobile",
+    description: "TLink does not yet store a separate mobile field.",
+  },
+  { key: "email", label: "Email", sortKey: "email" },
+  { key: "address", label: "Address", sortKey: "address" },
+  { key: "suburb", label: "Suburb", sortKey: "suburb" },
+  { key: "postcode", label: "Postcode", sortKey: "postcode" },
+  { key: "caseNumber", label: "TLink Case", sortKey: "caseNumber" },
+  { key: "state", label: "State", sortKey: "state" },
+  {
+    key: "registryActivityCode",
+    label: "VEU Activity",
+    sortKey: "registryActivityCode",
+  },
+  {
+    key: "specificationPart",
+    label: "Specification Part",
+    sortKey: "specificationPart",
+  },
+  { key: "activityTitle", label: "Activity Title", sortKey: "activityTitle" },
+  {
+    key: "serviceCategory",
+    label: "Service Category",
+    sortKey: "serviceCategory",
+  },
+  {
+    key: "productCategory",
+    label: "Product Category",
+    sortKey: "productCategory",
+  },
+  { key: "scenario", label: "Scenario", sortKey: "scenario" },
+  { key: "activityDate", label: "Activity Date", sortKey: "activityDate" },
+  { key: "ruleStatus", label: "Rules", sortKey: "ruleStatus" },
+  { key: "lookupStatus", label: "Lookups", sortKey: "lookupStatus" },
+  { key: "evidenceStatus", label: "Evidence", sortKey: "evidenceStatus" },
+  {
+    key: "calculatorStatus",
+    label: "Calculator",
+    sortKey: "calculatorStatus",
+  },
+  { key: "workStage", label: "Job Stage", sortKey: "workStage" },
+  { key: "priority", label: "Priority", sortKey: "priority" },
+  {
+    key: "appointmentType",
+    label: "Appointment Type",
+    sortKey: "appointmentType",
+  },
+  {
+    key: "appointmentStatus",
+    label: "Appointment Status",
+    sortKey: "appointmentStatus",
+  },
+  {
+    key: "pipelineStage",
+    label: "Pipeline Stage",
+    sortKey: "pipelineStage",
+  },
+  { key: "quoteStatus", label: "Quote Status", sortKey: "quoteStatus" },
+  { key: "invoiceStatus", label: "Invoice Status", sortKey: "invoiceStatus" },
+  { key: "recordMode", label: "Record Mode" },
+  { key: "createdAt", label: "Created", sortKey: "createdAt" },
+  { key: "updatedAt", label: "Updated", sortKey: "updatedAt" },
+] as const;
+
 type Filters = {
   installerId: string;
   technicianId: string;
@@ -224,9 +478,27 @@ type Filters = {
   reviewStatus: string;
   evidenceStatus: string;
   lookupStatus: string;
+  ruleStatus: string;
+  calculatorStatus: string;
+  connectorStatus: string;
+  workStage: string;
+  workType: string;
+  priority: string;
+  appointmentType: string;
+  appointmentStatus: string;
+  customerType: string;
+  serviceCategory: string;
+  productCategory: string;
+  postcode: string;
+  tag: string;
+  dateField: "activityDate" | "scheduledStart" | "createdAt" | "updatedAt";
+  dateFrom: string;
+  dateTo: string;
+  sortBy: PilotSortKey;
+  sortDirection: "asc" | "desc";
   query: string;
   page: number;
-  pageSize: 25 | 50 | 100;
+  pageSize: 25 | 50 | 100 | 300;
 };
 
 const EMPTY_FILTERS: Filters = {
@@ -236,9 +508,27 @@ const EMPTY_FILTERS: Filters = {
   reviewStatus: "",
   evidenceStatus: "",
   lookupStatus: "",
+  ruleStatus: "",
+  calculatorStatus: "",
+  connectorStatus: "",
+  workStage: "",
+  workType: "",
+  priority: "",
+  appointmentType: "",
+  appointmentStatus: "",
+  customerType: "",
+  serviceCategory: "",
+  productCategory: "",
+  postcode: "",
+  tag: "",
+  dateField: "activityDate",
+  dateFrom: "",
+  dateTo: "",
+  sortBy: "jobNumber",
+  sortDirection: "asc",
   query: "",
   page: 0,
-  pageSize: 50,
+  pageSize: 300,
 };
 
 const PANELS = [
@@ -259,15 +549,24 @@ function readable(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+const DATE_ONLY_FORMAT = new Intl.DateTimeFormat("en-AU", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-AU", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function dateOnly(value: string) {
   if (!value) return "Not recorded";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return DATE_ONLY_FORMAT.format(date);
 }
 
 function shortHash(value: string) {
@@ -278,6 +577,706 @@ function shortHash(value: string) {
 function progress(value: number, target: number) {
   if (!target) return 0;
   return Math.min(100, Math.round((value / target) * 100));
+}
+
+function dateTime(value: string) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return DATE_TIME_FORMAT.format(date);
+}
+
+function present(value: string, fallback = "Not recorded") {
+  return value.trim() || fallback;
+}
+
+function customerName(job: PilotJob) {
+  return present(
+    [job.customer.firstName, job.customer.lastName].filter(Boolean).join(" "),
+    "Not collected",
+  );
+}
+
+function sortState(
+  column: PilotColumn,
+  filters: Filters,
+): "ascending" | "descending" | "none" {
+  if (!column.sortKey || column.sortKey !== filters.sortBy) return "none";
+  return filters.sortDirection === "asc" ? "ascending" : "descending";
+}
+
+function PilotSortHeader({
+  column,
+  filters,
+  onSort,
+}: {
+  column: PilotColumn;
+  filters: Filters;
+  onSort: (sortBy: PilotSortKey, sortDirection: "asc" | "desc") => void;
+}) {
+  const state = sortState(column, filters);
+  return (
+    <th
+      scope="col"
+      aria-sort={state === "none" ? undefined : state}
+      title={column.description || column.label}
+    >
+      <details className={styles.sortMenu}>
+        <summary
+          aria-label={
+            column.sortKey
+              ? `Sort ${column.label}`
+              : `${column.label} mapping information`
+          }
+        >
+          <span>{column.label}</span>
+          <b aria-hidden="true">
+            {!column.sortKey
+              ? "⌄"
+              : state === "ascending"
+              ? "▲"
+              : state === "descending"
+              ? "▼"
+              : "↕"}
+          </b>
+        </summary>
+        <div>
+          {column.sortKey ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onSort(column.sortKey!, "asc")}
+              >
+                Sort ascending
+              </button>
+              <button
+                type="button"
+                onClick={() => onSort(column.sortKey!, "desc")}
+              >
+                Sort descending
+              </button>
+              <button
+                type="button"
+                onClick={() => onSort("jobNumber", "asc")}
+              >
+                Clear sort
+              </button>
+            </>
+          ) : (
+            <p>{column.description || "This column is not sortable."}</p>
+          )}
+        </div>
+      </details>
+    </th>
+  );
+}
+
+const PILOT_STATUS_COLUMN_KEYS = new Set([
+  "reviewStatus",
+  "connectorStatus",
+  "ruleStatus",
+  "lookupStatus",
+  "evidenceStatus",
+  "calculatorStatus",
+  "workStage",
+  "appointmentStatus",
+]);
+const PILOT_MAPPING_COLUMN_KEYS = new Set([
+  "legacySubStatus",
+  "legacyType",
+  "legacyBalance",
+  "certificates",
+  "legacyInstalled",
+  "agent",
+  "client",
+  "mobile",
+]);
+
+function pilotJobCellValue(columnKey: string, job: PilotJob) {
+  switch (columnKey) {
+    case "appointmentId":
+      return present(job.appointment.id);
+    case "reviewStatus":
+      return readable(job.reviewStatus);
+    case "legacySubStatus":
+    case "legacyType":
+    case "legacyBalance":
+    case "legacyInstalled":
+    case "agent":
+    case "client":
+    case "mobile":
+      return "Mapping required";
+    case "workType":
+      return readable(job.work.workType);
+    case "scheduledStart":
+      return dateTime(job.appointment.startsAt);
+    case "certificates":
+      return "Blocked: no issued VEECs";
+    case "connectorStatus":
+      return readable(job.connectorStatus);
+    case "technician":
+      return present(job.technician.displayName);
+    case "technicianCode":
+      return present(job.technician.technicianCode);
+    case "installer":
+      return present(job.installer.businessName);
+    case "installerCode":
+      return present(job.installer.companyCode);
+    case "customer":
+      return customerName(job);
+    case "companyName":
+      return present(job.customer.businessName, "Not applicable");
+    case "customerNumber":
+      return present(job.customer.customerNumber);
+    case "phone":
+      return present(job.customer.phone, "Not collected (test)");
+    case "email":
+      return present(job.customer.email, "Not collected (test)");
+    case "address":
+      return present(
+        [job.site.addressLine1, job.site.addressLine2]
+          .filter(Boolean)
+          .join(", "),
+      );
+    case "suburb":
+      return present(job.site.suburb);
+    case "postcode":
+      return present(job.site.postcode);
+    case "caseNumber":
+      return job.caseNumber;
+    case "state":
+      return present(job.site.state);
+    case "registryActivityCode":
+      return job.registryActivityCode;
+    case "specificationPart":
+      return present(job.specificationPart);
+    case "activityTitle":
+      return job.title;
+    case "serviceCategory":
+      return readable(job.serviceCategory);
+    case "productCategory":
+      return readable(job.productCategory);
+    case "scenario":
+      return present(
+        [job.scenarioCode, job.scenario].filter(Boolean).join(" | "),
+      );
+    case "activityDate":
+      return dateOnly(job.activityDate);
+    case "ruleStatus":
+      return readable(job.ruleStatus);
+    case "lookupStatus":
+      return readable(job.lookupStatus);
+    case "evidenceStatus":
+      return readable(job.evidenceStatus);
+    case "calculatorStatus":
+      return readable(job.calculatorStatus);
+    case "workStage":
+      return readable(job.work.stage);
+    case "priority":
+      return readable(job.work.priority);
+    case "appointmentType":
+      return readable(job.appointment.appointmentType);
+    case "appointmentStatus":
+      return readable(job.appointment.status);
+    case "pipelineStage":
+      return readable(job.crm.pipelineStage);
+    case "quoteStatus":
+      return readable(job.crm.quoteStatus);
+    case "invoiceStatus":
+      return readable(job.crm.invoiceStatus);
+    case "recordMode":
+      return readable(job.recordMode);
+    case "createdAt":
+      return dateTime(job.createdAt);
+    case "updatedAt":
+      return dateTime(job.updatedAt);
+    default:
+      return "Not recorded";
+  }
+}
+
+function PilotJobCell({
+  column,
+  job,
+  selected,
+  onOpen,
+}: {
+  column: PilotColumn;
+  job: PilotJob;
+  selected: boolean;
+  onOpen: () => void;
+}) {
+  if (column.key === "actions") {
+    return (
+      <details className={styles.rowMenu}>
+        <summary aria-label={`Actions for ${job.jobNumber}`}>⌄</summary>
+        <div>
+          <button type="button" onClick={onOpen}>
+            {selected ? "Record open" : "Open record"}
+          </button>
+          <span>More actions remain disabled in the synthetic pilot.</span>
+        </div>
+      </details>
+    );
+  }
+  if (column.key === "jobNumber") {
+    return (
+      <button className={styles.jobLink} type="button" onClick={onOpen}>
+        {job.jobNumber}
+      </button>
+    );
+  }
+  const value = pilotJobCellValue(column.key, job);
+  const statusTone =
+    /blocked|not checked|not started|not staged|dry run/i.test(value)
+      ? "blocked"
+      : /changes required|in review|in progress/i.test(value)
+      ? "attention"
+      : /verified|complete|reconciled/i.test(value)
+      ? "ready"
+      : "neutral";
+  return (
+    <span
+      className={
+        PILOT_STATUS_COLUMN_KEYS.has(column.key)
+          ? styles.statusCell
+          : PILOT_MAPPING_COLUMN_KEYS.has(column.key)
+          ? styles.mappingCell
+          : undefined
+      }
+      data-tone={
+        PILOT_STATUS_COLUMN_KEYS.has(column.key) ? statusTone : undefined
+      }
+      title={value}
+    >
+      {value}
+    </span>
+  );
+}
+
+function AdvancedPilotFilters({
+  snapshot,
+  filters,
+  technicians,
+  busy,
+  onChange,
+  onApply,
+  onClear,
+}: {
+  snapshot: PilotSnapshot;
+  filters: Filters;
+  technicians: NonNullable<PilotSnapshot["technicians"]>;
+  busy: boolean;
+  onChange: (next: Partial<Filters>) => void;
+  onApply: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <aside className={styles.advancedFilters} aria-label="Advanced filters">
+      <header>
+        <div>
+          <span>ADVANCED SEARCH</span>
+          <h3>Filter all VEU jobs</h3>
+        </div>
+        <b>
+          {PILOT_JOB_COLUMNS.length - 1} columns ·{" "}
+          {PILOT_SORT_KEYS.length} sortable
+        </b>
+      </header>
+
+      <label>
+        Search type
+        <select value="jobs" disabled>
+          <option value="jobs">Show jobs</option>
+        </select>
+      </label>
+      <label>
+        Bulk actions
+        <select value="" disabled>
+          <option value="">Disabled for synthetic records</option>
+        </select>
+        <small>External and certificate actions remain blocked.</small>
+      </label>
+
+      <details open>
+        <summary>Date filters</summary>
+        <div>
+          <label>
+            Date field
+            <select
+              value={filters.dateField}
+              onChange={(event) =>
+                onChange({
+                  dateField: event.target.value as Filters["dateField"],
+                })}
+            >
+              <option value="activityDate">Activity date</option>
+              <option value="scheduledStart">Scheduled date</option>
+              <option value="createdAt">Created date</option>
+              <option value="updatedAt">Updated date</option>
+            </select>
+          </label>
+          <label>
+            From
+            <input
+              type="date"
+              value={filters.dateFrom}
+              data-date-range-group="creditex-veu-pilot-jobs"
+              data-date-range-role="start"
+              onChange={(event) => onChange({ dateFrom: event.target.value })}
+            />
+          </label>
+          <label>
+            To
+            <input
+              type="date"
+              value={filters.dateTo}
+              data-date-range-group="creditex-veu-pilot-jobs"
+              data-date-range-role="end"
+              onChange={(event) => onChange({ dateTo: event.target.value })}
+            />
+          </label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Status filters</summary>
+        <div>
+          {[
+            ["reviewStatus", "Review", snapshot.filters.reviewStatuses],
+            ["evidenceStatus", "Evidence", snapshot.filters.evidenceStatuses],
+            ["lookupStatus", "Lookup", snapshot.filters.lookupStatuses],
+            ["ruleStatus", "Rules", snapshot.filters.ruleStatuses],
+            [
+              "calculatorStatus",
+              "Calculator",
+              snapshot.filters.calculatorStatuses,
+            ],
+            [
+              "connectorStatus",
+              "Submission",
+              snapshot.filters.connectorStatuses,
+            ],
+          ].map(([key, label, options]) => (
+            <label key={String(key)}>
+              {String(label)}
+              <select
+                value={String(filters[key as keyof Filters] || "")}
+                onChange={(event) =>
+                  onChange({
+                    [String(key)]: event.target.value,
+                  } as Partial<Filters>)}
+              >
+                <option value="">All {String(label).toLowerCase()} states</option>
+                {(options as string[]).map((option) => (
+                  <option key={option} value={option}>{readable(option)}</option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      </details>
+
+      <details>
+        <summary>Work &amp; personnel</summary>
+        <div>
+          <label>
+            Work type
+            <select
+              value={filters.workType}
+              onChange={(event) => onChange({ workType: event.target.value })}
+            >
+              <option value="">All work types</option>
+              {snapshot.filters.workTypes.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Service category
+            <select
+              value={filters.serviceCategory}
+              onChange={(event) =>
+                onChange({ serviceCategory: event.target.value })}
+            >
+              <option value="">All service categories</option>
+              {snapshot.filters.serviceCategories.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Installer
+            <select
+              value={filters.installerId}
+              onChange={(event) =>
+                onChange({
+                  installerId: event.target.value,
+                  technicianId: "",
+                })}
+            >
+              <option value="">All test installers</option>
+              {(snapshot.installers || []).map((installer) => (
+                <option key={installer.id} value={installer.id}>
+                  {installer.companyCode} | {installer.businessName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Field technician
+            <select
+              value={filters.technicianId}
+              onChange={(event) =>
+                onChange({ technicianId: event.target.value })}
+            >
+              <option value="">All test technicians</option>
+              {technicians.map((technician) => (
+                <option key={technician.id} value={technician.id}>
+                  {technician.technicianCode} | {technician.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Priority
+            <select
+              value={filters.priority}
+              onChange={(event) => onChange({ priority: event.target.value })}
+            >
+              <option value="">All priorities</option>
+              {snapshot.filters.priorities.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Client &amp; agent</summary>
+        <div>
+          <label>
+            Client
+            <select value="" disabled>
+              <option value="">Mapping required</option>
+            </select>
+          </label>
+          <label>
+            Agent
+            <select value="" disabled>
+              <option value="">Mapping required</option>
+            </select>
+          </label>
+          <small>
+            These relationships will not be guessed from installer or program
+            data.
+          </small>
+        </div>
+      </details>
+
+      <details>
+        <summary>Customer &amp; address</summary>
+        <div>
+          <label>
+            Customer type
+            <select
+              value={filters.customerType}
+              onChange={(event) =>
+                onChange({ customerType: event.target.value })}
+            >
+              <option value="">All customer types</option>
+              {snapshot.filters.customerTypes.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Postcode
+            <select
+              value={filters.postcode}
+              onChange={(event) => onChange({ postcode: event.target.value })}
+            >
+              <option value="">All postcodes</option>
+              {snapshot.filters.postcodes.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Job filters</summary>
+        <div>
+          <label>
+            Search jobs
+            <input
+              value={filters.query}
+              placeholder="Job, case, customer, address or activity"
+              onChange={(event) => onChange({ query: event.target.value })}
+            />
+          </label>
+          <label>
+            Job stage
+            <select
+              value={filters.workStage}
+              onChange={(event) => onChange({ workStage: event.target.value })}
+            >
+              <option value="">All job stages</option>
+              {snapshot.filters.workStages.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Appointment filters</summary>
+        <div>
+          <label>
+            Appointment type
+            <select
+              value={filters.appointmentType}
+              onChange={(event) =>
+                onChange({ appointmentType: event.target.value })}
+            >
+              <option value="">All appointment types</option>
+              {snapshot.filters.appointmentTypes.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Appointment status
+            <select
+              value={filters.appointmentStatus}
+              onChange={(event) =>
+                onChange({ appointmentStatus: event.target.value })}
+            >
+              <option value="">All appointment states</option>
+              {snapshot.filters.appointmentStatuses.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Tag filters</summary>
+        <div>
+          <label>
+            Job tag
+            <select
+              value={filters.tag}
+              onChange={(event) => onChange({ tag: event.target.value })}
+            >
+              <option value="">All tags</option>
+              {snapshot.filters.tags.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Product filters</summary>
+        <div>
+          <label>
+            VEU activity
+            <select
+              value={filters.activityTemplateId}
+              onChange={(event) =>
+                onChange({ activityTemplateId: event.target.value })}
+            >
+              <option value="">All activity families</option>
+              {(snapshot.activities || []).map((activity) => (
+                <option
+                  key={activity.activityTemplateId}
+                  value={activity.activityTemplateId}
+                >
+                  {activity.registryActivityCode} | {activity.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Product category
+            <select
+              value={filters.productCategory}
+              onChange={(event) =>
+                onChange({ productCategory: event.target.value })}
+            >
+              <option value="">All product categories</option>
+              {snapshot.filters.productCategories.map((option) => (
+                <option key={option} value={option}>{readable(option)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Audit filters</summary>
+        <div>
+          <label>
+            Certificate audit
+            <select value="" disabled>
+              <option value="">Blocked: no issued certificates</option>
+            </select>
+          </label>
+          <small>
+            Rule, lookup, evidence, calculator and submission states are
+            available under Status filters.
+          </small>
+        </div>
+      </details>
+
+      <details>
+        <summary>Other filters</summary>
+        <div>
+          <label>
+            Rows per page
+            <select
+              value={filters.pageSize}
+              onChange={(event) =>
+                onChange({
+                  pageSize: Number(event.target.value) as Filters["pageSize"],
+                })}
+            >
+              {snapshot.filters.pageSizes.map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Custom quick filters</summary>
+        <div>
+          <label>
+            Saved filter
+            <select value="" disabled>
+              <option value="">Saved views are not enabled yet</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <div className={styles.filterActions}>
+        <button type="button" disabled={busy} onClick={onApply}>
+          Search
+        </button>
+        <button type="button" disabled={busy} onClick={onClear}>
+          Clear
+        </button>
+      </div>
+    </aside>
+  );
 }
 
 export function CreditexVeuPilotWorkspace({
@@ -317,6 +1316,31 @@ export function CreditexVeuPilotWorkspace({
       params.set("evidenceStatus", filters.evidenceStatus);
     if (filters.lookupStatus)
       params.set("lookupStatus", filters.lookupStatus);
+    if (filters.ruleStatus) params.set("ruleStatus", filters.ruleStatus);
+    if (filters.calculatorStatus)
+      params.set("calculatorStatus", filters.calculatorStatus);
+    if (filters.connectorStatus)
+      params.set("connectorStatus", filters.connectorStatus);
+    if (filters.workStage) params.set("workStage", filters.workStage);
+    if (filters.workType) params.set("workType", filters.workType);
+    if (filters.priority) params.set("priority", filters.priority);
+    if (filters.appointmentType)
+      params.set("appointmentType", filters.appointmentType);
+    if (filters.appointmentStatus)
+      params.set("appointmentStatus", filters.appointmentStatus);
+    if (filters.customerType)
+      params.set("customerType", filters.customerType);
+    if (filters.serviceCategory)
+      params.set("serviceCategory", filters.serviceCategory);
+    if (filters.productCategory)
+      params.set("productCategory", filters.productCategory);
+    if (filters.postcode) params.set("postcode", filters.postcode);
+    if (filters.tag) params.set("tag", filters.tag);
+    params.set("dateField", filters.dateField);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    params.set("sortBy", filters.sortBy);
+    params.set("sortDirection", filters.sortDirection);
     if (filters.query) params.set("q", filters.query);
     return params.toString();
   }, [filters]);
@@ -808,253 +1832,141 @@ export function CreditexVeuPilotWorkspace({
       )}
 
       {panel === "jobs" && (
-        <>
-          <section className={styles.filters}>
-            <label>
-              Search
-              <input
-                value={draftFilters.query}
-                placeholder="Job, case, activity, installer or technician"
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    query: event.target.value,
-                  }))}
-              />
-            </label>
-            <label>
-              Installer
-              <select
-                value={draftFilters.installerId}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    installerId: event.target.value,
-                    technicianId: "",
-                  }))}
-              >
-                <option value="">All test installers</option>
-                {(snapshot.installers || []).map((installer) => (
-                  <option key={installer.id} value={installer.id}>
-                    {installer.companyCode} | {installer.businessName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Field technician
-              <select
-                value={draftFilters.technicianId}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    technicianId: event.target.value,
-                  }))}
-              >
-                <option value="">All test technicians</option>
-                {visibleTechnicians.map((technician) => (
-                  <option key={technician.id} value={technician.id}>
-                    {technician.technicianCode} | {technician.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              VEU activity
-              <select
-                value={draftFilters.activityTemplateId}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    activityTemplateId: event.target.value,
-                  }))}
-              >
-                <option value="">All activity families</option>
-                {(snapshot.activities || []).map((activity) => (
-                  <option
-                    key={activity.activityTemplateId}
-                    value={activity.activityTemplateId}
-                  >
-                    {activity.registryActivityCode} | {activity.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Evidence
-              <select
-                value={draftFilters.evidenceStatus}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    evidenceStatus: event.target.value,
-                  }))}
-              >
-                <option value="">All evidence states</option>
-                {snapshot.filters.evidenceStatuses.map((status) => (
-                  <option key={status} value={status}>{readable(status)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Lookup
-              <select
-                value={draftFilters.lookupStatus}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    lookupStatus: event.target.value,
-                  }))}
-              >
-                <option value="">All lookup states</option>
-                {snapshot.filters.lookupStatuses.map((status) => (
-                  <option key={status} value={status}>{readable(status)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Review
-              <select
-                value={draftFilters.reviewStatus}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    reviewStatus: event.target.value,
-                  }))}
-              >
-                <option value="">All review states</option>
-                {snapshot.filters.reviewStatuses.map((status) => (
-                  <option key={status} value={status}>{readable(status)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Page size
-              <select
-                value={draftFilters.pageSize}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    pageSize: Number(event.target.value) as 25 | 50 | 100,
-                  }))}
-              >
-                {snapshot.filters.pageSizes.map((size) => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </label>
-            <div className={styles.filterActions}>
-              <button
-                type="button"
-                onClick={() => {
-                  setFilters({ ...draftFilters, page: 0 });
-                  setSelectedJobId("");
-                }}
-              >
-                Apply filters
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftFilters(EMPTY_FILTERS);
-                  setFilters(EMPTY_FILTERS);
-                  setSelectedJobId("");
-                }}
-              >
-                Clear
-              </button>
-            </div>
-          </section>
-
-          <section className={styles.jobWorkspace}>
-            <div className={styles.jobList}>
-              <header>
-                <div>
-                  <span>VEU TEST WORK QUEUE</span>
-                  <h3>
-                    {snapshot.pagination?.total || 0} matching synthetic jobs
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={() => void load()}
-                >
-                  Refresh
-                </button>
-              </header>
-              <div className={styles.jobRows} role="list">
-                {(snapshot.jobs || []).map((job) => (
-                  <button
-                    key={job.id}
-                    type="button"
-                    role="listitem"
-                    data-selected={selectedJobId === job.id}
-                    onClick={() => setSelectedJobId(job.id)}
-                  >
-                    <span className={styles.testBadge}>TEST</span>
-                    <span>
-                      <strong>{job.jobNumber}</strong>
-                      <small>{job.caseNumber}</small>
-                    </span>
-                    <span>
-                      <strong>{job.registryActivityCode}</strong>
-                      <small>{job.title}</small>
-                    </span>
-                    <span>
-                      <strong>{job.installer.companyCode}</strong>
-                      <small>{job.technician.technicianCode}</small>
-                    </span>
-                    <span>
-                      <strong>{readable(job.reviewStatus)}</strong>
-                      <small>{readable(job.evidenceStatus)}</small>
-                    </span>
-                  </button>
-                ))}
-                {!snapshot.jobs?.length && (
-                  <p className={styles.empty}>No synthetic jobs match.</p>
-                )}
+        <section className={styles.jobWorkspace}>
+          <div className={styles.jobRegister}>
+            <header>
+              <div>
+                <span>VEU TEST JOB REGISTER</span>
+                <h3>
+                  {(snapshot.jobs || []).length} shown of{" "}
+                  {snapshot.pagination?.total || 0} matching jobs
+                </h3>
+                <p>
+                  One synthetic job per row. Scroll inside the register to
+                  inspect all {PILOT_JOB_COLUMNS.length - 1} data columns.
+                </p>
               </div>
-              <footer>
-                <button
-                  type="button"
-                  disabled={(snapshot.pagination?.page || 0) <= 0}
-                  onClick={() => {
-                    const next = {
-                      ...filters,
-                      page: Math.max(0, filters.page - 1),
-                    };
-                    setFilters(next);
-                    setDraftFilters(next);
-                    setSelectedJobId("");
-                  }}
-                >
-                  Previous
-                </button>
-                <span>
-                  Page {(snapshot.pagination?.page || 0) + 1} of{" "}
-                  {Math.max(1, snapshot.pagination?.pageCount || 1)}
-                </span>
-                <button
-                  type="button"
-                  disabled={
-                    (snapshot.pagination?.page || 0) + 1
-                    >= (snapshot.pagination?.pageCount || 0)
-                  }
-                  onClick={() => {
-                    const next = { ...filters, page: filters.page + 1 };
-                    setFilters(next);
-                    setDraftFilters(next);
-                    setSelectedJobId("");
-                  }}
-                >
-                  Next
-                </button>
-              </footer>
+              <button
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => void load()}
+              >
+                Refresh
+              </button>
+            </header>
+
+            <div className={styles.tableViewport}>
+              <table className={styles.jobTable}>
+                <caption>
+                  Creditex synthetic VEU compliance job register. Every
+                  returned job is represented by one row.
+                </caption>
+                <thead>
+                  <tr>
+                    {PILOT_JOB_COLUMNS.map((column) => (
+                      <PilotSortHeader
+                        key={column.key}
+                        column={column}
+                        filters={filters}
+                        onSort={(sortBy, sortDirection) => {
+                          const next = {
+                            ...filters,
+                            sortBy,
+                            sortDirection,
+                            page: 0,
+                          };
+                          setFilters(next);
+                          setDraftFilters((current) => ({
+                            ...current,
+                            sortBy,
+                            sortDirection,
+                            page: 0,
+                          }));
+                          setSelectedJobId("");
+                        }}
+                      />
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(snapshot.jobs || []).map((job) => (
+                    <tr
+                      key={job.id}
+                      data-selected={selectedJobId === job.id}
+                      aria-selected={selectedJobId === job.id}
+                    >
+                      {PILOT_JOB_COLUMNS.map((column) => (
+                        <td key={column.key}>
+                          <PilotJobCell
+                            column={column}
+                            job={job}
+                            selected={selectedJobId === job.id}
+                            onOpen={() => setSelectedJobId(job.id)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  {!snapshot.jobs?.length && (
+                    <tr>
+                      <td
+                        className={styles.empty}
+                        colSpan={PILOT_JOB_COLUMNS.length}
+                      >
+                        No synthetic jobs match the applied filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            <aside className={styles.jobDetail}>
-              {selectedJob ? (
+            <footer className={styles.registerFooter}>
+              <button
+                type="button"
+                disabled={(snapshot.pagination?.page || 0) <= 0}
+                onClick={() => {
+                  const next = {
+                    ...filters,
+                    page: Math.max(0, filters.page - 1),
+                  };
+                  setFilters(next);
+                  setDraftFilters(next);
+                  setSelectedJobId("");
+                }}
+              >
+                Previous
+              </button>
+              <span>
+                Page {(snapshot.pagination?.page || 0) + 1} of{" "}
+                {Math.max(1, snapshot.pagination?.pageCount || 1)}
+              </span>
+              <button
+                type="button"
+                disabled={
+                  (snapshot.pagination?.page || 0) + 1
+                  >= (snapshot.pagination?.pageCount || 0)
+                }
+                onClick={() => {
+                  const next = { ...filters, page: filters.page + 1 };
+                  setFilters(next);
+                  setDraftFilters(next);
+                  setSelectedJobId("");
+                }}
+              >
+                Next
+              </button>
+            </footer>
+
+            {selectedJob && (
+              <section className={styles.jobDrawer} aria-label="Selected job">
+                <button
+                  className={styles.closeDrawer}
+                  type="button"
+                  onClick={() => setSelectedJobId("")}
+                >
+                  Close record
+                </button>
                 <PilotJobDetail
                   key={[
                     selectedJob.id,
@@ -1069,20 +1981,28 @@ export function CreditexVeuPilotWorkspace({
                   options={snapshot.filters}
                   onSave={(next) => void saveJob(selectedJob, next)}
                 />
-              ) : (
-                <div className={styles.emptyDetail}>
-                  <span>DELIBERATE ACCESS</span>
-                  <h3>Select one test job</h3>
-                  <p>
-                    Open one synthetic record to inspect its installer,
-                    technician, activity, evidence, lookup, calculator and
-                    connector states.
-                  </p>
-                </div>
-              )}
-            </aside>
-          </section>
-        </>
+              </section>
+            )}
+          </div>
+
+          <AdvancedPilotFilters
+            snapshot={snapshot}
+            filters={draftFilters}
+            technicians={visibleTechnicians}
+            busy={Boolean(busy)}
+            onChange={(next) =>
+              setDraftFilters((current) => ({ ...current, ...next }))}
+            onApply={() => {
+              setFilters({ ...draftFilters, page: 0 });
+              setSelectedJobId("");
+            }}
+            onClear={() => {
+              setDraftFilters(EMPTY_FILTERS);
+              setFilters(EMPTY_FILTERS);
+              setSelectedJobId("");
+            }}
+          />
+        </section>
       )}
 
       {panel === "sources" && (
