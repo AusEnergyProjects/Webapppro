@@ -2204,6 +2204,10 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
   );
   assert.match(
     workspace,
+    /window\.setTimeout\(\(\) =>[\s\S]*\(focusable\[0\] \|\| drawerElement\)\.focus\(\)/,
+  );
+  assert.match(
+    workspace,
     /className=\{styles\.advancedFilters\}[\s\S]*role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="creditex-advanced-filters-title"/,
   );
   assert.match(

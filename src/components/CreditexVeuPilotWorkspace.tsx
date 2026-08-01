@@ -1083,10 +1083,12 @@ function AdvancedPilotFilters({
     const drawerElement = drawer;
     const focusableSelector =
       'button:not([disabled]), select:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
-    const focusable = Array.from(
-      drawerElement.querySelectorAll<HTMLElement>(focusableSelector),
-    );
-    focusable[0]?.focus();
+    const focusHandle = window.setTimeout(() => {
+      const focusable = Array.from(
+        drawerElement.querySelectorAll<HTMLElement>(focusableSelector),
+      );
+      (focusable[0] || drawerElement).focus();
+    }, 0);
 
     function keepFocusInside(event: KeyboardEvent) {
       if (event.key !== "Tab") return;
@@ -1109,8 +1111,10 @@ function AdvancedPilotFilters({
     }
 
     drawerElement.addEventListener("keydown", keepFocusInside);
-    return () =>
+    return () => {
+      window.clearTimeout(focusHandle);
       drawerElement.removeEventListener("keydown", keepFocusInside);
+    };
   }, []);
 
   return (
@@ -1120,6 +1124,7 @@ function AdvancedPilotFilters({
       role="dialog"
       aria-modal="true"
       aria-labelledby="creditex-advanced-filters-title"
+      tabIndex={-1}
     >
       <header>
         <div>
