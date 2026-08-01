@@ -1,18 +1,24 @@
 # Next task handover
 
-Status: `CREDITEX-VEU-DENSE-REGISTER-29` released and live; independently verified VEU instrument retention is next
+Status: `CREDITEX-VEU-OPERATOR-WORKSPACE-30` released and live; independently verified VEU instrument retention is next
 
-Prepared: 1 August 2026
+Prepared: 2 August 2026
 
-Milestone ID: `CREDITEX-VEU-DENSE-REGISTER-29`
+Milestone ID: `CREDITEX-VEU-OPERATOR-WORKSPACE-30`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`
+Released application source commit: `1a535a0fd2237e8aa3dcf1daf82da009885197b0`
 
-Previous production application source: `ebae330dab6c42881c14bc57548095b111d9c850`
+Primary workspace implementation: `e0e48b6a74a0515fe936f4882bead071b7bee443`
 
-Current production: Sites version 254 from application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`
+Focus correction: `c6fdbc42729adf1b2f5e9bca6822c298885a55d4`
+
+Production D1 projection correction: `1a535a0fd2237e8aa3dcf1daf82da009885197b0`
+
+Previous production application source: `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`
+
+Current production: Sites version 257 from application commit `1a535a0fd2237e8aa3dcf1daf82da009885197b0`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -20,83 +26,85 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 254 is the current production identity. It retains the discovery-only national catalogue and isolated VEU synthetic workflow pilot, then adds the Dataforce-style dense job register and advanced filter rail. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 257 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
 ## Released milestone outcome
 
-Make the controlled VEU pilot usable as a Creditex compliance register without creating a real claim. The live dataset still contains 10 clearly labelled synthetic installer companies, three assignment-only field technicians per installer and ten VEU jobs per technician: 10 installers, 30 technicians and 300 jobs. Every job is now one table row, all screenshot-derived Dataforce columns remain visible, TLink installer and governed compliance fields are added, and the advanced filter rail remains beside the register. Government and regulator instruments remain the sole rule authority; Creditex does not own a private rule pack.
+Creditex now has a dense, full-viewport VEU operator workspace modelled on the useful Dataforce workflows while preserving TLink's owner scope, private-data controls and fail-closed government compliance boundaries. The controlled dataset remains 10 synthetic installer companies, 30 assignment-only field technicians and 300 synthetic jobs across all 34 represented VEU activity families.
 
-The portal now provides:
+The released operator workflow provides:
 
-- a `VEU test pilot` workspace beside Operations and Government rules;
-- separate Pilot control, Jobs, Sources, Lookups, Evidence, Calculators and Connectors work areas;
-- a 300-row default register with 49 data columns plus one per-row action column;
-- all 23 screenshot-derived Dataforce columns, TLink installer and technician identity, activity, compliance-state, workflow and audit dates;
-- one dropdown menu on every column header and one action dropdown on every returned row;
-- an always-available advanced filter rail with 12 filter groups, 27 pre-populated selectors and a governed date range;
-- a persistent bottom Dashboard plus one tab per VEU activity family;
-- deterministic synthetic population and an immutable 300-item dry-run manifest;
-- controlled test-only job audit states and append-only history; and
-- database guards that reject any attempt to link a synthetic pilot work order to a regulated case or submission item.
+- one compact table row per job, 49 data columns plus one action column, 41 verified server-sortable fields and a menu on every heading;
+- table-owned vertical and horizontal scrolling without page-level desktop overflow;
+- compact and comfortable density controls;
+- an advanced-search drawer that slides from the right edge, traps focus, makes the register inert, closes with Escape and returns focus to its trigger;
+- Dashboard plus all 34 VEU activity-family tabs along the bottom;
+- Dataforce-style Customer Details, Job and Appointment context menus from right click, the row action control or keyboard;
+- Job Summary, Appointments, Actions, Questions, Quote and Invoice, Calculations, Transactions, Files, Issues, Emails and History routes;
+- Appointment Summary, Actions, Questions, Certificate Submissions, Decommissioning, Correspondence, Audit and History routes;
+- Copy Row, truthful disabled Copy Selection, Print and Print Preview actions;
+- a full-viewport double-click record workspace with collapsible navigation and compliance rails;
+- owner-scoped customer, private notes, service address, installer account, technician, work, appointment, job, source, lookup, evidence, calculator, connector and audit facts;
+- media presence, metadata, GPS and original-hash indicators derived only from bounded authoritative evidence facts; and
+- job-level regulated-case, compliance-evidence and submission-item counts rather than run-level substitutes.
 
-The official VEU family is Part `6`. Categories such as `6A` and scenarios such as `(i)` to `(xi)` are separate governed dimensions whose valid combinations must come from the official instruments. `6(23)` was only an informal example and is not an official activity identifier or implementation path.
+Part `6` remains one official VEU family among many. Categories and scenarios remain separate governed dimensions. `6(23)` was only an informal example and has no privileged implementation path.
 
 ## Owning workflow and files
 
-- Schema and migration: `db/schema.ts`, `drizzle/0099_creditex_synthetic_pilot.sql` and prepared runtime guards in `src/lib/creditex-schema-guards.ts`.
+- Schema and migration: `db/schema.ts`, `drizzle/0099_creditex_synthetic_pilot.sql` and `src/lib/creditex-schema-guards.ts`.
 - Pilot contracts and server: `src/lib/creditex-veu-pilot-contract.ts`, `src/lib/creditex-veu-pilot-server.ts` and `src/app/api/creditex/pilot/route.ts`.
-- Portal: `src/components/CreditexCompliancePortal.tsx`, `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Register and drawer: `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Full record workspace: `src/components/CreditexVeuJobAuditWorkspace.tsx` and `src/components/CreditexVeuJobAuditWorkspace.module.css`.
+- Portal: `src/components/CreditexCompliancePortal.tsx`.
 - Government-source reference: `src/lib/australian-government-program-catalogue.ts`.
 - Tests: `test/creditex-veu-pilot.test.mjs`, the Creditex portal and operations suites, and the Australian programme catalogue suite.
 
 ## Delivered safety boundaries
 
-- All synthetic companies, technicians, customers, sites, appointments and jobs are isolated and visibly marked `TEST`.
-- Synthetic emails use `example.invalid`; no real customer contact, Australian Business Number, Firebase field identity, evidence object or regulator certificate identifier is fabricated.
-- Synthetic trade accounts remain under review, unverified and paused.
-- The pilot creates no regulated compliance case, evidence object, certificate lot, submission, trade or settlement.
-- Recent administrator authentication and an exact confirmation phrase are required to create or archive the dataset.
-- A prior unarchived seed blocks a successor; archive and seed lifecycle events are append-only.
-- The dry-run manifest hashes immutable population fields only, so later controlled workflow-state changes do not invalidate the population proof.
-- Pilot state writes use compare-and-swap revision control, remain organisation scoped and are unavailable to auditors.
-- External submission, Dataforce import and Runabout import remain disabled.
+- All pilot companies, technicians, customers, sites, appointments and jobs are visibly synthetic and isolated from regulated workflow.
+- Same-origin Firebase identity and active Creditex membership checks precede every dashboard and record read.
+- Job detail requires an active organisation-owned synthetic run, a synthetic trade account, an assignment-only technician and an active owner-scoped synthetic work order.
+- Private customer, installer and service-site data is loaded only after the scoped job identity is established.
+- Raw evidence envelopes, storage keys and direct file bytes are not returned to the operator workspace.
+- Audit writes require a successfully matched authoritative detail response and an allowed role.
+- The pilot creates no regulated case, certificate, submission, trade or settlement.
+- External submission, forced compliance, Dataforce import and Runabout import remain disabled.
 
 ## Live production evidence
 
-- The authenticated AEA Creditex administrator created seed `veu-v25-2026-08-01-synthetic-v2`.
-- The portal reported exactly `10 / 10` installers, `30 / 30` technicians, `300 / 300` jobs and `34 / 34` activity families.
-- The Jobs workspace reported `300 shown of 300 matching jobs`; the semantic table contained exactly 300 body rows, 50 visible columns, 50 header dropdowns and 300 row action dropdowns.
-- The 49 data columns include all 23 screenshot-derived Dataforce headings. Unsupported legacy semantics remain visible as `Mapping required`, and certificate quantity remains `Blocked: no issued VEECs` rather than being fabricated.
-- The right rail contained 12 advanced-filter groups, 27 pre-populated selectors and two bounded date inputs. Selecting installer `I01` returned exactly 30 rows belonging only to `[TEST] VEU Installer Company 01`; clearing returned all 300.
-- Selecting Job ID descending changed the first returned job from `TEST-VEU-B5BA21F9-I01-T01-J01` to `TEST-VEU-B5BA21F9-I10-T03-J10` and exposed `aria-sort="descending"`.
-- The bottom activity rail included Dashboard plus all 34 family tabs and displayed Part `6`, not `6(23)`.
-- Filtering installer `I01` plus activity `6` returned one matching synthetic job.
-- Job `TEST-VEU-B5BA21F9-I01-T01-J01` was deliberately changed to `in_review`, `in_progress` evidence transport and `blocked` authoritative lookups. Refresh returned the same three values and the append-only `Pilot.Job Status Changed` event.
-- The connector workspace reported one deterministic 300-item dry-run manifest, zero regulator acceptances, zero rejected, zero unmatched and external submission blocked.
-- Structural safety counters remained 0 regulated cases, 0 Firebase test users and 0 certificates.
-- Desktop and 390-pixel Chrome inspection passed. At 390 pixels, the page remained 375 pixels wide while the 8,413-pixel register stayed inside its 334-pixel local scroll viewport; the advanced filter rail stacked below at 349.6 pixels wide.
-- Production Worker evidence showed four successful `200` VEU pilot reads plus successful Creditex session, access, operations, activities and cases reads. Two cutover-time asset requests from Cloudflare browser rendering returned `404`; the authenticated application and pilot API remained operational and no production `5xx` was observed.
-- After the version-253 authentication correction, a signed-in Chrome reload returned directly to the protected dashboard and reopened the VEU pilot without another login. The Jobs workspace showed all populated filter menus and the complete 300-job queue. Browser logging contained only the Chrome extension's closed asynchronous message-channel warning, not an application exception.
+- Signed-in production QA loaded the complete 300-job queue and all 34 activity-family tabs.
+- At 2048 by 983 pixels, the document matched the viewport exactly. Long job and record content remained inside local scrolling surfaces.
+- The advanced drawer exposed modal dialog semantics, three inert background regions, initial focus on Close, Escape close and focus return to Advanced search.
+- The complete Dataforce-style Job and Appointment action sets were present and initial menu focus landed on Customer Details.
+- Double-clicking `TEST-VEU-B5BA21F9-I01-T01-J01` loaded its authoritative record rather than the prior temporary-unavailable state.
+- Customer Details exposed the synthetic customer, private notes, service address and installer account within the owner-scoped record.
+- Files and Photos exposed six expected evidence contracts, zero captured originals and truthful disabled upload because no physical field evidence exists.
+- Auditing exposed controlled synthetic review, evidence and lookup states while all hard government gates remained blocked.
+- Both workspace rails collapsed and reopened without page-level overflow. Escape closed the workspace and returned focus to the originating job row.
+- Job-level regulated counts were 0 cases, 0 compliance evidence and 0 submission items for the inspected job.
+- Production request `a245e793ac2756fc` returned HTTP 200 for the opaque job-detail route. The post-release error-only Worker query returned zero events.
 
 ## Validation and release evidence
 
-- Exact application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete main test suite, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
-- The focused pilot suite passed 13 of 13 tests after the final review corrections. The earlier integrated Creditex, catalogue and API focused set passed 56 of 56. `git diff HEAD^ --check` passed.
-- Independent security review found and closed the prior-seed lifecycle and mutable-manifest defects. Independent authentication review found the recovery path bounded to one forced refresh after an authentication-specific `401`, protected against identity races and free of remaining P0, P1 or P2 findings.
-- No local release archive was supplied for this source-only Sites save, so package size, package hash, stored-file count and package content hash are not claimed.
-- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_d9dff81ff0c4819185def4ad16b9a889` reports exact application source `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`.
-- Sites version 254 deployment `appgdep_6a6dec1ba16c8191b572bf49dc958aa7` succeeded with environment revision 19.
+- Exact application commit `1a535a0fd2237e8aa3dcf1daf82da009885197b0` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,182 main tests with 1,180 passed, 2 intentionally skipped and 0 failed, all 100 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused Creditex pilot suite passed 15 of 15 tests. `git diff --check` passed.
+- Independent final review reported no remaining P0, P1 or P2 defect.
+- Signed-in QA found that the first record build asked production D1 for 105 result columns. The final correction split it into owner-scoped 63-column and 42-column reads and added a bounded-projection regression test.
+- Main implementation Sites version 255 and focus-corrected version 256 are superseded QA checkpoints. Version 257 is the corrected released application.
+- Local archive `.openai/site-release-1a535a0.tar.gz` is 6,893,645 bytes with SHA-256 `A9B1526A4033D0CA060821A841A5DCF0D7ABA57AE6F0E1C84A42346587DC2038`.
+- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c` reports exact source `1a535a0fd2237e8aa3dcf1daf82da009885197b0`, 178 stored files, 18,780,160 stored bytes and content hash `sha256:38dfcd7487aa2a6cde6eedc11b628e55dadd3d1cac4430a8beeeecf20f523357`.
+- Sites version 257 deployment `appgdep_6a6e119ef9c48191aa7a6da69463dd80` succeeded with environment revision 19.
 
 ## Important limits and unverified areas
 
-- The source workspace records official URLs, hierarchy and transition dates, but exact instrument bytes are not yet retained in TLink. Source publication therefore remains blocked pending independent review.
-- Lookup contracts are populated, but live participant, accreditation, licence, product, recall and suspension sources are not connected.
-- Evidence transport slots define original-byte, metadata, GPS, timing and signature capability. Government shot lists, platform camera attestation, representative devices, retention and restore remain unverified.
-- All 34 activity families have typed calculator contracts, but verified formulas and reconciled golden vectors remain 0. No VEEC quantity or rebate is calculated.
-- The registry connector is dry-run only. No regulator request was sent and no Dataforce or Runabout data was imported.
-- Part 45 is retained only as a closed-family test path. No new regulated Part 45 job can be created.
-- Sites version 254 retains the bounded authentication recovery introduced in version 253. Signed-in Chrome reload, workspace recovery and the complete Jobs register are verified; the in-app-browser tab remained signed out and was not used as authenticated release evidence.
-- The shared `info@ausenergyassessments.com` account is a bootstrap administrator. Routine operations still require named individual Creditex users and least privilege.
+- Exact current VEU instrument bytes are not yet retained and independently approved inside TLink.
+- Live participant, accreditation, licence, product, recall and suspension sources are not connected.
+- Physical-device evidence capture, original-byte restoration, offline recovery, GPS and metadata custody are not yet proven for a selected real activity.
+- Verified formulas and approved golden vectors remain 0. No VEEC quantity or rebate is calculated.
+- Registry, Dataforce and Runabout connectors remain dry-run or disabled. No external request was sent.
+- The shared `info@ausenergyassessments.com` account remains a bootstrap administrator. Routine Creditex operations require named individual users and least privilege.
+- The two bounded job-detail reads are not one D1 snapshot. This is acceptable for the immutable synthetic pilot, but regulated cutover needs an explicit consistency contract.
 
 ## Stop conditions
 
@@ -105,18 +113,18 @@ Stop before any regulated-case onboarding when:
 - an exact current instrument and its effective dates are not retained and independently verified;
 - an activity category and scenario combination is inferred rather than sourced;
 - an authorisation, tenant-isolation or synthetic-leakage guard fails;
-- original photo bytes, cryptographic hashes, capture time, timezone, device provenance, location accuracy and controlled metadata cannot be retained together;
+- original photo bytes, hashes, capture time, timezone, device provenance, location accuracy and controlled metadata cannot be retained together;
 - a calculator would use unverified equations, tables, units, caps or rounding;
 - a connector would assert a regulator response without an authorised request and immutable response artifact; or
-- D1/R2 ownership, backup, export, recovery and restore remain unproved for regulated evidence.
+- D1 and R2 ownership, backup, export, recovery and restore remain unproved for regulated evidence.
 
 ## Next five logical product steps
 
-1. **Retain and independently verify exact VEU instruments:** store the exact authorised instrument bytes in R2, hash them, transcribe bounded activity, category, scenario, evidence and effective-date rules, and require a different named reviewer before publication.
-2. **Connect authoritative operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension snapshots with source timestamps and fail-closed job and submission rechecks.
-3. **Prove AEA Field evidence on real devices:** run representative iOS and Android staging with platform-backed camera attestation, milestone timing, original-byte restore, GPS and EXIF consistency, offline resume and required signatures.
-4. **Verify versioned VEU calculators:** implement official equations, tables, units, caps and rounding behind effective-date versions, then reconcile independently approved golden vectors before enabling any VEEC output.
-5. **Run an authorised connector and legacy parallel pilot:** obtain a registry sandbox or approved interface plus authorised Dataforce and Runabout exports, map exact fields and states, and reconcile counts, hashes, exceptions, rollback and acceptance without touching real certificate inventory.
+1. **Retain and independently verify exact VEU instruments:** retain exact authorised bytes and version differences, including the 30 September 2026 Part 6 branch, and require independent approval before activation.
+2. **Connect authoritative operational lookups:** add effective-dated participant, product, licence, recall and suspension snapshots with source timestamps and fail-closed rechecks.
+3. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline and R2 restore evidence for one selected activity using its verified shot list.
+4. **Verify one activity calculator:** implement the official versioned calculator for that activity and reconcile independently approved golden vectors before enabling VEEC output.
+5. **Run an authorised legacy and registry parallel pilot:** obtain Creditex-authorised Dataforce and Runabout exports plus a registry sandbox or approved interface, then reconcile mappings, exceptions, idempotency and rollback without touching real certificate inventory.
 
 ## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
 

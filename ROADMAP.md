@@ -997,7 +997,7 @@ VEU `6(23)` was an informal example only, not an official activity identifier. T
 
 Status: released controlled VEU workflow pilot
 
-Release status: the initial pilot application commit `3ac6c72057a8afea61e85817ba566ec543079886` was deployed as Sites version 252. Corrective application commit `ebae330dab6c42881c14bc57548095b111d9c850` retains the complete pilot, hardens authentication recovery and is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 253. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c` and deployment `appgdep_6a6dde1747308191bf5c78bd4f674030` report the exact current application commit.
+Release status: the initial pilot application commit `3ac6c72057a8afea61e85817ba566ec543079886` was deployed as Sites version 252. Corrective application commit `ebae330dab6c42881c14bc57548095b111d9c850` retains the complete pilot, hardens authentication recovery and was deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as historical Sites version 253. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c` and deployment `appgdep_6a6dde1747308191bf5c78bd4f674030` report the exact historical application commit.
 
 ### Outcome
 
@@ -1016,17 +1016,49 @@ The portal separates Pilot control, Jobs, Sources, Lookups, Evidence, Calculator
 
 ### Validation and release evidence
 
-Exact current application commit `ebae330dab6c42881c14bc57548095b111d9c850` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused pilot suite passed 13 of 13 tests and the focused Creditex portal suite passed 25 of 25.
+Exact historical application commit `ebae330dab6c42881c14bc57548095b111d9c850` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused pilot suite passed 13 of 13 tests and the focused Creditex portal suite passed 25 of 25.
 
 Authenticated production QA created seed `veu-v25-2026-08-01-synthetic-v2` and confirmed 10 of 10 installers, 30 of 30 technicians, 300 of 300 jobs and 34 of 34 activity families. Filtering installer `I01` plus Part `6` returned one job; a controlled job-state update persisted after refresh; the connector workspace retained a deterministic 300-item dry-run manifest; and structural counters remained 0 regulated cases, 0 Firebase test users and 0 certificates. Desktop and 390-pixel mobile inspection passed without page-level horizontal overflow. Version 253 bounds forced token recovery to one authentication-specific `401` retry, preserves signed-in identity on workspace failure and separates authentication from workspace errors. Signed-in production reload reopened the protected dashboard and the populated VEU job queue.
 
+## Released milestone: CREDITEX-VEU-DENSE-REGISTER-29
+
+Status: released dense synthetic VEU compliance register
+
+Release status: exact application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0` was validated, pushed to GitHub and the Sites managed source branch, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_d9dff81ff0c4819185def4ad16b9a889` and deployed as historical Sites version 254 through `appgdep_6a6dec1ba16c8191b572bf49dc958aa7`.
+
+The milestone established one semantic row per synthetic job, 49 data columns plus one action column, 41 verified server-sortable fields, a menu on every heading and a row action control for every returned job. It retained every screenshot-derived Dataforce heading, explicit TLink installer and technician identity, 12 advanced-filter groups, 27 pre-populated selectors and all 34 VEU activity-family tabs. Unsupported legacy meanings remained visible as mapping gaps, and no issued VEEC quantity was fabricated.
+
+## Released milestone: CREDITEX-VEU-OPERATOR-WORKSPACE-30
+
+Status: released full-viewport Creditex operator and job audit workspace
+
+Release status: primary implementation commit `e0e48b6a74a0515fe936f4882bead071b7bee443` became intermediate Sites version 255. Focus correction `c6fdbc42729adf1b2f5e9bca6822c298885a55d4` became intermediate version 256. Final production-D1 correction `1a535a0fd2237e8aa3dcf1daf82da009885197b0` is validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c` and deployed as current Sites version 257 through `appgdep_6a6e119ef9c48191aa7a6da69463dd80`.
+
+### Outcome
+
+Use the available desktop space as a compliance operations tool rather than a marketing page. The register now owns its vertical and horizontal scrolling, supports compact and comfortable density, keeps the 300-job queue inside a full-height workspace and moves advanced search into a right-edge drawer. The drawer traps focus, makes the register inert, closes with Escape and returns focus to its trigger.
+
+Right click, the row action control and keyboard access expose Dataforce-style Customer Details, Job, Appointment, copy and print menus. Double-click opens a full-viewport record with collapsible navigation and compliance rails. The record covers owner-scoped customer and private notes, service site, installer account, technician, work order, appointments, tasks, forms, quotes, invoices, files, issues, history, sources, lookups, evidence, calculators, connectors and job-level regulated counts.
+
+### Safety and release evidence
+
+- Same-origin Firebase identity and active Creditex membership precede every dashboard and detail request.
+- Record access requires an active organisation-owned synthetic run, synthetic trade account, assignment-only technician and active owner-scoped synthetic work order.
+- Private CRM data is loaded only after the scoped job identity is established.
+- Raw evidence envelopes, storage keys and file bytes are not returned.
+- Regulated cases, certificates, submissions, trades and settlements remain 0 and all external actions remain disabled.
+- Exact final source passes `npm.cmd run validate`: 31 of 31 integration tests, 1,182 main tests with 1,180 passed, 2 intentionally skipped and 0 failed, all 100 migrations, PDF audit, production build and Sites bundle audit.
+- The focused Creditex pilot suite passed 15 of 15 tests. Independent final review reported no remaining P0, P1 or P2 defect.
+- Signed-in production QA loaded the 300-job register in a 2048 by 983 viewport without page-level overflow, verified the drawer and menus, and opened the complete authoritative job record.
+- The initial 105-column production job-detail query was split into owner-scoped 63-column and 42-column reads. Production request `a245e793ac2756fc` returned HTTP 200 and the post-release error-only Worker query returned zero events.
+
 ## Next five logical product steps
 
-1. **Retain and independently verify exact VEU instruments:** store the exact authorised instrument bytes in R2, hash them, transcribe bounded activity, category, scenario, evidence and effective-date rules, and require a different named reviewer before publication.
-2. **Connect authoritative operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension snapshots with source timestamps and fail-closed job and submission rechecks.
-3. **Prove AEA Field evidence on real devices:** run representative iOS and Android staging with platform-backed camera attestation, milestone timing, original-byte restore, GPS and EXIF consistency, offline resume and required signatures.
-4. **Verify versioned VEU calculators:** implement official equations, tables, units, caps and rounding behind effective-date versions, then reconcile independently approved golden vectors before enabling any VEEC output.
-5. **Run an authorised connector and legacy parallel pilot:** obtain a registry sandbox or approved interface plus authorised Dataforce and Runabout exports, map exact fields and states, and reconcile counts, hashes, exceptions, rollback and acceptance without touching real certificate inventory.
+1. **Retain and independently verify exact VEU instruments:** retain exact authorised bytes and version differences, including the 30 September 2026 Part 6 branch, and require independent approval before activation.
+2. **Connect authoritative operational lookups:** add effective-dated participant, product, licence, recall and suspension snapshots with source timestamps and fail-closed rechecks.
+3. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline and R2 restore evidence for one selected activity using its verified shot list.
+4. **Verify one activity calculator:** implement the official versioned calculator for that activity and reconcile independently approved golden vectors before enabling VEEC output.
+5. **Run an authorised legacy and registry parallel pilot:** obtain Creditex-authorised Dataforce and Runabout exports plus a registry sandbox or approved interface, then reconcile mappings, exceptions, idempotency and rollback without touching real certificate inventory.
 
 ## Global stop conditions
 
