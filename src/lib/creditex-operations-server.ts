@@ -2761,10 +2761,31 @@ async function requireOwnedCase(
     database,
     `SELECT id, revision, program_id, activity_version_id,
         evidence_policy_version_id, status, evidence_status
-      FROM compliance_cases
-      WHERE id = ? AND organisation_id = ?`,
-    [caseId, identity.organisationId],
-    "The compliance case was not found in this organisation.",
+      FROM compliance_cases compliance_case
+      WHERE compliance_case.id = ?
+        AND compliance_case.organisation_id = ?
+        AND (
+          ? = 1
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_case_assignments assignment
+            JOIN compliance_users member
+              ON member.id = assignment.compliance_user_id
+              AND member.organisation_id = assignment.organisation_id
+              AND member.firebase_uid = ?
+              AND member.status = 'active'
+            WHERE assignment.case_id = compliance_case.id
+              AND assignment.organisation_id = compliance_case.organisation_id
+              AND assignment.status = 'assigned'
+          )
+        )`,
+    [
+      caseId,
+      identity.organisationId,
+      identity.role === "admin" ? 1 : 0,
+      identity.uid,
+    ],
+    "The compliance case is unavailable or is not assigned to you.",
   );
   return {
     id: caseId,
@@ -3508,13 +3529,14 @@ export async function executeCreditexOperation(
 
   if (action === "release_case_assignment") {
     const assignmentId = text(body.assignmentId, "Assignment", 180);
-    await requireRecord(
+    const assignment = await requireRecord(
       database,
-      `SELECT id FROM compliance_case_assignments
+      `SELECT id, case_id FROM compliance_case_assignments
         WHERE id = ? AND organisation_id = ? AND status = 'assigned'`,
       [assignmentId, identity.organisationId],
       "The active assignment was not found in this organisation.",
     );
+    await requireOwnedCase(database, identity, assignment.case_id);
     await writeWithAudit(database, identity, [
       database.prepare(`UPDATE compliance_case_assignments
         SET status = 'released', released_at = ?
@@ -3586,14 +3608,15 @@ export async function executeCreditexOperation(
 
   if (action === "complete_task") {
     const taskId = text(body.taskId, "Task", 180);
-    await requireRecord(
+    const task = await requireRecord(
       database,
-      `SELECT id FROM compliance_case_tasks
+      `SELECT id, case_id FROM compliance_case_tasks
         WHERE id = ? AND organisation_id = ?
           AND status IN ('open', 'in_progress', 'blocked')`,
       [taskId, identity.organisationId],
       "The active task was not found in this organisation.",
     );
+    await requireOwnedCase(database, identity, task.case_id);
     await writeWithAudit(database, identity, [
       database.prepare(`UPDATE compliance_case_tasks
         SET status = 'completed', completed_by_uid = ?, completed_at = ?,
@@ -3667,31 +3690,18 @@ export async function executeCreditexOperation(
     const findingId = text(body.findingId, "Finding", 180);
     const finding = await requireRecord(
       database,
-      `SELECT finding.id, compliance_case.id case_id,
-          compliance_case.revision, compliance_case.program_id,
-          compliance_case.activity_version_id,
-          compliance_case.evidence_policy_version_id,
-          compliance_case.status, compliance_case.evidence_status
+      `SELECT finding.id, finding.case_id
         FROM compliance_case_findings finding
-        JOIN compliance_cases compliance_case
-          ON compliance_case.id = finding.case_id
-          AND compliance_case.organisation_id = finding.organisation_id
         WHERE finding.id = ? AND finding.organisation_id = ?
           AND finding.status = 'open'`,
       [findingId, identity.organisationId],
       "The open finding was not found in this organisation.",
     );
-    const complianceCase: OwnedCase = {
-      id: valueText(finding.case_id),
-      revision: Number(finding.revision || 0),
-      programId: valueText(finding.program_id),
-      activityVersionId: valueText(finding.activity_version_id),
-      evidencePolicyVersionId: valueText(
-        finding.evidence_policy_version_id,
-      ),
-      status: valueText(finding.status),
-      evidenceStatus: valueText(finding.evidence_status),
-    };
+    const complianceCase = await requireOwnedCase(
+      database,
+      identity,
+      finding.case_id,
+    );
     await writeWithAudit(database, identity, [
       database.prepare(`UPDATE compliance_case_findings
         SET status = 'resolved', resolved_by_uid = ?, resolved_at = ?,
@@ -3749,12 +3759,7 @@ export async function executeCreditexOperation(
     );
     const evidence = await requireRecord(
       database,
-      `SELECT evidence.id, compliance_case.id case_id,
-          compliance_case.revision, compliance_case.program_id,
-          compliance_case.activity_version_id,
-          compliance_case.evidence_policy_version_id,
-          compliance_case.status case_status,
-          compliance_case.evidence_status
+      `SELECT evidence.id, compliance_case.id case_id
         FROM compliance_case_evidence evidence
         JOIN compliance_cases compliance_case
           ON compliance_case.id = evidence.case_id
@@ -3764,17 +3769,11 @@ export async function executeCreditexOperation(
       [evidenceId, identity.organisationId],
       "The reviewable evidence record was not found in this organisation.",
     );
-    const complianceCase: OwnedCase = {
-      id: valueText(evidence.case_id),
-      revision: Number(evidence.revision || 0),
-      programId: valueText(evidence.program_id),
-      activityVersionId: valueText(evidence.activity_version_id),
-      evidencePolicyVersionId: valueText(
-        evidence.evidence_policy_version_id,
-      ),
-      status: valueText(evidence.case_status),
-      evidenceStatus: valueText(evidence.evidence_status),
-    };
+    const complianceCase = await requireOwnedCase(
+      database,
+      identity,
+      evidence.case_id,
+    );
     if (status !== "under_review") {
       await requireActiveReviewerAssignment(
         database,
@@ -4339,7 +4338,7 @@ export async function executeCreditexOperation(
     const itemId = text(body.batchItemId, "Batch item", 180);
     const item = await requireRecord(
       database,
-      `SELECT item.id, item.batch_id
+      `SELECT item.id, item.batch_id, item.case_id
         FROM compliance_submission_batch_items item
         JOIN compliance_submission_batches batch
           ON batch.id = item.batch_id
@@ -4349,6 +4348,7 @@ export async function executeCreditexOperation(
       [itemId, identity.organisationId],
       "The staged item was not found in an editable draft batch.",
     );
+    await requireOwnedCase(database, identity, item.case_id);
     const batchId = valueText(item.batch_id);
     await writeWithAudit(database, identity, [
       database.prepare(`UPDATE compliance_submission_batch_items

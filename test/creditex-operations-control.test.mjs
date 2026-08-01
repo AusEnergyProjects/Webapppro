@@ -876,6 +876,75 @@ test("Creditex workspace applies authoritative Dataforce-equivalent filters with
   assert.equal(noMatch.workspace.cases.length, 0);
 });
 
+test("non-admin case writes require a current active assignment", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule(
+    "../src/lib/creditex-operations-server.ts",
+  );
+  const governed = seedGovernedActivity(database);
+  seedTradeJob(database);
+  seedGovernedCase(database, governed);
+  seedComplianceUser(database, {
+    id: "reviewer-member",
+    firebaseUid: "reviewer-uid",
+    role: "reviewer",
+  });
+  const identity = {
+    organisationId: "org_creditex_au",
+    membershipId: "reviewer-member",
+    uid: "reviewer-uid",
+    role: "reviewer",
+  };
+  const createTask = {
+    action: "create_task",
+    caseId: "case",
+    taskType: "review",
+    title: "Review assigned case",
+    detail: "",
+    priority: "normal",
+  };
+  await assert.rejects(
+    operations.executeCreditexOperation(
+      testD1(database),
+      identity,
+      createTask,
+    ),
+    /not assigned to you/,
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) count FROM compliance_case_tasks",
+    ).get().count,
+    0,
+  );
+  seedCaseAssignment(database, {
+    id: "reviewer-assignment",
+    complianceUserId: "reviewer-member",
+    assignmentRole: "primary_reviewer",
+  });
+  const created = await operations.executeCreditexOperation(
+    testD1(database),
+    identity,
+    createTask,
+  );
+  database.prepare(`UPDATE compliance_case_assignments
+    SET status = 'released', released_at = ?
+    WHERE id = 'reviewer-assignment'`).run(TEST_NOW);
+  await assert.rejects(
+    operations.executeCreditexOperation(testD1(database), identity, {
+      action: "complete_task",
+      taskId: created.id,
+    }),
+    /not assigned to you/,
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT status FROM compliance_case_tasks WHERE id = ?",
+    ).get(created.id).status,
+    "open",
+  );
+});
+
 test("audited local operations execute against the schema and financial guards reconcile", async () => {
   const database = databaseWithComplianceOperations();
   const d1 = testD1(database);
@@ -1165,7 +1234,9 @@ test("evidence outcomes require current access, reviewer assignment, and canonic
       reviewNote: "Replacement meets the pinned requirement.",
       evidenceAccessReceiptId: "good-receipt",
     }),
-    (error) => error.code === "CREDITEX_CASE_ASSIGNMENT_REQUIRED",
+    (error) =>
+      error.message ===
+        "The compliance case is unavailable or is not assigned to you.",
   );
   seedCaseAssignment(database, {
     id: "primary-review-assignment",

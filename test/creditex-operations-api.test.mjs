@@ -233,6 +233,31 @@ test("non-admin operations remain assignment-scoped while Creditex admins retain
   assert.match(server, /visible_member\.firebase_uid = \?/);
   assert.match(server, /visible_member\.status = 'active'/);
   assert.match(server, /scope\.role === "admin" \? 1 : 0/);
+  assert.match(
+    server,
+    /The compliance case is unavailable or is not assigned to you/,
+  );
+  for (const action of [
+    "assign_case",
+    "release_case_assignment",
+    "create_task",
+    "complete_task",
+    "create_finding",
+    "resolve_finding",
+    "review_evidence",
+    "record_decision",
+    "add_equipment",
+    "stage_batch_item",
+    "remove_batch_item",
+  ]) {
+    const start = server.indexOf(`action === "${action}"`);
+    const next = server.indexOf("if (action ===", start + 1);
+    assert.match(
+      server.slice(start, next < 0 ? server.length : next),
+      /requireOwnedCase\(/,
+      `${action} must recheck the actor's active assignment scope`,
+    );
+  }
   assert.match(server, /No authoritative participant-to-case relationship is stored/);
   assert.match(server, /No authoritative claim-state record is stored/);
 });

@@ -6,6 +6,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -2069,6 +2070,8 @@ export function CreditexOperationsWorkspace({
     useState<OperationsFilterState>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<OperationsFilterState>(EMPTY_FILTERS);
+  const operationsRequestRef = useRef({ dashboard: 0, case: 0 });
+  const pendingOperationsRef = useRef(0);
   const [loadingOperations, setLoadingOperations] = useState(true);
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [operationsError, setOperationsError] = useState("");
@@ -2148,8 +2151,14 @@ export function CreditexOperationsWorkspace({
   const [stageBatchId, setStageBatchId] = useState("");
 
   const loadOperations = useCallback(async (caseId = "") => {
+    const requestKind = caseId ? "case" : "dashboard";
+    const requestId = operationsRequestRef.current[requestKind] + 1;
+    operationsRequestRef.current[requestKind] = requestId;
+    pendingOperationsRef.current += 1;
     setLoadingOperations(true);
-    setOperationsError("");
+    if (requestId === operationsRequestRef.current[requestKind]) {
+      setOperationsError("");
+    }
     try {
       const operationFilters = filterQuery(appliedFilters);
       const queryString = caseId
@@ -2161,6 +2170,7 @@ export function CreditexOperationsWorkspace({
         `/api/creditex/operations${queryString}`,
       );
       const parsed = parseOperations(result);
+      if (requestId !== operationsRequestRef.current[requestKind]) return;
       setOperations((current) =>
         caseId
           ? {
@@ -2171,13 +2181,20 @@ export function CreditexOperationsWorkspace({
           : parsed
       );
     } catch (error) {
+      if (requestId !== operationsRequestRef.current[requestKind]) return;
       setOperationsError(
         error instanceof Error
           ? error.message
           : "The operational workspace could not be loaded.",
       );
     } finally {
-      setLoadingOperations(false);
+      pendingOperationsRef.current = Math.max(
+        pendingOperationsRef.current - 1,
+        0,
+      );
+      if (pendingOperationsRef.current === 0) {
+        setLoadingOperations(false);
+      }
     }
   }, [appliedFilters]);
 
@@ -2218,33 +2235,21 @@ export function CreditexOperationsWorkspace({
     ? operations.cases
     : seedCases.map(seedCase);
   useEffect(() => {
+    if (!selectedCaseKey) return;
     const currentExists = operationalCases.some(
       (item) => item.id === selectedCaseKey || item.caseNumber === selectedCaseKey,
     );
-    const firstCase = operationalCases[0];
-    if (!firstCase?.id) {
-      if (!selectedCaseKey && !operations.selectedCase) return;
-      const timeout = window.setTimeout(() => {
-        setSelectedCaseKey("");
-        setOperations((current) => ({
-          ...current,
-          selectedCase: null,
-        }));
-      }, 0);
-      return () => window.clearTimeout(timeout);
-    }
-    if (selectedCaseKey && currentExists) return;
+    if (currentExists) return;
     const timeout = window.setTimeout(() => {
-      setSelectedCaseKey(firstCase.id);
-      void loadOperations(firstCase.id);
+      operationsRequestRef.current.case += 1;
+      setSelectedCaseKey("");
+      setOperations((current) => ({
+        ...current,
+        selectedCase: null,
+      }));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [
-    loadOperations,
-    operationalCases,
-    operations.selectedCase,
-    selectedCaseKey,
-  ]);
+  }, [operationalCases, selectedCaseKey]);
 
   useEffect(() => {
     if (session.role !== "admin") return;
@@ -2271,10 +2276,12 @@ export function CreditexOperationsWorkspace({
   }, [evidenceViewer]);
 
   const selectedCase = useMemo(() => {
-    const queueCase = operationalCases.find(
-      (item) =>
-        item.id === selectedCaseKey || item.caseNumber === selectedCaseKey,
-    ) || operationalCases[0] || null;
+    const queueCase = selectedCaseKey
+      ? operationalCases.find(
+          (item) =>
+            item.id === selectedCaseKey || item.caseNumber === selectedCaseKey,
+        ) || null
+      : null;
     if (
       operations.selectedCase
       && (
@@ -2347,6 +2354,7 @@ export function CreditexOperationsWorkspace({
   }
 
   function applyFilters(nextFilters = draftFilters) {
+    operationsRequestRef.current.case += 1;
     setSelectedCaseKey("");
     setOperations((current) => ({ ...current, selectedCase: null }));
     setAppliedFilters(nextFilters);

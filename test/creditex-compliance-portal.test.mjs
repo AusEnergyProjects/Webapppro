@@ -292,9 +292,12 @@ test("operations UI parses full case workflow and wires bounded local actions", 
   assert.doesNotMatch(operations, /Ready-to-submit approval remains unavailable/);
 });
 
-test("operations UI automatically loads case detail and discloses bounded queues", () => {
-  assert.match(operations, /setSelectedCaseKey\(firstCase\.id\)/);
-  assert.match(operations, /void loadOperations\(firstCase\.id\)/);
+test("operations UI requires deliberate case selection and discloses bounded queues", () => {
+  assert.doesNotMatch(operations, /setSelectedCaseKey\(firstCase\.id\)/);
+  assert.match(operations, /if \(item\.id\) void loadOperations\(item\.id\)/);
+  assert.match(operations, /const queueCase = selectedCaseKey/);
+  assert.match(operations, /operationsRequestRef\.current\[requestKind\]/);
+  assert.match(operations, /requestId !== operationsRequestRef\.current\[requestKind\]/);
   assert.match(operations, /if \(!item\.detailsLoaded\)/);
   assert.match(operations, /first\(workspace, \["pagination"\]\)/);
   assert.match(operations, /operations\.workspace\.total/);
