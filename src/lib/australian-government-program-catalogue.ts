@@ -496,7 +496,7 @@ const SPECIALIST_NATIONAL_ACTIVITIES = [
 const VEU_ACTIVITIES = [
   activity("VEU", "1", "Solar or heat-pump water heater replacing electric resistance", "hot-water", { specificationPart: "1" }),
   activity("VEU", "3", "Heat-pump or solar water heater replacing gas or LPG", "hot-water", { specificationPart: "3" }),
-  activity("VEU", "6(23)", "High-efficiency air conditioning", "heating-cooling", {
+  activity("VEU", "6", "Space heating and cooling, installing a high-efficiency air conditioner", "heating-cooling", {
     specificationPart: "6",
     productCategory: "",
     scenario: "",

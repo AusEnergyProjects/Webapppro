@@ -30,6 +30,7 @@ import {
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
+import { CreditexVeuPilotWorkspace } from "./CreditexVeuPilotWorkspace";
 import styles from "./CreditexCompliancePortal.module.css";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
@@ -282,7 +283,7 @@ export function CreditexCompliancePortal() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tab, setTab] = useState<"cases" | "governance">("cases");
+  const [tab, setTab] = useState<"cases" | "pilot" | "governance">("cases");
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -878,9 +879,10 @@ export function CreditexCompliancePortal() {
       return;
     }
     event.preventDefault();
-    const visibleTabs: Array<"cases" | "governance"> = session?.role === "admin"
-      ? ["cases", "governance"]
-      : ["cases"];
+    const visibleTabs: Array<"cases" | "pilot" | "governance"> =
+      session?.role === "admin"
+        ? ["cases", "pilot", "governance"]
+        : ["cases", "pilot"];
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
       ? 0
@@ -1106,6 +1108,19 @@ export function CreditexCompliancePortal() {
           >
             Operations
           </button>
+          <button
+            className={styles.tab}
+            type="button"
+            role="tab"
+            id="creditex-tab-pilot"
+            aria-controls="creditex-panel-pilot"
+            aria-selected={tab === "pilot"}
+            tabIndex={tab === "pilot" ? 0 : -1}
+            onClick={() => setTab("pilot")}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            VEU test pilot
+          </button>
           {session.role === "admin" && (
             <button
                 className={styles.tab}
@@ -1145,6 +1160,16 @@ export function CreditexCompliancePortal() {
               onLoadNextSeedCases={() => void loadNextCases()}
               onOpenActivityRules={() => setTab("governance")}
             />
+          </div>
+        )}
+
+        {tab === "pilot" && (
+          <div
+            id="creditex-panel-pilot"
+            role="tabpanel"
+            aria-labelledby="creditex-tab-pilot"
+          >
+            <CreditexVeuPilotWorkspace api={api} role={session.role} />
           </div>
         )}
 

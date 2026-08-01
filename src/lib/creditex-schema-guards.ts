@@ -1,6 +1,41 @@
 // Governed Creditex database guards installed through the D1 prepared-statement API.
 // Sites migrations cannot carry CREATE TRIGGER bodies because its migration parser splits on semicolons.
-export const CREDITEX_SCHEMA_GUARD_DEFINITIONS = [
+const CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS = [
+  { name: "compliance_cases_synthetic_work_order_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_synthetic_work_order_guard` BEFORE INSERT ON `compliance_cases` WHEN EXISTS ( SELECT 1 FROM `trade_work_orders` work WHERE work.`id` = NEW.`work_order_id` AND work.`source_type` = 'synthetic_pilot' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_SYNTHETIC_CASE_FORBIDDEN'); END;" },
+  { name: "compliance_batch_items_synthetic_case_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_batch_items_synthetic_case_guard` BEFORE INSERT ON `compliance_submission_batch_items` WHEN EXISTS ( SELECT 1 FROM `compliance_cases` compliance_case JOIN `trade_work_orders` work ON work.`id` = compliance_case.`work_order_id` WHERE compliance_case.`id` = NEW.`case_id` AND work.`source_type` = 'synthetic_pilot' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_SYNTHETIC_SUBMISSION_FORBIDDEN'); END;" },
+  { name: "trade_work_orders_synthetic_identity_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `trade_work_orders_synthetic_identity_no_update` BEFORE UPDATE OF `firebase_uid`, `source_type`, `source_reference`, `work_number` ON `trade_work_orders` WHEN OLD.`source_type` = 'synthetic_pilot' AND ( NEW.`firebase_uid` <> OLD.`firebase_uid` OR NEW.`source_type` <> OLD.`source_type` OR NEW.`source_reference` <> OLD.`source_reference` OR NEW.`work_number` <> OLD.`work_number` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_SYNTHETIC_WORK_IDENTITY_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_runs_contract_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_runs_contract_no_update` BEFORE UPDATE OF `id`, `organisation_id`, `program_code`, `seed_version`, `record_mode`, `installer_target`, `technicians_per_installer`, `jobs_per_technician`, `activity_catalogue_sha256`, `source_manifest_sha256`, `created_by_uid`, `created_at` ON `compliance_pilot_runs` WHEN NEW.`id` <> OLD.`id` OR NEW.`organisation_id` <> OLD.`organisation_id` OR NEW.`program_code` <> OLD.`program_code` OR NEW.`seed_version` <> OLD.`seed_version` OR NEW.`record_mode` <> OLD.`record_mode` OR NEW.`installer_target` <> OLD.`installer_target` OR NEW.`technicians_per_installer` <> OLD.`technicians_per_installer` OR NEW.`jobs_per_technician` <> OLD.`jobs_per_technician` OR NEW.`activity_catalogue_sha256` <> OLD.`activity_catalogue_sha256` OR NEW.`source_manifest_sha256` <> OLD.`source_manifest_sha256` OR NEW.`created_by_uid` <> OLD.`created_by_uid` OR NEW.`created_at` <> OLD.`created_at` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_CONTRACT_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_runs_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_runs_no_delete` BEFORE DELETE ON `compliance_pilot_runs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_sources_identity_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_sources_identity_no_update` BEFORE UPDATE OF `id`, `pilot_run_id`, `source_key`, `source_kind`, `title`, `official_source_url`, `official_version`, `effective_from`, `effective_to`, `official_source_sha256`, `hash_status`, `source_priority`, `captured_at` ON `compliance_pilot_source_instruments` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_SOURCE_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_sources_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_sources_no_delete` BEFORE DELETE ON `compliance_pilot_source_instruments` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_controls_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_controls_no_update` BEFORE UPDATE ON `compliance_pilot_control_options` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_CONTROL_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_controls_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_controls_no_delete` BEFORE DELETE ON `compliance_pilot_control_options` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_evidence_contracts_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_evidence_contracts_no_update` BEFORE UPDATE ON `compliance_pilot_evidence_contracts` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_EVIDENCE_CONTRACT_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_evidence_contracts_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_evidence_contracts_no_delete` BEFORE DELETE ON `compliance_pilot_evidence_contracts` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_calculators_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_calculators_no_update` BEFORE UPDATE ON `compliance_pilot_calculator_contracts` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_CALCULATOR_CONTRACT_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_calculators_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_calculators_no_delete` BEFORE DELETE ON `compliance_pilot_calculator_contracts` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_installers_identity_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_installers_identity_no_update` BEFORE UPDATE OF `id`, `pilot_run_id`, `installer_slot`, `trade_account_uid`, `company_code`, `business_name`, `created_at` ON `compliance_pilot_installers` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_INSTALLER_IDENTITY_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_installers_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_installers_no_delete` BEFORE DELETE ON `compliance_pilot_installers` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_technicians_identity_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_technicians_identity_no_update` BEFORE UPDATE OF `id`, `pilot_run_id`, `installer_id`, `technician_slot`, `team_member_id`, `technician_code`, `display_name`, `created_at` ON `compliance_pilot_technicians` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_TECHNICIAN_IDENTITY_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_technicians_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_technicians_no_delete` BEFORE DELETE ON `compliance_pilot_technicians` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_jobs_identity_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_jobs_identity_no_update` BEFORE UPDATE OF `id`, `pilot_run_id`, `installer_id`, `technician_id`, `work_order_id`, `case_number`, `job_number`, `activity_template_id`, `activity_key`, `registry_activity_code`, `specification_part`, `title`, `service_category`, `product_category`, `scenario_code`, `scenario`, `catalogue_state`, `activity_date`, `record_mode`, `created_at` ON `compliance_pilot_jobs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_JOB_IDENTITY_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_jobs_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_jobs_no_delete` BEFORE DELETE ON `compliance_pilot_jobs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_connector_runs_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_connector_runs_no_update` BEFORE UPDATE ON `compliance_pilot_connector_runs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_CONNECTOR_ARTIFACT_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_connector_runs_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_connector_runs_no_delete` BEFORE DELETE ON `compliance_pilot_connector_runs` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_events_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_events_no_update` BEFORE UPDATE ON `compliance_pilot_events` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_EVENT_IMMUTABLE'); END;" },
+  { name: "compliance_pilot_events_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_events_no_delete` BEFORE DELETE ON `compliance_pilot_events` BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_DELETE_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_sources_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_sources_parent_guard` BEFORE INSERT ON `compliance_pilot_source_instruments` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_runs` pilot_run WHERE pilot_run.`id` = NEW.`pilot_run_id` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_PARENT_INVALID'); END;" },
+  { name: "compliance_pilot_controls_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_controls_parent_guard` BEFORE INSERT ON `compliance_pilot_control_options` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_source_instruments` source WHERE source.`pilot_run_id` = NEW.`pilot_run_id` AND source.`source_key` = NEW.`source_key` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_SOURCE_INVALID'); END;" },
+  { name: "compliance_pilot_evidence_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_evidence_parent_guard` BEFORE INSERT ON `compliance_pilot_evidence_contracts` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_source_instruments` source WHERE source.`pilot_run_id` = NEW.`pilot_run_id` AND source.`source_key` = NEW.`source_key` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_SOURCE_INVALID'); END;" },
+  { name: "compliance_pilot_calculators_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_calculators_parent_guard` BEFORE INSERT ON `compliance_pilot_calculator_contracts` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_source_instruments` source WHERE source.`pilot_run_id` = NEW.`pilot_run_id` AND source.`source_key` = NEW.`source_key` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_SOURCE_INVALID'); END;" },
+  { name: "compliance_pilot_installers_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_installers_parent_guard` BEFORE INSERT ON `compliance_pilot_installers` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_runs` pilot_run JOIN `trade_accounts` account ON account.`firebase_uid` = NEW.`trade_account_uid` WHERE pilot_run.`id` = NEW.`pilot_run_id` AND account.`is_synthetic` = 1 AND account.`verification_status` = 'under_review' AND account.`verified_abn` = '' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_INSTALLER_INVALID'); END;" },
+  { name: "compliance_pilot_technicians_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_technicians_parent_guard` BEFORE INSERT ON `compliance_pilot_technicians` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_installers` installer JOIN `trade_team_members` member ON member.`id` = NEW.`team_member_id` WHERE installer.`id` = NEW.`installer_id` AND installer.`pilot_run_id` = NEW.`pilot_run_id` AND member.`owner_uid` = installer.`trade_account_uid` AND member.`member_uid` = '' AND member.`email` = '' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_TECHNICIAN_INVALID'); END;" },
+  { name: "compliance_pilot_jobs_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_jobs_parent_guard` BEFORE INSERT ON `compliance_pilot_jobs` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_installers` installer JOIN `compliance_pilot_technicians` technician ON technician.`id` = NEW.`technician_id` AND technician.`installer_id` = installer.`id` AND technician.`pilot_run_id` = installer.`pilot_run_id` JOIN `trade_work_orders` work ON work.`id` = NEW.`work_order_id` AND work.`firebase_uid` = installer.`trade_account_uid` JOIN `compliance_pilot_calculator_contracts` calculator ON calculator.`pilot_run_id` = installer.`pilot_run_id` AND calculator.`activity_template_id` = NEW.`activity_template_id` WHERE installer.`id` = NEW.`installer_id` AND installer.`pilot_run_id` = NEW.`pilot_run_id` AND work.`source_type` = 'synthetic_pilot' AND work.`source_reference` = NEW.`pilot_run_id` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_JOB_INVALID'); END;" },
+  { name: "compliance_pilot_connectors_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_connectors_parent_guard` BEFORE INSERT ON `compliance_pilot_connector_runs` WHEN NEW.`external_submission_enabled` <> 0 OR NOT EXISTS ( SELECT 1 FROM `compliance_pilot_runs` pilot_run WHERE pilot_run.`id` = NEW.`pilot_run_id` AND pilot_run.`record_mode` = 'synthetic_test' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_CONNECTOR_INVALID'); END;" },
+  { name: "compliance_pilot_events_parent_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_events_parent_guard` BEFORE INSERT ON `compliance_pilot_events` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_pilot_runs` pilot_run WHERE pilot_run.`id` = NEW.`pilot_run_id` AND pilot_run.`organisation_id` = NEW.`organisation_id` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_EVENT_PARENT_INVALID'); END;" },
+  { name: "compliance_pilot_verified_claims_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_verified_claims_guard` BEFORE UPDATE OF `rule_status`, `lookup_status`, `calculator_status` ON `compliance_pilot_jobs` WHEN NEW.`rule_status` = 'verified' OR NEW.`lookup_status` = 'verified' OR NEW.`calculator_status` = 'verified' BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_VERIFICATION_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_run_authority_claims_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_run_authority_claims_guard` BEFORE UPDATE OF `rule_import_status`, `lookup_status`, `evidence_status`, `calculator_status`, `connector_status` ON `compliance_pilot_runs` WHEN NEW.`rule_import_status` = 'independently_verified' OR NEW.`lookup_status` = 'verified' OR NEW.`evidence_status` = 'verified' OR NEW.`calculator_status` = 'verified' OR NEW.`connector_status` = 'authorised' BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_AUTHORITY_CLAIM_FORBIDDEN'); END;" },
+  { name: "compliance_pilot_archived_jobs_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_pilot_archived_jobs_guard` BEFORE UPDATE ON `compliance_pilot_jobs` WHEN EXISTS ( SELECT 1 FROM `compliance_pilot_runs` pilot_run WHERE pilot_run.`id` = OLD.`pilot_run_id` AND pilot_run.`status` = 'archived' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_PILOT_ARCHIVED'); END;" },
   { name: "compliance_programs_publish_requirements", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_programs_publish_requirements` BEFORE INSERT ON `compliance_programs` WHEN NEW.`publish_state` = 'published' AND ( trim(NEW.`official_source_url`) = '' OR trim(NEW.`official_source_title`) = '' OR trim(NEW.`official_source_checked_at`) = '' OR length(NEW.`official_source_sha256`) <> 64 OR trim(NEW.`published_by_uid`) = '' OR trim(NEW.`published_at`) = '' ) BEGIN SELECT RAISE(ABORT, 'Published compliance programs require source and publisher evidence'); END;" },
   { name: "compliance_programs_publish_update_requirements", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_programs_publish_update_requirements` BEFORE UPDATE OF `publish_state` ON `compliance_programs` WHEN NEW.`publish_state` = 'published' AND ( trim(NEW.`official_source_url`) = '' OR trim(NEW.`official_source_title`) = '' OR trim(NEW.`official_source_checked_at`) = '' OR length(NEW.`official_source_sha256`) <> 64 OR trim(NEW.`published_by_uid`) = '' OR trim(NEW.`published_at`) = '' ) BEGIN SELECT RAISE(ABORT, 'Published compliance programs require source and publisher evidence'); END;" },
   { name: "compliance_programs_state_transition_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_programs_state_transition_guard` BEFORE UPDATE OF `publish_state` ON `compliance_programs` WHEN NOT ( (OLD.`publish_state` = 'draft' AND NEW.`publish_state` IN ('draft', 'published')) OR (OLD.`publish_state` = 'published' AND NEW.`publish_state` IN ('published', 'withdrawn')) OR (OLD.`publish_state` = 'withdrawn' AND NEW.`publish_state` = 'withdrawn') ) BEGIN SELECT RAISE(ABORT, 'Compliance program publish state cannot move backwards'); END;" },
@@ -175,11 +210,30 @@ export const CREDITEX_SCHEMA_GUARD_DEFINITIONS = [
   { name: "compliance_case_evidence_maximum_count_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_case_evidence_maximum_count_update_guard` BEFORE UPDATE OF `status` ON `compliance_case_evidence` WHEN NEW.`status` IN ('received', 'under_review', 'accepted') AND EXISTS ( SELECT 1 FROM `compliance_evidence_requirements` requirement WHERE requirement.`id` = NEW.`requirement_id` AND requirement.`organisation_id` = NEW.`organisation_id` AND requirement.`maximum_count` <> 0 AND ( SELECT COUNT(DISTINCT current_evidence.`original_sha256`) FROM `compliance_case_evidence` current_evidence WHERE current_evidence.`id` <> OLD.`id` AND current_evidence.`case_id` = NEW.`case_id` AND current_evidence.`organisation_id` = NEW.`organisation_id` AND current_evidence.`requirement_id` = NEW.`requirement_id` AND current_evidence.`status` IN ('received', 'under_review', 'accepted') ) >= requirement.`maximum_count` ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_EVIDENCE_MAXIMUM_REACHED'); END;" },
 ] as const;
 
+const CREDITEX_PILOT_SCHEMA_GUARD_COUNT = 35;
+
+export const CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS =
+  CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS.slice(
+    0,
+    CREDITEX_PILOT_SCHEMA_GUARD_COUNT,
+  );
+
+export const CREDITEX_SCHEMA_GUARD_DEFINITIONS =
+  CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS.slice(
+    CREDITEX_PILOT_SCHEMA_GUARD_COUNT,
+  );
+
 export const CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_SCHEMA_GUARD_DEFINITIONS.slice(0, 27);
 
 const SCHEMA_INSTALL_BATCH_SIZE = 40;
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
+const pilotReadinessByDatabase = new WeakMap<object, Promise<void>>();
+
+type SchemaGuardDefinition = {
+  readonly name: string;
+  readonly sql: string;
+};
 
 export function canonicalCreditexSchemaGuardSql(sql: string) {
   const normalisedPrefix = sql
@@ -237,9 +291,12 @@ async function installedGuards(database: D1Database) {
   return installed;
 }
 
-async function installCreditexSchemaGuards(database: D1Database) {
+async function installCreditexSchemaGuards(
+  database: D1Database,
+  definitions: readonly SchemaGuardDefinition[],
+) {
   const installed = await installedGuards(database);
-  const mismatched = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
+  const mismatched = definitions.filter(
     (definition) =>
       installed.has(definition.name) &&
       canonicalCreditexSchemaGuardSql(installed.get(definition.name) || "")
@@ -252,7 +309,7 @@ async function installCreditexSchemaGuards(database: D1Database) {
         .join(",")}`,
     );
   }
-  const missing = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
+  const missing = definitions.filter(
     (definition) => !installed.has(definition.name),
   );
   const batch = missing.slice(0, SCHEMA_INSTALL_BATCH_SIZE);
@@ -274,7 +331,7 @@ async function installCreditexSchemaGuards(database: D1Database) {
         .join(",")}`,
     );
   }
-  const remaining = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
+  const remaining = definitions.filter(
     (definition) => !verified.has(definition.name),
   );
   if (remaining.length) {
@@ -286,13 +343,36 @@ export async function ensureCreditexSchemaGuards(database: D1Database) {
   const databaseKey = database as object;
   let readiness = readinessByDatabase.get(databaseKey);
   if (!readiness) {
-    readiness = installCreditexSchemaGuards(database);
+    readiness = installCreditexSchemaGuards(
+      database,
+      CREDITEX_SCHEMA_GUARD_DEFINITIONS,
+    );
     readinessByDatabase.set(databaseKey, readiness);
   }
   try {
     await readiness;
   } catch (error) {
     readinessByDatabase.delete(databaseKey);
+    throw error;
+  }
+}
+
+export async function ensureCreditexPilotSchemaGuards(
+  database: D1Database,
+) {
+  const databaseKey = database as object;
+  let readiness = pilotReadinessByDatabase.get(databaseKey);
+  if (!readiness) {
+    readiness = installCreditexSchemaGuards(
+      database,
+      CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS,
+    );
+    pilotReadinessByDatabase.set(databaseKey, readiness);
+  }
+  try {
+    await readiness;
+  } catch (error) {
+    pilotReadinessByDatabase.delete(databaseKey);
     throw error;
   }
 }

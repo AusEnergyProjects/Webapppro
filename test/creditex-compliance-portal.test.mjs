@@ -430,10 +430,11 @@ test("government catalogue distinguishes national outcomes and remains discovery
     /certificateQuantity|certificateCount|estimatedCertificates|rebateAmount|incentiveAmount/,
   );
   assert.equal(
-    (governmentCatalogue.match(/"6\(23\)"/g) || []).length,
+    (governmentCatalogue.match(/activity\("VEU", "6",/g) || []).length,
     1,
-    "the example activity must be one controlled template, not a special-case workflow",
+    "Part 6 must be one controlled template, not a special-case workflow",
   );
+  assert.doesNotMatch(governmentCatalogue, /6\(23\)/);
 });
 
 test("installer intake uses chained governed dropdowns and binds the exact source version", () => {

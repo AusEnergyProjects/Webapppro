@@ -81,9 +81,9 @@ test("every activity belongs to a catalogued program and has a unique key", () =
   }
 });
 
-test("the example VEU activity is ordinary catalogue data and incomplete variants fail closed", () => {
+test("VEU Part 6 is ordinary catalogue data and incomplete variants fail closed", () => {
   const examples = governmentActivityTemplates("VEU").filter(
-    (activityTemplate) => activityTemplate.registryActivityCode === "6(23)",
+    (activityTemplate) => activityTemplate.registryActivityCode === "6",
   );
   assert.equal(examples.length, 1);
   assert.equal(examples[0].productCategory, "");

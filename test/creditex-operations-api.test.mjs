@@ -62,7 +62,7 @@ test("operations filters are activity-agnostic, bounded, and cover the authorita
     new URLSearchParams([
       ["program", "VEU"],
       ["program", "SRES"],
-      ["activity", "6(23)"],
+      ["activity", "6"],
       ["activity", "HPHW-1"],
       ["status", "in_review"],
       ["evidenceStatus", "changes_required"],
@@ -102,7 +102,7 @@ test("operations filters are activity-agnostic, bounded, and cover the authorita
     ]),
   );
   assert.deepEqual(filters.programs, ["VEU", "SRES"]);
-  assert.deepEqual(filters.activities, ["6(23)", "HPHW-1"]);
+  assert.deepEqual(filters.activities, ["6", "HPHW-1"]);
   assert.deepEqual(filters.lifecycleStatuses, ["in_review"]);
   assert.deepEqual(filters.evidenceStatuses, ["changes_required"]);
   assert.deepEqual(filters.workTypes, ["job"]);

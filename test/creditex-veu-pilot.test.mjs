@@ -1,0 +1,1628 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import test from "node:test";
+import ts from "typescript";
+import {
+  GOVERNMENT_ACTIVITY_TEMPLATES,
+} from "../src/lib/australian-government-program-catalogue.ts";
+import {
+  CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS,
+  ensureCreditexPilotSchemaGuards,
+} from "../src/lib/creditex-schema-guards.ts";
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const migration = read("../drizzle/0099_creditex_synthetic_pilot.sql");
+const schema = read("../db/schema.ts");
+const contractSource = read("../src/lib/creditex-veu-pilot-contract.ts");
+const server = read("../src/lib/creditex-veu-pilot-server.ts");
+const route = read("../src/app/api/creditex/pilot/route.ts");
+const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
+const portal = read("../src/components/CreditexCompliancePortal.tsx");
+const migrationDirectory = new URL("../drizzle/", import.meta.url);
+const completeMigrationChain = fs.readdirSync(migrationDirectory)
+  .filter((name) => /^\d{4}_.+\.sql$/.test(name))
+  .sort();
+
+function loadPilotContract() {
+  const output = ts.transpileModule(contractSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: "creditex-veu-pilot-contract.ts",
+  }).outputText;
+  const record = { exports: {} };
+  const require = (specifier) => {
+    if (specifier === "./australian-government-program-catalogue") {
+      return { GOVERNMENT_ACTIVITY_TEMPLATES };
+    }
+    throw new Error(`Unexpected pilot contract dependency: ${specifier}`);
+  };
+  new Function("require", "module", "exports", output)(
+    require,
+    record,
+    record.exports,
+  );
+  return record.exports;
+}
+
+const pilotContract = loadPilotContract();
+
+function loadPilotServer() {
+  const output = ts.transpileModule(server, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: "creditex-veu-pilot-server.ts",
+  }).outputText;
+  const record = { exports: {} };
+  const require = (specifier) => {
+    if (specifier === "./creditex-veu-pilot-contract") return pilotContract;
+    throw new Error(`Unexpected pilot server dependency: ${specifier}`);
+  };
+  new Function("require", "module", "exports", output)(
+    require,
+    record,
+    record.exports,
+  );
+  return record.exports;
+}
+
+const pilotServer = loadPilotServer();
+
+class TestD1Statement {
+  constructor(database, metrics, sql, values = []) {
+    this.database = database;
+    this.metrics = metrics;
+    this.sql = sql;
+    this.values = values;
+  }
+
+  bind(...values) {
+    assert.ok(
+      values.length <= 100,
+      `D1 statement exceeds the 100-bound-parameter limit: ${values.length}`,
+    );
+    return new TestD1Statement(this.database, this.metrics, this.sql, values);
+  }
+
+  async measure(operation) {
+    if (!this.metrics.trackConcurrency) return operation();
+    this.metrics.active += 1;
+    this.metrics.maxActive = Math.max(
+      this.metrics.maxActive,
+      this.metrics.active,
+    );
+    await Promise.resolve();
+    try {
+      return operation();
+    } finally {
+      this.metrics.active -= 1;
+    }
+  }
+
+  async first() {
+    return this.measure(
+      () => this.database.prepare(this.sql).get(...this.values) || null,
+    );
+  }
+
+  async all() {
+    return this.measure(
+      () => ({ results: this.database.prepare(this.sql).all(...this.values) }),
+    );
+  }
+
+  async run() {
+    return this.measure(() => {
+      const result = this.database.prepare(this.sql).run(...this.values);
+      return {
+        success: true,
+        meta: {
+          changes: Number(result.changes),
+          last_row_id: result.lastInsertRowid,
+        },
+      };
+    });
+  }
+}
+
+function testD1(database) {
+  const metrics = {
+    active: 0,
+    maxActive: 0,
+    trackConcurrency: false,
+  };
+  return {
+    metrics,
+    prepare(sql) {
+      return new TestD1Statement(database, metrics, sql);
+    },
+    async batch(statements) {
+      assert.ok(
+        statements.length <= 50,
+        `Synthetic pilot batch exceeds the 50-subrequest safety budget: ${statements.length}`,
+      );
+      database.exec("BEGIN");
+      try {
+        const results = [];
+        for (const statement of statements) {
+          results.push(await statement.run());
+        }
+        database.exec("COMMIT");
+        return results;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  };
+}
+
+function applyCompleteMigrationChain(database) {
+  assert.equal(completeMigrationChain.length, 100);
+  assert.match(completeMigrationChain[0], /^0000_/);
+  assert.match(completeMigrationChain.at(-1), /^0099_/);
+  let emulatedFtsTables = 0;
+  for (const name of completeMigrationChain) {
+    const migrationSource = fs.readFileSync(
+      new URL(name, migrationDirectory),
+      "utf8",
+    );
+    for (const statement of migrationSource
+      .split("--> statement-breakpoint")
+      .map((item) => item.trim())
+      .filter(Boolean)) {
+      try {
+        database.exec(statement);
+      } catch (error) {
+        const ftsDefinition = statement.match(
+          /^CREATE VIRTUAL TABLE ([a-z_]+) USING fts5\((.*)\);?$/is,
+        );
+        if (
+          !(error instanceof Error)
+          || !error.message.includes("no such module: fts5")
+          || !ftsDefinition
+        ) {
+          throw error;
+        }
+        const columns = ftsDefinition[2]
+          .split(",")
+          .map((definition) => definition.trim())
+          .filter((definition) => !definition.startsWith("tokenize="))
+          .map((definition) => `${definition.split(/\s+/)[0]} text`);
+        database.exec(
+          `CREATE TABLE ${ftsDefinition[1]} (${columns.join(", ")})`,
+        );
+        emulatedFtsTables += 1;
+      }
+    }
+  }
+  assert.equal(
+    emulatedFtsTables,
+    5,
+    "node:sqlite lacks FTS5; all five search indexes need table-compatible test substitutes",
+  );
+}
+
+function pilotMember(suffix) {
+  return {
+    uid: `creditex-pilot-admin-${suffix}`,
+    organisationId: `org_creditex_synthetic_pilot_${suffix}`,
+    role: "admin",
+    authTime: Math.floor(Date.now() / 1_000),
+  };
+}
+
+async function provisionCompletePilot(d1, member) {
+  const started = await pilotServer.startCreditexVeuPilot(
+    d1,
+    member,
+    pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+  );
+  assert.equal(started.alreadyExists, false);
+  for (let cohort = 1; cohort <= 30; cohort += 1) {
+    const result =
+      await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member);
+    assert.equal(result.complete, false);
+    assert.equal(result.provisioned.jobs, 10);
+  }
+  assert.deepEqual(
+    await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member),
+    { runId: started.runId, complete: true },
+  );
+  const finalised = await pilotServer.finaliseCreditexVeuPilot(d1, member);
+  assert.equal(finalised.alreadyFinalised, false);
+  assert.equal(finalised.regulatorAcceptedCount, 0);
+  assert.equal(finalised.externalSubmissionEnabled, false);
+  return { runId: started.runId, finalised };
+}
+
+function pilotPopulation(database, runId) {
+  const row = database.prepare(`SELECT
+      (SELECT COUNT(*) FROM compliance_pilot_installers
+        WHERE pilot_run_id = ?) AS installers,
+      (SELECT COUNT(*) FROM compliance_pilot_technicians
+        WHERE pilot_run_id = ?) AS technicians,
+      (SELECT COUNT(*) FROM compliance_pilot_jobs
+        WHERE pilot_run_id = ?) AS jobs,
+      (SELECT COUNT(DISTINCT activity_template_id)
+        FROM compliance_pilot_jobs WHERE pilot_run_id = ?) AS activities,
+      (SELECT COUNT(*) FROM compliance_cases
+        WHERE work_order_id IN (
+          SELECT work_order_id FROM compliance_pilot_jobs
+          WHERE pilot_run_id = ?
+        )) AS regulated_cases`).get(
+    runId,
+    runId,
+    runId,
+    runId,
+    runId,
+  );
+  return {
+    installers: Number(row.installers),
+    technicians: Number(row.technicians),
+    jobs: Number(row.jobs),
+    activities: Number(row.activities),
+    regulatedCases: Number(row.regulated_cases),
+  };
+}
+
+function sourceSection(source, start, end) {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `Missing source boundary: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `Missing source boundary: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
+test("migration creates a constrained, synthetic-only pilot domain", (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  database.exec(migration);
+
+  const expectedTables = [
+    "compliance_pilot_calculator_contracts",
+    "compliance_pilot_connector_runs",
+    "compliance_pilot_control_options",
+    "compliance_pilot_events",
+    "compliance_pilot_evidence_contracts",
+    "compliance_pilot_installers",
+    "compliance_pilot_jobs",
+    "compliance_pilot_runs",
+    "compliance_pilot_source_instruments",
+    "compliance_pilot_technicians",
+  ];
+  const actualTables = database.prepare(`SELECT name
+      FROM sqlite_master
+      WHERE type = 'table' AND name LIKE 'compliance_pilot_%'
+      ORDER BY name`).all().map((row) => row.name);
+  assert.deepEqual(actualTables, expectedTables);
+
+  for (const tableName of expectedTables) {
+    assert.match(
+      schema,
+      new RegExp(`sqliteTable\\("${tableName.replaceAll("_", "\\_")}"`),
+    );
+  }
+
+  assert.match(
+    migration,
+    /`record_mode` text DEFAULT 'synthetic_test' NOT NULL CHECK \(`record_mode` = 'synthetic_test'\)/,
+  );
+  assert.match(
+    migration,
+    /`installer_target` integer DEFAULT 10 NOT NULL CHECK \(`installer_target` = 10\)/,
+  );
+  assert.match(
+    migration,
+    /`technicians_per_installer` integer DEFAULT 3 NOT NULL CHECK \(`technicians_per_installer` = 3\)/,
+  );
+  assert.match(
+    migration,
+    /`jobs_per_technician` integer DEFAULT 10 NOT NULL CHECK \(`jobs_per_technician` = 10\)/,
+  );
+  assert.match(
+    migration,
+    /`installer_slot` integer NOT NULL CHECK \(`installer_slot` BETWEEN 1 AND 10\)/,
+  );
+  assert.match(
+    migration,
+    /`technician_slot` integer NOT NULL CHECK \(`technician_slot` BETWEEN 1 AND 3\)/,
+  );
+  assert.match(
+    migration,
+    /`mode` text DEFAULT 'dry_run' NOT NULL CHECK \(`mode` = 'dry_run'\)/,
+  );
+  assert.match(
+    migration,
+    /`external_submission_enabled` integer DEFAULT 0 NOT NULL CHECK \(`external_submission_enabled` = 0\)/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX `compliance_pilot_installer_slot_idx`/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX `compliance_pilot_technician_slot_idx`/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX `compliance_pilot_jobs_work_order_idx`/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX `compliance_pilot_connector_run_idx`/,
+  );
+  assert.doesNotMatch(migration, /\b(?:INSERT|UPDATE|DELETE)\b/i);
+  assert.doesNotMatch(
+    migration,
+    /CREATE TABLE `(?:compliance_cases|compliance_certificate_lots|compliance_submission_batch_items)`/,
+  );
+
+  const hash = "0".repeat(64);
+  assert.throws(
+    () => database.prepare(`INSERT INTO compliance_pilot_runs (
+        id, organisation_id, program_code, name, seed_version,
+        installer_target, technicians_per_installer, jobs_per_technician,
+        activity_catalogue_sha256, source_manifest_sha256, created_by_uid,
+        created_at, updated_at
+      ) VALUES (?, ?, 'VEU', ?, ?, 9, 3, 10, ?, ?, ?, ?, ?)`).run(
+      "invalid-run",
+      "organisation",
+      "Invalid target",
+      "seed",
+      hash,
+      hash,
+      "actor",
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-01T00:00:00.000Z",
+    ),
+    /CHECK constraint failed/,
+  );
+  assert.throws(
+    () => database.prepare(`INSERT INTO compliance_pilot_connector_runs (
+        id, pilot_run_id, connector_code, mapping_version, status,
+        artifact_sha256, artifact_manifest, external_submission_enabled,
+        created_by_uid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'prepared', ?, '{}', 1, ?, ?, ?)`).run(
+      "invalid-connector",
+      "pilot",
+      "VEU_REGISTRY_SYNTHETIC",
+      "v1",
+      hash,
+      "actor",
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-01T00:00:00.000Z",
+    ),
+    /CHECK constraint failed/,
+  );
+});
+
+test("database guards prevent synthetic work entering regulated case or submission flows", (t) => {
+  const guardInventory = new Map(
+    CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS.map(
+      (definition) => [definition.name, definition.sql],
+    ),
+  );
+  for (const guardName of [
+    "compliance_pilot_sources_parent_guard",
+    "compliance_pilot_controls_parent_guard",
+    "compliance_pilot_evidence_parent_guard",
+    "compliance_pilot_calculators_parent_guard",
+    "compliance_pilot_installers_parent_guard",
+    "compliance_pilot_technicians_parent_guard",
+    "compliance_pilot_jobs_parent_guard",
+    "compliance_pilot_connectors_parent_guard",
+    "compliance_pilot_events_parent_guard",
+    "compliance_pilot_verified_claims_guard",
+    "compliance_pilot_run_authority_claims_guard",
+  ]) {
+    assert.ok(guardInventory.has(guardName), `Missing pilot guard ${guardName}`);
+  }
+  assert.match(
+    guardInventory.get("compliance_pilot_events_parent_guard"),
+    /pilot_run\.`organisation_id` = NEW\.`organisation_id`/,
+  );
+  assert.match(
+    guardInventory.get("compliance_pilot_jobs_parent_guard"),
+    /work\.`firebase_uid` = installer\.`trade_account_uid`[\s\S]*work\.`source_reference` = NEW\.`pilot_run_id`/,
+  );
+  assert.match(
+    guardInventory.get("compliance_pilot_connectors_parent_guard"),
+    /NEW\.`external_submission_enabled` <> 0/,
+  );
+  assert.match(
+    guardInventory.get("compliance_pilot_verified_claims_guard"),
+    /COMPLIANCE_PILOT_VERIFICATION_FORBIDDEN/,
+  );
+  assert.match(
+    guardInventory.get("compliance_pilot_run_authority_claims_guard"),
+    /COMPLIANCE_PILOT_AUTHORITY_CLAIM_FORBIDDEN/,
+  );
+
+  const guardNames = [
+    "compliance_cases_synthetic_work_order_guard",
+    "compliance_batch_items_synthetic_case_guard",
+    "trade_work_orders_synthetic_identity_no_update",
+  ];
+  const guards = guardNames.map((name) => {
+    const definition = CREDITEX_PILOT_SCHEMA_GUARD_DEFINITIONS.find(
+      (candidate) => candidate.name === name,
+    );
+    assert.ok(definition, `Missing schema guard ${name}`);
+    return definition;
+  });
+
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  database.exec(`CREATE TABLE trade_work_orders (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      source_type text NOT NULL,
+      source_reference text NOT NULL,
+      work_number text NOT NULL
+    );
+    CREATE TABLE compliance_cases (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL
+    );
+    CREATE TABLE compliance_submission_batch_items (
+      id text PRIMARY KEY NOT NULL,
+      case_id text NOT NULL
+    );`);
+  for (const guard of guards) database.exec(guard.sql);
+
+  database.prepare(`INSERT INTO trade_work_orders
+      (id, firebase_uid, source_type, source_reference, work_number)
+      VALUES ('synthetic-work', 'synthetic-installer', 'synthetic_pilot',
+        'pilot-run', 'TEST-VEU-I01-T01-J01')`).run();
+  assert.throws(
+    () => database.prepare(`INSERT INTO compliance_cases (id, work_order_id)
+      VALUES ('regulated-case', 'synthetic-work')`).run(),
+    /COMPLIANCE_SYNTHETIC_CASE_FORBIDDEN/,
+  );
+  assert.throws(
+    () => database.prepare(`UPDATE trade_work_orders
+      SET work_number = 'MUTATED' WHERE id = 'synthetic-work'`).run(),
+    /COMPLIANCE_SYNTHETIC_WORK_IDENTITY_IMMUTABLE/,
+  );
+
+  database.prepare(`INSERT INTO trade_work_orders
+      (id, firebase_uid, source_type, source_reference, work_number)
+      VALUES ('normal-work', 'installer', 'internal', 'job', 'JOB-1')`).run();
+  database.prepare(`INSERT INTO compliance_cases (id, work_order_id)
+      VALUES ('existing-case', 'normal-work')`).run();
+  database.prepare(`UPDATE trade_work_orders
+      SET source_type = 'synthetic_pilot' WHERE id = 'normal-work'`).run();
+  assert.throws(
+    () => database.prepare(`INSERT INTO compliance_submission_batch_items
+      (id, case_id) VALUES ('batch-item', 'existing-case')`).run(),
+    /COMPLIANCE_SYNTHETIC_SUBMISSION_FORBIDDEN/,
+  );
+});
+
+test("complete migration chain provisions and reconciles the governed 10/30/300 VEU pilot", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+
+  const member = {
+    uid: "creditex-pilot-admin",
+    organisationId: "org_creditex_synthetic_pilot_test",
+    role: "admin",
+    authTime: Math.floor(Date.now() / 1_000),
+  };
+  const started = await pilotServer.startCreditexVeuPilot(
+    d1,
+    member,
+    pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+  );
+  assert.equal(started.alreadyExists, false);
+  assert.equal(
+    started.runId,
+    [
+      "creditex-veu-pilot",
+      pilotContract.CREDITEX_VEU_PILOT_SEED_VERSION,
+      member.organisationId,
+    ].join(":"),
+  );
+  assert.deepEqual(
+    await pilotServer.startCreditexVeuPilot(
+      d1,
+      member,
+      pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+    ),
+    { runId: started.runId, alreadyExists: true },
+  );
+
+  for (let cohort = 1; cohort <= 30; cohort += 1) {
+    const result =
+      await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member);
+    assert.equal(result.complete, false);
+    assert.equal(result.provisioned.jobs, 10);
+    assert.equal(
+      (result.provisioned.installerSlot - 1) * 3
+        + result.provisioned.technicianSlot,
+      cohort,
+    );
+  }
+  assert.deepEqual(
+    await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member),
+    { runId: started.runId, complete: true },
+  );
+
+  const firstFinalise = await pilotServer.finaliseCreditexVeuPilot(d1, member);
+  const secondFinalise = await pilotServer.finaliseCreditexVeuPilot(d1, member);
+  assert.equal(firstFinalise.artifactSha256.length, 64);
+  assert.equal(secondFinalise.artifactSha256, firstFinalise.artifactSha256);
+  assert.deepEqual(firstFinalise.counts, secondFinalise.counts);
+  assert.equal(firstFinalise.alreadyFinalised, false);
+  assert.equal(secondFinalise.alreadyFinalised, true);
+  assert.equal(firstFinalise.regulatorAcceptedCount, 0);
+  assert.equal(secondFinalise.regulatorAcceptedCount, 0);
+  assert.equal(firstFinalise.externalSubmissionEnabled, false);
+  assert.deepEqual(
+    await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member),
+    { runId: started.runId, complete: true },
+  );
+
+  assert.deepEqual(firstFinalise.counts, {
+    installers: 10,
+    technicians: 30,
+    jobs: 300,
+    activities: pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES.length,
+    sources: pilotContract.CREDITEX_VEU_PILOT_SOURCES.length,
+    hashedSources: pilotContract.CREDITEX_VEU_PILOT_SOURCES.filter(
+      (source) => source.officialSourceSha256,
+    ).length,
+    controlOptions: pilotContract.CREDITEX_VEU_PILOT_CONTROL_OPTIONS.length,
+    calculatorContracts: pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES.length,
+    evidenceContracts:
+      pilotContract.CREDITEX_VEU_PILOT_EVIDENCE_CONTRACTS.length,
+    regulatedCases: 0,
+  });
+
+  const installers = database.prepare(`SELECT installer.installer_slot,
+      COUNT(DISTINCT technician.id) AS technicians,
+      COUNT(DISTINCT job.id) AS jobs
+    FROM compliance_pilot_installers installer
+    JOIN compliance_pilot_technicians technician
+      ON technician.installer_id = installer.id
+    JOIN compliance_pilot_jobs job
+      ON job.installer_id = installer.id
+    WHERE installer.pilot_run_id = ?
+    GROUP BY installer.id, installer.installer_slot
+    ORDER BY installer.installer_slot`).all(started.runId);
+  assert.equal(installers.length, 10);
+  assert.ok(
+    installers.every(
+      (installer) => installer.technicians === 3 && installer.jobs === 30,
+    ),
+  );
+  const technicians = database.prepare(`SELECT technician.id,
+      COUNT(job.id) AS jobs
+    FROM compliance_pilot_technicians technician
+    JOIN compliance_pilot_jobs job
+      ON job.technician_id = technician.id
+    WHERE technician.pilot_run_id = ?
+    GROUP BY technician.id`).all(started.runId);
+  assert.equal(technicians.length, 30);
+  assert.ok(technicians.every((technician) => technician.jobs === 10));
+
+  const activityIds = database.prepare(`SELECT DISTINCT activity_template_id
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      ORDER BY activity_template_id`).all(started.runId)
+    .map((row) => row.activity_template_id);
+  assert.deepEqual(
+    activityIds,
+    pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES
+      .map((activity) => activity.templateId)
+      .sort(),
+  );
+  const partSixJobs = database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ? AND registry_activity_code = '6'`)
+    .get(started.runId);
+  const activityCounts = database.prepare(`SELECT MIN(job_count) AS minimum,
+      MAX(job_count) AS maximum
+    FROM (
+      SELECT activity_template_id, COUNT(*) AS job_count
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      GROUP BY activity_template_id
+    )`).get(started.runId);
+  assert.ok(partSixJobs.count > 0);
+  assert.ok(activityCounts.maximum - activityCounts.minimum <= 1);
+
+  const connector = database.prepare(`SELECT *
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?`).get(started.runId);
+  assert.equal(connector.mode, "dry_run");
+  assert.equal(connector.status, "validated");
+  assert.equal(connector.item_count, 300);
+  assert.equal(connector.accepted_count, 0);
+  assert.equal(connector.rejected_count, 0);
+  assert.equal(connector.unmatched_count, 0);
+  assert.equal(connector.duplicate_count, 0);
+  assert.equal(connector.external_submission_enabled, 0);
+  assert.equal(connector.artifact_sha256, firstFinalise.artifactSha256);
+  const manifest = JSON.parse(connector.artifact_manifest);
+  assert.equal(manifest.schemaVersion, "creditex-veu-synthetic-dry-run-v2");
+  assert.equal(manifest.recordMode, "synthetic_test");
+  assert.equal(manifest.externalSubmissionEnabled, false);
+  assert.equal(manifest.validation.expectedItems, 300);
+  assert.equal(manifest.validation.regulatorResponseReceived, false);
+  assert.equal(manifest.items.length, 300);
+  assert.deepEqual(
+    Object.keys(manifest.items[0]).toSorted(),
+    [
+      "activityDate",
+      "activityTemplateId",
+      "caseNumber",
+      "jobNumber",
+      "registryActivityCode",
+      "specificationPart",
+    ],
+  );
+  assert.deepEqual(
+    manifest.items.map((item) => item.jobNumber),
+    manifest.items.map((item) => item.jobNumber).toSorted(),
+  );
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?`).get(started.runId).count,
+    1,
+  );
+
+  const filters = pilotServer.parseCreditexPilotFilters(
+    new URLSearchParams([
+      ["page", "0"],
+      ["pageSize", "100"],
+    ]),
+  );
+  d1.metrics.active = 0;
+  d1.metrics.maxActive = 0;
+  d1.metrics.trackConcurrency = true;
+  const dashboard = await pilotServer.loadCreditexVeuPilotDashboard(
+    d1,
+    member,
+    filters,
+  );
+  d1.metrics.trackConcurrency = false;
+  assert.equal(d1.metrics.active, 0);
+  assert.ok(
+    d1.metrics.maxActive <= 6,
+    `Dashboard exceeded the six-connection D1 limit: ${d1.metrics.maxActive}`,
+  );
+  assert.equal(dashboard.configured, true);
+  assert.equal(dashboard.run.id, started.runId);
+  assert.equal(dashboard.run.recordMode, "synthetic_test");
+  assert.equal(dashboard.run.status, "active");
+  assert.deepEqual(dashboard.targets, {
+    installers: 10,
+    technicians: 30,
+    jobs: 300,
+    techniciansPerInstaller: 3,
+    jobsPerTechnician: 10,
+    activityFamilies: pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES.length,
+  });
+  assert.equal(dashboard.installers.length, 10);
+  assert.equal(dashboard.technicians.length, 30);
+  assert.equal(dashboard.activities.length, activityIds.length);
+  assert.equal(dashboard.jobs.length, 100);
+  assert.equal(dashboard.pagination.total, 300);
+  assert.equal(dashboard.pagination.pageCount, 3);
+  assert.equal(dashboard.priorities.length, 5);
+  assert.equal(dashboard.connectors.length, 1);
+  assert.deepEqual(dashboard.boundaries, {
+    regulatedCasesCreated: 0,
+    firebaseTestUsersCreated: 0,
+    customerEmailsOrPhonesCreated: 0,
+    evidenceObjectsCreated: 0,
+    certificateLotsCreated: 0,
+    tradesCreated: 0,
+    settlementsCreated: 0,
+    externalSubmissionEnabled: false,
+    fieldLoginStatus:
+      "Blocked. Assignment-only technicians have no Firebase identity.",
+  });
+
+  const firstWorkOrder = database.prepare(`SELECT work_order_id
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      ORDER BY job_number
+      LIMIT 1`).get(started.runId).work_order_id;
+  const insertCase = database.prepare(`INSERT INTO compliance_cases (
+      id, case_number, organisation_id, program_id, work_order_id,
+      installer_uid, activity_version_id, activity_date, site_jurisdiction,
+      activity_snapshot, created_by_type, created_by_uid, created_at, updated_at
+    ) VALUES (?, ?, ?, 'test-program', ?, 'test-installer',
+      'test-activity-version', '2026-08-01', 'VIC', '{}', 'compliance',
+      ?, '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z')`);
+  assert.throws(
+    () => insertCase.run(
+      "forbidden-pilot-case",
+      "FORBIDDEN-PILOT-CASE",
+      member.organisationId,
+      firstWorkOrder,
+      member.uid,
+    ),
+    /COMPLIANCE_SYNTHETIC_CASE_FORBIDDEN/,
+  );
+
+  database.prepare(`INSERT INTO trade_work_orders (
+      id, firebase_uid, partner_type, work_type, source_type, source_reference,
+      work_number, title, service_category, service_categories, site_area,
+      stage, priority, scheduled_start, scheduled_end, assignee_member_id,
+      assignee_label, revision, record_status, created_at, updated_at
+    ) VALUES (
+      'control-work', 'control-installer', 'installer', 'job', 'internal',
+      'control', 'CONTROL-JOB-1', 'Control job', 'other', '["other"]', '',
+      'scheduled', 'standard', '', '', '', '', 1, 'active',
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run();
+  insertCase.run(
+    "control-case",
+    "CONTROL-CASE",
+    member.organisationId,
+    "control-work",
+    member.uid,
+  );
+  database.prepare(`UPDATE trade_work_orders
+      SET source_type = 'synthetic_pilot'
+      WHERE id = 'control-work'`).run();
+  assert.throws(
+    () => database.prepare(`INSERT INTO compliance_submission_batch_items (
+        id, organisation_id, batch_id, case_id, case_revision, created_by_uid,
+        created_at, updated_at
+      ) VALUES (
+        'forbidden-batch-item', ?, 'test-batch', 'control-case', 1, ?,
+        '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+      )`).run(member.organisationId, member.uid),
+    /COMPLIANCE_SYNTHETIC_SUBMISSION_FORBIDDEN/,
+  );
+
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_cases compliance_case
+      JOIN compliance_pilot_jobs pilot_job
+        ON pilot_job.work_order_id = compliance_case.work_order_id
+      WHERE pilot_job.pilot_run_id = ?`).get(started.runId).count,
+    0,
+  );
+  for (const tableName of [
+    "compliance_certificate_lots",
+    "compliance_trades",
+    "compliance_settlements",
+  ]) {
+    assert.equal(
+      database.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get().count,
+      0,
+    );
+  }
+});
+
+test("two Creditex organisations provision independent 10/30/300 pilots without collisions", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+
+  const firstMember = pilotMember("tenant_a");
+  const secondMember = pilotMember("tenant_b");
+  const first = await provisionCompletePilot(d1, firstMember);
+  const second = await provisionCompletePilot(d1, secondMember);
+  assert.notEqual(first.runId, second.runId);
+  assert.notEqual(
+    first.finalised.artifactSha256,
+    second.finalised.artifactSha256,
+  );
+  for (const result of [first, second]) {
+    assert.deepEqual(pilotPopulation(database, result.runId), {
+      installers: 10,
+      technicians: 30,
+      jobs: 300,
+      activities: pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES.length,
+      regulatedCases: 0,
+    });
+  }
+
+  const jobIdentityCounts = database.prepare(`SELECT
+      COUNT(*) AS rows,
+      COUNT(DISTINCT id) AS ids,
+      COUNT(DISTINCT case_number) AS case_numbers,
+      COUNT(DISTINCT job_number) AS job_numbers,
+      COUNT(DISTINCT work_order_id) AS work_order_ids
+    FROM compliance_pilot_jobs`).get();
+  assert.deepEqual({ ...jobIdentityCounts }, {
+    rows: 600,
+    ids: 600,
+    case_numbers: 600,
+    job_numbers: 600,
+    work_order_ids: 600,
+  });
+  const ownerIdentityCounts = database.prepare(`SELECT
+      COUNT(*) AS installers,
+      COUNT(DISTINCT installer.id) AS installer_ids,
+      COUNT(DISTINCT installer.trade_account_uid) AS account_uids,
+      COUNT(DISTINCT account.email) AS account_emails
+    FROM compliance_pilot_installers installer
+    JOIN trade_accounts account
+      ON account.firebase_uid = installer.trade_account_uid`).get();
+  assert.deepEqual({ ...ownerIdentityCounts }, {
+    installers: 20,
+    installer_ids: 20,
+    account_uids: 20,
+    account_emails: 20,
+  });
+  const technicianIdentityCounts = database.prepare(`SELECT
+      COUNT(*) AS technicians,
+      COUNT(DISTINCT technician.id) AS technician_ids,
+      COUNT(DISTINCT technician.team_member_id) AS team_member_ids,
+      COUNT(DISTINCT team_member.owner_uid) AS owner_uids
+    FROM compliance_pilot_technicians technician
+    JOIN trade_team_members team_member
+      ON team_member.id = technician.team_member_id`).get();
+  assert.deepEqual({ ...technicianIdentityCounts }, {
+    technicians: 60,
+    technician_ids: 60,
+    team_member_ids: 60,
+    owner_uids: 20,
+  });
+  const workOrderCounts = database.prepare(`SELECT
+      COUNT(*) AS jobs,
+      COUNT(DISTINCT work.id) AS work_ids,
+      COUNT(DISTINCT work.work_number) AS work_numbers,
+      COUNT(DISTINCT work.firebase_uid) AS owner_uids,
+      COUNT(DISTINCT work.source_reference) AS pilot_runs
+    FROM trade_work_orders work
+    WHERE work.source_type = 'synthetic_pilot'`).get();
+  assert.deepEqual({ ...workOrderCounts }, {
+    jobs: 600,
+    work_ids: 600,
+    work_numbers: 600,
+    owner_uids: 20,
+    pilot_runs: 2,
+  });
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_jobs job
+      JOIN compliance_pilot_installers installer
+        ON installer.id = job.installer_id
+        AND installer.pilot_run_id = job.pilot_run_id
+      JOIN compliance_pilot_technicians technician
+        ON technician.id = job.technician_id
+        AND technician.installer_id = installer.id
+        AND technician.pilot_run_id = job.pilot_run_id
+      JOIN trade_work_orders work
+        ON work.id = job.work_order_id
+      WHERE work.firebase_uid <> installer.trade_account_uid
+        OR work.source_type <> 'synthetic_pilot'
+        OR work.source_reference <> job.pilot_run_id`).get().count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_connector_runs`).get().count,
+    2,
+  );
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_connector_runs
+      WHERE mode <> 'dry_run'
+        OR status <> 'validated'
+        OR accepted_count <> 0
+        OR external_submission_enabled <> 0`).get().count,
+    0,
+  );
+});
+
+test("a government-source seed change archives the previous pilot and creates a separate successor", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+  const member = pilotMember("seed_successor");
+  const previousRunId = "creditex-veu-pilot:previous-seed:test";
+  database.prepare(`INSERT INTO compliance_pilot_runs (
+      id, organisation_id, program_code, name, seed_version, record_mode,
+      status, installer_target, technicians_per_installer,
+      jobs_per_technician, activity_catalogue_sha256,
+      source_manifest_sha256, rule_import_status, lookup_status,
+      evidence_status, calculator_status, connector_status,
+      created_by_uid, created_at, activated_at, archived_at, updated_at
+    ) VALUES (
+      ?, ?, 'VEU', 'Previous synthetic VEU pilot',
+      'veu-v24-previous-synthetic-v1', 'synthetic_test', 'active',
+      10, 3, 10, ?, ?, 'captured_pending_independent_review',
+      'contracts_ready_live_sources_blocked',
+      'transport_contract_ready_physical_acceptance_blocked',
+      'typed_contract_ready_formula_blocked', 'dry_run_only', ?,
+      '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z', '',
+      '2026-07-01T00:00:00.000Z'
+    )`).run(
+    previousRunId,
+    member.organisationId,
+    "0".repeat(64),
+    "1".repeat(64),
+    member.uid,
+  );
+
+  const filters = pilotServer.parseCreditexPilotFilters(
+    new URLSearchParams({ page: "0", pageSize: "50" }),
+  );
+  const beforeArchive = await pilotServer.loadCreditexVeuPilotDashboard(
+    d1,
+    member,
+    filters,
+  );
+  assert.equal(beforeArchive.configured, false);
+  assert.equal(beforeArchive.previousRun.id, previousRunId);
+  assert.equal(beforeArchive.previousRun.status, "active");
+  assert.equal(
+    beforeArchive.archiveConfirmationPhrase,
+    "ARCHIVE SYNTHETIC VEU PILOT",
+  );
+  await assert.rejects(
+    pilotServer.startCreditexVeuPilot(
+      d1,
+      member,
+      pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_PREVIOUS_SEED_ACTIVE");
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+
+  const archived = await pilotServer.archiveCreditexVeuPilot(
+    d1,
+    member,
+    "ARCHIVE SYNTHETIC VEU PILOT",
+  );
+  assert.deepEqual(archived, { runId: previousRunId, archived: true });
+  assert.equal(
+    database.prepare(`SELECT status FROM compliance_pilot_runs
+      WHERE id = ?`).get(previousRunId).status,
+    "archived",
+  );
+
+  const successor = await pilotServer.startCreditexVeuPilot(
+    d1,
+    member,
+    pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+  );
+  assert.equal(successor.alreadyExists, false);
+  assert.notEqual(successor.runId, previousRunId);
+  assert.match(
+    successor.runId,
+    new RegExp(pilotContract.CREDITEX_VEU_PILOT_SEED_VERSION),
+  );
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_runs WHERE organisation_id = ?`)
+      .get(member.organisationId).count,
+    2,
+  );
+});
+
+test("active job CAS preserves the immutable population manifest", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+  const member = pilotMember("cas");
+  const pilot = await provisionCompletePilot(d1, member);
+
+  const jobBefore = database.prepare(`SELECT id, review_status,
+      evidence_status, lookup_status, connector_status, updated_at
+    FROM compliance_pilot_jobs
+    WHERE pilot_run_id = ?
+    ORDER BY job_number
+    LIMIT 1`).get(pilot.runId);
+  assert.equal(jobBefore.connector_status, "dry_run_staged");
+  const connectorBefore = database.prepare(`SELECT artifact_sha256,
+      artifact_manifest, accepted_count, external_submission_enabled,
+      status, updated_at
+    FROM compliance_pilot_connector_runs
+    WHERE pilot_run_id = ?`).get(pilot.runId);
+  assert.equal(connectorBefore.accepted_count, 0);
+  assert.equal(connectorBefore.external_submission_enabled, 0);
+  assert.equal(connectorBefore.status, "validated");
+  const activationManifest = JSON.parse(connectorBefore.artifact_manifest);
+  assert.equal(activationManifest.items.length, 300);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const updated = await pilotServer.updateCreditexVeuPilotJob(
+    d1,
+    member,
+    {
+      jobId: jobBefore.id,
+      expectedUpdatedAt: jobBefore.updated_at,
+      reviewStatus: "in_review",
+      evidenceStatus: "in_progress",
+      lookupStatus: "blocked",
+    },
+  );
+  assert.deepEqual(updated, {
+    jobId: jobBefore.id,
+    reviewStatus: "in_review",
+    evidenceStatus: "in_progress",
+    lookupStatus: "blocked",
+  });
+  const jobAfter = database.prepare(`SELECT id, review_status,
+      evidence_status, lookup_status, connector_status, updated_at
+    FROM compliance_pilot_jobs WHERE id = ?`).get(jobBefore.id);
+  assert.equal(jobAfter.review_status, "in_review");
+  assert.equal(jobAfter.evidence_status, "in_progress");
+  assert.equal(jobAfter.lookup_status, "blocked");
+  assert.equal(jobAfter.connector_status, "dry_run_staged");
+  assert.notEqual(jobAfter.updated_at, jobBefore.updated_at);
+  const eventCountAfterUpdate = database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_events
+      WHERE pilot_run_id = ? AND event_type = 'pilot.job_status_changed'`)
+    .get(pilot.runId).count;
+  assert.equal(eventCountAfterUpdate, 1);
+
+  await assert.rejects(
+    pilotServer.updateCreditexVeuPilotJob(d1, member, {
+      jobId: jobBefore.id,
+      expectedUpdatedAt: jobBefore.updated_at,
+      reviewStatus: "changes_required",
+      evidenceStatus: "changes_required",
+      lookupStatus: "not_checked",
+    }),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_CHANGED");
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    database.prepare(`SELECT id, review_status, evidence_status,
+        lookup_status, connector_status, updated_at
+      FROM compliance_pilot_jobs WHERE id = ?`).get(jobBefore.id),
+    jobAfter,
+  );
+  assert.equal(
+    database.prepare(`SELECT COUNT(*) AS count
+      FROM compliance_pilot_events
+      WHERE pilot_run_id = ? AND event_type = 'pilot.job_status_changed'`)
+      .get(pilot.runId).count,
+    eventCountAfterUpdate,
+  );
+  assert.deepEqual(
+    database.prepare(`SELECT artifact_sha256, artifact_manifest,
+        accepted_count, external_submission_enabled, status, updated_at
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?`).get(pilot.runId),
+    connectorBefore,
+  );
+
+  const finalisedAgain =
+    await pilotServer.finaliseCreditexVeuPilot(d1, member);
+  assert.equal(finalisedAgain.alreadyFinalised, true);
+  assert.equal(
+    finalisedAgain.artifactSha256,
+    connectorBefore.artifact_sha256,
+  );
+  assert.equal(finalisedAgain.regulatorAcceptedCount, 0);
+  assert.equal(finalisedAgain.externalSubmissionEnabled, false);
+  assert.deepEqual(
+    database.prepare(`SELECT artifact_sha256, artifact_manifest,
+        accepted_count, external_submission_enabled, status, updated_at
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?`).get(pilot.runId),
+    connectorBefore,
+  );
+  assert.equal(
+    database.prepare(`SELECT connector_status
+      FROM compliance_pilot_jobs WHERE id = ?`).get(jobBefore.id)
+      .connector_status,
+    "dry_run_staged",
+  );
+});
+
+test("an activated archived pilot rejects finalisation without mutation", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+  const member = pilotMember("archive_active");
+  const pilot = await provisionCompletePilot(d1, member);
+  await pilotServer.archiveCreditexVeuPilot(
+    d1,
+    member,
+    "ARCHIVE SYNTHETIC VEU PILOT",
+  );
+
+  const snapshot = () => ({
+    run: database.prepare(`SELECT status, activated_at, archived_at, updated_at
+      FROM compliance_pilot_runs WHERE id = ?`).get(pilot.runId),
+    connectors: database.prepare(`SELECT id, status, item_count,
+        accepted_count, artifact_sha256, artifact_manifest,
+        external_submission_enabled, updated_at
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?
+      ORDER BY id`).all(pilot.runId),
+    jobs: database.prepare(`SELECT id, review_status, connector_status,
+        updated_at
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      ORDER BY id`).all(pilot.runId),
+    events: database.prepare(`SELECT id, event_type, summary, metadata,
+        created_at
+      FROM compliance_pilot_events
+      WHERE pilot_run_id = ?
+      ORDER BY id`).all(pilot.runId),
+  });
+  const archivedState = snapshot();
+  assert.equal(archivedState.run.status, "archived");
+  assert.ok(archivedState.run.activated_at);
+  assert.ok(archivedState.run.archived_at);
+  assert.equal(archivedState.connectors.length, 1);
+  assert.equal(archivedState.connectors[0].accepted_count, 0);
+
+  await assert.rejects(
+    pilotServer.finaliseCreditexVeuPilot(d1, member),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_ARCHIVED");
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+  assert.deepEqual(snapshot(), archivedState);
+});
+
+test("a partial provisioning pilot can be archived without deleting its cohort", async (t) => {
+  const database = new DatabaseSync(":memory:");
+  t.after(() => database.close());
+  applyCompleteMigrationChain(database);
+  const d1 = testD1(database);
+  await ensureCreditexPilotSchemaGuards(d1);
+  const member = pilotMember("archive_partial");
+  const started = await pilotServer.startCreditexVeuPilot(
+    d1,
+    member,
+    pilotContract.CREDITEX_VEU_PILOT_CONFIRMATION,
+  );
+  const cohort =
+    await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member);
+  assert.equal(cohort.complete, false);
+  assert.deepEqual(cohort.provisioned, {
+    installerSlot: 1,
+    technicianSlot: 1,
+    jobs: 10,
+  });
+  await pilotServer.archiveCreditexVeuPilot(
+    d1,
+    member,
+    "ARCHIVE SYNTHETIC VEU PILOT",
+  );
+
+  const snapshot = () => ({
+    run: database.prepare(`SELECT status, activated_at, archived_at, updated_at
+      FROM compliance_pilot_runs WHERE id = ?`).get(started.runId),
+    counts: pilotPopulation(database, started.runId),
+    installers: database.prepare(`SELECT id, status, updated_at
+      FROM compliance_pilot_installers
+      WHERE pilot_run_id = ? ORDER BY id`).all(started.runId),
+    technicians: database.prepare(`SELECT id, status, updated_at
+      FROM compliance_pilot_technicians
+      WHERE pilot_run_id = ? ORDER BY id`).all(started.runId),
+    jobs: database.prepare(`SELECT id, review_status, connector_status,
+        updated_at
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ? ORDER BY id`).all(started.runId),
+    accounts: database.prepare(`SELECT account.firebase_uid,
+        account.account_status, account.availability_status,
+        account.is_synthetic, account.updated_at
+      FROM trade_accounts account
+      JOIN compliance_pilot_installers installer
+        ON installer.trade_account_uid = account.firebase_uid
+      WHERE installer.pilot_run_id = ?
+      ORDER BY account.firebase_uid`).all(started.runId),
+    workOrders: database.prepare(`SELECT id, stage, record_status, updated_at
+      FROM trade_work_orders
+      WHERE source_type = 'synthetic_pilot' AND source_reference = ?
+      ORDER BY id`).all(started.runId),
+    appointments: database.prepare(`SELECT appointment.id,
+        appointment.status, appointment.updated_at
+      FROM trade_crm_appointments appointment
+      JOIN compliance_pilot_jobs job
+        ON job.work_order_id = appointment.work_order_id
+      WHERE job.pilot_run_id = ?
+      ORDER BY appointment.id`).all(started.runId),
+    connectors: database.prepare(`SELECT id
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?`).all(started.runId),
+    events: database.prepare(`SELECT id, event_type, summary, metadata,
+        created_at
+      FROM compliance_pilot_events
+      WHERE pilot_run_id = ?
+      ORDER BY id`).all(started.runId),
+  });
+  const archivedState = snapshot();
+  assert.equal(archivedState.run.status, "archived");
+  assert.equal(archivedState.run.activated_at, "");
+  assert.ok(archivedState.run.archived_at);
+  assert.deepEqual(archivedState.counts, {
+    installers: 1,
+    technicians: 1,
+    jobs: 10,
+    activities: 10,
+    regulatedCases: 0,
+  });
+  assert.equal(archivedState.installers[0].status, "archived");
+  assert.equal(archivedState.technicians[0].status, "archived");
+  assert.ok(
+    archivedState.jobs.every((job) => job.review_status === "archived"),
+  );
+  assert.ok(
+    archivedState.accounts.every(
+      (account) =>
+        account.account_status === "closed"
+        && account.availability_status === "paused"
+        && account.is_synthetic === 1,
+    ),
+  );
+  assert.ok(
+    archivedState.workOrders.every(
+      (work) =>
+        work.stage === "cancelled" && work.record_status === "archived",
+    ),
+  );
+  assert.ok(
+    archivedState.appointments.every(
+      (appointment) => appointment.status === "cancelled",
+    ),
+  );
+  assert.equal(archivedState.connectors.length, 0);
+
+  assert.deepEqual(
+    await pilotServer.provisionNextCreditexVeuPilotCohort(d1, member),
+    { runId: started.runId, complete: true },
+  );
+  await assert.rejects(
+    pilotServer.finaliseCreditexVeuPilot(d1, member),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_ARCHIVED");
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+  assert.deepEqual(snapshot(), archivedState);
+});
+
+test("pilot targets are exactly 10 installers, 30 technicians and 300 jobs", () => {
+  assert.equal(pilotContract.CREDITEX_VEU_PILOT_INSTALLER_COUNT, 10);
+  assert.equal(
+    pilotContract.CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER,
+    3,
+  );
+  assert.equal(pilotContract.CREDITEX_VEU_PILOT_JOBS_PER_TECHNICIAN, 10);
+  assert.equal(pilotContract.CREDITEX_VEU_PILOT_JOB_COUNT, 300);
+
+  assert.match(
+    server,
+    /installers:\s*CREDITEX_VEU_PILOT_INSTALLER_COUNT/,
+  );
+  assert.match(
+    server,
+    /technicians:\s*CREDITEX_VEU_PILOT_INSTALLER_COUNT\s*\*\s*CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER/s,
+  );
+  assert.match(server, /jobs:\s*CREDITEX_VEU_PILOT_JOB_COUNT/);
+  assert.match(
+    server,
+    /counts\.installers !== targets\.installers[\s\S]*counts\.technicians !== targets\.technicians[\s\S]*counts\.jobs !== targets\.jobs/,
+  );
+  assert.match(
+    server,
+    /source, control, evidence, calculator, 10-installer, 30-technician, 300-job, all-activity and zero-regulated-case contracts reconcile/,
+  );
+});
+
+test("every VEU activity family is data-driven and receives a balanced pilot cohort", () => {
+  const expectedActivities = GOVERNMENT_ACTIVITY_TEMPLATES.filter(
+    (activity) => activity.programCode === "VEU",
+  );
+  const pilotActivities = pilotContract.CREDITEX_VEU_PILOT_ACTIVITIES;
+  assert.ok(expectedActivities.length > 1);
+  assert.ok(pilotContract.CREDITEX_VEU_PILOT_JOB_COUNT >= expectedActivities.length);
+  assert.deepEqual(pilotActivities, expectedActivities);
+  assert.equal(
+    new Set(pilotActivities.map((activity) => activity.templateId)).size,
+    pilotActivities.length,
+  );
+  assert.ok(pilotActivities.every((activity) => activity.programCode === "VEU"));
+  assert.equal(
+    pilotActivities.filter(
+      (activity) => activity.registryActivityCode === "6",
+    ).length,
+    1,
+  );
+
+  const allocation = new Map(
+    pilotActivities.map((activity) => [activity.templateId, 0]),
+  );
+  for (
+    let jobIndex = 0;
+    jobIndex < pilotContract.CREDITEX_VEU_PILOT_JOB_COUNT;
+    jobIndex += 1
+  ) {
+    const activity = pilotActivities[jobIndex % pilotActivities.length];
+    allocation.set(activity.templateId, allocation.get(activity.templateId) + 1);
+  }
+  const allocatedCounts = Array.from(allocation.values());
+  assert.ok(allocatedCounts.every((count) => count > 0));
+  assert.ok(Math.max(...allocatedCounts) - Math.min(...allocatedCounts) <= 1);
+
+  assert.match(
+    contractSource,
+    /GOVERNMENT_ACTIVITY_TEMPLATES\.filter\(\s*\(activity\) => activity\.programCode === "VEU"/,
+  );
+  assert.match(
+    server,
+    /CREDITEX_VEU_PILOT_ACTIVITIES\[\s*globalJobIndex % CREDITEX_VEU_PILOT_ACTIVITIES\.length\s*\]/,
+  );
+  for (const source of [contractSource, server, route, workspace]) {
+    assert.doesNotMatch(source, /6\(23\)/);
+  }
+
+  const sourceKeys = new Set(
+    pilotContract.CREDITEX_VEU_PILOT_SOURCES.map((source) => source.sourceKey),
+  );
+  assert.equal(sourceKeys.size, pilotContract.CREDITEX_VEU_PILOT_SOURCES.length);
+  assert.ok(
+    pilotContract.CREDITEX_VEU_PILOT_SOURCES.every(
+      (source) => source.officialSourceUrl.startsWith("https://"),
+    ),
+  );
+  const controlsByType = Map.groupBy(
+    pilotContract.CREDITEX_VEU_PILOT_CONTROL_OPTIONS,
+    (option) => option.controlType,
+  );
+  assert.deepEqual(
+    new Set(controlsByType.keys()),
+    new Set([
+      "participant_status",
+      "accreditation_status",
+      "licence_status",
+      "product_status",
+      "recall_status",
+      "suspension_status",
+      "evidence_status",
+      "review_status",
+      "activity_status",
+    ]),
+  );
+  for (const options of controlsByType.values()) {
+    assert.ok(options.length > 1);
+    assert.equal(
+      new Set(options.map((option) => option.optionCode)).size,
+      options.length,
+    );
+    assert.ok(options.every((option) => sourceKeys.has(option.sourceKey)));
+  }
+
+  for (const activity of pilotActivities) {
+    const input = pilotContract.calculatorInputSchema(activity);
+    const output = pilotContract.calculatorOutputSchema(activity);
+    assert.equal(
+      input.properties.activityTemplateId.const,
+      activity.templateId,
+    );
+    assert.equal(output.oneOf[0].properties.kind.const, "blocked");
+    assert.equal(
+      output.oneOf[1].properties.activityTemplateId.const,
+      activity.templateId,
+    );
+    assert.equal(output.oneOf[1].properties.unit.const, "VEEC");
+  }
+});
+
+test("manifest generation is deterministic, dry-run only and isolated from regulated writes", () => {
+  assert.match(server, /Object\.keys\(record\)\s*\.sort\(\)/);
+  assert.match(
+    server,
+    /function pilotRunId\(organisationId: string\) \{[\s\S]*CREDITEX_VEU_PILOT_SEED_VERSION[\s\S]*organisationId[\s\S]*\.join\(":"\);/,
+  );
+  assert.match(
+    server,
+    /const workOrderId = `\$\{run\.id\}:work:\$\{jobCode\}`;/,
+  );
+  assert.match(
+    server,
+    /const pilotJobId = `\$\{run\.id\}:pilot-job:\$\{jobCode\}`;/,
+  );
+  assert.match(
+    server,
+    /const date = new Date\(Date\.UTC\(2026, 7, 4 \+ \(globalJobIndex % 90\)\)\)/,
+  );
+  assert.match(
+    server,
+    /FROM compliance_pilot_jobs[\s\S]*WHERE pilot_run_id = \?[\s\S]*ORDER BY job_number/,
+  );
+
+  const finalise = sourceSection(
+    server,
+    "export async function finaliseCreditexVeuPilot",
+    "export async function updateCreditexVeuPilotJob",
+  );
+  const manifest = sourceSection(
+    finalise,
+    "const manifest = {",
+    "const now = new Date().toISOString();",
+  );
+  assert.match(
+    manifest,
+    /schemaVersion: "creditex-veu-synthetic-dry-run-v2"/,
+  );
+  assert.match(manifest, /recordMode: "synthetic_test"/);
+  assert.match(manifest, /externalSubmissionEnabled: false/);
+  assert.match(
+    manifest,
+    /kind: "deterministic_immutable_population_check"/,
+  );
+  assert.match(manifest, /expectedItems: CREDITEX_VEU_PILOT_JOB_COUNT/);
+  assert.match(manifest, /regulatorResponseReceived: false/);
+  assert.match(manifest, /items: jobs\.results\.map/);
+  assert.match(manifest, /const artifactManifest = canonicalJson\(manifest\)/);
+  assert.match(
+    manifest,
+    /const artifactSha256 = await sha256Hex\(artifactManifest\)/,
+  );
+  assert.doesNotMatch(manifest, /randomUUID|Date\.now|new Date/);
+  assert.match(
+    finalise,
+    /`\$\{run\.id\}:connector:veu-registry-synthetic:v1`/,
+  );
+  assert.match(
+    finalise,
+    /'VEU_REGISTRY_SYNTHETIC', 'v1', 'dry_run', 'validated'/,
+  );
+  assert.match(
+    finalise,
+    /counts\.regulatedCases !== 0/,
+  );
+  assert.doesNotMatch(server, /\bfetch\s*\(/);
+
+  const writeTargets = new Set(
+    Array.from(server.matchAll(
+      /\b(?:INSERT(?:\s+OR\s+IGNORE)?\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi,
+    ), (match) => match[1].toLowerCase()),
+  );
+  for (const forbiddenTable of [
+    "compliance_cases",
+    "compliance_certificate_lots",
+    "compliance_submission_batches",
+    "compliance_submission_batch_items",
+    "compliance_trades",
+    "compliance_settlements",
+  ]) {
+    assert.equal(
+      writeTargets.has(forbiddenTable),
+      false,
+      `Synthetic pilot must not write ${forbiddenTable}`,
+    );
+  }
+  assert.match(
+    server,
+    /SELECT COUNT\(\*\) FROM compliance_cases[\s\S]*AS regulated_cases/,
+  );
+  assert.match(server, /certificateLotsCreated: 0/);
+  assert.match(server, /tradesCreated: 0/);
+  assert.match(server, /settlementsCreated: 0/);
+  assert.match(server, /externalSubmissionEnabled: false/);
+});
+
+test("API exposes only the authenticated, same-origin pilot control surface", () => {
+  assert.equal(
+    (route.match(/if \(!sameOrigin\(request\)\)/g) || []).length,
+    2,
+  );
+  assert.match(route, /"Cache-Control": "private, no-store"/);
+  assert.match(route, /"X-Content-Type-Options": "nosniff"/);
+  assert.match(route, /requireFirebaseIdentity\(request\)/);
+  assert.match(route, /requireComplianceIdentity\(identity/);
+  assert.match(
+    route,
+    /allowedRoles: \["admin", "case_manager", "reviewer", "auditor"\]/,
+  );
+  assert.match(route, /parseCreditexPilotFilters/);
+  assert.match(route, /loadCreditexVeuPilotDashboard/);
+  assert.deepEqual(
+    Array.from(route.matchAll(/action === "([^"]+)"/g), (match) => match[1]),
+    ["start", "provision_next", "finalise", "update_job", "archive"],
+  );
+  assert.doesNotMatch(route, /action === "(?:submit|publish|trade)"/);
+  assert.doesNotMatch(
+    route,
+    /export async function (?:PUT|PATCH|DELETE)/,
+  );
+});
+
+test("Creditex UI surfaces all five priorities, controlled dropdowns and activity tabs", () => {
+  const priorities = sourceSection(
+    server,
+    "function pilotPriorities",
+    "export async function startCreditexVeuPilot",
+  );
+  assert.deepEqual(
+    Array.from(priorities.matchAll(/key: "([^"]+)"/g), (match) => match[1]),
+    [
+      "official_instruments",
+      "controlled_lookups",
+      "original_evidence",
+      "calculator_contracts",
+      "connector_cutover",
+    ],
+  );
+  assert.deepEqual(
+    Array.from(priorities.matchAll(/number: (\d)/g), (match) => Number(match[1])),
+    [1, 2, 3, 4, 5],
+  );
+
+  for (const [key, label] of [
+    ["sources", "Sources"],
+    ["lookups", "Lookups"],
+    ["evidence", "Evidence"],
+    ["calculators", "Calculators"],
+    ["connectors", "Connectors"],
+  ]) {
+    assert.match(workspace, new RegExp(`\\["${key}", "${label}"\\]`));
+    assert.match(workspace, new RegExp(`panel === "${key}"`));
+  }
+  assert.match(workspace, /snapshot\.priorities\.map/);
+  assert.match(workspace, /snapshot\.activities \|\| \[\]\)\.map/);
+  assert.match(workspace, /aria-label="VEU activity tabs"/);
+  assert.match(workspace, /activityTemplateId: activity\.activityTemplateId/);
+  assert.match(workspace, /snapshot\.installers\.map/);
+  assert.match(workspace, /visibleTechnicians\.map/);
+  assert.match(workspace, /snapshot\.filters\.evidenceStatuses\.map/);
+  assert.match(workspace, /snapshot\.filters\.lookupStatuses/);
+  assert.match(workspace, /snapshot\.filters\.reviewStatuses/);
+  assert.match(workspace, /Object\.entries\(snapshot\.controls \|\| \{\}\)/);
+  assert.ok((workspace.match(/<select/g) || []).length >= 8);
+  assert.match(
+    workspace,
+    /Exercise every VEU activity family across synthetic installer\s*records, field assignments and Creditex compliance workflow\s*structure/,
+  );
+  assert.match(workspace, /Physical field capture is not enabled/);
+  assert.match(
+    workspace,
+    /These records\s*can never become regulated cases, certificates, registry\s*submissions, trades or settlements/,
+  );
+  assert.match(
+    workspace,
+    /The database rejects any regulated compliance case or\s*submission item linked to a synthetic pilot work order/,
+  );
+  assert.match(
+    workspace,
+    /zero regulator acceptances because no regulator request is sent,\s*and no Dataforce or Runabout data is imported/,
+  );
+
+  assert.match(
+    portal,
+    /import \{ CreditexVeuPilotWorkspace \} from "\.\/CreditexVeuPilotWorkspace"/,
+  );
+  assert.match(portal, /id="creditex-tab-pilot"/);
+  assert.match(portal, /aria-controls="creditex-panel-pilot"/);
+  assert.match(portal, /tab === "pilot"/);
+  assert.match(
+    portal,
+    /<CreditexVeuPilotWorkspace api=\{api\} role=\{session\.role\} \/>/,
+  );
+});
