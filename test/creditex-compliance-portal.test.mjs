@@ -455,6 +455,11 @@ test("installer intake uses chained governed dropdowns and binds the exact sourc
 });
 
 test("authorised case detail renders private CRM data only after audited case access", () => {
+  assert.match(portal, /Queue lists minimise private data/);
+  assert.match(
+    portal,
+    /customer, installer, site,[\s\S]*appointments, evidence originals and[\s\S]*captured metadata/,
+  );
   for (const contract of [
     /privateDetails: OperationPrivateDetails \| null/,
     /privateDetails: first\(actual/,
@@ -467,6 +472,10 @@ test("authorised case detail renders private CRM data only after audited case ac
     /Commercial state/,
     /Appointments/,
   ]) assert.match(operations, contract);
+  assert.match(operations, /Government activity sources/);
+  assert.match(operations, /submission and external outcome workflow/);
+  assert.doesNotMatch(operations, /submission and certificate workflow/);
+  assert.doesNotMatch(portal, /remain outside this queue/);
   assert.doesNotMatch(
     operations.slice(
       operations.indexOf("function PrivateCaseDetails"),

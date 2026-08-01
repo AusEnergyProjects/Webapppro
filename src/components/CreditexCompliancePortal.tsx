@@ -927,9 +927,10 @@ export function CreditexCompliancePortal() {
               </div>
               <h1>Controlled compliance operations</h1>
               <p>
-                Review privacy-minimised case queues and govern official program
-                activity versions. Access is limited to pre-approved, active
-                Creditex memberships with a verified Firebase identity.
+                Review privacy-minimised queues, open audited full case records
+                and govern official program activity versions. Access is limited
+                to pre-approved, active Creditex memberships with a verified
+                Firebase identity.
               </p>
             </div>
             <form className={styles.signInForm} onSubmit={signInEmail}>
@@ -1061,9 +1062,10 @@ export function CreditexCompliancePortal() {
             <span className={styles.eyebrow}>Protected partner operations</span>
             <h1>Compliance case control</h1>
             <p>
-              Review governed activity versions and the minimum job context
-              needed to manage a case. Customer identity, site address, evidence
-              files and captured location remain outside this queue.
+              Queue lists minimise private data. Authorised Creditex staff can
+              open the audited case workspace for the customer, installer, site,
+              appointments, evidence originals and captured metadata needed to
+              review, correct and submit that exact job.
             </p>
           </div>
           <aside className={styles.guardrail}>

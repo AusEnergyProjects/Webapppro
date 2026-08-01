@@ -493,7 +493,11 @@ const AREAS: Array<{
     shortLabel: "Certificates",
   },
   { id: "reports", label: "Reports", shortLabel: "Reports" },
-  { id: "rules", label: "Activity rules", shortLabel: "Rules" },
+  {
+    id: "rules",
+    label: "Government activity sources",
+    shortLabel: "Sources",
+  },
   { id: "access", label: "Access", shortLabel: "Access" },
 ];
 
@@ -2989,7 +2993,7 @@ export function CreditexOperationsWorkspace({
           <h2>Every program, one governed review path</h2>
           <p>
             Program workspaces and every governed activity version feed one
-            audited case, evidence, submission and certificate workflow.
+            audited case, evidence, submission and external outcome workflow.
           </p>
         </div>
         <button
@@ -4782,8 +4786,8 @@ export function CreditexOperationsWorkspace({
             <section aria-labelledby="operations-rules-title">
               <SectionTitle
                 id="operations-rules-title"
-                title="Activity rules"
-                description="Effective-dated activities, evidence policies and independently approved calculators."
+                title="Government activity sources"
+                description="Effective-dated government activities, evidence requirements and independently verified calculators."
               />
               <div className={styles.ruleMetrics}>
                 <div>
