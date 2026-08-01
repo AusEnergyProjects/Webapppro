@@ -8,11 +8,11 @@ Milestone ID: `CREDITEX-VEU-SYNTHETIC-PILOT-28`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `3ac6c72057a8afea61e85817ba566ec543079886`
+Released application source commit: `ebae330dab6c42881c14bc57548095b111d9c850`
 
-Previous production application source: `a33b7053301a64bea4bbcbe76713067a2c1782dd`
+Previous production application source: `3ac6c72057a8afea61e85817ba566ec543079886`
 
-Current production: Sites version 252 from application commit `3ac6c72057a8afea61e85817ba566ec543079886`
+Current production: Sites version 253 from application commit `ebae330dab6c42881c14bc57548095b111d9c850`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -20,7 +20,7 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 252 is the current production identity. It retains the discovery-only national catalogue and adds one isolated VEU synthetic workflow pilot. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 253 is the current production identity. It retains the discovery-only national catalogue and isolated VEU synthetic workflow pilot and hardens the authentication-to-workspace transition. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
 ## Released milestone outcome
 
@@ -69,15 +69,16 @@ The official VEU family is Part `6`. Categories such as `6A` and scenarios such 
 - Structural safety counters remained 0 regulated cases, 0 Firebase test users and 0 certificates.
 - Desktop and 390-pixel Chrome inspection passed. The mobile check reported a 390-pixel viewport, 375-pixel root width and 375-pixel scroll width, so there was no page-level horizontal overflow.
 - Production Worker evidence showed successful `201` pilot mutations and `200` reads. The only recent error event was the expected `403` from the first create attempt before recent reauthentication; no production `5xx` was observed.
+- After the version-253 authentication correction, a signed-in Chrome reload returned directly to the protected dashboard and reopened the VEU pilot without another login. The Jobs workspace showed all populated filter menus and the complete 300-job queue. Browser logging contained only the Chrome extension's closed asynchronous message-channel warning, not an application exception.
 
 ## Validation and release evidence
 
-- Exact application commit `3ac6c72057a8afea61e85817ba566ec543079886` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,176 main tests with 1,174 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
-- The focused pilot suite passed 13 of 13 tests. The focused Creditex portal suite passed 21 of 21. The catalogue and API focused set passed 18 of 18. `git diff --check` passed.
-- Independent security review found and closed the prior-seed lifecycle and mutable-manifest defects. Final review found no remaining P0 or P1 issue in the pilot change.
-- The 7,419,988-byte local release package has SHA-256 `CF7F72704BCAA585110FF3C9ADE8E1C4B212240CEE9BDD0B0F9673ACDB4B0727`.
-- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_6ead08734a6c8191b018dc5a952acd33` reports exact application source `3ac6c72057a8afea61e85817ba566ec543079886`. Sites stored 333 files and 29,624,320 bytes with content hash `sha256:be656467751fb195f2c381c2c450df8d9bfb74256a52d29650eaebc3bfe97eaf`.
-- Sites version 252 deployment `appgdep_6a6dd491dde88191bc862e69a2e59580` succeeded with environment revision 19.
+- Exact application commit `ebae330dab6c42881c14bc57548095b111d9c850` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused pilot suite passed 13 of 13 tests. The focused Creditex portal suite passed 25 of 25. The catalogue and API focused set passed 18 of 18. `git diff --check` passed.
+- Independent security review found and closed the prior-seed lifecycle and mutable-manifest defects. Independent authentication review found the recovery path bounded to one forced refresh after an authentication-specific `401`, protected against identity races and free of remaining P0, P1 or P2 findings.
+- The 7,420,447-byte local release package has SHA-256 `51DF880CF8C919FA0386B891BC98C18064491988325049B59CC3F4A4BCE370DA`.
+- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c` reports exact application source `ebae330dab6c42881c14bc57548095b111d9c850`. Sites stored 333 files and 29,624,320 bytes with content hash `sha256:20934a09b4658dafbd2b9c420c402028a3619a9fc9216bd2cb154ebcf12b1e98`.
+- Sites version 253 deployment `appgdep_6a6dde1747308191bf5c78bd4f674030` succeeded with environment revision 19.
 
 ## Important limits and unverified areas
 
@@ -87,7 +88,7 @@ The official VEU family is Part `6`. Categories such as `6A` and scenarios such 
 - All 34 activity families have typed calculator contracts, but verified formulas and reconciled golden vectors remain 0. No VEEC quantity or rebate is calculated.
 - The registry connector is dry-run only. No regulator request was sent and no Dataforce or Runabout data was imported.
 - Part 45 is retained only as a closed-family test path. No new regulated Part 45 job can be created.
-- Google popup authentication succeeded in the existing Chrome session. The in-app browser separately returned Firebase `auth/network-request-failed`; that surface remains an authentication-compatibility risk and does not change the verified Chrome or server results.
+- Sites version 253 removes the unconditional forced Firebase token refresh, retries once with a forced refresh only after an authentication-specific `401`, preserves the signed-in identity on workspace/network failure and exposes a bounded workspace retry. Signed-in Chrome reload and workspace recovery are verified; a fresh in-app-browser-specific failure was not reproduced separately.
 - The shared `info@ausenergyassessments.com` account is a bootstrap administrator. Routine operations still require named individual Creditex users and least privilege.
 
 ## Stop conditions

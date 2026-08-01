@@ -997,7 +997,7 @@ VEU `6(23)` was an informal example only, not an official activity identifier. T
 
 Status: released controlled VEU workflow pilot
 
-Release status: application commit `3ac6c72057a8afea61e85817ba566ec543079886` is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 252. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_6ead08734a6c8191b018dc5a952acd33` and deployment `appgdep_6a6dd491dde88191bc862e69a2e59580` report the exact application commit.
+Release status: the initial pilot application commit `3ac6c72057a8afea61e85817ba566ec543079886` was deployed as Sites version 252. Corrective application commit `ebae330dab6c42881c14bc57548095b111d9c850` retains the complete pilot, hardens authentication recovery and is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 253. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c` and deployment `appgdep_6a6dde1747308191bf5c78bd4f674030` report the exact current application commit.
 
 ### Outcome
 
@@ -1016,9 +1016,9 @@ The portal separates Pilot control, Jobs, Sources, Lookups, Evidence, Calculator
 
 ### Validation and release evidence
 
-Exact application commit `3ac6c72057a8afea61e85817ba566ec543079886` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,176 main tests with 1,174 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused pilot suite passed 13 of 13 tests and the focused Creditex portal suite passed 21 of 21.
+Exact current application commit `ebae330dab6c42881c14bc57548095b111d9c850` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused pilot suite passed 13 of 13 tests and the focused Creditex portal suite passed 25 of 25.
 
-Authenticated production QA created seed `veu-v25-2026-08-01-synthetic-v2` and confirmed 10 of 10 installers, 30 of 30 technicians, 300 of 300 jobs and 34 of 34 activity families. Filtering installer `I01` plus Part `6` returned one job; a controlled job-state update persisted after refresh; the connector workspace retained a deterministic 300-item dry-run manifest; and structural counters remained 0 regulated cases, 0 Firebase test users and 0 certificates. Desktop and 390-pixel mobile inspection passed without page-level horizontal overflow.
+Authenticated production QA created seed `veu-v25-2026-08-01-synthetic-v2` and confirmed 10 of 10 installers, 30 of 30 technicians, 300 of 300 jobs and 34 of 34 activity families. Filtering installer `I01` plus Part `6` returned one job; a controlled job-state update persisted after refresh; the connector workspace retained a deterministic 300-item dry-run manifest; and structural counters remained 0 regulated cases, 0 Firebase test users and 0 certificates. Desktop and 390-pixel mobile inspection passed without page-level horizontal overflow. Version 253 bounds forced token recovery to one authentication-specific `401` retry, preserves signed-in identity on workspace failure and separates authentication from workspace errors. Signed-in production reload reopened the protected dashboard and the populated VEU job queue.
 
 ## Next five logical product steps
 
