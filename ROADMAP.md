@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 1 August 2026
+Last reconciled: 2 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -1032,7 +1032,7 @@ The milestone established one semantic row per synthetic job, 49 data columns pl
 
 Status: released full-viewport Creditex operator and job audit workspace
 
-Release status: primary implementation commit `e0e48b6a74a0515fe936f4882bead071b7bee443` became intermediate Sites version 255. Focus correction `c6fdbc42729adf1b2f5e9bca6822c298885a55d4` became intermediate version 256. Final production-D1 correction `1a535a0fd2237e8aa3dcf1daf82da009885197b0` is validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c` and deployed as current Sites version 257 through `appgdep_6a6e119ef9c48191aa7a6da69463dd80`.
+Release status: primary implementation commit `e0e48b6a74a0515fe936f4882bead071b7bee443` became intermediate Sites version 255. Focus correction `c6fdbc42729adf1b2f5e9bca6822c298885a55d4` became intermediate version 256. Final production-D1 correction `1a535a0fd2237e8aa3dcf1daf82da009885197b0` was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c` and deployed as historical Sites version 257 through `appgdep_6a6e119ef9c48191aa7a6da69463dd80`.
 
 ### Outcome
 
@@ -1052,13 +1052,38 @@ Right click, the row action control and keyboard access expose Dataforce-style C
 - Signed-in production QA loaded the 300-job register in a 2048 by 983 viewport without page-level overflow, verified the drawer and menus, and opened the complete authoritative job record.
 - The initial 105-column production job-detail query was split into owner-scoped 63-column and 42-column reads. Production request `a245e793ac2756fc` returned HTTP 200 and the post-release error-only Worker query returned zero events.
 
+## Released milestone: CREDITEX-VEU-OPERATOR-USABILITY-31
+
+Status: released readable, compact Creditex VEU operator workflow
+
+Release status: primary implementation commit `96ecb9698943445c57ba7f4caec99ff3839d3499` was validated, pushed to GitHub and Sites managed `main`, then saved and deployed as intermediate Sites version 258. Final heading correction `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1` is the current exact application source. It was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_195313bad4888191a7b5472c6b215cc5` and deployed as current Sites version 259 through `appgdep_6a6e5248b7048191acfe5904b1d4628b`.
+
+### Outcome
+
+The 300-job register now uses a readable 12-pixel compact table type size, clearer supporting text and denser controls without adding page-level scrolling. Advanced search is a 19-rem right-edge drawer with Job, installer, VEU activity, review state and evidence state available together as quick filters. Secondary groups remain available but start collapsed, and the former installer roster is removed from the bottom of the workspace. Dashboard plus all 34 VEU activity-family tabs remain in the fixed bottom bar.
+
+Each column menu is now one controlled disclosure. It closes after a sort choice, an outside pointer action or Escape, restores focus to its heading and cannot leave multiple stale menus open.
+
+The official source register now records Victorian Energy Upgrades Specifications version 25 as effective from 21 July 2026, keeps version 24 as superseded comparison material and records both Part 6 branches in version 25. It no longer treats 30 September 2026 as a separate instrument. Government and regulator sources remain the only rule authority.
+
+The direct-trade installer integration is designed as a proposed post-quote-acceptance handoff. TLink will derive accepted job, site, jurisdiction, date and scope facts server-side, then expose controlled Program, Activity, Product category and Scenario choices tied to an effective source version. This contract is documented but is not active runtime behavior while the governed catalogue remains empty.
+
+### Safety and release evidence
+
+- Exact final application commit `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete main suite, all 100 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused Creditex VEU pilot suite passed 15 of 15 tests. `git diff --check` passed. Independent final review reported no P0 or P1 defect.
+- Signed-in production QA at 2048 by 927 pixels confirmed no page-level overflow, a 303.2-pixel drawer, all secondary groups initially collapsed, exactly one installer filter and one activity filter, 30 installer matches, one combined installer and Part 6 match, outside-click dismissal, Escape dismissal, close-after-sort and focus return.
+- Current version 259 shows the compact `All VEU jobs` drawer heading without the crowded count badge.
+- The final local archive is 6,894,158 bytes with SHA-256 `605BEE1AC610C7D4F82BD9CEBD5C2706B55BFB7F73B2640D1D5FBB6F041B21FF`. Sites stored 178 files and 18,780,160 bytes with content hash `sha256:81e8a258e445954acf669266c31c6fd7141d591925ff30148b6f70c4118172e9`.
+- The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases. Source activation, installer case handoff, calculators and external certificate actions remain fail-closed.
+
 ## Next five logical product steps
 
-1. **Retain and independently verify exact VEU instruments:** retain exact authorised bytes and version differences, including the 30 September 2026 Part 6 branch, and require independent approval before activation.
-2. **Connect authoritative operational lookups:** add effective-dated participant, product, licence, recall and suspension snapshots with source timestamps and fail-closed rechecks.
-3. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline and R2 restore evidence for one selected activity using its verified shot list.
-4. **Verify one activity calculator:** implement the official versioned calculator for that activity and reconcile independently approved golden vectors before enabling VEEC output.
-5. **Run an authorised legacy and registry parallel pilot:** obtain Creditex-authorised Dataforce and Runabout exports plus a registry sandbox or approved interface, then reconcile mappings, exceptions, idempotency and rollback without touching real certificate inventory.
+1. **Retain and independently approve the exact VEU source pack:** retain the authorised bytes, hashes, effective periods, Version 24 to 25 clause diff, Part 6 branch-trigger semantics and current accredited-provider portal artefacts before publishing any governed activity.
+2. **Implement the direct-trade post-acceptance handoff:** remove compliance selection from initial job setup, derive accepted job facts server-side, add the controlled installer panel and enforce one active case per work order while the zero-program state remains fail-closed.
+3. **Connect authoritative operational lookups:** add effective-dated participant, product, licence, recall and suspension snapshots with source timestamps and fail-closed rechecks.
+4. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline, original-byte, metadata, GPS and R2 restore evidence for one independently approved activity.
+5. **Run one verified end-to-end parallel activity:** reconcile an independently approved calculator, golden vectors, authorised Dataforce and Runabout mappings and a registry sandbox or approved interface without touching real certificate inventory.
 
 ## Global stop conditions
 

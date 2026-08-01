@@ -97,15 +97,27 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Customer-to-trade contact and compact lead workflow release/);
   assert.match(releaseTruth, /## Customer plan trade enquiry and home-fact refinement release/);
   assert.match(releaseTruth, /## Creditex evidence-policy governance release/);
-  assert.match(releaseTruth, /## Current Creditex VEU operator workspace/);
+  assert.match(releaseTruth, /## Current Creditex VEU operator usability release/);
+  assert.match(releaseTruth, /## Prior Creditex VEU operator workspace/);
   assert.match(
     releaseTruth,
     /Creditex VEU operator-workspace application source \| `1a535a0fd2237e8aa3dcf1daf82da009885197b0`/,
   );
   assert.match(
     releaseTruth,
-    /Current executable application identity \| Sites version 257/,
+    /Creditex VEU operator-usability primary application source \| `96ecb9698943445c57ba7f4caec99ff3839d3499`/,
   );
+  assert.match(
+    releaseTruth,
+    /Creditex VEU operator-usability application source \| `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1`/,
+  );
+  assert.match(
+    releaseTruth,
+    /Current executable application identity \| Sites version 259/,
+  );
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_195313bad4888191a7b5472c6b215cc5/);
+  assert.match(releaseTruth, /appgdep_6a6e5248b7048191acfe5904b1d4628b/);
+  assert.match(releaseTruth, /sha256:81e8a258e445954acf669266c31c6fd7141d591925ff30148b6f70c4118172e9/);
   assert.match(releaseTruth, /Customer plan evidence and history application source.*Sites version 210/);
   assert.match(releaseTruth, /Professional review, print and comfort application source \| `ee75aadfd6800c01b92532b2d376a4a1e33c9d74` \|[\s\S]{0,150}Sites version 212/);
   assert.match(releaseTruth, /Premium report documentation checkpoint \| `a92e18b9ea79b53eaf6eda8665f37ec02c861972` \|[\s\S]{0,180}Sites version 219/);
@@ -199,7 +211,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed/);
   assert.match(releaseTruth, /all 100 migrations through `0099_creditex_synthetic_pilot\.sql`/);
   assert.match(releaseTruth, /Creditex VEU operator-workspace application source \| `1a535a0fd2237e8aa3dcf1daf82da009885197b0`/);
-  assert.match(releaseTruth, /Sites version 257 from `1a535a0fd2237e8aa3dcf1daf82da009885197b0`/);
+  assert.match(releaseTruth, /historical Sites version 257/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c/);
   assert.match(releaseTruth, /appgdep_6a6e119ef9c48191aa7a6da69463dd80/);
   assert.match(releaseTruth, /6,893,645 bytes/);
@@ -291,16 +303,18 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /initial pilot application commit `3ac6c72057a8afea61e85817ba566ec543079886`[\s\S]{0,700}corrective application commit `ebae330dab6c42881c14bc57548095b111d9c850`[\s\S]{0,700}Sites version 253/i);
   assert.match(roadmap, /## Released milestone: CREDITEX-VEU-DENSE-REGISTER-29/);
   assert.match(roadmap, /## Released milestone: CREDITEX-VEU-OPERATOR-WORKSPACE-30/);
-  assert.match(roadmap, /Final production-D1 correction `1a535a0fd2237e8aa3dcf1daf82da009885197b0`[\s\S]{0,500}current Sites version 257/);
-  assert.match(handover, /Status: `CREDITEX-VEU-OPERATOR-WORKSPACE-30` released and live/);
-  assert.match(handover, /Milestone ID: `CREDITEX-VEU-OPERATOR-WORKSPACE-30`/);
-  assert.match(handover, /Current production: Sites version 257 from application commit `1a535a0fd2237e8aa3dcf1daf82da009885197b0`/);
-  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_416748b2d09881919f375b0cf255789c/);
-  assert.match(handover, /appgdep_6a6e119ef9c48191aa7a6da69463dd80/);
-  assert.match(handover, /6,893,645 bytes/);
-  assert.match(handover, /A9B1526A4033D0CA060821A841A5DCF0D7ABA57AE6F0E1C84A42346587DC2038/);
+  assert.match(roadmap, /Final production-D1 correction `1a535a0fd2237e8aa3dcf1daf82da009885197b0`[\s\S]{0,500}historical Sites version 257/);
+  assert.match(roadmap, /## Released milestone: CREDITEX-VEU-OPERATOR-USABILITY-31/);
+  assert.match(roadmap, /primary implementation commit `96ecb9698943445c57ba7f4caec99ff3839d3499`[\s\S]{0,800}Final heading correction `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1`[\s\S]{0,800}Sites version 259/i);
+  assert.match(handover, /Status: `CREDITEX-VEU-OPERATOR-USABILITY-31` released and live/);
+  assert.match(handover, /Milestone ID: `CREDITEX-VEU-OPERATOR-USABILITY-31`/);
+  assert.match(handover, /Current production: Sites version 259 from application commit `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1`/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_195313bad4888191a7b5472c6b215cc5/);
+  assert.match(handover, /appgdep_6a6e5248b7048191acfe5904b1d4628b/);
+  assert.match(handover, /6,894,158 bytes/);
+  assert.match(handover, /605BEE1AC610C7D4F82BD9CEBD5C2706B55BFB7F73B2640D1D5FBB6F041B21FF/);
   assert.match(handover, /178 stored files, 18,780,160 stored bytes/);
-  assert.match(handover, /sha256:38dfcd7487aa2a6cde6eedc11b628e55dadd3d1cac4430a8beeeecf20f523357/);
+  assert.match(handover, /sha256:81e8a258e445954acf669266c31c6fd7141d591925ff30148b6f70c4118172e9/);
   assert.match(handover, /Status: released implementation milestone/);
   assert.match(handover, /(?:Milestone ID|Prior released milestone record): `CUSTOMER-ACCOUNT-TRUST-23`/);
   assert.match(handover, /Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`/);
@@ -338,11 +352,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Retain and independently verify exact VEU instruments:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Connect authoritative operational lookups:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Prove AEA Field evidence custody:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Verify one activity calculator:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Run an authorised legacy and registry parallel pilot:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Retain and independently approve the exact VEU source pack:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Implement the direct-trade post-acceptance handoff:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Connect authoritative operational lookups:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Prove AEA Field evidence custody:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Run one verified end-to-end parallel activity:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {
