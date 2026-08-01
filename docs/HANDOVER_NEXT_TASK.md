@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: released empty invitation-gated foundation and preview
+Status: released activity-agnostic Creditex operations portal with an empty governed catalogue
 
 Prepared: 1 August 2026
 
@@ -8,21 +8,21 @@ Milestone ID: `CREDITEX-COMPLIANCE-OPERATIONS-25`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`
+Released application source commit: `7b08cb600bde30273774a544e07039acc6de1c03`
 
-Previous production application source: `399b04f4a5d680080610f9e88b994506bb60c16f`
+Previous production application source: `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`
 
-Current production: Sites version 246 from application commit `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`
+Current production: Sites version 248 from application commit `7b08cb600bde30273774a544e07039acc6de1c03`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
 Production access: public custom domain
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Version 246 is deliberately an empty controlled foundation: it does not publish a real activity, calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Version 248 provides the signed-in Creditex workflow and controls, but its governed catalogue is deliberately empty: it does not publish a real activity, calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
 
 ## Active milestone outcome
 
-Deliver the first safe Creditex operations slice inside TLink: exact activity and evidence-policy governance, atomic job and case creation, audit-grade mobile capture, an exception-led Creditex case workspace, audited original-evidence viewing, correction, dual control, access administration and provider-neutral batch staging. Keep every unverified formula and external execution path disabled.
+Deliver the first safe Creditex operations slice inside TLink across every program and activity, not one example activity: exact activity and evidence-policy governance, atomic job and case creation, audit-grade mobile capture, an exception-led Creditex case workspace, audited private details and original-evidence viewing, correction, dual control, access administration, Dataforce-parity filter families, bottom program workspaces and provider-neutral batch staging. Keep every unverified formula and external execution path disabled.
 
 ## Owning workflow and expected files
 
@@ -40,6 +40,9 @@ Deliver the first safe Creditex operations slice inside TLink: exact activity an
 - Participant and ability records, assignments, tasks, equipment, findings, correction requests, decisions and append-only audit history.
 - AEA Field original evidence with exact-byte SHA-256, encrypted offline queue, capture and location envelope, registered physical-device binding, resumable upload, server byte-signature validation and correction supersession.
 - A privacy-minimised Creditex queue and case workspace with audited evidence viewing. Original bytes are streamed only after an authorised case-purpose check and the returned receipt is required for accept or reject.
+- A persistent bottom workspace bar with Dashboard plus one tab for each source-pinned governed program. Activity, category and scenario selection remain separate fields and filters inside the program workspace.
+- Dataforce-equivalent advanced filter families for status, work and personnel, client and agent, customer and address, job, appointment, tag, product, audit and other dimensions. Unsupported fields remain explicit unavailable facets until TLink has an authoritative source.
+- Organisation-wide private case visibility for Creditex administrators. Non-admin case visibility and every case-specific mutation require a current active assignment.
 - Server-derived, dual-controlled decision bases pinned to the exact case revision, activity, policy, source hashes, accepted evidence and verified calculation run where required.
 - Provider-neutral batch staging plus read-only projections for submissions, responses, certificates, trades and settlements. External execution remains disabled.
 - One bootstrap invitation for `info@ausenergyassessments.com`, expiring 31 August 2026, solely to create the first named Creditex administrators.
@@ -68,20 +71,23 @@ Deliver the first safe Creditex operations slice inside TLink: exact activity an
 - Original evidence remains immutable, rejected evidence is retained and an atomic replacement points to the rejected item.
 - Caller-authored decision basis is ignored; a secondary approval cannot replace the server-derived primary basis.
 - Auditors are read-only, reviewers and auditors need active case assignments to open originals, and the final active administrator cannot remove the last administrative control.
+- Loading or filtering a queue does not select the first case, fetch private details or manufacture a private-detail audit. Opening private details is always deliberate.
+- An older dashboard or case response cannot overwrite a newer program, filter or case selection.
 - Migration replay, focused security and behavior tests, type checking, lint, full validation, production build and `git diff --check` pass before the milestone can be described as validated.
 
 ## Validation and release evidence
 
-- Focused Creditex, governance, access, viewer, field-evidence, guided-job, photo and database-console tests pass 81 of 81.
-- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,077 main tests with 1,075 passed, 2 intentionally skipped and 0 failed, all 98 migrations through `0097_creditex_operations_lifecycle.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. Sites rejected three pre-activation versions because its migration runner did not accept the new multi-line and trigger-body inputs. Migrations `0093` to `0097` now carry only complete line-bounded schema and seed statements, with the original `0096` and `0097` history slots retained so a failed saved version cannot create a filename collision. `src/lib/creditex-schema-guards.ts` installs the unchanged 132 trigger definitions with `CREATE TRIGGER IF NOT EXISTS` in at most 40-statement prepared D1 batches, verifies the exact stored SQL for every definition through `sqlite_schema`, and blocks Creditex access, governed case creation, verified trade access, team access and governed customer-media deletion on any missing, stale or failed installation. The Creditex session returns a bounded retry response while installation is incomplete and the portal retries automatically.
+- The post-review Creditex portal, API and operations-control command passes 54 of 54 tests. The final D1 aggregate regression subset passes 38 of 38.
+- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,089 main tests with 1,087 passed, 2 intentionally skipped and 0 failed, all 98 migrations through `0097_creditex_operations_lifecycle.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. The exact complete gate passed after the assignment boundary and request-race corrections and again after the production-D1 aggregate correction.
+- Failed pre-activation Sites versions 243 to 245 remain historical. Runtime trigger verification now canonicalises only formatting whitespace outside quoted SQL, stays fail-closed on substantive differences, returns a bounded review-required response and exposes staged portal progress. Successful email or Google authentication explicitly loads the workspace even when Firebase does not emit a second identity-state callback.
 - AEA Field passes 6 of 6 tests, lint, type checking and Android and iOS export. Expo printed non-fatal Google-services config parse warnings after both exports; physical signed builds and devices remain unverified.
-- The independent final audit found and closed two P0 evidence-policy immutability defects. Its final verdict permits only an empty, invitation-gated foundation and preview.
-- GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` resolve to exact application commit `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`. The 7,265,958-byte release archive has SHA-256 `D8EAACACACE4955C472851807344F2D824C6F8460614A4547E0371292EDD3801`, contains all 98 migration files and the Vinext server entrypoint, and was saved as Sites version 246 with content hash `sha256:9d6ac6f6e5a3036ba8fedf14c94b0fdc61e608b32b203346fc327a8119f625ea`.
-- Sites deployment `appgdep_6a6d5c42819081919d81dcd9451338bd` succeeded with environment revision 19. The active custom domain and SSL are healthy. Live `/api/health` returned 200 and unauthenticated Creditex session and access requests returned 401. The post-release Sites Worker error-only query reported those two expected 401 boundary invocations at information level with Worker outcome `ok` and no exception or error-level message.
-- The live no-index Creditex sign-in portal was inspected at desktop and 390-pixel widths. Its document width remained 390 pixels at the narrow viewport and it exposes no public-registration path.
-- The Firebase account for `info@ausenergyassessments.com` already existed. A fresh password-activation email was sent. Email-verification state, invitation claim, first authenticated runtime-guard installation and signed-in portal acceptance remain pending mailbox completion.
+- Independent release review found two P1 access/privacy defects and one P2 response-race defect in the first portal commit. Version 248 closes all three: all 11 case-specific action branches recheck the central active-assignment boundary, queues require deliberate private-detail selection and request generations reject stale responses.
+- GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` resolve to exact application commit `7b08cb600bde30273774a544e07039acc6de1c03`. The 7,300,196-byte release archive has SHA-256 `5DDD878B2CAD584194DFCEC00B5245A353B9860DEF17CA83B4AE737860E9E3D2`, contains all 98 migration files and the Vinext server entrypoint, and was saved as Sites version 248 with content hash `sha256:1928ee707d2076db876b6aa40e58219ae5e96273f8ee1ece08cfe74144cd2aac`.
+- Intermediate Sites version 247 restored signed-in dashboard entry but its first operations aggregate returned HTTP 500 in production D1. The database console confirmed all 181 tables were present. Version 248 replaces the local-only-compatible compound count query with one bounded scalar aggregate.
+- Sites deployment `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` succeeded with environment revision 19. Signed-in live QA reached the dashboard, loaded `/api/creditex/operations`, expanded every advanced filter family, inspected access and activity governance, and confirmed the empty governed program bar. No case was auto-selected and no production row was created or changed. The post-release Sites Worker error-only query returned zero events.
+- The Firebase account and claimed bootstrap membership for `info@ausenergyassessments.com` are active. The live portal displays the account as `AEA Creditex administrator` with the administrator role. It must be replaced for routine use by named individual Creditex accounts; suspend the bootstrap membership after two named administrators are active.
 
-Authenticated Creditex administration, non-admin least privilege, physical iOS or Android capture, hosted original-evidence viewing, production rule accuracy, approved calculator provenance, backup and restore, and any real registry, certificate, trade or settlement behavior remain unverified or blocked. No named reviewer, auditor or case-manager rollout is approved because their current dashboard projection is organisation-wide and some mutations are not yet assignment-gated.
+Physical iOS or Android capture, hosted production original-evidence viewing, non-admin production acceptance, private rule-pack accuracy, approved calculator provenance, retention, legal hold, backup and restore, and any real registry, certificate, trade or settlement behavior remain unverified or blocked. Named reviewer, auditor and case-manager rollout remains gated on Creditex's approved role matrix, data-sharing purpose and operating controls, not on an organisation-wide dashboard projection or unassigned mutation path.
 
 ## Stop conditions
 
@@ -115,7 +121,7 @@ Released application commit: `399b04f4a5d680080610f9e88b994506bb60c16f`
 
 Released application: Sites version 242, saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0`, deployment `appgdep_6a6cc08dc6f881919a349de607f5a8a9`
 
-The release keeps installer-request consent and validation beside submission, aligns the shared customer navigation, adds reciprocal TLink and Australian Energy Assessments branding and discloses only a current-consented immutable suburb, postcode and state opportunity snapshot to eligible installers. Migration `0092_trade_opportunity_matching_locality.sql` added the bounded locality and consent-receipt contract. The focused set passed 96 of 96 tests and the complete validation gate passed all 93 migrations through `0092`, the production build and Sites bundle audit. Live verification did not create a new production opportunity, so a version-242 locality-bearing row and business email remain intentionally unverified. This milestone was superseded as the current production identity by the additive Creditex foundation in version 246.
+The release keeps installer-request consent and validation beside submission, aligns the shared customer navigation, adds reciprocal TLink and Australian Energy Assessments branding and discloses only a current-consented immutable suburb, postcode and state opportunity snapshot to eligible installers. Migration `0092_trade_opportunity_matching_locality.sql` added the bounded locality and consent-receipt contract. The focused set passed 96 of 96 tests and the complete validation gate passed all 93 migrations through `0092`, the production build and Sites bundle audit. Live verification did not create a new production opportunity, so a version-242 locality-bearing row and business email remain intentionally unverified. This milestone was superseded as the current production identity by the Creditex foundation and then the signed-in Creditex operations portal in version 248.
 
 ## Prior released milestone record: `CUSTOMER-ACCOUNT-TRUST-23`
 
