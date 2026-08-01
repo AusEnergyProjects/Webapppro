@@ -10,6 +10,7 @@ const sessionRoute = read("../src/app/api/creditex/session/route.ts");
 const caseRoute = read("../src/app/api/creditex/cases/route.ts");
 const activityRoute = read("../src/app/api/creditex/activities/route.ts");
 const evidenceRoute = read("../src/app/api/creditex/evidence/[id]/route.ts");
+const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
 const routeSource = `${sessionRoute}\n${caseRoute}\n${activityRoute}`;
 const surfaceSource = `${page}\n${portal}\n${routeSource}`;
 
@@ -33,6 +34,16 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   ]) assert.match(portal, contract);
   assert.doesNotMatch(surfaceSource, /createUserWithEmailAndPassword|signUp|bootstrap|seed_/i);
   assert.doesNotMatch(sessionRoute, /export async function POST/);
+});
+
+test("first access installs schema guards in quota-safe batches and retries visibly", () => {
+  assert.match(schemaGuards, /const SCHEMA_INSTALL_BATCH_SIZE = 40/);
+  assert.match(schemaGuards, /missing\.slice\(0, SCHEMA_INSTALL_BATCH_SIZE\)/);
+  assert.match(schemaGuards, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
+  assert.match(sessionRoute, /code: "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
+  assert.match(sessionRoute, /"Retry-After": "1"/);
+  assert.match(portal, /for \(let attempt = 0; attempt < 6; attempt \+= 1\)/);
+  assert.match(portal, /result\.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
 });
 
 test("every Creditex endpoint enforces same-origin no-store verified membership access", () => {

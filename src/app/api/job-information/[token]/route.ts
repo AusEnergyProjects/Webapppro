@@ -7,6 +7,7 @@ import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { australianAppointmentTimeZone, customerAppointmentCalendar } from "@/lib/customer-appointment-calendar";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
+import { ensureCreditexSchemaGuards } from "@/lib/creditex-schema-guards";
 import {
   hashPhotoRequestSecret,
   normalisePhotoRequirements,
@@ -262,6 +263,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const { record, requirements } = await authorisedRequest(context);
+    await ensureCreditexSchemaGuards(getD1());
     const mediaId = cleanAdminText(new URL(request.url).searchParams.get("id"), 180);
     const media = await getD1().prepare(`SELECT id, object_key, photo_requirement_id FROM trade_crm_job_media
       WHERE id = ? AND firebase_uid = ? AND work_order_id = ? AND photo_request_id = ? AND source = 'customer_request'`)

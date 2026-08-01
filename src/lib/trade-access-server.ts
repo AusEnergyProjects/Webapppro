@@ -3,6 +3,7 @@ import {
   requireFirebaseIdentity,
   type FirebaseIdentity,
 } from "./firebase-server";
+import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { isValidAbn, normalizeAbn } from "./trade-abn";
 
 export type TradePartnerType = "installer" | "supplier";
@@ -176,6 +177,7 @@ export async function requireVerifiedTradeIdentity(
       "Verify the account email before using TLink.",
     );
   }
+  await ensureCreditexSchemaGuards(getD1());
   const account = await tradeAccountProjection(identity.uid);
   if (!account) {
     throw new TradeAccessError(

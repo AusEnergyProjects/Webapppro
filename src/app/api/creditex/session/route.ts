@@ -11,12 +11,13 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-function json(body: object, status = 200) {
+function json(body: object, status = 200, headers: HeadersInit = {}) {
   return Response.json(body, {
     status,
     headers: {
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      ...headers,
     },
   });
 }
@@ -27,6 +28,16 @@ function errorResponse(error: unknown) {
   }
   if (error instanceof Error && error.message === "AUTH_REQUIRED") {
     return json({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to continue." }, 401);
+  }
+  if (
+    error instanceof Error
+    && error.message.startsWith("CREDITEX_SCHEMA_GUARDS_INSTALLING:")
+  ) {
+    return json({
+      ok: false,
+      code: "CREDITEX_SCHEMA_GUARDS_INSTALLING",
+      error: "Preparing the governed Creditex workspace.",
+    }, 503, { "Retry-After": "1" });
   }
   console.error("Creditex compliance session failed", error);
   return json({

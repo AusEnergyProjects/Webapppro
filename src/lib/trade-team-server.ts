@@ -4,6 +4,7 @@ import {
   requireVerifiedTradeIdentity,
   tradeAccountProjection,
 } from "./trade-access-server";
+import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 
 export type TeamRole = "owner" | "manager" | "coordinator" | "technician";
 export type TeamAccess = {
@@ -40,6 +41,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
 export async function requireInstallerTeamAccess(request: Request): Promise<TeamAccess> {
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
+  await ensureCreditexSchemaGuards(db);
   const owner = await tradeAccountProjection(identity.uid);
   if (owner) {
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });

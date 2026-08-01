@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import {
+  CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS,
+} from "../src/lib/creditex-schema-guards.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0093_creditex_compliance_foundation.sql");
@@ -100,6 +103,9 @@ function applyFoundation(database) {
     .map((item) => item.trim())
     .filter(Boolean)) {
     database.exec(statement);
+  }
+  for (const definition of CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS) {
+    database.exec(definition.sql);
   }
 }
 
@@ -215,6 +221,11 @@ test("published programs and activity versions are source-backed, immutable, and
   const d1 = testD1(database);
   const domain = loadTypescriptModule(
     "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+    },
   );
   assert.throws(() => domain.prepareComplianceProgramCreateStatement(d1, {
     id: "invalid-jurisdiction",
@@ -593,6 +604,11 @@ test("case creation derives the organisation, snapshots the exact rule date, and
   const d1 = testD1(database);
   const domain = loadTypescriptModule(
     "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+    },
   );
 
   database.prepare(`INSERT INTO compliance_programs
@@ -823,6 +839,9 @@ test("compliance access requires a verified exact identity, active organisation,
       "../../db": { getD1: () => d1 },
       "./firebase-server": {
         requireFirebaseIdentity: async (request) => request.identity,
+      },
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
       },
     },
   );

@@ -5,6 +5,7 @@ import {
   ComplianceDomainError,
   listInstallerSelectableActivities,
 } from "@/lib/creditex-compliance-server";
+import { ensureCreditexSchemaGuards } from "@/lib/creditex-schema-guards";
 import {
   requireVerifiedTradeAccess,
   TradeAccessError,
@@ -34,6 +35,8 @@ export async function GET(request: Request) {
   }
   try {
     await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+    const database = getD1();
+    await ensureCreditexSchemaGuards(database);
     const url = new URL(request.url);
     const jurisdiction = cleanAdminText(url.searchParams.get("jurisdiction"), 20).toUpperCase();
     const onDate = String(url.searchParams.get("onDate") || "").trim();
@@ -44,7 +47,7 @@ export async function GET(request: Request) {
       throw new ComplianceDomainError("ACTIVITY_DATE_REQUIRED", 400, "Choose the planned installation date before selecting an activity.");
     }
     const afterActivityId = String(url.searchParams.get("afterActivityId") || "").trim();
-    const page = await listInstallerSelectableActivities(getD1(), {
+    const page = await listInstallerSelectableActivities(database, {
       serviceCategory: cleanAdminText(url.searchParams.get("serviceCategory"), 60),
       jurisdiction,
       onDate,

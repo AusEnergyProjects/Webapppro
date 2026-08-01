@@ -3,6 +3,7 @@ import {
   requireFirebaseIdentity,
   type FirebaseIdentity,
 } from "./firebase-server";
+import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 
 export const COMPLIANCE_ROLES = [
   "admin",
@@ -297,6 +298,7 @@ export async function requireComplianceIdentity(
     );
   }
   const db = database || getD1();
+  await ensureCreditexSchemaGuards(db);
   const organisationId = String(options.organisationId || "").trim();
   const organisationFilter = organisationId
     ? " AND member.organisation_id = ?"

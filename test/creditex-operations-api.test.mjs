@@ -13,6 +13,11 @@ const migration = [
   "../drizzle/0096_creditex_operations_integrity.sql",
   "../drizzle/0097_creditex_operations_lifecycle.sql",
 ].map(read).join("\n--> statement-breakpoint\n");
+const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
+const complianceDomain = read("../src/lib/creditex-compliance-server.ts");
+const tradeAccess = read("../src/lib/trade-access-server.ts");
+const tradeTeam = read("../src/lib/trade-team-server.ts");
+const publicJobInformation = read("../src/app/api/job-information/[token]/route.ts");
 
 function loadServer() {
   const output = ts.transpileModule(server, {
@@ -50,6 +55,25 @@ test("Creditex operations routes enforce same-origin, no-store and verified memb
     /allowedRoles: \["admin", "case_manager", "reviewer", "auditor"\]/,
   );
   assert.match(accessRoute, /allowedRoles: \["admin"\]/);
+});
+
+test("compliance-sensitive installer and public mutation boundaries initialise schema guards", () => {
+  assert.match(
+    complianceDomain,
+    /appendLiveComplianceCaseStatements[\s\S]+await ensureCreditexSchemaGuards\(database\)/,
+  );
+  assert.match(
+    tradeAccess,
+    /requireVerifiedTradeIdentity[\s\S]+await ensureCreditexSchemaGuards\(getD1\(\)\)/,
+  );
+  assert.match(
+    tradeTeam,
+    /requireInstallerTeamAccess[\s\S]+await ensureCreditexSchemaGuards\(db\)/,
+  );
+  assert.match(
+    publicJobInformation,
+    /export async function DELETE[\s\S]+await ensureCreditexSchemaGuards\(getD1\(\)\)/,
+  );
 });
 
 test("every supported write has a fixed role policy and forbidden roles fail before data access", async () => {
@@ -183,7 +207,7 @@ test("successful mutation paths append an immutable audit event and immutable le
     "compliance_submission_artifacts_no_delete",
     "compliance_submission_responses_no_update",
     "compliance_submission_responses_no_delete",
-  ]) assert.match(migration, new RegExp(trigger));
+  ]) assert.match(schemaGuards, new RegExp(trigger));
 });
 
 test("external execution is hard-disabled and local records do not imply registry success", async () => {

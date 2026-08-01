@@ -1,3 +1,5 @@
+import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
+
 export const COMPLIANCE_SERVICE_CATEGORIES = [
   "assessment",
   "solar",
@@ -1223,6 +1225,7 @@ export async function appendLiveComplianceCaseStatements(
   batch: D1PreparedStatement[],
   input: CreateLiveComplianceCaseInput,
 ): Promise<PreparedLiveComplianceCase> {
+  await ensureCreditexSchemaGuards(database);
   const createdAt = input.createdAt
     ? checkedInstant(input.createdAt, "INVALID_CREATED_AT", "Created time")
     : new Date().toISOString();

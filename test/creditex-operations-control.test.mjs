@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import {
+  CREDITEX_SCHEMA_GUARD_DEFINITIONS,
+  ensureCreditexSchemaGuards,
+} from "../src/lib/creditex-schema-guards.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
@@ -106,7 +110,7 @@ test("Sites migration inputs keep one complete SQLite statement per physical lin
   }
 });
 
-function databaseWithComplianceOperations() {
+function databaseWithComplianceOperations({ installGuards = true } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     CREATE TABLE trade_work_orders (
@@ -139,8 +143,54 @@ function databaseWithComplianceOperations() {
   `);
   applyStatements(database, foundationMigration);
   applyStatements(database, operationsMigration);
+  if (installGuards) {
+    for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS) {
+      database.exec(definition.sql);
+    }
+  }
   return database;
 }
+
+test("runtime schema bootstrap installs every governed trigger before compliance access", async () => {
+  const database = databaseWithComplianceOperations({ installGuards: false });
+  const d1 = testD1(database);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
+    0,
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(d1),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:92/,
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
+    40,
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(d1),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:52/,
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(d1),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:12/,
+  );
+  await ensureCreditexSchemaGuards(d1);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
+    CREDITEX_SCHEMA_GUARD_DEFINITIONS.length,
+  );
+});
+
+test("runtime schema bootstrap fails closed when a same-name guard has different SQL", async () => {
+  const database = databaseWithComplianceOperations({ installGuards: false });
+  database.exec(`CREATE TRIGGER compliance_programs_publish_requirements
+    BEFORE INSERT ON compliance_programs
+    BEGIN SELECT RAISE(ABORT, 'incorrect guard'); END;`);
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_GUARD_MISMATCH:compliance_programs_publish_requirements/,
+  );
+});
 
 const TEST_NOW = "2026-08-01T00:00:00.000Z";
 const TEST_HASH = "a".repeat(64);
@@ -552,6 +602,9 @@ test("the verified bootstrap identity claims the invitation exactly once", async
     "./firebase-server": {
       requireFirebaseIdentity: async (request) => request.identity,
     },
+    "./creditex-schema-guards": {
+      ensureCreditexSchemaGuards: async () => {},
+    },
   });
   const identity = {
     uid: "firebase-info-owner",
@@ -614,6 +667,11 @@ test("audited local operations execute against the schema and financial guards r
   );
   const complianceDomain = loadTypescriptModule(
     "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+    },
   );
   const now = TEST_NOW;
   const governed = seedGovernedActivity(database);

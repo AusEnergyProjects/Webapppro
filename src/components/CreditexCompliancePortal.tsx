@@ -277,20 +277,35 @@ export function CreditexCompliancePortal() {
     headers.set("Authorization", `Bearer ${await activeUser.getIdToken()}`);
     if (init.body && !headers.has("Content-Type"))
       headers.set("Content-Type", "application/json");
-    const response = await fetch(path, { ...init, headers, cache: "no-store" });
-    const result = (await response.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-      code?: string;
-    };
-    if (!response.ok || result.ok === false) {
-      const error = new Error(
-        result.error || "The compliance request could not be completed.",
-      ) as ApiFailure;
-      error.result = result;
-      throw error;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await fetch(path, {
+        ...init,
+        headers,
+        cache: "no-store",
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        code?: string;
+      };
+      if (
+        response.status === 503
+        && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
+        && attempt < 5
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        continue;
+      }
+      if (!response.ok || result.ok === false) {
+        const error = new Error(
+          result.error || "The compliance request could not be completed.",
+        ) as ApiFailure;
+        error.result = result;
+        throw error;
+      }
+      return result as Record<string, unknown>;
     }
-    return result as Record<string, unknown>;
+    throw new Error("The governed Creditex workspace could not be prepared.");
   }, []);
 
   const loadCases = useCallback(async ({
