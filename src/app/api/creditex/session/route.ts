@@ -39,6 +39,25 @@ function errorResponse(error: unknown) {
       error: "Preparing the governed Creditex workspace.",
     }, 503, { "Retry-After": "1" });
   }
+  if (
+    error instanceof Error
+    && (
+      error.message.startsWith("CREDITEX_SCHEMA_GUARD_MISMATCH:")
+      || error.message.startsWith("CREDITEX_SCHEMA_GUARDS_UNAVAILABLE:")
+    )
+  ) {
+    const [code, names = ""] = error.message.split(":", 2);
+    console.error("Creditex schema guard verification failed", {
+      code,
+      affectedGuardCount: names ? names.split(",").length : 0,
+    });
+    return json({
+      ok: false,
+      code: "CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED",
+      error:
+        "Creditex integrity controls need a governed upgrade before this workspace can open. No compliance write has been accepted.",
+    }, 503);
+  }
   console.error("Creditex compliance session failed", error);
   return json({
     ok: false,

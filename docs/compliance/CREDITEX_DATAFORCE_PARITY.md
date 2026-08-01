@@ -8,7 +8,7 @@ Reviewed: 1 August 2026
 
 The signed-in Dataforce tenant was inspected read-only. No record was created, edited, submitted or deleted. The inspection verified a queue-led back-office compliance system with job or case navigation, record detail, status-driven review, ownership, evidence and form review, participant records, certificate and submission batch work, response reconciliation, and reporting or export administration.
 
-This is the verified minimum replacement scope, not proof that every tenant feature has been inventoried. Dataforce menus expose only the tenant's configured programs and activities. Runabout private screens, Dataforce and Runabout field dictionaries, calculator logic, registry API behaviour, integration contracts, complete role permissions and retention rules remain unknown until Creditex supplies authorised documentation and representative exports.
+This is the verified minimum replacement scope, not proof that every tenant feature has been inventoried. Dataforce menus expose only the tenant's configured programs and activities. The public Australian program source register is discovery and reconciliation material only. Neither that research nor a visible Dataforce menu is authority to publish an activity, evidence policy or calculation. Runabout private screens, Dataforce and Runabout field dictionaries, calculator logic, registry API behaviour, integration contracts, complete role permissions and retention rules remain unknown until Creditex supplies authorised documentation and representative exports.
 
 Parity means Creditex can complete the same controlled business outcome with preserved data and audit history. It does not require a visual clone. The replacement should reduce context switching while retaining dense queues, filters, drill-down, explicit status, assignment, exceptions, submission control and immutable history.
 
@@ -19,13 +19,63 @@ Parity means Creditex can complete the same controlled business outcome with pre
 - `Required extension`: needed for Creditex's end-to-end operating model but not proven as a Dataforce tenant tool.
 - `Unknown`: not established by the authorised inspection.
 
+## Read-only Dataforce workflow observations
+
+### Program workspaces and activity separation
+
+The bottom workspace tabs observed in the signed-in tenant were `Dashboard` and `Victorian Energy Upgrades`. This supports bottom-level separation by program or scheme. It does not show one bottom tab per activity. TLink should therefore provide:
+
+1. a bottom workspace tab for each governed program or scheme available to the Creditex organisation;
+2. an activity selector and activity-specific filters inside the selected program workspace; and
+3. data-driven activity handling from effective-dated governed records, with no activity-specific interface or calculation hard-coded into the portal.
+
+VEU `6(23)` is one possible activity example only. It has no special platform status and cannot be treated as the first or only supported activity. Every approved program, activity, category and scenario must use the same governed workflow.
+
+The inspected tenant's configured `Activity` filter exposed only:
+
+- `15 Weather Sealing`;
+- `17 Showerheads`;
+- `21A` to `21F` lighting variants;
+- `30 In Home Displays`;
+- `36 pre-rinse spray valve`; and
+- `45 Home Energy Assessment`.
+
+This is a limited tenant configuration, not a national activity catalogue and not regulatory authority. It may be used to test legacy value mapping only after Creditex supplies the authorised field dictionary and export.
+
+### Advanced search and reusable filters
+
+The right-side advanced search panel exposed search type, bulk actions, date-filter type and date range, the following filter groups, and saved custom quick filters:
+
+| Filter group | Observed subfilters |
+| --- | --- |
+| Status Filters | Status; Sub Status; Submission Status; Invoice Status; Invoicing & Submission Filters; Quotation Status |
+| Work & Personnel | Work Type; Field Worker; Created By |
+| Client & Agent | Client; Agents |
+| Customer & Address | Customer Type; Address Filters; Customer Filters |
+| Job Filters | Job Source; Issue Status |
+| Appointment Filters | Appointment Type; Outcome; Other Appointment Filters |
+| Tag Filters | Match mode; Tags; Show tags as columns |
+| Product Filters | Activity; Product Category; Product Type |
+| Audit Filters | Completed; Not Completed |
+| Other Filters | Other Filters; Additional Columns |
+
+TLink parity requires each applicable dimension to be available as a deterministic server-side filter, composable across groups, reflected in result counts and export cohorts, and saveable as an organisation or named-user view. A legacy label may map to a clearer TLink term, but no source value can be silently discarded. Filters whose authoritative relationship does not yet exist must be shown as unavailable with the reason, not emulated from unrelated data.
+
+### New Job and customer intake
+
+The observed `New Job` flow first searches for an existing customer by customer ID, person name, company, ABN or ACN, email, phone or external job ID. It also offers `Create New Customer`.
+
+The observed create-customer intake includes title, first name, surname, email, phone, mobile, residential or business type, SMS consent state, external job ID, agent, property-address autocomplete or manual entry, unit or building details, and billing-address and owner-address flags. TLink must reuse authoritative installer CRM customer, contact, service-site and business records where available, preserve the legacy and external identifiers required for migration, and avoid repeated entry. Private customer, site and installer detail belongs in the purpose-authorised audited case view, not the default compliance queue.
+
 ## Verified parity matrix
 
 | Dataforce or Creditex capability | Evidence status | TLink replacement contract | Workflow improvement and acceptance condition |
 | --- | --- | --- | --- |
+| Program or scheme workspace tabs with nested activity filtering | Observed | Bottom program workspaces populated from governed program records, with activity, category and scenario filtering inside each workspace | Preserve fast scheme switching without encoding a special path for any activity. Selected filters, counts and queues must remain deterministic and organisation-scoped. |
 | Dashboard and operational work queues | Observed | Organisation-scoped case, evidence, task, finding, batch and reconciliation queues | One queue shell with saved filters, counts, priority, age, assignee and blockers. Counts must reconcile to the source tenant for the same cohort. |
 | Job or case list and drill-down detail | Observed | One compliance case linked to the installer job and exact activity snapshot | Open one case workspace instead of separate customer, job, audit and submission contexts. Preserve external IDs and source links after migration. |
-| Search, filters and status-driven review | Observed | Structured case, evidence, task, finding, submission and certificate states | Filters must be deterministic, export the same selected cohort and retain saved operator views. |
+| Advanced search, filters and status-driven review | Observed | Structured server-side filters across status, work and personnel, client and agent, customer and address, job, appointment, tags, product, audit and other authorised dimensions | Filters must be deterministic, export the same selected cohort and retain saved operator views. Unsupported legacy dimensions remain explicit gaps rather than inferred values. |
+| New Job and customer intake | Observed | Existing-customer lookup plus reusable customer, contact, service-site, installer and external-reference records | Reuse authoritative CRM data, preserve consent and address-purpose distinctions and avoid duplicate entry while keeping private fields out of the default queue. |
 | Assignment and ownership | Observed | Named case assignments for case manager, primary reviewer, secondary reviewer and auditor | Show unassigned and overloaded work, prevent self-approval and retain assignment history. |
 | Evidence and form review | Observed | Versioned evidence requirements and immutable case evidence linked to the exact requirement | Generate the checklist from the governed activity version, show originals and metadata beside the requirement and never make reviewers infer missing shots from a generic gallery. |
 | Audit Centre, findings and follow-up | Observed | Requirement or evidence-specific findings, correction tasks, decisions and append-only audit events | Exception-first queue, structured severity, clear correction request, installer response and reviewer resolution. Waiver authority must be explicit. |

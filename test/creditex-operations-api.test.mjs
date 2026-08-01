@@ -57,6 +57,203 @@ test("Creditex operations routes enforce same-origin, no-store and verified memb
   assert.match(accessRoute, /allowedRoles: \["admin"\]/);
 });
 
+test("operations filters are activity-agnostic, bounded, and cover the authoritative case dimensions", () => {
+  const filters = operationsModule.parseCreditexOperationsFilters(
+    new URLSearchParams([
+      ["program", "VEU"],
+      ["program", "SRES"],
+      ["activity", "6(23)"],
+      ["activity", "HPHW-1"],
+      ["status", "in_review"],
+      ["evidenceStatus", "changes_required"],
+      ["workType", "job"],
+      ["serviceCategory", "hot-water"],
+      ["createdBy", "Reviewer One"],
+      ["createdByType", "compliance"],
+      ["fieldWorker", "Crew A"],
+      ["customer", "Example customer"],
+      ["customerType", "residential"],
+      ["address", "Melbourne"],
+      ["installer", "Example installer"],
+      ["identifier", "JOB-1042"],
+      ["jobSource", "internal"],
+      ["workStage", "scheduled"],
+      ["pipelineStage", "approved"],
+      ["priority", "high"],
+      ["issueStatus", "open"],
+      ["appointmentStatus", "scheduled"],
+      ["appointmentType", "installation"],
+      ["auditState", "attention"],
+      ["certificateState", "pending"],
+      ["batchState", "draft"],
+      ["submissionStatus", "staged"],
+      ["quoteStatus", "accepted"],
+      ["invoiceStatus", "issued"],
+      ["product", "heat pump"],
+      ["productCategory", "heat-pump-water-heater"],
+      ["tag", "priority"],
+      ["tag", "veu"],
+      ["tagMatch", "all"],
+      ["installedFrom", "2026-01-01"],
+      ["installedTo", "2026-12-31"],
+      ["appointmentFrom", "2026-02-01"],
+      ["appointmentTo", "2026-11-30"],
+      ["pageSize", "100"],
+    ]),
+  );
+  assert.deepEqual(filters.programs, ["VEU", "SRES"]);
+  assert.deepEqual(filters.activities, ["6(23)", "HPHW-1"]);
+  assert.deepEqual(filters.lifecycleStatuses, ["in_review"]);
+  assert.deepEqual(filters.evidenceStatuses, ["changes_required"]);
+  assert.deepEqual(filters.workTypes, ["job"]);
+  assert.deepEqual(filters.serviceCategories, ["hot-water"]);
+  assert.equal(filters.createdByText, "Reviewer One");
+  assert.deepEqual(filters.createdByTypes, ["compliance"]);
+  assert.equal(filters.fieldWorkerText, "Crew A");
+  assert.equal(filters.customerText, "Example customer");
+  assert.deepEqual(filters.customerTypes, ["residential"]);
+  assert.equal(filters.addressText, "Melbourne");
+  assert.equal(filters.installerText, "Example installer");
+  assert.equal(filters.identifierText, "JOB-1042");
+  assert.deepEqual(filters.jobSources, ["internal"]);
+  assert.deepEqual(filters.workStages, ["scheduled"]);
+  assert.deepEqual(filters.pipelineStages, ["approved"]);
+  assert.deepEqual(filters.priorities, ["high"]);
+  assert.deepEqual(filters.issueStatuses, ["open"]);
+  assert.deepEqual(filters.appointmentStatuses, ["scheduled"]);
+  assert.deepEqual(filters.appointmentTypes, ["installation"]);
+  assert.deepEqual(filters.auditStates, ["attention"]);
+  assert.deepEqual(filters.certificateStatuses, ["pending"]);
+  assert.deepEqual(filters.batchStatuses, ["draft"]);
+  assert.deepEqual(filters.submissionStatuses, ["staged"]);
+  assert.deepEqual(filters.quoteStatuses, ["accepted"]);
+  assert.deepEqual(filters.invoiceStatuses, ["issued"]);
+  assert.equal(filters.productText, "heat pump");
+  assert.deepEqual(filters.productCategories, ["heat-pump-water-heater"]);
+  assert.deepEqual(filters.tags, ["priority", "veu"]);
+  assert.equal(filters.tagMatch, "all");
+  assert.equal(filters.installedFrom, "2026-01-01");
+  assert.equal(filters.installedTo, "2026-12-31");
+  assert.equal(filters.appointmentFrom, "2026-02-01");
+  assert.equal(filters.appointmentTo, "2026-11-30");
+  assert.equal(filters.pageSize, 100);
+  assert.throws(
+    () => operationsModule.parseCreditexOperationsFilters(
+      new URLSearchParams({ status: "invented" }),
+    ),
+    (error) => error.code === "CREDITEX_FILTER_INVALID" && error.status === 400,
+  );
+  assert.throws(
+    () => operationsModule.parseCreditexOperationsFilters(
+      new URLSearchParams({
+        installedFrom: "2026-12-31",
+        installedTo: "2026-01-01",
+      }),
+    ),
+    (error) => (
+      error.code === "CREDITEX_DATE_RANGE_INVALID" && error.status === 400
+    ),
+  );
+  for (const invalid of [
+    { serviceCategory: "invented" },
+    { customerType: "government" },
+    { appointmentType: "invented" },
+    { quoteStatus: "invented" },
+    { invoiceStatus: "invented" },
+    { submissionStatus: "invented" },
+    { tagMatch: "invented" },
+    { pageSize: "500" },
+  ]) {
+    assert.throws(
+      () => operationsModule.parseCreditexOperationsFilters(
+        new URLSearchParams(invalid),
+      ),
+      (error) => (
+        error.code === "CREDITEX_FILTER_INVALID" && error.status === 400
+      ),
+    );
+  }
+});
+
+test("Dataforce-equivalent filters use authoritative case links and declare unsupported relationships", () => {
+  for (const sqlBoundary of [
+    /work\.work_type/,
+    /activity\.service_category/,
+    /compliance_case\.created_by_type/,
+    /case_creator\.firebase_uid = compliance_case\.created_by_uid/,
+    /work\.assignee_label/,
+    /customer\.customer_type/,
+    /work\.source_type/,
+    /work\.stage/,
+    /job\.pipeline_stage/,
+    /work\.priority/,
+    /filtered_issue\.note_type = 'issue'/,
+    /filtered_issue\.issue_status IN/,
+    /filtered_appointment\.appointment_type IN/,
+    /filtered_submission\.status IN/,
+    /job\.quote_status/,
+    /job\.invoice_status/,
+    /activity\.product_category/,
+    /filters\.tagMatch === "all"/,
+  ]) assert.match(server, sqlBoundary);
+  for (const unavailableReason of [
+    /No authoritative client-to-case relationship is stored/,
+    /no authoritative agent-to-case relationship is stored/,
+    /no separate outcome field/,
+    /no authoritative audit-completed flag/,
+    /No additional authoritative appointment filter fields are stored/,
+    /no authoritative Dataforce-equivalent product-type field/,
+    /generic catch-all filter cannot be mapped safely/,
+  ]) assert.match(server, unavailableReason);
+  assert.match(server, /returnedInDefaultList: false/);
+});
+
+test("operations GET passes the full membership scope and exposes data-driven program and activity workspaces", () => {
+  assert.match(operationsRoute, /parseCreditexOperationsFilters\(searchParams\)/);
+  assert.match(
+    operationsRoute,
+    /loadCreditexOperationsDashboard\(\s*database,\s*member,\s*filters/,
+  );
+  assert.match(
+    operationsRoute,
+    /loadCreditexCaseWorkspace\(\s*database,\s*member,\s*caseId/,
+  );
+  assert.match(server, /programWorkspaceRows/);
+  assert.match(server, /activityWorkspaceRows/);
+  assert.match(server, /workspace:\s*\{\s*programs:/);
+  assert.match(server, /activityVersionId:/);
+  assert.match(server, /registryActivityCode:/);
+  assert.match(server, /scenarioCode:/);
+  assert.doesNotMatch(server, /activityKey\s*===\s*["']6\(23\)["']/);
+});
+
+test("non-admin operations remain assignment-scoped while Creditex admins retain organisation-wide visibility", () => {
+  assert.match(server, /if \(scope\.role !== "admin"\)/);
+  assert.match(server, /visible_assignment\.status = 'assigned'/);
+  assert.match(server, /visible_member\.firebase_uid = \?/);
+  assert.match(server, /visible_member\.status = 'active'/);
+  assert.match(server, /scope\.role === "admin" \? 1 : 0/);
+  assert.match(server, /No authoritative participant-to-case relationship is stored/);
+  assert.match(server, /No authoritative claim-state record is stored/);
+});
+
+test("case lists stay privacy-minimised and authorised private detail reads are audited", () => {
+  const dashboardSource = server.slice(
+    server.indexOf("export async function loadCreditexOperationsDashboard"),
+    server.indexOf("export async function loadCreditexCaseWorkspace"),
+  );
+  assert.doesNotMatch(dashboardSource, /firstName:/);
+  assert.doesNotMatch(dashboardSource, /customerEmail:/);
+  assert.match(dashboardSource, /privateDetailsAvailable: true/);
+  assert.match(server, /privateDetails:\s*\{/);
+  assert.match(server, /defaultListPrivacyMinimised: true/);
+  assert.match(server, /"case\.private_details_viewed"/);
+  assert.match(server, /purpose: "compliance_case_review"/);
+  assert.match(server, /privateNotes:/);
+  assert.match(server, /accessInstructions:/);
+  assert.match(server, /hazardNotes:/);
+});
+
 test("compliance-sensitive installer and public mutation boundaries initialise schema guards", () => {
   assert.match(
     complianceDomain,

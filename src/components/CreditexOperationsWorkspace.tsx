@@ -75,6 +75,17 @@ type OperationCase = SeedCase & {
   calculationRuns: OperationCalculationRun[];
   batchItems: OperationBatchItem[];
   events: OperationEvent[];
+  privateDetails: OperationPrivateDetails | null;
+};
+
+type OperationPrivateDetails = {
+  access: JsonRecord;
+  job: JsonRecord;
+  installer: JsonRecord;
+  customer: JsonRecord | null;
+  customerContacts: JsonRecord[];
+  serviceSite: JsonRecord | null;
+  appointments: JsonRecord[];
 };
 
 type OperationEvidence = {
@@ -294,6 +305,86 @@ type EvidencePolicySummary = {
   officialSourceCheckedAt: string;
 };
 
+type WorkspaceProgram = {
+  programId: string;
+  programCode: string;
+  programName: string;
+  schemeKind: string;
+  jurisdiction: string;
+  administeringBody: string;
+  publishState: string;
+  caseCount: number;
+  activityVersionCount: number;
+};
+
+type WorkspaceActivity = {
+  activityVersionId: string;
+  programId: string;
+  programCode: string;
+  programName: string;
+  activityKey: string;
+  version: number;
+  title: string;
+  serviceCategory: string;
+  registryActivityCode: string;
+  specificationPart: string;
+  productCategory: string;
+  scenarioCode: string;
+  scenario: string;
+  jurisdiction: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  publishState: string;
+  calculationApprovalState: string;
+  caseCount: number;
+};
+
+type WorkspaceFacet = {
+  available: boolean;
+  reason: string;
+  mode: string;
+  options: unknown[];
+};
+
+type OperationsFilterState = {
+  program: string;
+  activity: string;
+  lifecycleStatus: string;
+  evidenceStatus: string;
+  customer: string;
+  address: string;
+  installer: string;
+  workType: string;
+  serviceCategory: string;
+  createdBy: string;
+  createdByType: string;
+  fieldWorker: string;
+  identifier: string;
+  customerType: string;
+  jobSource: string;
+  workStage: string;
+  pipelineStage: string;
+  priority: string;
+  issueStatus: string;
+  appointmentStatus: string;
+  appointmentType: string;
+  auditState: string;
+  certificateStatus: string;
+  batchStatus: string;
+  submissionStatus: string;
+  quoteStatus: string;
+  invoiceStatus: string;
+  product: string;
+  productCategory: string;
+  tags: string;
+  tagMatch: string;
+  installedFrom: string;
+  installedTo: string;
+  appointmentFrom: string;
+  appointmentTo: string;
+  pageSize: "25" | "50" | "100";
+};
+
 type OperationsSnapshot = {
   loaded: boolean;
   counts: Record<string, number>;
@@ -309,6 +400,13 @@ type OperationsSnapshot = {
   calculators: CalculatorSummary[];
   evidencePolicies: EvidencePolicySummary[];
   reports: Record<string, number>;
+  workspace: {
+    programs: WorkspaceProgram[];
+    activities: WorkspaceActivity[];
+    facets: Record<string, WorkspaceFacet>;
+    total: number;
+    hasNext: boolean;
+  };
 };
 
 type AccessMember = {
@@ -413,6 +511,52 @@ const EMPTY_OPERATIONS: OperationsSnapshot = {
   calculators: [],
   evidencePolicies: [],
   reports: {},
+  workspace: {
+    programs: [],
+    activities: [],
+    facets: {},
+    total: 0,
+    hasNext: false,
+  },
+};
+
+const EMPTY_FILTERS: OperationsFilterState = {
+  program: "",
+  activity: "",
+  lifecycleStatus: "",
+  evidenceStatus: "",
+  customer: "",
+  address: "",
+  installer: "",
+  workType: "",
+  serviceCategory: "",
+  createdBy: "",
+  createdByType: "",
+  fieldWorker: "",
+  identifier: "",
+  customerType: "",
+  jobSource: "",
+  workStage: "",
+  pipelineStage: "",
+  priority: "",
+  issueStatus: "",
+  appointmentStatus: "",
+  appointmentType: "",
+  auditState: "",
+  certificateStatus: "",
+  batchStatus: "",
+  submissionStatus: "",
+  quoteStatus: "",
+  invoiceStatus: "",
+  product: "",
+  productCategory: "",
+  tags: "",
+  tagMatch: "",
+  installedFrom: "",
+  installedTo: "",
+  appointmentFrom: "",
+  appointmentTo: "",
+  pageSize: "50",
 };
 
 const EMPTY_ACCESS: AccessSnapshot = {
@@ -527,7 +671,7 @@ function parseActivity(value: unknown): ActivitySummary {
       "registry_activity_code",
     ]),
     title: text(source, ["title", "activityTitle", "activity_title"]),
-    version: numberValue(source, ["version"], 0),
+    version: numberValue(source, ["version", "activityVersion"], 0),
     specificationPart: text(source, [
       "specificationPart",
       "specification_part",
@@ -541,6 +685,27 @@ function parseActivity(value: unknown): ActivitySummary {
       "officialSourceVersion",
       "official_source_version",
     ]),
+  };
+}
+
+function parsePrivateDetails(value: unknown): OperationPrivateDetails | null {
+  const source = record(value);
+  if (!Object.keys(source).length) return null;
+  return {
+    access: record(first(source, ["access"])),
+    job: record(first(source, ["job"])),
+    installer: record(first(source, ["installer"])),
+    customer: first(source, ["customer"])
+      ? record(first(source, ["customer"]))
+      : null,
+    customerContacts: records(first(source, [
+      "customerContacts",
+      "customer_contacts",
+    ])),
+    serviceSite: first(source, ["serviceSite", "service_site"])
+      ? record(first(source, ["serviceSite", "service_site"]))
+      : null,
+    appointments: records(first(source, ["appointments"])),
   };
 }
 
@@ -759,15 +924,19 @@ function parseCase(value: unknown): OperationCase {
     ]),
     jurisdiction: text(combined, ["jurisdiction", "siteJurisdiction"]),
     activityDate: text(combined, ["activityDate", "activity_date"]),
-    activity: parseActivity(first(combined, [
-      "activity",
-      "activitySnapshot",
-      "activity_snapshot",
-    ])),
+    activity: parseActivity(
+      first(combined, [
+        "activity",
+        "activitySnapshot",
+        "activity_snapshot",
+      ]) ?? combined,
+    ),
     evidenceStatus: text(combined, ["evidenceStatus", "evidence_status"]),
     workflowStatus: text(combined, [
       "workflowStatus",
       "workflow_status",
+      "lifecycleStatus",
+      "lifecycle_status",
       "status",
     ]),
     createdAt: text(combined, ["createdAt", "created_at"]),
@@ -814,6 +983,10 @@ function parseCase(value: unknown): OperationCase {
       "caseEvents",
       "case_events",
     ])).map(parseEvent),
+    privateDetails: parsePrivateDetails(first(combined, [
+      "privateDetails",
+      "private_details",
+    ])),
   };
 }
 
@@ -841,6 +1014,7 @@ function seedCase(value: SeedCase): OperationCase {
     calculationRuns: [],
     batchItems: [],
     events: [],
+    privateDetails: null,
   };
 }
 
@@ -848,6 +1022,7 @@ function parseOperations(value: unknown): OperationsSnapshot {
   const root = record(value);
   const source = record(first(root, ["operations", "workspace", "dashboard"]));
   const actual = Object.keys(source).length ? source : root;
+  const workspace = record(first(actual, ["workspace"]));
   const queues = record(first(actual, ["queues"]));
   const rawCounts = record(first(actual, ["counts", "summary"]));
   const counts = Object.fromEntries(
@@ -882,17 +1057,20 @@ function parseOperations(value: unknown): OperationsSnapshot {
         ]),
         batchItems: first(actual, ["batchItems", "batch_items"]),
         events: first(actual, ["caseEvents", "case_events", "events"]),
+        privateDetails: first(actual, ["privateDetails", "private_details"]),
       })
     : null;
   return {
     loaded: true,
     counts,
-    cases: records(first(actual, [
-      "cases",
-      "workQueue",
-      "work_queue",
-      "queue",
-    ])).map(parseCase),
+    cases: records(
+      first(actual, [
+        "cases",
+        "workQueue",
+        "work_queue",
+        "queue",
+      ]) ?? first(workspace, ["cases"]),
+    ).map(parseCase),
     selectedCase,
     tasks: records(
       first(actual, ["tasks"]) ?? first(queues, ["tasks"]),
@@ -1064,7 +1242,159 @@ function parseOperations(value: unknown): OperationsSnapshot {
         .map(([key, item]) => [key, Number(item)])
         .filter((entry): entry is [string, number] => Number.isFinite(entry[1])),
     ),
+    workspace: {
+      programs: records(first(workspace, ["programs"])).map((item) => ({
+        programId: text(item, ["programId", "program_id"]),
+        programCode: text(item, ["programCode", "program_code"]),
+        programName: text(item, ["programName", "program_name", "name"]),
+        schemeKind: text(item, ["schemeKind", "scheme_kind"]),
+        jurisdiction: text(item, ["jurisdiction"]),
+        administeringBody: text(item, [
+          "administeringBody",
+          "administering_body",
+        ]),
+        publishState: text(item, ["publishState", "publish_state"]),
+        caseCount: numberValue(item, ["caseCount", "case_count"]),
+        activityVersionCount: numberValue(item, [
+          "activityVersionCount",
+          "activity_version_count",
+        ]),
+      })),
+      activities: records(first(workspace, ["activities"])).map((item) => ({
+        activityVersionId: text(item, [
+          "activityVersionId",
+          "activity_version_id",
+        ]),
+        programId: text(item, ["programId", "program_id"]),
+        programCode: text(item, ["programCode", "program_code"]),
+        programName: text(item, ["programName", "program_name"]),
+        activityKey: text(item, ["activityKey", "activity_key"]),
+        version: numberValue(item, ["version"]),
+        title: text(item, ["title"]),
+        serviceCategory: text(item, ["serviceCategory", "service_category"]),
+        registryActivityCode: text(item, [
+          "registryActivityCode",
+          "registry_activity_code",
+        ]),
+        specificationPart: text(item, [
+          "specificationPart",
+          "specification_part",
+        ]),
+        productCategory: text(item, [
+          "productCategory",
+          "product_category",
+        ]),
+        scenarioCode: text(item, ["scenarioCode", "scenario_code"]),
+        scenario: text(item, ["scenario"]),
+        jurisdiction: text(item, ["jurisdiction"]),
+        effectiveFrom: text(item, ["effectiveFrom", "effective_from"]),
+        effectiveTo: text(item, ["effectiveTo", "effective_to"]),
+        publishState: text(item, ["publishState", "publish_state"]),
+        calculationApprovalState: text(item, [
+          "calculationApprovalState",
+          "calculation_approval_state",
+        ]),
+        caseCount: numberValue(item, ["caseCount", "case_count"]),
+      })),
+      facets: Object.fromEntries(
+        Object.entries(record(first(workspace, ["facets"]))).map(
+          ([key, value]) => {
+            const facet = record(value);
+            const options = first(facet, ["options"]);
+            return [key, {
+              available: booleanValue(facet, ["available"]),
+              reason: text(facet, ["reason"]),
+              mode: text(facet, ["mode"]),
+              options: Array.isArray(options) ? options : [],
+            }];
+          },
+        ),
+      ),
+      total: numberValue(
+        record(first(workspace, ["pagination"])),
+        ["total"],
+      ),
+      hasNext: booleanValue(
+        record(first(workspace, ["pagination"])),
+        ["hasNext", "has_next"],
+      ),
+    },
   };
+}
+
+function filterQuery(filters: OperationsFilterState) {
+  const params = new URLSearchParams();
+  const values: Array<[string, string]> = [
+    ["program", filters.program],
+    ["activity", filters.activity],
+    ["status", filters.lifecycleStatus],
+    ["evidenceStatus", filters.evidenceStatus],
+    ["customer", filters.customer],
+    ["address", filters.address],
+    ["installer", filters.installer],
+    ["workType", filters.workType],
+    ["serviceCategory", filters.serviceCategory],
+    ["createdBy", filters.createdBy],
+    ["createdByType", filters.createdByType],
+    ["fieldWorker", filters.fieldWorker],
+    ["identifier", filters.identifier],
+    ["customerType", filters.customerType],
+    ["jobSource", filters.jobSource],
+    ["workStage", filters.workStage],
+    ["pipelineStage", filters.pipelineStage],
+    ["priority", filters.priority],
+    ["issueStatus", filters.issueStatus],
+    ["appointmentStatus", filters.appointmentStatus],
+    ["appointmentType", filters.appointmentType],
+    ["auditState", filters.auditState],
+    ["certificateState", filters.certificateStatus],
+    ["batchState", filters.batchStatus],
+    ["submissionStatus", filters.submissionStatus],
+    ["quoteStatus", filters.quoteStatus],
+    ["invoiceStatus", filters.invoiceStatus],
+    ["product", filters.product],
+    ["productCategory", filters.productCategory],
+    ["tag", filters.tags],
+    ["tagMatch", filters.tagMatch],
+    ["installedFrom", filters.installedFrom],
+    ["installedTo", filters.installedTo],
+    ["appointmentFrom", filters.appointmentFrom],
+    ["appointmentTo", filters.appointmentTo],
+    ["pageSize", filters.pageSize],
+  ];
+  for (const [key, value] of values) {
+    const normal = value.trim();
+    if (normal) params.set(key, normal);
+  }
+  return params.toString();
+}
+
+function facetOptions(facet: WorkspaceFacet | undefined) {
+  return (facet?.options || [])
+    .map((value) => {
+      if (typeof value === "string") {
+        return { value, label: readable(value), count: 0 };
+      }
+      const item = record(value);
+      const optionValue = text(item, [
+        "value",
+        "id",
+        "code",
+        "status",
+      ]);
+      return {
+        value: optionValue,
+        label: text(item, ["label", "name"], readable(optionValue)),
+        count: numberValue(item, ["total", "count"]),
+      };
+    })
+    .filter((item) => item.value);
+}
+
+function activeFilterCount(filters: OperationsFilterState) {
+  return Object.entries(filters)
+    .filter(([key, value]) => key !== "pageSize" && Boolean(value.trim()))
+    .length;
 }
 
 function parseAccess(value: unknown): AccessSnapshot {
@@ -1232,15 +1562,498 @@ function DisabledAction({
   );
 }
 
+type FilterOption = {
+  value: string;
+  label: string;
+  count?: number;
+};
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  allLabel = "All",
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  allLabel?: string;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+            {option.count ? ` (${option.count})` : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FilterInput({
+  label,
+  value,
+  onChange,
+  type = "search",
+  placeholder = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: "search" | "date";
+  placeholder?: string;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function UnavailableFilter({
+  label,
+  facet,
+}: {
+  label: string;
+  facet?: WorkspaceFacet;
+}) {
+  return (
+    <div className={styles.unavailableFilter}>
+      <span>{label}</span>
+      <small>
+        {facet?.reason
+          || "No authoritative TLink field is currently available for this filter."}
+      </small>
+    </div>
+  );
+}
+
+function AdvancedFilters({
+  filters,
+  workspace,
+  loading,
+  onChange,
+  onApply,
+  onClear,
+}: {
+  filters: OperationsFilterState;
+  workspace: OperationsSnapshot["workspace"];
+  loading: boolean;
+  onChange: (key: keyof OperationsFilterState, value: string) => void;
+  onApply: () => void;
+  onClear: () => void;
+}) {
+  const options = (key: string) => facetOptions(workspace.facets[key]);
+  const staticOptions = (...values: string[]) =>
+    values.map((value) => ({ value, label: readable(value) }));
+  const activities = workspace.activities.filter(
+    (activity) => !filters.program || activity.programId === filters.program,
+  );
+  return (
+    <section
+      className={styles.advancedFilters}
+      aria-labelledby="creditex-advanced-filter-title"
+    >
+      <div className={styles.advancedFilterHeader}>
+        <div>
+          <span className={styles.kicker}>Dataforce-parity search</span>
+          <h4 id="creditex-advanced-filter-title">Advanced case filters</h4>
+          <p>
+            Search the organisation-wide compliance workspace. Customer and
+            exact address matches are evaluated server-side and remain hidden
+            from the default result list.
+          </p>
+        </div>
+        <div className={styles.filterActions}>
+          <button type="button" onClick={onClear}>Clear</button>
+          <button
+            className={styles.primaryAction}
+            type="button"
+            disabled={loading}
+            onClick={onApply}
+          >
+            {loading ? "Applying..." : "Apply filters"}
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.filterAccordion}>
+        <details open>
+          <summary>Status filters</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Case lifecycle"
+              value={filters.lifecycleStatus}
+              options={options("lifecycleStatus")}
+              onChange={(value) => onChange("lifecycleStatus", value)}
+            />
+            <FilterSelect
+              label="Evidence status"
+              value={filters.evidenceStatus}
+              options={options("evidenceStatus")}
+              onChange={(value) => onChange("evidenceStatus", value)}
+            />
+            <FilterSelect
+              label="Submission status"
+              value={filters.submissionStatus}
+              options={options("submissionStatus")}
+              onChange={(value) => onChange("submissionStatus", value)}
+            />
+            <FilterSelect
+              label="Certificate status"
+              value={filters.certificateStatus}
+              options={options("certificateState")}
+              onChange={(value) => onChange("certificateStatus", value)}
+            />
+            <FilterSelect
+              label="Batch status"
+              value={filters.batchStatus}
+              options={options("batchState")}
+              onChange={(value) => onChange("batchStatus", value)}
+            />
+            <FilterSelect
+              label="Quotation status"
+              value={filters.quoteStatus}
+              options={options("quoteStatus")}
+              onChange={(value) => onChange("quoteStatus", value)}
+            />
+            <FilterSelect
+              label="Invoice status"
+              value={filters.invoiceStatus}
+              options={options("invoiceStatus")}
+              onChange={(value) => onChange("invoiceStatus", value)}
+            />
+            <div className={styles.filterSuggestions}>
+              <span>Invoicing &amp; submission filters</span>
+              <small>
+                Quotation, invoice, submission, batch and certificate states
+                can be combined in this group.
+              </small>
+            </div>
+            <UnavailableFilter
+              label="Sub status"
+              facet={workspace.facets.subStatus}
+            />
+            <UnavailableFilter
+              label="Claim state"
+              facet={workspace.facets.claimState}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Work &amp; personnel</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Work type"
+              value={filters.workType}
+              options={options("workType")}
+              onChange={(value) => onChange("workType", value)}
+            />
+            <FilterSelect
+              label="Service category"
+              value={filters.serviceCategory}
+              options={options("serviceCategory")}
+              onChange={(value) => onChange("serviceCategory", value)}
+            />
+            <FilterInput
+              label="Installer business"
+              value={filters.installer}
+              placeholder="Business or installer"
+              onChange={(value) => onChange("installer", value)}
+            />
+            <FilterInput
+              label="Field worker"
+              value={filters.fieldWorker}
+              placeholder="Assigned field worker"
+              onChange={(value) => onChange("fieldWorker", value)}
+            />
+            <FilterInput
+              label="Created by"
+              value={filters.createdBy}
+              placeholder="Name or identity"
+              onChange={(value) => onChange("createdBy", value)}
+            />
+            <FilterSelect
+              label="Creator type"
+              value={filters.createdByType}
+              options={staticOptions("installer", "compliance", "platform")}
+              onChange={(value) => onChange("createdByType", value)}
+            />
+            <FilterSelect
+              label="Priority"
+              value={filters.priority}
+              options={options("priority")}
+              onChange={(value) => onChange("priority", value)}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Client &amp; agent</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Program / scheme"
+              value={filters.program}
+              options={workspace.programs.map((program) => ({
+                value: program.programId,
+                label: `${program.programCode || program.jurisdiction} · ${
+                  program.programName
+                }`,
+                count: program.caseCount,
+              }))}
+              onChange={(value) => onChange("program", value)}
+            />
+            <UnavailableFilter
+              label="Client"
+              facet={workspace.facets.client}
+            />
+            <UnavailableFilter
+              label="Agent"
+              facet={workspace.facets.agent}
+            />
+            <UnavailableFilter
+              label="Participant"
+              facet={workspace.facets.participant}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Customer &amp; address</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Customer type"
+              value={filters.customerType}
+              options={options("customerType")}
+              onChange={(value) => onChange("customerType", value)}
+            />
+            <FilterInput
+              label="Customer"
+              value={filters.customer}
+              placeholder="Name, business, email or phone"
+              onChange={(value) => onChange("customer", value)}
+            />
+            <FilterInput
+              label="Property address"
+              value={filters.address}
+              placeholder="Street, suburb, state or postcode"
+              onChange={(value) => onChange("address", value)}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Job filters</summary>
+          <div className={styles.filterFields}>
+            <FilterInput
+              label="Case / job identifier"
+              value={filters.identifier}
+              placeholder="Case, job or work order"
+              onChange={(value) => onChange("identifier", value)}
+            />
+            <FilterSelect
+              label="Job source"
+              value={filters.jobSource}
+              options={options("jobSource")}
+              onChange={(value) => onChange("jobSource", value)}
+            />
+            <FilterSelect
+              label="Work stage"
+              value={filters.workStage}
+              options={options("workStage")}
+              onChange={(value) => onChange("workStage", value)}
+            />
+            <FilterSelect
+              label="Pipeline stage"
+              value={filters.pipelineStage}
+              options={options("pipelineStage")}
+              onChange={(value) => onChange("pipelineStage", value)}
+            />
+            <FilterSelect
+              label="Issue status"
+              value={filters.issueStatus}
+              options={options("issueStatus")}
+              onChange={(value) => onChange("issueStatus", value)}
+            />
+            <FilterInput
+              label="Installed from"
+              type="date"
+              value={filters.installedFrom}
+              onChange={(value) => onChange("installedFrom", value)}
+            />
+            <FilterInput
+              label="Installed to"
+              type="date"
+              value={filters.installedTo}
+              onChange={(value) => onChange("installedTo", value)}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Appointment filters</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Appointment type"
+              value={filters.appointmentType}
+              options={options("appointmentType")}
+              onChange={(value) => onChange("appointmentType", value)}
+            />
+            <FilterInput
+              label="Appointment status"
+              value={filters.appointmentStatus}
+              placeholder="Scheduled, completed..."
+              onChange={(value) => onChange("appointmentStatus", value)}
+            />
+            <FilterInput
+              label="Appointment from"
+              type="date"
+              value={filters.appointmentFrom}
+              onChange={(value) => onChange("appointmentFrom", value)}
+            />
+            <FilterInput
+              label="Appointment to"
+              type="date"
+              value={filters.appointmentTo}
+              onChange={(value) => onChange("appointmentTo", value)}
+            />
+            <UnavailableFilter
+              label="Appointment outcome"
+              facet={workspace.facets.appointmentOutcome}
+            />
+            <UnavailableFilter
+              label="Other appointment filters"
+              facet={workspace.facets.appointmentOtherFilters}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Tag filters</summary>
+          <div className={styles.filterFields}>
+            <FilterInput
+              label="Tags"
+              value={filters.tags}
+              placeholder="Comma-separated tags"
+              onChange={(value) => onChange("tags", value)}
+            />
+            <FilterSelect
+              label="Tag match"
+              value={filters.tagMatch}
+              allLabel="Any selected tag"
+              options={staticOptions("any", "all")}
+              onChange={(value) => onChange("tagMatch", value)}
+            />
+            {options("tags").length > 0 && (
+              <div className={styles.filterSuggestions}>
+                <span>Available tags</span>
+                <small>
+                  {options("tags").map((option) => option.label).join(", ")}
+                </small>
+              </div>
+            )}
+          </div>
+        </details>
+
+        <details>
+          <summary>Product filters</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Activity"
+              value={filters.activity}
+              options={activities.map((activity) => ({
+                value: activity.activityVersionId,
+                label: `${
+                  activity.registryActivityCode || activity.activityKey
+                } · ${activity.title} · v${activity.version}`,
+                count: activity.caseCount,
+              }))}
+              onChange={(value) => onChange("activity", value)}
+            />
+            <FilterSelect
+              label="Product category"
+              value={filters.productCategory}
+              options={options("productCategory")}
+              onChange={(value) => onChange("productCategory", value)}
+            />
+            <FilterInput
+              label="Product / equipment"
+              value={filters.product}
+              placeholder="Manufacturer, model, serial or registry"
+              onChange={(value) => onChange("product", value)}
+            />
+            <UnavailableFilter
+              label="Product type"
+              facet={workspace.facets.productType}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Audit filters</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Audit state"
+              value={filters.auditState}
+              options={options("auditState")}
+              onChange={(value) => onChange("auditState", value)}
+            />
+            <UnavailableFilter
+              label="Completed / not completed"
+              facet={workspace.facets.auditCompletion}
+            />
+          </div>
+        </details>
+
+        <details>
+          <summary>Other filters</summary>
+          <div className={styles.filterFields}>
+            <FilterSelect
+              label="Rows per page"
+              value={filters.pageSize}
+              allLabel="50 rows"
+              options={staticOptions("25", "50", "100")}
+              onChange={(value) => onChange(
+                "pageSize",
+                (value || "50") as OperationsFilterState["pageSize"],
+              )}
+            />
+            <UnavailableFilter
+              label="Additional columns"
+              facet={workspace.facets.additionalColumns}
+            />
+            <UnavailableFilter
+              label="Other Dataforce filters"
+              facet={workspace.facets.otherFilters}
+            />
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
 export function CreditexOperationsWorkspace({
   session,
   seedCases,
   seedPagination,
   seedStatus,
-  seedStatusOptions,
   seedLoadNextLabel,
   seedBusy,
-  onSeedStatusChange,
   onRefreshSeedCases,
   onLoadNextSeedCases,
   onOpenActivityRules,
@@ -1251,6 +2064,11 @@ export function CreditexOperationsWorkspace({
   const [access, setAccess] = useState<AccessSnapshot>(EMPTY_ACCESS);
   const [selectedCaseKey, setSelectedCaseKey] = useState("");
   const [query, setQuery] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [draftFilters, setDraftFilters] =
+    useState<OperationsFilterState>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<OperationsFilterState>(EMPTY_FILTERS);
   const [loadingOperations, setLoadingOperations] = useState(true);
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [operationsError, setOperationsError] = useState("");
@@ -1333,9 +2151,12 @@ export function CreditexOperationsWorkspace({
     setLoadingOperations(true);
     setOperationsError("");
     try {
+      const operationFilters = filterQuery(appliedFilters);
       const queryString = caseId
         ? `?caseId=${encodeURIComponent(caseId)}`
-        : "";
+        : operationFilters
+          ? `?${operationFilters}`
+          : "";
       const result = await authenticatedJson(
         `/api/creditex/operations${queryString}`,
       );
@@ -1358,7 +2179,7 @@ export function CreditexOperationsWorkspace({
     } finally {
       setLoadingOperations(false);
     }
-  }, []);
+  }, [appliedFilters]);
 
   const loadAccess = useCallback(async () => {
     if (session.role !== "admin") return;
@@ -1393,7 +2214,7 @@ export function CreditexOperationsWorkspace({
     return () => window.clearTimeout(timeout);
   }, [access.loaded, area, loadAccess]);
 
-  const operationalCases = operations.cases.length
+  const operationalCases = operations.loaded
     ? operations.cases
     : seedCases.map(seedCase);
   useEffect(() => {
@@ -1401,13 +2222,29 @@ export function CreditexOperationsWorkspace({
       (item) => item.id === selectedCaseKey || item.caseNumber === selectedCaseKey,
     );
     const firstCase = operationalCases[0];
-    if (!firstCase?.id || (selectedCaseKey && currentExists)) return;
+    if (!firstCase?.id) {
+      if (!selectedCaseKey && !operations.selectedCase) return;
+      const timeout = window.setTimeout(() => {
+        setSelectedCaseKey("");
+        setOperations((current) => ({
+          ...current,
+          selectedCase: null,
+        }));
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+    if (selectedCaseKey && currentExists) return;
     const timeout = window.setTimeout(() => {
       setSelectedCaseKey(firstCase.id);
       void loadOperations(firstCase.id);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [loadOperations, operationalCases, selectedCaseKey]);
+  }, [
+    loadOperations,
+    operationalCases,
+    operations.selectedCase,
+    selectedCaseKey,
+  ]);
 
   useEffect(() => {
     if (session.role !== "admin") return;
@@ -1467,11 +2304,15 @@ export function CreditexOperationsWorkspace({
     const normalQuery = query.trim().toLowerCase();
     return operationalCases.filter((item) => {
       if (
+        !operations.loaded
+        &&
         seedStatus !== "open"
         && seedStatus !== "all"
         && item.workflowStatus !== seedStatus
       ) return false;
       if (
+        !operations.loaded
+        &&
         seedStatus === "open"
         && ["accepted", "rejected", "closed"].includes(item.workflowStatus)
       ) return false;
@@ -1487,7 +2328,7 @@ export function CreditexOperationsWorkspace({
         item.activity.title,
       ].some((value) => value.toLowerCase().includes(normalQuery));
     });
-  }, [operationalCases, query, seedStatus]);
+  }, [operationalCases, operations.loaded, query, seedStatus]);
 
   function chooseCase(item: OperationCase, nextArea: WorkspaceArea = "review") {
     const key = item.id || item.caseNumber;
@@ -1503,6 +2344,39 @@ export function CreditexOperationsWorkspace({
     await loadOperations();
     if (selectedCase?.id) await loadOperations(selectedCase.id);
     if (area === "access") await loadAccess();
+  }
+
+  function applyFilters(nextFilters = draftFilters) {
+    setSelectedCaseKey("");
+    setOperations((current) => ({ ...current, selectedCase: null }));
+    setAppliedFilters(nextFilters);
+    setDraftFilters(nextFilters);
+    setArea("queue");
+  }
+
+  function clearFilters() {
+    applyFilters(EMPTY_FILTERS);
+  }
+
+  function updateDraftFilter(
+    key: keyof OperationsFilterState,
+    value: string,
+  ) {
+    setDraftFilters((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === "program" ? { activity: "" } : {}),
+    }));
+  }
+
+  function chooseProgram(programId: string) {
+    const nextFilters = {
+      ...appliedFilters,
+      program: programId,
+      activity: "",
+    };
+    setShowAdvancedFilters(false);
+    applyFilters(nextFilters);
   }
 
   async function runOperation(
@@ -2084,16 +2958,17 @@ export function CreditexOperationsWorkspace({
     ["submissionBatches", "submission_batches"],
     operations.submissions.length,
   );
+  const activeFilters = activeFilterCount(appliedFilters);
 
   return (
     <section className={styles.workspace} aria-label="Creditex operations">
       <header className={styles.workspaceHeader}>
         <div>
           <span className={styles.eyebrow}>Creditex operations control</span>
-          <h2>One case, one review path</h2>
+          <h2>Every program, one governed review path</h2>
           <p>
-            Queue, evidence, tasks, equipment and downstream records stay tied
-            to the selected compliance case.
+            Program workspaces and every governed activity version feed one
+            audited case, evidence, submission and certificate workflow.
           </p>
         </div>
         <button
@@ -2123,9 +2998,10 @@ export function CreditexOperationsWorkspace({
       )}
       {operations.loaded && (
         <p className={styles.warning} role="status">
-          Operational lists show at most 50 records per category. The current
-          dashboard API does not provide pagination or a complete-result flag,
-          so an absent row does not confirm that no record exists.
+          The case search returned {operations.workspace.total} matching{" "}
+          {operations.workspace.total === 1 ? "case" : "cases"}; this page
+          shows up to {appliedFilters.pageSize}. Other operational categories
+          remain bounded lists, so an absent row never proves no record exists.
         </p>
       )}
 
@@ -2194,26 +3070,48 @@ export function CreditexOperationsWorkspace({
                       onChange={(event) => setQuery(event.target.value)}
                     />
                   </label>
-                  <label>
-                    <span>Workflow status</span>
-                    <select
-                      value={seedStatus}
-                      disabled={seedBusy}
-                      onChange={(event) =>
-                        onSeedStatusChange(event.target.value)}
-                    >
-                      {seedStatusOptions.map((status) => (
-                        <option key={status} value={status}>
-                          {status === "open"
-                            ? "Open work"
-                            : status === "all"
-                              ? "All statuses"
-                              : readable(status)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <button
+                    className={styles.advancedFilterToggle}
+                    type="button"
+                    aria-expanded={showAdvancedFilters}
+                    onClick={() => setShowAdvancedFilters((current) => !current)}
+                  >
+                    Advanced filters
+                    {activeFilters ? ` (${activeFilters} active)` : ""}
+                  </button>
                 </div>
+              </div>
+
+              {showAdvancedFilters && (
+                <AdvancedFilters
+                  filters={draftFilters}
+                  workspace={operations.workspace}
+                  loading={loadingOperations}
+                  onChange={updateDraftFilter}
+                  onApply={() => applyFilters()}
+                  onClear={clearFilters}
+                />
+              )}
+
+              <div className={styles.queueContext} role="status">
+                <span>
+                  {appliedFilters.program
+                    ? operations.workspace.programs.find(
+                        (program) =>
+                          program.programId === appliedFilters.program,
+                      )?.programName || "Selected program"
+                    : "All governed programs"}
+                </span>
+                <strong>
+                  {operations.workspace.total} matching{" "}
+                  {operations.workspace.total === 1 ? "case" : "cases"}
+                </strong>
+                {operations.workspace.hasNext && (
+                  <small>
+                    More results exist. Narrow the filters or increase rows per
+                    page.
+                  </small>
+                )}
               </div>
 
               <div className={styles.caseWorkspace}>
@@ -3966,6 +4864,44 @@ export function CreditexOperationsWorkspace({
           )}
         </div>
       </div>
+      <nav
+        className={styles.programTabs}
+        aria-label="Compliance program workspaces"
+      >
+        <button
+          type="button"
+          aria-current={!appliedFilters.program ? "page" : undefined}
+          onClick={() => chooseProgram("")}
+        >
+          <span>Dashboard</span>
+          <small>{operations.workspace.total} matching cases</small>
+        </button>
+        {operations.workspace.programs.map((program) => (
+          <button
+            key={program.programId}
+            type="button"
+            aria-current={
+              appliedFilters.program === program.programId ? "page" : undefined
+            }
+            onClick={() => chooseProgram(program.programId)}
+          >
+            <span>
+              {program.programCode || program.jurisdiction} ·{" "}
+              {program.programName}
+            </span>
+            <small>
+              {program.caseCount} cases · {program.activityVersionCount}{" "}
+              activity versions
+            </small>
+          </button>
+        ))}
+        {!operations.workspace.programs.length && operations.loaded && (
+          <span className={styles.programTabsEmpty}>
+            Governed program tabs appear here after Creditex approves a
+            source-pinned program record. No public research is auto-published.
+          </span>
+        )}
+      </nav>
       {evidenceViewer && (
         <EvidenceViewerModal
           viewer={evidenceViewer}
@@ -4233,6 +5169,330 @@ function CaseOverview({
   );
 }
 
+function privateAddress(source: JsonRecord | null) {
+  if (!source) return "Not recorded";
+  return [
+    text(source, ["addressLine1", "address_line_1"]),
+    text(source, ["addressLine2", "address_line_2"]),
+    text(source, ["suburb"]),
+    text(source, ["state", "addressState", "address_state"]),
+    text(source, ["postcode"]),
+  ].filter(Boolean).join(", ") || "Not recorded";
+}
+
+function DetailValue({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{children || "Not recorded"}</dd>
+    </div>
+  );
+}
+
+function PrivateCaseDetails({ details }: {
+  details: OperationPrivateDetails | null;
+}) {
+  if (!details) {
+    return (
+      <EmptyState>
+        Linked private job, installer, customer, service-site and appointment
+        details were not returned for this case.
+      </EmptyState>
+    );
+  }
+  const { access, job, installer, customer, serviceSite, appointments } =
+    details;
+  const customerName = customer
+    ? [
+        text(customer, ["firstName", "first_name"]),
+        text(customer, ["lastName", "last_name"]),
+      ].filter(Boolean).join(" ")
+    : "";
+  const customerTags = customer ? stringList(customer, ["tags"]) : [];
+  const jobTags = stringList(job, ["tags"]);
+  const capabilities = stringList(installer, ["capabilities"]);
+  const serviceStates = stringList(installer, [
+    "serviceStates",
+    "service_states",
+  ]);
+  const authorised = booleanValue(access, ["authorised"]);
+  const audited = booleanValue(access, [
+    "auditEventRecorded",
+    "audit_event_recorded",
+  ]);
+  return (
+    <section
+      className={styles.privateDetails}
+      aria-labelledby="creditex-private-details-title"
+    >
+      <div className={styles.privateAccessBanner}>
+        <div>
+          <span className={styles.kicker}>Purpose-bound private access</span>
+          <h4 id="creditex-private-details-title">
+            Customer, installer and job workspace
+          </h4>
+          <p>
+            This information is excluded from the default queue and opened only
+            for the selected compliance case.
+          </p>
+        </div>
+        <div className={styles.privateAccessState}>
+          <StatusPill value={authorised ? "authorised" : "unavailable"} />
+          <span>{audited ? "Access audit recorded" : "Audit state unavailable"}</span>
+          <small>
+            Purpose: {readable(text(access, ["purpose"]))}
+          </small>
+        </div>
+      </div>
+
+      <div className={styles.privateDetailGrid}>
+        <article>
+          <h5>Installer</h5>
+          <dl>
+            <DetailValue label="Business">
+              {text(installer, ["businessName", "business_name"])}
+            </DetailValue>
+            <DetailValue label="Contact">
+              {text(installer, ["contactName", "contact_name"])}
+            </DetailValue>
+            <DetailValue label="Email">
+              {text(installer, ["email"])}
+            </DetailValue>
+            <DetailValue label="Phone">
+              {text(installer, ["phone"])}
+            </DetailValue>
+            <DetailValue label="ABN">
+              {text(installer, ["verifiedAbn", "verified_abn", "abn"])}
+            </DetailValue>
+            <DetailValue label="ABN verification">
+              {readable(text(installer, [
+                "verificationStatus",
+                "verification_status",
+              ]))}
+            </DetailValue>
+            <DetailValue label="Address">
+              {privateAddress(installer)}
+            </DetailValue>
+            <DetailValue label="Service states">
+              {serviceStates.join(", ") || "Not recorded"}
+            </DetailValue>
+            <DetailValue label="Capabilities">
+              {capabilities.join(", ") || "Not recorded"}
+            </DetailValue>
+          </dl>
+        </article>
+
+        <article>
+          <h5>Customer</h5>
+          {customer ? (
+            <dl>
+              <DetailValue label="Customer">
+                {text(customer, ["businessName", "business_name"])
+                  || customerName}
+              </DetailValue>
+              <DetailValue label="Customer number">
+                {text(customer, ["customerNumber", "customer_number"])}
+              </DetailValue>
+              <DetailValue label="Type">
+                {readable(text(customer, [
+                  "customerType",
+                  "customer_type",
+                ]))}
+              </DetailValue>
+              <DetailValue label="Email">
+                {text(customer, ["email"])}
+              </DetailValue>
+              <DetailValue label="Phone">
+                {text(customer, ["phone"])}
+              </DetailValue>
+              <DetailValue label="Address">
+                {privateAddress(customer)}
+              </DetailValue>
+              <DetailValue label="Tags">
+                {customerTags.join(", ") || "Not recorded"}
+              </DetailValue>
+              <DetailValue label="Private notes">
+                {text(customer, ["privateNotes", "private_notes"])}
+              </DetailValue>
+            </dl>
+          ) : (
+            <p>No linked CRM customer record was returned.</p>
+          )}
+          {details.customerContacts.length > 0 && (
+            <div className={styles.privateSubList}>
+              <strong>Additional contacts</strong>
+              {details.customerContacts.map((contact) => (
+                <p key={text(contact, ["id"])}>
+                  {[
+                    text(contact, ["firstName", "first_name"]),
+                    text(contact, ["lastName", "last_name"]),
+                  ].filter(Boolean).join(" ") || "Contact"} ·{" "}
+                  {text(contact, ["roleLabel", "role_label"])
+                    || "Role not recorded"} ·{" "}
+                  {text(contact, ["email", "phone"]) || "No contact detail"}
+                </p>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <article>
+          <h5>Job</h5>
+          <dl>
+            <DetailValue label="Job number">
+              {text(job, ["workNumber", "work_number"])}
+            </DetailValue>
+            <DetailValue label="Title">
+              {text(job, ["title"])}
+            </DetailValue>
+            <DetailValue label="Service">
+              {text(job, ["serviceCategory", "service_category"])}
+            </DetailValue>
+            <DetailValue label="Stage">
+              {readable(text(job, ["stage"]))}
+            </DetailValue>
+            <DetailValue label="Pipeline">
+              {readable(text(job, ["pipelineStage", "pipeline_stage"]))}
+            </DetailValue>
+            <DetailValue label="Priority">
+              {readable(text(job, ["priority"]))}
+            </DetailValue>
+            <DetailValue label="Assignee">
+              {text(job, ["assigneeLabel", "assignee_label"])}
+            </DetailValue>
+            <DetailValue label="Schedule">
+              {`${dateTime(text(job, ["scheduledStart", "scheduled_start"]))} to ${
+                dateTime(text(job, ["scheduledEnd", "scheduled_end"]))
+              }`}
+            </DetailValue>
+            <DetailValue label="Next action">
+              {text(job, ["nextAction", "next_action"])}
+            </DetailValue>
+            <DetailValue label="Description">
+              {text(job, ["description"])}
+            </DetailValue>
+            <DetailValue label="Tags">
+              {jobTags.join(", ") || "Not recorded"}
+            </DetailValue>
+          </dl>
+        </article>
+
+        <article>
+          <h5>Commercial state</h5>
+          <dl>
+            <DetailValue label="Estimated">
+              {money(numberValue(job, [
+                "estimatedValueCents",
+                "estimated_value_cents",
+              ]))}
+            </DetailValue>
+            <DetailValue label="Quoted">
+              {money(numberValue(job, [
+                "quotedValueCents",
+                "quoted_value_cents",
+              ]))}
+            </DetailValue>
+            <DetailValue label="Invoiced">
+              {money(numberValue(job, [
+                "invoicedValueCents",
+                "invoiced_value_cents",
+              ]))}
+            </DetailValue>
+            <DetailValue label="Paid">
+              {money(numberValue(job, [
+                "paidValueCents",
+                "paid_value_cents",
+              ]))}
+            </DetailValue>
+            <DetailValue label="Quotation status">
+              {readable(text(job, ["quoteStatus", "quote_status"]))}
+            </DetailValue>
+            <DetailValue label="Invoice status">
+              {readable(text(job, ["invoiceStatus", "invoice_status"]))}
+            </DetailValue>
+            <DetailValue label="Payment due">
+              {dateTime(text(job, ["paymentDueAt", "payment_due_at"]))}
+            </DetailValue>
+            <DetailValue label="Building type">
+              {text(job, ["buildingType", "building_type"])}
+            </DetailValue>
+          </dl>
+        </article>
+
+        <article>
+          <h5>Service site</h5>
+          {serviceSite ? (
+            <dl>
+              <DetailValue label="Site">
+                {text(serviceSite, ["label"])}
+              </DetailValue>
+              <DetailValue label="Exact address">
+                {privateAddress(serviceSite)}
+              </DetailValue>
+              <DetailValue label="Access">
+                {text(serviceSite, [
+                  "accessInstructions",
+                  "access_instructions",
+                ])}
+              </DetailValue>
+              <DetailValue label="Parking">
+                {text(serviceSite, [
+                  "parkingInstructions",
+                  "parking_instructions",
+                ])}
+              </DetailValue>
+              <DetailValue label="Hazards">
+                {text(serviceSite, ["hazardNotes", "hazard_notes"])}
+              </DetailValue>
+            </dl>
+          ) : (
+            <p>No linked service-site record was returned.</p>
+          )}
+        </article>
+
+        <article>
+          <h5>Appointments</h5>
+          <div className={styles.privateSubList}>
+            {appointments.map((appointment) => (
+              <div key={text(appointment, ["id"])}>
+                <span>
+                  <strong>
+                    {text(appointment, ["title"])
+                      || readable(text(appointment, [
+                        "appointmentType",
+                        "appointment_type",
+                      ]))}
+                  </strong>
+                  <StatusPill value={text(appointment, ["status"])} />
+                </span>
+                <p>
+                  {dateTime(text(appointment, ["startsAt", "starts_at"]))} to{" "}
+                  {dateTime(text(appointment, ["endsAt", "ends_at"]))}
+                </p>
+                <small>
+                  {text(appointment, ["assigneeLabel", "assignee_label"])
+                    || "Assignee not recorded"}
+                  {" · "}
+                  {text(appointment, ["notes"]) || "No notes"}
+                </small>
+              </div>
+            ))}
+            {!appointments.length && (
+              <p>No linked appointments were returned.</p>
+            )}
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function CaseReview({
   item,
   loading,
@@ -4274,6 +5534,7 @@ function CaseReview({
         description="Evidence, findings, decisions, tasks and equipment stay in one case context."
       />
       <CaseOverview item={item} />
+      <PrivateCaseDetails details={item.privateDetails} />
       <div className={styles.auditGrid}>
         <div>
           <h4>Evidence checklist</h4>

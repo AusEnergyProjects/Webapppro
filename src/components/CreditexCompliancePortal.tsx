@@ -16,6 +16,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -247,6 +248,10 @@ export function CreditexCompliancePortal() {
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState<ComplianceSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState(
+    "Loading the protected compliance workspace...",
+  );
+  const workspaceLoadRef = useRef<Promise<void> | null>(null);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"info" | "success" | "error">(
@@ -274,15 +279,33 @@ export function CreditexCompliancePortal() {
     const activeUser = firebaseAuth.currentUser;
     if (!activeUser) throw new Error("Sign in to continue.");
     const headers = new Headers(init.headers);
-    headers.set("Authorization", `Bearer ${await activeUser.getIdToken()}`);
+    headers.set(
+      "Authorization",
+      `Bearer ${await activeUser.getIdToken(path === "/api/creditex/session")}`,
+    );
     if (init.body && !headers.has("Content-Type"))
       headers.set("Content-Type", "application/json");
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const response = await fetch(path, {
-        ...init,
-        headers,
-        cache: "no-store",
-      });
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const controller = new AbortController();
+      const requestTimeout = window.setTimeout(() => controller.abort(), 20_000);
+      let response: Response;
+      try {
+        response = await fetch(path, {
+          ...init,
+          headers,
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error(
+            "The compliance service did not respond within 20 seconds. Retry the workspace.",
+          );
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(requestTimeout);
+      }
       const result = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
@@ -291,9 +314,18 @@ export function CreditexCompliancePortal() {
       if (
         response.status === 503
         && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
-        && attempt < 5
+        && attempt < 9
       ) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        const retryAfterSeconds = Number(response.headers.get("Retry-After"));
+        const retryAfterMilliseconds = Number.isFinite(retryAfterSeconds)
+          ? Math.min(Math.max(retryAfterSeconds * 1_000, 1_000), 5_000)
+          : 1_000;
+        setLoadingMessage(
+          `Preparing governed compliance controls (${attempt + 1} of 10)...`,
+        );
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, retryAfterMilliseconds)
+        );
         continue;
       }
       if (!response.ok || result.ok === false) {
@@ -348,29 +380,41 @@ export function CreditexCompliancePortal() {
     setActivities((result.activities || []) as ActivityRecord[]);
   }, [api]);
 
-  const loadWorkspace = useCallback(async () => {
-    setLoading(true);
-    setNotice("");
-    try {
-      const result = await api("/api/creditex/session");
-      const nextSession = result.member as ComplianceSession;
-      setSession(nextSession);
-      setCaseStatus("open");
-      setCaseQuery("");
-      await loadCases({ status: "open" });
-      if (nextSession.role === "admin") await loadGovernance();
-      else {
-        setPrograms([]);
-        setActivities([]);
-        setTab("cases");
+  const loadWorkspace = useCallback(() => {
+    if (workspaceLoadRef.current) return workspaceLoadRef.current;
+    const request = (async () => {
+      setLoading(true);
+      setLoadingMessage("Verifying Creditex access...");
+      setNotice("");
+      try {
+        const result = await api("/api/creditex/session");
+        const nextSession = result.member as ComplianceSession;
+        setSession(nextSession);
+        setCaseStatus("open");
+        setCaseQuery("");
+        await loadCases({ status: "open" });
+        if (nextSession.role === "admin") await loadGovernance();
+        else {
+          setPrograms([]);
+          setActivities([]);
+          setTab("cases");
+        }
+      } catch (error) {
+        setSession(null);
+        setNotice(authMessage(error));
+        setNoticeKind("error");
+      } finally {
+        setLoading(false);
+        setLoadingMessage("Loading the protected compliance workspace...");
       }
-    } catch (error) {
-      setSession(null);
-      setNotice(authMessage(error));
-      setNoticeKind("error");
-    } finally {
-      setLoading(false);
-    }
+    })();
+    workspaceLoadRef.current = request;
+    void request.finally(() => {
+      if (workspaceLoadRef.current === request) {
+        workspaceLoadRef.current = null;
+      }
+    });
+    return request;
   }, [api, loadCases, loadGovernance]);
 
   useEffect(
@@ -456,6 +500,7 @@ export function CreditexCompliancePortal() {
         password,
       );
       setPassword("");
+      await loadWorkspace();
     } catch (error) {
       setNotice(authMessage(error));
       setNoticeKind("error");
@@ -469,6 +514,7 @@ export function CreditexCompliancePortal() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(firebaseAuth, provider);
+      await loadWorkspace();
     } catch (error) {
       setNotice(authMessage(error));
       setNoticeKind("error");
@@ -639,7 +685,7 @@ export function CreditexCompliancePortal() {
     return (
       <main className={styles.shell} id="site-content">
         <div className={styles.loading} role="status">
-          Loading the protected compliance workspace...
+          {loadingMessage}
         </div>
       </main>
     );
@@ -677,61 +723,70 @@ export function CreditexCompliancePortal() {
                 Use the email already assigned to your compliance membership.
                 There is no public registration on this portal.
               </p>
-              {user && (
-                <p>
-                  Firebase is currently signed in as{" "}
-                  {user.email || "an account"}. Sign in again or use another
-                  account.
-                </p>
-              )}
-              <label>
-                Email
-                <input
-                  className={styles.input}
-                  type="email"
-                  autoComplete="username"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  className={styles.input}
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </label>
-              <button className={styles.button} type="submit">
-                Sign in securely
-              </button>
-              <button
-                className={styles.textButton}
-                type="button"
-                onClick={resetPassword}
-              >
-                Reset password
-              </button>
-              <div className={styles.divider}>or</div>
-              <button
-                className={styles.secondaryButton}
-                type="button"
-                onClick={signInGoogle}
-              >
-                Continue with Google
-              </button>
-              {user && (
-                <button
-                  className={styles.textButton}
-                  type="button"
-                  onClick={() => void signOut(firebaseAuth)}
-                >
-                  Sign out this Firebase account
-                </button>
+              {user ? (
+                <>
+                  <p>
+                    Firebase is signed in as {user.email || "an account"}, but
+                    the protected Creditex workspace did not open.
+                  </p>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => void loadWorkspace()}
+                  >
+                    Retry workspace
+                  </button>
+                  <button
+                    className={styles.textButton}
+                    type="button"
+                    onClick={() => void signOut(firebaseAuth)}
+                  >
+                    Sign out this Firebase account
+                  </button>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Email
+                    <input
+                      className={styles.input}
+                      type="email"
+                      autoComplete="username"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Password
+                    <input
+                      className={styles.input}
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </label>
+                  <button className={styles.button} type="submit">
+                    Sign in securely
+                  </button>
+                  <button
+                    className={styles.textButton}
+                    type="button"
+                    onClick={resetPassword}
+                  >
+                    Reset password
+                  </button>
+                  <div className={styles.divider}>or</div>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={signInGoogle}
+                  >
+                    Continue with Google
+                  </button>
+                </>
               )}
               {notice && (
                 <p

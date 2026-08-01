@@ -6,6 +6,195 @@ import type {
 type Input = Record<string, unknown>;
 type Row = Record<string, unknown>;
 
+export const CREDITEX_CASE_LIFECYCLE_STATUSES = [
+  "draft",
+  "ready_for_submission",
+  "submitted",
+  "in_review",
+  "changes_requested",
+  "accepted",
+  "rejected",
+  "closed",
+] as const;
+
+export const CREDITEX_CASE_EVIDENCE_STATUSES = [
+  "not_started",
+  "in_progress",
+  "complete",
+  "changes_required",
+  "verified",
+] as const;
+
+export const CREDITEX_AUDIT_STATES = [
+  "clear",
+  "attention",
+  "pending_review",
+] as const;
+
+export const CREDITEX_CERTIFICATE_STATUSES = [
+  "pending",
+  "created",
+  "available",
+  "reserved",
+  "traded",
+  "retired",
+  "cancelled",
+] as const;
+
+export const CREDITEX_BATCH_STATUSES = [
+  "draft",
+  "ready",
+  "exported",
+  "submitted",
+  "partially_accepted",
+  "accepted",
+  "rejected",
+  "reconciled",
+  "cancelled",
+] as const;
+
+export const CREDITEX_SERVICE_CATEGORIES = [
+  "assessment",
+  "solar",
+  "battery",
+  "heating-cooling",
+  "hot-water",
+  "draught-proofing",
+  "insulation",
+  "glazing",
+  "window-coverings",
+  "ev-charging",
+  "electrical",
+  "plumbing",
+  "mounting-hardware",
+  "controls",
+  "other",
+] as const;
+
+export const CREDITEX_CASE_CREATED_BY_TYPES = [
+  "installer",
+  "compliance",
+  "platform",
+] as const;
+
+export const CREDITEX_CUSTOMER_TYPES = [
+  "residential",
+  "business",
+] as const;
+
+export const CREDITEX_WORK_STAGES = [
+  "backlog",
+  "ready",
+  "scheduled",
+  "in_progress",
+  "blocked",
+  "completed",
+  "cancelled",
+] as const;
+
+export const CREDITEX_PIPELINE_STAGES = [
+  "enquiry",
+  "qualifying",
+  "quoting",
+  "approved",
+  "scheduled",
+  "in_progress",
+  "complete",
+  "invoiced",
+  "paid",
+  "lost",
+] as const;
+
+export const CREDITEX_WORK_PRIORITIES = [
+  "low",
+  "standard",
+  "high",
+  "urgent",
+] as const;
+
+export const CREDITEX_ISSUE_STATUSES = [
+  "not_applicable",
+  "open",
+  "resolved",
+] as const;
+
+export const CREDITEX_APPOINTMENT_TYPES = [
+  "phone_call",
+  "site_visit",
+  "quote_review",
+  "installation",
+  "service",
+  "admin",
+] as const;
+
+export const CREDITEX_QUOTE_STATUSES = [
+  "not_started",
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+] as const;
+
+export const CREDITEX_INVOICE_STATUSES = [
+  "not_started",
+  "draft",
+  "issued",
+  "part_paid",
+  "paid",
+  "overdue",
+  "void",
+] as const;
+
+export const CREDITEX_SUBMISSION_ITEM_STATUSES = [
+  "staged",
+  "submitted",
+  "accepted",
+  "rejected",
+  "correction_required",
+  "removed",
+] as const;
+
+export const CREDITEX_TAG_MATCH_MODES = ["any", "all"] as const;
+
+export type CreditexOperationsFilters = {
+  programs: string[];
+  activities: string[];
+  lifecycleStatuses: string[];
+  evidenceStatuses: string[];
+  workTypes: string[];
+  serviceCategories: string[];
+  createdByText: string;
+  createdByTypes: string[];
+  fieldWorkerText: string;
+  customerText: string;
+  customerTypes: string[];
+  addressText: string;
+  installerText: string;
+  identifierText: string;
+  jobSources: string[];
+  workStages: string[];
+  pipelineStages: string[];
+  priorities: string[];
+  issueStatuses: string[];
+  appointmentStatuses: string[];
+  appointmentTypes: string[];
+  auditStates: string[];
+  certificateStatuses: string[];
+  batchStatuses: string[];
+  submissionStatuses: string[];
+  quoteStatuses: string[];
+  invoiceStatuses: string[];
+  productText: string;
+  productCategories: string[];
+  tags: string[];
+  tagMatch: "any" | "all";
+  installedFrom: string;
+  installedTo: string;
+  appointmentFrom: string;
+  appointmentTo: string;
+  pageSize: 25 | 50 | 100;
+};
+
 export const CREDITEX_OPERATION_ACTIONS = [
   "assign_case",
   "release_case_assignment",
@@ -155,6 +344,308 @@ function dateOnly(value: unknown, label: string, required = true) {
     );
   }
   return result;
+}
+
+function queryValues(
+  searchParams: URLSearchParams,
+  names: readonly string[],
+  maximumValues: number,
+  label: string,
+  maximumLength = 180,
+) {
+  const values = names.flatMap((name) => searchParams.getAll(name))
+    .flatMap((value) => value.split(","))
+    .map((value) => text(value, label, maximumLength, false))
+    .filter(Boolean);
+  const unique = [...new Set(values)];
+  if (unique.length > maximumValues) {
+    throw new CreditexOperationsError(
+      "CREDITEX_FILTER_TOO_BROAD",
+      400,
+      `${label} accepts no more than ${maximumValues} selected values.`,
+    );
+  }
+  return unique;
+}
+
+function queryChoiceValues<const T extends readonly string[]>(
+  searchParams: URLSearchParams,
+  names: readonly string[],
+  label: string,
+  options: T,
+) {
+  const values = queryValues(
+    searchParams,
+    names,
+    Math.min(options.length, 20),
+    label,
+    80,
+  );
+  for (const value of values) {
+    if (!options.includes(value)) {
+      throw new CreditexOperationsError(
+        "CREDITEX_FILTER_INVALID",
+        400,
+        `${label} includes an unsupported value.`,
+      );
+    }
+  }
+  return values;
+}
+
+function queryText(
+  searchParams: URLSearchParams,
+  names: readonly string[],
+  label: string,
+  maximumLength = 180,
+) {
+  for (const name of names) {
+    const value = searchParams.get(name);
+    if (value !== null) return text(value, label, maximumLength, false);
+  }
+  return "";
+}
+
+export function parseCreditexOperationsFilters(
+  searchParams: URLSearchParams,
+): CreditexOperationsFilters {
+  const installedFrom = dateOnly(
+    queryText(searchParams, ["installedFrom", "dateFrom"], "Installed from", 10),
+    "Installed from",
+    false,
+  );
+  const installedTo = dateOnly(
+    queryText(searchParams, ["installedTo", "dateTo"], "Installed to", 10),
+    "Installed to",
+    false,
+  );
+  const appointmentFrom = dateOnly(
+    queryText(searchParams, ["appointmentFrom"], "Appointment from", 10),
+    "Appointment from",
+    false,
+  );
+  const appointmentTo = dateOnly(
+    queryText(searchParams, ["appointmentTo"], "Appointment to", 10),
+    "Appointment to",
+    false,
+  );
+  if (installedFrom && installedTo && installedFrom > installedTo) {
+    throw new CreditexOperationsError(
+      "CREDITEX_DATE_RANGE_INVALID",
+      400,
+      "Installed from must be on or before installed to.",
+    );
+  }
+  if (appointmentFrom && appointmentTo && appointmentFrom > appointmentTo) {
+    throw new CreditexOperationsError(
+      "CREDITEX_DATE_RANGE_INVALID",
+      400,
+      "Appointment from must be on or before appointment to.",
+    );
+  }
+  const pageSizeInput = Number(searchParams.get("pageSize") || 50);
+  if (![25, 50, 100].includes(pageSizeInput)) {
+    throw new CreditexOperationsError(
+      "CREDITEX_FILTER_INVALID",
+      400,
+      "Page size must be 25, 50 or 100.",
+    );
+  }
+  const pageSize = pageSizeInput as 25 | 50 | 100;
+  const tagMatchValues = queryChoiceValues(
+    searchParams,
+    ["tagMatch"],
+    "Tag match",
+    CREDITEX_TAG_MATCH_MODES,
+  );
+  if (tagMatchValues.length > 1) {
+    throw new CreditexOperationsError(
+      "CREDITEX_FILTER_INVALID",
+      400,
+      "Tag match accepts one mode.",
+    );
+  }
+  const tagMatch = (tagMatchValues[0] || "any") as "any" | "all";
+  return {
+    programs: queryValues(
+      searchParams,
+      ["program", "programId"],
+      20,
+      "Program",
+    ),
+    activities: queryValues(
+      searchParams,
+      ["activity", "activityId"],
+      40,
+      "Activity",
+    ),
+    lifecycleStatuses: queryChoiceValues(
+      searchParams,
+      ["status", "lifecycleStatus"],
+      "Lifecycle status",
+      CREDITEX_CASE_LIFECYCLE_STATUSES,
+    ),
+    evidenceStatuses: queryChoiceValues(
+      searchParams,
+      ["evidenceStatus", "evidenceState"],
+      "Evidence status",
+      CREDITEX_CASE_EVIDENCE_STATUSES,
+    ),
+    workTypes: queryValues(
+      searchParams,
+      ["workType"],
+      20,
+      "Work type",
+      80,
+    ),
+    serviceCategories: queryChoiceValues(
+      searchParams,
+      ["serviceCategory"],
+      "Service category",
+      CREDITEX_SERVICE_CATEGORIES,
+    ),
+    createdByText: queryText(
+      searchParams,
+      ["createdBy"],
+      "Created by filter",
+    ),
+    createdByTypes: queryChoiceValues(
+      searchParams,
+      ["createdByType"],
+      "Created by type",
+      CREDITEX_CASE_CREATED_BY_TYPES,
+    ),
+    fieldWorkerText: queryText(
+      searchParams,
+      ["fieldWorker"],
+      "Field worker filter",
+    ),
+    customerText: queryText(
+      searchParams,
+      ["customer"],
+      "Customer filter",
+    ),
+    customerTypes: queryChoiceValues(
+      searchParams,
+      ["customerType"],
+      "Customer type",
+      CREDITEX_CUSTOMER_TYPES,
+    ),
+    addressText: queryText(
+      searchParams,
+      ["address"],
+      "Address filter",
+    ),
+    installerText: queryText(
+      searchParams,
+      ["installer"],
+      "Installer filter",
+    ),
+    identifierText: queryText(
+      searchParams,
+      ["identifier", "q"],
+      "Identifier filter",
+    ),
+    jobSources: queryValues(
+      searchParams,
+      ["jobSource", "sourceType"],
+      20,
+      "Job source",
+      80,
+    ),
+    workStages: queryChoiceValues(
+      searchParams,
+      ["workStage"],
+      "Work stage",
+      CREDITEX_WORK_STAGES,
+    ),
+    pipelineStages: queryChoiceValues(
+      searchParams,
+      ["pipelineStage"],
+      "Pipeline stage",
+      CREDITEX_PIPELINE_STAGES,
+    ),
+    priorities: queryChoiceValues(
+      searchParams,
+      ["priority"],
+      "Priority",
+      CREDITEX_WORK_PRIORITIES,
+    ),
+    issueStatuses: queryChoiceValues(
+      searchParams,
+      ["issueStatus"],
+      "Issue status",
+      CREDITEX_ISSUE_STATUSES,
+    ),
+    appointmentStatuses: queryValues(
+      searchParams,
+      ["appointmentStatus"],
+      20,
+      "Appointment status",
+      80,
+    ),
+    appointmentTypes: queryChoiceValues(
+      searchParams,
+      ["appointmentType"],
+      "Appointment type",
+      CREDITEX_APPOINTMENT_TYPES,
+    ),
+    auditStates: queryChoiceValues(
+      searchParams,
+      ["auditState"],
+      "Audit state",
+      CREDITEX_AUDIT_STATES,
+    ),
+    certificateStatuses: queryChoiceValues(
+      searchParams,
+      ["certificateState", "certificateStatus"],
+      "Certificate status",
+      CREDITEX_CERTIFICATE_STATUSES,
+    ),
+    batchStatuses: queryChoiceValues(
+      searchParams,
+      ["batchState", "batchStatus"],
+      "Batch status",
+      CREDITEX_BATCH_STATUSES,
+    ),
+    submissionStatuses: queryChoiceValues(
+      searchParams,
+      ["submissionStatus"],
+      "Submission status",
+      CREDITEX_SUBMISSION_ITEM_STATUSES,
+    ),
+    quoteStatuses: queryChoiceValues(
+      searchParams,
+      ["quoteStatus"],
+      "Quote status",
+      CREDITEX_QUOTE_STATUSES,
+    ),
+    invoiceStatuses: queryChoiceValues(
+      searchParams,
+      ["invoiceStatus"],
+      "Invoice status",
+      CREDITEX_INVOICE_STATUSES,
+    ),
+    productText: queryText(
+      searchParams,
+      ["product", "equipment"],
+      "Product filter",
+    ),
+    productCategories: queryValues(
+      searchParams,
+      ["productCategory"],
+      40,
+      "Product category",
+      120,
+    ),
+    tags: queryValues(searchParams, ["tag"], 20, "Tag", 80),
+    tagMatch,
+    installedFrom,
+    installedTo,
+    appointmentFrom,
+    appointmentTo,
+    pageSize,
+  };
 }
 
 function instant(value: unknown, label: string, required = true) {
@@ -363,10 +854,643 @@ function projectRows(items: Row[]) {
   ));
 }
 
+type CreditexOperationsScope = ComplianceIdentity | string;
+
+type NormalisedCreditexScope = {
+  organisationId: string;
+  membershipId: string;
+  uid: string;
+  role: ComplianceRole;
+  auditableIdentity: boolean;
+};
+
+type CaseQueryContext = {
+  fromSql: string;
+  whereSql: string;
+  bindings: unknown[];
+};
+
+function defaultOperationsFilters(): CreditexOperationsFilters {
+  return {
+    programs: [],
+    activities: [],
+    lifecycleStatuses: [],
+    evidenceStatuses: [],
+    workTypes: [],
+    serviceCategories: [],
+    createdByText: "",
+    createdByTypes: [],
+    fieldWorkerText: "",
+    customerText: "",
+    customerTypes: [],
+    addressText: "",
+    installerText: "",
+    identifierText: "",
+    jobSources: [],
+    workStages: [],
+    pipelineStages: [],
+    priorities: [],
+    issueStatuses: [],
+    appointmentStatuses: [],
+    appointmentTypes: [],
+    auditStates: [],
+    certificateStatuses: [],
+    batchStatuses: [],
+    submissionStatuses: [],
+    quoteStatuses: [],
+    invoiceStatuses: [],
+    productText: "",
+    productCategories: [],
+    tags: [],
+    tagMatch: "any",
+    installedFrom: "",
+    installedTo: "",
+    appointmentFrom: "",
+    appointmentTo: "",
+    pageSize: 50,
+  };
+}
+
+function normaliseCreditexScope(
+  scope: CreditexOperationsScope,
+): NormalisedCreditexScope {
+  if (typeof scope === "string") {
+    return {
+      organisationId: text(scope, "Organisation", 180),
+      membershipId: "",
+      uid: "",
+      role: "admin",
+      auditableIdentity: false,
+    };
+  }
+  return {
+    organisationId: text(scope.organisationId, "Organisation", 180),
+    membershipId: text(scope.membershipId, "Membership", 180),
+    uid: text(scope.uid, "Identity", 180),
+    role: scope.role,
+    auditableIdentity: true,
+  };
+}
+
+function likeValue(value: string) {
+  return `%${value.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
+}
+
+function appendListCondition(
+  conditions: string[],
+  bindings: unknown[],
+  expressions: readonly string[],
+  values: readonly string[],
+) {
+  if (!values.length) return;
+  conditions.push(`(${expressions
+    .map((expression) => (
+      `${expression} IN (
+        SELECT CAST(value AS TEXT) FROM json_each(?)
+      )`
+    ))
+    .join(" OR ")})`);
+  const encoded = JSON.stringify(values);
+  bindings.push(...expressions.map(() => encoded));
+}
+
+function appendTextCondition(
+  conditions: string[],
+  bindings: unknown[],
+  expressions: readonly string[],
+  value: string,
+) {
+  if (!value) return;
+  const pattern = likeValue(value.toLowerCase());
+  conditions.push(`(${expressions
+    .map((expression) => (
+      `LOWER(COALESCE(${expression}, '')) LIKE ? ESCAPE '\\'`
+    ))
+    .join(" OR ")})`);
+  bindings.push(...expressions.map(() => pattern));
+}
+
+function buildCaseQueryContext(
+  scope: NormalisedCreditexScope,
+  filters: CreditexOperationsFilters,
+): CaseQueryContext {
+  if (!scope.auditableIdentity) {
+    return {
+      fromSql: `FROM compliance_cases compliance_case
+        JOIN compliance_programs program
+          ON program.id = compliance_case.program_id
+          AND program.organisation_id = compliance_case.organisation_id
+        JOIN compliance_activity_versions activity
+          ON activity.id = compliance_case.activity_version_id
+          AND activity.program_id = program.id`,
+      whereSql: "compliance_case.organisation_id = ?",
+      bindings: [scope.organisationId],
+    };
+  }
+  const conditions = ["compliance_case.organisation_id = ?"];
+  const bindings: unknown[] = [scope.organisationId];
+  if (scope.role !== "admin") {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM compliance_case_assignments visible_assignment
+      JOIN compliance_users visible_member
+        ON visible_member.id = visible_assignment.compliance_user_id
+        AND visible_member.organisation_id =
+          visible_assignment.organisation_id
+      WHERE visible_assignment.case_id = compliance_case.id
+        AND visible_assignment.organisation_id =
+          compliance_case.organisation_id
+        AND visible_assignment.status = 'assigned'
+        AND visible_member.firebase_uid = ?
+        AND visible_member.status = 'active'
+    )`);
+    bindings.push(scope.uid);
+  }
+  appendListCondition(
+    conditions,
+    bindings,
+    ["program.id", "program.program_code"],
+    filters.programs,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    [
+      "activity.id",
+      "activity.activity_key",
+      "activity.registry_activity_code",
+      "activity.specification_part",
+    ],
+    filters.activities,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["compliance_case.status"],
+    filters.lifecycleStatuses,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["compliance_case.evidence_status"],
+    filters.evidenceStatuses,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["work.work_type"],
+    filters.workTypes,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["activity.service_category"],
+    filters.serviceCategories,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["compliance_case.created_by_type"],
+    filters.createdByTypes,
+  );
+  if (filters.createdByText) {
+    const createdByPattern = likeValue(filters.createdByText.toLowerCase());
+    conditions.push(`(
+      LOWER(compliance_case.created_by_uid) LIKE ? ESCAPE '\\'
+      OR EXISTS (
+        SELECT 1
+        FROM compliance_users case_creator
+        WHERE case_creator.organisation_id =
+          compliance_case.organisation_id
+          AND case_creator.firebase_uid = compliance_case.created_by_uid
+          AND (
+            LOWER(case_creator.display_name) LIKE ? ESCAPE '\\'
+            OR LOWER(case_creator.email) LIKE ? ESCAPE '\\'
+          )
+      )
+    )`);
+    bindings.push(createdByPattern, createdByPattern, createdByPattern);
+  }
+  appendTextCondition(
+    conditions,
+    bindings,
+    ["work.assignee_label", "work.assignee_member_id"],
+    filters.fieldWorkerText,
+  );
+  appendTextCondition(
+    conditions,
+    bindings,
+    [
+      "customer.customer_number",
+      "customer.first_name",
+      "customer.last_name",
+      "TRIM(customer.first_name || ' ' || customer.last_name)",
+      "customer.business_name",
+      "customer.email",
+      "customer.phone",
+    ],
+    filters.customerText,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["customer.customer_type"],
+    filters.customerTypes,
+  );
+  appendTextCondition(
+    conditions,
+    bindings,
+    [
+      "service_site.site_label",
+      "service_site.address_line_1",
+      "service_site.address_line_2",
+      "service_site.suburb",
+      "service_site.address_state",
+      "service_site.postcode",
+      "customer.address_line_1",
+      "customer.address_line_2",
+      "customer.suburb",
+      "customer.address_state",
+      "customer.postcode",
+    ],
+    filters.addressText,
+  );
+  appendTextCondition(
+    conditions,
+    bindings,
+    [
+      "compliance_case.installer_uid",
+      "installer.business_name",
+      "installer.contact_name",
+      "installer.email",
+      "installer.phone",
+      "installer.verified_abn",
+    ],
+    filters.installerText,
+  );
+  appendTextCondition(
+    conditions,
+    bindings,
+    [
+      "compliance_case.id",
+      "compliance_case.case_number",
+      "compliance_case.work_order_id",
+      "work.work_number",
+      "work.source_reference",
+      "job.customer_reference",
+    ],
+    filters.identifierText,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["work.source_type"],
+    filters.jobSources,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["work.stage"],
+    filters.workStages,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["job.pipeline_stage"],
+    filters.pipelineStages,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["work.priority"],
+    filters.priorities,
+  );
+  if (filters.issueStatuses.length) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM trade_crm_job_notes filtered_issue
+      WHERE filtered_issue.work_order_id = compliance_case.work_order_id
+        AND filtered_issue.firebase_uid = compliance_case.installer_uid
+        AND filtered_issue.note_type = 'issue'
+        AND filtered_issue.issue_status IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.issueStatuses));
+  }
+  if (filters.installedFrom) {
+    conditions.push("compliance_case.activity_date >= ?");
+    bindings.push(filters.installedFrom);
+  }
+  if (filters.installedTo) {
+    conditions.push("compliance_case.activity_date <= ?");
+    bindings.push(filters.installedTo);
+  }
+  if (filters.appointmentStatuses.length) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM trade_crm_appointments filtered_appointment
+      WHERE filtered_appointment.work_order_id = compliance_case.work_order_id
+        AND filtered_appointment.firebase_uid = compliance_case.installer_uid
+        AND filtered_appointment.status IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.appointmentStatuses));
+  }
+  if (filters.appointmentTypes.length) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM trade_crm_appointments filtered_appointment
+      WHERE filtered_appointment.work_order_id = compliance_case.work_order_id
+        AND filtered_appointment.firebase_uid = compliance_case.installer_uid
+        AND filtered_appointment.appointment_type IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.appointmentTypes));
+  }
+  if (filters.appointmentFrom || filters.appointmentTo) {
+    const appointmentDateConditions = [
+      "filtered_appointment.work_order_id = compliance_case.work_order_id",
+      "filtered_appointment.firebase_uid = compliance_case.installer_uid",
+    ];
+    if (filters.appointmentFrom) {
+      appointmentDateConditions.push("substr(filtered_appointment.starts_at, 1, 10) >= ?");
+      bindings.push(filters.appointmentFrom);
+    }
+    if (filters.appointmentTo) {
+      appointmentDateConditions.push("substr(filtered_appointment.starts_at, 1, 10) <= ?");
+      bindings.push(filters.appointmentTo);
+    }
+    conditions.push(`EXISTS (
+      SELECT 1 FROM trade_crm_appointments filtered_appointment
+      WHERE ${appointmentDateConditions.join(" AND ")}
+    )`);
+  }
+  if (filters.auditStates.length) {
+    const auditConditions: string[] = [];
+    if (filters.auditStates.includes("clear")) {
+      auditConditions.push(`(
+        NOT EXISTS (
+          SELECT 1 FROM compliance_case_findings audit_finding
+          WHERE audit_finding.case_id = compliance_case.id
+            AND audit_finding.organisation_id =
+              compliance_case.organisation_id
+            AND audit_finding.status = 'open'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM compliance_decision_requests audit_request
+          WHERE audit_request.case_id = compliance_case.id
+            AND audit_request.organisation_id =
+              compliance_case.organisation_id
+            AND audit_request.status = 'pending'
+        )
+      )`);
+    }
+    if (filters.auditStates.includes("attention")) {
+      auditConditions.push(`(
+        compliance_case.evidence_status = 'changes_required'
+        OR EXISTS (
+          SELECT 1 FROM compliance_case_findings audit_finding
+          WHERE audit_finding.case_id = compliance_case.id
+            AND audit_finding.organisation_id =
+              compliance_case.organisation_id
+            AND audit_finding.status = 'open'
+        )
+      )`);
+    }
+    if (filters.auditStates.includes("pending_review")) {
+      auditConditions.push(`(
+        compliance_case.status = 'in_review'
+        OR EXISTS (
+          SELECT 1 FROM compliance_decision_requests audit_request
+          WHERE audit_request.case_id = compliance_case.id
+            AND audit_request.organisation_id =
+              compliance_case.organisation_id
+            AND audit_request.status = 'pending'
+        )
+      )`);
+    }
+    conditions.push(`(${auditConditions.join(" OR ")})`);
+  }
+  if (filters.certificateStatuses.length) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM compliance_submission_batch_items certificate_item
+      JOIN compliance_certificate_lots certificate_lot
+        ON certificate_lot.batch_id = certificate_item.batch_id
+        AND certificate_lot.organisation_id =
+          certificate_item.organisation_id
+      WHERE certificate_item.case_id = compliance_case.id
+        AND certificate_item.organisation_id =
+          compliance_case.organisation_id
+        AND certificate_lot.status IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.certificateStatuses));
+  }
+  if (filters.batchStatuses.length) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM compliance_submission_batch_items filtered_batch_item
+      JOIN compliance_submission_batches filtered_batch
+        ON filtered_batch.id = filtered_batch_item.batch_id
+        AND filtered_batch.organisation_id =
+          filtered_batch_item.organisation_id
+      WHERE filtered_batch_item.case_id = compliance_case.id
+        AND filtered_batch_item.organisation_id =
+          compliance_case.organisation_id
+        AND filtered_batch.status IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.batchStatuses));
+  }
+  if (filters.submissionStatuses.length) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM compliance_submission_batch_items filtered_submission
+      WHERE filtered_submission.case_id = compliance_case.id
+        AND filtered_submission.organisation_id =
+          compliance_case.organisation_id
+        AND filtered_submission.status IN (
+          SELECT CAST(value AS TEXT) FROM json_each(?)
+        )
+    )`);
+    bindings.push(JSON.stringify(filters.submissionStatuses));
+  }
+  appendListCondition(
+    conditions,
+    bindings,
+    ["job.quote_status"],
+    filters.quoteStatuses,
+  );
+  appendListCondition(
+    conditions,
+    bindings,
+    ["job.invoice_status"],
+    filters.invoiceStatuses,
+  );
+  if (filters.productText) {
+    const productPattern = likeValue(filters.productText.toLowerCase());
+    conditions.push(`EXISTS (
+      SELECT 1 FROM compliance_equipment_records filtered_equipment
+      WHERE filtered_equipment.case_id = compliance_case.id
+        AND filtered_equipment.organisation_id =
+          compliance_case.organisation_id
+        AND (
+          LOWER(filtered_equipment.manufacturer) LIKE ? ESCAPE '\\'
+          OR LOWER(filtered_equipment.model) LIKE ? ESCAPE '\\'
+          OR LOWER(filtered_equipment.serial_number) LIKE ? ESCAPE '\\'
+          OR LOWER(filtered_equipment.product_registry) LIKE ? ESCAPE '\\'
+          OR LOWER(filtered_equipment.product_reference) LIKE ? ESCAPE '\\'
+          OR LOWER(filtered_equipment.record_type) LIKE ? ESCAPE '\\'
+        )
+    )`);
+    bindings.push(
+      productPattern,
+      productPattern,
+      productPattern,
+      productPattern,
+      productPattern,
+      productPattern,
+    );
+  }
+  appendListCondition(
+    conditions,
+    bindings,
+    ["activity.product_category"],
+    filters.productCategories,
+  );
+  if (filters.tags.length) {
+    const tags = filters.tags.map((tag) => tag.toLowerCase());
+    const encodedTags = JSON.stringify(tags);
+    if (filters.tagMatch === "all") {
+      conditions.push(`NOT EXISTS (
+        SELECT 1
+        FROM json_each(?) selected_tag
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(job.tags) THEN job.tags ELSE '[]' END
+          ) job_tag
+          WHERE LOWER(CAST(job_tag.value AS TEXT)) =
+            LOWER(CAST(selected_tag.value AS TEXT))
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(customer.tags) THEN customer.tags ELSE '[]' END
+          ) customer_tag
+          WHERE LOWER(CAST(customer_tag.value AS TEXT)) =
+            LOWER(CAST(selected_tag.value AS TEXT))
+        )
+      )`);
+      bindings.push(encodedTags);
+    } else {
+      conditions.push(`(
+        EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(job.tags) THEN job.tags ELSE '[]' END
+          ) job_tag
+          WHERE LOWER(CAST(job_tag.value AS TEXT))
+            IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(customer.tags) THEN customer.tags ELSE '[]' END
+          ) customer_tag
+          WHERE LOWER(CAST(customer_tag.value AS TEXT))
+            IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+        )
+      )`);
+      bindings.push(encodedTags, encodedTags);
+    }
+  }
+  return {
+    fromSql: `FROM compliance_cases compliance_case
+      JOIN compliance_programs program
+        ON program.id = compliance_case.program_id
+        AND program.organisation_id = compliance_case.organisation_id
+      JOIN compliance_activity_versions activity
+        ON activity.id = compliance_case.activity_version_id
+        AND activity.program_id = program.id
+      JOIN trade_work_orders work
+        ON work.id = compliance_case.work_order_id
+        AND work.firebase_uid = compliance_case.installer_uid
+      LEFT JOIN trade_accounts installer
+        ON installer.firebase_uid = compliance_case.installer_uid
+      LEFT JOIN trade_crm_job_details job
+        ON job.work_order_id = compliance_case.work_order_id
+        AND job.firebase_uid = compliance_case.installer_uid
+      LEFT JOIN trade_crm_customers customer
+        ON customer.id = job.crm_customer_id
+        AND customer.firebase_uid = compliance_case.installer_uid
+      LEFT JOIN trade_crm_service_sites service_site
+        ON service_site.id = job.service_site_id
+        AND service_site.firebase_uid = compliance_case.installer_uid`,
+    whereSql: conditions.join(" AND "),
+    bindings,
+  };
+}
+
+function filteredCaseSubquery(context: CaseQueryContext) {
+  return `SELECT DISTINCT compliance_case.id
+    ${context.fromSql}
+    WHERE ${context.whereSql}`;
+}
+
 export async function loadCreditexOperationsDashboard(
   database: D1Database,
-  organisationId: string,
+  scopeInput: CreditexOperationsScope,
+  filtersInput: CreditexOperationsFilters = defaultOperationsFilters(),
 ) {
+  const scope = normaliseCreditexScope(scopeInput);
+  const organisationId = scope.organisationId;
+  const filters = { ...defaultOperationsFilters(), ...filtersInput };
+  const caseContext = buildCaseQueryContext(scope, filters);
+  const visibleCaseSql = filteredCaseSubquery(caseContext);
+  const hasAppliedCaseFilters = (
+    filters.programs.length > 0
+    || filters.activities.length > 0
+    || filters.lifecycleStatuses.length > 0
+    || filters.evidenceStatuses.length > 0
+    || filters.workTypes.length > 0
+    || filters.serviceCategories.length > 0
+    || Boolean(filters.createdByText)
+    || filters.createdByTypes.length > 0
+    || Boolean(filters.fieldWorkerText)
+    || Boolean(filters.customerText)
+    || filters.customerTypes.length > 0
+    || Boolean(filters.addressText)
+    || Boolean(filters.installerText)
+    || Boolean(filters.identifierText)
+    || filters.jobSources.length > 0
+    || filters.workStages.length > 0
+    || filters.pipelineStages.length > 0
+    || filters.priorities.length > 0
+    || filters.issueStatuses.length > 0
+    || filters.appointmentStatuses.length > 0
+    || filters.appointmentTypes.length > 0
+    || filters.auditStates.length > 0
+    || filters.certificateStatuses.length > 0
+    || filters.batchStatuses.length > 0
+    || filters.submissionStatuses.length > 0
+    || filters.quoteStatuses.length > 0
+    || filters.invoiceStatuses.length > 0
+    || Boolean(filters.productText)
+    || filters.productCategories.length > 0
+    || filters.tags.length > 0
+    || Boolean(filters.installedFrom)
+    || Boolean(filters.installedTo)
+    || Boolean(filters.appointmentFrom)
+    || Boolean(filters.appointmentTo)
+  );
+  const restrictCaseDependentQueues = (
+    scope.role !== "admin" || hasAppliedCaseFilters
+  );
   const [
     countRows,
     taskRows,
@@ -381,6 +1505,11 @@ export async function loadCreditexOperationsDashboard(
     calculationRows,
     policyRows,
     auditRows,
+    programWorkspaceRows,
+    activityWorkspaceRows,
+    caseWorkspaceRows,
+    caseWorkspaceCountRows,
+    tagFacetRows,
   ] = await Promise.all([
     rows(database, `WITH context(organisation_id) AS (VALUES (?))
       SELECT 'invitations' domain, COUNT(*) total
@@ -467,6 +1596,7 @@ export async function loadCreditexOperationsDashboard(
         AND compliance_case.organisation_id = task.organisation_id
       WHERE task.organisation_id = ?
         AND task.status IN ('open', 'in_progress', 'blocked')
+        AND compliance_case.id IN (${visibleCaseSql})
       ORDER BY
         CASE task.priority
           WHEN 'urgent' THEN 0 WHEN 'high' THEN 1
@@ -474,7 +1604,7 @@ export async function loadCreditexOperationsDashboard(
         END,
         CASE WHEN task.due_at = '' THEN 1 ELSE 0 END,
         task.due_at, task.created_at
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, ...caseContext.bindings]),
     rows(database, `SELECT evidence.id, compliance_case.id case_id,
         compliance_case.case_number,
         requirement.requirement_code, requirement.title,
@@ -492,8 +1622,9 @@ export async function loadCreditexOperationsDashboard(
         AND requirement.organisation_id = evidence.organisation_id
       WHERE evidence.organisation_id = ?
         AND evidence.status IN ('received', 'under_review', 'rejected')
+        AND compliance_case.id IN (${visibleCaseSql})
       ORDER BY evidence.received_at, evidence.id
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, ...caseContext.bindings]),
     rows(database, `SELECT finding.id, compliance_case.id case_id,
         compliance_case.case_number,
         finding.finding_code, finding.severity, finding.description,
@@ -503,13 +1634,14 @@ export async function loadCreditexOperationsDashboard(
         ON compliance_case.id = finding.case_id
         AND compliance_case.organisation_id = finding.organisation_id
       WHERE finding.organisation_id = ? AND finding.status = 'open'
+        AND compliance_case.id IN (${visibleCaseSql})
       ORDER BY
         CASE finding.severity
           WHEN 'critical' THEN 0 WHEN 'major' THEN 1
           WHEN 'minor' THEN 2 ELSE 3
         END,
         finding.raised_at
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, ...caseContext.bindings]),
     rows(database, `SELECT batch.id, program.program_code, batch.batch_number,
         batch.format, batch.status, batch.case_count,
         batch.certificate_quantity, batch.created_at, batch.updated_at
@@ -518,16 +1650,31 @@ export async function loadCreditexOperationsDashboard(
         ON program.id = batch.program_id
         AND program.organisation_id = batch.organisation_id
       WHERE batch.organisation_id = ?
+        AND (
+          ? = 0
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_submission_batch_items visible_batch_item
+            WHERE visible_batch_item.batch_id = batch.id
+              AND visible_batch_item.organisation_id = batch.organisation_id
+              AND visible_batch_item.case_id IN (${visibleCaseSql})
+          )
+        )
       ORDER BY batch.created_at DESC, batch.id DESC
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [
+      organisationId,
+      restrictCaseDependentQueues ? 1 : 0,
+      ...caseContext.bindings,
+    ]),
     rows(database, `SELECT participant.id, participant.participant_type,
         participant.external_reference, participant.legal_name,
         participant.trading_name, participant.status, participant.effective_to
       FROM compliance_participants participant
       WHERE participant.organisation_id = ?
+        AND ? = 1
       ORDER BY participant.status, participant.trading_name,
         participant.legal_name, participant.id
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, scope.role === "admin" ? 1 : 0]),
     rows(database, `SELECT equipment.id, compliance_case.id case_id,
         compliance_case.case_number, equipment.record_type,
         equipment.manufacturer, equipment.model, equipment.serial_number,
@@ -538,8 +1685,9 @@ export async function loadCreditexOperationsDashboard(
         ON compliance_case.id = equipment.case_id
         AND compliance_case.organisation_id = equipment.organisation_id
       WHERE equipment.organisation_id = ?
+        AND compliance_case.id IN (${visibleCaseSql})
       ORDER BY equipment.recorded_at DESC, equipment.id DESC
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, ...caseContext.bindings]),
     rows(database, `SELECT lot.id, program.program_code, lot.certificate_type,
         lot.registry_lot_reference, lot.quantity, lot.status,
         lot.vintage_from, lot.vintage_to, lot.updated_at
@@ -548,23 +1696,81 @@ export async function loadCreditexOperationsDashboard(
         ON program.id = lot.program_id
         AND program.organisation_id = lot.organisation_id
       WHERE lot.organisation_id = ?
+        AND (
+          ? = 0
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_submission_batch_items visible_lot_item
+            WHERE visible_lot_item.batch_id = lot.batch_id
+              AND visible_lot_item.organisation_id = lot.organisation_id
+              AND visible_lot_item.case_id IN (${visibleCaseSql})
+          )
+        )
       ORDER BY lot.created_at DESC, lot.id DESC
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [
+      organisationId,
+      restrictCaseDependentQueues ? 1 : 0,
+      ...caseContext.bindings,
+    ]),
     rows(database, `SELECT trade.id, trade.certificate_lot_id,
         trade.counterparty_reference, trade.quantity,
         trade.unit_price_cents, trade.trade_date, trade.status,
         trade.external_reference
       FROM compliance_trades trade
       WHERE trade.organisation_id = ?
+        AND (
+          ? = 0
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_certificate_lots visible_trade_lot
+            JOIN compliance_submission_batch_items visible_trade_item
+              ON visible_trade_item.batch_id = visible_trade_lot.batch_id
+              AND visible_trade_item.organisation_id =
+                visible_trade_lot.organisation_id
+            WHERE visible_trade_lot.id = trade.certificate_lot_id
+              AND visible_trade_lot.organisation_id =
+                trade.organisation_id
+              AND visible_trade_item.case_id IN (${visibleCaseSql})
+          )
+        )
       ORDER BY trade.trade_date DESC, trade.id DESC
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [
+      organisationId,
+      restrictCaseDependentQueues ? 1 : 0,
+      ...caseContext.bindings,
+    ]),
     rows(database, `SELECT settlement.id, settlement.trade_id,
         settlement.gross_cents, settlement.fee_cents, settlement.net_cents,
         settlement.due_date, settlement.status, settlement.external_reference
       FROM compliance_settlements settlement
       WHERE settlement.organisation_id = ?
+        AND (
+          ? = 0
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_trades visible_settlement_trade
+            JOIN compliance_certificate_lots visible_settlement_lot
+              ON visible_settlement_lot.id =
+                visible_settlement_trade.certificate_lot_id
+              AND visible_settlement_lot.organisation_id =
+                visible_settlement_trade.organisation_id
+            JOIN compliance_submission_batch_items visible_settlement_item
+              ON visible_settlement_item.batch_id =
+                visible_settlement_lot.batch_id
+              AND visible_settlement_item.organisation_id =
+                visible_settlement_lot.organisation_id
+            WHERE visible_settlement_trade.id = settlement.trade_id
+              AND visible_settlement_trade.organisation_id =
+                settlement.organisation_id
+              AND visible_settlement_item.case_id IN (${visibleCaseSql})
+          )
+        )
       ORDER BY settlement.due_date, settlement.id
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [
+      organisationId,
+      restrictCaseDependentQueues ? 1 : 0,
+      ...caseContext.bindings,
+    ]),
     rows(database, `SELECT run.id, compliance_case.id case_id,
         compliance_case.case_number,
         calculator.calculator_key, calculator.version,
@@ -577,8 +1783,9 @@ export async function loadCreditexOperationsDashboard(
         ON calculator.id = run.calculator_version_id
         AND calculator.organisation_id = run.organisation_id
       WHERE run.organisation_id = ?
+        AND compliance_case.id IN (${visibleCaseSql})
       ORDER BY run.run_at DESC, run.id DESC
-      LIMIT 50`, [organisationId]),
+      LIMIT 50`, [organisationId, ...caseContext.bindings]),
     rows(database, `SELECT policy.id, activity.activity_key,
         policy.version, policy.publish_state, policy.requirements_complete,
         policy.official_source_title, policy.official_source_version,
@@ -600,8 +1807,173 @@ export async function loadCreditexOperationsDashboard(
         ON member.firebase_uid = event.actor_uid
         AND member.organisation_id = event.organisation_id
       WHERE event.organisation_id = ?
+        AND ? = 1
       ORDER BY event.created_at DESC, event.id DESC
-      LIMIT 100`, [organisationId]),
+      LIMIT 100`, [organisationId, scope.role === "admin" ? 1 : 0]),
+    rows(database, `SELECT workspace_program.id program_id,
+        workspace_program.program_code, workspace_program.name program_name,
+        workspace_program.scheme_kind, workspace_program.jurisdiction,
+        workspace_program.administering_body,
+        workspace_program.publish_state,
+        (
+          SELECT COUNT(*)
+          FROM compliance_cases workspace_case
+          WHERE workspace_case.program_id = workspace_program.id
+            AND workspace_case.id IN (${visibleCaseSql})
+        ) case_count,
+        (
+          SELECT COUNT(*)
+          FROM compliance_activity_versions workspace_activity
+          WHERE workspace_activity.program_id = workspace_program.id
+        ) activity_version_count
+      FROM compliance_programs workspace_program
+      WHERE workspace_program.organisation_id = ?
+      ORDER BY workspace_program.jurisdiction,
+        workspace_program.name, workspace_program.id`, [
+      ...caseContext.bindings,
+      organisationId,
+    ]),
+    rows(database, `SELECT workspace_activity.id activity_version_id,
+        workspace_activity.program_id, workspace_program.program_code,
+        workspace_program.name program_name,
+        workspace_activity.activity_key, workspace_activity.version,
+        workspace_activity.title, workspace_activity.service_category,
+        workspace_activity.registry_activity_code,
+        workspace_activity.specification_part,
+        workspace_activity.product_category,
+        workspace_activity.scenario_code, workspace_activity.scenario,
+        workspace_activity.jurisdiction,
+        workspace_activity.effective_from, workspace_activity.effective_to,
+        workspace_activity.publish_state,
+        workspace_activity.calculation_approval_state,
+        (
+          SELECT COUNT(*)
+          FROM compliance_cases workspace_case
+          WHERE workspace_case.activity_version_id = workspace_activity.id
+            AND workspace_case.id IN (${visibleCaseSql})
+        ) case_count
+      FROM compliance_activity_versions workspace_activity
+      JOIN compliance_programs workspace_program
+        ON workspace_program.id = workspace_activity.program_id
+        AND workspace_program.organisation_id = ?
+      ORDER BY workspace_program.jurisdiction,
+        workspace_program.name, workspace_activity.activity_key,
+        workspace_activity.version DESC, workspace_activity.id`, [
+      ...caseContext.bindings,
+      organisationId,
+    ]),
+    scope.auditableIdentity ? rows(database, `SELECT compliance_case.id case_id,
+        compliance_case.case_number, compliance_case.work_order_id,
+        work.work_number,
+        COALESCE(installer.business_name, '') installer_business,
+        program.id program_id, program.program_code, program.name program_name,
+        program.scheme_kind, program.jurisdiction program_jurisdiction,
+        activity.id activity_version_id, activity.activity_key,
+        activity.registry_activity_code, activity.specification_part,
+        activity.title activity_title, activity.version activity_version,
+        activity.service_category, activity.product_category,
+        activity.scenario_code, activity.scenario,
+        compliance_case.site_jurisdiction,
+        compliance_case.activity_date,
+        compliance_case.status lifecycle_status,
+        compliance_case.evidence_status, compliance_case.revision,
+        (
+          SELECT appointment.status
+          FROM trade_crm_appointments appointment
+          WHERE appointment.work_order_id = compliance_case.work_order_id
+            AND appointment.firebase_uid = compliance_case.installer_uid
+          ORDER BY appointment.starts_at DESC, appointment.id DESC
+          LIMIT 1
+        ) appointment_status,
+        (
+          SELECT appointment.starts_at
+          FROM trade_crm_appointments appointment
+          WHERE appointment.work_order_id = compliance_case.work_order_id
+            AND appointment.firebase_uid = compliance_case.installer_uid
+          ORDER BY appointment.starts_at DESC, appointment.id DESC
+          LIMIT 1
+        ) appointment_starts_at,
+        (
+          SELECT COUNT(*)
+          FROM compliance_case_findings open_finding
+          WHERE open_finding.case_id = compliance_case.id
+            AND open_finding.organisation_id =
+              compliance_case.organisation_id
+            AND open_finding.status = 'open'
+        ) open_finding_count,
+        (
+          SELECT COUNT(*)
+          FROM compliance_decision_requests pending_request
+          WHERE pending_request.case_id = compliance_case.id
+            AND pending_request.organisation_id =
+              compliance_case.organisation_id
+            AND pending_request.status = 'pending'
+        ) pending_decision_count,
+        (
+          SELECT COUNT(*)
+          FROM compliance_equipment_records case_equipment
+          WHERE case_equipment.case_id = compliance_case.id
+            AND case_equipment.organisation_id =
+              compliance_case.organisation_id
+        ) equipment_count,
+        (
+          SELECT submission_batch.status
+          FROM compliance_submission_batch_items submission_item
+          JOIN compliance_submission_batches submission_batch
+            ON submission_batch.id = submission_item.batch_id
+            AND submission_batch.organisation_id =
+              submission_item.organisation_id
+          WHERE submission_item.case_id = compliance_case.id
+            AND submission_item.organisation_id =
+              compliance_case.organisation_id
+          ORDER BY submission_item.created_at DESC, submission_item.id DESC
+          LIMIT 1
+        ) latest_batch_status,
+        compliance_case.created_at, compliance_case.updated_at
+      ${caseContext.fromSql}
+      WHERE ${caseContext.whereSql}
+      ORDER BY compliance_case.updated_at DESC, compliance_case.id DESC
+      LIMIT ?`, [...caseContext.bindings, filters.pageSize + 1])
+      : Promise.resolve<Row[]>([]),
+    rows(database, `SELECT COUNT(DISTINCT compliance_case.id) total
+      ${caseContext.fromSql}
+      WHERE ${caseContext.whereSql}`, caseContext.bindings),
+    scope.auditableIdentity ? rows(
+      database,
+      `WITH visible_cases(id) AS (${visibleCaseSql}),
+      visible_tags(tag, case_id) AS (
+        SELECT LOWER(CAST(job_tag.value AS TEXT)), compliance_case.id
+        FROM compliance_cases compliance_case
+        JOIN visible_cases ON visible_cases.id = compliance_case.id
+        JOIN trade_crm_job_details job
+          ON job.work_order_id = compliance_case.work_order_id
+          AND job.firebase_uid = compliance_case.installer_uid
+        JOIN json_each(
+          CASE WHEN json_valid(job.tags) THEN job.tags ELSE '[]' END
+        ) job_tag
+        UNION ALL
+        SELECT LOWER(CAST(customer_tag.value AS TEXT)), compliance_case.id
+        FROM compliance_cases compliance_case
+        JOIN visible_cases ON visible_cases.id = compliance_case.id
+        JOIN trade_crm_job_details job
+          ON job.work_order_id = compliance_case.work_order_id
+          AND job.firebase_uid = compliance_case.installer_uid
+        JOIN trade_crm_customers customer
+          ON customer.id = job.crm_customer_id
+          AND customer.firebase_uid = compliance_case.installer_uid
+        JOIN json_each(
+          CASE WHEN json_valid(customer.tags)
+            THEN customer.tags ELSE '[]' END
+        ) customer_tag
+      )
+      SELECT tag value, COUNT(DISTINCT case_id) total
+      FROM visible_tags
+      WHERE tag <> ''
+      GROUP BY tag
+      ORDER BY total DESC, tag
+      LIMIT 200`,
+      caseContext.bindings,
+    ) : Promise.resolve<Row[]>([]),
   ]);
 
   const counts = Object.fromEntries(
@@ -624,8 +1996,301 @@ export async function loadCreditexOperationsDashboard(
     evidence_policies: policyRows.length,
     audit_events: auditRows.length,
   };
+  if (scope.role !== "admin") {
+    Object.assign(counts, {
+      invitations: 0,
+      audit_events: 0,
+      participants: 0,
+      participant_abilities: 0,
+      assignments: 0,
+      tasks: taskRows.length,
+      evidence: evidenceRows.length,
+      findings: findingRows.length,
+      decisions: 0,
+      decision_requests: 0,
+      equipment: equipmentRows.length,
+      calculation_runs: calculationRows.length,
+      submission_batches: batchRows.length,
+      submission_items: 0,
+      submission_artifacts: 0,
+      submission_responses: 0,
+      certificate_lots: inventoryRows.length,
+      trades: tradeRows.length,
+      settlements: settlementRows.length,
+    });
+  }
+  const totalFilteredCases = Number(
+    caseWorkspaceCountRows[0]?.total || 0,
+  );
+  const hasNextCases = caseWorkspaceRows.length > filters.pageSize;
+  const workspaceCases = caseWorkspaceRows.slice(0, filters.pageSize)
+    .map((item) => {
+      const openFindings = Number(item.open_finding_count || 0);
+      const pendingDecisions = Number(item.pending_decision_count || 0);
+      const lifecycleStatus = valueText(item.lifecycle_status);
+      const evidenceStatus = valueText(item.evidence_status);
+      const auditState = (
+        openFindings > 0 || evidenceStatus === "changes_required"
+          ? "attention"
+          : pendingDecisions > 0 || lifecycleStatus === "in_review"
+            ? "pending_review"
+            : "clear"
+      );
+      return {
+        caseId: valueText(item.case_id),
+        caseNumber: valueText(item.case_number),
+        workOrderId: valueText(item.work_order_id),
+        jobNumber: valueText(item.work_number),
+        installerBusiness: (
+          valueText(item.installer_business)
+          || "Installer record unavailable"
+        ),
+        programId: valueText(item.program_id),
+        programCode: valueText(item.program_code),
+        programName: valueText(item.program_name),
+        schemeKind: valueText(item.scheme_kind),
+        programJurisdiction: valueText(item.program_jurisdiction),
+        activityVersionId: valueText(item.activity_version_id),
+        activityKey: valueText(item.activity_key),
+        registryActivityCode: valueText(item.registry_activity_code),
+        specificationPart: valueText(item.specification_part),
+        activityTitle: valueText(item.activity_title),
+        activityVersion: Number(item.activity_version || 0),
+        serviceCategory: valueText(item.service_category),
+        productCategory: valueText(item.product_category),
+        scenarioCode: valueText(item.scenario_code),
+        scenario: valueText(item.scenario),
+        siteJurisdiction: valueText(item.site_jurisdiction),
+        activityDate: valueText(item.activity_date),
+        lifecycleStatus,
+        evidenceStatus,
+        auditState,
+        revision: Number(item.revision || 0),
+        appointmentStatus: valueText(item.appointment_status),
+        appointmentStartsAt: valueText(item.appointment_starts_at),
+        openFindingCount: openFindings,
+        pendingDecisionCount: pendingDecisions,
+        equipmentCount: Number(item.equipment_count || 0),
+        latestBatchStatus: valueText(item.latest_batch_status),
+        privateDetailsAvailable: true,
+        createdAt: valueText(item.created_at),
+        updatedAt: valueText(item.updated_at),
+      };
+    });
   return {
     counts,
+    workspace: {
+      programs: projectRows(programWorkspaceRows),
+      activities: projectRows(activityWorkspaceRows),
+      cases: workspaceCases,
+      pagination: {
+        pageSize: filters.pageSize,
+        total: totalFilteredCases,
+        hasNext: hasNextCases,
+      },
+      appliedFilters: filters,
+      facets: {
+        program: {
+          available: true,
+          mode: "multi_select",
+          optionsSource: "workspace.programs",
+        },
+        activity: {
+          available: true,
+          mode: "multi_select",
+          optionsSource: "workspace.activities",
+        },
+        lifecycleStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_CASE_LIFECYCLE_STATUSES,
+        },
+        evidenceStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_CASE_EVIDENCE_STATUSES,
+        },
+        subStatus: {
+          available: false,
+          reason: "TLink has no distinct authoritative case sub-status field; lifecycle and evidence status remain separate governed dimensions.",
+        },
+        workType: {
+          available: true,
+          mode: "multi_select_text",
+          sourceField: "trade_work_orders.work_type",
+        },
+        serviceCategory: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_SERVICE_CATEGORIES,
+        },
+        createdBy: {
+          available: true,
+          mode: "text",
+          returnedInDefaultList: false,
+        },
+        createdByType: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_CASE_CREATED_BY_TYPES,
+        },
+        fieldWorker: {
+          available: true,
+          mode: "text",
+          returnedInDefaultList: false,
+        },
+        client: {
+          available: false,
+          reason: "No authoritative client-to-case relationship is stored; installer ownership is available separately.",
+        },
+        agent: {
+          available: false,
+          reason: "Agent participants are stored, but no authoritative agent-to-case relationship is stored.",
+        },
+        customer: {
+          available: true,
+          mode: "text",
+          returnedInDefaultList: false,
+        },
+        customerType: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_CUSTOMER_TYPES,
+        },
+        address: {
+          available: true,
+          mode: "text",
+          returnedInDefaultList: false,
+        },
+        installer: { available: true, mode: "text" },
+        participant: {
+          available: false,
+          reason: "No authoritative participant-to-case relationship is stored.",
+        },
+        identifier: { available: true, mode: "text" },
+        jobSource: {
+          available: true,
+          mode: "multi_select_text",
+          sourceField: "trade_work_orders.source_type",
+        },
+        workStage: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_WORK_STAGES,
+        },
+        pipelineStage: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_PIPELINE_STAGES,
+        },
+        priority: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_WORK_PRIORITIES,
+        },
+        issueStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_ISSUE_STATUSES,
+        },
+        installDate: { available: true, mode: "date_range" },
+        appointmentDate: { available: true, mode: "date_range" },
+        appointmentStatus: {
+          available: true,
+          mode: "multi_select_text",
+        },
+        appointmentType: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_APPOINTMENT_TYPES,
+        },
+        appointmentOutcome: {
+          available: false,
+          reason: "Appointments have authoritative type and status fields, but no separate outcome field.",
+        },
+        auditState: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_AUDIT_STATES,
+        },
+        auditCompletion: {
+          available: false,
+          reason: "TLink has no authoritative audit-completed flag; evidence, findings and decision state remain separate audited dimensions.",
+        },
+        certificateState: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_CERTIFICATE_STATUSES,
+        },
+        claimState: {
+          available: false,
+          reason: "No authoritative claim-state record is stored.",
+        },
+        batchState: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_BATCH_STATUSES,
+        },
+        submissionStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_SUBMISSION_ITEM_STATUSES,
+        },
+        quoteStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_QUOTE_STATUSES,
+        },
+        invoiceStatus: {
+          available: true,
+          mode: "multi_select",
+          options: CREDITEX_INVOICE_STATUSES,
+        },
+        invoicingAndSubmission: {
+          available: true,
+          mode: "group",
+          members: [
+            "quoteStatus",
+            "invoiceStatus",
+            "submissionStatus",
+            "batchState",
+            "certificateState",
+          ],
+        },
+        product: { available: true, mode: "text" },
+        productCategory: {
+          available: true,
+          mode: "multi_select_text",
+          optionsSource: "workspace.activities.productCategory",
+        },
+        productType: {
+          available: false,
+          reason: "TLink has governed activity product categories and equipment search, but no authoritative Dataforce-equivalent product-type field.",
+        },
+        tags: {
+          available: true,
+          mode: "multi_select",
+          options: projectRows(tagFacetRows),
+          matchModes: CREDITEX_TAG_MATCH_MODES,
+        },
+        tagColumns: {
+          available: false,
+          reason: "Tags can be filtered, but tag-column expansion is not part of the privacy-minimised default case list.",
+        },
+        appointmentOtherFilters: {
+          available: false,
+          reason: "No additional authoritative appointment filter fields are stored beyond date, type and status.",
+        },
+        additionalColumns: {
+          available: false,
+          reason: "Compliance case column preferences are not yet stored as an authoritative workspace setting.",
+        },
+        otherFilters: {
+          available: false,
+          reason: "A generic catch-all filter cannot be mapped safely; every supported TLink dimension is exposed explicitly.",
+        },
+      },
+    },
     queues: {
       tasks: projectRows(taskRows),
       evidence: projectRows(evidenceRows),
@@ -657,9 +2322,11 @@ export async function loadCreditexOperationsDashboard(
 
 export async function loadCreditexCaseWorkspace(
   database: D1Database,
-  organisationId: string,
+  scopeInput: CreditexOperationsScope,
   caseIdInput: unknown,
 ) {
+  const scope = normaliseCreditexScope(scopeInput);
+  const organisationId = scope.organisationId;
   const caseId = text(caseIdInput, "Case", 180);
   const complianceCase = await requireRecord(
     database,
@@ -669,8 +2336,31 @@ export async function loadCreditexCaseWorkspace(
         activity_snapshot, status, evidence_status, revision,
         created_at, updated_at
       FROM compliance_cases
-      WHERE id = ? AND organisation_id = ?`,
-    [caseId, organisationId],
+      WHERE id = ? AND organisation_id = ?
+        AND (
+          ? = 1
+          OR EXISTS (
+            SELECT 1
+            FROM compliance_case_assignments visible_assignment
+            JOIN compliance_users visible_member
+              ON visible_member.id =
+                visible_assignment.compliance_user_id
+              AND visible_member.organisation_id =
+                visible_assignment.organisation_id
+            WHERE visible_assignment.case_id = compliance_cases.id
+              AND visible_assignment.organisation_id =
+                compliance_cases.organisation_id
+              AND visible_assignment.status = 'assigned'
+              AND visible_member.firebase_uid = ?
+              AND visible_member.status = 'active'
+          )
+        )`,
+    [
+      caseId,
+      organisationId,
+      scope.role === "admin" ? 1 : 0,
+      scope.uid,
+    ],
     "The compliance case was not found in this organisation.",
   );
   const [
@@ -686,6 +2376,11 @@ export async function loadCreditexCaseWorkspace(
     responseRows,
     artifactRows,
     eventRows,
+    jobRows,
+    customerRows,
+    contactRows,
+    siteRows,
+    appointmentRows,
   ] = await Promise.all([
     rows(database, `SELECT assignment.id, assignment.assignment_role,
         assignment.status, assignment.assigned_at, assignment.released_at,
@@ -822,7 +2517,117 @@ export async function loadCreditexCaseWorkspace(
       WHERE event.case_id = ? AND event.organisation_id = ?
       ORDER BY event.created_at DESC, event.id
       LIMIT 200`, [caseId, organisationId]),
+    rows(database, `SELECT work.id work_order_id, work.work_number,
+        work.title, work.service_category, work.site_area, work.stage,
+        work.priority, work.scheduled_start, work.scheduled_end,
+        work.assignee_label, work.record_status,
+        job.pipeline_stage, job.description, job.customer_reference,
+        job.next_action, job.tags, job.estimated_value_cents,
+        job.quoted_value_cents, job.invoiced_value_cents,
+        job.paid_value_cents, job.quote_status, job.invoice_status,
+        job.payment_due_at, job.building_type,
+        installer.firebase_uid installer_uid,
+        installer.business_name installer_business_name,
+        installer.contact_name installer_contact_name,
+        installer.email installer_email, installer.phone installer_phone,
+        installer.business_website installer_business_website,
+        installer.address_line_1 installer_address_line_1,
+        installer.suburb installer_suburb,
+        installer.address_state installer_address_state,
+        installer.postcode installer_postcode,
+        installer.abn installer_abn, installer.verified_abn,
+        installer.account_status installer_account_status,
+        installer.verification_status installer_verification_status,
+        installer.service_states installer_service_states,
+        installer.capabilities installer_capabilities
+      FROM trade_work_orders work
+      LEFT JOIN trade_crm_job_details job
+        ON job.work_order_id = work.id
+        AND job.firebase_uid = work.firebase_uid
+      LEFT JOIN trade_accounts installer
+        ON installer.firebase_uid = work.firebase_uid
+      WHERE work.id = ? AND work.firebase_uid = ?`, [
+      valueText(complianceCase.work_order_id),
+      valueText(complianceCase.installer_uid),
+    ]),
+    rows(database, `SELECT customer.id, customer.customer_number,
+        customer.customer_type, customer.first_name, customer.last_name,
+        customer.business_name, customer.business_number,
+        customer.email, customer.phone, customer.address_line_1,
+        customer.address_line_2, customer.suburb, customer.address_state,
+        customer.postcode, customer.tags, customer.private_notes,
+        customer.record_status, customer.created_at, customer.updated_at
+      FROM trade_crm_job_details job
+      JOIN trade_crm_customers customer
+        ON customer.id = job.crm_customer_id
+        AND customer.firebase_uid = job.firebase_uid
+      WHERE job.work_order_id = ? AND job.firebase_uid = ?`, [
+      valueText(complianceCase.work_order_id),
+      valueText(complianceCase.installer_uid),
+    ]),
+    rows(database, `SELECT contact.id, contact.first_name, contact.last_name,
+        contact.role_label, contact.email, contact.phone,
+        contact.is_primary, contact.record_status
+      FROM trade_crm_job_details job
+      JOIN trade_crm_customer_contacts contact
+        ON contact.customer_id = job.crm_customer_id
+        AND contact.firebase_uid = job.firebase_uid
+      WHERE job.work_order_id = ? AND job.firebase_uid = ?
+      ORDER BY contact.is_primary DESC, contact.last_name,
+        contact.first_name, contact.id`, [
+      valueText(complianceCase.work_order_id),
+      valueText(complianceCase.installer_uid),
+    ]),
+    rows(database, `SELECT site.id, site.site_label, site.address_line_1,
+        site.address_line_2, site.suburb, site.address_state, site.postcode,
+        site.access_instructions, site.parking_instructions,
+        site.hazard_notes, site.is_primary, site.record_status
+      FROM trade_crm_job_details job
+      JOIN trade_crm_service_sites site
+        ON site.id = job.service_site_id
+        AND site.firebase_uid = job.firebase_uid
+      WHERE job.work_order_id = ? AND job.firebase_uid = ?`, [
+      valueText(complianceCase.work_order_id),
+      valueText(complianceCase.installer_uid),
+    ]),
+    rows(database, `SELECT appointment.id, appointment.appointment_type,
+        appointment.title, appointment.starts_at, appointment.ends_at,
+        appointment.assignee_label, appointment.status, appointment.notes,
+        appointment.created_at, appointment.updated_at
+      FROM trade_crm_appointments appointment
+      WHERE appointment.work_order_id = ?
+        AND appointment.firebase_uid = ?
+      ORDER BY appointment.starts_at DESC, appointment.id DESC`, [
+      valueText(complianceCase.work_order_id),
+      valueText(complianceCase.installer_uid),
+    ]),
   ]);
+  if (scope.auditableIdentity) {
+    const now = new Date().toISOString();
+    await auditStatement(
+      database,
+      scopeInput as ComplianceIdentity,
+      "case.private_details_viewed",
+      "compliance_case",
+      caseId,
+      "Authorised compliance member viewed linked private case details.",
+      {
+        purpose: "compliance_case_review",
+        role: scope.role,
+        dataClasses: [
+          "job",
+          "installer",
+          "customer",
+          "service_site",
+          "appointment",
+        ],
+      },
+      now,
+    ).run();
+  }
+  const job = jobRows[0] || {};
+  const customer = customerRows[0] || {};
+  const site = siteRows[0] || {};
   return {
     case: {
       id: valueText(complianceCase.id),
@@ -841,6 +2646,95 @@ export async function loadCreditexCaseWorkspace(
       createdAt: valueText(complianceCase.created_at),
       updatedAt: valueText(complianceCase.updated_at),
       activity: safeActivity(complianceCase.activity_snapshot),
+    },
+    privateDetails: {
+      access: {
+        authorised: true,
+        purpose: "compliance_case_review",
+        auditEventRecorded: scope.auditableIdentity,
+        defaultListPrivacyMinimised: true,
+      },
+      job: {
+        workOrderId: valueText(job.work_order_id),
+        workNumber: valueText(job.work_number),
+        title: valueText(job.title),
+        serviceCategory: valueText(job.service_category),
+        siteArea: valueText(job.site_area),
+        stage: valueText(job.stage),
+        priority: valueText(job.priority),
+        scheduledStart: valueText(job.scheduled_start),
+        scheduledEnd: valueText(job.scheduled_end),
+        assigneeLabel: valueText(job.assignee_label),
+        recordStatus: valueText(job.record_status),
+        pipelineStage: valueText(job.pipeline_stage),
+        description: valueText(job.description),
+        customerReference: valueText(job.customer_reference),
+        nextAction: valueText(job.next_action),
+        tags: safeJsonValue(job.tags) || [],
+        estimatedValueCents: Number(job.estimated_value_cents || 0),
+        quotedValueCents: Number(job.quoted_value_cents || 0),
+        invoicedValueCents: Number(job.invoiced_value_cents || 0),
+        paidValueCents: Number(job.paid_value_cents || 0),
+        quoteStatus: valueText(job.quote_status),
+        invoiceStatus: valueText(job.invoice_status),
+        paymentDueAt: valueText(job.payment_due_at),
+        buildingType: valueText(job.building_type),
+      },
+      installer: {
+        uid: valueText(job.installer_uid),
+        businessName: valueText(job.installer_business_name),
+        contactName: valueText(job.installer_contact_name),
+        email: valueText(job.installer_email),
+        phone: valueText(job.installer_phone),
+        businessWebsite: valueText(job.installer_business_website),
+        addressLine1: valueText(job.installer_address_line_1),
+        suburb: valueText(job.installer_suburb),
+        state: valueText(job.installer_address_state),
+        postcode: valueText(job.installer_postcode),
+        abn: valueText(job.installer_abn),
+        verifiedAbn: valueText(job.verified_abn),
+        accountStatus: valueText(job.installer_account_status),
+        verificationStatus: valueText(job.installer_verification_status),
+        serviceStates: safeJsonValue(job.installer_service_states) || [],
+        capabilities: safeJsonValue(job.installer_capabilities) || [],
+      },
+      customer: customerRows.length ? {
+        id: valueText(customer.id),
+        customerNumber: valueText(customer.customer_number),
+        customerType: valueText(customer.customer_type),
+        firstName: valueText(customer.first_name),
+        lastName: valueText(customer.last_name),
+        businessName: valueText(customer.business_name),
+        businessNumber: valueText(customer.business_number),
+        email: valueText(customer.email),
+        phone: valueText(customer.phone),
+        addressLine1: valueText(customer.address_line_1),
+        addressLine2: valueText(customer.address_line_2),
+        suburb: valueText(customer.suburb),
+        state: valueText(customer.address_state),
+        postcode: valueText(customer.postcode),
+        tags: safeJsonValue(customer.tags) || [],
+        privateNotes: valueText(customer.private_notes),
+        recordStatus: valueText(customer.record_status),
+        createdAt: valueText(customer.created_at),
+        updatedAt: valueText(customer.updated_at),
+      } : null,
+      customerContacts: projectRows(contactRows),
+      serviceSite: siteRows.length ? {
+        id: valueText(site.id),
+        label: valueText(site.site_label),
+        addressLine1: valueText(site.address_line_1),
+        addressLine2: valueText(site.address_line_2),
+        suburb: valueText(site.suburb),
+        state: valueText(site.address_state),
+        postcode: valueText(site.postcode),
+        accessInstructions: valueText(site.access_instructions),
+        parkingInstructions: valueText(site.parking_instructions),
+        hazardNotes: valueText(site.hazard_notes),
+        isPrimary: Number(site.is_primary || 0) === 1,
+        recordStatus: valueText(site.record_status),
+      } : null,
+      appointments: projectRows(appointmentRows),
     },
     assignments: projectRows(assignmentRows),
     tasks: projectRows(taskRows),

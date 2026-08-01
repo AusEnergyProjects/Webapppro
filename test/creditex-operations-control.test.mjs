@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import {
+  canonicalCreditexSchemaGuardSql,
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
   ensureCreditexSchemaGuards,
 } from "../src/lib/creditex-schema-guards.ts";
@@ -117,19 +118,80 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
       work_number text NOT NULL,
+      work_type text DEFAULT 'job' NOT NULL,
+      source_type text DEFAULT 'internal' NOT NULL,
+      source_reference text DEFAULT '' NOT NULL,
+      title text DEFAULT '' NOT NULL,
       service_category text NOT NULL,
-      scheduled_start text DEFAULT '' NOT NULL
+      stage text DEFAULT 'backlog' NOT NULL,
+      priority text DEFAULT 'standard' NOT NULL,
+      assignee_label text DEFAULT '' NOT NULL,
+      assignee_member_id text DEFAULT '' NOT NULL,
+      scheduled_start text DEFAULT '' NOT NULL,
+      created_at text DEFAULT '' NOT NULL,
+      updated_at text DEFAULT '' NOT NULL
+    );
+    CREATE TABLE trade_accounts (
+      firebase_uid text PRIMARY KEY NOT NULL,
+      business_name text DEFAULT '' NOT NULL,
+      contact_name text DEFAULT '' NOT NULL,
+      email text DEFAULT '' NOT NULL,
+      phone text DEFAULT '' NOT NULL,
+      verified_abn text DEFAULT '' NOT NULL
     );
     CREATE TABLE trade_crm_service_sites (
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
-      address_state text DEFAULT '' NOT NULL
+      site_label text DEFAULT '' NOT NULL,
+      address_line_1 text DEFAULT '' NOT NULL,
+      address_line_2 text DEFAULT '' NOT NULL,
+      suburb text DEFAULT '' NOT NULL,
+      address_state text DEFAULT '' NOT NULL,
+      postcode text DEFAULT '' NOT NULL
     );
     CREATE TABLE trade_crm_job_details (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
-      service_site_id text DEFAULT '' NOT NULL
+      service_site_id text DEFAULT '' NOT NULL,
+      crm_customer_id text DEFAULT '' NOT NULL,
+      customer_reference text DEFAULT '' NOT NULL,
+      tags text DEFAULT '[]' NOT NULL,
+      pipeline_stage text DEFAULT 'enquiry' NOT NULL,
+      quote_status text DEFAULT 'not_started' NOT NULL,
+      invoice_status text DEFAULT 'not_started' NOT NULL
+    );
+    CREATE TABLE trade_crm_customers (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      customer_number text DEFAULT '' NOT NULL,
+      customer_type text DEFAULT 'residential' NOT NULL,
+      first_name text DEFAULT '' NOT NULL,
+      last_name text DEFAULT '' NOT NULL,
+      business_name text DEFAULT '' NOT NULL,
+      email text DEFAULT '' NOT NULL,
+      phone text DEFAULT '' NOT NULL,
+      address_line_1 text DEFAULT '' NOT NULL,
+      address_line_2 text DEFAULT '' NOT NULL,
+      suburb text DEFAULT '' NOT NULL,
+      address_state text DEFAULT '' NOT NULL,
+      postcode text DEFAULT '' NOT NULL,
+      tags text DEFAULT '[]' NOT NULL
+    );
+    CREATE TABLE trade_crm_appointments (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      appointment_type text DEFAULT 'site_visit' NOT NULL,
+      status text DEFAULT 'scheduled' NOT NULL,
+      starts_at text DEFAULT '' NOT NULL
+    );
+    CREATE TABLE trade_crm_job_notes (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      note_type text DEFAULT 'internal' NOT NULL,
+      issue_status text DEFAULT 'not_applicable' NOT NULL
     );
     CREATE TABLE trade_mobile_upload_sessions (
       id text PRIMARY KEY NOT NULL,
@@ -181,6 +243,37 @@ test("runtime schema bootstrap installs every governed trigger before compliance
   );
 });
 
+test("runtime schema bootstrap accepts legacy multiline guards across stateless worker invocations", async () => {
+  const database = databaseWithComplianceOperations({ installGuards: false });
+  const expected = CREDITEX_SCHEMA_GUARD_DEFINITIONS[0].sql;
+  const legacy = expected
+    .replace("CREATE TRIGGER IF NOT EXISTS", "CREATE   TRIGGER")
+    .replace(" BEFORE INSERT ", "\nBEFORE INSERT\n")
+    .replace(" WHEN ", "\nWHEN\n")
+    .replace(" BEGIN ", "\nBEGIN\n")
+    .replace(/;\s*$/, "");
+  database.exec(legacy);
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:91/,
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:51/,
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_GUARDS_INSTALLING:11/,
+  );
+  await ensureCreditexSchemaGuards(testD1(database));
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+    ).get().count,
+    CREDITEX_SCHEMA_GUARD_DEFINITIONS.length,
+  );
+});
+
 test("runtime schema bootstrap fails closed when a same-name guard has different SQL", async () => {
   const database = databaseWithComplianceOperations({ installGuards: false });
   database.exec(`CREATE TRIGGER compliance_programs_publish_requirements
@@ -189,6 +282,34 @@ test("runtime schema bootstrap fails closed when a same-name guard has different
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
     /CREDITEX_SCHEMA_GUARD_MISMATCH:compliance_programs_publish_requirements/,
+  );
+});
+
+test("schema guard comparison preserves whitespace inside SQL string literals", async () => {
+  const database = databaseWithComplianceOperations({ installGuards: false });
+  const altered = CREDITEX_SCHEMA_GUARD_DEFINITIONS[0].sql
+    .replace(
+      "source and publisher evidence",
+      "source  and publisher evidence",
+    );
+  database.exec(altered);
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_GUARD_MISMATCH:compliance_programs_publish_requirements/,
+  );
+});
+
+test("schema guard comparison ignores storage-only multiline formatting", () => {
+  const expected = CREDITEX_SCHEMA_GUARD_DEFINITIONS[0].sql;
+  const stored = expected
+    .replace("CREATE TRIGGER IF NOT EXISTS", "CREATE   TRIGGER")
+    .replace(" BEFORE INSERT ", "\nBEFORE INSERT\n")
+    .replace(" AND ( ", "\nAND (\n")
+    .replaceAll(" OR ", "\n  OR ")
+    .replace(/;\s*$/, "");
+  assert.equal(
+    canonicalCreditexSchemaGuardSql(stored),
+    canonicalCreditexSchemaGuardSql(expected),
   );
 });
 
@@ -657,6 +778,102 @@ test("operations dashboard and access queries execute against the operations sch
   );
   assert.equal(access.members.length, 0);
   assert.equal(access.invitations.length, 1);
+});
+
+test("Creditex workspace applies authoritative Dataforce-equivalent filters without returning private list data", async () => {
+  const database = databaseWithComplianceOperations();
+  const operations = loadTypescriptModule(
+    "../src/lib/creditex-operations-server.ts",
+  );
+  const governed = seedGovernedActivity(database);
+  seedTradeJob(database);
+  seedGovernedCase(database, governed);
+  seedComplianceUser(database, {
+    id: "admin-member",
+    firebaseUid: "admin-uid",
+    role: "admin",
+  });
+  database.prepare(`UPDATE trade_work_orders
+    SET work_type = 'job', source_type = 'internal', stage = 'scheduled',
+      priority = 'high', assignee_label = 'Crew A',
+      assignee_member_id = 'crew-a'
+    WHERE id = 'job'`).run();
+  database.prepare(`INSERT INTO trade_accounts
+    (firebase_uid, business_name, contact_name, email, phone, verified_abn)
+    VALUES ('installer-uid', 'Installer One Pty Ltd', 'Installer One',
+      'installer@example.com', '0400000000', '76105513040')`).run();
+  database.prepare(`INSERT INTO trade_crm_customers
+    (id, firebase_uid, customer_number, customer_type, first_name, last_name,
+      email, address_line_1, suburb, address_state, postcode, tags)
+    VALUES ('customer', 'installer-uid', 'CUS-1', 'residential', 'Private',
+      'Customer', 'private@example.com', '1 Private Street', 'Melbourne',
+      'VIC', '3000', '["veu"]')`).run();
+  database.prepare(`UPDATE trade_crm_job_details
+    SET crm_customer_id = 'customer', customer_reference = 'CUSTOMER-REF',
+      tags = '["priority"]', pipeline_stage = 'approved',
+      quote_status = 'accepted', invoice_status = 'issued'
+    WHERE work_order_id = 'job'`).run();
+  database.prepare(`INSERT INTO trade_crm_appointments
+    (id, work_order_id, firebase_uid, appointment_type, status, starts_at)
+    VALUES ('appointment', 'job', 'installer-uid', 'installation',
+      'scheduled', '2026-08-01T09:00:00.000Z')`).run();
+  database.prepare(`INSERT INTO trade_crm_job_notes
+    (id, work_order_id, firebase_uid, note_type, issue_status)
+    VALUES ('issue', 'job', 'installer-uid', 'issue', 'open')`).run();
+  const filters = operations.parseCreditexOperationsFilters(
+    new URLSearchParams([
+      ["workType", "job"],
+      ["serviceCategory", "hot-water"],
+      ["createdBy", "installer-uid"],
+      ["createdByType", "installer"],
+      ["fieldWorker", "Crew A"],
+      ["customer", "Private Customer"],
+      ["customerType", "residential"],
+      ["address", "Melbourne"],
+      ["installer", "Installer One"],
+      ["jobSource", "internal"],
+      ["workStage", "scheduled"],
+      ["pipelineStage", "approved"],
+      ["priority", "high"],
+      ["issueStatus", "open"],
+      ["appointmentStatus", "scheduled"],
+      ["appointmentType", "installation"],
+      ["quoteStatus", "accepted"],
+      ["invoiceStatus", "issued"],
+      ["productCategory", "test-product"],
+      ["tag", "priority"],
+      ["tag", "veu"],
+      ["tagMatch", "all"],
+    ]),
+  );
+  const scope = {
+    organisationId: "org_creditex_au",
+    membershipId: "admin-member",
+    uid: "admin-uid",
+    role: "admin",
+  };
+  const dashboard = await operations.loadCreditexOperationsDashboard(
+    testD1(database),
+    scope,
+    filters,
+  );
+  assert.equal(dashboard.workspace.pagination.total, 1);
+  assert.equal(dashboard.workspace.cases.length, 1);
+  assert.equal(dashboard.workspace.cases[0].caseId, "case");
+  assert.equal(dashboard.workspace.cases[0].privateDetailsAvailable, true);
+  assert.equal("customerEmail" in dashboard.workspace.cases[0], false);
+  assert.equal("customerName" in dashboard.workspace.cases[0], false);
+  assert.equal(dashboard.workspace.facets.client.available, false);
+  assert.equal(dashboard.workspace.facets.agent.available, false);
+  assert.equal(dashboard.workspace.facets.appointmentOutcome.available, false);
+  assert.equal(dashboard.workspace.facets.productType.available, false);
+  const noMatch = await operations.loadCreditexOperationsDashboard(
+    testD1(database),
+    scope,
+    { ...filters, issueStatuses: ["resolved"] },
+  );
+  assert.equal(noMatch.workspace.pagination.total, 0);
+  assert.equal(noMatch.workspace.cases.length, 0);
 });
 
 test("audited local operations execute against the schema and financial guards reconcile", async () => {

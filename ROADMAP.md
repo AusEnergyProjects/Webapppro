@@ -923,13 +923,15 @@ Audit source: RM-085, RM-090, RM-100 and RM-110
 
 Exit gate: cutover evidence, rollback proof, archival custody and post-cutover monitoring are complete.
 
+VEU `6(23)` remains a useful test example only. It is not a privileged implementation path; the platform contract is program, activity, category and scenario agnostic.
+
 ## Next five logical product steps
 
-1. **Replace the shared bootstrap with named Creditex administrators:** provision at least two named verified administrators, require strong authentication, review least privilege and suspend the `info@ausenergyassessments.com` bootstrap from routine use.
-2. **Approve one exact production rule pack and physical-device path:** Creditex selects one VEU `6(23)` category and scenario, signs the authoritative activity and evidence policy, and accepts capture, offline recovery, review and correction on representative iOS and Android devices.
-3. **Approve custody and withdrawn-policy governance:** implement the signed retention, legal hold, deletion, backup and restore schedule and an explicit continuation or supersession decision for cases whose pinned policy is withdrawn.
-4. **Release the first independently verified calculator:** reconcile exact inputs, units, effective dates, product and climate lookups, caps and rounding to official or Creditex-approved vectors, then dual-approve one calculator while all others remain disabled.
-5. **Rehearse one provider and legacy cohort:** build an authorised dry-run submission adapter plus response reconciliation, map representative Dataforce and Runabout records without source mutation, reconcile every count, hash and exception, then run a bounded parallel pilot.
+1. **Reconcile the national authoritative catalogue:** obtain Creditex's private authoritative rule packs for every federal, state and territory program, activity, category and scenario intended in scope; import them as effective-dated drafts; and reconcile complete coverage against official public discovery sources and Creditex's signed inventory before any publication.
+2. **Drive field capture from each governed activity:** translate every approved activity and evidence-policy version into dynamic installer and field-app requirements, preserving original bytes, hashes, capture time and timezone, geolocation, device provenance, offline recovery, upload receipts and correction history.
+3. **Verify calculators and output contracts per method:** implement immutable method-specific inputs, formulas, product and climate lookups, units, caps, rounding, test vectors and typed outputs; obtain independent reconciliation and Creditex approval for each method while every unverified calculator remains disabled.
+4. **Build provider-neutral connectors per program:** define versioned batch, submission, response, issuance and reconciliation contracts once, then add separately authorised program adapters with dry-run validation, idempotency, immutable artifacts, dual control and exception handling.
+5. **Inventory legacy data and phase the cutover:** obtain authorised Dataforce and Runabout exports, field dictionaries, screen and report inventories, role maps and a Runabout walkthrough; preserve source records through repeatable imports; then reconcile counts, hashes and exceptions in bounded parallel cohorts by program with explicit rollback and acceptance.
 
 ## Global stop conditions
 

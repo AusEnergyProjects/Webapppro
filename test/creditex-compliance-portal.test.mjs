@@ -34,6 +34,9 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   ]) assert.match(portal, contract);
   assert.doesNotMatch(surfaceSource, /createUserWithEmailAndPassword|signUp|bootstrap|seed_/i);
   assert.doesNotMatch(sessionRoute, /export async function POST/);
+  assert.match(portal, /workspaceLoadRef = useRef<Promise<void> \| null>/);
+  assert.match(portal, /await signInWithEmailAndPassword[\s\S]*await loadWorkspace\(\)/);
+  assert.match(portal, /await signInWithPopup[\s\S]*await loadWorkspace\(\)/);
 });
 
 test("first access installs schema guards in quota-safe batches and retries visibly", () => {
@@ -42,8 +45,12 @@ test("first access installs schema guards in quota-safe batches and retries visi
   assert.match(schemaGuards, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
   assert.match(sessionRoute, /code: "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
   assert.match(sessionRoute, /"Retry-After": "1"/);
-  assert.match(portal, /for \(let attempt = 0; attempt < 6; attempt \+= 1\)/);
+  assert.match(portal, /for \(let attempt = 0; attempt < 10; attempt \+= 1\)/);
   assert.match(portal, /result\.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
+  assert.match(portal, /response\.headers\.get\("Retry-After"\)/);
+  assert.match(portal, /Preparing governed compliance controls/);
+  assert.match(portal, /Retry workspace/);
+  assert.match(sessionRoute, /CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED/);
 });
 
 test("every Creditex endpoint enforces same-origin no-store verified membership access", () => {
@@ -289,9 +296,55 @@ test("operations UI automatically loads case detail and discloses bounded queues
   assert.match(operations, /setSelectedCaseKey\(firstCase\.id\)/);
   assert.match(operations, /void loadOperations\(firstCase\.id\)/);
   assert.match(operations, /if \(!item\.detailsLoaded\)/);
-  assert.match(operations, /at most 50 records per category/);
-  assert.match(operations, /does not provide pagination or a complete-result flag/);
+  assert.match(operations, /first\(workspace, \["pagination"\]\)/);
+  assert.match(operations, /operations\.workspace\.total/);
+  assert.match(operations, /operations\.workspace\.hasNext/);
   assert.match(operations, /limited to the selected case/);
+});
+
+test("operations UI is activity-agnostic with program tabs and Dataforce-parity filters", () => {
+  for (const contract of [
+    /className=\{styles\.programTabs\}/,
+    /aria-label="Compliance program workspaces"/,
+    /operations\.workspace\.programs\.map/,
+    /chooseProgram\(program\.programId\)/,
+    /activity\.activityVersionId/,
+    /Dataforce-parity search/,
+    /Status filters/,
+    /Work &amp; personnel/,
+    /Client &amp; agent/,
+    /Customer &amp; address/,
+    /Job filters/,
+    /Appointment filters/,
+    /Tag filters/,
+    /Product filters/,
+    /Audit filters/,
+    /Other filters/,
+    /No public research is auto-published/,
+  ]) assert.match(operations, contract);
+  assert.doesNotMatch(operations, /6\(23\)/);
+});
+
+test("authorised case detail renders private CRM data only after audited case access", () => {
+  for (const contract of [
+    /privateDetails: OperationPrivateDetails \| null/,
+    /privateDetails: first\(actual/,
+    /<PrivateCaseDetails details=\{item\.privateDetails\} \/>/,
+    /Purpose-bound private access/,
+    /Customer, installer and job workspace/,
+    /Access audit recorded/,
+    /Private notes/,
+    /Exact address/,
+    /Commercial state/,
+    /Appointments/,
+  ]) assert.match(operations, contract);
+  assert.doesNotMatch(
+    operations.slice(
+      operations.indexOf("function PrivateCaseDetails"),
+      operations.indexOf("function CaseReview"),
+    ),
+    /firebase_uid|object_key|original_filename/i,
+  );
 });
 
 test("portal tabs and disabled actions expose accessible semantics", () => {

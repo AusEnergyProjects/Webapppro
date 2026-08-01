@@ -8,6 +8,7 @@ import {
   executeCreditexOperation,
   loadCreditexCaseWorkspace,
   loadCreditexOperationsDashboard,
+  parseCreditexOperationsFilters,
 } from "@/lib/creditex-operations-server";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 
@@ -111,18 +112,21 @@ export async function GET(request: Request) {
   try {
     const database = getD1();
     const member = await requireMember(request, database);
-    const caseId = new URL(request.url).searchParams.get("caseId");
+    const searchParams = new URL(request.url).searchParams;
+    const caseId = searchParams.get("caseId");
     if (caseId) {
       const workspace = await loadCreditexCaseWorkspace(
         database,
-        member.organisationId,
+        member,
         caseId,
       );
       return json({ ok: true, workspace });
     }
+    const filters = parseCreditexOperationsFilters(searchParams);
     const dashboard = await loadCreditexOperationsDashboard(
       database,
-      member.organisationId,
+      member,
+      filters,
     );
     return json({ ok: true, dashboard });
   } catch (error) {

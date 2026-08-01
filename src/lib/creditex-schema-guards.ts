@@ -141,10 +141,49 @@ export const CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS =
 const SCHEMA_INSTALL_BATCH_SIZE = 40;
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
 
-function storedGuardSql(sql: string) {
-  return sql
-    .replace(/^CREATE TRIGGER IF NOT EXISTS /, "CREATE TRIGGER ")
+export function canonicalCreditexSchemaGuardSql(sql: string) {
+  const normalisedPrefix = sql
+    .trim()
+    .replace(
+      /^CREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?/i,
+      "CREATE TRIGGER ",
+    )
     .replace(/;\s*$/, "");
+  let canonical = "";
+  let quote = "";
+  let pendingWhitespace = false;
+  for (let index = 0; index < normalisedPrefix.length; index += 1) {
+    const character = normalisedPrefix[index];
+    if (quote) {
+      canonical += character;
+      if (character !== quote) continue;
+      if (
+        quote === "'"
+        && normalisedPrefix[index + 1] === "'"
+      ) {
+        canonical += normalisedPrefix[index + 1];
+        index += 1;
+      } else {
+        quote = "";
+      }
+      continue;
+    }
+    if (character === "'" || character === "\"" || character === "`") {
+      if (pendingWhitespace && canonical) canonical += " ";
+      pendingWhitespace = false;
+      quote = character;
+      canonical += character;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      pendingWhitespace = true;
+      continue;
+    }
+    if (pendingWhitespace && canonical) canonical += " ";
+    pendingWhitespace = false;
+    canonical += character;
+  }
+  return canonical.trim();
 }
 
 async function installedGuards(database: D1Database) {
@@ -163,7 +202,8 @@ async function installCreditexSchemaGuards(database: D1Database) {
   const mismatched = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     (definition) =>
       installed.has(definition.name) &&
-      installed.get(definition.name) !== storedGuardSql(definition.sql),
+      canonicalCreditexSchemaGuardSql(installed.get(definition.name) || "")
+        !== canonicalCreditexSchemaGuardSql(definition.sql),
   );
   if (mismatched.length) {
     throw new Error(
@@ -184,7 +224,8 @@ async function installCreditexSchemaGuards(database: D1Database) {
   const verified = await installedGuards(database);
   const unavailable = batch.filter(
     (definition) =>
-      verified.get(definition.name) !== storedGuardSql(definition.sql),
+      canonicalCreditexSchemaGuardSql(verified.get(definition.name) || "")
+        !== canonicalCreditexSchemaGuardSql(definition.sql),
   );
   if (unavailable.length) {
     throw new Error(
