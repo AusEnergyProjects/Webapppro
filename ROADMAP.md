@@ -830,9 +830,11 @@ Exact application commit `7b08cb600bde30273774a544e07039acc6de1c03` passes the p
 
 Sites saved version 248 from the exact application commit and deployed it through `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` with environment revision 19 at `https://compare.ausenergyassessments.com`. Signed-in live QA confirmed the administrator dashboard, Dataforce-parity advanced filter groups, persistent program bar, access controls and separate program and activity governance. Intermediate version 247 restored sign-in but exposed one local-SQLite-only compound aggregate; version 248 replaced it with a bounded D1-compatible aggregate and loaded the live operations endpoint successfully. No case was auto-selected and no production data changed. The post-release Sites Worker error-only query returned zero events. Physical-device capture, hosted production evidence viewing, non-admin production acceptance, backup and restore, private rule-pack accuracy, approved calculator provenance and registry behavior remain unverified or blocked until separately accepted.
 
-## Active milestone: CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26
+## Released milestone: CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26
 
-Status: implementation complete, validation and release pending
+Status: released activity-agnostic evidence-policy governance and exact-byte verification
+
+Release status: application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 249. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bf90b67a89508191bbea3f1a2d926719` and deployment `appgdep_6a6da8704be08191a4d310adb523e0f3` report the exact application commit.
 
 ### Outcome
 
@@ -858,6 +860,12 @@ Make the Creditex rules workspace genuinely activity agnostic and safe to extend
 - The complete Dataforce and Runabout inventory is still unknown. Observed filter families remain visible, but a subfilter with no authoritative TLink relationship stays explicitly unavailable rather than being inferred.
 
 VEU `6(23)` remains a test example only. It has no privileged implementation path.
+
+Exact application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` passes the complete `npm run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, 1,157 main tests with 1,155 passed, 2 intentionally skipped and 0 failed, all 99 migrations through `0098_creditex_rule_governance.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. AEA Field passes type checking, lint, 8 of 8 tests and Android and iOS export. Expo Doctor reports 19 of 20 because of dependency patch drift.
+
+The 7,352,352-byte local package has SHA-256 `4E9087A40A00613E4BBDD111D8D5E1CA4A3A5AED01BCF3DA8DD9635396CF920F`. Sites stored 332 files and 29,276,160 bytes with content hash `sha256:3e66780f5d61ae46c650df39c711a9a26166f75f7d9eb58cf8461a39dc7bc123`. Saved version 249 reports the exact application source and deployment `appgdep_6a6da8704be08191a4d310adb523e0f3` succeeded. The provider URL is `https://aea-energy-comparison.info294029.chatgpt.site`.
+
+Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity rules, evidence-policy authoring, four-eyes notice and Access membership screen loaded. The real production catalogue and case inventory remains deliberately empty at 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
 
 ## Forward phases
 

@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: Creditex evidence-policy governance implementation complete, validation and release pending
+Status: `CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26` released; private national rule-pack import and reconciliation is next
 
 Prepared: 1 August 2026
 
@@ -8,19 +8,21 @@ Milestone ID: `CREDITEX-EVIDENCE-POLICY-GOVERNANCE-26`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `7b08cb600bde30273774a544e07039acc6de1c03`
+Released application source commit: `d40c803bfa0b614ed806624a375a1fa47bd0e5a4`
 
-Previous production application source: `2ef8ce19fd5423fd95652a7bc88265e80d7b827f`
+Previous production application source: `7b08cb600bde30273774a544e07039acc6de1c03`
 
-Current production: Sites version 248 from application commit `7b08cb600bde30273774a544e07039acc6de1c03`
+Current production: Sites version 249 from application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4`
 
-Production URL: `https://compare.ausenergyassessments.com`
+Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
-Production access: public custom domain
+Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Version 248 remains the current production identity until this release candidate passes the complete gate and live inspection. Its governed catalogue is deliberately empty: it does not publish a real activity, calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
+Production access: public host with an authenticated Creditex portal
 
-## Active milestone outcome
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 249 is the current production identity. Its governed catalogue is deliberately empty at 0 governed programs, 0 activity versions, 0 policies and 0 cases. It does not calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
+
+## Released milestone outcome
 
 Complete the next safe Creditex rules and evidence slice across every program and activity, not one example activity: full evidence-policy and ordered requirement authoring, program and activity scoped queues, immutable dual-control publication history, fail-closed field compatibility and server verification of assembled evidence bytes. Keep every real rule pack, unsupported evidence contract, unverified formula and external execution path disabled.
 
@@ -78,17 +80,15 @@ Complete the next safe Creditex rules and evidence slice across every program an
 
 ## Validation and release evidence
 
-- The released version-248 post-review Creditex portal, API and operations-control command passes 54 of 54 tests. The final D1 aggregate regression subset passes 38 of 38.
-- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,089 main tests with 1,087 passed, 2 intentionally skipped and 0 failed, all 98 migrations through `0097_creditex_operations_lifecycle.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. The exact complete gate passed after the assignment boundary and request-race corrections and again after the production-D1 aggregate correction.
-- Failed pre-activation Sites versions 243 to 245 remain historical. Runtime trigger verification now canonicalises only formatting whitespace outside quoted SQL, stays fail-closed on substantive differences, returns a bounded review-required response and exposes staged portal progress. Successful email or Google authentication explicitly loads the workspace even when Firebase does not emit a second identity-state callback.
-- AEA Field passes 6 of 6 tests, lint, type checking and Android and iOS export. Expo printed non-fatal Google-services config parse warnings after both exports; physical signed builds and devices remain unverified.
-- Independent release review found two P1 access/privacy defects and one P2 response-race defect in the first portal commit. Version 248 closes all three: all 11 case-specific action branches recheck the central active-assignment boundary, queues require deliberate private-detail selection and request generations reject stale responses.
-- GitHub branch `codex/sites-custom-domain-migration` and Sites managed `main` resolve to exact application commit `7b08cb600bde30273774a544e07039acc6de1c03`. The 7,300,196-byte release archive has SHA-256 `5DDD878B2CAD584194DFCEC00B5245A353B9860DEF17CA83B4AE737860E9E3D2`, contains all 98 migration files and the Vinext server entrypoint, and was saved as Sites version 248 with content hash `sha256:1928ee707d2076db876b6aa40e58219ae5e96273f8ee1ece08cfe74144cd2aac`.
-- Intermediate Sites version 247 restored signed-in dashboard entry but its first operations aggregate returned HTTP 500 in production D1. The database console confirmed all 181 tables were present. Version 248 replaces the local-only-compatible compound count query with one bounded scalar aggregate.
-- Sites deployment `appgdep_6a6d733ea23c81918f4ccd8e4f30f98b` succeeded with environment revision 19. Signed-in live QA reached the dashboard, loaded `/api/creditex/operations`, expanded every advanced filter family, inspected access and activity governance, and confirmed the empty governed program bar. No case was auto-selected and no production row was created or changed. The post-release Sites Worker error-only query returned zero events.
+- Exact application commit `d40c803bfa0b614ed806624a375a1fa47bd0e5a4` passes the complete `npm run validate` gate: type checking, warning-free lint, 31 of 31 integration tests, 1,157 main tests with 1,155 passed, 2 intentionally skipped and 0 failed, all 99 migrations through `0098_creditex_rule_governance.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit.
+- AEA Field passes type checking, lint, 8 of 8 tests and Android and iOS export. Expo Doctor reports 19 of 20 because of dependency patch drift. Physical signed builds and representative physical devices remain unverified.
+- The 7,352,352-byte local release package has SHA-256 `4E9087A40A00613E4BBDD111D8D5E1CA4A3A5AED01BCF3DA8DD9635396CF920F`. Sites stored 332 files and 29,276,160 bytes with content hash `sha256:3e66780f5d61ae46c650df39c711a9a26166f75f7d9eb58cf8461a39dc7bc123`.
+- Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bf90b67a89508191bbea3f1a2d926719` reports exact application source `d40c803bfa0b614ed806624a375a1fa47bd0e5a4`. Sites version 249 deployment `appgdep_6a6da8704be08191a4d310adb523e0f3` succeeded. The custom production route is `https://compare.ausenergyassessments.com/creditex/compliance` and the provider URL is `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Signed-in Chrome QA as the AEA Creditex administrator with the `Admin` role confirmed that reload progressed from the protected loading state to Operations without a stuck sign-in. The work queue, advanced filters, bottom Dashboard and program rail, activity rules, evidence-policy authoring, four-eyes notice and Access membership screen loaded.
+- Current real catalogue and case counts are 0 governed programs, 0 activity versions, 0 policies and 0 cases. Release QA performed no production mutation.
 - The Firebase account and claimed bootstrap membership for `info@ausenergyassessments.com` are active. The live portal displays the account as `AEA Creditex administrator` with the administrator role. It must be replaced for routine use by named individual Creditex accounts; suspend the bootstrap membership after two named administrators are active.
 
-The release candidate's focused checks currently pass policy authoring, sealed publication, database guard, JPEG parser, server finalisation and mobile field suites. The complete repository validation, exact application commit, Sites version and signed-in live inspection must be recorded here before the candidate can be marked released.
+The milestone is released. Policy authoring, sealed publication, database guards, exact-byte JPEG verification, server finalisation, mobile field capture and the direct terminal-job mutation boundary are included in the validated application source.
 
 Physical iOS or Android acceptance on representative devices, platform-backed original-camera attestation, hosted production original-evidence viewing, non-admin production acceptance, private rule-pack accuracy, approved calculator provenance, retention, legal hold, backup and restore, and any real registry, certificate, trade or settlement behavior remain unverified or blocked. Named reviewer, auditor and case-manager rollout remains gated on Creditex's approved role matrix, data-sharing purpose and operating controls, not on an organisation-wide dashboard projection or unassigned mutation path.
 
@@ -124,7 +124,7 @@ Released application commit: `399b04f4a5d680080610f9e88b994506bb60c16f`
 
 Released application: Sites version 242, saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0`, deployment `appgdep_6a6cc08dc6f881919a349de607f5a8a9`
 
-The release keeps installer-request consent and validation beside submission, aligns the shared customer navigation, adds reciprocal TLink and Australian Energy Assessments branding and discloses only a current-consented immutable suburb, postcode and state opportunity snapshot to eligible installers. Migration `0092_trade_opportunity_matching_locality.sql` added the bounded locality and consent-receipt contract. The focused set passed 96 of 96 tests and the complete validation gate passed all 93 migrations through `0092`, the production build and Sites bundle audit. Live verification did not create a new production opportunity, so a version-242 locality-bearing row and business email remain intentionally unverified. This milestone was superseded as the current production identity by the Creditex foundation and then the signed-in Creditex operations portal in version 248.
+The release keeps installer-request consent and validation beside submission, aligns the shared customer navigation, adds reciprocal TLink and Australian Energy Assessments branding and discloses only a current-consented immutable suburb, postcode and state opportunity snapshot to eligible installers. Migration `0092_trade_opportunity_matching_locality.sql` added the bounded locality and consent-receipt contract. The focused set passed 96 of 96 tests and the complete validation gate passed all 93 migrations through `0092`, the production build and Sites bundle audit. Live verification did not create a new production opportunity, so a version-242 locality-bearing row and business email remain intentionally unverified. This milestone was superseded as the current production identity by the Creditex foundation, the signed-in Creditex operations portal in version 248 and the released evidence-policy governance system in version 249.
 
 ## Prior released milestone record: `CUSTOMER-ACCOUNT-TRUST-23`
 
