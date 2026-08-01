@@ -18,6 +18,8 @@ const migration = read("../drizzle/0074_global_tlink_job_numbers.sql");
 const adminJobs = read("../src/app/api/admin/jobs/route.ts");
 const adminDirectory = read("../src/components/AdminJobDirectory.tsx");
 const address = read("../src/app/api/trade-address-suggestions/route.ts");
+const complianceCatalogue = read("../src/app/api/trade-compliance/route.ts");
+const complianceDomain = read("../src/lib/creditex-compliance-server.ts");
 
 test("new jobs use one globally sequenced TLink ID across every creation path", () => {
   assert.match(numbers, /__tlink_global__/);
@@ -66,4 +68,32 @@ test("address search supports structured Google Australian results and manual fa
   assert.match(address, /administrative_area_level_1/);
   assert.match(address, /configured: false, suggestions: \[\]/);
   assert.match(form, /enter the address manually/i);
+});
+
+test("guided compliance intake binds an approved activity to the exact installation job", () => {
+  assert.match(form, /\/api\/trade-compliance\?\$\{new URLSearchParams/);
+  assert.match(form, /jurisdiction: siteJurisdiction/);
+  assert.match(form, /onDate: activityDate/);
+  assert.match(form, /seenCursors/);
+  assert.match(form, /pagination\?\.hasNext/);
+  assert.match(form, /seenCursors\.has\(nextCursor\)/);
+  assert.match(form, /Date and start time[\s\S]*Government program or certificate activity/);
+  assert.match(form, /name="complianceActivityVersionId"/);
+  assert.match(form, /setAppointmentType\("installation"\)/);
+  assert.match(form, /does not yet decide eligibility, calculate an incentive or promise certificates/);
+  assert.match(complianceCatalogue, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.match(complianceCatalogue, /listInstallerSelectableActivities/);
+  assert.match(complianceCatalogue, /AUSTRALIAN_SITE_JURISDICTIONS\.includes/);
+  assert.match(complianceCatalogue, /ACTIVITY_DATE_REQUIRED/);
+  assert.match(complianceCatalogue, /ACTIVITY_PAGE_SIZE \+ 1/);
+  assert.match(complianceCatalogue, /nextCursor: hasNext \? activities\.at\(-1\)\?\.id/);
+  assert.match(crm, /appointmentType !== "installation"/);
+  assert.match(crm, /activityDate: scheduledStart\.slice\(0, 10\)/);
+  assert.match(crm, /serviceCategory,[\s\S]*jurisdiction: siteJurisdiction/);
+  assert.match(crm, /appendLiveComplianceCaseStatements\(db, batchStatements/);
+  assert.match(crm, /await db\.batch\(batchStatements\)/);
+  assert.match(crm, /complianceCaseNumber: complianceCase\?\.caseNumber/);
+  assert.match(complianceDomain, /ACTIVITY_CATEGORY_MISMATCH/);
+  assert.match(complianceDomain, /ACTIVITY_JURISDICTION_MISMATCH/);
+  assert.match(workspace, /This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise/);
 });

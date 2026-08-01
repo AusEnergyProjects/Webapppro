@@ -26,6 +26,7 @@ import {
 } from '@/lib/database';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { forgetPushToken, getDeviceId, getDeviceName, rememberPushToken } from '@/lib/device';
+import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
 import { localSyncOutcome, runSync, type SyncOutcome } from '@/lib/sync';
 import type { FieldJob, OfflineAction } from '@/lib/types';
 
@@ -37,6 +38,8 @@ type UploadInput = {
   sizeBytes: number;
   category: string;
   caption: string;
+  evidenceEnvelope: Omit<EvidenceCaptureEnvelope, 'integrity'>;
+  clearSettingKey?: string;
 };
 
 type AppValue = {
@@ -196,6 +199,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       size_bytes: input.sizeBytes,
       category: input.category,
       caption: input.caption,
+      evidenceEnvelope: input.evidenceEnvelope,
+      clearSettingKey: input.clearSettingKey,
     });
     await refreshLocal();
     if (sync.online) void syncNow();

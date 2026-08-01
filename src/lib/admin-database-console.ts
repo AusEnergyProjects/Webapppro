@@ -151,6 +151,8 @@ export function isProtectedDatabaseColumn(name: string) {
   const normalised = name.toLowerCase();
   return /(^|_)(password|secret|credential|api_key|access_token|refresh_token|client_secret)(_|$)/.test(normalised)
     || /(^|_)(token|hash|encrypted)(_|$)/.test(normalised)
+    || normalised.endsWith("_snapshot")
+    || normalised.endsWith("_envelope")
     || normalised === "object_key" || normalised === "push_token";
 }
 

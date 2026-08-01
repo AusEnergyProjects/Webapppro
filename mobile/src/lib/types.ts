@@ -40,6 +40,31 @@ export type FieldForm = {
   updatedAt: string;
 };
 
+export type ComplianceEvidenceRequirement = {
+  id: string;
+  code: string;
+  title: string;
+  evidenceType: string;
+  captureTiming: string;
+  minimumCount: number;
+  maximumCount: number;
+  originalRequired: boolean;
+  metadataRequired: boolean;
+  gpsRequired: boolean;
+  dateStampRequired: boolean;
+  status: string;
+};
+
+export type FieldJobCompliance = {
+  caseId: string;
+  caseNumber: string;
+  activityVersionId: string;
+  activityCode: string;
+  activityTitle: string;
+  evidencePolicyVersionId: string;
+  requirements: ComplianceEvidenceRequirement[];
+};
+
 export type FieldJob = {
   id: string;
   workNumber: string;
@@ -76,6 +101,7 @@ export type FieldJob = {
   tasks: FieldTask[];
   media: FieldMedia[];
   forms: FieldForm[];
+  compliance?: FieldJobCompliance;
 };
 
 export type SyncChange = {
@@ -144,6 +170,7 @@ export type UploadRow = {
   size_bytes: number;
   category: string;
   caption: string;
+  evidence_envelope: string;
   session_id: string;
   uploaded_parts: string;
   status: 'queued' | 'uploading' | 'retry' | 'completed' | 'rejected';

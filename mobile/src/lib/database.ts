@@ -4,6 +4,7 @@ import * as SQLite from 'expo-sqlite';
 
 import { ADDRESS_MAX_AGE_MS } from '@/lib/config';
 import { deleteEncryptedBundle, encryptFileForQueue, purgeEncryptedFiles, purgeEncryptionKey } from '@/lib/encrypted-files';
+import { completeEvidenceEnvelope, type EvidenceCaptureEnvelope } from '@/lib/evidence';
 import type { FieldJob, OfflineAction, QueueRow, SyncChange, UploadRow } from '@/lib/types';
 
 const DATABASE_NAME = 'aea-field.db';
@@ -64,6 +65,7 @@ async function openDatabase() {
       size_bytes INTEGER NOT NULL,
       category TEXT NOT NULL,
       caption TEXT NOT NULL DEFAULT '',
+      evidence_envelope TEXT NOT NULL DEFAULT '{}',
       session_id TEXT NOT NULL DEFAULT '',
       uploaded_parts TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'queued',
@@ -78,6 +80,10 @@ async function openDatabase() {
       value TEXT NOT NULL
     );
   `);
+  const uploadColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(upload_queue)');
+  if (!uploadColumns.some((column) => column.name === 'evidence_envelope')) {
+    await db.execAsync("ALTER TABLE upload_queue ADD COLUMN evidence_envelope TEXT NOT NULL DEFAULT '{}';");
+  }
   return db;
 }
 
@@ -282,31 +288,65 @@ export async function listProblemActions() {
   );
 }
 
-export async function addUpload(input: Omit<UploadRow, 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message' | 'created_at'>) {
-  const encryptedBundle = await encryptFileForQueue(input.local_uri, input.id);
+type AddUploadInput = Omit<
+  UploadRow,
+  'evidence_envelope' | 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message' | 'created_at'
+> & {
+  evidenceEnvelope: Omit<EvidenceCaptureEnvelope, 'integrity'>;
+  clearSettingKey?: string;
+};
+
+export async function addUpload(input: AddUploadInput) {
+  const encrypted = await encryptFileForQueue(input.local_uri, input.id);
   const db = await getDatabase();
   const now = new Date().toISOString();
-  await db.runAsync(
-    `INSERT INTO upload_queue
-      (id, work_order_id, local_uri, file_name, content_type, size_bytes, category, caption, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    input.id,
-    input.work_order_id,
-    encryptedBundle,
-    input.file_name,
-    input.content_type,
-    input.size_bytes,
-    input.category,
-    input.caption,
-    now,
-    now,
-  );
+  const evidenceEnvelope = completeEvidenceEnvelope(input.evidenceEnvelope, {
+    digestHex: encrypted.sha256Hex,
+    byteLength: encrypted.sizeBytes,
+  });
+  try {
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        `INSERT INTO upload_queue
+          (id, work_order_id, local_uri, file_name, content_type, size_bytes, category, caption,
+           evidence_envelope, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        input.id,
+        input.work_order_id,
+        encrypted.bundle,
+        input.file_name,
+        input.content_type,
+        encrypted.sizeBytes,
+        input.category,
+        input.caption,
+        JSON.stringify(evidenceEnvelope),
+        now,
+        now,
+      );
+      if (input.clearSettingKey) {
+        await db.runAsync(
+          "INSERT INTO settings (key, value) VALUES (?, '') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          input.clearSettingKey,
+        );
+      }
+    });
+  } catch (error) {
+    deleteEncryptedBundle(encrypted.bundle);
+    throw error;
+  }
 }
 
 export async function queuedUploads() {
   const db = await getDatabase();
   return db.getAllAsync<UploadRow>(
     "SELECT * FROM upload_queue WHERE status IN ('queued', 'uploading', 'retry') ORDER BY created_at LIMIT 10",
+  );
+}
+
+export async function listProblemUploads() {
+  const db = await getDatabase();
+  return db.getAllAsync<UploadRow>(
+    "SELECT * FROM upload_queue WHERE status = 'rejected' ORDER BY updated_at DESC",
   );
 }
 
@@ -336,11 +376,15 @@ export async function completeUpload(id: string) {
   await db.runAsync('DELETE FROM upload_queue WHERE id = ?', id);
 }
 
+export const discardUpload = completeUpload;
+
 export async function queueCounts() {
   const db = await getDatabase();
   const actions = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) count FROM action_queue WHERE status IN ('queued', 'retry')");
   const uploads = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) count FROM upload_queue WHERE status IN ('queued', 'uploading', 'retry')");
-  const conflicts = await db.getFirstAsync<{ count: number }>("SELECT COUNT(*) count FROM action_queue WHERE status IN ('conflict', 'rejected')");
+  const conflicts = await db.getFirstAsync<{ count: number }>(`SELECT
+    (SELECT COUNT(*) FROM action_queue WHERE status IN ('conflict', 'rejected'))
+    + (SELECT COUNT(*) FROM upload_queue WHERE status = 'rejected') count`);
   return { actions: actions?.count || 0, uploads: uploads?.count || 0, conflicts: conflicts?.count || 0 };
 }
 

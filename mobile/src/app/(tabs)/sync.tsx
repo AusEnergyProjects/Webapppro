@@ -6,9 +6,16 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
-import { discardAction, getJob, listProblemActions, queueAction } from '@/lib/database';
+import {
+  discardAction,
+  discardUpload,
+  getJob,
+  listProblemActions,
+  listProblemUploads,
+  queueAction,
+} from '@/lib/database';
 import { colours, radius, spacing } from '@/lib/theme';
-import type { OfflineAction, QueueRow } from '@/lib/types';
+import type { OfflineAction, QueueRow, UploadRow } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
 
 function timeLabel(value: string) {
@@ -19,13 +26,21 @@ function timeLabel(value: string) {
 export default function SyncScreen() {
   const { sync, syncNow, refreshLocal } = useApp();
   const [problems, setProblems] = useState<QueueRow[]>([]);
-  const load = useCallback(async () => setProblems(await listProblemActions()), []);
+  const [problemUploads, setProblemUploads] = useState<UploadRow[]>([]);
+  const load = useCallback(async () => {
+    const [actions, uploads] = await Promise.all([listProblemActions(), listProblemUploads()]);
+    setProblems(actions);
+    setProblemUploads(uploads);
+  }, []);
   useFocusEffect(useCallback(() => {
     let active = true;
-    const expectedCount = sync.conflicts;
-    void listProblemActions().then((rows) => { if (active && rows.length >= expectedCount) setProblems(rows); });
+    void Promise.all([listProblemActions(), listProblemUploads()]).then(([actions, uploads]) => {
+      if (!active) return;
+      setProblems(actions);
+      setProblemUploads(uploads);
+    });
     return () => { active = false; };
-  }, [sync.conflicts]));
+  }, []));
 
   async function retry(item: QueueRow) {
     const action = JSON.parse(item.payload) as OfflineAction;
@@ -47,6 +62,21 @@ export default function SyncScreen() {
     ]);
   }
 
+  function discardRejectedUpload(item: UploadRow) {
+    Alert.alert(
+      'Discard this saved file?',
+      'Capture the evidence again from its job. The rejected encrypted copy will be removed from this device.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => void discardUpload(item.id).then(refreshLocal).then(load),
+        },
+      ],
+    );
+  }
+
   return (
     <Screen>
       <View style={styles.hero}><Text style={styles.eyebrow}>OFFLINE SAFETY</Text><Text style={styles.heading}>Your work is protected</Text><Text style={styles.intro}>Changes save on this device first, then sync automatically when a connection is available.</Text></View>
@@ -57,8 +87,10 @@ export default function SyncScreen() {
         <FieldButton loading={sync.running} disabled={!sync.online || Boolean(sync.updateRequired)} onPress={() => void syncNow()}>Sync now</FieldButton>
       </View>
       {problems.length ? <View style={styles.section}><Text style={styles.sectionTitle}>Review saved changes</Text><Text style={styles.body}>Another person changed these records before your offline work reached the office.</Text>{problems.map((item) => <View key={item.id} style={styles.problem}><View style={styles.flex}><Text style={styles.problemTitle}>{JSON.parse(item.payload).type.replaceAll('_', ' ')}</Text><Text style={styles.body}>{item.error_message || 'The office record has a newer version.'}</Text></View><View style={styles.row}>{item.status === 'conflict' ? <FieldButton variant="secondary" style={styles.action} onPress={() => void retry(item)}>Apply to latest</FieldButton> : null}<FieldButton variant="danger" style={styles.action} onPress={() => discard(item)}>Discard</FieldButton></View></View>)}</View> : (
-        <View style={styles.clear}><MaterialCommunityIcons name="check-decagram-outline" size={38} color={colours.green} /><Text style={styles.cardTitle}>Nothing needs your attention</Text><Text style={styles.body}>Any new assigned work or office changes will arrive through secure sync.</Text></View>
+        null
       )}
+      {problemUploads.length ? <View style={styles.section}><Text style={styles.sectionTitle}>Recapture rejected evidence</Text><Text style={styles.body}>These files did not pass the server evidence checks and were not added to the Creditex case.</Text>{problemUploads.map((item) => <View key={item.id} style={styles.problem}><View style={styles.flex}><Text style={styles.problemTitle}>{item.file_name}</Text><Text style={styles.body}>{item.error_message || 'Capture this evidence again from the job requirement.'}</Text></View><FieldButton variant="danger" onPress={() => discardRejectedUpload(item)}>Remove saved copy</FieldButton></View>)}</View> : null}
+      {!problems.length && !problemUploads.length ? <View style={styles.clear}><MaterialCommunityIcons name="check-decagram-outline" size={38} color={colours.green} /><Text style={styles.cardTitle}>Nothing needs your attention</Text><Text style={styles.body}>Any new assigned work or office changes will arrive through secure sync.</Text></View> : null}
     </Screen>
   );
 }

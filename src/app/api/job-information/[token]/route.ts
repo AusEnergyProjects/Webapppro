@@ -271,6 +271,16 @@ export async function DELETE(request: Request, context: RouteContext) {
       WHERE photo_request_id = ? AND photo_requirement_id = ? LIMIT 1`)
       .bind(record.id, media.photo_requirement_id).first();
     if (reviewed) return json({ ok: false, error: "This photo is part of the review history and cannot be removed. Add a replacement instead." }, 409);
+    const governedEvidence = await getD1().prepare(`SELECT 1 AS governed
+      FROM compliance_case_evidence
+      WHERE job_media_id = ?
+      LIMIT 1`).bind(media.id).first();
+    if (governedEvidence) {
+      return json({
+        ok: false,
+        error: "This photo is part of a compliance evidence record and cannot be removed. Add a replacement instead.",
+      }, 409);
+    }
     await bucket().delete(media.object_key);
     const now = new Date().toISOString();
     const jobRevision = nextJobRevision(record.job_revision);

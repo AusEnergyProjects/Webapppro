@@ -252,11 +252,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Connected customer follow-up and scheduling status loop:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Installer structured request-for-information and quote clarification loop:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Opportunity and activity delivery health with bounded retry controls:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Customer side-by-side quote comparison and version history:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Administrator communication SLA, assistive contact handover and privacy-safe funnel telemetry before the deferred pilot:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Replace the shared bootstrap with named Creditex administrators:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Approve one exact production rule pack and physical-device path:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Approve custody and withdrawn-policy governance:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Release the first independently verified calculator:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Rehearse one provider and legacy cohort:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

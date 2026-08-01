@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 31 July 2026
+Last reconciled: 1 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -785,6 +785,45 @@ Keep the installer-request consent and any missing-consent explanation beside su
 
 The executable, migration, source-provenance, consent-presentation, responsive-navigation and error-log gates are met. Release QA deliberately did not submit a new production enquiry, so a newly written version-242 locality row and locality-bearing business email were not observed live. Existing opportunities remain state-only by design and are not backfilled.
 
+## Unreleased milestone: CREDITEX-COMPLIANCE-OPERATIONS-25
+
+Status: release candidate in the working tree; final validation and release pending
+
+### Outcome
+
+Establish the first case-centred Creditex operations slice in TLink. An installer can link an exact governed activity and evidence-policy version to a guided job, the field app can preserve and upload the original evidence chain, and assigned Creditex users can triage, inspect, correct and dual-control the case without treating an estimate, export or local ledger entry as a regulator action.
+
+### In scope
+
+- Separate compliance organisations, verified invitation-only memberships and server-enforced administrator, case-manager, reviewer and auditor roles.
+- Effective-dated programs, activities and evidence policies with distinct official code, specification part, product category and scenario fields, source SHA-256, exact case pinning and irreversible publication or withdrawal.
+- Atomic job and case creation with category, jurisdiction and planned-date checks; participant abilities, equipment, assignments, tasks, findings and immutable case events.
+- Requirement-led AEA Field capture of exact original bytes, SHA-256, capture and location envelope, registered-device provenance, encrypted offline queue, resumable upload and rejected-evidence supersession.
+- A no-index Creditex portal with exception-led queues, bounded searches and filters, case workspace, evidence review, audited same-user evidence-view receipts, corrections, dual-control decisions, access administration and provider-neutral batch staging.
+- Server-derived decision bases that pin the exact revision, rule and source hashes, canonical evidence digests, findings and any verified calculation run. A withdrawn policy remains available for correction and audit but blocks approval and staging.
+- Data models and read-only portal projections for participants, abilities, equipment, calculators, batches, artifacts, responses, certificate lots, trades and settlements. External execution remains disabled.
+- A controlled [Australian program source register](./docs/compliance/AUSTRALIAN_PROGRAM_SOURCE_REGISTER.md), [Creditex operating model](./docs/compliance/CREDITEX_OPERATING_MODEL.md) and [Dataforce and Runabout parity record](./docs/compliance/CREDITEX_DATAFORCE_PARITY.md).
+
+### Excluded until later governed milestones
+
+- Publication of any real activity or evidence policy before Creditex supplies and approves its private authority, evidence interpretation and current effective source pack.
+- Unverified certificate or rebate calculations, customer price promises, registry submission, certificate creation, trading, settlement or manually asserted external responses.
+- A live Dataforce or Runabout import, connector, cutover or retirement. Complete private parity remains blocked on authorised exports, field dictionaries, reports, formulas and a Runabout walkthrough.
+- Production regulated cases. The production catalogue starts with no published activities or evidence policies and therefore cannot open a live claim.
+- Approved retention, legal hold, backup, restore, real-device acceptance, regulator connector credentials or a broad Creditex team rollout.
+
+### Acceptance gates
+
+- Every active case pins an immutable published activity and complete evidence policy; withdrawn policies retain correction and audit access while approval and staging fail closed.
+- The job, case and first event commit together or not at all, and child-record, assignment, evidence, batch and ledger tenant boundaries fail closed.
+- Creditex access requires an email-verified exact Firebase identity, active organisation, active membership, allowed role and, for reviewer or auditor evidence, an active case assignment.
+- An accept or reject action requires a recent same-user evidence-view receipt; the primary decision basis is generated on the server and cannot be replaced by a secondary reviewer or caller-authored JSON.
+- Evidence completion, abort, expiry and device revocation races cannot delete the completion winner; original bytes and their server-verified hash are retained, and database guards block deletion of evidence-linked media.
+- Auditors remain read-only, a final administrator cannot demote or suspend themself, and all governed writes and access events are immutable and organisation-scoped.
+- The complete repository and mobile validation gates, independent final review, exact release provenance and public portal checks pass before this milestone is described as released.
+
+The settled candidate passes 76 of 76 focused Creditex, governance, access, viewer, field-evidence, guided-job, photo and database-console tests. The complete `npm.cmd run validate` gate passes type checking, warning-free lint, 31 of 31 integration tests, 1,072 main tests with 1,070 passed, 2 intentionally skipped and 0 failed, all 95 migrations through `0094_creditex_operations_control.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit. AEA Field separately passes 6 of 6 tests, lint, type checking and Android and iOS export. Independent review approves release only as an empty invitation-gated baseline. Authenticated Creditex administration, non-admin least privilege, representative physical-device capture, hosted R2 evidence viewing, backup and restore, private rule-pack accuracy, approved calculator provenance and registry behavior remain unverified or blocked until separately accepted.
+
 ## Forward phases
 
 ### Phase 0: apply operating restrictions
@@ -884,11 +923,11 @@ Exit gate: cutover evidence, rollback proof, archival custody and post-cutover m
 
 ## Next five logical product steps
 
-1. **Connected customer follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
-2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
-3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
-4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
-5. **Administrator communication SLA, assistive contact handover and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, business-contact choice and scheduling outcomes without exposing household content.
+1. **Replace the shared bootstrap with named Creditex administrators:** provision at least two named verified administrators, require strong authentication, review least privilege and suspend the `info@ausenergyassessments.com` bootstrap from routine use.
+2. **Approve one exact production rule pack and physical-device path:** Creditex selects one VEU `6(23)` category and scenario, signs the authoritative activity and evidence policy, and accepts capture, offline recovery, review and correction on representative iOS and Android devices.
+3. **Approve custody and withdrawn-policy governance:** implement the signed retention, legal hold, deletion, backup and restore schedule and an explicit continuation or supersession decision for cases whose pinned policy is withdrawn.
+4. **Release the first independently verified calculator:** reconcile exact inputs, units, effective dates, product and climate lookups, caps and rounding to official or Creditex-approved vectors, then dual-approve one calculator while all others remain disabled.
+5. **Rehearse one provider and legacy cohort:** build an authorised dry-run submission adapter plus response reconciliation, map representative Dataforce and Runabout records without source mutation, reconcile every count, hash and exception, then run a bounded parallel pilot.
 
 ## Global stop conditions
 

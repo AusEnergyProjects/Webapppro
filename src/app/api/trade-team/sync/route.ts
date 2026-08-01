@@ -69,7 +69,7 @@ function cursorValue(value: string | null) {
 
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
-  const [jobRows, taskRows, mediaRows, formRows] = await Promise.all([
+  const [jobRows, taskRows, mediaRows, formRows, complianceRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, d.description,
@@ -112,6 +112,40 @@ async function accessibleJobs(access: TeamAccess) {
         AND (? <> 'technician' OR w.assignee_member_id = ?)
       ORDER BY f.status = 'complete', f.created_at`)
       .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+    db.prepare(`SELECT
+        c.work_order_id, c.id case_id, c.case_number, c.activity_version_id,
+        a.activity_key, a.registry_activity_code, a.title activity_title,
+        p.id evidence_policy_version_id,
+        r.id requirement_id, r.requirement_code, r.title requirement_title,
+        r.evidence_type, r.capture_timing, r.minimum_count, r.maximum_count,
+        r.original_required, r.metadata_required, r.gps_required,
+        r.date_stamp_required,
+        SUM(CASE WHEN e.status = 'accepted' THEN 1 ELSE 0 END) accepted_count,
+        SUM(CASE WHEN e.status IN ('received', 'under_review', 'accepted') THEN 1 ELSE 0 END) submitted_count
+      FROM compliance_cases c
+      JOIN trade_work_orders w
+        ON w.id = c.work_order_id AND w.firebase_uid = c.installer_uid
+      JOIN compliance_activity_versions a
+        ON a.id = c.activity_version_id
+      JOIN compliance_evidence_policy_versions p
+        ON p.id = c.evidence_policy_version_id
+        AND p.activity_version_id = c.activity_version_id
+        AND p.organisation_id = c.organisation_id
+      JOIN compliance_evidence_requirements r
+        ON r.policy_version_id = p.id AND r.organisation_id = c.organisation_id
+      LEFT JOIN compliance_case_evidence e
+        ON e.case_id = c.id AND e.requirement_id = r.id
+      WHERE c.installer_uid = ? AND c.status NOT IN ('rejected', 'closed')
+        AND w.record_status = 'active'
+        AND (? <> 'technician' OR w.assignee_member_id = ?)
+      GROUP BY
+        c.work_order_id, c.id, c.case_number, c.activity_version_id,
+        a.activity_key, a.registry_activity_code, a.title, p.id,
+        r.id, r.requirement_code, r.title, r.evidence_type, r.capture_timing,
+        r.minimum_count, r.maximum_count, r.original_required,
+        r.metadata_required, r.gps_required, r.date_stamp_required
+      ORDER BY c.updated_at DESC, r.sort_order, r.requirement_code`)
+      .bind(access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
   ]);
   return new Map(jobRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
@@ -174,6 +208,44 @@ async function accessibleJobs(access: TeamAccess) {
           revision: Number(form.revision || 1), ready: completion.ready, missing: completion.missing,
           completedAt: form.completed_at, updatedAt: form.updated_at };
       }),
+      compliance: (() => {
+        const first = complianceRows.results.find((item) => item.work_order_id === row.id);
+        if (!first) return undefined;
+        const requirements = complianceRows.results
+          .filter((item) => item.work_order_id === row.id && item.case_id === first.case_id)
+          .map((item) => {
+            const minimumCount = Number(item.minimum_count || 0);
+            const acceptedCount = Number(item.accepted_count || 0);
+            const submittedCount = Number(item.submitted_count || 0);
+            return {
+              id: item.requirement_id,
+              code: item.requirement_code,
+              title: item.requirement_title,
+              evidenceType: item.evidence_type,
+              captureTiming: item.capture_timing,
+              minimumCount,
+              maximumCount: Number(item.maximum_count || 0),
+              originalRequired: Number(item.original_required) === 1,
+              metadataRequired: Number(item.metadata_required) === 1,
+              gpsRequired: Number(item.gps_required) === 1,
+              dateStampRequired: Number(item.date_stamp_required) === 1,
+              status: acceptedCount >= minimumCount
+                ? "complete"
+                : submittedCount >= minimumCount
+                  ? "in_review"
+                  : "pending",
+            };
+          });
+        return {
+          caseId: first.case_id,
+          caseNumber: first.case_number,
+          activityVersionId: first.activity_version_id,
+          activityCode: first.registry_activity_code || first.activity_key,
+          activityTitle: first.activity_title,
+          evidencePolicyVersionId: first.evidence_policy_version_id,
+          requirements,
+        };
+      })(),
     }];
   }));
 }

@@ -22,15 +22,36 @@ type EvidenceBucket = {
 
 async function abortDeviceUploads(ownerUid: string, deviceId: string) {
   const store = (env as unknown as { EVIDENCE?: EvidenceBucket }).EVIDENCE;
-  if (!store) return;
-  const rows = await getD1().prepare(`SELECT object_key, upload_id, status FROM trade_mobile_upload_sessions
-    WHERE owner_uid = ? AND device_id = ? AND status IN ('initiated', 'uploading', 'completing') LIMIT 50`)
-    .bind(ownerUid, deviceId).all<Record<string, unknown>>();
-  for (const row of rows.results) {
-    try {
-      if (row.status === "completing" && await store.head(String(row.object_key))) await store.delete(String(row.object_key));
-      else await store.resumeMultipartUpload(String(row.object_key), String(row.upload_id)).abort();
-    } catch { /* revocation continues even when an expired upload is already absent */ }
+  while (true) {
+    const rows = await getD1().prepare(`SELECT id, object_key, upload_id
+      FROM trade_mobile_upload_sessions
+      WHERE owner_uid = ? AND device_id = ?
+        AND status IN ('initiated', 'uploading', 'completing')
+        AND media_id = ''
+      ORDER BY created_at, id
+      LIMIT 50`)
+      .bind(ownerUid, deviceId).all<Record<string, unknown>>();
+    if (rows.results.length === 0) return;
+    for (const row of rows.results) {
+      const now = new Date().toISOString();
+      const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+        SET status = 'aborted', last_error = 'device_revoked', updated_at = ?
+        WHERE id = ? AND owner_uid = ? AND device_id = ?
+          AND status IN ('initiated', 'uploading', 'completing')
+          AND media_id = ''`)
+        .bind(now, row.id, ownerUid, deviceId).run();
+      if (Number(claim.meta.changes || 0) !== 1) continue;
+      if (store) {
+        try {
+          await store.resumeMultipartUpload(String(row.object_key), String(row.upload_id)).abort();
+        } catch { /* the claimed multipart upload may already be assembled or absent */ }
+        try {
+          if (await store.head(String(row.object_key))) await store.delete(String(row.object_key));
+        } catch { /* the claimed terminal object may already be absent */ }
+      }
+      await getD1().prepare("DELETE FROM trade_mobile_upload_parts WHERE session_id = ?")
+        .bind(row.id).run();
+    }
   }
 }
 
@@ -146,15 +167,12 @@ export async function PATCH(request: Request) {
     if (action === "revoke_device") {
       const device = await getD1().prepare(`SELECT device_id FROM trade_mobile_devices WHERE id = ? AND owner_uid = ?`)
         .bind(id, access.ownerUid).first<Record<string, unknown>>();
+      await getD1().prepare(`UPDATE trade_mobile_devices
+        SET status = 'revoked', push_token = '', push_token_updated_at = ?,
+          revoked_at = ?, revoked_by_uid = ?, updated_at = ?
+        WHERE id = ? AND owner_uid = ?`)
+        .bind(now, now, access.actorUid, now, id, access.ownerUid).run();
       await abortDeviceUploads(access.ownerUid, String(device?.device_id || ""));
-      await getD1().batch([
-        getD1().prepare(`UPDATE trade_mobile_devices SET status = 'revoked', push_token = '', push_token_updated_at = ?,
-          revoked_at = ?, revoked_by_uid = ?, updated_at = ? WHERE id = ? AND owner_uid = ?`)
-          .bind(now, now, access.actorUid, now, id, access.ownerUid),
-        getD1().prepare(`UPDATE trade_mobile_upload_sessions SET status = 'aborted', last_error = 'device_revoked', updated_at = ?
-          WHERE owner_uid = ? AND device_id = (SELECT device_id FROM trade_mobile_devices WHERE id = ?) AND status IN ('initiated', 'uploading')`)
-          .bind(now, access.ownerUid, id),
-      ]);
     } else if (action === "authorise_device") {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
       await getD1().prepare(`UPDATE trade_mobile_devices SET status = 'active', revoked_at = '', revoked_by_uid = '',

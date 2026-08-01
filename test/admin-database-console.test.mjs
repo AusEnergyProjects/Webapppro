@@ -68,7 +68,17 @@ test("table mutation policy is explicit, default-deny and hides database interna
 });
 
 test("sensitive database columns are identified and redacted", () => {
-  for (const name of ["token_hash", "encrypted_credentials", "state_hash", "push_token", "object_key", "refresh_token"]) {
+  for (const name of [
+    "token_hash",
+    "encrypted_credentials",
+    "state_hash",
+    "push_token",
+    "object_key",
+    "refresh_token",
+    "evidence_envelope",
+    "activity_snapshot",
+    "basis_snapshot",
+  ]) {
     assert.equal(isProtectedDatabaseColumn(name), true, name);
   }
   assert.equal(isProtectedDatabaseColumn("customer_number"), false);

@@ -4,13 +4,24 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
+import { getSetting, setSetting } from '@/lib/database';
+import {
+  buildEvidenceEnvelope,
+  cameraPermissionState,
+  captureSessionId,
+  evidenceIdentifiers,
+  observeLocation,
+  observedTime,
+  serialisableAsset,
+  type PendingPhotoCapture,
+} from '@/lib/evidence';
 import { colours, radius, spacing } from '@/lib/theme';
-import type { FieldForm, FieldJob } from '@/lib/types';
+import type { ComplianceEvidenceRequirement, FieldForm, FieldJob } from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
 
 const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'start_work' | 'finish'; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
@@ -20,7 +31,31 @@ const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'st
   in_progress: { transition: 'finish', label: 'Finish', icon: 'check-circle-outline' },
 };
 
+const PENDING_PHOTO_SETTING = 'pending_evidence_photo_v1';
+const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+
+function evidenceCategory(requirement?: ComplianceEvidenceRequirement) {
+  const timing = requirement?.captureTiming.toLowerCase() || '';
+  if (timing.includes('before') || timing.startsWith('pre_')) return 'before' as const;
+  if (timing.includes('after') || timing.startsWith('post_')) return 'after' as const;
+  return 'progress' as const;
+}
+
+function evidenceCaption(requirement?: ComplianceEvidenceRequirement) {
+  return requirement ? `${requirement.code}: ${requirement.title}`.slice(0, 300) : '';
+}
+
+function pendingPhoto(value: string) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as PendingPhotoCapture;
+  } catch {
+    return null;
+  }
+}
 
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,9 +64,115 @@ export default function JobScreen() {
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
+  const recoveringPhoto = useRef(false);
+  const launchingCamera = useRef(false);
 
   const load = useCallback(async () => setJob(await findJob(String(id))), [findJob, id]);
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  const processPendingPhoto = useCallback(async (pending: PendingPhotoCapture) => {
+    if (!pending.asset || recoveringPhoto.current) return;
+    recoveringPhoto.current = true;
+    const busyKey = `photo:${pending.identifiers.evidenceRequirementId || 'general'}`;
+    setBusy(busyKey);
+    try {
+      const latestLocation = await observeLocation(false);
+      const location = latestLocation.location.state === 'captured'
+        ? latestLocation.location
+        : pending.preCaptureLocation;
+      const locationPermission = latestLocation.permission.status === 'not_requested'
+        ? pending.preCaptureLocationPermission
+        : latestLocation.permission;
+      if (pending.gpsRequired && location.state !== 'captured') {
+        Alert.alert(
+          'Location evidence is required',
+          'This photo remains pending on this device. Enable precise location services, then reopen the job so the evidence can be completed.',
+        );
+        return;
+      }
+      const file = new File(pending.asset.uri);
+      if (!file.exists || file.size < 1) throw new Error('The captured photo is no longer available on this device.');
+      if (file.size > MAX_EVIDENCE_BYTES) throw new Error('The captured photo is larger than the 50 MB evidence limit.');
+      const contentType = pending.asset.mimeType || file.type || 'image/jpeg';
+      if (!ALLOWED_EVIDENCE_TYPES.has(contentType) || !contentType.startsWith('image/')) {
+        throw new Error('The original camera file is not a supported JPEG, PNG or WebP image.');
+      }
+      const envelope = await buildEvidenceEnvelope({
+        captureSessionId: pending.captureSessionId,
+        source: 'in_app_camera',
+        identifiers: pending.identifiers,
+        cameraPermission: pending.cameraPermission,
+        locationPermission,
+        location,
+        asset: pending.asset,
+        observedTime: {
+          captureObservedAtUtc: pending.captureObservedAtUtc,
+          utcOffsetMinutes: pending.utcOffsetMinutes,
+          timeZone: pending.timeZone,
+        },
+      });
+      const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+      await saveUpload({
+        workOrderId: pending.identifiers.jobId,
+        uri: pending.asset.uri,
+        fileName: pending.asset.fileName || `job-photo-${Date.now()}.${extension}`,
+        contentType,
+        sizeBytes: file.size,
+        category: pending.category,
+        caption: pending.caption,
+        evidenceEnvelope: envelope,
+        clearSettingKey: PENDING_PHOTO_SETTING,
+      });
+      const locationMessage = location.state === 'captured'
+        ? ` Location accuracy was ${location.accuracyMetres === null ? 'not reported' : `${Math.round(location.accuracyMetres)} metres`}.`
+        : ` Location was recorded as ${readable(location.state)}.`;
+      Alert.alert(
+        'Evidence saved',
+        `${sync.online ? 'The original file and capture record are uploading securely.' : 'The original file and capture record will upload when reception returns.'}${locationMessage} Creditex must still review it against the applicable scheme rules.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        'Evidence is still pending',
+        error instanceof Error ? error.message : 'The photo could not be secured for upload. Reopen the job and try again.',
+      );
+    } finally {
+      setBusy('');
+      recoveringPhoto.current = false;
+    }
+  }, [saveUpload, sync.online]);
+
+  const recoverPendingPhoto = useCallback(async () => {
+    if (recoveringPhoto.current) return;
+    let pending = pendingPhoto(await getSetting(PENDING_PHOTO_SETTING));
+    if (!pending) return;
+    if (!pending.asset) {
+      const result = await ImagePicker.getPendingResultAsync();
+      if (!result) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        return;
+      }
+      if (!('canceled' in result)) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        Alert.alert('Camera result unavailable', result.message || 'The camera did not return a usable photo.');
+        return;
+      }
+      if (result.canceled || !result.assets?.[0]) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        return;
+      }
+      pending = {
+        ...pending,
+        ...observedTime(),
+        asset: serialisableAsset(result.assets[0]),
+      };
+      await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
+    }
+    await processPendingPhoto(pending);
+  }, [processPendingPhoto]);
+
+  useFocusEffect(useCallback(() => {
+    void load();
+    void recoverPendingPhoto();
+  }, [load, recoverPendingPhoto]));
 
   async function advanceFieldJob() {
     if (!job) return; const action = fieldActions[job.appointmentStatus]; if (!action) return;
@@ -74,37 +215,106 @@ export default function JobScreen() {
     Alert.alert(complete ? 'Form completed' : 'Draft saved', sync.online ? 'The field record is syncing now.' : 'The field record is secure on this device and will sync when reception returns.');
   }
 
-  async function capturePhoto() {
-    if (!job) return;
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return Alert.alert('Camera access needed', 'Allow camera access in device settings to add a job photo.');
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.82, exif: false });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    const file = new File(asset.uri);
-    setBusy('photo');
-    await saveUpload({ workOrderId: job.id, uri: asset.uri, fileName: asset.fileName || `job-photo-${Date.now()}.jpg`, contentType: asset.mimeType || 'image/jpeg', sizeBytes: asset.fileSize || file.size, category: 'progress', caption: '' });
-    setBusy('');
-    Alert.alert('Photo saved', sync.online ? 'The photo is uploading securely.' : 'The photo will upload when reception returns.');
+  async function capturePhoto(requirement?: ComplianceEvidenceRequirement) {
+    if (!job || launchingCamera.current) return;
+    launchingCamera.current = true;
+    setBusy(`photo:${requirement?.id || 'general'}`);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Camera access needed', 'Allow camera access in device settings to add a job photo.');
+        return;
+      }
+      const preCaptureLocation = await observeLocation(true);
+      if (requirement?.gpsRequired && preCaptureLocation.location.state !== 'captured') {
+        Alert.alert(
+          'Location evidence is required',
+          'This requirement needs a current location record. Allow precise location and turn on location services before taking the photo.',
+        );
+        return;
+      }
+      let pending: PendingPhotoCapture = {
+        captureSessionId: captureSessionId(),
+        ...observedTime(),
+        identifiers: evidenceIdentifiers(job, requirement),
+        category: evidenceCategory(requirement),
+        caption: evidenceCaption(requirement),
+        gpsRequired: requirement?.gpsRequired || false,
+        cameraPermission: cameraPermissionState(permission),
+        preCaptureLocationPermission: preCaptureLocation.permission,
+        preCaptureLocation: preCaptureLocation.location,
+      };
+      await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        exif: true,
+        cameraType: ImagePicker.CameraType.back,
+      });
+      if (result.canceled || !result.assets[0]) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        return;
+      }
+      pending = {
+        ...pending,
+        ...observedTime(),
+        asset: serialisableAsset(result.assets[0]),
+      };
+      await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
+      launchingCamera.current = false;
+      await processPendingPhoto(pending);
+    } catch (error) {
+      Alert.alert('Camera evidence is pending', error instanceof Error ? error.message : 'The camera did not return a usable photo.');
+    } finally {
+      launchingCamera.current = false;
+      setBusy('');
+    }
   }
 
-  async function chooseDocument() {
+  async function chooseDocument(requirement?: ComplianceEvidenceRequirement) {
     if (!job) return;
     const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], copyToCacheDirectory: true, multiple: false });
     if (result.canceled) return;
     const asset = result.assets[0];
     const file = new File(asset.uri);
-    if (file.size > 50 * 1024 * 1024) return Alert.alert('File is too large', 'Choose a photo or PDF no larger than 50 MB.');
-    setBusy('document');
-    await saveUpload({ workOrderId: job.id, uri: asset.uri, fileName: asset.name, contentType: asset.mimeType || 'application/pdf', sizeBytes: asset.size || file.size, category: 'document', caption: '' });
-    setBusy('');
-    Alert.alert('Document saved', sync.online ? 'The document is uploading securely.' : 'The document will upload when reception returns.');
+    if (!file.exists || file.size < 1) return Alert.alert('File is unavailable', 'Choose the original file again.');
+    if (file.size > MAX_EVIDENCE_BYTES) return Alert.alert('File is too large', 'Choose a photo or PDF no larger than 50 MB.');
+    const contentType = asset.mimeType || file.type || 'application/pdf';
+    if (!ALLOWED_EVIDENCE_TYPES.has(contentType)) return Alert.alert('File type is not supported', 'Choose the original JPEG, PNG, WebP or PDF file.');
+    const envelope = await buildEvidenceEnvelope({
+      captureSessionId: captureSessionId(),
+      source: 'document_picker',
+      identifiers: evidenceIdentifiers(job, requirement),
+    });
+    setBusy(`document:${requirement?.id || 'general'}`);
+    try {
+      await saveUpload({
+        workOrderId: job.id,
+        uri: asset.uri,
+        fileName: asset.name,
+        contentType,
+        sizeBytes: file.size,
+        category: requirement ? evidenceCategory(requirement) : 'document',
+        caption: evidenceCaption(requirement),
+        evidenceEnvelope: envelope,
+      });
+      Alert.alert(
+        'Original file saved',
+        `${sync.online ? 'The file and SHA-256 capture record are uploading securely.' : 'The file and SHA-256 capture record will upload when reception returns.'} Creditex must still review it against the applicable scheme rules.`,
+      );
+    } catch (error) {
+      Alert.alert('File was not saved', error instanceof Error ? error.message : 'Choose the original file and try again.');
+    } finally {
+      setBusy('');
+    }
   }
 
   if (!job) return <Screen><View style={styles.empty}><MaterialCommunityIcons name="briefcase-remove-outline" size={42} color={colours.muted} /><Text style={styles.title}>Job is not available</Text><Text style={styles.body}>It may have been unassigned or removed during sync.</Text></View></Screen>;
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
+  const complianceRequirements = job.compliance?.requirements || [];
   const fieldAction = fieldActions[job.appointmentStatus];
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   return (
@@ -144,8 +354,44 @@ export default function JobScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text><Text style={styles.body}>Files save safely on this device first. Uploads resume automatically after a connection drops.</Text>
-        <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View>
+        <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
+        <Text style={styles.body}>The app preserves the exact file returned by the camera picker without further editing or recompression, requests available EXIF, adds independent time and location observations, and hashes the exact queued bytes with SHA-256. Files save encrypted on this device first and resume automatically after a connection drops.</Text>
+        <Text style={styles.meta}>These records support audit review. They are not a government or scheme acceptance decision.</Text>
+        {job.compliance ? <View style={styles.complianceBlock}>
+          <View style={styles.complianceHeading}>
+            <MaterialCommunityIcons name="certificate-outline" size={25} color={colours.green} />
+            <View style={styles.flex}>
+              <Text style={styles.taskTitle}>{job.compliance.activityCode} | {job.compliance.activityTitle}</Text>
+              <Text style={styles.meta}>Case {job.compliance.caseNumber || job.compliance.caseId} | Evidence policy {job.compliance.evidencePolicyVersionId || 'not assigned'}</Text>
+            </View>
+          </View>
+          {complianceRequirements.length ? complianceRequirements.map((requirement) => (
+            <View key={requirement.id} style={styles.requirement}>
+              <View style={styles.requirementHeading}>
+                <View style={styles.flex}><Text style={styles.taskTitle}>{requirement.code} | {requirement.title}</Text><Text style={styles.meta}>{readable(requirement.captureTiming || 'timing not specified')} | Minimum {requirement.minimumCount} | {readable(requirement.status || 'pending')}</Text></View>
+                {requirement.gpsRequired ? <View style={styles.gpsBadge}><Text style={styles.gpsBadgeText}>GPS required</Text></View> : null}
+              </View>
+              <Text style={styles.meta}>{requirement.originalRequired ? 'Original file required. ' : ''}{readable(requirement.evidenceType || 'evidence')} evidence. Creditex review remains required.</Text>
+              <View style={styles.row}>
+                <FieldButton variant="secondary" loading={busy === `photo:${requirement.id}`} style={styles.flex} onPress={() => void capturePhoto(requirement)}>Take photo</FieldButton>
+                <FieldButton
+                  variant="secondary"
+                  disabled={requirement.gpsRequired || requirement.metadataRequired}
+                  loading={busy === `document:${requirement.id}`}
+                  style={styles.flex}
+                  onPress={() => void chooseDocument(requirement)}
+                >
+                  {requirement.gpsRequired || requirement.metadataRequired ? 'Camera required' : 'Add file'}
+                </FieldButton>
+              </View>
+              {requirement.gpsRequired || requirement.metadataRequired
+                ? <Text style={styles.meta}>Use Take photo so the app can capture the required location or camera metadata.</Text>
+                : null}
+            </View>
+          )) : <Text style={styles.body}>No governed evidence requirements have been assigned. Do not treat general uploads as compliance evidence.</Text>}
+        </View> : null}
+        <Text style={styles.inputLabel}>{job.compliance ? 'General job files' : 'Job files'}</Text>
+        <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View>
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
       </View>
 
@@ -217,6 +463,12 @@ const styles = StyleSheet.create({
   optionSelected: { backgroundColor: colours.mint, borderColor: colours.green },
   optionText: { color: colours.ink, fontWeight: '700' },
   formActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
+  complianceBlock: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  complianceHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  requirement: { backgroundColor: colours.white, borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
+  requirementHeading: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
+  gpsBadge: { backgroundColor: colours.forest, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },
+  gpsBadgeText: { color: colours.white, fontSize: 11, fontWeight: '800' },
   meta: { color: colours.muted, fontSize: 12, lineHeight: 17 },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   inputLabel: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },

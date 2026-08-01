@@ -339,6 +339,16 @@ export async function DELETE(request: Request) {
       WHERE m.id = ? AND m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
       .bind(id, access.ownerUid, access.ownerUid).first<{ object_key: string; work_order_id: string }>();
     if (!record) return adminJson({ ok: false, error: "Job file not found." }, 404);
+    const governedEvidence = await getD1().prepare(`SELECT 1 AS governed
+      FROM compliance_case_evidence
+      WHERE job_media_id = ?
+      LIMIT 1`).bind(id).first();
+    if (governedEvidence) {
+      return adminJson({
+        ok: false,
+        error: "This file is part of a compliance evidence record and cannot be deleted. Add a replacement or ask Creditex to record a supersession.",
+      }, 409);
+    }
     const job = await assignedJob(access, record.work_order_id);
     await bucket().delete(record.object_key);
     const now = new Date().toISOString(); const revision = nextJobRevision(job.revision);

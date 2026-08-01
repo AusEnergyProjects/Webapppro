@@ -1,4 +1,4 @@
-import { apiRequest } from '@/lib/api';
+import { ApiError, apiRequest } from '@/lib/api';
 import { APP_VERSION, MOBILE_PLATFORM, UPLOAD_PART_BYTES } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
 import { completeUpload, queuedUploads, updateUpload } from '@/lib/database';
@@ -14,6 +14,14 @@ type UploadSession = {
 };
 
 type UploadResponse = { ok: boolean; upload: UploadSession };
+
+function evidenceEnvelope(row: UploadRow) {
+  try {
+    return JSON.parse(row.evidence_envelope) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
 
 async function initiate(row: UploadRow) {
   const deviceId = await getDeviceId();
@@ -31,6 +39,7 @@ async function initiate(row: UploadRow) {
       sizeBytes: row.size_bytes,
       category: row.category,
       caption: row.caption,
+      evidenceEnvelope: evidenceEnvelope(row),
     }),
   });
 }
@@ -102,8 +111,22 @@ export async function processUploadQueue() {
     try {
       await processUpload(upload);
     } catch (error) {
+      const permanentEvidenceCodes = new Set([
+        'EVIDENCE_HASH_MISMATCH',
+        'EVIDENCE_ENVELOPE_INVALID',
+        'EVIDENCE_LINK_INVALID',
+        'EVIDENCE_REQUIREMENT_REQUIRED',
+        'EVIDENCE_CONTENT_TYPE_INVALID',
+        'EVIDENCE_ORIGINAL_REQUIRED',
+        'EVIDENCE_METADATA_REQUIRED',
+        'EVIDENCE_LOCATION_INVALID',
+        'EVIDENCE_GPS_REQUIRED',
+        'EVIDENCE_GPS_MOCKED',
+        'EVIDENCE_CAPTURE_TIME_REQUIRED',
+        'IDEMPOTENCY_MISMATCH',
+      ]);
       await updateUpload(upload.id, {
-        status: 'retry',
+        status: error instanceof ApiError && permanentEvidenceCodes.has(error.code) ? 'rejected' : 'retry',
         attempts: upload.attempts + 1,
         error_message: error instanceof Error ? error.message : 'Upload paused. It will resume when connected.',
       });

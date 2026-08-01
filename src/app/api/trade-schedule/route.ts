@@ -11,6 +11,9 @@ export const runtime = "edge";
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
+  if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
+    return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
+  }
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["TEAM_ACCESS_REQUIRED", "ACCOUNT_INACTIVE", "INSTALLER_ONLY"].includes(code)) return adminJson({ ok: false, error: "This account does not currently have active installer scheduling access." }, 403);
   if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can change the team schedule." }, 403);

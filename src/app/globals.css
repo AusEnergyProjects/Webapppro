@@ -4948,6 +4948,31 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-title-preview, .crm-final-summary { background: #edf8f3; border-left: 4px solid #0caf7d; border-radius: 9px; display: grid; gap: 3px; padding: 12px 14px; }
 .crm-title-preview span, .crm-final-summary small { color: var(--color-aea-muted); font-size: .57rem; }
 .crm-title-preview strong, .crm-final-summary strong { color: #104f3d; }
+.crm-compliance-choice { background: #f5f9ff; border: 1px solid #c9d8ee; border-radius: 11px; display: grid; gap: 10px; margin: 14px 0 0; padding: 13px; }
+.crm-compliance-choice legend { color: #244a79; font-size: .62rem; font-weight: 900; padding: 0 5px; }
+.crm-compliance-choice > label { display: grid; gap: 5px; }
+.crm-compliance-choice > label > span { color: var(--color-aea-ink); font-size: .62rem; font-weight: 800; }
+.crm-compliance-choice select { background: #fff; border: 1px solid #b6c9e2; border-radius: 8px; color: var(--color-aea-ink); font: inherit; min-height: 42px; padding: 8px 10px; }
+.crm-compliance-choice small { color: var(--color-aea-muted); font-size: .54rem; line-height: 1.45; }
+.crm-compliance-notice { background: #fff; border-left: 4px solid #245f9b; border-radius: 8px; display: grid; gap: 5px; padding: 11px 13px; }
+.crm-compliance-notice strong { color: #173f6d; font-size: .68rem; }
+.crm-compliance-notice p { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.5; margin: 0; }
+.crm-compliance-notice a { color: #174f8b; font-size: .58rem; font-weight: 800; width: fit-content; }
+.crm-job-compliance { background: #f5f9ff; border: 1px solid #c9d8ee; border-radius: 12px; display: grid; gap: 10px; padding: 14px; }
+.crm-job-compliance > header { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.crm-job-compliance > header span, .crm-job-compliance article span { color: #42658b; font-size: .53rem; font-weight: 850; text-transform: uppercase; }
+.crm-job-compliance > header h4 { color: #173f6d; font-size: .86rem; margin: 2px 0 0; }
+.crm-job-compliance > header > strong { background: #e1ecfa; border-radius: 999px; color: #244a79; font-size: .54rem; padding: 6px 9px; }
+.crm-job-compliance > div { display: grid; gap: 8px; }
+.crm-job-compliance article { background: #fff; border-radius: 9px; display: grid; gap: 7px; padding: 11px; }
+.crm-job-compliance article > div { display: grid; gap: 3px; }
+.crm-job-compliance article strong { color: var(--color-aea-ink); font-size: .64rem; }
+.crm-job-compliance article p, .crm-job-compliance > p { color: var(--color-aea-muted); font-size: .56rem; line-height: 1.5; margin: 0; }
+.crm-job-compliance article dl { display: flex; gap: 8px; margin: 0; }
+.crm-job-compliance article dl > div { background: #eef4fb; border-radius: 7px; display: grid; gap: 1px; padding: 6px 8px; }
+.crm-job-compliance article dt { color: #61758c; font-size: .47rem; font-weight: 850; text-transform: uppercase; }
+.crm-job-compliance article dd { color: #173f6d; font-size: .54rem; font-weight: 800; margin: 0; text-transform: capitalize; }
+.crm-job-compliance article a { color: #174f8b; font-size: .56rem; font-weight: 800; width: fit-content; }
 .crm-final-summary span { font-size: .68rem; }
 .crm-evidence-choice { display: grid; gap: 8px; }
 .crm-evidence-choice > label, .crm-consent-confirm { align-items: flex-start; background: #f8fbfa; border: 1px solid #d3e4de; border-radius: 10px; display: flex; gap: 10px; padding: 11px; }

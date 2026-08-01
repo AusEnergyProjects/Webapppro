@@ -1,22 +1,126 @@
 # Next task handover
 
-Status: released implementation milestone
+Status: release candidate; final validation and release pending
 
-Prepared: 31 July 2026
+Prepared: 1 August 2026
 
-Milestone ID: `CUSTOMER-ACCOUNT-TRUST-23`
+Milestone ID: `CREDITEX-COMPLIANCE-OPERATIONS-25`
 
-Released application commit: `da4fa911c0b6c7f520e266259af8882b95aaf14a`
+Working branch: `codex/sites-custom-domain-migration`
 
-Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`
+Starting application source commit: `399b04f4a5d680080610f9e88b994506bb60c16f`
 
-Current source checkpoint: the documentation-only child containing this record; it does not change the executable application identity above
+Starting repository checkpoint: `f3b453c5b556fac62a548a4e7b74841f67a3c0d6`, a documentation-only child of the application source
+
+Current production remains: Sites version 242 from application commit `399b04f4a5d680080610f9e88b994506bb60c16f`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
 Production access: public custom domain
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. The household and experienced-assessor pilot remains deliberately deferred while the five next product steps recorded below are completed.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and application deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Until the release record below is completed, current production remains version 242. The candidate does not publish a real activity, calculate a certificate quantity, make a live eligibility decision or submit anything to a registry.
+
+## Active milestone outcome
+
+Deliver the first safe Creditex operations slice inside TLink: exact activity and evidence-policy governance, atomic job and case creation, audit-grade mobile capture, an exception-led Creditex case workspace, audited original-evidence viewing, correction, dual control, access administration and provider-neutral batch staging. Keep every unverified formula and external execution path disabled.
+
+## Owning workflow and expected files
+
+- Domain and control migrations: `db/schema.ts`, `drizzle/0093_creditex_compliance_foundation.sql`, `drizzle/0094_creditex_operations_control.sql`, `src/lib/compliance-access-server.ts`, `src/lib/creditex-compliance-server.ts` and `src/lib/creditex-operations-server.ts`.
+- Installer and field intake: the trade CRM, work-order and sync routes, guided job setup, AEA Field evidence capture, exact-byte encryption and resumable media finalisation.
+- Creditex workspace: no-index `/creditex/compliance`, session, governance and operations APIs, the bounded evidence viewer and Creditex-specific portal components.
+- Regulatory and migration control: the Australian program source register, Creditex operating model and Dataforce and Runabout parity matrix.
+- Tests: schema replay, invitation and role controls, tenant denial, immutable governance, evidence custody and races, viewer receipts, decision integrity, corrections and batch staging.
+
+## In scope
+
+- Invitation-only compliance organisations and named server-enforced administrator, case-manager, reviewer and auditor roles, isolated from installer and platform-administrator authority.
+- Immutable effective-dated program, activity and evidence-policy versions with exact source hashes and separate registry code, specification part, product category and scenario.
+- Atomic installer job, exact case snapshot and initial event; multiple governed cases per job only through explicit selection.
+- Participant and ability records, assignments, tasks, equipment, findings, correction requests, decisions and append-only audit history.
+- AEA Field original evidence with exact-byte SHA-256, encrypted offline queue, capture and location envelope, registered physical-device binding, resumable upload, server byte-signature validation and correction supersession.
+- A privacy-minimised Creditex queue and case workspace with audited evidence viewing. Original bytes are streamed only after an authorised case-purpose check and the returned receipt is required for accept or reject.
+- Server-derived, dual-controlled decision bases pinned to the exact case revision, activity, policy, source hashes, accepted evidence and verified calculation run where required.
+- Provider-neutral batch staging plus read-only projections for submissions, responses, certificates, trades and settlements. External execution remains disabled.
+- One bootstrap invitation for `info@ausenergyassessments.com`, expiring 31 August 2026, solely to create the first named Creditex administrators.
+
+## Out of scope
+
+- Any real activity or evidence-policy publication before Creditex approves the exact effective public and private rule pack.
+- Any unverified certificate, rebate, deemed-saving or incentive calculator, customer price promise, registry submission, certificate creation, trade or settlement.
+- Manual assertion of an external response, live Dataforce or Runabout import, connector, cutover or retirement.
+- Production regulated cases; no activity or evidence policy is seeded as published.
+- Approved retention, legal-hold, backup, restore, strong-authentication or physical-device acceptance. The data model and deletion guards do not replace those operating controls.
+- Changes to the immutable dated audit.
+
+## Acceptance criteria
+
+- Creditex access is rejected unless the Firebase identity is email verified and has an active membership in an active compliance organisation with an allowed role.
+- Installer and platform-administrator identities do not inherit Creditex access, and Creditex identities do not inherit installer or platform-administrator authority.
+- Published activity identity preserves registry code, specification part, product category and scenario as distinct values.
+- Published programs and activities require an exact official-source SHA-256 and become immutable; withdrawal cannot return them to draft or published state.
+- Draft, withdrawn, future and expired activity versions cannot be selected for a new job. A case pinned to a later-withdrawn policy remains correctable and auditable, but approval and staging fail with `CREDITEX_POLICY_WITHDRAWN`.
+- A selected activity cannot create a case against a different TLink work category, service-site jurisdiction or appointment type, and its planned installation date is immutable.
+- A selected activity, its case snapshot, the TLink job and the initial append-only event are committed together or not at all.
+- No unapproved application path emits a certificate count, rebate amount, external eligibility result or submission success.
+- General Creditex queues do not expose customer name, email, phone, exact address, private notes, object keys, evidence filenames or raw geolocation.
+- An evidence accept or reject action requires a recent same-user, same-organisation audited view receipt and an active reviewer assignment unless the user is an administrator.
+- Original evidence remains immutable, rejected evidence is retained and an atomic replacement points to the rejected item.
+- Caller-authored decision basis is ignored; a secondary approval cannot replace the server-derived primary basis.
+- Auditors are read-only, reviewers and auditors need active case assignments to open originals, and the final active administrator cannot remove the last administrative control.
+- Migration replay, focused security and behavior tests, type checking, lint, full validation, production build and `git diff --check` pass before the milestone can be described as validated.
+
+## Validation and release evidence
+
+- Focused Creditex, governance, access, viewer, field-evidence, guided-job, photo and database-console tests pass 76 of 76.
+- `npm.cmd run validate` passes type checking, warning-free lint, 31 of 31 integration tests, 1,072 main tests with 1,070 passed, 2 intentionally skipped and 0 failed, all 95 migrations through `0094_creditex_operations_control.sql`, the customer-plan PDF audit, production build and Sites server-bundle audit.
+- AEA Field passes 6 of 6 tests, lint, type checking and Android and iOS export. Expo printed non-fatal Google-services config parse warnings after both exports; physical signed builds and devices remain unverified.
+- The independent final audit found and closed two P0 evidence-policy immutability defects. Its final verdict permits only an empty, invitation-gated foundation and preview.
+- Final exact Git and Sites identities and production portal checks remain to be recorded before the milestone status changes to released.
+
+Authenticated Creditex administration, non-admin least privilege, physical iOS or Android capture, hosted original-evidence viewing, production rule accuracy, approved calculator provenance, backup and restore, and any real registry, certificate, trade or settlement behavior remain unverified or blocked. No named reviewer, auditor or case-manager rollout is approved because their current dashboard projection is organisation-wide and some mutations are not yet assignment-gated.
+
+## Stop conditions
+
+Stop before release or regulated-case onboarding when:
+
+- Creditex has not approved its legal organisation identity, role matrix, data-sharing purpose, customer notice and consent, retention schedule or incident process;
+- an activity lacks a current official source, exact effective dates or Creditex approval to publish;
+- a published activity or existing case snapshot can be mutated;
+- an authorisation or cross-tenant denial test fails;
+- original photo bytes, cryptographic file hashes, capture time and timezone, device provenance, location accuracy and controlled metadata cannot be retained together;
+- evidence linked to a submitted case can still be physically deleted or silently replaced;
+- real-device camera, GPS and offline/resume acceptance has not passed;
+- a formula, eligibility decision, price promise or registry submission would rely on an unapproved rule version; or
+- D1/R2 ownership, backup, export, point-in-time recovery and restore testing remain operationally unproved for regulated evidence.
+
+## Next five logical product steps
+
+1. **Replace the shared bootstrap with named Creditex administrators:** provision at least two named verified administrators, require strong authentication, review least privilege and suspend the `info@ausenergyassessments.com` bootstrap from routine use.
+2. **Approve one exact production rule pack and physical-device path:** Creditex selects one VEU `6(23)` category and scenario, signs the authoritative activity and evidence policy, and accepts capture, offline recovery, review and correction on representative iOS and Android devices.
+3. **Approve custody and withdrawn-policy governance:** implement the signed retention, legal hold, deletion, backup and restore schedule and an explicit continuation or supersession decision for cases whose pinned policy is withdrawn.
+4. **Release the first independently verified calculator:** reconcile exact inputs, units, effective dates, product and climate lookups, caps and rounding to official or Creditex-approved vectors, then dual-approve one calculator while all others remain disabled.
+5. **Rehearse one provider and legacy cohort:** build an authorised dry-run submission adapter plus response reconciliation, map representative Dataforce and Runabout records without source mutation, reconcile every count, hash and exception, then run a bounded parallel pilot.
+
+## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
+
+Status: released implementation milestone
+
+Released application commit: `399b04f4a5d680080610f9e88b994506bb60c16f`
+
+Released application: Sites version 242, saved version `appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0`, deployment `appgdep_6a6cc08dc6f881919a349de607f5a8a9`
+
+The release keeps installer-request consent and validation beside submission, aligns the shared customer navigation, adds reciprocal TLink and Australian Energy Assessments branding and discloses only a current-consented immutable suburb, postcode and state opportunity snapshot to eligible installers. Migration `0092_trade_opportunity_matching_locality.sql` added the bounded locality and consent-receipt contract. The focused set passed 96 of 96 tests and the complete validation gate passed all 93 migrations through `0092`, the production build and Sites bundle audit. Live verification did not create a new production opportunity, so a version-242 locality-bearing row and business email remain intentionally unverified. Current production is unchanged by the Creditex foundation work above.
+
+## Prior released milestone record: `CUSTOMER-ACCOUNT-TRUST-23`
+
+Status: released implementation milestone
+
+Prepared: 31 July 2026
+
+Released application commit: `da4fa911c0b6c7f520e266259af8882b95aaf14a`
+
+Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`
 
 ## Current milestone outcome
 
@@ -738,11 +842,3 @@ Stop the affected work when:
 - the release commit, GitHub branch, Sites source, archive and saved version do not reconcile;
 - a change would alter the immutable dated audit;
 - a legal, regulated-service, privacy, provider or account-ownership decision requires an authorised human.
-
-## Next five logical product steps
-
-1. **Connected customer follow-up and scheduling status loop:** let the trade mark the customer contacted and the next appointment proposed or booked, while the customer sees one clear next action and no duplicate outreach.
-2. **Installer structured request-for-information and quote clarification loop:** let an allocated installer request a small controlled set of missing details without unrestricted messaging or early identity exposure.
-3. **Opportunity and activity delivery health with bounded retry controls:** expose pending, failed, suppressed and retriable customer, trade and administrator notifications to authorised operators without a generic command surface.
-4. **Customer side-by-side quote comparison and version history:** explain scope, exclusions, timing, warranty and price differences in plain language while preserving immutable submitted versions.
-5. **Administrator communication SLA, assistive contact handover and privacy-safe funnel telemetry before the deferred pilot:** measure quote delivery, review, business-contact choice and scheduling outcomes without exposing household content.

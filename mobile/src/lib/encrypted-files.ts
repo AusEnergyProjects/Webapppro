@@ -1,4 +1,11 @@
-import { AESEncryptionKey, AESSealedData, aesDecryptAsync, aesEncryptAsync } from 'expo-crypto';
+import {
+  AESEncryptionKey,
+  AESSealedData,
+  CryptoDigestAlgorithm,
+  aesDecryptAsync,
+  aesEncryptAsync,
+  digest,
+} from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
@@ -25,19 +32,34 @@ function bundleFiles(value: string) {
 export async function encryptFileForQueue(sourceUri: string, uploadId: string) {
   if (!UPLOAD_DIRECTORY.exists) UPLOAD_DIRECTORY.create({ intermediates: true, idempotent: true });
   const source = new File(sourceUri);
+  if (!source.exists || source.size < 1) throw new Error('The selected evidence file is empty or unavailable.');
+  const plaintext = await source.bytes();
+  const sha256 = new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, plaintext));
+  const digestHex = Array.from(sha256, (value) => value.toString(16).padStart(2, '0')).join('');
   const key = await encryptionKey();
   const encryptedFiles: string[] = [];
-  for (let start = 0, part = 1; start < source.size; start += UPLOAD_PART_BYTES, part += 1) {
-    const plaintext = new Uint8Array(await source.slice(start, Math.min(start + UPLOAD_PART_BYTES, source.size)).arrayBuffer());
-    const sealed = await aesEncryptAsync(plaintext, key);
-    const combined = await sealed.combined();
-    const target = new File(UPLOAD_DIRECTORY, `${uploadId}.${part}.aeaenc`);
-    target.create({ overwrite: true });
-    target.write(combined);
-    encryptedFiles.push(target.uri);
+  try {
+    for (let start = 0, part = 1; start < plaintext.byteLength; start += UPLOAD_PART_BYTES, part += 1) {
+      const partBytes = plaintext.subarray(start, Math.min(start + UPLOAD_PART_BYTES, plaintext.byteLength));
+      const sealed = await aesEncryptAsync(partBytes, key);
+      const combined = await sealed.combined();
+      const target = new File(UPLOAD_DIRECTORY, `${uploadId}.${part}.aeaenc`);
+      target.create({ overwrite: true });
+      target.write(combined);
+      encryptedFiles.push(target.uri);
+    }
+  } catch (error) {
+    for (const uri of encryptedFiles) {
+      try { new File(uri).delete(); } catch { /* Partial encrypted part was already removed. */ }
+    }
+    throw error;
   }
   try { source.delete(); } catch { /* Picker file may be managed outside this app. */ }
-  return JSON.stringify(encryptedFiles);
+  return {
+    bundle: JSON.stringify(encryptedFiles),
+    sizeBytes: plaintext.byteLength,
+    sha256Hex: digestHex,
+  };
 }
 
 export async function decryptQueuedPart(bundle: string, partNumber: number) {

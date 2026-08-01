@@ -15,6 +15,10 @@ import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 import { quickInvoiceNumber, resolveQuickInvoiceDraft, sendQuickInvoiceDelivery, type QuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
 import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
+import {
+  appendLiveComplianceCaseStatements,
+  ComplianceDomainError,
+} from "@/lib/creditex-compliance-server";
 
 export const runtime = "edge";
 
@@ -94,7 +98,19 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof ComplianceDomainError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
+  }
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
+    return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
+  }
+  if (code.includes("Compliance-linked job service site cannot change without case supersession")) {
+    return adminJson({ ok: false, error: "This job is linked to a compliance case, so its service site is locked. Governed case supersession is not available yet." }, 409);
+  }
+  if (code.includes("Compliance-linked service site jurisdiction cannot change without case supersession")) {
+    return adminJson({ ok: false, error: "This service site is linked to a compliance case, so its state or territory is locked. Governed case supersession is not available yet." }, 409);
+  }
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
@@ -177,6 +193,15 @@ function customerDisplayName(row: Record<string, unknown>) {
   return String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim() || row.customer_number || "");
 }
 
+function storedObject(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch { return {}; }
+}
+
 function pagination(url: URL) {
   const requestedPage = Number(url.searchParams.get("page"));
   const requestedPageSize = Number(url.searchParams.get("pageSize"));
@@ -202,8 +227,34 @@ function indexedJob(row: Record<string, unknown>) {
     quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
     paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
     invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
-    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [],
+    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [],
     createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+function indexedComplianceCase(row: Record<string, unknown>) {
+  const snapshot = storedObject(row.activity_snapshot);
+  return {
+    id: String(row.id),
+    caseNumber: String(row.case_number),
+    activityDate: String(row.activity_date),
+    organisationName: String(snapshot.organisationTradingName || snapshot.organisationLegalName || "Compliance provider"),
+    programCode: String(snapshot.programCode || ""),
+    programName: String(snapshot.programName || ""),
+    activityKey: String(snapshot.activityKey || ""),
+    version: Number(snapshot.version || 0),
+    title: String(snapshot.title || ""),
+    registryActivityCode: String(snapshot.registryActivityCode || ""),
+    productCategory: String(snapshot.productCategory || ""),
+    scenarioCode: String(snapshot.scenarioCode || ""),
+    scenario: String(snapshot.scenario || ""),
+    officialSourceUrl: String(snapshot.officialSourceUrl || ""),
+    officialSourceTitle: String(snapshot.officialSourceTitle || ""),
+    officialSourceVersion: String(snapshot.officialSourceVersion || ""),
+    status: String(row.status),
+    evidenceStatus: String(row.evidence_status),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -446,7 +497,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     .bind(id, identity.uid).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   const customerId = String(row.crm_customer_id || "");
-  const [tasks, appointments, notes, customer, sites, siteContacts] = await Promise.all([
+  const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases] = await Promise.all([
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
@@ -466,6 +517,9 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
           WHERE ss.customer_id = ? AND sc.firebase_uid = ? AND sc.record_status = 'active' AND cc.record_status = 'active'`)
         .bind(customerId, identity.uid).all<Record<string, unknown>>()
       : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    db.prepare(`SELECT id, case_number, activity_date, activity_snapshot, status, evidence_status, created_at, updated_at
+      FROM compliance_cases WHERE work_order_id = ? AND installer_uid = ?
+      ORDER BY created_at, id LIMIT 50`).bind(id, identity.uid).all<Record<string, unknown>>(),
   ]);
   const job = indexedJob(row);
   return { customer: customer ? indexedCustomer(customer) : null,
@@ -473,6 +527,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
     appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at, endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes })),
     notes: notes.results.map((item: Record<string, unknown>) => ({ id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status, createdAt: item.created_at, updatedAt: item.updated_at })),
+    complianceCases: complianceCases.results.map(indexedComplianceCase),
   } };
 }
 
@@ -874,6 +929,10 @@ export async function POST(request: Request) {
 
     if (action === "create_job" || action === "create_scheduled_job") {
       const guided = action === "create_scheduled_job";
+      const complianceActivityVersionId = cleanAdminText(body.complianceActivityVersionId, 180);
+      if (complianceActivityVersionId && !guided) {
+        return adminJson({ ok: false, error: "Schedule the installation before opening a compliance intake case." }, 400);
+      }
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
         WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
         .bind(identity.uid).first<Record<string, unknown>>();
@@ -981,6 +1040,9 @@ export async function POST(request: Request) {
         assignee = String(member.display_name || "");
       }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
+      if (complianceActivityVersionId && appointmentType !== "installation") {
+        return adminJson({ ok: false, error: "A compliance intake case requires the scheduled appointment to be the planned installation date." }, 400);
+      }
       let appointmentId = "";
       let appointmentTitle = "";
       let photoRequestId = "";
@@ -1030,13 +1092,18 @@ export async function POST(request: Request) {
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
+      let siteJurisdiction = "";
       if (serviceSiteId) {
         const site = createCustomer || serviceSiteMode === "new" ? { suburb, address_state: addressState, postcode } : await ownedServiceSite(db, identity, serviceSiteId, customerId);
         serviceArea = [site.suburb, site.address_state, site.postcode].filter(Boolean).join(" ").trim();
+        siteJurisdiction = String(site.address_state || "").toUpperCase();
+      }
+      if (complianceActivityVersionId && !ADDRESS_STATES.has(siteJurisdiction)) {
+        return adminJson({ ok: false, error: "Add a valid Australian service-site state before opening a compliance intake case." }, 400);
       }
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
-      await db.batch([
+      const batchStatements: D1PreparedStatement[] = [
         ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
@@ -1102,7 +1169,21 @@ export async function POST(request: Request) {
           ] : []),
         ] : []),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
-      ]);
+      ];
+      const complianceCase = complianceActivityVersionId
+        ? await appendLiveComplianceCaseStatements(db, batchStatements, {
+          activityVersionId: complianceActivityVersionId,
+          activityDate: scheduledStart.slice(0, 10),
+          workOrderId,
+          installerUid: identity.uid,
+          serviceCategory,
+          jurisdiction: siteJurisdiction,
+          actorType: "installer",
+          actorUid: identity.uid,
+          createdAt: now,
+        })
+        : null;
+      await db.batch(batchStatements);
       let requestSent = false;
       let deliveryError = "";
       let invoiceSent = false;
@@ -1144,6 +1225,7 @@ export async function POST(request: Request) {
         }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
+        complianceCaseId: complianceCase?.caseId || "", complianceCaseNumber: complianceCase?.caseNumber || "",
         appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,
         invoiceSent, invoiceDeliveryError, calendarSynced, calendarFailed }, 201);
     }

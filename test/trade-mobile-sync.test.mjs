@@ -148,10 +148,10 @@ test("field media uploads are resumable, idempotent and assignment scoped", () =
   assert.match(mediaRoute, /metadata_hash/);
   assert.match(mediaRoute, /IDEMPOTENCY_MISMATCH/);
   assert.match(mediaRoute, /UPLOAD_RECOVERY_REQUIRED/);
-  assert.match(mediaRoute, /status === "completing"/);
+  assert.match(mediaRoute, /SET status = 'completing'/);
   assert.match(mediaRoute, /assignedJob\(access/);
   assert.match(mediaRoute, /PROTECTED_CUSTOMER_DATA/);
-  assert.match(mediaRoute, /jobSyncChangeStatements/);
+  assert.match(mediaRoute, /INSERT INTO trade_team_sync_changes/);
 });
 
 test("the native field contract keeps the web CRM authoritative", () => {

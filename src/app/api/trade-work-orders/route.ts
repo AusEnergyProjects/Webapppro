@@ -104,6 +104,9 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
 
 function errorResponse(error: unknown) {
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
+    return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
+  }
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the trade profile first." }, 404);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This trade account is not active." }, 403);

@@ -61,9 +61,18 @@ test("customer completion checks current required uploads and preserves reviewed
   assert.match(customerRoute, /trade_crm_photo_request_completions/);
   assert.match(customerRoute, /evidence_key/);
   assert.match(customerRoute, /part of the review history and cannot be removed/);
+  assert.match(customerRoute, /FROM compliance_case_evidence[\s\S]*WHERE job_media_id = \?/);
+  assert.match(customerRoute, /part of a compliance evidence record and cannot be removed/);
   assert.match(customerUi, /Finish and notify installer/);
   assert.match(customerUi, /Retake requested/);
   assert.match(customerUi, /Your original photo remains in the installer job/);
+});
+
+test("governed field evidence is checked before object storage deletion", () => {
+  const evidenceCheck = fieldRoute.indexOf("FROM compliance_case_evidence");
+  const objectDelete = fieldRoute.indexOf("await bucket().delete(record.object_key)");
+  assert.ok(evidenceCheck >= 0 && objectDelete > evidenceCheck);
+  assert.match(fieldRoute, /ask Creditex to record a supersession/);
 });
 
 test("installer review is manager scoped, append only and uses fixed retake guidance", () => {
