@@ -20,6 +20,55 @@
   max-width: 1480px;
 }
 
+.pilotShell {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.pilotFrame {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pilotFrame .topbar {
+  min-height: 48px;
+  flex: 0 0 auto;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 5px 12px;
+}
+
+.pilotFrame .brand img {
+  width: 34px;
+  height: 34px;
+}
+
+.pilotFrame .tabs {
+  min-height: 36px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 10px;
+  background: #f7faf9;
+}
+
+.pilotFrame .tab {
+  padding: 7px 10px 5px;
+  font-size: 0.64rem;
+}
+
+.pilotFrame > [role="tabpanel"] {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .topbar {
   align-items: center;
   background: rgba(255, 255, 255, .94);
@@ -908,6 +957,24 @@
 @media (max-width: 780px) {
   .shell {
     padding: 12px;
+  }
+
+  .pilotShell {
+    padding: 0;
+  }
+
+  .pilotFrame .topbar {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .pilotFrame .brand span,
+  .pilotFrame .identity span {
+    display: none;
+  }
+
+  .pilotFrame .identity div {
+    text-align: right;
   }
 
   .topbar,

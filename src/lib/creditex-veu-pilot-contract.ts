@@ -15,6 +15,107 @@ export const CREDITEX_VEU_PILOT_JOB_COUNT =
   * CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER
   * CREDITEX_VEU_PILOT_JOBS_PER_TECHNICIAN;
 
+export const CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS = [
+  { key: "customer_details", group: "customer", label: "Customer details" },
+  { key: "customer_jobs", group: "customer", label: "Jobs for customer" },
+  { key: "customer_files", group: "customer", label: "Customer files" },
+  {
+    key: "customer_create_job",
+    group: "customer",
+    label: "Create new job for this customer",
+  },
+  { key: "job_summary", group: "job", label: "Job summary" },
+  { key: "job_appointments", group: "job", label: "Job appointments" },
+  { key: "job_actions", group: "job", label: "Job actions" },
+  { key: "job_questions", group: "job", label: "Job questions" },
+  { key: "job_quote_invoice", group: "job", label: "Job quote and invoice" },
+  { key: "job_calculations", group: "job", label: "Job calculations" },
+  { key: "job_transactions", group: "job", label: "Job transactions" },
+  { key: "job_files", group: "job", label: "Job files and photos" },
+  { key: "job_issues", group: "job", label: "Job issues" },
+  { key: "job_emails", group: "job", label: "Job emails" },
+  { key: "job_history", group: "job", label: "Job history" },
+  {
+    key: "appointment_summary",
+    group: "appointment",
+    label: "Appointment summary",
+  },
+  {
+    key: "appointment_actions",
+    group: "appointment",
+    label: "Appointment actions",
+  },
+  {
+    key: "appointment_questions",
+    group: "appointment",
+    label: "Appointment questions",
+  },
+  {
+    key: "appointment_certificate_submissions",
+    group: "appointment",
+    label: "Appointment certificate submissions",
+  },
+  {
+    key: "appointment_decommissioning",
+    group: "appointment",
+    label: "Appointment decommissioning summary",
+  },
+  {
+    key: "appointment_correspondence",
+    group: "appointment",
+    label: "Appointment correspondence",
+  },
+  {
+    key: "appointment_audit",
+    group: "appointment",
+    label: "Appointment audit",
+  },
+  {
+    key: "appointment_history",
+    group: "appointment",
+    label: "Appointment history",
+  },
+  { key: "copy_row", group: "utility", label: "Copy row" },
+  { key: "copy_selection", group: "utility", label: "Copy selection" },
+  { key: "print", group: "utility", label: "Print" },
+  { key: "print_preview", group: "utility", label: "Print preview" },
+  { key: "compliance_rules", group: "compliance", label: "Rules and sources" },
+  {
+    key: "compliance_lookups",
+    group: "compliance",
+    label: "Authoritative lookups",
+  },
+  {
+    key: "compliance_evidence",
+    group: "compliance",
+    label: "Evidence requirements",
+  },
+  {
+    key: "compliance_calculations",
+    group: "compliance",
+    label: "VEEC calculations",
+  },
+  {
+    key: "compliance_submission",
+    group: "compliance",
+    label: "Certificate submission",
+  },
+] as const;
+
+export type CreditexVeuPilotJobDetailSection =
+  typeof CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS[number];
+
+export type CreditexVeuPilotJobDetailSectionKey =
+  CreditexVeuPilotJobDetailSection["key"];
+
+export type CreditexVeuPilotJobDetailCapability =
+  CreditexVeuPilotJobDetailSection & {
+    available: boolean;
+    count: number;
+    readOnly: boolean;
+    reason: string;
+  };
+
 export const CREDITEX_VEU_PILOT_ACTIVITIES =
   GOVERNMENT_ACTIVITY_TEMPLATES.filter(
     (activity) => activity.programCode === "VEU",

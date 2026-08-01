@@ -8,6 +8,7 @@ import {
   archiveCreditexVeuPilot,
   finaliseCreditexVeuPilot,
   loadCreditexVeuPilotDashboard,
+  loadCreditexVeuPilotJobWorkspace,
   parseCreditexPilotFilters,
   provisionNextCreditexVeuPilotCohort,
   startCreditexVeuPilot,
@@ -106,8 +107,18 @@ export async function GET(request: Request) {
   try {
     const database = getD1();
     const member = await requireMember(request, database);
+    const searchParams = new URL(request.url).searchParams;
+    const jobId = searchParams.get("jobId");
+    if (jobId !== null) {
+      const workspace = await loadCreditexVeuPilotJobWorkspace(
+        database,
+        member,
+        jobId,
+      );
+      return json({ ok: true, workspace });
+    }
     const filters = parseCreditexPilotFilters(
-      new URL(request.url).searchParams,
+      searchParams,
     );
     const pilot = await loadCreditexVeuPilotDashboard(
       database,

@@ -21,6 +21,12 @@ const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
 const workspaceStyles = read(
   "../src/components/CreditexVeuPilotWorkspace.module.css",
 );
+const auditWorkspace = read(
+  "../src/components/CreditexVeuJobAuditWorkspace.tsx",
+);
+const auditWorkspaceStyles = read(
+  "../src/components/CreditexVeuJobAuditWorkspace.module.css",
+);
 const portal = read("../src/components/CreditexCompliancePortal.tsx");
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const completeMigrationChain = fs.readdirSync(migrationDirectory)
@@ -814,6 +820,322 @@ test("complete migration chain provisions and reconciles the governed 10/30/300 
     "synthetic-latest-appointment",
   );
 
+  const regulatedSnapshot = () => database.prepare(`SELECT
+      (SELECT COUNT(*) FROM compliance_cases) AS cases,
+      (SELECT COUNT(*) FROM compliance_case_evidence) AS evidence,
+      (SELECT COUNT(*) FROM compliance_submission_batches) AS batches,
+      (SELECT COUNT(*) FROM compliance_submission_batch_items) AS batch_items,
+      (SELECT COUNT(*) FROM compliance_submission_artifacts) AS artifacts,
+      (SELECT COUNT(*) FROM compliance_submission_responses) AS responses,
+      (SELECT COUNT(*) FROM compliance_certificate_lots) AS certificate_lots,
+      (SELECT COUNT(*) FROM compliance_trades) AS trades,
+      (SELECT COUNT(*) FROM compliance_settlements) AS settlements`)
+    .get();
+  const beforeDetailRead = regulatedSnapshot();
+  d1.metrics.active = 0;
+  d1.metrics.maxActive = 0;
+  d1.metrics.trackConcurrency = true;
+  const jobWorkspace = await pilotServer.loadCreditexVeuPilotJobWorkspace(
+    d1,
+    member,
+    afterSecondAppointment.jobs[0].id,
+  );
+  d1.metrics.trackConcurrency = false;
+  assert.equal(d1.metrics.active, 0);
+  assert.ok(
+    d1.metrics.maxActive <= 6,
+    `Job detail exceeded the six-connection D1 limit: ${d1.metrics.maxActive}`,
+  );
+  assert.equal(jobWorkspace.readOnly, true);
+  assert.equal(jobWorkspace.run.id, started.runId);
+  assert.equal(jobWorkspace.job.id, afterSecondAppointment.jobs[0].id);
+  assert.equal(jobWorkspace.job.recordMode, "synthetic_test");
+  assert.equal(jobWorkspace.job.work.sourceType, "synthetic_pilot");
+  assert.equal(jobWorkspace.job.work.sourceReference, started.runId);
+  assert.equal(
+    jobWorkspace.job.customer.id,
+    afterSecondAppointment.jobs[0].customer.id,
+  );
+  assert.equal(jobWorkspace.job.site.addressState, "VIC");
+  assert.equal(jobWorkspace.customerJobs.length, 1);
+  assert.equal(jobWorkspace.appointments.length, 2);
+  assert.deepEqual(
+    jobWorkspace.appointments.map((appointment) => appointment.startsAt),
+    jobWorkspace.appointments
+      .map((appointment) => appointment.startsAt)
+      .toSorted(),
+  );
+  assert.equal(
+    jobWorkspace.appointments.at(-1).id,
+    "synthetic-latest-appointment",
+  );
+  assert.deepEqual(jobWorkspace.appointmentAudit, {
+    revisions: [],
+    rescheduleRequests: [],
+    rescheduleEvents: [],
+  });
+  assert.equal(jobWorkspace.crm.events.length, 1);
+  assert.deepEqual(jobWorkspace.crm.tasks, []);
+  assert.deepEqual(jobWorkspace.crm.notes, []);
+  assert.deepEqual(jobWorkspace.crm.forms, []);
+  assert.deepEqual(jobWorkspace.crm.media, []);
+  assert.deepEqual(jobWorkspace.crm.quotes, []);
+  assert.deepEqual(jobWorkspace.crm.invoices, []);
+  assert.equal(jobWorkspace.priorities.length, 5);
+  assert.equal(
+    jobWorkspace.rules.sources.length,
+    pilotContract.CREDITEX_VEU_PILOT_SOURCES.length,
+  );
+  assert.equal(
+    jobWorkspace.lookups.options.length,
+    pilotContract.CREDITEX_VEU_PILOT_CONTROL_OPTIONS.length,
+  );
+  assert.equal(
+    jobWorkspace.evidence.contracts.length,
+    pilotContract.CREDITEX_VEU_PILOT_EVIDENCE_CONTRACTS.length,
+  );
+  assert.equal(
+    jobWorkspace.calculator.contract.activityTemplateId,
+    afterSecondAppointment.jobs[0].activityTemplateId,
+  );
+  assert.equal(jobWorkspace.submission.connectors.length, 1);
+  assert.equal(jobWorkspace.submission.externalSubmissionEnabled, false);
+  assert.deepEqual(jobWorkspace.boundaries, {
+    syntheticOnly: true,
+    regulatedCasesCreated: 0,
+    complianceEvidenceCreated: 0,
+    submissionItemsCreated: 0,
+    externalSubmissionEnabled: false,
+  });
+  assert.deepEqual(
+    jobWorkspace.capabilities.map((capability) => capability.key),
+    pilotContract.CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS.map(
+      (section) => section.key,
+    ),
+  );
+  assert.equal(
+    new Set(jobWorkspace.capabilities.map((capability) => capability.key)).size,
+    pilotContract.CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS.length,
+  );
+  const capabilities = Object.fromEntries(
+    jobWorkspace.capabilities.map((capability) => [
+      capability.key,
+      capability,
+    ]),
+  );
+  for (const section of [
+    "customer_files",
+    "customer_create_job",
+    "job_transactions",
+    "job_emails",
+    "appointment_questions",
+    "appointment_certificate_submissions",
+    "appointment_decommissioning",
+    "appointment_correspondence",
+    "copy_selection",
+  ]) {
+    assert.equal(capabilities[section].available, false, section);
+    assert.equal(capabilities[section].count, 0, section);
+    assert.equal(capabilities[section].readOnly, true, section);
+    assert.ok(capabilities[section].reason, section);
+  }
+  for (const section of [
+    "job_actions",
+    "job_questions",
+    "job_files",
+    "job_issues",
+  ]) {
+    assert.equal(capabilities[section].available, true, section);
+    assert.equal(capabilities[section].count, 0, section);
+    assert.equal(capabilities[section].readOnly, true, section);
+  }
+  assert.equal(capabilities.job_history.count, 1);
+  for (const section of ["print", "print_preview"]) {
+    assert.equal(capabilities[section].available, true, section);
+    assert.equal(capabilities[section].count, 1, section);
+    assert.equal(capabilities[section].readOnly, true, section);
+  }
+  assert.equal(capabilities.compliance_calculations.available, true);
+  assert.deepEqual(regulatedSnapshot(), beforeDetailRead);
+  assert.doesNotMatch(
+    JSON.stringify(jobWorkspace),
+    /objectKey|evidenceEnvelope|providerMessageId/,
+  );
+  const insertPilotMedia = database.prepare(`INSERT INTO trade_crm_job_media (
+      id, work_order_id, firebase_uid, category, file_name, content_type,
+      size_bytes, object_key, caption, source, evidence_envelope,
+      original_sha256, created_at, updated_at
+    ) VALUES (?, ?, ?, 'installation', ?, 'image/jpeg', 1024, ?, '', ?, ?, ?,
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z')`);
+  const mediaTruthCases = [
+    {
+      id: "media-envelope-only",
+      source: "field_app",
+      envelope: {
+        schemaVersion: 1,
+        source: "in_app_camera",
+        capture: { observedAtUtc: "" },
+        location: {
+          state: "permission_denied",
+          latitude: null,
+          longitude: null,
+        },
+        original: {
+          exifState: "not_returned",
+          exif: null,
+          widthPixels: null,
+          heightPixels: null,
+        },
+      },
+      metadataPresent: false,
+      gpsPresent: false,
+    },
+    {
+      id: "media-invalid-coordinates",
+      source: "field_app",
+      envelope: {
+        schemaVersion: 1,
+        source: "document_picker",
+        capture: { observedAtUtc: "2026-08-01T00:00:00.000Z" },
+        location: {
+          state: "captured",
+          latitude: -37.8136,
+          longitude: 181,
+        },
+        original: {
+          exifState: "not_applicable",
+          exif: null,
+          widthPixels: null,
+          heightPixels: null,
+        },
+      },
+      metadataPresent: false,
+      gpsPresent: false,
+    },
+    {
+      id: "media-valid-gps",
+      source: "field_app",
+      envelope: {
+        schemaVersion: 1,
+        source: "document_picker",
+        capture: { observedAtUtc: "2026-08-01T00:00:00.000Z" },
+        location: {
+          state: "captured",
+          latitude: -37.8136,
+          longitude: 144.9631,
+        },
+        original: {
+          exifState: "not_applicable",
+          exif: null,
+          widthPixels: null,
+          heightPixels: null,
+        },
+      },
+      metadataPresent: false,
+      gpsPresent: true,
+    },
+    {
+      id: "media-valid-capture",
+      source: "field_app",
+      envelope: {
+        schemaVersion: 1,
+        source: "in_app_camera",
+        capture: { observedAtUtc: "2026-08-01T00:00:00.000Z" },
+        location: {
+          state: "unavailable",
+          latitude: null,
+          longitude: null,
+        },
+        original: {
+          exifState: "not_returned",
+          exif: null,
+          widthPixels: 1920,
+          heightPixels: 1080,
+        },
+      },
+      metadataPresent: true,
+      gpsPresent: false,
+    },
+    {
+      id: "media-valid-exif",
+      source: "field_app",
+      envelope: {
+        schemaVersion: 1,
+        source: "document_picker",
+        capture: { observedAtUtc: "" },
+        location: {
+          state: "not_requested",
+          latitude: null,
+          longitude: null,
+        },
+        original: {
+          exifState: "available",
+          exif: { DateTimeOriginal: "2026:08:01 10:00:00" },
+          widthPixels: null,
+          heightPixels: null,
+        },
+      },
+      metadataPresent: true,
+      gpsPresent: false,
+    },
+  ];
+  for (const mediaCase of mediaTruthCases) {
+    insertPilotMedia.run(
+      mediaCase.id,
+      firstPilotWork.id,
+      firstPilotWork.firebase_uid,
+      `${mediaCase.id}.jpg`,
+      `private/${mediaCase.id}`,
+      mediaCase.source,
+      JSON.stringify(mediaCase.envelope),
+      "a".repeat(64),
+    );
+  }
+  const mediaTruthWorkspace =
+    await pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      member,
+      afterSecondAppointment.jobs[0].id,
+    );
+  const mediaFlags = Object.fromEntries(
+    mediaTruthWorkspace.crm.media.map((item) => [
+      item.id,
+      {
+        metadataPresent: item.metadataPresent,
+        gpsPresent: item.gpsPresent,
+      },
+    ]),
+  );
+  assert.deepEqual(
+    mediaFlags,
+    Object.fromEntries(
+      mediaTruthCases.map((mediaCase) => [
+        mediaCase.id,
+        {
+          metadataPresent: mediaCase.metadataPresent,
+          gpsPresent: mediaCase.gpsPresent,
+        },
+      ]),
+    ),
+  );
+  assert.doesNotMatch(
+    JSON.stringify(mediaTruthWorkspace),
+    /evidenceEnvelope|private\/media-/,
+  );
+  await assert.rejects(
+    pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      member,
+      "unknown-synthetic-job",
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_NOT_FOUND");
+      assert.equal(error.status, 404);
+      assert.equal(error.message, "The synthetic pilot job was not found.");
+      return true;
+    },
+  );
+
   assert.throws(
     () => pilotServer.parseCreditexPilotFilters(
       new URLSearchParams({
@@ -900,6 +1222,42 @@ test("complete migration chain provisions and reconciles the governed 10/30/300 
       0,
     );
   }
+
+  database.exec(
+    "DROP TRIGGER IF EXISTS trade_work_orders_synthetic_identity_no_update",
+  );
+  database.prepare(`UPDATE trade_work_orders
+      SET source_type = 'internal'
+      WHERE id = ?`).run(firstPilotWork.id);
+  await assert.rejects(
+    pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      member,
+      afterSecondAppointment.jobs[0].id,
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_NOT_FOUND");
+      assert.equal(error.status, 404);
+      assert.equal(error.message, "The synthetic pilot job was not found.");
+      return true;
+    },
+  );
+  database.prepare(`UPDATE trade_work_orders
+      SET source_type = 'synthetic_pilot', firebase_uid = 'corrupt-owner'
+      WHERE id = ?`).run(firstPilotWork.id);
+  await assert.rejects(
+    pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      member,
+      afterSecondAppointment.jobs[0].id,
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_NOT_FOUND");
+      assert.equal(error.status, 404);
+      assert.equal(error.message, "The synthetic pilot job was not found.");
+      return true;
+    },
+  );
 });
 
 test("two Creditex organisations provision independent 10/30/300 pilots without collisions", async (t) => {
@@ -917,6 +1275,24 @@ test("two Creditex organisations provision independent 10/30/300 pilots without 
   assert.notEqual(
     first.finalised.artifactSha256,
     second.finalised.artifactSha256,
+  );
+  const firstOrganisationJob = database.prepare(`SELECT id
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      ORDER BY job_number ASC
+      LIMIT 1`).get(first.runId);
+  await assert.rejects(
+    pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      secondMember,
+      firstOrganisationJob.id,
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_NOT_FOUND");
+      assert.equal(error.status, 404);
+      assert.equal(error.message, "The synthetic pilot job was not found.");
+      return true;
+    },
   );
   for (const result of [first, second]) {
     assert.deepEqual(pilotPopulation(database, result.runId), {
@@ -1235,6 +1611,11 @@ test("an activated archived pilot rejects finalisation without mutation", async 
   await ensureCreditexPilotSchemaGuards(d1);
   const member = pilotMember("archive_active");
   const pilot = await provisionCompletePilot(d1, member);
+  const archivedJobId = database.prepare(`SELECT id
+      FROM compliance_pilot_jobs
+      WHERE pilot_run_id = ?
+      ORDER BY job_number ASC
+      LIMIT 1`).get(pilot.runId).id;
   await pilotServer.archiveCreditexVeuPilot(
     d1,
     member,
@@ -1267,6 +1648,19 @@ test("an activated archived pilot rejects finalisation without mutation", async 
   assert.ok(archivedState.run.archived_at);
   assert.equal(archivedState.connectors.length, 1);
   assert.equal(archivedState.connectors[0].accepted_count, 0);
+  await assert.rejects(
+    pilotServer.loadCreditexVeuPilotJobWorkspace(
+      d1,
+      member,
+      archivedJobId,
+    ),
+    (error) => {
+      assert.equal(error.code, "CREDITEX_PILOT_JOB_NOT_FOUND");
+      assert.equal(error.status, 404);
+      assert.equal(error.message, "The synthetic pilot job was not found.");
+      return true;
+    },
+  );
 
   await assert.rejects(
     pilotServer.finaliseCreditexVeuPilot(d1, member),
@@ -1636,6 +2030,14 @@ test("API exposes only the authenticated, same-origin pilot control surface", ()
   );
   assert.match(route, /parseCreditexPilotFilters/);
   assert.match(route, /loadCreditexVeuPilotDashboard/);
+  assert.match(route, /loadCreditexVeuPilotJobWorkspace/);
+  assert.match(route, /searchParams\.get\("jobId"\)/);
+  assert.ok(
+    route.indexOf('searchParams.get("jobId")')
+      < route.indexOf("parseCreditexPilotFilters("),
+    "The opaque job-detail route must branch before dashboard filter parsing.",
+  );
+  assert.match(route, /return json\(\{ ok: true, workspace \}\)/);
   assert.deepEqual(
     Array.from(route.matchAll(/action === "([^"]+)"/g), (match) => match[1]),
     ["start", "provision_next", "finalise", "update_job", "archive"],
@@ -1645,6 +2047,30 @@ test("API exposes only the authenticated, same-origin pilot control surface", ()
     route,
     /export async function (?:PUT|PATCH|DELETE)/,
   );
+});
+
+test("job detail projection is fail-closed, owner-scoped and read-only", () => {
+  const detail = sourceSection(
+    server,
+    "export async function loadCreditexVeuPilotJobWorkspace",
+    "export async function loadCreditexVeuPilotDashboard",
+  );
+  assert.doesNotMatch(
+    detail,
+    /\b(?:INSERT(?:\s+OR\s+IGNORE)?\s+INTO|UPDATE|DELETE\s+FROM)\b/i,
+  );
+  assert.match(detail, /run\.status === "archived"/);
+  assert.match(detail, /job\.record_mode = 'synthetic_test'/);
+  assert.match(detail, /account\.is_synthetic = 1/);
+  assert.match(detail, /team\.owner_uid = installer\.trade_account_uid/);
+  assert.match(detail, /team\.member_uid = ''[\s\S]*team\.email = ''/);
+  assert.match(detail, /work\.firebase_uid = installer\.trade_account_uid/);
+  assert.match(detail, /work\.source_type = 'synthetic_pilot'/);
+  assert.match(detail, /work\.source_reference = job\.pilot_run_id/);
+  assert.match(detail, /work\.record_status = 'active'/);
+  assert.match(detail, /pilotJobNotFound\(\)/);
+  assert.match(detail, /externalSubmissionEnabled: false/);
+  assert.doesNotMatch(detail, /object_key|evidence_envelope AS|provider_message_id/i);
 });
 
 test("Creditex UI surfaces all five priorities, controlled dropdowns and activity tabs", () => {
@@ -1744,11 +2170,141 @@ test("Creditex UI surfaces all five priorities, controlled dropdowns and activit
     assert.match(workspace, new RegExp(`label: "${readinessColumn}"`));
   }
   assert.doesNotMatch(
-    workspaceStyles,
-    /\.jobTable[\s\S]{0,200}display:\s*none/,
+    sourceSection(workspaceStyles, ".jobTable {", ".jobTable caption"),
+    /display:\s*none/,
   );
   assert.match(workspaceStyles, /\.tableViewport\s*\{[\s\S]*overflow:\s*auto/);
-  assert.match(workspaceStyles, /\.advancedFilters\s*\{[\s\S]*position:\s*sticky/);
+  assert.match(
+    workspaceStyles,
+    /\.filterDrawer\s*\{[\s\S]*position:\s*absolute[\s\S]*transform:\s*translateX\(102%\)/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.filterDrawer\[data-open="true"\]\s*\{[\s\S]*transform:\s*translateX\(0\)/,
+  );
+  assert.match(
+    workspace,
+    /import \{[\s\S]*CreditexVeuJobAuditWorkspace[\s\S]*\} from "\.\/CreditexVeuJobAuditWorkspace"/,
+  );
+  assert.match(workspace, /onDoubleClick=\{\(event\) =>/);
+  assert.match(workspace, /onContextMenu=\{\(event\) =>/);
+  assert.match(workspace, /JOB_CONTEXT_ITEMS\.map/);
+  assert.match(workspace, /APPOINTMENT_CONTEXT_ITEMS\.map/);
+  assert.match(workspace, /<CreditexVeuJobAuditWorkspace/);
+  assert.match(
+    workspace,
+    /Copy Selection[\s\S]{0,250}disabled|disabled[\s\S]{0,250}Copy Selection/,
+  );
+  assert.match(workspace, /const detail = await openRecord\(job, "print_preview"\)/);
+  assert.match(workspace, /window\.requestAnimationFrame\(\(\) =>[\s\S]*window\.print\(\)/);
+  assert.match(workspace, /\{filtersOpen && \([\s\S]*<AdvancedPilotFilters/);
+  assert.match(
+    workspace,
+    /drawerElement\.addEventListener\("keydown", keepFocusInside\)/,
+  );
+  assert.match(
+    workspace,
+    /className=\{styles\.advancedFilters\}[\s\S]*role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="creditex-advanced-filters-title"/,
+  );
+  assert.match(
+    workspace,
+    /className=\{styles\.jobRegister\} inert=\{filtersOpen\}/,
+  );
+  assert.match(
+    workspace,
+    /className=\{styles\.panelTabs\}[\s\S]{0,120}inert=\{filtersOpen\}/,
+  );
+  assert.match(
+    workspace,
+    /className=\{styles\.activityRail\}[\s\S]{0,120}inert=\{filtersOpen\}/,
+  );
+  assert.match(
+    sourceSection(
+      workspace,
+      "async function copyJobRow",
+      "async function openPrint",
+    ),
+    /finally\s*\{\s*closeContextMenu\(\);\s*\}/,
+  );
+  assert.match(
+    auditWorkspaceStyles,
+    /\.workspace\s*\{[\s\S]*position:\s*fixed[\s\S]*inset:\s*0/,
+  );
+  assert.match(auditWorkspace, /detailMatchesJob\(job, detail\)/);
+  assert.match(auditWorkspace, /disabled=\{writeBlocked\}/);
+  assert.match(auditWorkspace, /detail\.customerJobs\.map/);
+  assert.match(auditWorkspace, /detail\.appointmentAudit\.revisions\.filter/);
+  assert.match(auditWorkspace, /detail\.appointmentAudit\.rescheduleRequests\.filter/);
+  assert.match(auditWorkspace, /detail\.appointmentAudit\.rescheduleEvents\.filter/);
+  for (const provenanceField of [
+    "revision.changedByUid",
+    "request.accessNotes",
+    "request.decisionNote",
+    "request.decidedByUid",
+    "event.actorUid",
+  ]) {
+    assert.match(auditWorkspace, new RegExp(provenanceField.replace(".", "\\.")));
+  }
+  assert.match(
+    auditWorkspace,
+    /detail\.boundaries\.regulatedCasesCreated/,
+  );
+  assert.match(
+    auditWorkspace,
+    /detail\.boundaries\.complianceEvidenceCreated/,
+  );
+  assert.match(
+    auditWorkspace,
+    /detail\.boundaries\.submissionItemsCreated/,
+  );
+  assert.match(auditWorkspace, /Job-level regulated records/);
+  assert.doesNotMatch(workspace, /boundaries=\{snapshot\.boundaries\}/);
+  assert.doesNotMatch(auditWorkspace, /boundaries\?\.regulatedCasesCreated/);
+  assert.match(
+    auditWorkspace,
+    /media\.filter\(\(item\) => item\.originalHashPresent\)\.length/,
+  );
+  assert.match(auditWorkspace, /disabled=\{!detailReady\}/);
+  assert.match(
+    auditWorkspace,
+    /\{leftOpen && <aside className=\{styles\.leftRail\}/,
+  );
+  assert.match(
+    auditWorkspace,
+    /\{rightOpen && <aside className=\{styles\.rightRail\}/,
+  );
+  for (const section of [
+    "customer_details",
+    "customer_jobs",
+    "customer_files",
+    "customer_create_job",
+    "job_summary",
+    "job_appointments",
+    "job_actions",
+    "job_questions",
+    "job_quote_invoice",
+    "job_calculations",
+    "job_transactions",
+    "job_files",
+    "job_issues",
+    "job_emails",
+    "job_history",
+    "appointment_summary",
+    "appointment_actions",
+    "appointment_questions",
+    "appointment_certificate_submissions",
+    "appointment_decommissioning",
+    "appointment_correspondence",
+    "appointment_audit",
+    "appointment_history",
+    "print_preview",
+  ]) {
+    assert.match(
+      auditWorkspace,
+      new RegExp(`section: "${section}"`),
+      `Missing full-record workspace section ${section}`,
+    );
+  }
   assert.match(
     workspace,
     /Exercise every VEU activity family across synthetic installer\s*records, field assignments and Creditex compliance workflow\s*structure/,

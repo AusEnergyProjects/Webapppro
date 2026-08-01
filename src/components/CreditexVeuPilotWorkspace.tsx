@@ -7,6 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  CreditexVeuJobAuditWorkspace,
+  type CreditexJobAuditDetail,
+  type JobWorkspaceSection,
+} from "./CreditexVeuJobAuditWorkspace";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
 type Api = (
@@ -531,6 +536,19 @@ const EMPTY_FILTERS: Filters = {
   pageSize: 300,
 };
 
+function activeFilterCount(filters: Filters) {
+  const ignored = new Set([
+    "dateField",
+    "sortBy",
+    "sortDirection",
+    "page",
+    "pageSize",
+  ]);
+  return Object.entries(filters).filter(
+    ([key, value]) => !ignored.has(key) && value !== "",
+  ).length;
+}
+
 const PANELS = [
   ["overview", "Pilot control"],
   ["jobs", "Jobs"],
@@ -542,6 +560,52 @@ const PANELS = [
 ] as const;
 
 type Panel = typeof PANELS[number][0];
+
+type ContextMenuState = {
+  jobId: string;
+  x: number;
+  y: number;
+};
+
+const JOB_CONTEXT_ITEMS: ReadonlyArray<{
+  label: string;
+  section: JobWorkspaceSection;
+}> = [
+  { label: "Job Summary", section: "job_summary" },
+  { label: "Job Appointments", section: "job_appointments" },
+  { label: "Job Actions", section: "job_actions" },
+  { label: "Job Questions", section: "job_questions" },
+  { label: "Job Quote/Invoice", section: "job_quote_invoice" },
+  { label: "Job Calculations", section: "job_calculations" },
+  { label: "Job Transactions", section: "job_transactions" },
+  { label: "Job Files", section: "job_files" },
+  { label: "Job Issues", section: "job_issues" },
+  { label: "Job Emails", section: "job_emails" },
+  { label: "Job History", section: "job_history" },
+];
+
+const APPOINTMENT_CONTEXT_ITEMS: ReadonlyArray<{
+  label: string;
+  section: JobWorkspaceSection;
+}> = [
+  { label: "Appointment Summary", section: "appointment_summary" },
+  { label: "Appointment Actions", section: "appointment_actions" },
+  { label: "Appointment Questions", section: "appointment_questions" },
+  {
+    label: "Appointment Certificate Submissions",
+    section: "appointment_certificate_submissions",
+  },
+  {
+    label: "Appointment Decommissioning Summary",
+    section: "appointment_decommissioning",
+  },
+  {
+    label: "Appointment Correspondence",
+    section: "appointment_correspondence",
+  },
+  { label: "Appointment Audit", section: "appointment_audit" },
+  { label: "Appointment History", section: "appointment_history" },
+];
 
 function readable(value: string) {
   return value
@@ -798,30 +862,34 @@ function pilotJobCellValue(columnKey: string, job: PilotJob) {
 function PilotJobCell({
   column,
   job,
-  selected,
   onOpen,
+  onOpenMenu,
 }: {
   column: PilotColumn;
   job: PilotJob;
-  selected: boolean;
-  onOpen: () => void;
+  onOpen: (button: HTMLButtonElement) => void;
+  onOpenMenu: (button: HTMLButtonElement) => void;
 }) {
   if (column.key === "actions") {
     return (
-      <details className={styles.rowMenu}>
-        <summary aria-label={`Actions for ${job.jobNumber}`}>⌄</summary>
-        <div>
-          <button type="button" onClick={onOpen}>
-            {selected ? "Record open" : "Open record"}
-          </button>
-          <span>More actions remain disabled in the synthetic pilot.</span>
-        </div>
-      </details>
+      <button
+        className={styles.rowActionButton}
+        type="button"
+        aria-label={`Open actions for ${job.jobNumber}`}
+        aria-haspopup="menu"
+        onClick={(event) => onOpenMenu(event.currentTarget)}
+      >
+        ⋮
+      </button>
     );
   }
   if (column.key === "jobNumber") {
     return (
-      <button className={styles.jobLink} type="button" onClick={onOpen}>
+      <button
+        className={styles.jobLink}
+        type="button"
+        onClick={(event) => onOpen(event.currentTarget)}
+      >
         {job.jobNumber}
       </button>
     );
@@ -854,6 +922,140 @@ function PilotJobCell({
   );
 }
 
+function PilotJobContextMenu({
+  state,
+  job,
+  onOpen,
+  onCopyRow,
+  onPrint,
+  onClose,
+}: {
+  state: ContextMenuState;
+  job: PilotJob;
+  onOpen: (section: JobWorkspaceSection) => void;
+  onCopyRow: () => void;
+  onPrint: (previewOnly: boolean) => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    menu?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    function handlePointer(event: MouseEvent) {
+      if (!menu?.contains(event.target as Node)) onClose();
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (
+        event.key === "ArrowDown"
+        || event.key === "ArrowUp"
+        || event.key === "Home"
+        || event.key === "End"
+      ) {
+        const items = Array.from(
+          menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') || [],
+        ).filter((item) => item.offsetParent !== null && !item.disabled);
+        if (!items.length) return;
+        event.preventDefault();
+        const activeIndex = items.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        const nextIndex = event.key === "Home"
+          ? 0
+          : event.key === "End"
+          ? items.length - 1
+          : event.key === "ArrowUp"
+          ? (activeIndex <= 0 ? items.length - 1 : activeIndex - 1)
+          : (activeIndex + 1) % items.length;
+        items[nextIndex]?.focus();
+      }
+    }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className={styles.contextMenu}
+      role="menu"
+      aria-label={`Actions for ${job.jobNumber}`}
+      style={{
+        left: Math.min(state.x, Math.max(8, window.innerWidth - 528)),
+        top: Math.min(state.y, Math.max(8, window.innerHeight - 448)),
+      }}
+    >
+      <button type="button" role="menuitem" onClick={() => onOpen("customer_details")}>
+        Customer Details
+      </button>
+      <div className={styles.contextSubmenu}>
+        <button type="button" role="menuitem" aria-haspopup="menu">
+          Job <span aria-hidden="true">›</span>
+        </button>
+        <div role="menu" aria-label="Job actions">
+          {JOB_CONTEXT_ITEMS.map((item) => (
+            <button
+              key={item.section}
+              type="button"
+              role="menuitem"
+              onClick={() => onOpen(item.section)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className={styles.contextSubmenu}>
+        <button type="button" role="menuitem" aria-haspopup="menu">
+          Appointment <span aria-hidden="true">›</span>
+        </button>
+        <div role="menu" aria-label="Appointment actions">
+          {APPOINTMENT_CONTEXT_ITEMS.map((item) => (
+            <button
+              key={item.section}
+              type="button"
+              role="menuitem"
+              onClick={() => onOpen(item.section)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <hr />
+      <button type="button" role="menuitem" onClick={onCopyRow}>
+        Copy Row
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        disabled
+        aria-disabled="true"
+        title="Copy Selection is unavailable until a cell range is selected."
+      >
+        Copy Selection
+      </button>
+      <button type="button" role="menuitem" onClick={() => onPrint(false)}>
+        Print
+      </button>
+      <button type="button" role="menuitem" onClick={() => onPrint(true)}>
+        Print Preview
+      </button>
+    </div>
+  );
+}
+
 function AdvancedPilotFilters({
   snapshot,
   filters,
@@ -862,6 +1064,7 @@ function AdvancedPilotFilters({
   onChange,
   onApply,
   onClear,
+  onClose,
 }: {
   snapshot: PilotSnapshot;
   filters: Filters;
@@ -870,18 +1073,71 @@ function AdvancedPilotFilters({
   onChange: (next: Partial<Filters>) => void;
   onApply: () => void;
   onClear: () => void;
+  onClose: () => void;
 }) {
+  const drawerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+    const drawerElement = drawer;
+    const focusableSelector =
+      'button:not([disabled]), select:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(
+      drawerElement.querySelectorAll<HTMLElement>(focusableSelector),
+    );
+    focusable[0]?.focus();
+
+    function keepFocusInside(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const current = Array.from(
+        drawerElement.querySelectorAll<HTMLElement>(focusableSelector),
+      );
+      if (!current.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = current[0];
+      const last = current[current.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    drawerElement.addEventListener("keydown", keepFocusInside);
+    return () =>
+      drawerElement.removeEventListener("keydown", keepFocusInside);
+  }, []);
+
   return (
-    <aside className={styles.advancedFilters} aria-label="Advanced filters">
+    <aside
+      ref={drawerRef}
+      className={styles.advancedFilters}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="creditex-advanced-filters-title"
+    >
       <header>
         <div>
           <span>ADVANCED SEARCH</span>
-          <h3>Filter all VEU jobs</h3>
+          <h3 id="creditex-advanced-filters-title">Filter all VEU jobs</h3>
         </div>
         <b>
           {PILOT_JOB_COLUMNS.length - 1} columns ·{" "}
           {PILOT_SORT_KEYS.length} sortable
         </b>
+        <button
+          className={styles.closeFilters}
+          type="button"
+          onClick={onClose}
+          aria-label="Close advanced filters"
+        >
+          ×
+        </button>
       </header>
 
       <label>
@@ -1291,6 +1547,17 @@ export function CreditexVeuPilotWorkspace({
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [panel, setPanel] = useState<Panel>("overview");
   const [selectedJobId, setSelectedJobId] = useState("");
+  const [recordSection, setRecordSection] =
+    useState<JobWorkspaceSection>("appointment_summary");
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [jobDetail, setJobDetail] = useState<CreditexJobAuditDetail | null>(
+    null,
+  );
+  const [jobDetailBusy, setJobDetailBusy] = useState(false);
+  const [jobDetailError, setJobDetailError] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [density, setDensity] = useState<"compact" | "comfortable">("compact");
   const [confirmation, setConfirmation] = useState("");
   const [archiveConfirmation, setArchiveConfirmation] = useState("");
   const [busy, setBusy] = useState("");
@@ -1298,6 +1565,10 @@ export function CreditexVeuPilotWorkspace({
   const [error, setError] = useState("");
   const [provisionProgress, setProvisionProgress] = useState("");
   const requestRef = useRef(0);
+  const detailRequestRef = useRef(0);
+  const initialPanelRef = useRef(false);
+  const filterToggleRef = useRef<HTMLButtonElement>(null);
+  const lastRecordTriggerRef = useRef<HTMLElement | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({
@@ -1353,7 +1624,12 @@ export function CreditexVeuPilotWorkspace({
     try {
       const result = await api(`/api/creditex/pilot?${query}`);
       if (requestId !== requestRef.current) return;
-      setSnapshot(result.pilot as PilotSnapshot);
+      const nextSnapshot = result.pilot as PilotSnapshot;
+      setSnapshot(nextSnapshot);
+      if (!initialPanelRef.current) {
+        initialPanelRef.current = true;
+        if (nextSnapshot.run?.status === "active") setPanel("jobs");
+      }
     } catch (requestError) {
       if (requestId !== requestRef.current) return;
       setError(
@@ -1377,6 +1653,14 @@ export function CreditexVeuPilotWorkspace({
     () => snapshot?.jobs?.find((job) => job.id === selectedJobId) || null,
     [selectedJobId, snapshot?.jobs],
   );
+  const contextJob = useMemo(
+    () => snapshot?.jobs?.find((job) => job.id === contextMenu?.jobId) || null,
+    [contextMenu?.jobId, snapshot?.jobs],
+  );
+  const appliedFilterCount = useMemo(
+    () => activeFilterCount(filters),
+    [filters],
+  );
   const visibleTechnicians = useMemo(
     () => (snapshot?.technicians || []).filter(
       (technician) =>
@@ -1391,6 +1675,122 @@ export function CreditexVeuPilotWorkspace({
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    window.setTimeout(() => lastRecordTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const closeFilters = useCallback(() => {
+    setFiltersOpen(false);
+    window.setTimeout(() => filterToggleRef.current?.focus(), 0);
+  }, []);
+
+  const loadJobDetail = useCallback(async (jobId: string) => {
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
+    setJobDetailBusy(true);
+    setJobDetailError("");
+    try {
+      const result = await api(
+        `/api/creditex/pilot?jobId=${encodeURIComponent(jobId)}`,
+      );
+      if (detailRequestRef.current !== requestId) return;
+      const workspace = result.workspace as CreditexJobAuditDetail;
+      setJobDetail(workspace);
+      return workspace;
+    } catch (detailError) {
+      if (detailRequestRef.current !== requestId) return;
+      setJobDetailError(
+        detailError instanceof Error
+          ? detailError.message
+          : "The complete synthetic job record could not be loaded.",
+      );
+    } finally {
+      if (detailRequestRef.current === requestId) setJobDetailBusy(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeFilters();
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [closeFilters, filtersOpen]);
+
+  function openRecord(
+    job: PilotJob,
+    section: JobWorkspaceSection,
+    trigger?: HTMLElement | null,
+  ) {
+    if (trigger) lastRecordTriggerRef.current = trigger;
+    setJobDetail(null);
+    setJobDetailError("");
+    setSelectedJobId(job.id);
+    setRecordSection(section);
+    setRecordOpen(true);
+    setContextMenu(null);
+    return loadJobDetail(job.id);
+  }
+
+  const closeRecord = useCallback(() => {
+    detailRequestRef.current += 1;
+    setJobDetailBusy(false);
+    setJobDetailError("");
+    setJobDetail(null);
+    setRecordOpen(false);
+    setSelectedJobId("");
+    window.setTimeout(() => lastRecordTriggerRef.current?.focus(), 0);
+  }, []);
+
+  function openContextMenu(
+    job: PilotJob,
+    x: number,
+    y: number,
+    trigger?: HTMLElement | null,
+  ) {
+    if (trigger) lastRecordTriggerRef.current = trigger;
+    setSelectedJobId(job.id);
+    setRecordOpen(false);
+    setContextMenu({ jobId: job.id, x: Math.max(8, x), y: Math.max(8, y) });
+  }
+
+  async function copyJobRow(job: PilotJob) {
+    const values = PILOT_JOB_COLUMNS
+      .filter((column) => column.key !== "actions")
+      .map((column) => pilotJobCellValue(column.key, job));
+    const content = [
+      PILOT_JOB_COLUMNS
+        .filter((column) => column.key !== "actions")
+        .map((column) => column.label)
+        .join("\t"),
+      values.join("\t"),
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(content);
+      setNotice(`${job.jobNumber} row headings and values were copied.`);
+    } catch {
+      setError("Browser clipboard access was denied. Nothing was copied.");
+    } finally {
+      closeContextMenu();
+    }
+  }
+
+  async function openPrint(job: PilotJob, previewOnly: boolean) {
+    const detail = await openRecord(job, "print_preview");
+    if (previewOnly || !detail) return;
+    await new Promise<void>((resolve) =>
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => resolve()),
+      ),
+    );
+    window.print();
   }
 
   async function provisionPilot() {
@@ -1516,6 +1916,9 @@ export function CreditexVeuPilotWorkspace({
       });
       setNotice(`${job.jobNumber} synthetic workflow status was audited.`);
       await load();
+      if (recordOpen && selectedJobId === job.id) {
+        await loadJobDetail(job.id);
+      }
     } catch (actionError) {
       setError(
         actionError instanceof Error
@@ -1554,7 +1957,11 @@ export function CreditexVeuPilotWorkspace({
   const isActive = snapshot.run?.status === "active";
 
   return (
-    <section className={styles.workspace} aria-label="VEU synthetic pilot">
+    <section
+      className={styles.workspace}
+      aria-label="VEU synthetic pilot"
+      data-panel={panel}
+    >
       <header className={styles.header}>
         <div>
           <span className={styles.kicker}>CONTROLLED TEST ENVIRONMENT</span>
@@ -1586,7 +1993,11 @@ export function CreditexVeuPilotWorkspace({
         </p>
       )}
 
-      <nav className={styles.panelTabs} aria-label="VEU pilot workspaces">
+      <nav
+        className={styles.panelTabs}
+        aria-label="VEU pilot workspaces"
+        inert={filtersOpen}
+      >
         {PANELS.map(([key, label]) => (
           <button
             key={key}
@@ -1832,8 +2243,8 @@ export function CreditexVeuPilotWorkspace({
       )}
 
       {panel === "jobs" && (
-        <section className={styles.jobWorkspace}>
-          <div className={styles.jobRegister}>
+        <section className={styles.jobWorkspace} data-density={density}>
+          <div className={styles.jobRegister} inert={filtersOpen}>
             <header>
               <div>
                 <span>VEU TEST JOB REGISTER</span>
@@ -1842,17 +2253,47 @@ export function CreditexVeuPilotWorkspace({
                   {snapshot.pagination?.total || 0} matching jobs
                 </h3>
                 <p>
-                  One synthetic job per row. Scroll inside the register to
-                  inspect all {PILOT_JOB_COLUMNS.length - 1} data columns.
+                  Double-click a job for its complete audit workspace.
+                  Right-click for customer, job and appointment actions.
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={Boolean(busy)}
-                onClick={() => void load()}
-              >
-                Refresh
-              </button>
+              <div className={styles.registerTools}>
+                <label>
+                  Density
+                  <select
+                    value={density}
+                    onChange={(event) =>
+                      setDensity(
+                        event.target.value as "compact" | "comfortable",
+                      )}
+                  >
+                    <option value="compact">Compact</option>
+                    <option value="comfortable">Comfortable</option>
+                  </select>
+                </label>
+                <button
+                  ref={filterToggleRef}
+                  type="button"
+                  className={styles.filterToggle}
+                  aria-expanded={filtersOpen}
+                  aria-controls="creditex-veu-advanced-filters"
+                  onClick={() => setFiltersOpen((current) => !current)}
+                >
+                  Advanced search
+                  {appliedFilterCount > 0 && (
+                    <b aria-label={`${appliedFilterCount} active filters`}>
+                      {appliedFilterCount}
+                    </b>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void load()}
+                >
+                  Refresh
+                </button>
+              </div>
             </header>
 
             <div className={styles.tableViewport}>
@@ -1882,6 +2323,7 @@ export function CreditexVeuPilotWorkspace({
                             sortDirection,
                             page: 0,
                           }));
+                          setRecordOpen(false);
                           setSelectedJobId("");
                         }}
                       />
@@ -1894,14 +2336,86 @@ export function CreditexVeuPilotWorkspace({
                       key={job.id}
                       data-selected={selectedJobId === job.id}
                       aria-selected={selectedJobId === job.id}
+                      tabIndex={0}
+                      onClick={(event) => {
+                        if (
+                          (event.target as Element).closest(
+                            "button, a, input, select, textarea, [role='menu']",
+                          )
+                        ) {
+                          return;
+                        }
+                        setSelectedJobId(job.id);
+                        setRecordOpen(false);
+                      }}
+                      onDoubleClick={(event) => {
+                        if (
+                          (event.target as Element).closest(
+                            "button, a, input, select, textarea, [role='menu']",
+                          )
+                        ) {
+                          return;
+                        }
+                        void openRecord(
+                          job,
+                          "appointment_summary",
+                          event.currentTarget,
+                        );
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        openContextMenu(
+                          job,
+                          event.clientX,
+                          event.clientY,
+                          event.currentTarget,
+                        );
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void openRecord(
+                            job,
+                            "appointment_summary",
+                            event.currentTarget,
+                          );
+                        }
+                        if (
+                          event.key === "ContextMenu"
+                          || (event.shiftKey && event.key === "F10")
+                        ) {
+                          event.preventDefault();
+                          const rect =
+                            event.currentTarget.getBoundingClientRect();
+                          openContextMenu(
+                            job,
+                            rect.left + 28,
+                            rect.top + 24,
+                            event.currentTarget,
+                          );
+                        }
+                      }}
                     >
                       {PILOT_JOB_COLUMNS.map((column) => (
                         <td key={column.key}>
                           <PilotJobCell
                             column={column}
                             job={job}
-                            selected={selectedJobId === job.id}
-                            onOpen={() => setSelectedJobId(job.id)}
+                            onOpen={(button) =>
+                              void openRecord(
+                                job,
+                                "appointment_summary",
+                                button,
+                              )}
+                            onOpenMenu={(button) => {
+                              const rect = button.getBoundingClientRect();
+                              openContextMenu(
+                                job,
+                                rect.left,
+                                rect.bottom + 4,
+                                button,
+                              );
+                            }}
                           />
                         </td>
                       ))}
@@ -1922,6 +2436,11 @@ export function CreditexVeuPilotWorkspace({
             </div>
 
             <footer className={styles.registerFooter}>
+              <span>
+                Records {(snapshot.jobs || []).length} |{" "}
+                {PILOT_JOB_COLUMNS.length - 1} columns |{" "}
+                {PILOT_SORT_KEYS.length} sortable
+              </span>
               <button
                 type="button"
                 disabled={(snapshot.pagination?.page || 0) <= 0}
@@ -1932,6 +2451,7 @@ export function CreditexVeuPilotWorkspace({
                   };
                   setFilters(next);
                   setDraftFilters(next);
+                  setRecordOpen(false);
                   setSelectedJobId("");
                 }}
               >
@@ -1951,58 +2471,90 @@ export function CreditexVeuPilotWorkspace({
                   const next = { ...filters, page: filters.page + 1 };
                   setFilters(next);
                   setDraftFilters(next);
+                  setRecordOpen(false);
                   setSelectedJobId("");
                 }}
               >
                 Next
               </button>
             </footer>
+          </div>
 
-            {selectedJob && (
-              <section className={styles.jobDrawer} aria-label="Selected job">
-                <button
-                  className={styles.closeDrawer}
-                  type="button"
-                  onClick={() => setSelectedJobId("")}
-                >
-                  Close record
-                </button>
-                <PilotJobDetail
-                  key={[
-                    selectedJob.id,
-                    selectedJob.reviewStatus,
-                    selectedJob.evidenceStatus,
-                    selectedJob.lookupStatus,
-                    selectedJob.updatedAt,
-                  ].join(":")}
-                  job={selectedJob}
-                  role={role}
-                  busy={busy === `job:${selectedJob.id}`}
-                  options={snapshot.filters}
-                  onSave={(next) => void saveJob(selectedJob, next)}
-                />
-              </section>
+          {filtersOpen && (
+            <button
+              className={styles.filterBackdrop}
+              type="button"
+              aria-label="Close advanced filters"
+              onClick={closeFilters}
+            />
+          )}
+          <div
+            id="creditex-veu-advanced-filters"
+            className={styles.filterDrawer}
+            data-open={filtersOpen}
+            aria-hidden={!filtersOpen}
+          >
+            {filtersOpen && (
+              <AdvancedPilotFilters
+                snapshot={snapshot}
+                filters={draftFilters}
+                technicians={visibleTechnicians}
+                busy={Boolean(busy)}
+                onChange={(next) =>
+                  setDraftFilters((current) => ({ ...current, ...next }))}
+                onApply={() => {
+                  setFilters({ ...draftFilters, page: 0 });
+                  setRecordOpen(false);
+                  setSelectedJobId("");
+                  closeFilters();
+                }}
+                onClear={() => {
+                  setDraftFilters(EMPTY_FILTERS);
+                  setFilters(EMPTY_FILTERS);
+                  setRecordOpen(false);
+                  setSelectedJobId("");
+                }}
+                onClose={closeFilters}
+              />
             )}
           </div>
 
-          <AdvancedPilotFilters
-            snapshot={snapshot}
-            filters={draftFilters}
-            technicians={visibleTechnicians}
-            busy={Boolean(busy)}
-            onChange={(next) =>
-              setDraftFilters((current) => ({ ...current, ...next }))}
-            onApply={() => {
-              setFilters({ ...draftFilters, page: 0 });
-              setSelectedJobId("");
-            }}
-            onClear={() => {
-              setDraftFilters(EMPTY_FILTERS);
-              setFilters(EMPTY_FILTERS);
-              setSelectedJobId("");
-            }}
-          />
+          {contextMenu && contextJob && (
+            <PilotJobContextMenu
+              state={contextMenu}
+              job={contextJob}
+              onOpen={(section) => void openRecord(contextJob, section)}
+              onCopyRow={() => void copyJobRow(contextJob)}
+              onPrint={(previewOnly) => void openPrint(contextJob, previewOnly)}
+              onClose={closeContextMenu}
+            />
+          )}
         </section>
+      )}
+
+      {recordOpen && selectedJob && (
+        <CreditexVeuJobAuditWorkspace
+          key={[
+            selectedJob.id,
+            selectedJob.reviewStatus,
+            selectedJob.evidenceStatus,
+            selectedJob.lookupStatus,
+            selectedJob.updatedAt,
+          ].join(":")}
+          job={selectedJob}
+          section={recordSection}
+          role={role}
+          busy={busy === `job:${selectedJob.id}`}
+          options={snapshot.filters}
+          priorities={jobDetail?.priorities || snapshot.priorities}
+          detail={jobDetail}
+          detailBusy={jobDetailBusy}
+          detailError={jobDetailError}
+          onSectionChange={setRecordSection}
+          onClose={closeRecord}
+          onSave={(next) => void saveJob(selectedJob, next)}
+          onPrint={() => window.print()}
+        />
       )}
 
       {panel === "sources" && (
@@ -2238,7 +2790,11 @@ export function CreditexVeuPilotWorkspace({
       )}
 
       {isActive && (
-        <nav className={styles.activityRail} aria-label="VEU activity tabs">
+        <nav
+          className={styles.activityRail}
+          aria-label="VEU activity tabs"
+          inert={filtersOpen}
+        >
           <button
             type="button"
             data-selected={!filters.activityTemplateId}
@@ -2281,108 +2837,5 @@ export function CreditexVeuPilotWorkspace({
         </nav>
       )}
     </section>
-  );
-}
-
-function PilotJobDetail({
-  job,
-  role,
-  busy,
-  options,
-  onSave,
-}: {
-  job: PilotJob;
-  role: "admin" | "case_manager" | "reviewer" | "auditor";
-  busy: boolean;
-  options: PilotSnapshot["filters"];
-  onSave: (next: {
-    reviewStatus: string;
-    evidenceStatus: string;
-    lookupStatus: string;
-  }) => void;
-}) {
-  const [reviewStatus, setReviewStatus] = useState(job.reviewStatus);
-  const [evidenceStatus, setEvidenceStatus] = useState(job.evidenceStatus);
-  const [lookupStatus, setLookupStatus] = useState(job.lookupStatus);
-
-  const writable = ["admin", "case_manager", "reviewer"].includes(role);
-  return (
-    <>
-      <header>
-        <span className={styles.testBadge}>SYNTHETIC TEST ONLY</span>
-        <h3>{job.jobNumber}</h3>
-        <p>{job.caseNumber}</p>
-      </header>
-      <dl>
-        <div><dt>Installer</dt><dd>{job.installer.businessName}</dd></div>
-        <div><dt>Technician</dt><dd>{job.technician.displayName}</dd></div>
-        <div><dt>Activity</dt><dd>{job.registryActivityCode} | {job.title}</dd></div>
-        <div><dt>Part</dt><dd>{job.specificationPart || "Specialist method"}</dd></div>
-        <div><dt>Activity date</dt><dd>{job.activityDate}</dd></div>
-        <div><dt>Catalogue state</dt><dd>{readable(job.catalogueState)}</dd></div>
-      </dl>
-      <section>
-        <h4>Controlled workflow status</h4>
-        <label>
-          Review
-          <select
-            value={reviewStatus}
-            disabled={!writable || busy}
-            onChange={(event) => setReviewStatus(event.target.value)}
-          >
-            {options.reviewStatuses
-              .filter(
-                (status) =>
-                  status !== "test_complete" && status !== "archived",
-              )
-              .map((status) => (
-                <option key={status} value={status}>{readable(status)}</option>
-              ))}
-          </select>
-        </label>
-        <label>
-          Evidence transport
-          <select
-            value={evidenceStatus}
-            disabled={!writable || busy}
-            onChange={(event) => setEvidenceStatus(event.target.value)}
-          >
-            {options.evidenceStatuses.map((status) => (
-              <option key={status} value={status}>{readable(status)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Authoritative lookups
-          <select
-            value={lookupStatus}
-            disabled={!writable || busy}
-            onChange={(event) => setLookupStatus(event.target.value)}
-          >
-            {options.lookupStatuses
-              .filter((status) => status !== "verified")
-              .map((status) => (
-                <option key={status} value={status}>{readable(status)}</option>
-              ))}
-          </select>
-        </label>
-        {writable && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              onSave({ reviewStatus, evidenceStatus, lookupStatus })}
-          >
-            {busy ? "Saving..." : "Save audited test state"}
-          </button>
-        )}
-      </section>
-      <section className={styles.blockers}>
-        <h4>Hard blockers</h4>
-        <p><strong>Rules</strong>{readable(job.ruleStatus)}</p>
-        <p><strong>Calculator</strong>{readable(job.calculatorStatus)}</p>
-        <p><strong>Connector</strong>{readable(job.connectorStatus)}</p>
-      </section>
-    </>
   );
 }

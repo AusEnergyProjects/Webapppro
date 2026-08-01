@@ -5,6 +5,7 @@ import {
   CREDITEX_VEU_PILOT_CONTROL_OPTIONS,
   CREDITEX_VEU_PILOT_EVIDENCE_CONTRACTS,
   CREDITEX_VEU_PILOT_INSTALLER_COUNT,
+  CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS,
   CREDITEX_VEU_PILOT_JOBS_PER_TECHNICIAN,
   CREDITEX_VEU_PILOT_JOB_COUNT,
   CREDITEX_VEU_PILOT_SEED_VERSION,
@@ -12,6 +13,8 @@ import {
   CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER,
   calculatorInputSchema,
   calculatorOutputSchema,
+  type CreditexVeuPilotJobDetailCapability,
+  type CreditexVeuPilotJobDetailSectionKey,
 } from "./creditex-veu-pilot-contract";
 
 const PILOT_PAGE_SIZES = new Set([25, 50, 100, 300]);
@@ -248,6 +251,76 @@ function scheduledAt(date: string, hour: number) {
 
 function metadata(value: unknown) {
   return canonicalJson(value);
+}
+
+function parsedJson(value: unknown, fallback: unknown) {
+  try {
+    return JSON.parse(String(value || "")) as unknown;
+  } catch {
+    return fallback;
+  }
+}
+
+function plainRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function finiteCoordinate(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+) {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && value >= minimum
+    && value <= maximum;
+}
+
+function evidenceEnvelopeFlags(envelope: unknown) {
+  const envelopeRecord = plainRecord(envelope);
+  if (!envelopeRecord) {
+    return { metadataPresent: false, gpsPresent: false };
+  }
+
+  const location = plainRecord(envelopeRecord.location);
+  const gpsPresent = location?.state === "captured"
+    && finiteCoordinate(location.latitude, -90, 90)
+    && finiteCoordinate(location.longitude, -180, 180);
+
+  const capture = plainRecord(envelopeRecord.capture);
+  const original = plainRecord(envelopeRecord.original);
+  const exif = plainRecord(original?.exif);
+  const exifPresent = original?.exifState === "available"
+    && Boolean(exif && Object.keys(exif).length > 0);
+  const captureObservedAt = capture?.observedAtUtc;
+  const captureObservedAtPresent =
+    typeof captureObservedAt === "string"
+    && captureObservedAt.trim().length > 0
+    && Number.isFinite(Date.parse(captureObservedAt));
+  const captureMetadataPresent =
+    envelopeRecord.source === "in_app_camera"
+    && captureObservedAtPresent
+    && typeof original?.widthPixels === "number"
+    && Number.isFinite(original.widthPixels)
+    && original.widthPixels > 0
+    && typeof original.heightPixels === "number"
+    && Number.isFinite(original.heightPixels)
+    && original.heightPixels > 0;
+
+  return {
+    metadataPresent: exifPresent || captureMetadataPresent,
+    gpsPresent,
+  };
+}
+
+function pilotJobNotFound(): never {
+  throw new CreditexVeuPilotError(
+    "CREDITEX_PILOT_JOB_NOT_FOUND",
+    404,
+    "The synthetic pilot job was not found.",
+  );
 }
 
 function insertRows(
@@ -1752,6 +1825,998 @@ function projectionRun(run: PilotRunRow) {
     activatedAt: run.activated_at,
     archivedAt: run.archived_at,
     updatedAt: run.updated_at,
+  };
+}
+
+type PilotJobDetailCapabilityCounts = {
+  customerDetails: number;
+  customerJobs: number;
+  appointments: number;
+  tasks: number;
+  forms: number;
+  quotesAndInvoices: number;
+  calculatorContracts: number;
+  media: number;
+  issues: number;
+  events: number;
+  appointmentChanges: number;
+  sources: number;
+  lookupOptions: number;
+  evidenceContracts: number;
+  connectors: number;
+};
+
+function detailCapability(
+  available: boolean,
+  count: number,
+  reason: string,
+) {
+  return { available, count, readOnly: true, reason };
+}
+
+function pilotJobDetailCapabilities(
+  counts: PilotJobDetailCapabilityCounts,
+): CreditexVeuPilotJobDetailCapability[] {
+  const states: Record<
+    CreditexVeuPilotJobDetailSectionKey,
+    ReturnType<typeof detailCapability>
+  > = {
+    customer_details: detailCapability(
+      counts.customerDetails > 0,
+      counts.customerDetails,
+      counts.customerDetails
+        ? "The linked synthetic CRM customer is available read-only."
+        : "No linked synthetic CRM customer is recorded.",
+    ),
+    customer_jobs: detailCapability(
+      counts.customerDetails > 0,
+      counts.customerJobs,
+      counts.customerDetails
+        ? "Customer-linked synthetic pilot jobs are available read-only."
+        : "Customer-linked jobs require an authoritative customer relationship.",
+    ),
+    customer_files: detailCapability(
+      false,
+      0,
+      "No authoritative customer-file relationship is stored for pilot customers.",
+    ),
+    customer_create_job: detailCapability(
+      false,
+      0,
+      "Synthetic provisioning is the only supported pilot job creation path.",
+    ),
+    job_summary: detailCapability(
+      true,
+      1,
+      "The immutable pilot identity and linked CRM job facts are available.",
+    ),
+    job_appointments: detailCapability(
+      true,
+      counts.appointments,
+      "All owner-scoped appointments for this synthetic job are returned.",
+    ),
+    job_actions: detailCapability(
+      true,
+      counts.tasks,
+      "The TLink work-order task domain is available and may be empty.",
+    ),
+    job_questions: detailCapability(
+      true,
+      counts.forms,
+      "The TLink job-form domain is available and may be empty.",
+    ),
+    job_quote_invoice: detailCapability(
+      true,
+      counts.quotesAndInvoices,
+      "Quote and invoice summaries are available without recipient or provider identifiers.",
+    ),
+    job_calculations: detailCapability(
+      counts.calculatorContracts > 0,
+      counts.calculatorContracts,
+      counts.calculatorContracts
+        ? "A typed calculator contract is available, but formula execution remains blocked."
+        : "No calculator contract is recorded for this activity.",
+    ),
+    job_transactions: detailCapability(
+      false,
+      0,
+      "No authoritative transaction or payment record is linked to the synthetic pilot.",
+    ),
+    job_files: detailCapability(
+      true,
+      counts.media,
+      "The owner-scoped job-media domain is available and may be empty.",
+    ),
+    job_issues: detailCapability(
+      true,
+      counts.issues,
+      "Issue-marked CRM job notes are available and may be empty.",
+    ),
+    job_emails: detailCapability(
+      false,
+      0,
+      "No authoritative generic job-email domain is linked to the synthetic pilot.",
+    ),
+    job_history: detailCapability(
+      true,
+      counts.events,
+      "Append-only TLink work-order events are available.",
+    ),
+    appointment_summary: detailCapability(
+      true,
+      counts.appointments,
+      "Appointment summaries are available for every linked appointment.",
+    ),
+    appointment_actions: detailCapability(
+      true,
+      counts.appointmentChanges,
+      "Appointment revisions and reschedule records are available and may be empty.",
+    ),
+    appointment_questions: detailCapability(
+      false,
+      0,
+      "No authoritative appointment-specific question domain is stored.",
+    ),
+    appointment_certificate_submissions: detailCapability(
+      false,
+      0,
+      "Database guards prohibit synthetic jobs from entering certificate submission flows.",
+    ),
+    appointment_decommissioning: detailCapability(
+      false,
+      0,
+      "No authoritative decommissioning record is stored for the synthetic pilot.",
+    ),
+    appointment_correspondence: detailCapability(
+      false,
+      0,
+      "No authoritative appointment-correspondence domain is stored.",
+    ),
+    appointment_audit: detailCapability(
+      true,
+      counts.appointmentChanges,
+      "Appointment revisions and reschedule events form the available audit history.",
+    ),
+    appointment_history: detailCapability(
+      true,
+      counts.appointmentChanges,
+      "Recorded appointment changes are available in deterministic order.",
+    ),
+    copy_row: detailCapability(
+      true,
+      1,
+      "The current read-only job projection can support a client-side row copy.",
+    ),
+    copy_selection: detailCapability(
+      false,
+      0,
+      "Multi-row selection is a client workspace capability and is not asserted by this detail response.",
+    ),
+    print: detailCapability(
+      true,
+      1,
+      "The complete loaded synthetic detail can be printed from the read-only client workspace.",
+    ),
+    print_preview: detailCapability(
+      true,
+      1,
+      "The complete loaded synthetic detail can be reviewed in the client print surface before printing.",
+    ),
+    compliance_rules: detailCapability(
+      counts.sources > 0,
+      counts.sources,
+      counts.sources
+        ? "Government source facts are available, but independent verification remains required."
+        : "No government source facts are recorded for the current pilot.",
+    ),
+    compliance_lookups: detailCapability(
+      counts.lookupOptions > 0,
+      counts.lookupOptions,
+      counts.lookupOptions
+        ? "Controlled lookup options are available, but live authoritative connectors remain blocked."
+        : "No controlled lookup options are recorded.",
+    ),
+    compliance_evidence: detailCapability(
+      counts.evidenceContracts > 0,
+      counts.evidenceContracts,
+      counts.evidenceContracts
+        ? "Transport test contracts are available; they are not a complete government evidence policy."
+        : "No evidence transport contracts are recorded.",
+    ),
+    compliance_calculations: detailCapability(
+      counts.calculatorContracts > 0,
+      counts.calculatorContracts,
+      counts.calculatorContracts
+        ? "The typed activity contract is available; no VEEC quantity is calculated."
+        : "No calculator contract is recorded for this activity.",
+    ),
+    compliance_submission: detailCapability(
+      counts.connectors > 0,
+      counts.connectors,
+      counts.connectors
+        ? "Run-level dry-run connector facts are available; external submission remains disabled."
+        : "No dry-run connector artifact is recorded.",
+    ),
+  };
+  return CREDITEX_VEU_PILOT_JOB_DETAIL_SECTIONS.map((section) => ({
+    ...section,
+    ...states[section.key],
+  }));
+}
+
+export async function loadCreditexVeuPilotJobWorkspace(
+  database: D1Database,
+  member: ComplianceIdentity,
+  jobIdInput: unknown,
+) {
+  const jobId = textValue(jobIdInput, 200);
+  if (!jobId) {
+    pilotJobNotFound();
+  }
+  const run = await currentPilotRun(database, member.organisationId);
+  if (!run || run.status === "archived") {
+    pilotJobNotFound();
+  }
+  await assertRunContract(run);
+
+  const job = await database.prepare(`SELECT
+      job.id, job.pilot_run_id, job.work_order_id, job.case_number,
+      job.job_number, job.activity_template_id, job.activity_key,
+      job.registry_activity_code, job.specification_part, job.title,
+      job.service_category, job.product_category, job.scenario_code,
+      job.scenario, job.catalogue_state, job.activity_date, job.record_mode,
+      job.rule_status, job.lookup_status, job.evidence_status,
+      job.calculator_status, job.connector_status, job.review_status,
+      job.created_at, job.updated_at,
+      installer.id AS installer_id, installer.company_code,
+      installer.business_name, installer.status AS installer_status,
+      account.firebase_uid AS installer_owner_uid,
+      account.email AS installer_email, account.abn AS installer_abn,
+      account.address_line_1 AS installer_address_line_1,
+      account.suburb AS installer_suburb,
+      account.address_state AS installer_address_state,
+      account.postcode AS installer_postcode,
+      account.contact_name AS installer_contact_name,
+      account.phone AS installer_phone,
+      account.partner_type AS installer_partner_type,
+      account.account_status AS installer_account_status,
+      account.verification_status AS installer_verification_status,
+      technician.id AS technician_id, technician.team_member_id,
+      technician.technician_code, technician.display_name,
+      technician.status AS technician_status,
+      team.status AS technician_team_status,
+      work.work_number, work.work_type, work.source_type,
+      work.source_reference, work.title AS work_title,
+      work.service_category AS work_service_category,
+      work.service_categories, work.site_area, work.stage AS work_stage,
+      work.priority, work.scheduled_start, work.scheduled_end,
+      work.assignee_member_id, work.assignee_label,
+      work.revision AS work_revision, work.record_status AS work_record_status,
+      detail.id AS job_detail_id, detail.customer_source,
+      detail.pipeline_stage, detail.building_type, detail.description,
+      detail.customer_reference, detail.next_action, detail.tags,
+      detail.estimated_value_cents, detail.quoted_value_cents,
+      detail.invoiced_value_cents, detail.paid_value_cents,
+      detail.quote_status, detail.invoice_status, detail.payment_due_at,
+      customer.id AS customer_id, customer.customer_number,
+      customer.customer_type, customer.first_name, customer.last_name,
+      customer.business_name AS customer_business_name,
+      customer.business_number, customer.email AS customer_email,
+      customer.phone AS customer_phone,
+      customer.address_line_1 AS customer_address_line_1,
+      customer.address_line_2 AS customer_address_line_2,
+      customer.suburb AS customer_suburb,
+      customer.address_state AS customer_address_state,
+      customer.postcode AS customer_postcode,
+      customer.tags AS customer_tags, customer.private_notes,
+      site.id AS service_site_id, site.site_label,
+      site.address_line_1, site.address_line_2, site.suburb,
+      site.address_state, site.postcode,
+      site.access_instructions, site.parking_instructions,
+      site.hazard_notes, site.is_primary
+    FROM compliance_pilot_jobs job
+    JOIN compliance_pilot_installers installer
+      ON installer.id = job.installer_id
+      AND installer.pilot_run_id = job.pilot_run_id
+    JOIN trade_accounts account
+      ON account.firebase_uid = installer.trade_account_uid
+      AND account.is_synthetic = 1
+    JOIN compliance_pilot_technicians technician
+      ON technician.id = job.technician_id
+      AND technician.pilot_run_id = job.pilot_run_id
+      AND technician.installer_id = installer.id
+    JOIN trade_team_members team
+      ON team.id = technician.team_member_id
+      AND team.owner_uid = installer.trade_account_uid
+      AND team.member_uid = ''
+      AND team.email = ''
+    JOIN trade_work_orders work
+      ON work.id = job.work_order_id
+      AND work.firebase_uid = installer.trade_account_uid
+      AND work.source_type = 'synthetic_pilot'
+      AND work.source_reference = job.pilot_run_id
+      AND work.record_status = 'active'
+    JOIN trade_crm_job_details detail
+      ON detail.work_order_id = work.id
+      AND detail.firebase_uid = work.firebase_uid
+    JOIN trade_crm_customers customer
+      ON customer.id = detail.crm_customer_id
+      AND customer.firebase_uid = work.firebase_uid
+      AND customer.record_status = 'active'
+    JOIN trade_crm_service_sites site
+      ON site.id = detail.service_site_id
+      AND site.customer_id = customer.id
+      AND site.firebase_uid = work.firebase_uid
+      AND site.record_status = 'active'
+    WHERE job.id = ?
+      AND job.pilot_run_id = ?
+      AND job.record_mode = 'synthetic_test'
+    LIMIT 1`).bind(jobId, run.id).first<Record<string, unknown>>();
+  if (!job) {
+    pilotJobNotFound();
+  }
+
+  const workOrderId = String(job.work_order_id);
+  const firebaseUid = String(job.installer_owner_uid || "");
+  if (!firebaseUid) {
+    pilotJobNotFound();
+  }
+  const customerId = String(job.customer_id);
+  const activityTemplateId = String(job.activity_template_id);
+
+  const [
+    customerJobsResult,
+    appointmentsResult,
+    revisionsResult,
+    rescheduleRequestsResult,
+    rescheduleEventsResult,
+    tasksResult,
+  ] = await Promise.all([
+    database.prepare(`SELECT candidate.id, candidate.job_number,
+        candidate.case_number, candidate.registry_activity_code,
+        candidate.title, candidate.review_status, candidate.evidence_status,
+        candidate.activity_date, candidate.created_at, candidate.updated_at
+      FROM compliance_pilot_jobs candidate
+      JOIN trade_work_orders candidate_work
+        ON candidate_work.id = candidate.work_order_id
+        AND candidate_work.firebase_uid = ?
+        AND candidate_work.source_type = 'synthetic_pilot'
+        AND candidate_work.source_reference = candidate.pilot_run_id
+        AND candidate_work.record_status = 'active'
+      JOIN trade_crm_job_details candidate_detail
+        ON candidate_detail.work_order_id = candidate_work.id
+        AND candidate_detail.firebase_uid = candidate_work.firebase_uid
+        AND candidate_detail.crm_customer_id = ?
+      WHERE candidate.pilot_run_id = ?
+        AND candidate.record_mode = 'synthetic_test'
+      ORDER BY candidate.activity_date ASC, candidate.job_number ASC,
+        candidate.id ASC`).bind(firebaseUid, customerId, run.id).all(),
+    database.prepare(`SELECT id, appointment_type, title, starts_at, ends_at,
+        assignee_member_id, assignee_label, status, travel_started_at,
+        arrived_at, work_started_at, completed_at, last_transition_by_uid,
+        notes, revision, created_at, updated_at
+      FROM trade_crm_appointments
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY starts_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, appointment_id, revision, starts_at, ends_at,
+        assignee_member_id, assignee_label, change_source, source_reference,
+        changed_by_uid, created_at
+      FROM trade_crm_appointment_revisions
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, appointment_id, crm_customer_id, status,
+        preferred_windows, reason, access_notes,
+        requested_appointment_revision, original_starts_at, original_ends_at,
+        original_assignee_member_id, original_assignee_label,
+        proposed_starts_at, proposed_ends_at, proposed_assignee_member_id,
+        proposed_assignee_label, decision_note, revision, requested_at,
+        decided_by_uid, decided_at, created_at, updated_at
+      FROM trade_crm_appointment_reschedule_requests
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, request_id, appointment_id, actor_type,
+        actor_uid, event_type, request_revision, from_starts_at, from_ends_at,
+        to_starts_at, to_ends_at, summary, created_at
+      FROM trade_crm_appointment_reschedule_events
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, title, due_at, status, completed_at, revision,
+        sort_order, created_at, updated_at
+      FROM trade_work_order_tasks
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY sort_order ASC, created_at ASC, id ASC`)
+      .bind(workOrderId, firebaseUid).all(),
+  ]);
+  const [
+    workEventsResult,
+    notesResult,
+    formsResult,
+    mediaResult,
+    quotesResult,
+    invoicesResult,
+  ] = await Promise.all([
+    database.prepare(`SELECT id, event_type, summary, created_at
+      FROM trade_work_order_events
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, note_type, body, issue_status, created_at,
+        updated_at
+      FROM trade_crm_job_notes
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, template_key, template_version, template_name,
+        jurisdiction, answers, status, revision, completed_by_uid,
+        completed_at, created_at, updated_at
+      FROM trade_job_forms
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, category, file_name, content_type, size_bytes,
+        caption, source, photo_request_id, photo_requirement_id,
+        request_revision, checklist_version, customer_acknowledged_at,
+        evidence_envelope, original_sha256, created_at, updated_at
+      FROM trade_crm_job_media
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT quote.id, quote.quote_number,
+        quote.current_version_number, quote.status, quote.created_at,
+        quote.updated_at, version.status AS version_status,
+        version.subtotal_cents, version.tax_cents, version.total_cents,
+        version.terms, version.valid_until, version.issued_at
+      FROM trade_crm_quotes quote
+      LEFT JOIN trade_crm_quote_versions version
+        ON version.quote_id = quote.id
+        AND version.firebase_uid = quote.firebase_uid
+        AND version.version_number = quote.current_version_number
+      WHERE quote.work_order_id = ? AND quote.firebase_uid = ?
+      ORDER BY quote.created_at ASC, quote.id ASC`)
+      .bind(workOrderId, firebaseUid).all(),
+    database.prepare(`SELECT id, invoice_number, currency, line_items_json,
+        subtotal_cents, tax_cents, total_cents, due_at, status,
+        delivery_status, consent_confirmed_at, attempts, last_error,
+        sent_at, revision, created_at, updated_at
+      FROM trade_crm_quick_invoices
+      WHERE work_order_id = ? AND firebase_uid = ?
+      ORDER BY created_at ASC, id ASC`).bind(workOrderId, firebaseUid).all(),
+  ]);
+  const [
+    sourcesResult,
+    controlsResult,
+    evidenceContractsResult,
+    calculatorContract,
+    connectorsResult,
+    boundaryCounts,
+  ] = await Promise.all([
+    database.prepare(`SELECT source_key, source_kind, title,
+        official_source_url, official_version, effective_from, effective_to,
+        official_source_sha256, hash_status, verification_status,
+        source_priority, captured_at
+      FROM compliance_pilot_source_instruments
+      WHERE pilot_run_id = ?
+      ORDER BY source_priority ASC, source_key ASC`).bind(run.id).all(),
+    database.prepare(`SELECT control_type, option_code, label, option_order,
+        effective_from, effective_to, source_key, live_lookup_enabled
+      FROM compliance_pilot_control_options
+      WHERE pilot_run_id = ?
+      ORDER BY control_type ASC, option_order ASC, option_code ASC`)
+      .bind(run.id).all(),
+    database.prepare(`SELECT requirement_code, title, evidence_kind,
+        capture_timing, original_required, metadata_required, gps_required,
+        minimum_count, maximum_count, allowed_content_types, contract_scope,
+        government_requirement_status, source_key, option_order
+      FROM compliance_pilot_evidence_contracts
+      WHERE pilot_run_id = ?
+      ORDER BY option_order ASC, requirement_code ASC`).bind(run.id).all(),
+    database.prepare(`SELECT id, activity_template_id, registry_activity_code,
+        input_schema, output_schema, output_unit, formula_status,
+        test_vector_status, source_key, created_at
+      FROM compliance_pilot_calculator_contracts
+      WHERE pilot_run_id = ? AND activity_template_id = ?
+      LIMIT 1`).bind(run.id, activityTemplateId)
+      .first<Record<string, unknown>>(),
+    database.prepare(`SELECT connector_code, mapping_version, mode, status,
+        item_count, accepted_count, rejected_count, unmatched_count,
+        duplicate_count, artifact_sha256, external_submission_enabled,
+        created_at, updated_at
+      FROM compliance_pilot_connector_runs
+      WHERE pilot_run_id = ?
+      ORDER BY created_at ASC, connector_code ASC`).bind(run.id).all(),
+    database.prepare(`SELECT
+        (SELECT COUNT(*)
+          FROM compliance_cases compliance_case
+          WHERE compliance_case.organisation_id = ?
+            AND compliance_case.work_order_id = ?) AS regulated_cases_created,
+        (SELECT COUNT(*)
+          FROM compliance_case_evidence evidence
+          JOIN compliance_cases compliance_case
+            ON compliance_case.id = evidence.case_id
+            AND compliance_case.organisation_id = evidence.organisation_id
+          WHERE compliance_case.organisation_id = ?
+            AND compliance_case.work_order_id = ?) AS compliance_evidence_created,
+        (SELECT COUNT(*)
+          FROM compliance_submission_batch_items item
+          JOIN compliance_cases compliance_case
+            ON compliance_case.id = item.case_id
+            AND compliance_case.organisation_id = item.organisation_id
+          WHERE compliance_case.organisation_id = ?
+            AND compliance_case.work_order_id = ?) AS submission_items_created`)
+      .bind(
+        member.organisationId,
+        workOrderId,
+        member.organisationId,
+        workOrderId,
+        member.organisationId,
+        workOrderId,
+      ).first<Record<string, unknown>>(),
+  ]);
+
+  const appointments = appointmentsResult.results.map((row) => ({
+    id: String(row.id),
+    appointmentType: String(row.appointment_type),
+    title: String(row.title),
+    startsAt: String(row.starts_at),
+    endsAt: String(row.ends_at || ""),
+    assigneeMemberId: String(row.assignee_member_id || ""),
+    assigneeLabel: String(row.assignee_label || ""),
+    status: String(row.status),
+    travelStartedAt: String(row.travel_started_at || ""),
+    arrivedAt: String(row.arrived_at || ""),
+    workStartedAt: String(row.work_started_at || ""),
+    completedAt: String(row.completed_at || ""),
+    lastTransitionByUid: String(row.last_transition_by_uid || ""),
+    notes: String(row.notes || ""),
+    revision: Number(row.revision),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const appointmentRevisions = revisionsResult.results.map((row) => ({
+    id: String(row.id),
+    appointmentId: String(row.appointment_id),
+    revision: Number(row.revision),
+    startsAt: String(row.starts_at),
+    endsAt: String(row.ends_at || ""),
+    assigneeMemberId: String(row.assignee_member_id || ""),
+    assigneeLabel: String(row.assignee_label || ""),
+    changeSource: String(row.change_source),
+    sourceReference: String(row.source_reference || ""),
+    changedByUid: String(row.changed_by_uid),
+    createdAt: String(row.created_at),
+  }));
+  const rescheduleRequests = rescheduleRequestsResult.results.map((row) => ({
+    id: String(row.id),
+    appointmentId: String(row.appointment_id),
+    customerId: String(row.crm_customer_id),
+    status: String(row.status),
+    preferredWindows: parsedJson(row.preferred_windows, []),
+    reason: String(row.reason || ""),
+    accessNotes: String(row.access_notes || ""),
+    requestedAppointmentRevision: Number(row.requested_appointment_revision),
+    originalStartsAt: String(row.original_starts_at),
+    originalEndsAt: String(row.original_ends_at || ""),
+    originalAssigneeMemberId: String(row.original_assignee_member_id || ""),
+    originalAssigneeLabel: String(row.original_assignee_label || ""),
+    proposedStartsAt: String(row.proposed_starts_at || ""),
+    proposedEndsAt: String(row.proposed_ends_at || ""),
+    proposedAssigneeMemberId: String(row.proposed_assignee_member_id || ""),
+    proposedAssigneeLabel: String(row.proposed_assignee_label || ""),
+    decisionNote: String(row.decision_note || ""),
+    revision: Number(row.revision),
+    requestedAt: String(row.requested_at),
+    decidedByUid: String(row.decided_by_uid || ""),
+    decidedAt: String(row.decided_at || ""),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const rescheduleEvents = rescheduleEventsResult.results.map((row) => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    appointmentId: String(row.appointment_id),
+    actorType: String(row.actor_type),
+    actorUid: String(row.actor_uid),
+    eventType: String(row.event_type),
+    requestRevision: Number(row.request_revision),
+    fromStartsAt: String(row.from_starts_at || ""),
+    fromEndsAt: String(row.from_ends_at || ""),
+    toStartsAt: String(row.to_starts_at || ""),
+    toEndsAt: String(row.to_ends_at || ""),
+    summary: String(row.summary),
+    createdAt: String(row.created_at),
+  }));
+  const tasks = tasksResult.results.map((row) => ({
+    id: String(row.id),
+    title: String(row.title),
+    dueAt: String(row.due_at || ""),
+    status: String(row.status),
+    completedAt: String(row.completed_at || ""),
+    revision: Number(row.revision),
+    sortOrder: Number(row.sort_order),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const workEvents = workEventsResult.results.map((row) => ({
+    id: String(row.id),
+    eventType: String(row.event_type),
+    summary: String(row.summary),
+    createdAt: String(row.created_at),
+  }));
+  const notes = notesResult.results.map((row) => ({
+    id: String(row.id),
+    noteType: String(row.note_type),
+    body: String(row.body),
+    issueStatus: String(row.issue_status),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const forms = formsResult.results.map((row) => {
+    const answers = parsedJson(row.answers, {});
+    const answersRecorded =
+      !!answers
+      && typeof answers === "object"
+      && !Array.isArray(answers)
+      && Object.keys(answers as Record<string, unknown>).length > 0;
+    return {
+      id: String(row.id),
+      templateKey: String(row.template_key),
+      templateVersion: Number(row.template_version),
+      templateName: String(row.template_name),
+      jurisdiction: String(row.jurisdiction),
+      answersRecorded,
+      status: String(row.status),
+      revision: Number(row.revision),
+      completedByUid: String(row.completed_by_uid || ""),
+      completedAt: String(row.completed_at || ""),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  });
+  const media = mediaResult.results.map((row) => {
+    const envelope = parsedJson(row.evidence_envelope, {});
+    const evidenceFlags = evidenceEnvelopeFlags(envelope);
+    return {
+      id: String(row.id),
+      category: String(row.category),
+      fileName: String(row.file_name),
+      contentType: String(row.content_type),
+      sizeBytes: Number(row.size_bytes),
+      caption: String(row.caption || ""),
+      source: String(row.source),
+      photoRequestId: String(row.photo_request_id || ""),
+      photoRequirementId: String(row.photo_requirement_id || ""),
+      requestRevision: Number(row.request_revision),
+      checklistVersion: String(row.checklist_version || ""),
+      customerAcknowledgedAt: String(row.customer_acknowledged_at || ""),
+      metadataPresent: evidenceFlags.metadataPresent,
+      gpsPresent: evidenceFlags.gpsPresent,
+      originalHashPresent: String(row.original_sha256 || "").length === 64,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  });
+  const quotes = quotesResult.results.map((row) => ({
+    id: String(row.id),
+    quoteNumber: String(row.quote_number),
+    currentVersionNumber: Number(row.current_version_number),
+    status: String(row.status),
+    versionStatus: String(row.version_status || ""),
+    subtotalCents: Number(row.subtotal_cents || 0),
+    taxCents: Number(row.tax_cents || 0),
+    totalCents: Number(row.total_cents || 0),
+    terms: String(row.terms || ""),
+    validUntil: String(row.valid_until || ""),
+    issuedAt: String(row.issued_at || ""),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const invoices = invoicesResult.results.map((row) => {
+    const lineItems = parsedJson(row.line_items_json, []);
+    return {
+      id: String(row.id),
+      invoiceNumber: String(row.invoice_number),
+      currency: String(row.currency),
+      lineItemCount: Array.isArray(lineItems) ? lineItems.length : 0,
+      subtotalCents: Number(row.subtotal_cents),
+      taxCents: Number(row.tax_cents),
+      totalCents: Number(row.total_cents),
+      dueAt: String(row.due_at),
+      status: String(row.status),
+      deliveryStatus: String(row.delivery_status),
+      consentConfirmedAt: String(row.consent_confirmed_at),
+      attempts: Number(row.attempts),
+      lastError: String(row.last_error || ""),
+      sentAt: String(row.sent_at || ""),
+      revision: Number(row.revision),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  });
+  const sources = sourcesResult.results.map((row) => ({
+    sourceKey: String(row.source_key),
+    sourceKind: String(row.source_kind),
+    title: String(row.title),
+    officialSourceUrl: String(row.official_source_url),
+    officialVersion: String(row.official_version || ""),
+    effectiveFrom: String(row.effective_from || ""),
+    effectiveTo: String(row.effective_to || ""),
+    officialSourceSha256: String(row.official_source_sha256 || ""),
+    hashStatus: String(row.hash_status),
+    verificationStatus: String(row.verification_status),
+    sourcePriority: Number(row.source_priority),
+    capturedAt: String(row.captured_at),
+  }));
+  const lookupOptions = controlsResult.results.map((row) => ({
+    controlType: String(row.control_type),
+    optionCode: String(row.option_code),
+    label: String(row.label),
+    optionOrder: Number(row.option_order),
+    effectiveFrom: String(row.effective_from),
+    effectiveTo: String(row.effective_to || ""),
+    sourceKey: String(row.source_key),
+    liveLookupEnabled: Number(row.live_lookup_enabled) === 1,
+  }));
+  const evidenceContracts = evidenceContractsResult.results.map((row) => ({
+    requirementCode: String(row.requirement_code),
+    title: String(row.title),
+    evidenceKind: String(row.evidence_kind),
+    captureTiming: String(row.capture_timing),
+    originalRequired: Number(row.original_required) === 1,
+    metadataRequired: Number(row.metadata_required) === 1,
+    gpsRequired: Number(row.gps_required) === 1,
+    minimumCount: Number(row.minimum_count),
+    maximumCount: Number(row.maximum_count),
+    allowedContentTypes: parsedJson(row.allowed_content_types, []),
+    contractScope: String(row.contract_scope),
+    governmentRequirementStatus: String(
+      row.government_requirement_status,
+    ),
+    sourceKey: String(row.source_key),
+    optionOrder: Number(row.option_order),
+  }));
+  const calculator = calculatorContract
+    ? {
+        id: String(calculatorContract.id),
+        activityTemplateId: String(calculatorContract.activity_template_id),
+        registryActivityCode: String(
+          calculatorContract.registry_activity_code,
+        ),
+        inputSchema: parsedJson(calculatorContract.input_schema, {}),
+        outputSchema: parsedJson(calculatorContract.output_schema, {}),
+        outputUnit: String(calculatorContract.output_unit),
+        formulaStatus: String(calculatorContract.formula_status),
+        testVectorStatus: String(calculatorContract.test_vector_status),
+        sourceKey: String(calculatorContract.source_key),
+        createdAt: String(calculatorContract.created_at),
+      }
+    : null;
+  const connectors = connectorsResult.results.map((row) => ({
+    connectorCode: String(row.connector_code),
+    mappingVersion: String(row.mapping_version),
+    mode: String(row.mode),
+    status: String(row.status),
+    itemCount: Number(row.item_count),
+    acceptedCount: Number(row.accepted_count),
+    rejectedCount: Number(row.rejected_count),
+    unmatchedCount: Number(row.unmatched_count),
+    duplicateCount: Number(row.duplicate_count),
+    artifactHashPresent: String(row.artifact_sha256 || "").length === 64,
+    externalSubmissionEnabled:
+      Number(row.external_submission_enabled) === 1,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }));
+  const regulatedCasesCreated = Number(
+    boundaryCounts?.regulated_cases_created || 0,
+  );
+  const complianceEvidenceCreated = Number(
+    boundaryCounts?.compliance_evidence_created || 0,
+  );
+  const submissionItemsCreated = Number(
+    boundaryCounts?.submission_items_created || 0,
+  );
+  const capabilityCounts: PilotJobDetailCapabilityCounts = {
+    customerDetails: 1,
+    customerJobs: customerJobsResult.results.length,
+    appointments: appointments.length,
+    tasks: tasks.length,
+    forms: forms.length,
+    quotesAndInvoices: quotes.length + invoices.length,
+    calculatorContracts: calculator ? 1 : 0,
+    media: media.length,
+    issues: notes.filter((note) => note.issueStatus !== "not_applicable").length,
+    events: workEvents.length,
+    appointmentChanges:
+      appointmentRevisions.length
+      + rescheduleRequests.length
+      + rescheduleEvents.length,
+    sources: sources.length,
+    lookupOptions: lookupOptions.length,
+    evidenceContracts: evidenceContracts.length,
+    connectors: connectors.length,
+  };
+
+  return {
+    readOnly: true,
+    run: projectionRun(run),
+    job: {
+      id: String(job.id),
+      pilotRunId: String(job.pilot_run_id),
+      workOrderId,
+      caseNumber: String(job.case_number),
+      jobNumber: String(job.job_number),
+      activity: {
+        templateId: activityTemplateId,
+        activityKey: String(job.activity_key),
+        registryActivityCode: String(job.registry_activity_code),
+        specificationPart: String(job.specification_part || ""),
+        title: String(job.title),
+        serviceCategory: String(job.service_category),
+        productCategory: String(job.product_category || ""),
+        scenarioCode: String(job.scenario_code || ""),
+        scenario: String(job.scenario || ""),
+        catalogueState: String(job.catalogue_state),
+        activityDate: String(job.activity_date),
+      },
+      statuses: {
+        review: String(job.review_status),
+        evidence: String(job.evidence_status),
+        rule: String(job.rule_status),
+        lookup: String(job.lookup_status),
+        calculator: String(job.calculator_status),
+        connector: String(job.connector_status),
+      },
+      installer: {
+        id: String(job.installer_id),
+        companyCode: String(job.company_code),
+        businessName: String(job.business_name),
+        status: String(job.installer_status),
+        email: String(job.installer_email),
+        abn: String(job.installer_abn || ""),
+        addressLine1: String(job.installer_address_line_1 || ""),
+        suburb: String(job.installer_suburb || ""),
+        addressState: String(job.installer_address_state || ""),
+        postcode: String(job.installer_postcode || ""),
+        contactName: String(job.installer_contact_name || ""),
+        phone: String(job.installer_phone || ""),
+        partnerType: String(job.installer_partner_type),
+        accountStatus: String(job.installer_account_status),
+        verificationStatus: String(job.installer_verification_status),
+      },
+      technician: {
+        id: String(job.technician_id),
+        teamMemberId: String(job.team_member_id),
+        technicianCode: String(job.technician_code),
+        displayName: String(job.display_name),
+        status: String(job.technician_status),
+        teamStatus: String(job.technician_team_status),
+      },
+      work: {
+        workNumber: String(job.work_number),
+        workType: String(job.work_type),
+        sourceType: String(job.source_type),
+        sourceReference: String(job.source_reference),
+        title: String(job.work_title),
+        serviceCategory: String(job.work_service_category),
+        serviceCategories: parsedJson(job.service_categories, []),
+        siteArea: String(job.site_area || ""),
+        stage: String(job.work_stage),
+        priority: String(job.priority),
+        scheduledStart: String(job.scheduled_start || ""),
+        scheduledEnd: String(job.scheduled_end || ""),
+        assigneeMemberId: String(job.assignee_member_id || ""),
+        assigneeLabel: String(job.assignee_label || ""),
+        revision: Number(job.work_revision),
+        recordStatus: String(job.work_record_status),
+      },
+      crm: {
+        jobDetailId: String(job.job_detail_id),
+        customerSource: String(job.customer_source),
+        pipelineStage: String(job.pipeline_stage),
+        buildingType: String(job.building_type),
+        description: String(job.description || ""),
+        customerReference: String(job.customer_reference || ""),
+        nextAction: String(job.next_action || ""),
+        tags: parsedJson(job.tags, []),
+        estimatedValueCents: Number(job.estimated_value_cents),
+        quotedValueCents: Number(job.quoted_value_cents),
+        invoicedValueCents: Number(job.invoiced_value_cents),
+        paidValueCents: Number(job.paid_value_cents),
+        quoteStatus: String(job.quote_status),
+        invoiceStatus: String(job.invoice_status),
+        paymentDueAt: String(job.payment_due_at || ""),
+      },
+      customer: {
+        id: customerId,
+        customerNumber: String(job.customer_number),
+        customerType: String(job.customer_type),
+        firstName: String(job.first_name || ""),
+        lastName: String(job.last_name || ""),
+        businessName: String(job.customer_business_name || ""),
+        businessNumber: String(job.business_number || ""),
+        email: String(job.customer_email || ""),
+        phone: String(job.customer_phone || ""),
+        addressLine1: String(job.customer_address_line_1 || ""),
+        addressLine2: String(job.customer_address_line_2 || ""),
+        suburb: String(job.customer_suburb || ""),
+        addressState: String(job.customer_address_state || ""),
+        postcode: String(job.customer_postcode || ""),
+        tags: parsedJson(job.customer_tags, []),
+        privateNotes: String(job.private_notes || ""),
+      },
+      site: {
+        id: String(job.service_site_id),
+        label: String(job.site_label),
+        addressLine1: String(job.address_line_1 || ""),
+        addressLine2: String(job.address_line_2 || ""),
+        suburb: String(job.suburb || ""),
+        addressState: String(job.address_state || ""),
+        postcode: String(job.postcode || ""),
+        accessInstructions: String(job.access_instructions || ""),
+        parkingInstructions: String(job.parking_instructions || ""),
+        hazardNotes: String(job.hazard_notes || ""),
+        isPrimary: Number(job.is_primary) === 1,
+      },
+      recordMode: String(job.record_mode),
+      createdAt: String(job.created_at),
+      updatedAt: String(job.updated_at),
+    },
+    customerJobs: customerJobsResult.results.map((row) => ({
+      id: String(row.id),
+      jobNumber: String(row.job_number),
+      caseNumber: String(row.case_number),
+      registryActivityCode: String(row.registry_activity_code),
+      title: String(row.title),
+      reviewStatus: String(row.review_status),
+      evidenceStatus: String(row.evidence_status),
+      activityDate: String(row.activity_date),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    })),
+    appointments,
+    appointmentAudit: {
+      revisions: appointmentRevisions,
+      rescheduleRequests,
+      rescheduleEvents,
+    },
+    crm: {
+      tasks,
+      events: workEvents,
+      notes,
+      forms,
+      media,
+      quotes,
+      invoices,
+    },
+    priorities: pilotPriorities(run),
+    rules: {
+      status: String(job.rule_status),
+      sources,
+    },
+    lookups: {
+      status: String(job.lookup_status),
+      options: lookupOptions,
+    },
+    evidence: {
+      status: String(job.evidence_status),
+      collectedCount: complianceEvidenceCreated,
+      pilotMediaCount: media.length,
+      contracts: evidenceContracts,
+    },
+    calculator: {
+      status: String(job.calculator_status),
+      contract: calculator,
+    },
+    submission: {
+      status: String(job.connector_status),
+      scope: "pilot_run",
+      externalSubmissionEnabled: false,
+      connectors,
+    },
+    capabilities: pilotJobDetailCapabilities(capabilityCounts),
+    boundaries: {
+      syntheticOnly: true,
+      regulatedCasesCreated,
+      complianceEvidenceCreated,
+      submissionItemsCreated,
+      externalSubmissionEnabled: false,
+    },
   };
 }
 

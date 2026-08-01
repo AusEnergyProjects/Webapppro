@@ -1079,8 +1079,15 @@ export function CreditexCompliancePortal() {
   }
 
   return (
-    <main className={styles.shell} id="site-content">
-      <div className={styles.frame}>
+    <main
+      className={`${styles.shell} ${tab === "pilot" ? styles.pilotShell : ""}`}
+      id="site-content"
+    >
+      <div
+        className={`${styles.frame} ${
+          tab === "pilot" ? styles.pilotFrame : ""
+        }`}
+      >
         <header className={styles.topbar}>
           <div className={styles.brand}>
             <Image
@@ -1115,28 +1122,29 @@ export function CreditexCompliancePortal() {
           </div>
         </header>
 
-        <section className={styles.hero}>
-          <div className={styles.heroCopy}>
-            <span className={styles.eyebrow}>Protected partner operations</span>
-            <h1>Compliance case control</h1>
-            <p>
-              Queue lists minimise private data. Authorised Creditex staff can
-              open the audited case workspace for the customer, installer, site,
-              appointments, evidence originals and captured metadata needed to
-              review, correct and submit that exact job.
-            </p>
-          </div>
-          <aside className={styles.guardrail}>
-            <strong>Governance boundary</strong>
-            <p>
-              Activity publication records source provenance and effective
-              dates. It does not make a financial, technical or regulator
-              decision for a case.
-            </p>
-          </aside>
-        </section>
+        {tab !== "pilot" && (
+          <section className={styles.hero}>
+            <div className={styles.heroCopy}>
+              <span className={styles.eyebrow}>Protected partner operations</span>
+              <h1>Compliance case control</h1>
+              <p>
+                Queue lists minimise private data. Authorised Creditex staff can
+                open the audited case workspace for the customer, installer, site, appointments, evidence originals and
+                captured metadata needed to review, correct and submit that exact job.
+              </p>
+            </div>
+            <aside className={styles.guardrail}>
+              <strong>Governance boundary</strong>
+              <p>
+                Activity publication records source provenance and effective
+                dates. It does not make a financial, technical or regulator
+                decision for a case.
+              </p>
+            </aside>
+          </section>
+        )}
 
-        {notice && (
+        {notice && tab !== "pilot" && (
           <p
             className={styles.status}
             data-kind={noticeKind}

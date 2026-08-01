@@ -175,7 +175,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /178 files and 18,227,200 bytes/);
   assert.match(releaseTruth, /32 Australian government program pathways and 207 controlled activity templates/);
   assert.match(releaseTruth, /Initial Creditex VEU synthetic pilot application source \| `3ac6c72057a8afea61e85817ba566ec543079886`/);
-  assert.match(releaseTruth, /Current Creditex VEU synthetic pilot application source \| `ebae330dab6c42881c14bc57548095b111d9c850`/);
+  assert.match(releaseTruth, /Authentication-corrected Creditex VEU pilot application source \| `ebae330dab6c42881c14bc57548095b111d9c850`/);
   assert.match(releaseTruth, /Sites version 253 from `ebae330dab6c42881c14bc57548095b111d9c850`/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_6ead08734a6c8191b018dc5a952acd33/);
   assert.match(releaseTruth, /appgdep_6a6dd491dde88191bc862e69a2e59580/);
@@ -190,6 +190,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /333 files and 29,624,320 bytes/);
   assert.match(releaseTruth, /1,180 main tests with 1,178 passed, 2 intentionally skipped and 0 failed/);
   assert.match(releaseTruth, /all 100 migrations through `0099_creditex_synthetic_pilot\.sql`/);
+  assert.match(releaseTruth, /Creditex VEU dense-register application source \| `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`/);
+  assert.match(releaseTruth, /Sites version 254 from `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_d9dff81ff0c4819185def4ad16b9a889/);
+  assert.match(releaseTruth, /appgdep_6a6dec1ba16c8191b572bf49dc958aa7/);
   assert.match(releaseTruth, /https:\/\/compare\.ausenergyassessments\.com\/creditex\/compliance/);
   assert.match(releaseTruth, /https:\/\/aea-energy-comparison\.info294029\.chatgpt\.site/);
   assert.match(releaseTruth, /0 published programs, 0 activity versions, 0 policies and 0 regulated cases/);
@@ -273,11 +277,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Release status: application commit `a33b7053301a64bea4bbcbe76713067a2c1782dd`[\s\S]{0,400}Sites version 251/);
   assert.match(roadmap, /## Released milestone: CREDITEX-VEU-SYNTHETIC-PILOT-28/);
   assert.match(roadmap, /initial pilot application commit `3ac6c72057a8afea61e85817ba566ec543079886`[\s\S]{0,700}corrective application commit `ebae330dab6c42881c14bc57548095b111d9c850`[\s\S]{0,700}Sites version 253/i);
-  assert.match(handover, /Status: `CREDITEX-VEU-SYNTHETIC-PILOT-28` released and live/);
-  assert.match(handover, /Milestone ID: `CREDITEX-VEU-SYNTHETIC-PILOT-28`/);
-  assert.match(handover, /Current production: Sites version 253 from application commit `ebae330dab6c42881c14bc57548095b111d9c850`/);
-  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_900ff3f8d0448191a798a5eb10ef648c/);
-  assert.match(handover, /appgdep_6a6dde1747308191bf5c78bd4f674030/);
+  assert.match(handover, /Status: `CREDITEX-VEU-DENSE-REGISTER-29` released and live/);
+  assert.match(handover, /Milestone ID: `CREDITEX-VEU-DENSE-REGISTER-29`/);
+  assert.match(handover, /Current production: Sites version 254 from application commit `e8d12a4b562de3f9ac5b6821c4e1b062547722e0`/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_d9dff81ff0c4819185def4ad16b9a889/);
+  assert.match(handover, /appgdep_6a6dec1ba16c8191b572bf49dc958aa7/);
   assert.match(handover, /Status: released implementation milestone/);
   assert.match(handover, /(?:Milestone ID|Prior released milestone record): `CUSTOMER-ACCOUNT-TRUST-23`/);
   assert.match(handover, /Released application for this milestone: Sites version 241 from application commit `da4fa911c0b6c7f520e266259af8882b95aaf14a`/);
