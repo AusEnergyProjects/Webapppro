@@ -6,12 +6,13 @@ import ts from "typescript";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
-const operationsMigration = [
+const operationsMigrationSources = [
   "../drizzle/0094_creditex_operations_control.sql",
   "../drizzle/0095_creditex_operations_workflows.sql",
   "../drizzle/0096_creditex_operations_integrity.sql",
   "../drizzle/0097_creditex_operations_lifecycle.sql",
-].map(read).join("\n--> statement-breakpoint\n");
+].map(read);
+const operationsMigration = operationsMigrationSources.join("\n--> statement-breakpoint\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 
@@ -90,6 +91,20 @@ function applyStatements(database, migration) {
     database.exec(statement);
   }
 }
+
+test("Sites migration inputs keep one complete SQLite statement per physical line", () => {
+  for (const migration of [foundationMigration, ...operationsMigrationSources]) {
+    const statements = migration
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    assert.ok(statements.length > 0);
+    assert.doesNotMatch(migration, /statement-breakpoint/);
+    for (const statement of statements) {
+      assert.match(statement, /;$/);
+    }
+  }
+});
 
 function databaseWithComplianceOperations() {
   const database = new DatabaseSync(":memory:");
