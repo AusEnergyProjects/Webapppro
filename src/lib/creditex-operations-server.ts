@@ -1442,6 +1442,95 @@ function filteredCaseSubquery(context: CaseQueryContext) {
     WHERE ${context.whereSql}`;
 }
 
+async function loadOrganisationDomainCounts(
+  database: D1Database,
+  organisationId: string,
+) {
+  const domains = [
+    "invitations",
+    "audit_events",
+    "evidence_policies",
+    "evidence_requirements",
+    "participants",
+    "participant_abilities",
+    "assignments",
+    "tasks",
+    "evidence",
+    "findings",
+    "decisions",
+    "decision_requests",
+    "equipment",
+    "calculator_versions",
+    "calculator_vectors",
+    "calculation_runs",
+    "submission_batches",
+    "submission_items",
+    "submission_artifacts",
+    "submission_responses",
+    "certificate_lots",
+    "trades",
+    "settlements",
+  ] as const;
+  const countRow = await first(database, `SELECT
+      (SELECT COUNT(*) FROM compliance_invitations
+        WHERE organisation_id = ?) invitations,
+      (SELECT COUNT(*) FROM compliance_audit_events
+        WHERE organisation_id = ?) audit_events,
+      (SELECT COUNT(*) FROM compliance_evidence_policy_versions
+        WHERE organisation_id = ?) evidence_policies,
+      (SELECT COUNT(*)
+        FROM compliance_evidence_requirements requirement
+        JOIN compliance_evidence_policy_versions policy
+          ON policy.id = requirement.policy_version_id
+        WHERE policy.organisation_id = ?) evidence_requirements,
+      (SELECT COUNT(*) FROM compliance_participants
+        WHERE organisation_id = ?) participants,
+      (SELECT COUNT(*) FROM compliance_participant_abilities
+        WHERE organisation_id = ?) participant_abilities,
+      (SELECT COUNT(*) FROM compliance_case_assignments
+        WHERE organisation_id = ?) assignments,
+      (SELECT COUNT(*) FROM compliance_case_tasks
+        WHERE organisation_id = ?) tasks,
+      (SELECT COUNT(*) FROM compliance_case_evidence
+        WHERE organisation_id = ?) evidence,
+      (SELECT COUNT(*) FROM compliance_case_findings
+        WHERE organisation_id = ?) findings,
+      (SELECT COUNT(*) FROM compliance_case_decisions
+        WHERE organisation_id = ?) decisions,
+      (SELECT COUNT(*) FROM compliance_decision_requests
+        WHERE organisation_id = ?) decision_requests,
+      (SELECT COUNT(*) FROM compliance_equipment_records
+        WHERE organisation_id = ?) equipment,
+      (SELECT COUNT(*) FROM compliance_calculator_versions
+        WHERE organisation_id = ?) calculator_versions,
+      (SELECT COUNT(*)
+        FROM compliance_calculator_test_vectors vector
+        JOIN compliance_calculator_versions calculator
+          ON calculator.id = vector.calculator_version_id
+        WHERE calculator.organisation_id = ?) calculator_vectors,
+      (SELECT COUNT(*) FROM compliance_calculation_runs
+        WHERE organisation_id = ?) calculation_runs,
+      (SELECT COUNT(*) FROM compliance_submission_batches
+        WHERE organisation_id = ?) submission_batches,
+      (SELECT COUNT(*) FROM compliance_submission_batch_items
+        WHERE organisation_id = ?) submission_items,
+      (SELECT COUNT(*) FROM compliance_submission_artifacts
+        WHERE organisation_id = ?) submission_artifacts,
+      (SELECT COUNT(*) FROM compliance_submission_responses
+        WHERE organisation_id = ?) submission_responses,
+      (SELECT COUNT(*) FROM compliance_certificate_lots
+        WHERE organisation_id = ?) certificate_lots,
+      (SELECT COUNT(*) FROM compliance_trades
+        WHERE organisation_id = ?) trades,
+      (SELECT COUNT(*) FROM compliance_settlements
+        WHERE organisation_id = ?) settlements`,
+  domains.map(() => organisationId));
+  return domains.map((domain) => ({
+    domain,
+    total: Number(countRow?.[domain] || 0),
+  }));
+}
+
 export async function loadCreditexOperationsDashboard(
   database: D1Database,
   scopeInput: CreditexOperationsScope,
@@ -1511,82 +1600,7 @@ export async function loadCreditexOperationsDashboard(
     caseWorkspaceCountRows,
     tagFacetRows,
   ] = await Promise.all([
-    rows(database, `WITH context(organisation_id) AS (VALUES (?))
-      SELECT 'invitations' domain, COUNT(*) total
-        FROM compliance_invitations, context
-        WHERE compliance_invitations.organisation_id = context.organisation_id
-      UNION ALL SELECT 'audit_events', COUNT(*)
-        FROM compliance_audit_events, context
-        WHERE compliance_audit_events.organisation_id = context.organisation_id
-      UNION ALL SELECT 'evidence_policies', COUNT(*)
-        FROM compliance_evidence_policy_versions, context
-        WHERE compliance_evidence_policy_versions.organisation_id = context.organisation_id
-      UNION ALL SELECT 'evidence_requirements', COUNT(*)
-        FROM compliance_evidence_requirements requirement
-        JOIN compliance_evidence_policy_versions policy
-          ON policy.id = requirement.policy_version_id
-        JOIN context ON policy.organisation_id = context.organisation_id
-      UNION ALL SELECT 'participants', COUNT(*)
-        FROM compliance_participants, context
-        WHERE compliance_participants.organisation_id = context.organisation_id
-      UNION ALL SELECT 'participant_abilities', COUNT(*)
-        FROM compliance_participant_abilities, context
-        WHERE compliance_participant_abilities.organisation_id = context.organisation_id
-      UNION ALL SELECT 'assignments', COUNT(*)
-        FROM compliance_case_assignments, context
-        WHERE compliance_case_assignments.organisation_id = context.organisation_id
-      UNION ALL SELECT 'tasks', COUNT(*)
-        FROM compliance_case_tasks, context
-        WHERE compliance_case_tasks.organisation_id = context.organisation_id
-      UNION ALL SELECT 'evidence', COUNT(*)
-        FROM compliance_case_evidence, context
-        WHERE compliance_case_evidence.organisation_id = context.organisation_id
-      UNION ALL SELECT 'findings', COUNT(*)
-        FROM compliance_case_findings, context
-        WHERE compliance_case_findings.organisation_id = context.organisation_id
-      UNION ALL SELECT 'decisions', COUNT(*)
-        FROM compliance_case_decisions, context
-        WHERE compliance_case_decisions.organisation_id = context.organisation_id
-      UNION ALL SELECT 'decision_requests', COUNT(*)
-        FROM compliance_decision_requests, context
-        WHERE compliance_decision_requests.organisation_id = context.organisation_id
-      UNION ALL SELECT 'equipment', COUNT(*)
-        FROM compliance_equipment_records, context
-        WHERE compliance_equipment_records.organisation_id = context.organisation_id
-      UNION ALL SELECT 'calculator_versions', COUNT(*)
-        FROM compliance_calculator_versions, context
-        WHERE compliance_calculator_versions.organisation_id = context.organisation_id
-      UNION ALL SELECT 'calculator_vectors', COUNT(*)
-        FROM compliance_calculator_test_vectors vector
-        JOIN compliance_calculator_versions calculator
-          ON calculator.id = vector.calculator_version_id
-        JOIN context ON calculator.organisation_id = context.organisation_id
-      UNION ALL SELECT 'calculation_runs', COUNT(*)
-        FROM compliance_calculation_runs, context
-        WHERE compliance_calculation_runs.organisation_id = context.organisation_id
-      UNION ALL SELECT 'submission_batches', COUNT(*)
-        FROM compliance_submission_batches, context
-        WHERE compliance_submission_batches.organisation_id = context.organisation_id
-      UNION ALL SELECT 'submission_items', COUNT(*)
-        FROM compliance_submission_batch_items, context
-        WHERE compliance_submission_batch_items.organisation_id = context.organisation_id
-      UNION ALL SELECT 'submission_artifacts', COUNT(*)
-        FROM compliance_submission_artifacts, context
-        WHERE compliance_submission_artifacts.organisation_id = context.organisation_id
-      UNION ALL SELECT 'submission_responses', COUNT(*)
-        FROM compliance_submission_responses, context
-        WHERE compliance_submission_responses.organisation_id = context.organisation_id
-      UNION ALL SELECT 'certificate_lots', COUNT(*)
-        FROM compliance_certificate_lots, context
-        WHERE compliance_certificate_lots.organisation_id = context.organisation_id
-      UNION ALL SELECT 'trades', COUNT(*)
-        FROM compliance_trades, context
-        WHERE compliance_trades.organisation_id = context.organisation_id
-      UNION ALL SELECT 'settlements', COUNT(*)
-        FROM compliance_settlements, context
-        WHERE compliance_settlements.organisation_id = context.organisation_id`, [
-      organisationId,
-    ]),
+    loadOrganisationDomainCounts(database, organisationId),
     rows(database, `SELECT task.id, compliance_case.id case_id,
         compliance_case.case_number, task.task_type,
         task.title, task.priority, task.status, task.due_at, task.updated_at

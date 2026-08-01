@@ -381,6 +381,15 @@ test("queries and writes are organisation scoped and dashboard coverage spans ev
     (server.match(/compliance_case\.id case_id/g) || []).length >= 5,
     "each case-linked dashboard queue should expose the safe opaque case id",
   );
+  assert.match(server, /async function loadOrganisationDomainCounts\(/);
+  assert.match(
+    server,
+    /\(SELECT COUNT\(\*\) FROM compliance_invitations\s+WHERE organisation_id = \?\) invitations/,
+  );
+  assert.doesNotMatch(
+    server,
+    /WITH context\(organisation_id\) AS \(VALUES \(\?\)\)/,
+  );
   assert.doesNotMatch(server, /evidence\.file_name/);
   assert.match(server, /truncatedDomains/);
 });
