@@ -991,15 +991,42 @@ Audit source: RM-085, RM-090, RM-100 and RM-110
 
 Exit gate: cutover evidence, rollback proof, archival custody and post-cutover monitoring are complete.
 
-VEU `6(23)` remains a useful test example only. It is not a privileged implementation path; the platform contract is program, activity, category and scenario agnostic.
+VEU `6(23)` was an informal example only, not an official activity identifier. The governed family is Part `6`; categories and scenarios remain separate source-controlled dimensions, and no activity has a privileged implementation path.
+
+## Released milestone: CREDITEX-VEU-SYNTHETIC-PILOT-28
+
+Status: released controlled VEU workflow pilot
+
+Release status: application commit `3ac6c72057a8afea61e85817ba566ec543079886` is validated, pushed to GitHub and the Sites managed source branch, and deployed at `https://compare.ausenergyassessments.com/creditex/compliance` as Sites version 252. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_6ead08734a6c8191b018dc5a952acd33` and deployment `appgdep_6a6dd491dde88191bc862e69a2e59580` report the exact application commit.
+
+### Outcome
+
+Provide Creditex with one production-hosted but rigorously isolated workflow pilot for the installer-to-compliance handoff. The live seed contains 10 visibly synthetic installer companies, three assignment-only field technicians per installer and ten VEU jobs per technician: 10 installers, 30 technicians and 300 jobs balanced across all 34 represented VEU activity families.
+
+The portal separates Pilot control, Jobs, Sources, Lookups, Evidence, Calculators and Connectors into workflow-focused areas. It provides pre-populated filters and a fixed bottom Dashboard plus one tab per VEU family. Government and regulator instruments remain the sole rule authority; Creditex verifies and operates within those rules and does not own a private rule pack.
+
+### Delivered controls
+
+- Deterministic seed creation and archive require a recently authenticated administrator and an exact confirmation phrase.
+- Every synthetic company, technician, customer, site, appointment and job is visibly labelled `TEST`, uses non-deliverable contact data and creates no Firebase technician identity.
+- Database triggers prevent synthetic work orders from entering regulated compliance cases or submission items.
+- The 300-item dry-run manifest hashes immutable population fields only and remains valid after controlled workflow-state changes.
+- Test-only review, evidence-transport and lookup states use organisation-scoped compare-and-swap revisions with append-only audit events.
+- All unverified evidence shot lists, operational lookups, formulas and registry connectors fail closed. The pilot calculates no VEEC quantity, creates no certificate and sends no external request.
+
+### Validation and release evidence
+
+Exact application commit `3ac6c72057a8afea61e85817ba566ec543079886` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,176 main tests with 1,174 passed, 2 intentionally skipped and 0 failed, all 100 migrations through `0099_creditex_synthetic_pilot.sql`, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused pilot suite passed 13 of 13 tests and the focused Creditex portal suite passed 21 of 21.
+
+Authenticated production QA created seed `veu-v25-2026-08-01-synthetic-v2` and confirmed 10 of 10 installers, 30 of 30 technicians, 300 of 300 jobs and 34 of 34 activity families. Filtering installer `I01` plus Part `6` returned one job; a controlled job-state update persisted after refresh; the connector workspace retained a deterministic 300-item dry-run manifest; and structural counters remained 0 regulated cases, 0 Firebase test users and 0 certificates. Desktop and 390-pixel mobile inspection passed without page-level horizontal overflow.
 
 ## Next five logical product steps
 
-1. **Import and independently verify official instruments:** capture every intended federal, state and territory program, activity, category, scenario, evidence and calculation instrument as an effective-dated, source-hashed draft; independently verify the transcription before any production publication.
-2. **Complete controlled operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension lookups, controlled dropdown values and official-source monitoring so case selection and submission rechecks fail closed.
-3. **Prove original evidence end to end:** complete platform-backed camera and device attestation, representative iOS and Android acceptance, hosted original-evidence viewing, retention and restore checks, plus the remaining governed evidence types, signatures, conditions and dynamic fields.
-4. **Verify calculators and typed output contracts:** implement method-specific inputs, formulas, official product and climate lookups, units, caps, rounding and typed outcomes; reconcile official or independently approved test vectors while every unverified calculator remains disabled.
-5. **Authorise connectors and reconcile legacy cutover:** build versioned registry and program connectors with dry-run, idempotency, immutable artifacts and response reconciliation, then map authorised Dataforce and Runabout exports through bounded parallel cohorts with counts, hashes, exceptions, rollback and acceptance.
+1. **Retain and independently verify exact VEU instruments:** store the exact authorised instrument bytes in R2, hash them, transcribe bounded activity, category, scenario, evidence and effective-date rules, and require a different named reviewer before publication.
+2. **Connect authoritative operational lookups:** add effective-dated participant, accreditation, licence, product-register, recall and suspension snapshots with source timestamps and fail-closed job and submission rechecks.
+3. **Prove AEA Field evidence on real devices:** run representative iOS and Android staging with platform-backed camera attestation, milestone timing, original-byte restore, GPS and EXIF consistency, offline resume and required signatures.
+4. **Verify versioned VEU calculators:** implement official equations, tables, units, caps and rounding behind effective-date versions, then reconcile independently approved golden vectors before enabling any VEEC output.
+5. **Run an authorised connector and legacy parallel pilot:** obtain a registry sandbox or approved interface plus authorised Dataforce and Runabout exports, map exact fields and states, and reconcile counts, hashes, exceptions, rollback and acceptance without touching real certificate inventory.
 
 ## Global stop conditions
 
