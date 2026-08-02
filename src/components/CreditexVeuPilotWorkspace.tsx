@@ -12,6 +12,12 @@ import {
   type CreditexJobAuditDetail,
   type JobWorkspaceSection,
 } from "./CreditexVeuJobAuditWorkspace";
+import {
+  exportDataforceJobCsv,
+  projectCreditexJobToDataforceRecord,
+  validateDataforceJobCsv,
+  type DataforceJobCsvValidation,
+} from "@/lib/creditex-dataforce-job-csv";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
 type Api = (
@@ -344,8 +350,8 @@ type PilotColumn = {
 
 const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
   { key: "actions", label: "Row" },
-  { key: "appointmentId", label: "Appt ID", sortKey: "appointmentId" },
-  { key: "jobNumber", label: "Job ID", sortKey: "jobNumber" },
+  { key: "appointmentId", label: "App Id", sortKey: "appointmentId" },
+  { key: "jobNumber", label: "Job Id", sortKey: "jobNumber" },
   { key: "reviewStatus", label: "Status", sortKey: "reviewStatus" },
   {
     key: "legacySubStatus",
@@ -360,7 +366,7 @@ const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
   { key: "workType", label: "Work Type", sortKey: "workType" },
   {
     key: "scheduledStart",
-    label: "Scheduled Date/Time",
+    label: "Scheduled Datetime",
     sortKey: "scheduledStart",
   },
   {
@@ -374,23 +380,8 @@ const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
     description: "Only regulator-issued quantities may appear here.",
   },
   { key: "connectorStatus", label: "Submission", sortKey: "connectorStatus" },
-  {
-    key: "legacyInstalled",
-    label: "Installed",
-    description: "Dataforce Installed semantics require a field dictionary.",
-  },
+  { key: "invoiceStatus", label: "Invoiced", sortKey: "invoiceStatus" },
   { key: "technician", label: "Field Worker", sortKey: "technician" },
-  {
-    key: "technicianCode",
-    label: "Field Worker Code",
-    sortKey: "technicianCode",
-  },
-  { key: "installer", label: "TLink Installer", sortKey: "installer" },
-  {
-    key: "installerCode",
-    label: "Installer Code",
-    sortKey: "installerCode",
-  },
   {
     key: "agent",
     label: "Agent",
@@ -405,7 +396,7 @@ const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
   { key: "companyName", label: "Company Name", sortKey: "companyName" },
   {
     key: "customerNumber",
-    label: "Ref Cust No?",
+    label: "Ext Cust Ref",
     sortKey: "customerNumber",
     description: "TLink customer number is shown; legacy equivalence is pending.",
   },
@@ -419,6 +410,17 @@ const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
   { key: "address", label: "Address", sortKey: "address" },
   { key: "suburb", label: "Suburb", sortKey: "suburb" },
   { key: "postcode", label: "Postcode", sortKey: "postcode" },
+  {
+    key: "technicianCode",
+    label: "Field Worker Code",
+    sortKey: "technicianCode",
+  },
+  { key: "installer", label: "TLink Installer", sortKey: "installer" },
+  {
+    key: "installerCode",
+    label: "Installer Code",
+    sortKey: "installerCode",
+  },
   { key: "caseNumber", label: "TLink Case", sortKey: "caseNumber" },
   { key: "state", label: "State", sortKey: "state" },
   {
@@ -470,7 +472,6 @@ const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
     sortKey: "pipelineStage",
   },
   { key: "quoteStatus", label: "Quote Status", sortKey: "quoteStatus" },
-  { key: "invoiceStatus", label: "Invoice Status", sortKey: "invoiceStatus" },
   { key: "recordMode", label: "Record Mode" },
   { key: "createdAt", label: "Created", sortKey: "createdAt" },
   { key: "updatedAt", label: "Updated", sortKey: "updatedAt" },
@@ -565,6 +566,18 @@ type ContextMenuState = {
   jobId: string;
   x: number;
   y: number;
+};
+
+type DataforceImportDraft = {
+  fileName: string;
+  csv: string;
+  validation: DataforceJobCsvValidation | null;
+};
+
+const EMPTY_DATAFORCE_IMPORT: DataforceImportDraft = {
+  fileName: "",
+  csv: "",
+  validation: null,
 };
 
 const JOB_CONTEXT_ITEMS: ReadonlyArray<{
@@ -792,7 +805,6 @@ const PILOT_MAPPING_COLUMN_KEYS = new Set([
   "legacyType",
   "legacyBalance",
   "certificates",
-  "legacyInstalled",
   "agent",
   "client",
   "mobile",
@@ -807,7 +819,6 @@ function pilotJobCellValue(columnKey: string, job: PilotJob) {
     case "legacySubStatus":
     case "legacyType":
     case "legacyBalance":
-    case "legacyInstalled":
     case "agent":
     case "client":
     case "mobile":
@@ -1632,10 +1643,15 @@ export function CreditexVeuPilotWorkspace({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [provisionProgress, setProvisionProgress] = useState("");
+  const [dataforceImportOpen, setDataforceImportOpen] = useState(false);
+  const [dataforceImport, setDataforceImport] =
+    useState<DataforceImportDraft>(EMPTY_DATAFORCE_IMPORT);
   const requestRef = useRef(0);
   const detailRequestRef = useRef(0);
   const initialPanelRef = useRef(false);
   const filterToggleRef = useRef<HTMLButtonElement>(null);
+  const dataforceFileRef = useRef<HTMLInputElement>(null);
+  const dataforceImportDialogRef = useRef<HTMLDialogElement>(null);
   const lastRecordTriggerRef = useRef<HTMLElement | null>(null);
 
   const query = useMemo(() => {
@@ -1814,6 +1830,25 @@ export function CreditexVeuPilotWorkspace({
     return () => window.removeEventListener("keydown", handleKey);
   }, [closeFilters, filtersOpen]);
 
+  useEffect(() => {
+    if (!dataforceImportOpen) return;
+    const dialog = dataforceImportDialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDataforceImportOpen(false);
+        setDataforceImport(EMPTY_DATAFORCE_IMPORT);
+        if (dataforceFileRef.current) dataforceFileRef.current.value = "";
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      if (dialog?.open) dialog.close();
+    };
+  }, [dataforceImportOpen]);
+
   function openRecord(
     job: PilotJob,
     section: JobWorkspaceSection,
@@ -1869,6 +1904,171 @@ export function CreditexVeuPilotWorkspace({
       setError("Browser clipboard access was denied. Nothing was copied.");
     } finally {
       closeContextMenu();
+    }
+  }
+
+  async function downloadDataforceCsv() {
+    const expectedTotal = snapshot?.pagination?.total || 0;
+    if (expectedTotal <= 0) return;
+    if (expectedTotal > 20_000) {
+      setError(
+        "Narrow the advanced search to 20,000 jobs or fewer before exporting.",
+      );
+      return;
+    }
+
+    setBusy("dataforce-export");
+    setError("");
+    setNotice("");
+    try {
+      const params = new URLSearchParams(query);
+      params.set("pageSize", "300");
+      const jobsById = new Map<string, PilotJob>();
+      let page = 0;
+      let pageCount = 1;
+      do {
+        params.set("page", String(page));
+        const result = await api(
+          `/api/creditex/pilot?${params.toString()}`,
+        );
+        const pageSnapshot = result.pilot as PilotSnapshot;
+        for (const job of pageSnapshot.jobs || []) {
+          jobsById.set(job.id, job);
+        }
+        pageCount = Math.max(1, pageSnapshot.pagination?.pageCount || 1);
+        page += 1;
+      } while (page < pageCount);
+
+      const jobs = Array.from(jobsById.values());
+      if (jobs.length !== expectedTotal) {
+        throw new Error(
+          "The job register changed during export. Refresh and download again.",
+        );
+      }
+      const csv = exportDataforceJobCsv(
+        jobs.map((job) => projectCreditexJobToDataforceRecord(job, {
+          "App Id": job.appointment.id,
+          "Job Id": job.jobNumber,
+          "Status": pilotJobCellValue("reviewStatus", job),
+          "SubStatus": pilotJobCellValue("legacySubStatus", job),
+          "Type": pilotJobCellValue("legacyType", job),
+          "Work Type": pilotJobCellValue("workType", job),
+          "Scheduled Datetime": pilotJobCellValue("scheduledStart", job),
+          "Balance": pilotJobCellValue("legacyBalance", job),
+          "Certificates (VEECs)": pilotJobCellValue("certificates", job),
+          "Submission": pilotJobCellValue("connectorStatus", job),
+          "Invoiced": pilotJobCellValue("invoiceStatus", job),
+          "Field Worker": pilotJobCellValue("technician", job),
+          "Agent": pilotJobCellValue("agent", job),
+          "Client": pilotJobCellValue("client", job),
+          "Customer": pilotJobCellValue("customer", job),
+          "Company Name": pilotJobCellValue("companyName", job),
+          "Ext Cust Ref": pilotJobCellValue("customerNumber", job),
+          "Phone": pilotJobCellValue("phone", job),
+          "Mobile": pilotJobCellValue("mobile", job),
+          "Email": pilotJobCellValue("email", job),
+          "Address": pilotJobCellValue("address", job),
+          "Suburb": pilotJobCellValue("suburb", job),
+          "Postcode": pilotJobCellValue("postcode", job),
+        })),
+        { includeBom: true },
+      );
+      const url = URL.createObjectURL(
+        new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download =
+        `creditex-veu-jobs-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNotice(
+        `Downloaded ${jobs.length} matching jobs in the exact 23-column Dataforce layout.`,
+      );
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "The Dataforce-compatible CSV could not be downloaded.",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function closeDataforceImport() {
+    setDataforceImportOpen(false);
+    setDataforceImport(EMPTY_DATAFORCE_IMPORT);
+    if (dataforceFileRef.current) dataforceFileRef.current.value = "";
+  }
+
+  async function inspectDataforceFile(file: File | undefined) {
+    setError("");
+    setNotice("");
+    setDataforceImport(EMPTY_DATAFORCE_IMPORT);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Choose a Dataforce CSV no larger than 5 MB.");
+      return;
+    }
+    try {
+      const csv = await file.text();
+      const validation = validateDataforceJobCsv(csv);
+      setDataforceImport({
+        fileName: file.name,
+        csv,
+        validation,
+      });
+    } catch {
+      setError(
+        "The selected file could not be read as a Dataforce job CSV.",
+      );
+    }
+  }
+
+  async function stageDataforceImport() {
+    const validation = dataforceImport.validation;
+    if (
+      !validation?.valid
+      || validation.summary.totalRows > 2_500
+      || !dataforceImport.csv
+    ) {
+      return;
+    }
+    setBusy("dataforce-import");
+    setError("");
+    setNotice("");
+    try {
+      const result = await api("/api/creditex/dataforce", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "stage_import",
+          fileName: dataforceImport.fileName,
+          csv: dataforceImport.csv,
+        }),
+      });
+      const batch = result.batch as {
+        rowCount?: number;
+        reused?: boolean;
+      } | undefined;
+      const rowCount =
+        batch?.rowCount ?? validation.summary.acceptedRows;
+      closeDataforceImport();
+      setNotice(
+        batch?.reused
+          ? `This ${rowCount}-row Dataforce export was already staged. No duplicate jobs were created.`
+          : `Staged ${rowCount} Dataforce rows for mapping review. No regulated jobs, cases or certificates were created.`,
+      );
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "The Dataforce CSV could not be staged.",
+      );
+    } finally {
+      setBusy("");
     }
   }
 
@@ -2044,7 +2244,6 @@ export function CreditexVeuPilotWorkspace({
   };
   const isProvisioning =
     snapshot.configured && snapshot.run?.status === "provisioning";
-  const isActive = snapshot.run?.status === "active";
 
   return (
     <section
@@ -2506,6 +2705,31 @@ export function CreditexVeuPilotWorkspace({
                 {PILOT_JOB_COLUMNS.length - 1} columns |{" "}
                 {PILOT_SORT_KEYS.length} sortable
               </span>
+              {(role === "admin" || role === "case_manager") && (
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    setError("");
+                    setNotice("");
+                    setDataforceImportOpen(true);
+                  }}
+                >
+                  Import CSV
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={
+                  Boolean(busy)
+                  || (snapshot.pagination?.total || 0) <= 0
+                }
+                onClick={() => void downloadDataforceCsv()}
+              >
+                {busy === "dataforce-export"
+                  ? "Preparing CSV..."
+                  : "Download CSV"}
+              </button>
               <button
                 type="button"
                 disabled={(snapshot.pagination?.page || 0) <= 0}
@@ -2544,6 +2768,131 @@ export function CreditexVeuPilotWorkspace({
               </button>
             </footer>
           </div>
+
+          {dataforceImportOpen && (
+            <dialog
+              ref={dataforceImportDialogRef}
+              className={styles.importDialog}
+              aria-labelledby="dataforce-import-title"
+              onCancel={(event) => {
+                event.preventDefault();
+                closeDataforceImport();
+              }}
+            >
+              <header>
+                <div>
+                  <span>CONTROLLED LEGACY INTAKE</span>
+                  <h3 id="dataforce-import-title">
+                    Stage a Dataforce job export
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close Dataforce import"
+                  onClick={closeDataforceImport}
+                >
+                  Close
+                </button>
+              </header>
+              <p>
+                Select the unedited job CSV downloaded from Dataforce. TLink
+                checks the exact 23-column layout before retaining it for
+                mapping review.
+              </p>
+              <label className={styles.importFile}>
+                Dataforce CSV
+                <input
+                  ref={dataforceFileRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  autoFocus
+                  disabled={Boolean(busy)}
+                  onChange={(event) =>
+                    void inspectDataforceFile(event.target.files?.[0])}
+                />
+                <small>Maximum 5 MB and 2,500 job rows per batch.</small>
+              </label>
+
+              {dataforceImport.validation && (
+                <div
+                  className={styles.importValidation}
+                  data-valid={
+                    dataforceImport.validation.valid
+                    && dataforceImport.validation.summary.totalRows <= 2_500
+                  }
+                >
+                  <strong>
+                    {dataforceImport.validation.valid
+                      ? `${dataforceImport.validation.summary.acceptedRows} rows match the Dataforce contract`
+                      : "This file does not match the Dataforce contract"}
+                  </strong>
+                  <span>
+                    {dataforceImport.validation.summary.rejectedRows} rejected
+                    {" | "}
+                    {dataforceImport.validation.summary.duplicateRows} duplicate
+                  </span>
+                  {dataforceImport.validation.summary.totalRows > 2_500 && (
+                    <p>
+                      Split this export into batches of 2,500 jobs or fewer.
+                    </p>
+                  )}
+                  {dataforceImport.validation.issues.length > 0 && (
+                    <ul>
+                      {dataforceImport.validation.issues
+                        .slice(0, 5)
+                        .map((issue, index) => (
+                          <li
+                            key={[
+                              issue.code,
+                              issue.rowNumber || 0,
+                              issue.columnNumber || 0,
+                              index,
+                            ].join(":")}
+                          >
+                            {issue.rowNumber
+                              ? `Row ${issue.rowNumber}: `
+                              : ""}
+                            {issue.message}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <div className={styles.importBoundary}>
+                <strong>Staging only</strong>
+                <span>
+                  Importing does not create a customer, job, compliance case,
+                  certificate, registry submission or trade. Unmapped
+                  Dataforce values remain quarantined until Creditex approves
+                  the field dictionary.
+                </span>
+              </div>
+              <footer>
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={closeDataforceImport}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    Boolean(busy)
+                    || !dataforceImport.validation?.valid
+                    || dataforceImport.validation.summary.totalRows > 2_500
+                  }
+                  onClick={() => void stageDataforceImport()}
+                >
+                  {busy === "dataforce-import"
+                    ? "Staging..."
+                    : "Stage for mapping review"}
+                </button>
+              </footer>
+            </dialog>
+          )}
 
           {filtersOpen && (
             <button
@@ -2802,7 +3151,9 @@ export function CreditexVeuPilotWorkspace({
               The pilot produces a deterministic 300-item manifest and
               validates its structure against its own source cohort. It records
               zero regulator acceptances because no regulator request is sent,
-              and no Dataforce or Runabout data is imported.
+              and no staged Dataforce or Runabout row can create a customer,
+              job, regulated case, certificate, submission, trade or
+              settlement.
             </p>
           </div>
           <div className={styles.connectorGrid}>
@@ -2852,54 +3203,6 @@ export function CreditexVeuPilotWorkspace({
             </article>
           </div>
         </section>
-      )}
-
-      {isActive && (
-        <nav
-          className={styles.activityRail}
-          aria-label="VEU activity tabs"
-          inert={filtersOpen}
-        >
-          <button
-            type="button"
-            data-selected={!filters.activityTemplateId}
-            onClick={() => {
-              const next = {
-                ...filters,
-                activityTemplateId: "",
-                page: 0,
-              };
-              setFilters(next);
-              setDraftFilters(next);
-              setPanel("jobs");
-            }}
-          >
-            <strong>Dashboard</strong>
-            <small>{counts.jobs} test jobs</small>
-          </button>
-          {(snapshot.activities || []).map((activity) => (
-            <button
-              key={activity.activityTemplateId}
-              type="button"
-              data-selected={
-                filters.activityTemplateId === activity.activityTemplateId
-              }
-              onClick={() => {
-                const next = {
-                  ...filters,
-                  activityTemplateId: activity.activityTemplateId,
-                  page: 0,
-                };
-                setFilters(next);
-                setDraftFilters(next);
-                setPanel("jobs");
-              }}
-            >
-              <strong>{activity.registryActivityCode}</strong>
-              <small>{activity.jobCount} jobs</small>
-            </button>
-          ))}
-        </nav>
       )}
 
     </section>

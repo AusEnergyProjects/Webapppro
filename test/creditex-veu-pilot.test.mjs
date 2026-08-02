@@ -28,6 +28,9 @@ const auditWorkspaceStyles = read(
   "../src/components/CreditexVeuJobAuditWorkspace.module.css",
 );
 const portal = read("../src/components/CreditexCompliancePortal.tsx");
+const portalStyles = read(
+  "../src/components/CreditexCompliancePortal.module.css",
+);
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const completeMigrationChain = fs.readdirSync(migrationDirectory)
   .filter((name) => /^\d{4}_.+\.sql$/.test(name))
@@ -171,9 +174,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 100);
+  assert.equal(completeMigrationChain.length, 106);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0099_/);
+  assert.match(completeMigrationChain.at(-1), /^0105_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -2152,6 +2155,11 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     "function PilotSortHeader",
     "const PILOT_STATUS_COLUMN_KEYS",
   );
+  const jobColumns = sourceSection(
+    workspace,
+    "const PILOT_JOB_COLUMNS",
+    "const JOB_CONTEXT_ITEMS",
+  );
   assert.deepEqual(
     Array.from(priorities.matchAll(/key: "([^"]+)"/g), (match) => match[1]),
     [
@@ -2218,11 +2226,51 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.equal((advancedFilters.match(/VEU activity/g) || []).length, 1);
   assert.doesNotMatch(advancedFilters, /<details open>/);
   assert.doesNotMatch(advancedFilters, /Search type|Bulk actions/);
-  assert.match(workspace, /aria-label="VEU activity tabs"/);
-  assert.match(workspace, /activityTemplateId: activity\.activityTemplateId/);
+  assert.doesNotMatch(workspace, /aria-label="VEU activity tabs"/);
+  assert.match(advancedFilters, /value=\{activity\.activityTemplateId\}/);
   assert.doesNotMatch(workspace, /className=\{styles\.roster\}/);
-  assert.match(workspaceStyles, /\.activityRail/);
+  assert.doesNotMatch(workspaceStyles, /\.activityRail/);
   assert.doesNotMatch(workspaceStyles, /\.rosterGrid/);
+  assert.match(workspace, /Download CSV/);
+  assert.match(workspace, /Import CSV/);
+  assert.match(workspace, /\/api\/creditex\/dataforce/);
+  assert.match(workspace, /projectCreditexJobToDataforceRecord/);
+  assert.match(workspace, /exportDataforceJobCsv/);
+  assert.match(
+    workspace,
+    /No regulated jobs, cases or certificates were created/,
+  );
+  assert.match(workspaceStyles, /\.importDialog/);
+  assert.deepEqual(
+    Array.from(jobColumns.matchAll(/label: "([^"]+)"/g), (match) => match[1])
+      .slice(0, 24),
+    [
+      "Row",
+      "App Id",
+      "Job Id",
+      "Status",
+      "SubStatus",
+      "Type",
+      "Work Type",
+      "Scheduled Datetime",
+      "Balance",
+      "Certificates (VEECs)",
+      "Submission",
+      "Invoiced",
+      "Field Worker",
+      "Agent",
+      "Client",
+      "Customer",
+      "Company Name",
+      "Ext Cust Ref",
+      "Phone",
+      "Mobile",
+      "Email",
+      "Address",
+      "Suburb",
+      "Postcode",
+    ],
+  );
   for (const label of [
     "Status filters",
     "Work &amp; personnel",
@@ -2239,14 +2287,14 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     assert.match(workspace, new RegExp(label));
   }
   for (const legacyColumn of [
-    "Appt ID",
-    "Job ID",
+    "App Id",
+    "Job Id",
     "SubStatus",
     "Balance",
     "Certificates \\(VEECs\\)",
     "Field Worker",
     "Company Name",
-    "Ref Cust No\\?",
+    "Ext Cust Ref",
     "Mobile",
     "Postcode",
   ]) {
@@ -2266,6 +2314,24 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     /display:\s*none/,
   );
   assert.match(workspaceStyles, /\.tableViewport\s*\{[\s\S]*overflow:\s*auto/);
+  assert.match(
+    workspaceStyles,
+    /\.workspace:not\(\[data-panel="jobs"\]\)\s*\{[\s\S]*height:\s*100%[\s\S]*overflow-y:\s*auto/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.workspace\[data-panel="jobs"\]\s*\{[\s\S]*overflow:\s*hidden/,
+  );
+  assert.match(workspaceStyles, /--pilot-canvas:\s*#020b18/);
+  assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
+  assert.match(
+    portalStyles,
+    /\.pilotShell\s*\{[\s\S]*background:\s*#020b18/,
+  );
+  assert.match(
+    portalStyles,
+    /\.pilotFrame \.topbar\s*\{[\s\S]*background:\s*#031524/,
+  );
   assert.match(
     workspaceStyles,
     /\.jobTable\s*\{[\s\S]*font-size:\s*0\.75rem/,
@@ -2357,10 +2423,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(
     sortHeader,
     /onSort\("jobNumber", "asc"\);[\s\S]{0,120}closeAndRestoreFocus\(\)/,
-  );
-  assert.match(
-    workspace,
-    /className=\{styles\.activityRail\}[\s\S]{0,120}inert=\{filtersOpen\}/,
   );
   assert.match(
     sourceSection(
@@ -2464,7 +2526,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   );
   assert.match(
     workspace,
-    /zero regulator acceptances because no regulator request is sent,\s*and no Dataforce or Runabout data is imported/,
+    /zero regulator acceptances because no regulator request is sent,\s*and no staged Dataforce or Runabout row can create a customer,\s*job, regulated case, certificate, submission, trade or\s*settlement/,
   );
 
   assert.match(

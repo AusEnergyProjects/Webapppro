@@ -59,7 +59,15 @@ test("table mutation policy is explicit, default-deny and hides database interna
     assert.equal(policy.canInsert, true);
     assert.equal(policy.canDelete, true);
   }
-  for (const name of ["admin_users", "admin_audit_log", "trade_crm_quote_events", "trade_work_orders", "future_application_table"]) {
+  for (const name of [
+    "admin_users",
+    "admin_audit_log",
+    "trade_crm_quote_events",
+    "trade_work_orders",
+    "compliance_official_source_artifacts",
+    "compliance_official_source_bindings",
+    "future_application_table",
+  ]) {
     const policy = databaseTablePolicy(name);
     assert.equal(policy.visible, true, name);
     assert.equal(policy.canInsert, false, name);

@@ -15,10 +15,7 @@ import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 import { quickInvoiceNumber, resolveQuickInvoiceDraft, sendQuickInvoiceDelivery, type QuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
 import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
-import {
-  appendLiveComplianceCaseStatements,
-  ComplianceDomainError,
-} from "@/lib/creditex-compliance-server";
+import { ComplianceDomainError } from "@/lib/creditex-compliance-server";
 
 export const runtime = "edge";
 
@@ -930,8 +927,11 @@ export async function POST(request: Request) {
     if (action === "create_job" || action === "create_scheduled_job") {
       const guided = action === "create_scheduled_job";
       const complianceActivityVersionId = cleanAdminText(body.complianceActivityVersionId, 180);
-      if (complianceActivityVersionId && !guided) {
-        return adminJson({ ok: false, error: "Schedule the installation before opening a compliance intake case." }, 400);
+      if (complianceActivityVersionId) {
+        return adminJson({
+          ok: false,
+          error: "Link the government activity after the customer accepts the quote.",
+        }, 409);
       }
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
         WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active' AND stage NOT IN ('completed', 'cancelled')`)
@@ -1040,9 +1040,6 @@ export async function POST(request: Request) {
         assignee = String(member.display_name || "");
       }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
-      if (complianceActivityVersionId && appointmentType !== "installation") {
-        return adminJson({ ok: false, error: "A compliance intake case requires the scheduled appointment to be the planned installation date." }, 400);
-      }
       let appointmentId = "";
       let appointmentTitle = "";
       let photoRequestId = "";
@@ -1092,14 +1089,9 @@ export async function POST(request: Request) {
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
-      let siteJurisdiction = "";
       if (serviceSiteId) {
         const site = createCustomer || serviceSiteMode === "new" ? { suburb, address_state: addressState, postcode } : await ownedServiceSite(db, identity, serviceSiteId, customerId);
         serviceArea = [site.suburb, site.address_state, site.postcode].filter(Boolean).join(" ").trim();
-        siteJurisdiction = String(site.address_state || "").toUpperCase();
-      }
-      if (complianceActivityVersionId && !ADDRESS_STATES.has(siteJurisdiction)) {
-        return adminJson({ ok: false, error: "Add a valid Australian service-site state before opening a compliance intake case." }, 400);
       }
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
@@ -1170,19 +1162,6 @@ export async function POST(request: Request) {
         ] : []),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
-      const complianceCase = complianceActivityVersionId
-        ? await appendLiveComplianceCaseStatements(db, batchStatements, {
-          activityVersionId: complianceActivityVersionId,
-          activityDate: scheduledStart.slice(0, 10),
-          workOrderId,
-          installerUid: identity.uid,
-          serviceCategory,
-          jurisdiction: siteJurisdiction,
-          actorType: "installer",
-          actorUid: identity.uid,
-          createdAt: now,
-        })
-        : null;
       await db.batch(batchStatements);
       let requestSent = false;
       let deliveryError = "";
@@ -1225,7 +1204,6 @@ export async function POST(request: Request) {
         }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
-        complianceCaseId: complianceCase?.caseId || "", complianceCaseNumber: complianceCase?.caseNumber || "",
         appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,
         invoiceSent, invoiceDeliveryError, calendarSynced, calendarFailed }, 201);
     }
@@ -1249,12 +1227,47 @@ export async function POST(request: Request) {
       const assignee = String(member.display_name || "");
       const displayName = customerDisplayName(job);
       const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
-      await db.prepare(`INSERT INTO trade_crm_appointments
+      const appointmentId = crypto.randomUUID();
+      const statements = [db.prepare(`INSERT INTO trade_crm_appointments
         (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
          status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`)
-        .bind(crypto.randomUUID(), workOrderId, identity.uid, appointmentType,
+        .bind(appointmentId, workOrderId, identity.uid, appointmentType,
           appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
-          cleanAdminText(body.notes, 1000), now, now).run();
+          cleanAdminText(body.notes, 1000), now, now)];
+      if (appointmentType === "installation") {
+        const revision = nextJobRevision(job.revision);
+        statements.push(
+          db.prepare(`UPDATE trade_work_orders
+            SET scheduled_start = ?, scheduled_end = ?, stage = 'scheduled',
+              revision = ?, updated_at = ?
+            WHERE id = ? AND firebase_uid = ?`)
+            .bind(
+              startsAt,
+              endsAt,
+              revision,
+              now,
+              workOrderId,
+              identity.uid,
+            ),
+          db.prepare(`INSERT INTO trade_work_order_events
+            (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'installation_scheduled',
+              'Planned installation appointment set as the job schedule.', ?)`)
+            .bind(
+              crypto.randomUUID(),
+              workOrderId,
+              identity.uid,
+              now,
+            ),
+          ...jobSyncChangeStatements(db, {
+            ownerUid: identity.uid,
+            workOrderId,
+            revision,
+            changedAt: now,
+          }),
+        );
+      }
+      await db.batch(statements);
       return adminJson({ ok: true }, 201);
     }
     if (action === "create_note") {

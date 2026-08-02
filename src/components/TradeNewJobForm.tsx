@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "firebase/auth";
-import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
 import { TradeQuickInvoiceStep } from "./TradeQuickInvoiceStep";
 import { defaultPhotoRequirements, type PhotoRequirement } from "@/lib/trade-photo-requests";
@@ -13,34 +13,6 @@ type Site = { id: string; siteLabel: string; addressLine1: string; suburb: strin
 type TeamMember = { id: string; displayName: string; role: string; status: string; isOwner: boolean };
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
 type AddressSuggestion = { id: string; label: string; addressLine1: string; addressLine2: string; suburb: string; addressState: string; postcode: string };
-type ComplianceActivity = {
-  id: string;
-  programId: string;
-  organisationName: string;
-  programName: string;
-  programCode: string;
-  schemeKind: string;
-  jurisdiction: string;
-  activityKey: string;
-  version: number;
-  title: string;
-  registryActivityCode: string;
-  specificationPart: string;
-  productCategory: string;
-  scenarioCode: string;
-  scenario: string;
-  effectiveFrom: string;
-  effectiveTo: string;
-  officialSourceUrl: string;
-  officialSourceTitle: string;
-  officialSourceVersion: string;
-  calculationApprovalState: string;
-};
-
-function scenarioSelectorValue(activity: ComplianceActivity) {
-  return JSON.stringify([activity.scenarioCode, activity.scenario]);
-}
-
 const serviceOptions = [
   ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
   ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
@@ -58,7 +30,7 @@ const appointmentLabels: Record<string, string> = { phone_call: "Phone call", si
 const buildingTypes = [["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]];
 const steps = ["Job", "Customer", "Appointment", "Time", "Evidence", "Invoice"];
 
-function AddressFields({ user, onJurisdictionChange }: { user: User; onJurisdictionChange: (jurisdiction: string) => void }) {
+function AddressFields({ user }: { user: User }) {
   const id = useId();
   const [value, setValue] = useState({ addressLine1: "", addressLine2: "", suburb: "", addressState: "", postcode: "" });
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
@@ -88,7 +60,6 @@ function AddressFields({ user, onJurisdictionChange }: { user: User; onJurisdict
 
   function choose(item: AddressSuggestion) {
     setValue({ addressLine1: item.addressLine1, addressLine2: item.addressLine2, suburb: item.suburb, addressState: item.addressState, postcode: item.postcode });
-    onJurisdictionChange(item.addressState);
     setSuggestions([]);
   }
 
@@ -99,7 +70,7 @@ function AddressFields({ user, onJurisdictionChange }: { user: User; onJurisdict
     </label>
     <label className="wide"><span>Unit, level or building, optional</span><input name="addressLine2" maxLength={140} value={value.addressLine2} onChange={(event) => setValue((current) => ({ ...current, addressLine2: event.target.value }))} /></label>
     <label><span>Suburb</span><input name="suburb" required maxLength={80} autoComplete="address-level2" value={value.suburb} onChange={(event) => setValue((current) => ({ ...current, suburb: event.target.value }))} /></label>
-    <label><span>State</span><select name="addressState" required autoComplete="address-level1" value={value.addressState} onChange={(event) => { const next = event.target.value; setValue((current) => ({ ...current, addressState: next })); onJurisdictionChange(next); }}><option value="">Select state</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((state) => <option key={state}>{state}</option>)}</select></label>
+    <label><span>State</span><select name="addressState" required autoComplete="address-level1" value={value.addressState} onChange={(event) => { const next = event.target.value; setValue((current) => ({ ...current, addressState: next })); }}><option value="">Select state</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((state) => <option key={state}>{state}</option>)}</select></label>
     <label><span>Postcode</span><input name="postcode" required inputMode="numeric" autoComplete="postal-code" maxLength={4} pattern="[0-9]{4}" value={value.postcode} onChange={(event) => setValue((current) => ({ ...current, postcode: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
   </div>;
 }
@@ -112,13 +83,6 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   const selectableTemplates = templates.filter((item) => serviceCategories.has(item.serviceCategory));
   const template = selectableTemplates.find((item) => item.id === templateId);
   const [serviceCategory, setServiceCategory] = useState("assessment");
-  const [complianceActivities, setComplianceActivities] = useState<ComplianceActivity[]>([]);
-  const [complianceProgramId, setComplianceProgramId] = useState("");
-  const [complianceActivityKey, setComplianceActivityKey] = useState("");
-  const [complianceProductCategory, setComplianceProductCategory] = useState("");
-  const [complianceScenario, setComplianceScenario] = useState("");
-  const [complianceActivityVersionId, setComplianceActivityVersionId] = useState("");
-  const [complianceCatalogueStatus, setComplianceCatalogueStatus] = useState("Choose the job address and planned installation date to check government program activities.");
   const [priority, setPriority] = useState("standard");
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [customerType, setCustomerType] = useState("residential");
@@ -131,7 +95,6 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   const [sites, setSites] = useState<Site[]>([]);
   const [serviceSiteId, setServiceSiteId] = useState("");
   const [newSite, setNewSite] = useState(false);
-  const [newSiteJurisdiction, setNewSiteJurisdiction] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
   const [duplicateReviewed, setDuplicateReviewed] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
@@ -144,89 +107,10 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   const [selectedRequirementIds, setSelectedRequirementIds] = useState(() => new Set(defaultPhotoRequirements("assessment").map((item) => item.id)));
   const requirements: PhotoRequirement[] = defaultPhotoRequirements(serviceCategory);
   const effectiveAssigneeMemberId = assigneeMemberId || teamMembers[0]?.id || "";
-  const siteJurisdiction = customerMode === "new" || newSite
-    ? newSiteJurisdiction
-    : sites.find((site) => site.id === serviceSiteId)?.addressState || "";
-  const activityDate = scheduledStart.slice(0, 10);
-
-  function resetComplianceCatalogue(status = "Choose the job address and planned installation date to check government program activities.") {
-    setComplianceActivities([]);
-    setComplianceProgramId("");
-    setComplianceActivityKey("");
-    setComplianceProductCategory("");
-    setComplianceScenario("");
-    setComplianceActivityVersionId("");
-    setComplianceCatalogueStatus(status);
-  }
-
-  useEffect(() => {
-    if (!siteJurisdiction || !activityDate) return;
-    let active = true;
-    void user.getIdToken().then(async (token) => {
-      const nextActivities: ComplianceActivity[] = [];
-      const seenActivityIds = new Set<string>();
-      const seenCursors = new Set<string>();
-      let afterActivityId = "";
-      for (;;) {
-        if (!active) return;
-        if (seenCursors.has(afterActivityId)) throw new Error("The compliance catalogue returned an invalid page sequence.");
-        seenCursors.add(afterActivityId);
-        const response = await fetch(`/api/trade-compliance?${new URLSearchParams({
-          serviceCategory,
-          jurisdiction: siteJurisdiction,
-          onDate: activityDate,
-          afterActivityId,
-        })}`, {
-          headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
-        });
-        const result = await response.json() as {
-          activities?: ComplianceActivity[];
-          error?: string;
-          pagination?: { hasNext?: boolean; nextCursor?: string };
-        };
-        if (!response.ok) throw new Error(result.error || "The compliance catalogue is unavailable.");
-        for (const activity of result.activities || []) {
-          if (!seenActivityIds.has(activity.id)) {
-            nextActivities.push(activity);
-            seenActivityIds.add(activity.id);
-          }
-        }
-        if (!result.pagination?.hasNext) break;
-        const nextCursor = String(result.pagination.nextCursor || "");
-        if (!nextCursor || seenCursors.has(nextCursor)) {
-          throw new Error("The compliance catalogue returned an invalid page sequence.");
-        }
-        afterActivityId = nextCursor;
-      }
-      if (!active) return;
-      nextActivities.sort((left, right) => {
-        const groupOrder = [
-          left.organisationName,
-          left.programName,
-          left.activityKey,
-        ].join("|").localeCompare([
-          right.organisationName,
-          right.programName,
-          right.activityKey,
-        ].join("|"), "en-AU");
-        return groupOrder || right.version - left.version;
-      });
-      setComplianceActivities(nextActivities);
-      setComplianceCatalogueStatus(nextActivities.length
-        ? "Only current government-source activity versions activated for this date and work type appear here."
-        : "No activated government-program activity is available for this work type and date. You can still create an ordinary job.");
-    }).catch(() => {
-      if (!active) return;
-      setComplianceActivities([]); setComplianceActivityVersionId("");
-      setComplianceCatalogueStatus("The compliance catalogue could not be loaded. Create an ordinary job or try again before linking a program.");
-    });
-    return () => { active = false; };
-  }, [activityDate, serviceCategory, siteJurisdiction, user]);
 
   function changeServiceCategory(value: string) {
     if (!serviceCategories.has(value)) return;
     const next = defaultPhotoRequirements(value);
-    resetComplianceCatalogue(siteJurisdiction && activityDate ? "Loading government program activities..." : undefined);
     setServiceCategory(value); setSelectedRequirementIds(new Set(next.map((item) => item.id)));
   }
 
@@ -256,8 +140,7 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
 
   function selectCustomer(id: string) {
     setCustomerId(id); setDuplicates([]); setDuplicateReviewed(false);
-    resetComplianceCatalogue();
-    if (!id) { setSelectedCustomer(null); setSites([]); setServiceSiteId(""); setNewSite(false); setNewSiteJurisdiction(""); }
+    if (!id) { setSelectedCustomer(null); setSites([]); setServiceSiteId(""); setNewSite(false); }
   }
 
   function validateVisibleStep() {
@@ -307,89 +190,6 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
   }
 
   const selectedRequirements = requirements.filter((item) => selectedRequirementIds.has(item.id));
-  const compliancePrograms = useMemo(() => {
-    const unique = new Map<string, ComplianceActivity>();
-    for (const activity of complianceActivities) {
-      if (!unique.has(activity.programId)) unique.set(activity.programId, activity);
-    }
-    return [...unique.values()].sort((left, right) =>
-      [left.jurisdiction, left.programCode, left.programName]
-        .join("|")
-        .localeCompare(
-          [right.jurisdiction, right.programCode, right.programName].join("|"),
-          "en-AU",
-        ));
-  }, [complianceActivities]);
-  const complianceActivityOptions = useMemo(() => {
-    const unique = new Map<string, ComplianceActivity>();
-    for (const activity of complianceActivities) {
-      if (
-        activity.programId === complianceProgramId
-        && !unique.has(activity.activityKey)
-      ) unique.set(activity.activityKey, activity);
-    }
-    return [...unique.values()].sort((left, right) =>
-      [left.registryActivityCode, left.title]
-        .join("|")
-        .localeCompare([right.registryActivityCode, right.title].join("|"), "en-AU"));
-  }, [complianceActivities, complianceProgramId]);
-  const complianceProductOptions = useMemo(() => [
-    ...new Set(
-      complianceActivities
-        .filter((activity) =>
-          activity.programId === complianceProgramId
-          && activity.activityKey === complianceActivityKey)
-        .map((activity) => activity.productCategory),
-    ),
-  ].sort((left, right) => left.localeCompare(right, "en-AU")), [
-    complianceActivities,
-    complianceActivityKey,
-    complianceProgramId,
-  ]);
-  const complianceScenarioOptions = useMemo(() => {
-    const unique = new Map<string, ComplianceActivity>();
-    for (const activity of complianceActivities) {
-      if (
-        activity.programId === complianceProgramId
-        && activity.activityKey === complianceActivityKey
-        && activity.productCategory === complianceProductCategory
-      ) unique.set(scenarioSelectorValue(activity), activity);
-    }
-    return [...unique.values()].sort((left, right) =>
-      [left.scenarioCode, left.scenario]
-        .join("|")
-        .localeCompare([right.scenarioCode, right.scenario].join("|"), "en-AU"));
-  }, [
-    complianceActivities,
-    complianceActivityKey,
-    complianceProductCategory,
-    complianceProgramId,
-  ]);
-  const complianceVersionOptions = useMemo(() =>
-    complianceActivities
-      .filter((activity) =>
-        activity.programId === complianceProgramId
-        && activity.activityKey === complianceActivityKey
-        && activity.productCategory === complianceProductCategory
-        && scenarioSelectorValue(activity) === complianceScenario)
-      .sort((left, right) => right.version - left.version), [
-    complianceActivities,
-    complianceActivityKey,
-    complianceProductCategory,
-    complianceProgramId,
-    complianceScenario,
-  ]);
-  const effectiveComplianceActivityVersionId =
-    complianceVersionOptions.some(
-      (activity) => activity.id === complianceActivityVersionId,
-    )
-      ? complianceActivityVersionId
-      : complianceVersionOptions.length === 1
-        ? complianceVersionOptions[0].id
-        : "";
-  const selectedComplianceActivity = complianceActivities.find(
-    (activity) => activity.id === effectiveComplianceActivityVersionId,
-  );
   const newCustomerName = customerType === "business" ? businessName : `${firstName} ${lastName}`.trim();
   const customerName = selectedCustomer?.displayName || newCustomerName || "Customer";
   const deliveryEmail = selectedCustomer?.email || newCustomerEmail;
@@ -408,7 +208,6 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
     onSubmit(event);
   }}>
     <input type="hidden" name="customerMode" value={customerMode} /><input type="hidden" name="crmCustomerId" value={customerId} />
-    <input type="hidden" name="complianceActivityVersionId" value={effectiveComplianceActivityVersionId} />
     <input type="hidden" name="duplicateOverride" value={duplicateReviewed ? "true" : "false"} />
     <input type="hidden" name="serviceSiteMode" value={customerMode === "new" || newSite ? "new" : "existing"} /><input type="hidden" name="serviceSiteId" value={newSite ? "" : serviceSiteId} />
     <input type="hidden" name="assigneeMemberId" value={effectiveAssigneeMemberId} /><input type="hidden" name="evidenceRequirements" value={JSON.stringify(selectedRequirements)} /><input type="hidden" name="deliveryConsent" value={deliveryConsent ? "true" : "false"} />
@@ -429,13 +228,13 @@ export function TradeNewJobForm({ user, templates, teamMembers, busy, onSubmit }
         <small>AEA protected leads use their authorised workflow and cannot become direct customer records here.</small>
       </fieldset>
       {duplicates.length > 0 && <div className="crm-duplicate-match" role="alert"><strong>Customer already found</strong><p>Use the existing record so the customer and job history stay together.</p>{duplicates.map((candidate) => <div key={candidate.customerId}><span><b>{candidate.displayName}</b><small>{candidate.customerNumber} | matched {candidate.reasons.join(", ")}</small></span><button type="button" onClick={() => attachDuplicate(candidate)}>Use this customer</button></div>)}<button type="button" className="crm-text-action" onClick={() => { setDuplicateReviewed(true); setDuplicates([]); setMessage("Continuing as a different customer."); }}>This is a different customer</button></div>}
-      {(customerMode === "new" || customerId) && <fieldset className="crm-service-site"><legend>Job address</legend>{customerMode === "existing" && customerId && !newSite && sites.length > 0 && <label><span>Existing service site</span><select value={serviceSiteId} onChange={(event) => { const next = event.target.value; setServiceSiteId(next); resetComplianceCatalogue(sites.find((site) => site.id === next)?.addressState && activityDate ? "Loading government program activities..." : undefined); }}>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.addressLine1, site.suburb, site.addressState, site.postcode].filter(Boolean).join(", ")}</option>)}</select></label>}{customerMode === "existing" && customerId && <button type="button" className="crm-text-action" onClick={() => { setNewSite((value) => !value); setNewSiteJurisdiction(""); resetComplianceCatalogue(); }}>{newSite ? "Use an existing service site" : "Add a new service site"}</button>}{(customerMode === "new" || newSite) && <div className="crm-form-grid"><label><span>Site name</span><input name="siteLabel" maxLength={100} defaultValue={customerMode === "new" ? "Primary site" : "New service site"} /></label><AddressFields user={user} onJurisdictionChange={(jurisdiction) => { setNewSiteJurisdiction(jurisdiction); resetComplianceCatalogue(jurisdiction && activityDate ? "Loading government program activities..." : undefined); }} /></div>}</fieldset>}
+      {(customerMode === "new" || customerId) && <fieldset className="crm-service-site"><legend>Job address</legend>{customerMode === "existing" && customerId && !newSite && sites.length > 0 && <label><span>Existing service site</span><select value={serviceSiteId} onChange={(event) => setServiceSiteId(event.target.value)}>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.addressLine1, site.suburb, site.addressState, site.postcode].filter(Boolean).join(", ")}</option>)}</select></label>}{customerMode === "existing" && customerId && <button type="button" className="crm-text-action" onClick={() => setNewSite((value) => !value)}>{newSite ? "Use an existing service site" : "Add a new service site"}</button>}{(customerMode === "new" || newSite) && <div className="crm-form-grid"><label><span>Site name</span><input name="siteLabel" maxLength={100} defaultValue={customerMode === "new" ? "Primary site" : "New service site"} /></label><AddressFields user={user} /></div>}</fieldset>}
       <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(1)}>Back</button><button type="button" className="btn" disabled={checkingDuplicates} onClick={() => void continueFromCustomer()}>{checkingDuplicates ? "Checking customer..." : "Choose appointment"}</button></div>
     </section>
 
     <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 6</span><h3>Choose who and what</h3><p>Select the team member responsible and the kind of appointment.</p></header><div className="crm-form-grid"><label><span>Team member</span><select required value={effectiveAssigneeMemberId} onChange={(event) => setAssigneeMemberId(event.target.value)}><option value="">Choose team member</option>{teamMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}{member.isOwner ? " (owner)" : ""}{member.status === "invited" ? " (invite pending)" : ""}</option>)}</select></label><label><span>Appointment type</span><select name="appointmentType" value={appointmentType} onChange={(event) => setAppointmentType(event.target.value)}>{Object.entries(appointmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><div className="crm-title-preview"><span>Automatic title</span><strong>{customerName} {serviceLabels[serviceCategory]}</strong><small>{appointmentLabels[appointmentType]}</small></div><div className="crm-wizard-actions"><button type="button" onClick={() => setStep(2)}>Back</button><button type="button" className="btn" onClick={() => next(4)}>Choose time</button></div></section>
 
-    <section data-step="4" hidden={step !== 4} className="crm-wizard-panel"><header><span>4 of 6</span><h3>Schedule the time</h3><p>Set the planned installation time. After a quote is accepted, you can attach the exact government activity that Creditex will audit.</p></header><div className="crm-form-grid"><label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => { const next = event.target.value; setScheduledStart(next); resetComplianceCatalogue(siteJurisdiction && next ? "Loading government program activities..." : undefined); }} /></label><label className="schedule-duration"><span>Duration <strong>{duration < 60 ? `${duration} minutes` : duration === 60 ? "1 hour" : `${Math.floor(duration / 60)} hours${duration % 60 ? ` ${duration % 60} minutes` : ""}`}</strong></span><input type="range" name="durationMinutes" min="15" max="480" step="15" value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label><label className="wide"><span>Appointment notes, optional</span><textarea name="appointmentNotes" maxLength={1000} rows={3} placeholder="Access, parking or visit notes" /></label></div><fieldset className="crm-compliance-choice"><legend>Government program activity, optional</legend><p>Select from controlled, effective-dated government activity records. TLink creates a compliance case for Creditex to audit. A certificate or external program ID is recorded later only if the government pathway issues one.</p><div className="crm-form-grid"><label><span>Program</span><select value={complianceProgramId} disabled={!siteJurisdiction || !activityDate} onChange={(event) => { const next = event.target.value; setComplianceProgramId(next); setComplianceActivityKey(""); setComplianceProductCategory(""); setComplianceScenario(""); setComplianceActivityVersionId(""); if (next) setAppointmentType("installation"); }}><option value="">Ordinary job, no compliance case</option>{compliancePrograms.map((item) => <option value={item.programId} key={item.programId}>{item.jurisdiction} | {item.programCode} | {item.programName}</option>)}</select></label><label><span>Activity</span><select value={complianceActivityKey} disabled={!complianceProgramId} onChange={(event) => { setComplianceActivityKey(event.target.value); setComplianceProductCategory(""); setComplianceScenario(""); setComplianceActivityVersionId(""); }}><option value="">Choose activity</option>{complianceActivityOptions.map((item) => <option value={item.activityKey} key={item.activityKey}>{item.registryActivityCode || item.activityKey} | {item.title}</option>)}</select></label><label><span>Product category</span><select value={complianceProductCategory} disabled={!complianceActivityKey} onChange={(event) => { setComplianceProductCategory(event.target.value); setComplianceScenario(""); setComplianceActivityVersionId(""); }}><option value="">Choose product category</option>{complianceProductOptions.map((category) => <option value={category} key={category}>{category}</option>)}</select></label><label><span>Activity scenario</span><select value={complianceScenario} disabled={!complianceProductCategory} onChange={(event) => { setComplianceScenario(event.target.value); setComplianceActivityVersionId(""); }}><option value="">Choose scenario</option>{complianceScenarioOptions.map((item) => <option value={scenarioSelectorValue(item)} key={scenarioSelectorValue(item)}>{item.scenarioCode ? `${item.scenarioCode} | ` : ""}{item.scenario}</option>)}</select></label><label className="wide"><span>Effective source version</span><select value={effectiveComplianceActivityVersionId} disabled={!complianceScenario} onChange={(event) => setComplianceActivityVersionId(event.target.value)}><option value="">Choose exact effective version</option>{complianceVersionOptions.map((item) => <option value={item.id} key={item.id}>Version {item.version} | effective {item.effectiveFrom}{item.effectiveTo ? ` to ${item.effectiveTo}` : " onward"} | {item.officialSourceVersion || item.officialSourceTitle}</option>)}</select><small>{complianceCatalogueStatus}</small></label></div>{selectedComplianceActivity && <div className="crm-compliance-notice"><strong>{selectedComplianceActivity.organisationName} audit case will open with this job</strong><p>{selectedComplianceActivity.programName}. TLink will lock the exact government source, activity, product category, scenario and evidence requirement version to the planned installation date. It does not decide eligibility, calculate an incentive or promise certificates.</p><a href={selectedComplianceActivity.officialSourceUrl} target="_blank" rel="noreferrer">Open official {selectedComplianceActivity.officialSourceVersion || "activity"} source</a></div>}</fieldset><div className="crm-wizard-actions"><button type="button" onClick={() => setStep(3)}>Back</button><button type="button" className="btn" onClick={() => next(5)}>Choose evidence</button></div></section>
+    <section data-step="4" hidden={step !== 4} className="crm-wizard-panel"><header><span>4 of 6</span><h3>Schedule the time</h3><p>Set the planned work time. Government program activity is linked from the accepted job after the customer accepts the quote.</p></header><div className="crm-form-grid"><label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} /></label><label className="schedule-duration"><span>Duration <strong>{duration < 60 ? `${duration} minutes` : duration === 60 ? "1 hour" : `${Math.floor(duration / 60)} hours${duration % 60 ? ` ${duration % 60} minutes` : ""}`}</strong></span><input type="range" name="durationMinutes" min="15" max="480" step="15" value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label><label className="wide"><span>Appointment notes, optional</span><textarea name="appointmentNotes" maxLength={1000} rows={3} placeholder="Access, parking or visit notes" /></label></div><div className="crm-wizard-actions"><button type="button" onClick={() => setStep(3)}>Back</button><button type="button" className="btn" onClick={() => next(5)}>Choose evidence</button></div></section>
 
     <section data-step="5" hidden={step !== 5} className="crm-wizard-panel"><header><span>5 of 6</span><h3>Request information</h3><p>Choose what the customer should photograph before the appointment.</p></header><div className="crm-evidence-choice">{requirements.map((item) => <label key={item.id}><input type="checkbox" checked={selectedRequirementIds.has(item.id)} onChange={(event) => setSelectedRequirementIds((current) => { const next = new Set(current); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next; })} /><span><strong>{item.label}</strong><small>{item.guidance}</small></span></label>)}</div><label className="crm-consent-confirm"><input type="checkbox" checked={deliveryConsent} required={step === 5} onChange={(event) => setDeliveryConsent(event.target.checked)} /><span><strong>Send by email to {deliveryEmail || "this customer"}</strong><small>I confirm the customer asked to receive this job information request.</small></span></label>{!deliveryEmail && <div className="crm-wizard-message">Add a valid customer email before this request can be sent.</div>}<div className="crm-wizard-actions"><button type="button" onClick={() => setStep(4)}>Back</button><button type="button" className="btn" disabled={!deliveryEmail} onClick={() => next(6)}>Invoice options</button></div></section>
     <TradeQuickInvoiceStep user={user} active={step === 6} busy={busy} customerName={`${customerName} | ${serviceLabels[serviceCategory]} | ${appointmentLabels[appointmentType]}`} deliveryEmail={deliveryEmail} onBack={() => setStep(5)} />

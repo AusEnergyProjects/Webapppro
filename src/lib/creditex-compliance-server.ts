@@ -3518,6 +3518,9 @@ export type CreateLiveComplianceCaseInput = {
   serviceCategory: string;
   jurisdiction: string;
   workOrderId: string;
+  commercialHandoffId?: string;
+  acceptedQuoteVersionId?: string;
+  acceptedScopeSha256?: string;
   installerUid: string;
   actorType?: ComplianceActorType;
   actorUid: string;
@@ -3534,6 +3537,9 @@ export type PreparedLiveComplianceCase = {
   programId: string;
   activityVersionId: string;
   evidencePolicyVersionId: string;
+  commercialHandoffId: string;
+  acceptedQuoteVersionId: string;
+  acceptedScopeSha256: string;
   activityDate: string;
   siteJurisdiction: AustralianSiteJurisdiction;
   activitySnapshot: Record<string, unknown>;
@@ -3560,6 +3566,11 @@ function activityCaseSnapshot(
     officialSourceTitle: string;
     officialSourceVersion: string;
     officialSourceSha256: string;
+  },
+  acceptedHandoff: {
+    commercialHandoffId: string;
+    acceptedQuoteVersionId: string;
+    acceptedScopeSha256: string;
   },
 ) {
   return {
@@ -3601,6 +3612,7 @@ function activityCaseSnapshot(
     evidencePolicyOfficialSourceTitle: evidencePolicy.officialSourceTitle,
     evidencePolicyOfficialSourceVersion: evidencePolicy.officialSourceVersion,
     evidencePolicyOfficialSourceSha256: evidencePolicy.officialSourceSha256,
+    acceptedHandoff,
   };
 }
 
@@ -3725,6 +3737,28 @@ export async function appendLiveComplianceCaseStatements(
       "The compliance actor type is invalid.",
     );
   }
+  const commercialHandoffId = cleanText(input.commercialHandoffId, 180);
+  const acceptedQuoteVersionId = cleanText(
+    input.acceptedQuoteVersionId,
+    180,
+  );
+  const acceptedScopeSha256 = checkedSourceSha256(
+    input.acceptedScopeSha256,
+  );
+  if (
+    actorType === "installer"
+    && (
+      !commercialHandoffId
+      || !acceptedQuoteVersionId
+      || !acceptedScopeSha256
+    )
+  ) {
+    throw new ComplianceDomainError(
+      "ACCEPTED_HANDOFF_REQUIRED",
+      409,
+      "Accept the customer quote before opening a compliance intake.",
+    );
+  }
   const caseId = cleanText(input.caseId, 180) || crypto.randomUUID();
   const eventId = cleanText(input.eventId, 180) || crypto.randomUUID();
   const nextCaseNumber = cleanText(input.caseNumber, 80)
@@ -3734,22 +3768,33 @@ export async function appendLiveComplianceCaseStatements(
     activityDate,
     siteJurisdiction,
     evidencePolicy,
+    {
+      commercialHandoffId,
+      acceptedQuoteVersionId,
+      acceptedScopeSha256,
+    },
   );
   const caseStatementIndex = batch.push(
     database.prepare(`INSERT INTO compliance_cases
       (id, case_number, organisation_id, program_id, work_order_id,
+       commercial_handoff_id, accepted_quote_version_id,
+       accepted_scope_sha256,
        installer_uid, activity_version_id, evidence_policy_version_id,
        activity_date, site_jurisdiction,
        activity_snapshot, status,
        evidence_status, revision, created_by_type, created_by_uid,
        created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 'not_started', 1, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
+        'not_started', 1, ?, ?, ?, ?)`)
       .bind(
         caseId,
         nextCaseNumber,
         activity.organisationId,
         activity.programId,
         workOrderId,
+        commercialHandoffId,
+        acceptedQuoteVersionId,
+        acceptedScopeSha256,
         installerUid,
         activity.id,
         evidencePolicy.id,
@@ -3781,6 +3826,9 @@ export async function appendLiveComplianceCaseStatements(
           programCode: activity.programCode,
           activityKey: activity.activityKey,
           version: activity.version,
+          commercialHandoffId,
+          acceptedQuoteVersionId,
+          acceptedScopeSha256,
         }),
         createdAt,
       ),
@@ -3792,6 +3840,9 @@ export async function appendLiveComplianceCaseStatements(
     programId: activity.programId,
     activityVersionId: activity.id,
     evidencePolicyVersionId: evidencePolicy.id,
+    commercialHandoffId,
+    acceptedQuoteVersionId,
+    acceptedScopeSha256,
     activityDate,
     siteJurisdiction,
     activitySnapshot: snapshot,

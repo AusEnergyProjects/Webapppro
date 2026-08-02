@@ -121,6 +121,12 @@ function applyEvidencePolicyFixtureSchema(database) {
       ADD publication_snapshot_sha256 text DEFAULT '' NOT NULL;
     ALTER TABLE compliance_cases
       ADD evidence_policy_version_id text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_cases
+      ADD commercial_handoff_id text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_cases
+      ADD accepted_quote_version_id text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_cases
+      ADD accepted_scope_sha256 text DEFAULT '' NOT NULL;
     CREATE TABLE compliance_evidence_policy_versions (
       id text PRIMARY KEY NOT NULL,
       organisation_id text NOT NULL,
@@ -740,6 +746,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     jurisdiction: "VIC",
     workOrderId: "job-1",
     installerUid: "installer-1",
+    actorType: "platform",
     actorUid: "installer-1",
     caseId: "case-1",
     eventId: "event-1",
@@ -796,6 +803,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     jurisdiction: "VIC",
     workOrderId: "job-1",
     installerUid: "installer-1",
+    actorType: "platform",
     actorUid: "installer-1",
     caseId: "case-2",
     eventId: "event-2",
@@ -815,6 +823,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     jurisdiction: "VIC",
     workOrderId: "job-1",
     installerUid: "other-installer",
+    actorType: "platform",
     actorUid: "other-installer",
     caseId: "case-wrong-owner",
     eventId: "event-wrong-owner",
@@ -837,6 +846,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     jurisdiction: "VIC",
     workOrderId: "job-1",
     installerUid: "installer-1",
+    actorType: "platform",
     actorUid: "installer-1",
     caseId: "case-tampered",
     eventId: "event-tampered",
@@ -844,9 +854,12 @@ test("case creation derives the organisation, snapshots the exact rule date, and
   });
   const caseStatement = tampered.statements[0];
   const tamperedValues = [...caseStatement.values];
-  const tamperedSnapshot = JSON.parse(tamperedValues[10]);
+  const activitySnapshotIndex = 13;
+  const tamperedSnapshot = JSON.parse(
+    tamperedValues[activitySnapshotIndex],
+  );
   tamperedSnapshot.title = "Tampered rule";
-  tamperedValues[10] = JSON.stringify(tamperedSnapshot);
+  tamperedValues[activitySnapshotIndex] = JSON.stringify(tamperedSnapshot);
   tampered.statements[0] = new TestD1Statement(
     database,
     caseStatement.sql,

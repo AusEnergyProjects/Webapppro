@@ -11,6 +11,9 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
+const acceptedHandoffMigration = read(
+  "../drizzle/0101_compliance_accepted_handoff.sql",
+);
 const operationsMigrationSources = [
   "../drizzle/0094_creditex_operations_control.sql",
   "../drizzle/0095_creditex_operations_workflows.sql",
@@ -19,6 +22,12 @@ const operationsMigrationSources = [
   "../drizzle/0098_creditex_rule_governance.sql",
 ].map(read);
 const operationsMigration = operationsMigrationSources.join("\n--> statement-breakpoint\n");
+const custodyMigration = [
+  "../drizzle/0102_creditex_official_source_custody.sql",
+  "../drizzle/0103_creditex_evidence_integrity_receipts.sql",
+  "../drizzle/0104_creditex_operational_lookup_snapshots.sql",
+  "../drizzle/0105_creditex_parallel_reconciliation.sql",
+].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 
@@ -215,9 +224,27 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL
     );
+    CREATE TABLE trade_crm_quote_acceptances (
+      id text PRIMARY KEY NOT NULL,
+      quote_version_id text NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      decision text NOT NULL
+    );
+    CREATE TABLE trade_crm_commercial_handovers (
+      id text PRIMARY KEY NOT NULL,
+      acceptance_id text NOT NULL,
+      quote_version_id text NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      scope_snapshot_json text DEFAULT '[]' NOT NULL,
+      status text DEFAULT 'accepted' NOT NULL
+    );
   `);
   applyStatements(database, foundationMigration);
+  applyStatements(database, acceptedHandoffMigration);
   applyStatements(database, operationsMigration);
+  applyStatements(database, custodyMigration);
   if (installGuards) {
     for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS) {
       database.exec(definition.sql);
@@ -231,29 +258,47 @@ test("runtime schema bootstrap installs every governed trigger before compliance
   const d1 = testD1(database);
   const expectedRemaining = (installed) =>
     CREDITEX_SCHEMA_GUARD_DEFINITIONS.length - installed;
+  const preinstalled = database.prepare(
+    "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+  ).get().count;
+  assert.equal(preinstalled, 0);
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
-    0,
+    preinstalled,
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(40)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 40)}`,
+    ),
   );
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
-    40,
+    preinstalled + 40,
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(80)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 80)}`,
+    ),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(120)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 120)}`,
+    ),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(d1),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(160)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 160)}`,
+    ),
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(d1),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 200)}`,
+    ),
   );
   await ensureCreditexSchemaGuards(d1);
   assert.equal(
@@ -274,21 +319,39 @@ test("runtime schema bootstrap accepts legacy multiline guards across stateless 
   database.exec(legacy);
   const expectedRemaining = (installed) =>
     CREDITEX_SCHEMA_GUARD_DEFINITIONS.length - installed;
+  const preinstalled = database.prepare(
+    "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+  ).get().count;
+  assert.equal(preinstalled, 1);
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(41)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 40)}`,
+    ),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(81)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 80)}`,
+    ),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(121)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 120)}`,
+    ),
   );
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(`CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(161)}`),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 160)}`,
+    ),
+  );
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    new RegExp(
+      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 200)}`,
+    ),
   );
   await ensureCreditexSchemaGuards(testD1(database));
   assert.equal(
@@ -610,6 +673,11 @@ function seedTradeJob(database, {
 function activitySnapshot(governed, {
   activityDate = "2026-08-01",
   siteJurisdiction = "VIC",
+  acceptedHandoff = {
+    commercialHandoffId: "",
+    acceptedQuoteVersionId: "",
+    acceptedScopeSha256: "",
+  },
 } = {}) {
   return JSON.stringify({
     activityVersionId: governed.activityVersionId,
@@ -655,6 +723,7 @@ function activitySnapshot(governed, {
     evidencePolicyVersion: 1,
     evidencePolicyOfficialSourceVersion: "1",
     evidencePolicyOfficialSourceSha256: TEST_HASH,
+    acceptedHandoff,
   });
 }
 
@@ -665,29 +734,64 @@ function seedGovernedCase(database, governed, {
   installerUid = "installer-uid",
   revision = 1,
   snapshot = activitySnapshot(governed),
+  createdByType = "platform",
+  commercialHandoffId = "",
+  acceptedQuoteVersionId = "",
+  acceptedScopeSha256 = "",
 } = {}) {
   database.prepare(`INSERT INTO compliance_cases
-    (id, case_number, organisation_id, program_id, work_order_id, installer_uid,
+    (id, case_number, organisation_id, program_id, work_order_id,
+     commercial_handoff_id, accepted_quote_version_id, accepted_scope_sha256,
+     installer_uid,
      activity_version_id, evidence_policy_version_id, activity_date,
      site_jurisdiction, activity_snapshot, status, evidence_status, revision,
      created_by_type, created_by_uid, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2026-08-01', 'VIC', ?, 'draft',
-      'not_started', ?, 'installer', ?, ?, ?)`)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '2026-08-01', 'VIC', ?, 'draft',
+      'not_started', ?, ?, ?, ?, ?)`)
     .run(
       caseId,
       caseNumber,
       governed.organisationId,
       governed.programId,
       workOrderId,
+      commercialHandoffId,
+      acceptedQuoteVersionId,
+      acceptedScopeSha256,
       installerUid,
       governed.activityVersionId,
       governed.policyVersionId,
       snapshot,
       revision,
+      createdByType,
       installerUid,
       TEST_NOW,
       TEST_NOW,
     );
+}
+
+function seedAcceptedHandoff(database, {
+  workOrderId = "job",
+  installerUid = "installer-uid",
+  acceptanceId = "acceptance",
+  quoteVersionId = "quote-version",
+  handoffId = "handoff",
+} = {}) {
+  database.prepare(`INSERT INTO trade_crm_quote_acceptances
+    (id, quote_version_id, work_order_id, firebase_uid, decision)
+    VALUES (?, ?, ?, ?, 'accepted')`)
+    .run(acceptanceId, quoteVersionId, workOrderId, installerUid);
+  database.prepare(`INSERT INTO trade_crm_commercial_handovers
+    (id, acceptance_id, quote_version_id, work_order_id, firebase_uid,
+     scope_snapshot_json, status)
+    VALUES (?, ?, ?, ?, ?, '[{"description":"Accepted work"}]', 'accepted')`)
+    .run(
+      handoffId,
+      acceptanceId,
+      quoteVersionId,
+      workOrderId,
+      installerUid,
+    );
+  return { handoffId, quoteVersionId, acceptedScopeSha256: TEST_HASH };
 }
 
 function seedComplianceUser(database, {
@@ -1010,7 +1114,20 @@ test("Creditex workspace applies authoritative Dataforce-equivalent filters with
   );
   const governed = seedGovernedActivity(database);
   seedTradeJob(database);
-  seedGovernedCase(database, governed);
+  const acceptedHandoff = seedAcceptedHandoff(database);
+  seedGovernedCase(database, governed, {
+    createdByType: "installer",
+    commercialHandoffId: acceptedHandoff.handoffId,
+    acceptedQuoteVersionId: acceptedHandoff.quoteVersionId,
+    acceptedScopeSha256: acceptedHandoff.acceptedScopeSha256,
+    snapshot: activitySnapshot(governed, {
+      acceptedHandoff: {
+        commercialHandoffId: acceptedHandoff.handoffId,
+        acceptedQuoteVersionId: acceptedHandoff.quoteVersionId,
+        acceptedScopeSha256: acceptedHandoff.acceptedScopeSha256,
+      },
+    }),
+  });
   seedComplianceUser(database, {
     id: "admin-member",
     firebaseUid: "admin-uid",
@@ -1204,6 +1321,7 @@ test("audited local operations execute against the schema and financial guards r
       jurisdiction: "VIC",
       workOrderId: "job",
       installerUid: "installer-uid",
+      actorType: "platform",
       actorUid: "installer-uid",
       caseId: "case",
       eventId: "case-created",

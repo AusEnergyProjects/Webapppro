@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
+  canonicalCreditexSchemaGuardSql,
 } from "../src/lib/creditex-schema-guards.ts";
 
 const HASH = "a".repeat(64);
@@ -155,12 +157,35 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 172);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 203);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    172,
+    203,
   );
-  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 5);
+  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 6);
+});
+
+test("lookup and parallel migrations remain table-only with runtime guards", () => {
+  const migrationSources = [];
+  for (const path of [
+    "../drizzle/0104_creditex_operational_lookup_snapshots.sql",
+    "../drizzle/0105_creditex_parallel_reconciliation.sql",
+  ]) {
+    migrationSources.push(
+      fs.readFileSync(new URL(path, import.meta.url), "utf8"),
+    );
+  }
+  assert.doesNotMatch(migrationSources.join("\n"), /CREATE\s+TRIGGER/i);
+  const definitions = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter((item) => (
+    item.name.startsWith("compliance_operational_lookup_")
+    || item.name.startsWith("compliance_legacy_mapping_")
+    || item.name.startsWith("compliance_parallel_reconciliation_")
+  ));
+  assert.equal(definitions.length, 17);
+  for (const definition of definitions) {
+    assert.match(definition.sql, /^CREATE TRIGGER IF NOT EXISTS /);
+    assert.match(canonicalCreditexSchemaGuardSql(definition.sql), /BEGIN /);
+  }
 });
 
 function insertGovernanceRequest(database, {

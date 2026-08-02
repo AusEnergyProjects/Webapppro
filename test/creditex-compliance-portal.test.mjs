@@ -22,6 +22,9 @@ const governmentCatalogue = read(
   "../src/lib/australian-government-program-catalogue.ts",
 );
 const tradeNewJobForm = read("../src/components/TradeNewJobForm.tsx");
+const tradeComplianceIntake = read(
+  "../src/components/TradeComplianceIntake.tsx",
+);
 const tradeComplianceRoute = read("../src/app/api/trade-compliance/route.ts");
 const sessionRoute = read("../src/app/api/creditex/session/route.ts");
 const caseRoute = read("../src/app/api/creditex/cases/route.ts");
@@ -544,22 +547,29 @@ test("government catalogue distinguishes national outcomes and remains discovery
   assert.doesNotMatch(governmentCatalogue, /6\(23\)/);
 });
 
-test("installer intake uses chained governed dropdowns and binds the exact source version", () => {
+test("accepted-job installer intake uses governed dropdowns and binds the exact source version", () => {
   for (const contract of [
-    /const \[complianceProgramId, setComplianceProgramId\]/,
-    /const \[complianceActivityKey, setComplianceActivityKey\]/,
-    /const \[complianceProductCategory, setComplianceProductCategory\]/,
-    /const \[complianceScenario, setComplianceScenario\]/,
-    /<span>Program<\/span><select/,
-    /<span>Activity<\/span><select/,
-    /<span>Product category<\/span><select/,
-    /<span>Activity scenario<\/span><select/,
-    /<span>Effective source version<\/span><select/,
-    /name="complianceActivityVersionId"/,
-    /exact government source, activity, product category, scenario and evidence requirement version/,
-  ]) assert.match(tradeNewJobForm, contract);
+    /const \[programId, setProgramId\]/,
+    /const \[activityKey, setActivityKey\]/,
+    /const \[productCategory, setProductCategory\]/,
+    /const \[scenario, setScenario\]/,
+    /<span>Program<\/span>/,
+    /<span>Activity<\/span>/,
+    /<span>Product category<\/span>/,
+    /<span>Activity scenario<\/span>/,
+    /<span>Effective source version<\/span>/,
+    /activityVersionId: effectiveActivityVersionId/,
+    /accepted quote scope and exact government source/,
+  ]) assert.match(tradeComplianceIntake, contract);
+  assert.doesNotMatch(tradeNewJobForm, /complianceActivityVersionId/);
+  assert.match(tradeNewJobForm, /after the customer accepts the quote/);
   assert.match(tradeComplianceRoute, /programId: activity\.programId/);
-  assert.doesNotMatch(tradeNewJobForm, /6\(23\)/);
+  assert.match(tradeComplianceRoute, /ensureAcceptedCommercialHandoff/);
+  assert.match(tradeComplianceRoute, /acceptedScopeSha256/);
+  assert.doesNotMatch(
+    `${tradeNewJobForm}\n${tradeComplianceIntake}`,
+    /6\(23\)|synthetic/i,
+  );
 });
 
 test("authorised case detail renders private CRM data only after audited case access", () => {

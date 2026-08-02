@@ -20,6 +20,9 @@ const adminDirectory = read("../src/components/AdminJobDirectory.tsx");
 const address = read("../src/app/api/trade-address-suggestions/route.ts");
 const complianceCatalogue = read("../src/app/api/trade-compliance/route.ts");
 const complianceDomain = read("../src/lib/creditex-compliance-server.ts");
+const complianceIntake = read("../src/components/TradeComplianceIntake.tsx");
+const acceptedHandoffServer = read("../src/lib/trade-commercial-handoff-server.ts");
+const acceptedHandoffMigration = read("../drizzle/0101_compliance_accepted_handoff.sql");
 
 test("new jobs use one globally sequenced TLink ID across every creation path", () => {
   assert.match(numbers, /__tlink_global__/);
@@ -70,35 +73,45 @@ test("address search supports structured Google Australian results and manual fa
   assert.match(form, /enter the address manually/i);
 });
 
-test("guided compliance intake binds an approved activity to the exact installation job", () => {
-  assert.match(form, /\/api\/trade-compliance\?\$\{new URLSearchParams/);
-  assert.match(form, /jurisdiction: siteJurisdiction/);
-  assert.match(form, /onDate: activityDate/);
-  assert.match(form, /seenCursors/);
-  assert.match(form, /pagination\?\.hasNext/);
-  assert.match(form, /seenCursors\.has\(nextCursor\)/);
-  assert.match(form, /Date and start time[\s\S]*Government program activity/);
-  assert.match(form, /<span>Program<\/span><select/);
-  assert.match(form, /<span>Activity<\/span><select/);
-  assert.match(form, /<span>Product category<\/span><select/);
-  assert.match(form, /<span>Activity scenario<\/span><select/);
-  assert.match(form, /<span>Effective source version<\/span><select/);
-  assert.match(form, /name="complianceActivityVersionId"/);
-  assert.match(form, /A certificate or external program ID is recorded later only if the government pathway issues one/);
-  assert.match(form, /setAppointmentType\("installation"\)/);
-  assert.match(form, /does not decide eligibility, calculate an incentive or promise certificates/);
-  assert.match(complianceCatalogue, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
+test("compliance intake starts only after the customer accepts the quote", () => {
+  assert.doesNotMatch(form, /name="complianceActivityVersionId"/);
+  assert.doesNotMatch(form, /\/api\/trade-compliance/);
+  assert.match(form, /Government program activity is linked from the accepted job after the customer accepts the quote/);
+  assert.match(crm, /Link the government activity after the customer accepts the quote/);
+  assert.doesNotMatch(crm, /appendLiveComplianceCaseStatements\(db, batchStatements/);
+  assert.match(workspace, /TradeComplianceIntake/);
+
+  assert.match(complianceIntake, /new URLSearchParams\(\{ workOrderId \}\)/);
+  assert.match(complianceIntake, /seenCursors/);
+  assert.match(complianceIntake, /<span>Program<\/span>/);
+  assert.match(complianceIntake, /<span>Activity<\/span>/);
+  assert.match(complianceIntake, /<span>Product category<\/span>/);
+  assert.match(complianceIntake, /<span>Activity scenario<\/span>/);
+  assert.match(complianceIntake, /<span>Effective source version<\/span>/);
+  assert.match(complianceIntake, /workOrderId,[\s\S]*activityVersionId: effectiveActivityVersionId,[\s\S]*idempotencyKey/);
+  assert.doesNotMatch(complianceIntake, /6\(23\)|synthetic/i);
+
+  assert.match(complianceCatalogue, /requireVerifiedTradeAccess\(request, \{/);
+  assert.match(complianceCatalogue, /work\.service_category/);
+  assert.match(complianceCatalogue, /work\.scheduled_start/);
+  assert.match(complianceCatalogue, /appointment\.appointment_type = 'installation'/);
+  assert.match(crm, /appointmentType === "installation"[\s\S]*UPDATE trade_work_orders[\s\S]*scheduled_start = \?/);
+  assert.match(complianceCatalogue, /service_site\.address_state/);
+  assert.match(complianceCatalogue, /ensureAcceptedCommercialHandoff/);
   assert.match(complianceCatalogue, /listInstallerSelectableActivities/);
   assert.match(complianceCatalogue, /AUSTRALIAN_SITE_JURISDICTIONS\.includes/);
   assert.match(complianceCatalogue, /ACTIVITY_DATE_REQUIRED/);
   assert.match(complianceCatalogue, /ACTIVITY_PAGE_SIZE \+ 1/);
   assert.match(complianceCatalogue, /nextCursor: hasNext \? activities\.at\(-1\)\?\.id/);
-  assert.match(crm, /appointmentType !== "installation"/);
-  assert.match(crm, /activityDate: scheduledStart\.slice\(0, 10\)/);
-  assert.match(crm, /serviceCategory,[\s\S]*jurisdiction: siteJurisdiction/);
-  assert.match(crm, /appendLiveComplianceCaseStatements\(db, batchStatements/);
-  assert.match(crm, /await db\.batch\(batchStatements\)/);
-  assert.match(crm, /complianceCaseNumber: complianceCase\?\.caseNumber/);
+  assert.match(complianceCatalogue, /const POST_FIELDS = new Set\(\[[\s\S]*"workOrderId"[\s\S]*"activityVersionId"[\s\S]*"idempotencyKey"/);
+  assert.match(complianceCatalogue, /typeof parsedBody !== "object"[\s\S]*Array\.isArray\(parsedBody\)/);
+  assert.match(complianceCatalogue, /commercialHandoffId: String\(handoff\.id\)/);
+  assert.match(complianceCatalogue, /acceptedQuoteVersionId: String\(handoff\.quote_version_id\)/);
+  assert.match(complianceCatalogue, /acceptedScopeSha256/);
+  assert.match(complianceCatalogue, /appendLiveComplianceCaseStatements/);
+  assert.match(acceptedHandoffServer, /commercialHandoffScopeSha256/);
+  assert.match(acceptedHandoffMigration, /compliance_cases_active_work_order_idx/);
+  assert.match(acceptedHandoffMigration, /WHERE `status` <> 'closed'/);
   assert.match(complianceDomain, /ACTIVITY_CATEGORY_MISMATCH/);
   assert.match(complianceDomain, /ACTIVITY_JURISDICTION_MISMATCH/);
   assert.match(workspace, /This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise/);

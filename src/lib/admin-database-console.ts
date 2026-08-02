@@ -54,6 +54,10 @@ const GENERATED_TABLES = new Set([
   "trade_crm_counters",
   "trade_data_import_batches",
   "trade_data_import_rows",
+  "compliance_legacy_import_batches",
+  "compliance_legacy_import_rows",
+  "compliance_official_source_artifacts",
+  "compliance_official_source_bindings",
   "certificate_price_sync_runs",
   "api_performance_samples",
 ]);
