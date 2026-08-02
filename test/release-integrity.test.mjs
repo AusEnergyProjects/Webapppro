@@ -97,7 +97,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Customer-to-trade contact and compact lead workflow release/);
   assert.match(releaseTruth, /## Customer plan trade enquiry and home-fact refinement release/);
   assert.match(releaseTruth, /## Creditex evidence-policy governance release/);
-  assert.match(releaseTruth, /## Current Creditex governed operations foundations release/);
+  assert.match(releaseTruth, /## Current Creditex exact Dataforce register and governed authoring release/);
+  assert.match(releaseTruth, /## Prior Creditex governed operations foundations release/);
   assert.match(releaseTruth, /## Prior Creditex VEU operator usability release/);
   assert.match(releaseTruth, /## Prior Creditex VEU operator workspace/);
   assert.match(
@@ -120,8 +121,21 @@ test("the dated audit is immutable evidence and current truth has one documented
     releaseTruth,
     /Corrective Creditex controlled-intake application source \| `d441d41cad4d5299a882e73ea006a963fa360cf4`/,
   );
-  assert.match(releaseTruth, /Current executable application identity \| Sites version 262/);
-  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_f2d304f9c9b481919b8d9588f0ef034f/);
+  assert.match(releaseTruth, /Primary Creditex exact-register and governed-authoring application source \| `58b92e1f859c62de00e4d8bda11624ab3f1633b8`/);
+  assert.match(releaseTruth, /Corrective Creditex exact-register and governed-authoring application source \| `31b152933273db33bfa866bdbc491f6fdc35360a`/);
+  assert.match(releaseTruth, /Current executable application identity \| Sites version 264 from `31b152933273db33bfa866bdbc491f6fdc35360a`/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_aa8d0183098881918f1fe626a7deb951/);
+  assert.match(releaseTruth, /appgdep_6a6f09034b10819187e46054254b06b2/);
+  assert.match(releaseTruth, /sha256:7add92fd081d36220e266666533ce162585bcf23531889182f7abbbd982a8ea2/);
+  assert.match(releaseTruth, /appgdep_6a6f0208b8208191ba75d01cd0b659d8/);
+  assert.match(releaseTruth, /failed before activation with `incomplete input: SQLITE_ERROR`/);
+  assert.match(releaseTruth, /7,575,785 bytes/);
+  assert.match(releaseTruth, /0AE7AA64CE6D9B93D0A0D6DA65CEC1F11F1ADA8D4D1451E60EEDDD2AF38D87C5/);
+  assert.match(releaseTruth, /360 entries, all 111 migrations and zero CSV entries/);
+  assert.match(releaseTruth, /346 files and 30,535,680 bytes/);
+  assert.match(releaseTruth, /1,267 main tests with 1,265 passed, 2 intentionally skipped and 0 failed/);
+  assert.match(releaseTruth, /exact 23 Dataforce headers in order, 23 cells per row and 300 controlled row actions/);
+  assert.match(releaseTruth, /Sites version 262 built from `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
   assert.match(releaseTruth, /appgdep_6a6edfb2b8e08191b295825c3db65d4d/);
   assert.match(releaseTruth, /sha256:60ede71e262e365ed8aa39fced47e8a550623266d6636ef8c326a821efdadb3c/);
   assert.match(releaseTruth, /migrations `0100` through `0105` were absent from the package/);
@@ -326,11 +340,25 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /primary application commit `c423f3c3938b43bf92c8ec98d285b49e63024ee6`[\s\S]{0,900}Corrective application commit `d441d41cad4d5299a882e73ea006a963fa360cf4`[\s\S]{0,900}Sites version 261/i);
   assert.match(roadmap, /## Released milestone: CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33/);
   assert.match(roadmap, /exact application commit `11b06b88d68609a9fcf254877a4afe379a95f8b3`[\s\S]{0,500}Sites version 262/i);
-  assert.match(handover, /Status: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33` released and live/);
-  assert.match(handover, /Milestone ID: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33`/);
-  assert.match(handover, /Current production: Sites version 262 from application commit `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
-  assert.match(handover, /Released application source commit: `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
-  assert.match(handover, /Previous production application source: `d441d41cad4d5299a882e73ea006a963fa360cf4`/);
+  assert.match(roadmap, /## Released milestone: CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34/);
+  assert.match(roadmap, /primary application commit `58b92e1f859c62de00e4d8bda11624ab3f1633b8`[\s\S]{0,900}Corrective application commit `31b152933273db33bfa866bdbc491f6fdc35360a`[\s\S]{0,900}Sites version 264/i);
+  assert.match(handover, /Status: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34` released and live/);
+  assert.match(handover, /Milestone ID: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34`/);
+  assert.match(handover, /Current production: Sites version 264 from application commit `31b152933273db33bfa866bdbc491f6fdc35360a`/);
+  assert.match(handover, /Released application source commit: `31b152933273db33bfa866bdbc491f6fdc35360a`/);
+  assert.match(handover, /Primary application source commit: `58b92e1f859c62de00e4d8bda11624ab3f1633b8`/);
+  assert.match(handover, /Previous production application source: `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_aa8d0183098881918f1fe626a7deb951/);
+  assert.match(handover, /appgdep_6a6f09034b10819187e46054254b06b2/);
+  assert.match(handover, /appgdep_6a6f0208b8208191ba75d01cd0b659d8/);
+  assert.match(handover, /failed before activation with `incomplete input: SQLITE_ERROR`/);
+  assert.match(handover, /7,575,785 bytes/);
+  assert.match(handover, /0AE7AA64CE6D9B93D0A0D6DA65CEC1F11F1ADA8D4D1451E60EEDDD2AF38D87C5/);
+  assert.match(handover, /346 stored files, 30,535,680 stored bytes/);
+  assert.match(handover, /sha256:7add92fd081d36220e266666533ce162585bcf23531889182f7abbbd982a8ea2/);
+  assert.match(handover, /1,267 main tests with 1,265 passed, 2 intentionally skipped and 0 failed/);
+  assert.match(handover, /exact 23 Dataforce headers in order, 23 cells per row and 300 controlled row actions/);
+  assert.match(handover, /10 of 10 installers, 30 of 30 field technicians, 300 of 300 jobs and all 34 activity families/);
   assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_f2d304f9c9b481919b8d9588f0ef034f/);
   assert.match(handover, /appgdep_6a6edfb2b8e08191b295825c3db65d4d/);
   assert.match(handover, /7,544,418 bytes/);
@@ -384,11 +412,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
   assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Approve the first exact VEU version-25 source pack:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Approve the first authorised operational lookup set:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Complete the physical AEA Field custody matrix:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Approve one official VEU calculator contract:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Execute one exact governed parallel activity:/);
+  assert.match(roadmapNextFive, /^1\. \*\*Retain and independently approve the exact VEU v24 and v25 source bytes:/);
+  assert.match(roadmapNextFive, /\n2\. \*\*Approve the first official current-effective lookup cohort:/);
+  assert.match(roadmapNextFive, /\n3\. \*\*Execute the physical AEA Field custody matrix:/);
+  assert.match(roadmapNextFive, /\n4\. \*\*Review and dual-approve the first official calculator draft:/);
+  assert.match(roadmapNextFive, /\n5\. \*\*Approve the first mapping artifact and run one authorised Dataforce-bound parallel receipt:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

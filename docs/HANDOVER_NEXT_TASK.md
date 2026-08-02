@@ -1,18 +1,20 @@
 # Next task handover
 
-Status: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33` released and live; exact source-byte approval and the first authorised operational snapshots are next
+Status: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34` released and live; exact source-byte approval and the first official current-effective lookup cohort are next
 
 Prepared: 2 August 2026
 
-Milestone ID: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33`
+Milestone ID: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `11b06b88d68609a9fcf254877a4afe379a95f8b3`
+Released application source commit: `31b152933273db33bfa866bdbc491f6fdc35360a`
 
-Previous production application source: `d441d41cad4d5299a882e73ea006a963fa360cf4`
+Primary application source commit: `58b92e1f859c62de00e4d8bda11624ab3f1633b8`
 
-Current production: Sites version 262 from application commit `11b06b88d68609a9fcf254877a4afe379a95f8b3`
+Previous production application source: `11b06b88d68609a9fcf254877a4afe379a95f8b3`
+
+Current production: Sites version 264 from application commit `31b152933273db33bfa866bdbc491f6fdc35360a`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -20,9 +22,75 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 262 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 264 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
-## Released milestone 33 outcome
+## Released milestone 34 outcome
+
+Creditex now has an exact Dataforce job-list surface and governed authoring foundations without adding TLink-only fields to the operator register or enabling any regulated external action. The register exposes the exact 23 Dataforce headers in the exact Dataforce order, one job per row and one controlled row action embedded inside `App Id`. TLink governance fields remain available in the complete job audit workspace.
+
+The released operator workflow provides:
+
+- one desktop toolbar line ordered Density, all-field search, Search, Refresh and Advanced search, with every control 28 pixels high;
+- the rightmost Advanced search control opening the compact right-edge drawer and restoring focus after close;
+- compact 320-pixel and 390-pixel layouts that stay on one line with no document overflow;
+- one exact 23-column Dataforce display, import, export and copy projection;
+- one table-owned vertical and horizontal scroll surface, with no document-level desktop overflow;
+- menu dismissal after outside action, Escape or selection;
+- global all-field search and the complete double-click audit workspace;
+- corrected official VEU version dates, with version 25 effective from 21 July 2026 and version 24 effective from 30 June 2026;
+- explicit as-of and effective-window lookup approval and materialisation;
+- append-only legacy mapping authoring and independent review; and
+- draft-only calculator and golden-vector authoring whose vectors remain `not_run`.
+
+## Milestone 34 owning workflow and files
+
+- Exact register and responsive toolbar: `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Dataforce contract: `src/lib/creditex-dataforce-job-csv.ts`.
+- Effective-dated lookup review: `src/lib/creditex-source-lookup-review-server.ts`.
+- Legacy mapping authoring and review: `src/lib/creditex-legacy-mapping-authoring-server.ts`, `src/lib/creditex-legacy-mapping-guards.ts` and their protected routes.
+- Calculator authoring: `src/lib/creditex-calculator-authoring-server.ts`, `src/lib/creditex-calculator-authoring-guards.ts` and its protected route.
+- Schema and deployment-parser correction: `db/schema.ts`, migrations `0109` and `0110`, and `src/lib/creditex-schema-guards.ts`.
+
+## Milestone 34 safety boundaries
+
+- User-facing register columns are the exact 23 Dataforce columns only. TLink compliance and governance dimensions remain in the audit workspace rather than becoming extra register columns.
+- Lookup approval is append-only, independently reviewed, explicitly as-of dated and constrained by authoritative effective windows.
+- Mapping authoring cannot infer an unmapped source field or target path and cannot invoke Dataforce, Runabout or a registry.
+- Calculator authoring remains draft-only. Test vectors remain `not_run`; no protected runner, approval or execution surface is exposed in this release.
+- No mapping or calculator endpoint can create a certificate, submission, trade or settlement.
+- The controlled VEU population remains synthetic and cannot become regulated work.
+
+## Milestone 34 validation and release evidence
+
+- Primary application commit `58b92e1f859c62de00e4d8bda11624ab3f1633b8` passed the complete application review. Corrective application commit `31b152933273db33bfa866bdbc491f6fdc35360a` moved calculator trigger installation into the existing prepared-statement schema-guard path after Sites migration parsing rejected trigger bodies containing internal semicolons.
+- Exact corrective commit `31b152933273db33bfa866bdbc491f6fdc35360a` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,267 main tests with 1,265 passed, 2 intentionally skipped and 0 failed, all 111 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The targeted operations, calculator and schema suite passed 49 of 49. Independent migration and final review reported READY with no P1 or P2 defect.
+- Corrected archive `.openai/site-release-31b1529.tar.gz` is 7,575,785 bytes with SHA-256 `0AE7AA64CE6D9B93D0A0D6DA65CEC1F11F1ADA8D4D1451E60EEDDD2AF38D87C5`, 360 entries, all 111 migrations, zero CSV entries and zero `CREATE TRIGGER` statements in `0110_creditex_calculator_authoring.sql`.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_aa8d0183098881918f1fe626a7deb951` reports 346 stored files, 30,535,680 stored bytes and content hash `sha256:7add92fd081d36220e266666533ce162585bcf23531889182f7abbbd982a8ea2`.
+- Deployment `appgdep_6a6f09034b10819187e46054254b06b2` succeeded as Sites version 264 with environment revision 19.
+- Sites version 263 was saved from `58b92e1f859c62de00e4d8bda11624ab3f1633b8`, but deployment `appgdep_6a6f0208b8208191ba75d01cd0b659d8` failed before activation with `incomplete input: SQLITE_ERROR`. Sites version 262 remained live, no production change occurred and version 263 was not redeployed.
+
+## Milestone 34 live production evidence
+
+- Signed-in administrator QA confirmed 10 of 10 installers, 30 of 30 field technicians, 300 of 300 jobs and all 34 activity families.
+- The register rendered the exact 23 Dataforce headers in order, 23 cells per row and 300 controlled row actions. TLink-only governance fields were absent from the register and available inside the audit workspace.
+- At desktop size, the table owned its 3,540 by 9,576 scroll area with no document overflow. At 320 and 390 pixels the toolbar remained one line with no document overflow.
+- The toolbar stayed on one line in the order Density, search field, Search, Refresh and Advanced search, with every control 28 pixels high.
+- Global search for `I01-T01` returned 10 of 10 jobs; reset restored 300 of 300.
+- Advanced search opened exactly one dialog containing 25 controlled selects, focused Close first and returned focus to Advanced search on close. A column sort menu closed on outside action.
+- Primary tabs remained at approximately 53 pixels and pilot tabs at approximately 143 pixels across every panel. Double-click opened the complete audit workspace.
+- Browser review found only Chrome extension asynchronous-channel warnings and no application exception.
+
+## Milestone 34 important limits and unverified areas
+
+- Exact v24 and v25 source bytes have not yet been retained in R2, hash-verified and independently approved.
+- The first official participant, product, licence, recall and suspension cohort has not yet been imported and approved.
+- Physical iOS, Android, offline, upload-recovery and R2-restore acceptance remain incomplete.
+- Calculator drafts and authoritative golden vectors remain unapproved and cannot execute.
+- The first mapping artifact and authorised Dataforce-bound parallel receipt remain incomplete. Runabout and registry sandbox contracts remain unavailable.
+- External certificate creation, submission, trading and settlement remain disabled.
+
+## Prior released milestone 33 outcome
 
 Creditex now has the governed approval and parallel-operation foundations needed to move retained government material, operational lookup snapshots, physical-device custody evidence, official formulas and exact Dataforce references through independent review without allowing an unapproved item to become a rule, eligibility result, certificate, submission, trade or settlement.
 
@@ -250,11 +318,11 @@ Stop before any regulated-case onboarding when:
 
 ## Next five logical product steps
 
-1. **Approve the first exact VEU version-25 source pack:** retain the authorised bytes in R2, verify hashes and effective dates, bind the activity, evidence and calculator records, and obtain independent artifact and binding approvals before publishing any governed activity.
-2. **Approve the first authorised operational lookup set:** import participant, product, licence, recall and suspension snapshots from approved government interfaces, validate every row and aggregate hash, approve the mapping and materialise only the current effective set.
-3. **Complete the physical AEA Field custody matrix:** run iOS, Android, offline, upload-recovery and R2-restore scenarios, retain tester-authored artifacts and obtain distinct governance decisions for every required path.
-4. **Approve one official VEU calculator contract:** transcribe one official formula into the exact-decimal engine, bind units, caps and rounding, pass authoritative golden vectors and complete dual source approval before exposing any estimate.
-5. **Execute one exact governed parallel activity:** bind a Dataforce Job ID and App ID to one approved TLink activity, create the immutable comparison receipt, obtain written Runabout and registry sandbox contracts and keep certificate creation, submission, trading and settlement disabled until all variances are accepted.
+1. **Retain and independently approve the exact VEU v24 and v25 source bytes:** retain the exact bytes in R2, verify hashes and effective periods, obtain independent approvals and apply the Part 6 clause-specific 30 September requirement.
+2. **Approve the first official current-effective lookup cohort:** import participant, product, licence, recall and suspension records, independently approve them and add an aggregate multi-batch manifest.
+3. **Execute the physical AEA Field custody matrix:** run iOS, Android, offline, recovery and R2 restore scenarios with named testers and a distinct reviewer.
+4. **Review and dual-approve the first official calculator draft:** add authoritative golden vectors and a protected receipt-bound runner while keeping the current slice draft-only.
+5. **Approve the first mapping artifact and run one authorised Dataforce-bound parallel receipt:** proceed only after source, activity, calculator, Runabout and registry sandbox contracts are approved, with all external actions disabled.
 
 ## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
 

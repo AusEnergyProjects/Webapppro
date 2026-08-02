@@ -1129,13 +1129,34 @@ The governed backend now provides append-only independent approval for exact off
 - Signed-in production QA confirmed the primary tab bar at the same 52.7-pixel top position across all three sections and the pilot tab bar at the same 142.7-pixel top position across all seven workspaces. The all-field search returned the 10 expected technician-code matches, toolbar controls measured 28 pixels, outside-click closed the Status column menu, the compact filter drawer opened from the right edge and double-click opened the dark independently scrollable audit workspace.
 - Recent Worker logs contained no Creditex failure. The only error in the review window was an unrelated existing `/api/trade-job-notifications` HTTP 500 from the Direct Trade dashboard.
 
+## Released milestone: CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34
+
+Status: released exact Dataforce register and guarded mapping and calculator authoring
+
+Release status: primary application commit `58b92e1f859c62de00e4d8bda11624ab3f1633b8` was validated and pushed to GitHub and Sites managed `main`. Its saved Sites version 263 failed before activation through deployment `appgdep_6a6f0208b8208191ba75d01cd0b659d8` with `incomplete input: SQLITE_ERROR`, so Sites version 262 remained live and production did not change. Corrective application commit `31b152933273db33bfa866bdbc491f6fdc35360a` was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_aa8d0183098881918f1fe626a7deb951` and deployed as Sites version 264 through `appgdep_6a6f09034b10819187e46054254b06b2` with environment revision 19.
+
+### Outcome
+
+The Jobs register now exposes the exact 23 Dataforce columns in the exact Dataforce order and one job per row. TLink governance fields remain inside the complete audit workspace rather than becoming extra columns. The row action is embedded within `App Id`. The toolbar stays on one desktop line in the order Density, all-field search, Search, Refresh and Advanced search, with every control 28 pixels high. Advanced search opens the compact right-edge drawer, sort menus close after outside action, and 320-pixel and 390-pixel layouts stay on one line without document overflow.
+
+The release corrects official VEU version 25 to 21 July 2026 and version 24 to 30 June 2026, adds explicit as-of and effective-window lookup approval, adds append-only legacy mapping authoring and review, and adds draft-only calculator and golden-vector authoring. Test vectors remain `not_run`. No authoring endpoint can create a certificate, submission, trade or settlement.
+
+### Safety and release evidence
+
+- External certificate creation, regulator submission, trading and settlement remain disabled. The governed production inventory remains 0 published programs, 0 activity versions, 0 policies and 0 regulated cases.
+- Exact corrective application commit `31b152933273db33bfa866bdbc491f6fdc35360a` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,267 main tests with 1,265 passed, 2 intentionally skipped and 0 failed, all 111 migrations, the customer-plan PDF audit, Vinext production build and Sites bundle audit. The targeted operations, calculator and schema suite passed 49 of 49. Independent migration and final review reported READY with no P1 or P2 defect.
+- Corrected archive `.openai/site-release-31b1529.tar.gz` is 7,575,785 bytes with SHA-256 `0AE7AA64CE6D9B93D0A0D6DA65CEC1F11F1ADA8D4D1451E60EEDDD2AF38D87C5`, 360 entries, all 111 migrations, zero CSV entries and zero `CREATE TRIGGER` statements in migration `0110`.
+- Sites version 264 stored 346 files and 30,535,680 bytes with content hash `sha256:7add92fd081d36220e266666533ce162585bcf23531889182f7abbbd982a8ea2`.
+- Signed-in production QA confirmed 10 installers, 30 field technicians, 300 jobs, all 34 activity families, the exact 23 headers and 23 cells per row, 300 row actions, table-owned desktop scrolling with no document overflow, one-line compact toolbars, working global search and reset, one 25-select advanced-search dialog with focus restoration, outside-click sort dismissal, stable tab positions and the complete double-click audit workspace.
+- Browser review found only Chrome extension asynchronous-channel warnings and no application exception.
+
 ## Next five logical product steps
 
-1. **Approve the first exact VEU version-25 source pack:** retain the authorised bytes in R2, verify hashes and effective dates, bind the activity, evidence and calculator records, and obtain independent artifact and binding approvals before publishing any governed activity.
-2. **Approve the first authorised operational lookup set:** import participant, product, licence, recall and suspension snapshots from approved government interfaces, validate every row and aggregate hash, approve the mapping and materialise only the current effective set.
-3. **Complete the physical AEA Field custody matrix:** run iOS, Android, offline, upload-recovery and R2-restore scenarios, retain tester-authored artifacts and obtain distinct governance decisions for every required path.
-4. **Approve one official VEU calculator contract:** transcribe one official formula into the exact-decimal engine, bind units, caps and rounding, pass authoritative golden vectors and complete dual source approval before exposing any estimate.
-5. **Execute one exact governed parallel activity:** bind a Dataforce Job ID and App ID to one approved TLink activity, create the immutable comparison receipt, obtain written Runabout and registry sandbox contracts and keep certificate creation, submission, trading and settlement disabled until all variances are accepted.
+1. **Retain and independently approve the exact VEU v24 and v25 source bytes:** retain the exact bytes in R2, verify hashes and effective periods, obtain independent approvals and apply the Part 6 clause-specific 30 September requirement.
+2. **Approve the first official current-effective lookup cohort:** import participant, product, licence, recall and suspension records, independently approve them and add an aggregate multi-batch manifest.
+3. **Execute the physical AEA Field custody matrix:** run iOS, Android, offline, recovery and R2 restore scenarios with named testers and a distinct reviewer.
+4. **Review and dual-approve the first official calculator draft:** add authoritative golden vectors and a protected receipt-bound runner while keeping the current slice draft-only.
+5. **Approve the first mapping artifact and run one authorised Dataforce-bound parallel receipt:** proceed only after source, activity, calculator, Runabout and registry sandbox contracts are approved, with all external actions disabled.
 
 ## Global stop conditions
 
