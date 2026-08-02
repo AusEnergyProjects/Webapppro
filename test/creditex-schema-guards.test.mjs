@@ -158,10 +158,10 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 252);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 270);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    252,
+    270,
   );
   assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 7);
 });

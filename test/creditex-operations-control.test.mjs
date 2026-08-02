@@ -37,6 +37,7 @@ const custodyMigration = [
   "../drizzle/0107_creditex_source_lookup_approval_bridge.sql",
   "../drizzle/0108_creditex_dataforce_parallel_bindings.sql",
   "../drizzle/0110_creditex_calculator_authoring.sql",
+  "../drizzle/0111_creditex_manual_evidence_lab.sql",
 ].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");

@@ -4080,6 +4080,101 @@ export const compliancePilotEvents = sqliteTable("compliance_pilot_events", {
   check("compliance_pilot_events_metadata_check", sql`json_valid(${table.metadata})`),
 ]);
 
+export const complianceManualEvidenceFormVersions = sqliteTable("compliance_manual_evidence_form_versions", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  programCode: text("program_code").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(),
+  activitySnapshot: text("activity_snapshot").notNull(),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"),
+  formSchema: text("form_schema").notNull(),
+  formSchemaSha256: text("form_schema_sha256").notNull(),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  revision: integer("revision").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(),
+  updatedByUid: text("updated_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  lockedAt: text("locked_at").notNull().default(""),
+  archivedAt: text("archived_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_evidence_form_version_idx")
+    .on(table.organisationId, table.activityTemplateId, table.version),
+  index("compliance_manual_evidence_form_status_idx")
+    .on(table.organisationId, table.status, table.updatedAt),
+  check("compliance_manual_evidence_form_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+  check("compliance_manual_evidence_form_status_check", sql`${table.status} IN ('draft', 'test_ready', 'archived')`),
+  check("compliance_manual_evidence_form_json_check", sql`json_valid(${table.activitySnapshot}) AND json_valid(${table.formSchema})`),
+  check("compliance_manual_evidence_form_hash_check", sql`length(${table.formSchemaSha256}) = 64 AND lower(${table.formSchemaSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_manual_evidence_form_version_check", sql`${table.version} >= 1 AND ${table.revision} >= 1`),
+  check("compliance_manual_evidence_form_lifecycle_check", sql`(${table.status} = 'draft' AND ${table.lockedAt} = '' AND ${table.archivedAt} = '') OR (${table.status} = 'test_ready' AND trim(${table.lockedAt}) <> '' AND ${table.archivedAt} = '') OR (${table.status} = 'archived' AND trim(${table.archivedAt}) <> '')`),
+]);
+
+export const complianceManualEvidenceTestJobs = sqliteTable("compliance_manual_evidence_test_jobs", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  formVersionId: text("form_version_id").notNull(),
+  programCode: text("program_code").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(),
+  activitySnapshot: text("activity_snapshot").notNull(),
+  formSchema: text("form_schema").notNull(),
+  formSchemaSha256: text("form_schema_sha256").notNull(),
+  jobNumber: text("job_number").notNull(),
+  installerId: text("installer_id").notNull().default(""),
+  installerLabel: text("installer_label").notNull().default("Unassigned test installer"),
+  technicianId: text("technician_id").notNull().default(""),
+  technicianLabel: text("technician_label").notNull().default("Unassigned test technician"),
+  customerLabel: text("customer_label").notNull(),
+  siteState: text("site_state").notNull(),
+  sitePostcode: text("site_postcode").notNull(),
+  status: text("status").notNull().default("draft"),
+  responseSnapshot: text("response_snapshot").notNull().default("[]"),
+  responseSha256: text("response_sha256").notNull(),
+  requiredCount: integer("required_count").notNull().default(0),
+  completedRequiredCount: integer("completed_required_count").notNull().default(0),
+  issueCount: integer("issue_count").notNull().default(0),
+  reviewNote: text("review_note").notNull().default(""),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  revision: integer("revision").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(),
+  updatedByUid: text("updated_by_uid").notNull(),
+  passedByUid: text("passed_by_uid").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  passedAt: text("passed_at").notNull().default(""),
+  archivedAt: text("archived_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_evidence_test_job_number_idx")
+    .on(table.organisationId, table.jobNumber),
+  index("compliance_manual_evidence_test_job_status_idx")
+    .on(table.organisationId, table.status, table.updatedAt),
+  index("compliance_manual_evidence_test_job_activity_idx")
+    .on(table.organisationId, table.activityTemplateId, table.updatedAt),
+  check("compliance_manual_evidence_test_job_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+  check("compliance_manual_evidence_test_job_status_check", sql`${table.status} IN ('draft', 'field_testing', 'ready_for_audit', 'changes_required', 'passed', 'archived')`),
+  check("compliance_manual_evidence_test_job_json_check", sql`json_valid(${table.activitySnapshot}) AND json_valid(${table.formSchema}) AND json_valid(${table.responseSnapshot})`),
+  check("compliance_manual_evidence_test_job_hash_check", sql`length(${table.formSchemaSha256}) = 64 AND lower(${table.formSchemaSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.responseSha256}) = 64 AND lower(${table.responseSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_manual_evidence_test_job_count_check", sql`${table.requiredCount} >= 0 AND ${table.completedRequiredCount} >= 0 AND ${table.completedRequiredCount} <= ${table.requiredCount} AND ${table.issueCount} >= 0 AND ${table.revision} >= 1`),
+  check("compliance_manual_evidence_test_job_lifecycle_check", sql`(${table.status} NOT IN ('passed', 'archived') AND ${table.passedAt} = '' AND ${table.archivedAt} = '') OR (${table.status} = 'passed' AND trim(${table.passedByUid}) <> '' AND trim(${table.passedAt}) <> '' AND ${table.archivedAt} = '') OR (${table.status} = 'archived' AND trim(${table.archivedAt}) <> '')`),
+]);
+
+export const complianceManualEvidenceTestEvents = sqliteTable("compliance_manual_evidence_test_events", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  jobId: text("job_id").notNull(),
+  eventType: text("event_type").notNull(),
+  actorUid: text("actor_uid").notNull(),
+  summary: text("summary").notNull(),
+  metadata: text("metadata").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("compliance_manual_evidence_test_event_job_idx")
+    .on(table.organisationId, table.jobId, table.createdAt, table.id),
+  check("compliance_manual_evidence_test_event_json_check", sql`json_valid(${table.metadata})`),
+]);
+
 export const complianceLegacyImportBatches = sqliteTable("compliance_legacy_import_batches", {
   id: text("id").primaryKey(),
   organisationId: text("organisation_id").notNull(),

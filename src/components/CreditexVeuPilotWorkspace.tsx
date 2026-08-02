@@ -32,6 +32,7 @@ import {
 import {
   GOVERNMENT_PROGRAM_TEMPLATES,
 } from "@/lib/australian-government-program-catalogue";
+import { CreditexManualEvidenceLab } from "./CreditexManualEvidenceLab";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
 type Api = (
@@ -3428,77 +3429,91 @@ export function CreditexVeuPilotWorkspace({
       )}
 
       {panel === "evidence" && (
-        <section className={styles.dataPanel}>
-          <div className={styles.sectionHeading}>
-            <span>PRIORITY 03</span>
-            <h3>Original evidence transport test contract</h3>
-            <p>
-              These slots test capture timing, exact original bytes, EXIF,
-              location and custody. They are not presented as a complete
-              government evidence policy for any VEU activity.
-            </p>
-          </div>
-          <section className={styles.sourcePackSummary}>
-            <article>
-              <span>Physical acceptance ledger</span>
-              <strong>Available</strong>
-            </article>
-            <article>
-              <span>Recorded physical runs</span>
-              <strong>
-                {foundationReadiness.loading === "evidence"
-                  ? "Loading"
-                  : foundationReadiness.fieldAcceptances?.length || 0}
-              </strong>
-            </article>
-            <article>
-              <span>Passed custody runs</span>
-              <strong>
-                {foundationReadiness.fieldAcceptances?.filter(
-                  (acceptance) => (
-                    acceptance.status === "passed"
-                    && acceptance.physicalCustodyAccepted
-                  ),
-                ).length || 0}
-              </strong>
-            </article>
-            <article>
-              <span>Unrecorded result</span>
-              <strong>Never treated as passed</strong>
-            </article>
-          </section>
-          {foundationReadiness.error && panel === "evidence" && (
-            <p className={styles.error}>{foundationReadiness.error}</p>
-          )}
-          <div className={styles.evidenceGrid}>
-            {(snapshot.evidenceContracts || []).map((requirement) => (
-              <article key={requirement.requirementCode}>
-                <span>{readable(requirement.captureTiming)}</span>
-                <h4>{requirement.title}</h4>
-                <p>
-                  {readable(requirement.evidenceKind)} |{" "}
-                  {requirement.minimumCount} to {requirement.maximumCount} files
-                </p>
-                <ul>
-                  <li>
-                    Original bytes:{" "}
-                    {requirement.originalRequired ? "Required" : "Not required"}
-                  </li>
-                  <li>
-                    Metadata:{" "}
-                    {requirement.metadataRequired ? "Required" : "Not required"}
-                  </li>
-                  <li>
-                    GPS: {requirement.gpsRequired ? "Required" : "Not required"}
-                  </li>
-                </ul>
-                <small>
-                  Government status:{" "}
-                  {readable(requirement.governmentRequirementStatus)}
-                </small>
+        <section className={`${styles.dataPanel} ${styles.manualEvidencePanel}`}>
+          <section className={styles.custodyLedgerPanel}>
+            <div className={styles.sectionHeading}>
+              <span>PHYSICAL CUSTODY ACCEPTANCE</span>
+              <h3>Original evidence transport boundary</h3>
+              <p>
+                Physical-device runs prove whether original bytes, metadata,
+                GPS and custody survive the field path. The editable manual
+                forms below configure synthetic installer testing; they do not
+                replace this independent acceptance ledger.
+              </p>
+            </div>
+            <section className={styles.sourcePackSummary}>
+              <article>
+                <span>Acceptance ledger</span>
+                <strong>Available</strong>
               </article>
-            ))}
-          </div>
+              <article>
+                <span>Recorded physical runs</span>
+                <strong>
+                  {foundationReadiness.loading === "evidence"
+                    ? "Loading"
+                    : foundationReadiness.fieldAcceptances?.length || 0}
+                </strong>
+              </article>
+              <article>
+                <span>Passed custody runs</span>
+                <strong>
+                  {foundationReadiness.fieldAcceptances?.filter(
+                    (acceptance) => (
+                      acceptance.status === "passed"
+                      && acceptance.physicalCustodyAccepted
+                    ),
+                  ).length || 0}
+                </strong>
+              </article>
+              <article>
+                <span>Unrecorded result</span>
+                <strong>Never treated as passed</strong>
+              </article>
+            </section>
+            {foundationReadiness.error && (
+              <p className={styles.error}>{foundationReadiness.error}</p>
+            )}
+            <details>
+              <summary>View physical capture test contract</summary>
+              <div className={styles.evidenceGrid}>
+                {(snapshot.evidenceContracts || []).map((requirement) => (
+                  <article key={requirement.requirementCode}>
+                    <span>{readable(requirement.captureTiming)}</span>
+                    <h4>{requirement.title}</h4>
+                    <p>
+                      {readable(requirement.evidenceKind)} |{" "}
+                      {requirement.minimumCount} to{" "}
+                      {requirement.maximumCount} files
+                    </p>
+                    <ul>
+                      <li>
+                        Original bytes:{" "}
+                        {requirement.originalRequired
+                          ? "Required"
+                          : "Not required"}
+                      </li>
+                      <li>
+                        Metadata:{" "}
+                        {requirement.metadataRequired
+                          ? "Required"
+                          : "Not required"}
+                      </li>
+                      <li>
+                        GPS: {requirement.gpsRequired
+                          ? "Required"
+                          : "Not required"}
+                      </li>
+                    </ul>
+                    <small>
+                      Government status:{" "}
+                      {readable(requirement.governmentRequirementStatus)}
+                    </small>
+                  </article>
+                ))}
+              </div>
+            </details>
+          </section>
+          <CreditexManualEvidenceLab api={api} role={role} />
         </section>
       )}
 

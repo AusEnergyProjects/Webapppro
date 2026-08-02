@@ -415,6 +415,32 @@
   padding: 1.35rem;
 }
 
+.manualEvidencePanel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.custodyLedgerPanel {
+  border: 1px solid rgba(108, 207, 192, 0.2);
+  border-radius: 0.85rem;
+  background: #071b2a;
+  padding: 0.85rem 1rem;
+}
+
+.custodyLedgerPanel details {
+  margin-top: 0.7rem;
+}
+
+.custodyLedgerPanel summary {
+  min-height: 2.5rem;
+  cursor: pointer;
+  color: #dffcf7;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .sectionHeading {
   margin-bottom: 1rem;
 }

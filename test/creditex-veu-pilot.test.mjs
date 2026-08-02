@@ -21,6 +21,9 @@ const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
 const workspaceStyles = read(
   "../src/components/CreditexVeuPilotWorkspace.module.css",
 );
+const manualEvidenceWorkspace = read(
+  "../src/components/CreditexManualEvidenceLab.tsx",
+);
 const auditWorkspace = read(
   "../src/components/CreditexVeuJobAuditWorkspace.tsx",
 );
@@ -174,9 +177,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 111);
+  assert.equal(completeMigrationChain.length, 112);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0110_/);
+  assert.match(completeMigrationChain.at(-1), /^0111_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -2321,7 +2324,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspace, /\/api\/creditex\/dataforce/);
   assert.match(workspace, /\/api\/creditex\/official-sources\/reviews/);
   assert.match(workspace, /\/api\/creditex\/operational-lookups\/reviews/);
-  assert.match(workspace, /\/api\/creditex\/field-custody-acceptance/);
+  assert.match(workspace, /CreditexManualEvidenceLab/);
   assert.match(workspace, /projectCreditexJobToDataforceRecord/);
   assert.match(workspace, /exportDataforceJobCsv/);
   assert.match(
@@ -2460,7 +2463,10 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspaceStyles, /--pilot-canvas:\s*#020b18/);
   assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
   assert.match(workspace, /Append-only review ledger/);
-  assert.match(workspace, /Physical acceptance ledger/);
+  assert.match(manualEvidenceWorkspace, /Form builder/);
+  assert.match(manualEvidenceWorkspace, /Manual jobs/);
+  assert.match(manualEvidenceWorkspace, /Installer preview/);
+  assert.match(manualEvidenceWorkspace, /Submit for Creditex audit/);
   assert.match(workspace, /National certificate calculation workspace/);
   assert.match(workspace, /Estimate STCs/);
   assert.match(workspace, /Activity calculation readiness/);
