@@ -79,6 +79,60 @@ type OfficialSourceBindingRecord = {
   created_at: string;
 };
 
+type OfficialSourceReviewRecord = {
+  id: string;
+  subject_type: "artifact" | "binding";
+  subject_id: string;
+  decision: "approved" | "rejected" | "withdrawn";
+  supersedes_decision_id: string;
+  review_note: string;
+  reviewed_by_uid: string;
+  reviewed_at: string;
+};
+
+type OfficialSourceDownloadRecord = {
+  id: string;
+  original_file_name: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  object_key: string;
+};
+
+type OfficialSourceListingRecord = OfficialSourceArtifactRecord & {
+  binding_id: string;
+  artifact_id: string;
+  target_type: string;
+  target_id: string;
+  citation_location: string;
+  binding_state: string;
+  binding_created_by_uid: string;
+  binding_created_at: string;
+  artifact_review_id: string | null;
+  artifact_review_decision: OfficialSourceReviewRecord["decision"] | null;
+  artifact_review_supersedes_decision_id: string | null;
+  artifact_review_note: string | null;
+  artifact_reviewed_by_uid: string | null;
+  artifact_reviewed_at: string | null;
+  binding_review_id: string | null;
+  binding_review_decision: OfficialSourceReviewRecord["decision"] | null;
+  binding_review_supersedes_decision_id: string | null;
+  binding_review_note: string | null;
+  binding_reviewed_by_uid: string | null;
+  binding_reviewed_at: string | null;
+};
+
+export type CreditexOfficialSourcePageOptions = {
+  cursor?: unknown;
+  pageSize?: unknown;
+};
+
+type OfficialSourceCursor = {
+  capturedAt: string;
+  artifactId: string;
+  bindingId: string;
+};
+
 export class CreditexOfficialSourceCustodyError extends Error {
   readonly code: string;
   readonly status: number;
@@ -334,11 +388,21 @@ async function requireDraftTarget(
         AND target.publish_state = 'draft'`,
     evidence_policy: `SELECT target.id
       FROM compliance_evidence_policy_versions target
+      JOIN compliance_activity_versions activity
+        ON activity.id = target.activity_version_id
+      JOIN compliance_programs program
+        ON program.id = activity.program_id
       WHERE target.id = ? AND target.organisation_id = ?
+        AND program.organisation_id = target.organisation_id
         AND target.publish_state = 'draft'`,
     calculator: `SELECT target.id
       FROM compliance_calculator_versions target
+      JOIN compliance_activity_versions activity
+        ON activity.id = target.activity_version_id
+      JOIN compliance_programs program
+        ON program.id = activity.program_id
       WHERE target.id = ? AND target.organisation_id = ?
+        AND program.organisation_id = target.organisation_id
         AND target.approval_state = 'draft'`,
   };
   const record = await database.prepare(queries[type])
@@ -388,6 +452,144 @@ function publicBinding(record: OfficialSourceBindingRecord) {
     createdByUid: record.created_by_uid,
     createdAt: record.created_at,
   };
+}
+
+function publicReview(
+  record: OfficialSourceReviewRecord | null | undefined,
+) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    decision: record.decision,
+    supersedesDecisionId: record.supersedes_decision_id,
+    reviewNote: record.review_note,
+    reviewedByUid: record.reviewed_by_uid,
+    reviewedAt: record.reviewed_at,
+  };
+}
+
+function officialSourcePageSize(value: unknown) {
+  if (value === undefined || value === null || value === "") return 50;
+  const pageSize = Number(value);
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_PAGE_SIZE_INVALID",
+      400,
+      "Choose an official source page size from 1 to 100.",
+    );
+  }
+  return pageSize;
+}
+
+function cursorText(value: unknown, maximum: number) {
+  const cleaned = typeof value === "string" ? value.trim() : "";
+  if (!cleaned || cleaned.length > maximum) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CURSOR_INVALID",
+      400,
+      "The official source page cursor is invalid.",
+    );
+  }
+  return cleaned;
+}
+
+function encodeOfficialSourceCursor(
+  cursor: OfficialSourceCursor,
+) {
+  const bytes = new TextEncoder().encode(JSON.stringify([
+    cursor.capturedAt,
+    cursor.artifactId,
+    cursor.bindingId,
+  ]));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeOfficialSourceCursor(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const encoded = cursorText(value, 640);
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CURSOR_INVALID",
+      400,
+      "The official source page cursor is invalid.",
+    );
+  }
+  try {
+    const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/")
+      .padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0)
+    );
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    if (!Array.isArray(parsed) || parsed.length !== 3) throw new Error();
+    const capturedAt = cursorText(parsed[0], 64);
+    const artifactId = cursorText(parsed[1], 180);
+    const bindingId = cursorText(parsed[2], 180);
+    if (!Number.isFinite(Date.parse(capturedAt))) throw new Error();
+    return { capturedAt, artifactId, bindingId };
+  } catch (error) {
+    if (error instanceof CreditexOfficialSourceCustodyError) throw error;
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CURSOR_INVALID",
+      400,
+      "The official source page cursor is invalid.",
+    );
+  }
+}
+
+async function verifiedOfficialSourceBytes(
+  bucket: CreditexCustodyBucket,
+  record: {
+    object_key: string;
+    size_bytes: number;
+    sha256: string;
+  },
+) {
+  let object;
+  try {
+    object = await bucket.get(record.object_key);
+  } catch {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_OBJECT_UNAVAILABLE",
+      503,
+      "The retained official source bytes could not be read.",
+    );
+  }
+  if (!object) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_OBJECT_NOT_FOUND",
+      409,
+      "The recorded official source bytes are missing from custody storage.",
+    );
+  }
+  if (
+    typeof object.size === "number"
+    && object.size !== Number(record.size_bytes)
+  ) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_OBJECT_INTEGRITY_FAILED",
+      409,
+      "The retained official source bytes do not match the custody record.",
+    );
+  }
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (
+    bytes.byteLength !== Number(record.size_bytes)
+    || await sha256Hex(bytes) !== record.sha256
+  ) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_OBJECT_INTEGRITY_FAILED",
+      409,
+      "The retained official source bytes do not match the custody record.",
+    );
+  }
+  return bytes;
 }
 
 async function existingCapture(
@@ -572,13 +774,7 @@ export async function captureCreditexOfficialSource(
   );
   if (existing) {
     assertIdempotentCapture(existing, idempotentValues);
-    if (!await bucket.head(existing.object_key)) {
-      throw new CreditexOfficialSourceCustodyError(
-        "SOURCE_OBJECT_NOT_FOUND",
-        409,
-        "The recorded official source bytes are missing from custody storage.",
-      );
-    }
+    await verifiedOfficialSourceBytes(bucket, existing);
     return {
       reused: true,
       artifact: publicArtifact(existing),
@@ -732,11 +928,62 @@ export async function captureCreditexOfficialSource(
   };
 }
 
+function reviewFromListing(
+  record: OfficialSourceListingRecord,
+  subjectType: "artifact" | "binding",
+) {
+  const prefix = subjectType === "artifact" ? "artifact" : "binding";
+  const id = record[`${prefix}_review_id`];
+  const decision = record[`${prefix}_review_decision`];
+  if (!id || !decision) return null;
+  return publicReview({
+    id,
+    subject_type: subjectType,
+    subject_id: subjectType === "artifact" ? record.id : record.binding_id,
+    decision,
+    supersedes_decision_id:
+      record[`${prefix}_review_supersedes_decision_id`] || "",
+    review_note: record[`${prefix}_review_note`] || "",
+    reviewed_by_uid: record[`${prefix}_reviewed_by_uid`] || "",
+    reviewed_at: record[`${prefix}_reviewed_at`] || "",
+  });
+}
+
 export async function listCreditexOfficialSources(
   database: D1Database,
   member: CustodyMember,
+  options: CreditexOfficialSourcePageOptions = {},
 ) {
-  const rows = await database.prepare(`SELECT
+  const pageSize = officialSourcePageSize(options.pageSize);
+  const cursor = decodeOfficialSourceCursor(options.cursor);
+  const cursorPredicate = cursor
+    ? `AND (
+        artifact.captured_at < ?
+        OR (
+          artifact.captured_at = ?
+          AND artifact.id < ?
+        )
+        OR (
+          artifact.captured_at = ?
+          AND artifact.id = ?
+          AND binding.id < ?
+        )
+      )`
+    : "";
+  const listBindings = cursor
+    ? [
+        member.organisationId,
+        cursor.capturedAt,
+        cursor.capturedAt,
+        cursor.artifactId,
+        cursor.capturedAt,
+        cursor.artifactId,
+        cursor.bindingId,
+        pageSize + 1,
+      ]
+    : [member.organisationId, pageSize + 1];
+  const [rows, totalRecord] = await Promise.all([
+    database.prepare(`SELECT
       artifact.id,
       artifact.client_request_id,
       artifact.source_url,
@@ -760,26 +1007,82 @@ export async function listCreditexOfficialSources(
       binding.citation_location,
       binding.binding_state,
       binding.created_by_uid binding_created_by_uid,
-      binding.created_at binding_created_at
+      binding.created_at binding_created_at,
+      artifact_review.id artifact_review_id,
+      artifact_review.decision artifact_review_decision,
+      artifact_review.supersedes_decision_id
+        artifact_review_supersedes_decision_id,
+      artifact_review.review_note artifact_review_note,
+      artifact_review.reviewed_by_uid artifact_reviewed_by_uid,
+      artifact_review.reviewed_at artifact_reviewed_at,
+      binding_review.id binding_review_id,
+      binding_review.decision binding_review_decision,
+      binding_review.supersedes_decision_id
+        binding_review_supersedes_decision_id,
+      binding_review.review_note binding_review_note,
+      binding_review.reviewed_by_uid binding_reviewed_by_uid,
+      binding_review.reviewed_at binding_reviewed_at
     FROM compliance_official_source_artifacts artifact
     JOIN compliance_official_source_bindings binding
       ON binding.artifact_id = artifact.id
       AND binding.organisation_id = artifact.organisation_id
+    LEFT JOIN compliance_official_source_review_decisions artifact_review
+      ON artifact_review.organisation_id = artifact.organisation_id
+      AND artifact_review.subject_type = 'artifact'
+      AND artifact_review.subject_id = artifact.id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM compliance_official_source_review_decisions newer
+        WHERE newer.organisation_id = artifact_review.organisation_id
+          AND newer.subject_type = artifact_review.subject_type
+          AND newer.subject_id = artifact_review.subject_id
+          AND (
+            newer.reviewed_at > artifact_review.reviewed_at
+            OR (
+              newer.reviewed_at = artifact_review.reviewed_at
+              AND newer.id > artifact_review.id
+            )
+          )
+      )
+    LEFT JOIN compliance_official_source_review_decisions binding_review
+      ON binding_review.organisation_id = binding.organisation_id
+      AND binding_review.subject_type = 'binding'
+      AND binding_review.subject_id = binding.id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM compliance_official_source_review_decisions newer
+        WHERE newer.organisation_id = binding_review.organisation_id
+          AND newer.subject_type = binding_review.subject_type
+          AND newer.subject_id = binding_review.subject_id
+          AND (
+            newer.reviewed_at > binding_review.reviewed_at
+            OR (
+              newer.reviewed_at = binding_review.reviewed_at
+              AND newer.id > binding_review.id
+            )
+          )
+      )
     WHERE artifact.organisation_id = ?
-    ORDER BY artifact.captured_at DESC, artifact.id DESC
-    LIMIT 100`)
-    .bind(member.organisationId)
-    .all<OfficialSourceArtifactRecord & {
-      binding_id: string;
-      artifact_id: string;
-      target_type: string;
-      target_id: string;
-      citation_location: string;
-      binding_state: string;
-      binding_created_by_uid: string;
-      binding_created_at: string;
-    }>();
-  return rows.results.map((record) => ({
+      ${cursorPredicate}
+    ORDER BY
+      artifact.captured_at DESC,
+      artifact.id DESC,
+      binding.id DESC
+    LIMIT ?`)
+      .bind(...listBindings)
+      .all<OfficialSourceListingRecord>(),
+    database.prepare(`SELECT COUNT(*) total
+      FROM compliance_official_source_artifacts artifact
+      JOIN compliance_official_source_bindings binding
+        ON binding.artifact_id = artifact.id
+        AND binding.organisation_id = artifact.organisation_id
+      WHERE artifact.organisation_id = ?`)
+      .bind(member.organisationId)
+      .first<{ total: number }>(),
+  ]);
+  const hasNext = rows.results.length > pageSize;
+  const pageRows = rows.results.slice(0, pageSize);
+  const items = pageRows.map((record) => ({
     artifact: publicArtifact(record),
     binding: publicBinding({
       id: record.binding_id,
@@ -791,5 +1094,302 @@ export async function listCreditexOfficialSources(
       created_by_uid: record.binding_created_by_uid,
       created_at: record.binding_created_at,
     }),
+    artifactReview: reviewFromListing(record, "artifact"),
+    bindingReview: reviewFromListing(record, "binding"),
   }));
+  const last = hasNext ? pageRows.at(-1) : null;
+  return {
+    items,
+    total: Number(totalRecord?.total || 0),
+    pageSize,
+    hasNext,
+    nextCursor: last
+      ? encodeOfficialSourceCursor({
+          capturedAt: last.captured_at,
+          artifactId: last.id,
+          bindingId: last.binding_id,
+        })
+      : null,
+  };
+}
+
+export async function listCreditexOfficialSourceTargets(
+  database: D1Database,
+  member: CustodyMember,
+) {
+  const [programs, activities, evidencePolicies, calculators] =
+    await Promise.all([
+      database.prepare(`SELECT
+          program.id,
+          program.program_code,
+          program.name,
+          program.jurisdiction,
+          program.publish_state state
+        FROM compliance_programs program
+        WHERE program.organisation_id = ?
+          AND program.publish_state = 'draft'
+        ORDER BY program.name, program.program_code, program.id`)
+        .bind(member.organisationId)
+        .all<{
+          id: string;
+          program_code: string;
+          name: string;
+          jurisdiction: string;
+          state: string;
+        }>(),
+      database.prepare(`SELECT
+          activity.id,
+          activity.activity_key,
+          activity.version,
+          activity.title,
+          activity.registry_activity_code,
+          activity.specification_part,
+          activity.scenario_code,
+          activity.publish_state state,
+          program.program_code,
+          program.name program_name
+        FROM compliance_activity_versions activity
+        JOIN compliance_programs program
+          ON program.id = activity.program_id
+        WHERE program.organisation_id = ?
+          AND activity.publish_state = 'draft'
+        ORDER BY
+          program.name,
+          activity.registry_activity_code,
+          activity.activity_key,
+          activity.version,
+          activity.id`)
+        .bind(member.organisationId)
+        .all<{
+          id: string;
+          activity_key: string;
+          version: number;
+          title: string;
+          registry_activity_code: string;
+          specification_part: string;
+          scenario_code: string;
+          state: string;
+          program_code: string;
+          program_name: string;
+        }>(),
+      database.prepare(`SELECT
+          policy.id,
+          policy.version,
+          policy.title,
+          policy.publish_state state,
+          activity.activity_key,
+          activity.title activity_title,
+          program.program_code,
+          program.name program_name
+        FROM compliance_evidence_policy_versions policy
+        JOIN compliance_activity_versions activity
+          ON activity.id = policy.activity_version_id
+        JOIN compliance_programs program
+          ON program.id = activity.program_id
+        WHERE policy.organisation_id = ?
+          AND program.organisation_id = policy.organisation_id
+          AND policy.publish_state = 'draft'
+        ORDER BY
+          program.name,
+          activity.title,
+          policy.title,
+          policy.version,
+          policy.id`)
+        .bind(member.organisationId)
+        .all<{
+          id: string;
+          version: number;
+          title: string;
+          state: string;
+          activity_key: string;
+          activity_title: string;
+          program_code: string;
+          program_name: string;
+        }>(),
+      database.prepare(`SELECT
+          calculator.id,
+          calculator.version,
+          calculator.title,
+          calculator.output_type,
+          calculator.approval_state state,
+          activity.activity_key,
+          activity.title activity_title,
+          program.program_code,
+          program.name program_name
+        FROM compliance_calculator_versions calculator
+        JOIN compliance_activity_versions activity
+          ON activity.id = calculator.activity_version_id
+        JOIN compliance_programs program
+          ON program.id = activity.program_id
+        WHERE calculator.organisation_id = ?
+          AND program.organisation_id = calculator.organisation_id
+          AND calculator.approval_state = 'draft'
+        ORDER BY
+          program.name,
+          activity.title,
+          calculator.title,
+          calculator.version,
+          calculator.id`)
+        .bind(member.organisationId)
+        .all<{
+          id: string;
+          version: number;
+          title: string;
+          output_type: string;
+          state: string;
+          activity_key: string;
+          activity_title: string;
+          program_code: string;
+          program_name: string;
+        }>(),
+    ]);
+
+  const programLabel = (code: string, name: string) =>
+    `${code} | ${name}`;
+  return [
+    ...programs.results.map((program) => ({
+      type: "program" as const,
+      id: program.id,
+      label:
+        `${program.jurisdiction} | ${programLabel(program.program_code, program.name)}`,
+      state: program.state,
+    })),
+    ...activities.results.map((activity) => {
+      const parentLabel = programLabel(
+        activity.program_code,
+        activity.program_name,
+      );
+      const activityCode = activity.registry_activity_code
+        || activity.activity_key;
+      const scenario = activity.scenario_code
+        ? ` | Scenario ${activity.scenario_code}`
+        : "";
+      return {
+        type: "activity" as const,
+        id: activity.id,
+        label:
+          `${parentLabel} | ${activityCode} | ${activity.title}${scenario} | v${activity.version}`,
+        programLabel: parentLabel,
+        state: activity.state,
+      };
+    }),
+    ...evidencePolicies.results.map((policy) => {
+      const parentLabel = programLabel(
+        policy.program_code,
+        policy.program_name,
+      );
+      return {
+        type: "evidence_policy" as const,
+        id: policy.id,
+        label:
+          `${parentLabel} | ${policy.activity_title} | Evidence: ${policy.title} | v${policy.version}`,
+        programLabel: parentLabel,
+        state: policy.state,
+      };
+    }),
+    ...calculators.results.map((calculator) => {
+      const parentLabel = programLabel(
+        calculator.program_code,
+        calculator.program_name,
+      );
+      return {
+        type: "calculator" as const,
+        id: calculator.id,
+        label:
+          `${parentLabel} | ${calculator.activity_title} | Calculator: ${calculator.title} (${calculator.output_type}) | v${calculator.version}`,
+        programLabel: parentLabel,
+        state: calculator.state,
+      };
+    }),
+  ];
+}
+
+export async function downloadCreditexOfficialSource(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: CustodyMember,
+  artifactIdValue: unknown,
+) {
+  if (
+    !["admin", "case_manager", "reviewer", "auditor"].includes(member.role)
+  ) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CUSTODY_ROLE_REQUIRED",
+      403,
+      "This compliance role cannot open official source material.",
+    );
+  }
+  const artifactId = cleanText(
+    artifactIdValue,
+    180,
+    "SOURCE_ARTIFACT_ID_INVALID",
+    "Choose an official source artifact.",
+  );
+  const record = await database.prepare(`SELECT
+      artifact.id,
+      artifact.original_file_name,
+      artifact.content_type,
+      artifact.size_bytes,
+      artifact.sha256,
+      artifact.object_key
+    FROM compliance_official_source_artifacts artifact
+    WHERE artifact.organisation_id = ?
+      AND artifact.id = ?
+      AND artifact.custody_state IN ('draft', 'pending_review')
+      AND artifact.rule_activation_enabled = 0
+    LIMIT 1`)
+    .bind(member.organisationId, artifactId)
+    .first<OfficialSourceDownloadRecord>();
+  if (!record) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_ARTIFACT_NOT_FOUND",
+      404,
+      "The official source artifact was not found in this organisation.",
+    );
+  }
+
+  const bytes = await verifiedOfficialSourceBytes(bucket, record);
+
+  const receiptId = crypto.randomUUID();
+  const accessedAt = new Date().toISOString();
+  const receipt = await database.prepare(`INSERT INTO compliance_audit_events (
+      id, organisation_id, actor_type, actor_uid, event_type,
+      target_type, target_id, summary, metadata, created_at
+    ) VALUES (
+      ?, ?, 'compliance', ?, 'official_source.retained_bytes_accessed',
+      'compliance_official_source_artifact', ?,
+      'Authorised Creditex member accessed verified retained official source bytes.',
+      ?, ?
+    )`)
+    .bind(
+      receiptId,
+      member.organisationId,
+      member.uid,
+      record.id,
+      JSON.stringify({
+        accessRole: member.role,
+        contentType: record.content_type,
+        fileName: record.original_file_name,
+        sha256: record.sha256,
+        sizeBytes: Number(record.size_bytes),
+        custodyState: "retained_exact_bytes_verified",
+        ruleActivationEnabled: false,
+      }),
+      accessedAt,
+    )
+    .run();
+  if (!receipt.success || Number(receipt.meta.changes) !== 1) {
+    throw new Error("SOURCE_DOWNLOAD_AUDIT_FAILED");
+  }
+
+  return {
+    artifactId: record.id,
+    fileName: record.original_file_name,
+    contentType: record.content_type,
+    sizeBytes: Number(record.size_bytes),
+    sha256: record.sha256,
+    bytes: exactArrayBuffer(bytes),
+    receiptId,
+    accessedAt,
+  };
 }

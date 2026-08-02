@@ -471,12 +471,14 @@ test("the dated audit is immutable evidence and current truth has one documented
 
   assert.ok(roadmapNextFive, "ROADMAP.md must contain exactly five ordered next steps");
   assert.ok(handoverNextFive, "HANDOVER_NEXT_TASK.md must contain exactly five ordered next steps");
-  assert.equal(handoverNextFive, roadmapNextFive);
-  assert.match(roadmapNextFive, /^1\. \*\*Pass named physical-device acceptance:/);
-  assert.match(roadmapNextFive, /\n2\. \*\*Publish the first approved VEU government-minimum policy:/);
-  assert.match(roadmapNextFive, /\n3\. \*\*Implement exact TESSA and REC interchange:/);
-  assert.match(roadmapNextFive, /\n4\. \*\*Approve calculations pathway by pathway:/);
-  assert.match(roadmapNextFive, /\n5\. \*\*Run a bounded installer-side VEU pilot:/);
+  const normalisedRoadmapNextFive = roadmapNextFive.replaceAll("\r\n", "\n");
+  const normalisedHandoverNextFive = handoverNextFive.replaceAll("\r\n", "\n");
+  assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Pass named physical-device acceptance:/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Publish the first approved VEU government-minimum policy:/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Implement exact TESSA and REC interchange:/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Approve calculations pathway by pathway:/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Run a bounded installer-side VEU pilot:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

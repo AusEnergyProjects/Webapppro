@@ -377,6 +377,46 @@ async function exactRetainedArtifact(
   }
 }
 
+async function requireReviewerRetainedBytesAccess(
+  database: D1Database,
+  member: GovernanceReviewer,
+  artifact: Pick<
+    SourceSubjectRecord,
+    "artifact_id" | "artifact_sha256" | "artifact_size_bytes"
+  >,
+) {
+  const receipt = await database.prepare(`SELECT event.id
+    FROM compliance_audit_events event
+    WHERE event.organisation_id = ?
+      AND event.actor_type = 'compliance'
+      AND event.actor_uid = ?
+      AND event.event_type = 'official_source.retained_bytes_accessed'
+      AND event.target_type = 'compliance_official_source_artifact'
+      AND event.target_id = ?
+      AND json_type(event.metadata, '$.sha256') = 'text'
+      AND json_extract(event.metadata, '$.sha256') = ?
+      AND json_type(event.metadata, '$.sizeBytes') = 'integer'
+      AND json_extract(event.metadata, '$.sizeBytes') = ?
+    ORDER BY event.created_at DESC, event.id DESC
+    LIMIT 1`)
+    .bind(
+      member.organisationId,
+      member.uid,
+      artifact.artifact_id,
+      artifact.artifact_sha256,
+      Number(artifact.artifact_size_bytes),
+    )
+    .first<{ id: string }>();
+  if (!receipt) {
+    fail(
+      "SOURCE_RETAINED_BYTES_ACCESS_REQUIRED",
+      409,
+      "Open and inspect the verified retained source bytes before approving this artifact.",
+    );
+  }
+  return receipt.id;
+}
+
 async function sourceSubject(
   database: D1Database,
   organisationId: string,
@@ -620,6 +660,8 @@ export async function reviewCreditexOfficialSource(
         subject.artifact_id,
         subject.artifact_sha256,
       );
+    } else {
+      await requireReviewerRetainedBytesAccess(database, member, subject);
     }
     await exactRetainedArtifact(bucket, subject);
   }

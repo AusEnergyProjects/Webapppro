@@ -14,6 +14,9 @@ const evidenceGovernance = read(
 const evidenceGovernanceStyles = read(
   "../src/components/CreditexEvidencePolicyGovernance.module.css",
 );
+const officialSourceWorkbench = read(
+  "../src/components/CreditexOfficialSourceWorkbench.tsx",
+);
 const operations = read("../src/components/CreditexOperationsWorkspace.tsx");
 const operationsStyles = read(
   "../src/components/CreditexOperationsWorkspace.module.css",
@@ -40,7 +43,7 @@ const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
 const routeSource =
   `${sessionRoute}\n${caseRoute}\n${activityRoute}\n${evidencePolicyRoute}`;
 const surfaceSource =
-  `${page}\n${portal}\n${evidenceGovernance}\n${routeSource}`;
+  `${page}\n${portal}\n${evidenceGovernance}\n${officialSourceWorkbench}\n${routeSource}`;
 
 test("Creditex compliance page is excluded from search and archival", () => {
   for (const directive of [
@@ -130,6 +133,32 @@ test("an authentication 401 triggers exactly one forced token refresh", async ()
   assert.deepEqual(result, { status: 200 });
   assert.deepEqual(tokenCalls, [[], [true]]);
   assert.deepEqual(requestTokens, ["cached-token", "refreshed-token"]);
+});
+
+test("governed source uploads and retained-byte downloads preserve browser and identity boundaries", () => {
+  assert.match(portal, /!\(init\.body instanceof FormData\)/);
+  assert.match(portal, /CreditexOfficialSourceWorkbench/);
+  assert.match(
+    portal,
+    /canCapture=\{\s*session\.role === "admin"\s*\|\| session\.role === "case_manager"/,
+  );
+  assert.match(
+    portal,
+    /session\.role === "admin"\s*&& session\.governanceIdentityVerified/,
+  );
+  assert.match(portal, /onDownload=\{downloadOfficialSource\}/);
+  assert.match(
+    portal,
+    /\/api\/creditex\/official-sources\/\$\{encodeURIComponent\(artifactId\)\}/,
+  );
+  assert.match(portal, /requestWithCreditexTokenRecovery<Response>/);
+  assert.match(portal, /response\.blob\(\)/);
+  assert.match(portal, /X-Creditex-Official-Source-Receipt/);
+  assert.match(portal, /return accessReceipt/);
+  assert.match(portal, /URL\.createObjectURL\(blob\)/);
+  assert.match(portal, /firebaseAuth\.currentUser\?\.uid !== activeUid/);
+  assert.match(officialSourceWorkbench, /new FormData\(\)/);
+  assert.match(officialSourceWorkbench, /"sourceFile"/);
 });
 
 test("network failures preserve the signed-in identity and expose workspace recovery", async () => {
@@ -613,7 +642,19 @@ test("portal tabs and disabled actions expose accessible semantics", () => {
   );
   assert.match(portal, /role="tablist"/);
   assert.match(portal, /aria-controls="creditex-panel-cases"/);
+  assert.match(portal, /aria-controls="creditex-panel-sources"/);
   assert.match(portal, /aria-controls="creditex-panel-governance"/);
+  assert.match(portal, /Official sources/);
+  assert.match(portal, /Official source custody/);
+  assert.match(
+    portal,
+    /setTab\(session\.role === "admin" \? "governance" : "sources"\)/,
+  );
+  assert.ok(
+    portal.indexOf('id="creditex-tab-sources"')
+      < portal.indexOf('{session.role === "admin" && ('),
+    "Every authorised compliance role must reach the source custody tab.",
+  );
   assert.match(portal, /role="tabpanel"/);
   assert.match(portal, /handleWorkspaceTabKeyDown/);
   assert.ok(

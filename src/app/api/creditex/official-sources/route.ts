@@ -8,6 +8,7 @@ import {
   CREDITEX_OFFICIAL_SOURCE_LIMITS,
   CreditexOfficialSourceCustodyError,
   captureCreditexOfficialSource,
+  listCreditexOfficialSourceTargets,
   listCreditexOfficialSources,
 } from "@/lib/creditex-official-source-custody-server";
 
@@ -92,9 +93,24 @@ export async function GET(request: Request) {
     const member = await requireComplianceAccess(request, {
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
+    const search = new URL(request.url).searchParams;
+    const [sourcePage, targets] = await Promise.all([
+      listCreditexOfficialSources(database, member, {
+        cursor: search.get("cursor"),
+        pageSize: search.get("pageSize"),
+      }),
+      listCreditexOfficialSourceTargets(database, member),
+    ]);
     return json({
       ok: true,
-      sources: await listCreditexOfficialSources(database, member),
+      sources: sourcePage.items,
+      sourcePagination: {
+        total: sourcePage.total,
+        pageSize: sourcePage.pageSize,
+        hasNext: sourcePage.hasNext,
+        nextCursor: sourcePage.nextCursor,
+      },
+      targets,
     });
   } catch (error) {
     return errorResponse(error);

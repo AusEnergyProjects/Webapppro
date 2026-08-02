@@ -30,6 +30,7 @@ import {
 import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
+import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
 import { CreditexVeuPilotWorkspace } from "./CreditexVeuPilotWorkspace";
 import styles from "./CreditexCompliancePortal.module.css";
@@ -311,7 +312,8 @@ export function CreditexCompliancePortal() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tab, setTab] = useState<"cases" | "pilot" | "governance">("cases");
+  const [tab, setTab] =
+    useState<"cases" | "pilot" | "sources" | "governance">("cases");
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -338,7 +340,11 @@ export function CreditexCompliancePortal() {
     if (!activeUser) throw new Error("Sign in to continue.");
     const activeUid = activeUser.uid;
     const headers = new Headers(init.headers);
-    if (init.body && !headers.has("Content-Type"))
+    if (
+      init.body
+      && !(init.body instanceof FormData)
+      && !headers.has("Content-Type")
+    )
       headers.set("Content-Type", "application/json");
 
     const { response, result } =
@@ -419,6 +425,59 @@ export function CreditexCompliancePortal() {
       throw error;
     }
     return result as Record<string, unknown>;
+  }, []);
+
+  const downloadOfficialSource = useCallback(async (
+    artifactId: string,
+    originalFileName: string,
+  ) => {
+    const activeUser = firebaseAuth.currentUser;
+    if (!activeUser) throw new Error("Sign in to continue.");
+    const activeUid = activeUser.uid;
+    const response = await requestWithCreditexTokenRecovery<Response>({
+      user: activeUser,
+      currentUid: () => firebaseAuth.currentUser?.uid,
+      isUnauthorized: (attempt) => attempt.status === 401,
+      request: async (idToken) =>
+        fetch(
+          `/api/creditex/official-sources/${encodeURIComponent(artifactId)}`,
+          {
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${idToken}` },
+          },
+        ),
+    });
+    if (!response.ok) {
+      const result = (await response.json().catch(() => ({}))) as ApiResult;
+      throw new Error(
+        result.error || "The retained official source could not be downloaded.",
+      );
+    }
+    if (firebaseAuth.currentUser?.uid !== activeUid) {
+      throw new Error(
+        "The signed-in account changed. Loading the new workspace.",
+      );
+    }
+    const accessReceipt = response.headers.get(
+      "X-Creditex-Official-Source-Receipt",
+    )?.trim();
+    if (!accessReceipt) {
+      throw new Error(
+        "The retained source was verified but no access receipt was returned.",
+      );
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = originalFileName
+      .replace(/[^A-Za-z0-9._ ()-]/g, "_")
+      .slice(0, 180) || "official-source";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    return accessReceipt;
   }, []);
 
   const loadCases = useCallback(async ({
@@ -923,10 +982,12 @@ export function CreditexCompliancePortal() {
       return;
     }
     event.preventDefault();
-    const visibleTabs: Array<"cases" | "pilot" | "governance"> =
+    const visibleTabs: Array<
+      "cases" | "pilot" | "sources" | "governance"
+    > =
       session?.role === "admin"
-        ? ["cases", "pilot", "governance"]
-        : ["cases", "pilot"];
+        ? ["cases", "pilot", "sources", "governance"]
+        : ["cases", "pilot", "sources"];
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
       ? 0
@@ -1153,6 +1214,19 @@ export function CreditexCompliancePortal() {
           >
             VEU test pilot
           </button>
+          <button
+            className={styles.tab}
+            type="button"
+            role="tab"
+            id="creditex-tab-sources"
+            aria-controls="creditex-panel-sources"
+            aria-selected={tab === "sources"}
+            tabIndex={tab === "sources" ? 0 : -1}
+            onClick={() => setTab("sources")}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            Official sources
+          </button>
           {session.role === "admin" && (
             <button
               className={styles.tab}
@@ -1174,11 +1248,19 @@ export function CreditexCompliancePortal() {
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
               <span className={styles.eyebrow}>Protected partner operations</span>
-              <h1>Compliance case control</h1>
+              <h1>
+                {tab === "sources"
+                  ? "Official source custody"
+                  : tab === "governance"
+                    ? "Government rule control"
+                    : "Compliance case control"}
+              </h1>
               <p>
-                Queue lists minimise private data. Authorised Creditex staff can
-                open the audited case workspace for the customer, installer, site, appointments, evidence originals and
-                captured metadata needed to review, correct and submit that exact job.
+                {tab === "sources"
+                  ? "Authorised Creditex staff can compare current government links with exact retained bytes and immutable source-review records."
+                  : tab === "governance"
+                    ? "Named administrators create and govern effective-dated program, activity and evidence records without turning Creditex instructions into government rules."
+                    : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
               </p>
             </div>
             <aside className={styles.guardrail}>
@@ -1222,7 +1304,8 @@ export function CreditexCompliancePortal() {
                 )}
               onRefreshSeedCases={() => void refreshCases()}
               onLoadNextSeedCases={() => void loadNextCases()}
-              onOpenActivityRules={() => setTab("governance")}
+              onOpenActivityRules={() =>
+                setTab(session.role === "admin" ? "governance" : "sources")}
             />
           </div>
         )}
@@ -1235,6 +1318,28 @@ export function CreditexCompliancePortal() {
           >
             <CreditexVeuPilotWorkspace api={api} role={session.role} />
           </div>
+        )}
+
+        {tab === "sources" && (
+          <section
+            className={`${styles.panel} ${styles.governancePanel}`}
+            id="creditex-panel-sources"
+            role="tabpanel"
+            aria-labelledby="creditex-tab-sources"
+          >
+            <CreditexOfficialSourceWorkbench
+              api={api}
+              canCapture={
+                session.role === "admin"
+                || session.role === "case_manager"
+              }
+              canReview={
+                session.role === "admin"
+                && session.governanceIdentityVerified
+              }
+              onDownload={downloadOfficialSource}
+            />
+          </section>
         )}
 
         {tab === "governance" && session.role === "admin" && (

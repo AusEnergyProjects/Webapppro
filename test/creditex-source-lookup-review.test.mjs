@@ -14,6 +14,9 @@ import {
   stageCreditexOperationalLookupImport,
 } from "../src/lib/creditex-operational-lookup-server.ts";
 import {
+  downloadCreditexOfficialSource,
+} from "../src/lib/creditex-official-source-custody-server.ts";
+import {
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
 } from "../src/lib/creditex-schema-guards.ts";
 
@@ -298,6 +301,7 @@ function fixture() {
         "compliance_operational_lookup_review_decisions_",
       )
     )
+    || item.name.startsWith("compliance_audit_events_no_")
   ));
   for (const guard of relevantGuards) database.exec(guard.sql);
   const bucket = new FakeR2();
@@ -322,6 +326,12 @@ function fixture() {
 }
 
 async function approveSource(d1, bucket, reviewer) {
+  await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    reviewer,
+    "artifact-1",
+  );
   const artifact = await reviewCreditexOfficialSource(
     d1,
     bucket,
@@ -380,6 +390,28 @@ test("source approval is independent, hash-bound, append-only and publication-ga
       WHERE id = 'program-1'`).run(),
     /COMPLIANCE_APPROVED_SOURCE_BINDING_REQUIRED/,
   );
+
+  await assert.rejects(
+    reviewCreditexOfficialSource(
+      d1,
+      bucket,
+      reviewer,
+      {
+        subjectType: "artifact",
+        subjectId: "artifact-1",
+        decision: "approved",
+        reviewNote: "Approval requires a reviewer-specific access receipt.",
+      },
+    ),
+    (error) => error.code === "SOURCE_RETAINED_BYTES_ACCESS_REQUIRED",
+  );
+  const access = await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    reviewer,
+    "artifact-1",
+  );
+  assert.equal(access.sha256, exactSha256);
 
   const artifact = await reviewCreditexOfficialSource(
     d1,
@@ -484,12 +516,99 @@ test("source approval is independent, hash-bound, append-only and publication-ga
     database.prepare(`SELECT COUNT(*) count
       FROM compliance_audit_events
       WHERE event_type LIKE 'official_source.%'`).get().count,
-    3,
+    4,
   );
+  assert.throws(
+    () => database.prepare(`UPDATE compliance_audit_events
+      SET metadata = '{}' WHERE id = ?`).run(access.receiptId),
+    /COMPLIANCE_AUDIT_EVENT_IMMUTABLE/,
+  );
+});
+
+test("artifact approval requires the same reviewer to access the exact hash and size", async () => {
+  const { database, d1, bucket, importer, reviewer } = fixture();
+  await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    importer,
+    "artifact-1",
+  );
+  const attemptApproval = () => reviewCreditexOfficialSource(
+    d1,
+    bucket,
+    reviewer,
+    {
+      subjectType: "artifact",
+      subjectId: "artifact-1",
+      decision: "approved",
+      reviewNote: "Only an exact reviewer-specific receipt can authorise this.",
+    },
+  );
+  await assert.rejects(
+    attemptApproval(),
+    (error) => error.code === "SOURCE_RETAINED_BYTES_ACCESS_REQUIRED",
+  );
+
+  const insertAccess = (id, metadata) => database.prepare(`
+    INSERT INTO compliance_audit_events (
+      id,
+      organisation_id,
+      actor_type,
+      actor_uid,
+      event_type,
+      target_type,
+      target_id,
+      summary,
+      metadata,
+      created_at
+    ) VALUES (
+      ?,
+      'org-1',
+      'compliance',
+      'admin-2',
+      'official_source.retained_bytes_accessed',
+      'compliance_official_source_artifact',
+      'artifact-1',
+      'Synthetic mismatched access receipt.',
+      ?,
+      '2026-08-02T00:30:00.000Z'
+    )
+  `).run(id, JSON.stringify(metadata));
+  insertAccess("mismatched-sha-access", {
+    sha256: "0".repeat(64),
+    sizeBytes: exactBytes.byteLength,
+  });
+  await assert.rejects(
+    attemptApproval(),
+    (error) => error.code === "SOURCE_RETAINED_BYTES_ACCESS_REQUIRED",
+  );
+  insertAccess("mismatched-size-access", {
+    sha256: exactSha256,
+    sizeBytes: exactBytes.byteLength + 1,
+  });
+  await assert.rejects(
+    attemptApproval(),
+    (error) => error.code === "SOURCE_RETAINED_BYTES_ACCESS_REQUIRED",
+  );
+
+  await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    reviewer,
+    "artifact-1",
+  );
+  const approved = await attemptApproval();
+  assert.equal(approved.decision.artifactSha256, exactSha256);
 });
 
 test("approval refuses missing or changed retained source bytes", async () => {
   const { d1, bucket, reviewer } = fixture();
+  await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    reviewer,
+    "artifact-1",
+  );
   bucket.objects.set(
     objectKey,
     new TextEncoder().encode("changed-retained-bytes"),
