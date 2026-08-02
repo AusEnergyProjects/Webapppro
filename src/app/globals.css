@@ -1122,9 +1122,11 @@ h2, h3 { font-family: "Source Serif 4", Georgia, serif; letter-spacing: -.015em;
 .brandname { color: #fff; font-family: "Source Serif 4", Georgia, serif; font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; }
 .brandtag { color: #a9c7c9; font-size: .66rem; font-weight: 600; letter-spacing: .01em; }
 .brandbar:hover .brandname { text-decoration: underline; }
-.comparator-nav { display: flex; gap: 3px; justify-content: flex-end; margin: 0; max-width: 100%; min-width: 0; overflow-x: auto; padding: 3px; scrollbar-width: none; }
+.site-nav-shell { min-width: 0; position: relative; }
+.site-nav-discovery { display: none; }
+.comparator-nav { display: flex; gap: 3px; justify-content: flex-start; margin: 0; max-width: 100%; min-width: 0; overflow-x: auto; padding: 3px; scrollbar-width: none; }
 .comparator-nav::-webkit-scrollbar { display: none; }
-.comparator-nav a { border: 1px solid transparent; border-radius: var(--radius-control); color: #d9e7e8; font-size: .7rem; font-weight: 700; padding: 9px 9px; text-decoration: none; transition: background .16s, box-shadow .16s, color .16s, transform .16s; white-space: nowrap; }
+.comparator-nav a { border: 1px solid transparent; border-radius: var(--radius-control); color: #d9e7e8; font-size: .7rem; font-weight: 700; padding: 9px 8px; text-decoration: none; transition: background .16s, box-shadow .16s, color .16s, transform .16s; white-space: nowrap; }
 .comparator-nav .active { background: var(--action-primary); box-shadow: 0 7px 18px rgba(18, 166, 106, .25); color: #fff; }
 .comparator-nav .inactive { border-color: transparent; color: #d9e7e8; }
 .comparator-nav .inactive:hover { background: rgba(255, 255, 255, .07); border-color: transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); color: #fff; transform: translateY(-1px); }
@@ -2434,7 +2436,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-aea-green)
 @media (max-width: 1080px) {
   .platform-workspaces > div:last-child, .trade-access-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .site-header { align-items: stretch; flex-direction: column; gap: 10px; }
-  .comparator-nav { justify-content: flex-start; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .site-header .site-nav-shell { grid-column: 1 / -1; grid-row: 2; width: 100%; }
   .planner-layout { grid-template-columns: 1fr; }
   .planner-results { position: static; }
   .home-upgrade-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2641,6 +2643,18 @@ footer a { color: #6ee7b7; font-weight: 700; }
   .standards-actions { align-items: flex-start; flex-direction: column; }
   .standards-actions > div:last-child { justify-content: flex-start; }
 }
+
+@media (max-width: 1320px) {
+  .site-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .site-header .site-nav-shell { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .site-account-link { grid-column: 2; grid-row: 1; }
+  .site-nav-discovery { align-items: center; color: #a9c7c9; display: flex; font-size: .6rem; font-weight: 800; justify-content: space-between; letter-spacing: .025em; padding: 0 4px 4px; }
+  .site-nav-discovery span:last-child { color: #6ee7b7; }
+  .site-nav-shell::after { background: linear-gradient(90deg, rgba(3, 28, 43, 0), rgba(3, 28, 43, .96)); bottom: 0; content: ""; pointer-events: none; position: absolute; right: 0; top: 20px; width: 32px; z-index: 2; }
+  .comparator-nav { justify-content: flex-start; overflow-x: auto; padding: 2px 34px 5px 2px; scroll-padding-inline: 2px 34px; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .comparator-nav a { scroll-snap-align: start; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
   .site-header, .start-hero aside { backdrop-filter: none; }
@@ -4185,7 +4199,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 
 @media (max-width: 1080px) {
   .site-header { grid-template-columns: minmax(0, 1fr) auto; }
-  .site-header .comparator-nav { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; width: 100%; }
+  .site-header .site-nav-shell { grid-column: 1 / -1; grid-row: 2; width: 100%; }
   .site-account-link { grid-column: 2; grid-row: 1; }
   .customer-auth-card { grid-template-columns: 1fr 1.2fr; }
   .customer-auth-benefits { grid-column: 1 / -1; }

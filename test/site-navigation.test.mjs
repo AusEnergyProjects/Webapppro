@@ -75,6 +75,30 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
+test("shared navigation never clips its first destination and explains mobile overflow", () => {
+  assert.match(chrome, /className="site-nav-shell"/);
+  assert.match(chrome, /className="site-nav-discovery" id="site-nav-discovery"/);
+  assert.match(chrome, /aria-describedby="site-nav-discovery"/);
+  assert.match(chrome, /Energy services/);
+  assert.match(chrome, /Scroll for more options/);
+  assert.match(
+    styles,
+    /\.comparator-nav \{[^}]*justify-content: flex-start;[^}]*overflow-x: auto;/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.comparator-nav \{[^}]*justify-content: flex-end;/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 1320px\) \{[\s\S]*?\.site-nav-discovery \{[^}]*display: flex;/,
+  );
+  assert.match(styles, /\.site-nav-shell::after \{[^}]*linear-gradient/);
+  assert.match(styles, /\.comparator-nav \{[^}]*padding: 2px 34px 5px 2px;/);
+  assert.match(styles, /scroll-snap-type: x proximity/);
+  assert.match(styles, /\.comparator-nav a \{ scroll-snap-align: start; \}/);
+});
+
 test("direct trade proposition presents the free verified operating model honestly", () => {
   assert.match(guide, /Traditional upgrade channels can include sales and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);

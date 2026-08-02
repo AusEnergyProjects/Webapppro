@@ -28,7 +28,26 @@ export function SiteNav({ active }: { active: SiteActive }) {
     { key: "guides", href: "/guides", label: "Guides and rebates" },
     { key: "assessments", href: "/assessments", label: "Assessments" },
   ] as const;
-  return <nav aria-label="Energy services" className="comparator-nav">{links.map((link) => <a className={active === link.key ? "active" : "inactive"} href={link.href} key={link.key} aria-current={active === link.key ? "page" : undefined}>{link.label}</a>)}</nav>;
+  return (
+    <div className="site-nav-shell">
+      <div className="site-nav-discovery" id="site-nav-discovery">
+        <span>Energy services</span>
+        <span>Scroll for more options <span aria-hidden="true">→</span></span>
+      </div>
+      <nav aria-describedby="site-nav-discovery" aria-label="Energy services" className="comparator-nav">
+        {links.map((link) => (
+          <a
+            className={active === link.key ? "active" : "inactive"}
+            href={link.href}
+            key={link.key}
+            aria-current={active === link.key ? "page" : undefined}
+          >
+            {link.label}
+          </a>
+        ))}
+      </nav>
+    </div>
+  );
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
