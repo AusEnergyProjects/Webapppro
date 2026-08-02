@@ -92,6 +92,7 @@ type LookupDecisionRecord = {
 };
 
 type LookupMaterialisationRow = {
+  id: string;
   row_number: number;
   source_record_key: string;
   source_effective_from: string;
@@ -170,6 +171,37 @@ function requireGovernanceReviewer(member: GovernanceReviewer) {
       "A named Creditex administrator with independently verified governance identity is required.",
     );
   }
+}
+
+function requireLookupMaterialiser(member: GovernanceReviewer) {
+  if (
+    !["admin", "case_manager", "reviewer", "auditor"].includes(member.role)
+  ) {
+    fail(
+      "LOOKUP_ROLE_REQUIRED",
+      403,
+      "Creditex compliance access is required to materialise approved lookup records.",
+    );
+  }
+}
+
+function cleanAsOfDate(value: unknown) {
+  const cleaned = typeof value === "string" ? value.trim() : "";
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(cleaned)
+    ? new Date(`${cleaned}T00:00:00.000Z`)
+    : null;
+  if (
+    !parsed
+    || !Number.isFinite(parsed.getTime())
+    || parsed.toISOString().slice(0, 10) !== cleaned
+  ) {
+    fail(
+      "LOOKUP_AS_OF_DATE_INVALID",
+      400,
+      "Choose an explicit ISO date in YYYY-MM-DD format.",
+    );
+  }
+  return cleaned;
 }
 
 function publicSourceDecision(record: SourceDecisionRecord) {
@@ -838,6 +870,7 @@ async function validateStagedLookupRecords(
   errorPrefix: string,
 ) {
   const result = await database.prepare(`SELECT
+      id,
       row_number,
       source_record_key,
       source_effective_from,
@@ -891,12 +924,13 @@ async function validateStagedLookupRecords(
   return result.results;
 }
 
-export async function materialiseApprovedCreditexOperationalLookup(
+async function approvedCreditexOperationalLookupRows(
   database: D1Database,
   bucket: CreditexCustodyBucket,
   member: GovernanceReviewer,
   importIdValue: unknown,
 ) {
+  requireLookupMaterialiser(member);
   const importId = cleanText(
     importIdValue,
     180,
@@ -989,17 +1023,121 @@ export async function materialiseApprovedCreditexOperationalLookup(
     artifact_sha256: approved.source_artifact_sha256,
     artifact_size_bytes: approved.artifact_size_bytes,
   });
+  return { approved, importId, records };
+}
+
+function publicLookupMaterialisationRecord(row: LookupMaterialisationRow) {
+  return {
+    sourceRecordKey: row.source_record_key,
+    effectiveFrom: row.source_effective_from,
+    effectiveTo: row.source_effective_to,
+    sourceStatus: row.source_status,
+    sourceRecord: JSON.parse(row.record_json) as Record<string, unknown>,
+  };
+}
+
+function compareText(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function currentEffectiveLookupRows(
+  records: readonly LookupMaterialisationRow[],
+  asOf: string,
+) {
+  const selected = new Map<string, LookupMaterialisationRow>();
+  for (const row of records) {
+    if (
+      row.source_effective_from > asOf
+      || (
+        row.source_effective_to
+        && row.source_effective_to < asOf
+      )
+    ) {
+      continue;
+    }
+    const current = selected.get(row.source_record_key);
+    if (
+      !current
+      || row.source_effective_from > current.source_effective_from
+      || (
+        row.source_effective_from === current.source_effective_from
+        && row.id > current.id
+      )
+    ) {
+      selected.set(row.source_record_key, row);
+    }
+  }
+  return Array.from(selected.values()).sort((left, right) => (
+    compareText(left.source_record_key, right.source_record_key)
+    || compareText(left.source_effective_from, right.source_effective_from)
+    || compareText(left.id, right.id)
+  ));
+}
+
+function publicLookupMaterialisation(
+  approved: LookupImportForReview,
+  importId: string,
+  records: readonly LookupMaterialisationRow[],
+  metadata: {
+    materialisationMode: "approved_history" | "current_effective";
+    asOf?: string;
+  },
+) {
   return {
     importId,
     sourceArtifactId: approved.source_artifact_id,
     sourceArtifactSha256: approved.source_artifact_sha256,
     recordsSha256: approved.records_sha256,
-    records: records.map((row) => ({
-      sourceRecordKey: row.source_record_key,
-      effectiveFrom: row.source_effective_from,
-      effectiveTo: row.source_effective_to,
-      sourceStatus: row.source_status,
-      sourceRecord: JSON.parse(row.record_json) as Record<string, unknown>,
-    })),
+    materialisationMode: metadata.materialisationMode,
+    ...(metadata.asOf ? { asOf: metadata.asOf } : {}),
+    liveVerificationEnabled: false,
+    eligibilityActivationEnabled: false,
+    localAssertionEnabled: false,
+    records: records.map(publicLookupMaterialisationRecord),
   };
+}
+
+export async function materialiseApprovedCreditexOperationalLookupHistory(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: GovernanceReviewer,
+  importIdValue: unknown,
+) {
+  const { approved, importId, records } =
+    await approvedCreditexOperationalLookupRows(
+      database,
+      bucket,
+      member,
+      importIdValue,
+    );
+  return publicLookupMaterialisation(approved, importId, records, {
+    materialisationMode: "approved_history",
+  });
+}
+
+export async function materialiseApprovedCreditexOperationalLookup(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: GovernanceReviewer,
+  importIdValue: unknown,
+  asOfValue: unknown,
+) {
+  requireLookupMaterialiser(member);
+  const asOf = cleanAsOfDate(asOfValue);
+  const { approved, importId, records } =
+    await approvedCreditexOperationalLookupRows(
+      database,
+      bucket,
+      member,
+      importIdValue,
+    );
+  return publicLookupMaterialisation(
+    approved,
+    importId,
+    currentEffectiveLookupRows(records, asOf),
+    {
+      materialisationMode: "current_effective",
+      asOf,
+    },
+  );
 }

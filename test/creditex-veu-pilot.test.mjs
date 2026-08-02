@@ -174,9 +174,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 109);
+  assert.equal(completeMigrationChain.length, 111);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0108_/);
+  assert.match(completeMigrationChain.at(-1), /^0110_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -1880,6 +1880,46 @@ test("pilot targets are exactly 10 installers, 30 technicians and 300 jobs", () 
   );
 });
 
+test("current VEU specification sources preserve the official v24 to v25 effective boundary", () => {
+  const v25 = pilotContract.CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES.find(
+    (source) => source.sourceKey === "veu-specifications-v25",
+  );
+  const v24 = pilotContract.CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES.find(
+    (source) => source.sourceKey === "veu-specifications-v24-comparison",
+  );
+
+  assert.deepEqual(
+    {
+      version: v25?.officialVersion,
+      effectiveFrom: v25?.effectiveFrom,
+      hashStatus: v25?.hashStatus,
+    },
+    {
+      version: "25.0",
+      effectiveFrom: "2026-07-21",
+      hashStatus: "download_blocked_pending_hash",
+    },
+  );
+  assert.deepEqual(
+    {
+      version: v24?.officialVersion,
+      effectiveFrom: v24?.effectiveFrom,
+      effectiveTo: v24?.effectiveTo,
+      hashStatus: v24?.hashStatus,
+    },
+    {
+      version: "24.0 comparison source",
+      effectiveFrom: "2026-06-30",
+      effectiveTo: "2026-07-20",
+      hashStatus: "download_blocked_pending_hash",
+    },
+  );
+  assert.equal(
+    pilotContract.CREDITEX_VEU_CURRENT_SOURCE_PACK.activationEnabled,
+    false,
+  );
+});
+
 test("every VEU activity family is data-driven and receives a balanced pilot cohort", () => {
   const expectedActivities = GOVERNMENT_ACTIVITY_TEMPLATES.filter(
     (activity) => activity.programCode === "VEU",
@@ -2202,8 +2242,8 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   );
   const jobColumns = sourceSection(
     workspace,
-    "const PILOT_JOB_COLUMNS",
-    "const JOB_CONTEXT_ITEMS",
+    "const DATAFORCE_JOB_COLUMN_CONFIG",
+    "type Filters",
   );
   assert.deepEqual(
     Array.from(priorities.matchAll(/key: "([^"]+)"/g), (match) => match[1]),
@@ -2290,10 +2330,11 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   );
   assert.match(workspaceStyles, /\.importDialog/);
   assert.deepEqual(
-    Array.from(jobColumns.matchAll(/label: "([^"]+)"/g), (match) => match[1])
-      .slice(0, 24),
+    Array.from(
+      jobColumns.matchAll(/^  "([^"]+)": (?:\{|\{ key:)/gm),
+      (match) => match[1],
+    ),
     [
-      "Row",
       "App Id",
       "Job Id",
       "Status",
@@ -2319,6 +2360,11 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
       "Postcode",
     ],
   );
+  assert.match(
+    jobColumns,
+    /DATAFORCE_JOB_CSV_HEADERS\.map\(\(label\) => \(\{/,
+  );
+  assert.doesNotMatch(jobColumns, /label:\s*"Row"|key:\s*"actions"/);
   for (const label of [
     "Status filters",
     "Work &amp; personnel",
@@ -2333,29 +2379,6 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     "Custom quick filters",
   ]) {
     assert.match(workspace, new RegExp(label));
-  }
-  for (const legacyColumn of [
-    "App Id",
-    "Job Id",
-    "SubStatus",
-    "Balance",
-    "Certificates \\(VEECs\\)",
-    "Field Worker",
-    "Company Name",
-    "Ext Cust Ref",
-    "Mobile",
-    "Postcode",
-  ]) {
-    assert.match(workspace, new RegExp(`label: "${legacyColumn}"`));
-  }
-  for (const readinessColumn of [
-    "Rules",
-    "Lookups",
-    "Evidence",
-    "Calculator",
-    "Submission",
-  ]) {
-    assert.match(workspace, new RegExp(`label: "${readinessColumn}"`));
   }
   assert.doesNotMatch(
     sourceSection(workspaceStyles, ".jobTable {", ".jobTable caption"),
@@ -2393,7 +2416,31 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
     workspace.indexOf('className={styles.registerSearch}')
       < workspace.indexOf('aria-label="Advanced search"'),
   );
-  assert.match(workspace, />\s*Filters\s*\{/);
+  assert.match(
+    workspace,
+    /className=\{styles\.registerTools\}[\s\S]*aria-label="Refresh jobs"[\s\S]*>\s*Refresh\s*<\/span>[\s\S]*aria-label="Advanced search"/,
+  );
+  assert.match(workspace, />\s*Advanced search\s*<\/span>/);
+  assert.match(workspace, />\s*Filters\s*<\/span>/);
+  assert.match(workspace, /className=\{styles\.densityControl\}/);
+  assert.match(workspace, /aria-label="Job row density"/);
+  assert.match(
+    workspace,
+    /if \(column\.key === "appointmentId"\)[\s\S]*className=\{styles\.rowActionButton\}/,
+  );
+  assert.match(workspace, /data-column=\{column\.key\}/);
+  assert.match(
+    workspace,
+    /\{PILOT_JOB_COLUMNS\.length\} Dataforce columns/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.registerTools label\s*\{[\s\S]*display:\s*inline-flex[\s\S]*align-items:\s*center/,
+  );
+  assert.match(
+    workspaceStyles,
+    /@media \(max-width: 480px\)[\s\S]*\.compactButtonLabel\s*\{[\s\S]*display:\s*inline/,
+  );
   for (const expression of [
     "job.scenario",
     "installer.company_code",

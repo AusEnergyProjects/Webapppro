@@ -370,6 +370,13 @@ test("lookup API is authenticated, same-origin, no-store and connector-free", ()
     /allowedRoles: \["admin", "case_manager"\]/,
   );
   assert.match(routeSource, /"stage_import"/);
+  assert.match(
+    routeSource,
+    /materialiseApprovedCreditexOperationalLookup/,
+  );
+  assert.match(routeSource, /searchParams\.has\("importId"\)/);
+  assert.match(routeSource, /searchParams\.has\("asOf"\)/);
+  assert.match(routeSource, /return json\(\{ ok: true, snapshot \}\)/);
   assert.doesNotMatch(routeSource, /export async function (PUT|PATCH|DELETE)/);
   assert.doesNotMatch(`${routeSource}\n${serverSource}`, /\bfetch\s*\(/);
   assert.match(

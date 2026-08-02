@@ -497,7 +497,7 @@
   padding: 4px 8px;
 }
 
-.jobRegister > header span {
+.jobRegister > header > div:first-child > span {
   color: var(--pilot-teal);
   font-size: 0.74rem;
   font-weight: 850;
@@ -517,13 +517,20 @@
 
 .registerTools {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.compactButtonLabel {
+  display: none;
 }
 
 .registerTools label {
-  display: grid;
-  gap: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--pilot-muted);
   font-size: 0.68rem;
   font-weight: 800;
@@ -560,6 +567,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
+  flex: 0 0 auto;
   background: #0d2a39;
 }
 
@@ -571,12 +579,16 @@
 
 .registerSearch {
   display: flex;
+  min-width: 0;
   align-items: center;
+  flex: 1 1 24rem;
   gap: 0.25rem;
 }
 
 .registerSearch input {
-  width: clamp(12rem, 20vw, 24rem);
+  width: clamp(13rem, 22vw, 26rem);
+  min-width: 0;
+  flex: 1 1 auto;
   font-weight: 650;
 }
 
@@ -651,21 +663,18 @@
   text-align: left;
 }
 
-.jobTable th:first-child,
-.jobTable td:first-child {
+.jobTable :is(th, td)[data-column="appointmentId"] {
   position: sticky;
   left: 0;
   z-index: 4;
-  min-width: 2.35rem;
-  width: 2.35rem;
-  max-width: 2.35rem;
-  text-align: center;
+  min-width: 9rem;
+  width: 9rem;
+  max-width: 9rem;
 }
 
-.jobTable th:nth-child(3),
-.jobTable td:nth-child(3) {
+.jobTable :is(th, td)[data-column="jobNumber"] {
   position: sticky;
-  left: 2.35rem;
+  left: 9rem;
   z-index: 4;
   min-width: 12rem;
   width: 12rem;
@@ -682,48 +691,30 @@
   padding: 0.3rem 0.45rem;
 }
 
-.jobTable th:first-child,
-.jobTable th:nth-child(3) {
+.jobTable th[data-column="appointmentId"],
+.jobTable th[data-column="jobNumber"] {
   z-index: 7;
 }
 
-.jobTable th:nth-child(8),
-.jobTable td:nth-child(8),
-.jobTable th:nth-child(13),
-.jobTable td:nth-child(13),
-.jobTable th:nth-child(15),
-.jobTable td:nth-child(15),
-.jobTable th:nth-child(19),
-.jobTable td:nth-child(19),
-.jobTable th:nth-child(20),
-.jobTable td:nth-child(20),
-.jobTable th:nth-child(24),
-.jobTable td:nth-child(24) {
+.jobTable :is(th, td)[data-column="scheduledStart"],
+.jobTable :is(th, td)[data-column="certificates"],
+.jobTable :is(th, td)[data-column="connectorStatus"],
+.jobTable :is(th, td)[data-column="technician"],
+.jobTable :is(th, td)[data-column="customerNumber"],
+.jobTable :is(th, td)[data-column="phone"],
+.jobTable :is(th, td)[data-column="mobile"] {
   min-width: 9.5rem;
 }
 
-.jobTable th:nth-child(25),
-.jobTable td:nth-child(25),
-.jobTable th:nth-child(32),
-.jobTable td:nth-child(32),
-.jobTable th:nth-child(35),
-.jobTable td:nth-child(35) {
+.jobTable :is(th, td)[data-column="customer"],
+.jobTable :is(th, td)[data-column="companyName"],
+.jobTable :is(th, td)[data-column="email"],
+.jobTable :is(th, td)[data-column="address"] {
   min-width: 14rem;
 }
 
-.jobTable th:nth-child(29),
-.jobTable td:nth-child(29) {
-  min-width: 4rem;
-}
-
-.jobTable th:nth-child(30),
-.jobTable td:nth-child(30) {
-  min-width: 5rem;
-}
-
-.jobTable th:nth-child(31),
-.jobTable td:nth-child(31) {
-  min-width: 8rem;
+.jobTable :is(th, td)[data-column="postcode"] {
+  min-width: 6rem;
 }
 
 .jobTable tbody tr:nth-child(even) td {
@@ -826,8 +817,23 @@
   font-size: 0.68rem;
 }
 
+.jobTable td > .appIdCell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.appIdCell > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rowActionButton {
   display: grid;
+  flex: 0 0 auto;
   width: 1.55rem;
   height: 1.4rem;
   place-items: center;
@@ -1560,6 +1566,10 @@
     max-height: none;
     border-top: 0;
   }
+
+  .jobRegister > header p {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1595,6 +1605,15 @@
     gap: 0.4rem;
   }
 
+  .jobRegister > header > :first-child {
+    display: none;
+  }
+
+  .registerTools {
+    width: 100%;
+    gap: 0.2rem;
+  }
+
   .tableViewport {
     max-height: none;
   }
@@ -1604,13 +1623,23 @@
     min-width: 7.25rem;
   }
 
-  .jobRegister > header p,
-  .registerTools label {
-    display: none;
+  .densityControl {
+    gap: 0.2rem;
+  }
+
+  .densityControl select {
+    max-width: 4.75rem;
+  }
+
+  .registerSearch {
+    flex: 1 1 auto;
+    gap: 0.2rem;
   }
 
   .registerSearch input {
-    width: min(11rem, 32vw);
+    width: auto;
+    min-width: 4.5rem;
+    flex: 1 1 auto;
   }
 
   .registerTools button {
@@ -1640,5 +1669,28 @@
 
   .activityTable article > *:nth-child(n + 3) {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .registerTools {
+    font-size: 0.64rem;
+  }
+
+  .registerTools button {
+    min-width: 1.8rem;
+    padding-inline: 0.35rem;
+  }
+
+  .fullButtonLabel {
+    display: none;
+  }
+
+  .compactButtonLabel {
+    display: inline;
+  }
+
+  .registerSearch input {
+    min-width: 3rem;
   }
 }

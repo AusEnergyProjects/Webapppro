@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   materialiseApprovedCreditexOperationalLookup,
+  materialiseApprovedCreditexOperationalLookupHistory,
   requireCurrentApprovedOfficialSourceBinding,
   reviewCreditexOfficialSource,
   reviewCreditexOperationalLookupImport,
@@ -566,6 +567,200 @@ test("lookup approval validates every staged row before recording approval", asy
   );
 });
 
+test("approved lookup materialises a deterministic current-effective as-of snapshot", async () => {
+  const { d1, bucket, importer, reviewer } = fixture();
+  await approveSource(d1, bucket, reviewer);
+  const staged = await stageCreditexOperationalLookupImport(
+    d1,
+    importer,
+    {
+      clientRequestId: "lookup-current-effective-request",
+      lookupKind: "product",
+      sourceArtifactId: "artifact-1",
+      sourceTimestamp: "2026-08-01T01:02:03.000Z",
+      records: [
+        {
+          sourceRecordKey: "WINDOWED",
+          effectiveFrom: "2026-06-01",
+          effectiveTo: "2026-06-30",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "windowed" },
+        },
+        {
+          sourceRecordKey: "OVERLAP",
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "older" },
+        },
+        {
+          sourceRecordKey: "OVERLAP",
+          effectiveFrom: "2026-07-01",
+          effectiveTo: "",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "newer" },
+        },
+        {
+          sourceRecordKey: "TIE",
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "2026-12-31",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "stable-first" },
+        },
+        {
+          sourceRecordKey: "TIE",
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "stable-second" },
+        },
+        {
+          sourceRecordKey: "FUTURE",
+          effectiveFrom: "2026-09-01",
+          effectiveTo: "",
+          sourceStatus: "listed",
+          sourceRecord: { revision: "future" },
+        },
+      ],
+    },
+    { now: "2026-08-02T02:00:00.000Z" },
+  );
+  await reviewCreditexOperationalLookupImport(
+    d1,
+    bucket,
+    reviewer,
+    {
+      importId: staged.importBatch.id,
+      decision: "approved",
+      reviewNote: "Effective-dated rows reviewed against retained source bytes.",
+    },
+    { now: "2026-08-02T02:01:00.000Z" },
+  );
+
+  const before = await materialiseApprovedCreditexOperationalLookup(
+    d1,
+    bucket,
+    reviewer,
+    staged.importBatch.id,
+    "2026-05-31",
+  );
+  assert.equal(before.asOf, "2026-05-31");
+  assert.equal(before.materialisationMode, "current_effective");
+  assert.equal(before.eligibilityActivationEnabled, false);
+  assert.equal(
+    before.records.some((record) => record.sourceRecordKey === "WINDOWED"),
+    false,
+  );
+  assert.equal(
+    before.records.find((record) => (
+      record.sourceRecordKey === "OVERLAP"
+    )).sourceRecord.revision,
+    "older",
+  );
+
+  const inside = await materialiseApprovedCreditexOperationalLookup(
+    d1,
+    bucket,
+    reviewer,
+    staged.importBatch.id,
+    "2026-06-30",
+  );
+  assert.equal(
+    inside.records.find((record) => (
+      record.sourceRecordKey === "WINDOWED"
+    )).sourceRecord.revision,
+    "windowed",
+  );
+
+  const after = await materialiseApprovedCreditexOperationalLookup(
+    d1,
+    bucket,
+    reviewer,
+    staged.importBatch.id,
+    "2026-07-01",
+  );
+  assert.equal(
+    after.records.some((record) => record.sourceRecordKey === "WINDOWED"),
+    false,
+  );
+  assert.equal(
+    after.records.find((record) => (
+      record.sourceRecordKey === "OVERLAP"
+    )).sourceRecord.revision,
+    "newer",
+  );
+  assert.equal(
+    after.records.find((record) => (
+      record.sourceRecordKey === "TIE"
+    )).sourceRecord.revision,
+    "stable-second",
+  );
+  assert.deepEqual(
+    after.records.map((record) => record.sourceRecordKey),
+    ["OVERLAP", "TIE"],
+  );
+  assert.deepEqual(
+    await materialiseApprovedCreditexOperationalLookup(
+      d1,
+      bucket,
+      reviewer,
+      staged.importBatch.id,
+      "2026-07-01",
+    ),
+    after,
+  );
+
+  const history = await materialiseApprovedCreditexOperationalLookupHistory(
+    d1,
+    bucket,
+    reviewer,
+    staged.importBatch.id,
+  );
+  assert.equal(history.materialisationMode, "approved_history");
+  assert.equal(history.records.length, 6);
+
+  for (const invalidAsOf of [
+    "2026-02-30",
+    "2026-8-02",
+    "2026-08-02T00:00:00.000Z",
+    "",
+  ]) {
+    await assert.rejects(
+      materialiseApprovedCreditexOperationalLookup(
+        d1,
+        bucket,
+        reviewer,
+        staged.importBatch.id,
+        invalidAsOf,
+      ),
+      (error) => (
+        error.code === "LOOKUP_AS_OF_DATE_INVALID"
+        && error.status === 400
+      ),
+    );
+  }
+  await assert.rejects(
+    materialiseApprovedCreditexOperationalLookup(
+      d1,
+      bucket,
+      { ...reviewer, organisationId: "org-2" },
+      staged.importBatch.id,
+      "2026-07-01",
+    ),
+    (error) => error.code === "LOOKUP_MATERIALISATION_BLOCKED",
+  );
+  await assert.rejects(
+    materialiseApprovedCreditexOperationalLookup(
+      d1,
+      bucket,
+      { ...reviewer, role: "installer" },
+      staged.importBatch.id,
+      "2026-07-01",
+    ),
+    (error) => error.code === "LOOKUP_ROLE_REQUIRED",
+  );
+});
+
 test("lookup approval and withdrawal never mutate staged bytes and materialise fail-closed", async () => {
   const { database, d1, bucket, importer, reviewer } = fixture();
   await approveSource(d1, bucket, reviewer);
@@ -593,6 +788,7 @@ test("lookup approval and withdrawal never mutate staged bytes and materialise f
       bucket,
       reviewer,
       staged.importBatch.id,
+      "2026-08-02",
     ),
     (error) => error.code === "LOOKUP_MATERIALISATION_BLOCKED",
   );
@@ -622,6 +818,7 @@ test("lookup approval and withdrawal never mutate staged bytes and materialise f
     bucket,
     reviewer,
     staged.importBatch.id,
+    "2026-08-02",
   );
   assert.deepEqual(materialised.records, [{
     sourceRecordKey: "PRODUCT-001",
@@ -661,6 +858,7 @@ test("lookup approval and withdrawal never mutate staged bytes and materialise f
       bucket,
       reviewer,
       staged.importBatch.id,
+      "2026-08-02",
     ),
     (error) => error.code === "LOOKUP_MATERIALISATION_BLOCKED",
   );

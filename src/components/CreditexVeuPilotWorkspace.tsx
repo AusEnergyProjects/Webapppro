@@ -13,9 +13,12 @@ import {
   type JobWorkspaceSection,
 } from "./CreditexVeuJobAuditWorkspace";
 import {
+  DATAFORCE_JOB_CSV_HEADERS,
   exportDataforceJobCsv,
   projectCreditexJobToDataforceRecord,
   validateDataforceJobCsv,
+  type DataforceJobCsvHeader,
+  type DataforceJobCsvRecord,
   type DataforceJobCsvValidation,
 } from "@/lib/creditex-dataforce-job-csv";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
@@ -324,186 +327,121 @@ type PilotSnapshot = {
   };
 };
 
-const PILOT_SORT_KEYS = [
-  "appointmentId",
-  "jobNumber",
-  "caseNumber",
-  "reviewStatus",
-  "evidenceStatus",
-  "workType",
-  "scheduledStart",
-  "scheduledEnd",
-  "connectorStatus",
-  "activityDate",
-  "technician",
-  "technicianCode",
-  "installer",
-  "installerCode",
-  "customer",
-  "companyName",
-  "customerNumber",
-  "phone",
-  "email",
-  "address",
-  "suburb",
-  "state",
-  "postcode",
-  "registryActivityCode",
-  "specificationPart",
-  "activityTitle",
-  "serviceCategory",
-  "productCategory",
-  "scenario",
-  "ruleStatus",
-  "lookupStatus",
-  "calculatorStatus",
-  "workStage",
-  "priority",
-  "appointmentType",
-  "appointmentStatus",
-  "pipelineStage",
-  "quoteStatus",
-  "invoiceStatus",
-  "createdAt",
-  "updatedAt",
-] as const;
-type PilotSortKey = typeof PILOT_SORT_KEYS[number];
+type PilotSortKey =
+  | "appointmentId"
+  | "jobNumber"
+  | "caseNumber"
+  | "reviewStatus"
+  | "evidenceStatus"
+  | "workType"
+  | "scheduledStart"
+  | "scheduledEnd"
+  | "connectorStatus"
+  | "activityDate"
+  | "technician"
+  | "technicianCode"
+  | "installer"
+  | "installerCode"
+  | "customer"
+  | "companyName"
+  | "customerNumber"
+  | "phone"
+  | "email"
+  | "address"
+  | "suburb"
+  | "state"
+  | "postcode"
+  | "registryActivityCode"
+  | "specificationPart"
+  | "activityTitle"
+  | "serviceCategory"
+  | "productCategory"
+  | "scenario"
+  | "ruleStatus"
+  | "lookupStatus"
+  | "calculatorStatus"
+  | "workStage"
+  | "priority"
+  | "appointmentType"
+  | "appointmentStatus"
+  | "pipelineStage"
+  | "quoteStatus"
+  | "invoiceStatus"
+  | "createdAt"
+  | "updatedAt";
 
 type PilotColumn = {
   key: string;
-  label: string;
+  label: DataforceJobCsvHeader;
   sortKey?: PilotSortKey;
   description?: string;
 };
 
-const PILOT_JOB_COLUMNS: readonly PilotColumn[] = [
-  { key: "actions", label: "Row" },
-  { key: "appointmentId", label: "App Id", sortKey: "appointmentId" },
-  { key: "jobNumber", label: "Job Id", sortKey: "jobNumber" },
-  { key: "reviewStatus", label: "Status", sortKey: "reviewStatus" },
-  {
+const DATAFORCE_JOB_COLUMN_CONFIG = {
+  "App Id": { key: "appointmentId", sortKey: "appointmentId" },
+  "Job Id": { key: "jobNumber", sortKey: "jobNumber" },
+  "Status": { key: "reviewStatus", sortKey: "reviewStatus" },
+  "SubStatus": {
     key: "legacySubStatus",
-    label: "SubStatus",
     description: "Dataforce SubStatus semantics are not yet mapped.",
   },
-  {
+  "Type": {
     key: "legacyType",
-    label: "Type",
     description: "Dataforce Type semantics are not yet mapped.",
   },
-  { key: "workType", label: "Work Type", sortKey: "workType" },
-  {
+  "Work Type": { key: "workType", sortKey: "workType" },
+  "Scheduled Datetime": {
     key: "scheduledStart",
-    label: "Scheduled Datetime",
     sortKey: "scheduledStart",
   },
-  {
+  "Balance": {
     key: "legacyBalance",
-    label: "Balance",
     description: "Dataforce Balance semantics require a field dictionary.",
   },
-  {
+  "Certificates (VEECs)": {
     key: "certificates",
-    label: "Certificates (VEECs)",
     description: "Only regulator-issued quantities may appear here.",
   },
-  { key: "connectorStatus", label: "Submission", sortKey: "connectorStatus" },
-  { key: "invoiceStatus", label: "Invoiced", sortKey: "invoiceStatus" },
-  { key: "technician", label: "Field Worker", sortKey: "technician" },
-  {
+  "Submission": { key: "connectorStatus", sortKey: "connectorStatus" },
+  "Invoiced": { key: "invoiceStatus", sortKey: "invoiceStatus" },
+  "Field Worker": { key: "technician", sortKey: "technician" },
+  "Agent": {
     key: "agent",
-    label: "Agent",
     description: "No authoritative pilot agent relationship is stored.",
   },
-  {
+  "Client": {
     key: "client",
-    label: "Client",
     description: "No authoritative pilot client relationship is stored.",
   },
-  { key: "customer", label: "Customer", sortKey: "customer" },
-  { key: "companyName", label: "Company Name", sortKey: "companyName" },
-  {
+  "Customer": { key: "customer", sortKey: "customer" },
+  "Company Name": { key: "companyName", sortKey: "companyName" },
+  "Ext Cust Ref": {
     key: "customerNumber",
-    label: "Ext Cust Ref",
     sortKey: "customerNumber",
     description: "TLink customer number is shown; legacy equivalence is pending.",
   },
-  { key: "phone", label: "Phone", sortKey: "phone" },
-  {
+  "Phone": { key: "phone", sortKey: "phone" },
+  "Mobile": {
     key: "mobile",
-    label: "Mobile",
     description: "TLink does not yet store a separate mobile field.",
   },
-  { key: "email", label: "Email", sortKey: "email" },
-  { key: "address", label: "Address", sortKey: "address" },
-  { key: "suburb", label: "Suburb", sortKey: "suburb" },
-  { key: "postcode", label: "Postcode", sortKey: "postcode" },
-  {
-    key: "technicianCode",
-    label: "Field Worker Code",
-    sortKey: "technicianCode",
-  },
-  { key: "installer", label: "TLink Installer", sortKey: "installer" },
-  {
-    key: "installerCode",
-    label: "Installer Code",
-    sortKey: "installerCode",
-  },
-  { key: "caseNumber", label: "TLink Case", sortKey: "caseNumber" },
-  { key: "state", label: "State", sortKey: "state" },
-  {
-    key: "registryActivityCode",
-    label: "VEU Activity",
-    sortKey: "registryActivityCode",
-  },
-  {
-    key: "specificationPart",
-    label: "Specification Part",
-    sortKey: "specificationPart",
-  },
-  { key: "activityTitle", label: "Activity Title", sortKey: "activityTitle" },
-  {
-    key: "serviceCategory",
-    label: "Service Category",
-    sortKey: "serviceCategory",
-  },
-  {
-    key: "productCategory",
-    label: "Product Category",
-    sortKey: "productCategory",
-  },
-  { key: "scenario", label: "Scenario", sortKey: "scenario" },
-  { key: "activityDate", label: "Activity Date", sortKey: "activityDate" },
-  { key: "ruleStatus", label: "Rules", sortKey: "ruleStatus" },
-  { key: "lookupStatus", label: "Lookups", sortKey: "lookupStatus" },
-  { key: "evidenceStatus", label: "Evidence", sortKey: "evidenceStatus" },
-  {
-    key: "calculatorStatus",
-    label: "Calculator",
-    sortKey: "calculatorStatus",
-  },
-  { key: "workStage", label: "Job Stage", sortKey: "workStage" },
-  { key: "priority", label: "Priority", sortKey: "priority" },
-  {
-    key: "appointmentType",
-    label: "Appointment Type",
-    sortKey: "appointmentType",
-  },
-  {
-    key: "appointmentStatus",
-    label: "Appointment Status",
-    sortKey: "appointmentStatus",
-  },
-  {
-    key: "pipelineStage",
-    label: "Pipeline Stage",
-    sortKey: "pipelineStage",
-  },
-  { key: "quoteStatus", label: "Quote Status", sortKey: "quoteStatus" },
-  { key: "recordMode", label: "Record Mode" },
-  { key: "createdAt", label: "Created", sortKey: "createdAt" },
-  { key: "updatedAt", label: "Updated", sortKey: "updatedAt" },
-] as const;
+  "Email": { key: "email", sortKey: "email" },
+  "Address": { key: "address", sortKey: "address" },
+  "Suburb": { key: "suburb", sortKey: "suburb" },
+  "Postcode": { key: "postcode", sortKey: "postcode" },
+} as const satisfies Record<
+  DataforceJobCsvHeader,
+  Omit<PilotColumn, "label">
+>;
+
+const PILOT_JOB_COLUMNS: readonly PilotColumn[] =
+  DATAFORCE_JOB_CSV_HEADERS.map((label) => ({
+    label,
+    ...DATAFORCE_JOB_COLUMN_CONFIG[label],
+  }));
+const PILOT_VISIBLE_SORTABLE_COLUMN_COUNT = PILOT_JOB_COLUMNS.filter(
+  (column) => Boolean(column.sortKey),
+).length;
 
 type Filters = {
   installerId: string;
@@ -761,6 +699,7 @@ function PilotSortHeader({
   return (
     <th
       scope="col"
+      data-column={column.key}
       aria-sort={state === "none" ? undefined : state}
       title={column.description || column.label}
     >
@@ -867,6 +806,8 @@ function pilotJobCellValue(columnKey: string, job: PilotJob) {
   switch (columnKey) {
     case "appointmentId":
       return present(job.appointment.id);
+    case "jobNumber":
+      return present(job.jobNumber);
     case "reviewStatus":
       return readable(job.reviewStatus);
     case "legacySubStatus":
@@ -965,6 +906,16 @@ function pilotJobCellValue(columnKey: string, job: PilotJob) {
   }
 }
 
+function projectPilotJobToDataforceRecord(job: PilotJob) {
+  const overrides = Object.fromEntries(
+    PILOT_JOB_COLUMNS.map((column) => [
+      column.label,
+      pilotJobCellValue(column.key, job),
+    ]),
+  ) as DataforceJobCsvRecord;
+  return projectCreditexJobToDataforceRecord(job, overrides);
+}
+
 function PilotJobCell({
   column,
   job,
@@ -976,17 +927,22 @@ function PilotJobCell({
   onOpen: (button: HTMLButtonElement) => void;
   onOpenMenu: (button: HTMLButtonElement) => void;
 }) {
-  if (column.key === "actions") {
+  if (column.key === "appointmentId") {
     return (
-      <button
-        className={styles.rowActionButton}
-        type="button"
-        aria-label={`Open actions for ${job.jobNumber}`}
-        aria-haspopup="menu"
-        onClick={(event) => onOpenMenu(event.currentTarget)}
-      >
-        ⋮
-      </button>
+      <span className={styles.appIdCell}>
+        <button
+          className={styles.rowActionButton}
+          type="button"
+          aria-label={`Open actions for ${job.jobNumber}`}
+          aria-haspopup="menu"
+          onClick={(event) => onOpenMenu(event.currentTarget)}
+        >
+          ⋮
+        </button>
+        <span title={present(job.appointment.id)}>
+          {present(job.appointment.id)}
+        </span>
+      </span>
     );
   }
   if (column.key === "jobNumber") {
@@ -2005,14 +1961,10 @@ export function CreditexVeuPilotWorkspace({
   }
 
   async function copyJobRow(job: PilotJob) {
-    const values = PILOT_JOB_COLUMNS
-      .filter((column) => column.key !== "actions")
-      .map((column) => pilotJobCellValue(column.key, job));
+    const record = projectPilotJobToDataforceRecord(job);
+    const values = DATAFORCE_JOB_CSV_HEADERS.map((header) => record[header]);
     const content = [
-      PILOT_JOB_COLUMNS
-        .filter((column) => column.key !== "actions")
-        .map((column) => column.label)
-        .join("\t"),
+      DATAFORCE_JOB_CSV_HEADERS.join("\t"),
       values.join("\t"),
     ].join("\n");
     try {
@@ -2064,31 +2016,7 @@ export function CreditexVeuPilotWorkspace({
         );
       }
       const csv = exportDataforceJobCsv(
-        jobs.map((job) => projectCreditexJobToDataforceRecord(job, {
-          "App Id": job.appointment.id,
-          "Job Id": job.jobNumber,
-          "Status": pilotJobCellValue("reviewStatus", job),
-          "SubStatus": pilotJobCellValue("legacySubStatus", job),
-          "Type": pilotJobCellValue("legacyType", job),
-          "Work Type": pilotJobCellValue("workType", job),
-          "Scheduled Datetime": pilotJobCellValue("scheduledStart", job),
-          "Balance": pilotJobCellValue("legacyBalance", job),
-          "Certificates (VEECs)": pilotJobCellValue("certificates", job),
-          "Submission": pilotJobCellValue("connectorStatus", job),
-          "Invoiced": pilotJobCellValue("invoiceStatus", job),
-          "Field Worker": pilotJobCellValue("technician", job),
-          "Agent": pilotJobCellValue("agent", job),
-          "Client": pilotJobCellValue("client", job),
-          "Customer": pilotJobCellValue("customer", job),
-          "Company Name": pilotJobCellValue("companyName", job),
-          "Ext Cust Ref": pilotJobCellValue("customerNumber", job),
-          "Phone": pilotJobCellValue("phone", job),
-          "Mobile": pilotJobCellValue("mobile", job),
-          "Email": pilotJobCellValue("email", job),
-          "Address": pilotJobCellValue("address", job),
-          "Suburb": pilotJobCellValue("suburb", job),
-          "Postcode": pilotJobCellValue("postcode", job),
-        })),
+        jobs.map((job) => projectPilotJobToDataforceRecord(job)),
         { includeBom: true },
       );
       const url = URL.createObjectURL(
@@ -2665,9 +2593,10 @@ export function CreditexVeuPilotWorkspace({
                 </p>
               </div>
               <div className={styles.registerTools}>
-                <label>
-                  Density
+                <label className={styles.densityControl}>
+                  <span>Density</span>
                   <select
+                    aria-label="Job row density"
                     value={density}
                     onChange={(event) =>
                       setDensity(
@@ -2711,8 +2640,30 @@ export function CreditexVeuPilotWorkspace({
                         query: event.target.value,
                       }))}
                   />
-                  <button type="submit">Search</button>
+                  <button type="submit" aria-label="Search all job fields">
+                    <span className={styles.fullButtonLabel}>Search</span>
+                    <span
+                      className={styles.compactButtonLabel}
+                      aria-hidden="true"
+                    >
+                      ⌕
+                    </span>
+                  </button>
                 </form>
+                <button
+                  type="button"
+                  aria-label="Refresh jobs"
+                  disabled={Boolean(busy)}
+                  onClick={() => void load()}
+                >
+                  <span className={styles.fullButtonLabel}>Refresh</span>
+                  <span
+                    className={styles.compactButtonLabel}
+                    aria-hidden="true"
+                  >
+                    ↻
+                  </span>
+                </button>
                 <button
                   ref={filterToggleRef}
                   type="button"
@@ -2725,19 +2676,17 @@ export function CreditexVeuPilotWorkspace({
                     setFiltersOpen((current) => !current);
                   }}
                 >
-                  Filters
+                  <span className={styles.fullButtonLabel}>
+                    Advanced search
+                  </span>
+                  <span className={styles.compactButtonLabel}>
+                    Filters
+                  </span>
                   {appliedFilterCount > 0 && (
                     <b aria-label={`${appliedFilterCount} active filters`}>
                       {appliedFilterCount}
                     </b>
                   )}
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={() => void load()}
-                >
-                  Refresh
                 </button>
               </div>
             </header>
@@ -2848,7 +2797,7 @@ export function CreditexVeuPilotWorkspace({
                       }}
                     >
                       {PILOT_JOB_COLUMNS.map((column) => (
-                        <td key={column.key}>
+                        <td key={column.key} data-column={column.key}>
                           <PilotJobCell
                             column={column}
                             job={job}
@@ -2889,8 +2838,8 @@ export function CreditexVeuPilotWorkspace({
             <footer className={styles.registerFooter}>
               <span>
                 Records {(snapshot.jobs || []).length} |{" "}
-                {PILOT_JOB_COLUMNS.length - 1} columns |{" "}
-                {PILOT_SORT_KEYS.length} sortable
+                {PILOT_JOB_COLUMNS.length} Dataforce columns |{" "}
+                {PILOT_VISIBLE_SORTABLE_COLUMN_COUNT} sortable
               </span>
               {(role === "admin" || role === "case_manager") && (
                 <button

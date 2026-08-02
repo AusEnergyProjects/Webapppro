@@ -9,6 +9,11 @@ import {
   listCreditexOperationalLookupImports,
   stageCreditexOperationalLookupImport,
 } from "@/lib/creditex-operational-lookup-server";
+import { getCreditexCustodyBucket } from "@/lib/creditex-custody-bucket";
+import {
+  CreditexSourceLookupReviewError,
+  materialiseApprovedCreditexOperationalLookup,
+} from "@/lib/creditex-source-lookup-review-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -45,6 +50,7 @@ function errorResponse(error: unknown) {
   if (
     error instanceof ComplianceAccessError
     || error instanceof CreditexOperationalLookupError
+    || error instanceof CreditexSourceLookupReviewError
   ) {
     return json({
       ok: false,
@@ -94,6 +100,17 @@ export async function GET(request: Request) {
     const member = await requireComplianceAccess(request, {
       allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
     }, database);
+    const searchParams = new URL(request.url).searchParams;
+    if (searchParams.has("importId") || searchParams.has("asOf")) {
+      const snapshot = await materialiseApprovedCreditexOperationalLookup(
+        database,
+        getCreditexCustodyBucket(),
+        member,
+        searchParams.get("importId"),
+        searchParams.get("asOf"),
+      );
+      return json({ ok: true, snapshot });
+    }
     const imports = await listCreditexOperationalLookupImports(
       database,
       member,

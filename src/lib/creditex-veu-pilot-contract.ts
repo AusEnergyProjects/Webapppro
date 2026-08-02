@@ -194,7 +194,7 @@ export const CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES:
       officialSourceUrl:
         "https://www.energy.vic.gov.au/__data/assets/pdf_file/0031/792904/victorian-energy-upgrades-specifications-2018-version-24.pdf",
       officialVersion: "24.0 comparison source",
-      effectiveFrom: "2026-07-06",
+      effectiveFrom: "2026-06-30",
       effectiveTo: "2026-07-20",
       officialSourceSha256: "",
       hashStatus: "download_blocked_pending_hash",

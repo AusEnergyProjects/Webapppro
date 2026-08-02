@@ -3634,6 +3634,62 @@ export const complianceCalculatorTestVectors = sqliteTable("compliance_calculato
   check("compliance_calculator_vectors_result_check", sql`${table.lastResult} IN ('not_run', 'passed', 'failed')`),
 ]);
 
+export const complianceCalculatorAuthoringReceipts = sqliteTable("compliance_calculator_authoring_receipts", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  clientRequestId: text("client_request_id").notNull(),
+  requestSha256: text("request_sha256").notNull(),
+  calculatorVersionId: text("calculator_version_id").notNull(),
+  activityVersionId: text("activity_version_id").notNull(),
+  sourceArtifactId: text("source_artifact_id").notNull(),
+  activitySourceBindingId: text("activity_source_binding_id").notNull(),
+  calculatorSourceBindingId: text("calculator_source_binding_id").notNull(),
+  sourceArtifactSha256: text("source_artifact_sha256").notNull(),
+  specificationSha256: text("specification_sha256").notNull(),
+  engineContractHash: text("engine_contract_hash").notNull(),
+  authoringContractSha256: text("authoring_contract_sha256").notNull(),
+  authoringState: text("authoring_state").notNull().default("pending_review"),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_calculator_authoring_org_request_idx")
+    .on(table.organisationId, table.clientRequestId),
+  uniqueIndex("compliance_calculator_authoring_version_idx")
+    .on(table.calculatorVersionId),
+  index("compliance_calculator_authoring_org_state_idx")
+    .on(table.organisationId, table.authoringState, table.createdAt),
+  check("compliance_calculator_authoring_state_check", sql`${table.authoringState} = 'pending_review'`),
+  check("compliance_calculator_authoring_hashes_check", sql`length(${table.requestSha256}) = 64 AND lower(${table.requestSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.sourceArtifactSha256}) = 64 AND lower(${table.sourceArtifactSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.specificationSha256}) = 64 AND lower(${table.specificationSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.engineContractHash} LIKE 'sha256:%' AND length(${table.engineContractHash}) = 71 AND lower(substr(${table.engineContractHash}, 8)) NOT GLOB '*[^0-9a-f]*' AND length(${table.authoringContractSha256}) = 64 AND lower(${table.authoringContractSha256}) NOT GLOB '*[^0-9a-f]*'`),
+]);
+
+export const complianceCalculatorVectorAuthoringReceipts = sqliteTable("compliance_calculator_vector_authoring_receipts", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  clientRequestId: text("client_request_id").notNull(),
+  requestSha256: text("request_sha256").notNull(),
+  vectorId: text("vector_id").notNull(),
+  calculatorVersionId: text("calculator_version_id").notNull(),
+  sourceArtifactId: text("source_artifact_id").notNull(),
+  activitySourceBindingId: text("activity_source_binding_id").notNull(),
+  sourceArtifactSha256: text("source_artifact_sha256").notNull(),
+  inputSha256: text("input_sha256").notNull(),
+  expectedOutputSha256: text("expected_output_sha256").notNull(),
+  sourceCitationSha256: text("source_citation_sha256").notNull(),
+  vectorContractSha256: text("vector_contract_sha256").notNull(),
+  authoringState: text("authoring_state").notNull().default("pending_review"),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_calculator_vector_authoring_org_request_idx")
+    .on(table.organisationId, table.clientRequestId),
+  uniqueIndex("compliance_calculator_vector_authoring_vector_idx")
+    .on(table.vectorId),
+  index("compliance_calculator_vector_authoring_parent_idx")
+    .on(table.organisationId, table.calculatorVersionId, table.createdAt),
+  check("compliance_calculator_vector_authoring_state_check", sql`${table.authoringState} = 'pending_review'`),
+  check("compliance_calculator_vector_authoring_hashes_check", sql`length(${table.requestSha256}) = 64 AND lower(${table.requestSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.sourceArtifactSha256}) = 64 AND lower(${table.sourceArtifactSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.inputSha256}) = 64 AND lower(${table.inputSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.expectedOutputSha256}) = 64 AND lower(${table.expectedOutputSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.sourceCitationSha256}) = 64 AND lower(${table.sourceCitationSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.vectorContractSha256}) = 64 AND lower(${table.vectorContractSha256}) NOT GLOB '*[^0-9a-f]*'`),
+]);
+
 export const complianceCalculationRuns = sqliteTable("compliance_calculation_runs", {
   id: text("id").primaryKey(),
   organisationId: text("organisation_id").notNull(),
@@ -4426,6 +4482,53 @@ export const complianceLegacyMappingArtifacts = sqliteTable("compliance_legacy_m
   check("compliance_legacy_mapping_artifacts_state_check", sql`${table.authorizationState} IN ('draft', 'approved', 'withdrawn')`),
   check("compliance_legacy_mapping_artifacts_approval_check", sql`(${table.authorizationState} = 'draft' AND ${table.authorizationBasis} = '' AND ${table.primaryAuthorizerUid} = '' AND ${table.secondaryAuthorizerUid} = '' AND ${table.authorizedAt} = '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.authorizationState} = 'approved' AND trim(${table.authorizationBasis}) <> '' AND trim(${table.primaryAuthorizerUid}) <> '' AND trim(${table.secondaryAuthorizerUid}) <> '' AND ${table.requestedByUid} <> ${table.primaryAuthorizerUid} AND ${table.requestedByUid} <> ${table.secondaryAuthorizerUid} AND ${table.primaryAuthorizerUid} <> ${table.secondaryAuthorizerUid} AND datetime(${table.authorizedAt}) IS NOT NULL AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '') OR (${table.authorizationState} = 'withdrawn' AND trim(${table.authorizationBasis}) <> '' AND trim(${table.primaryAuthorizerUid}) <> '' AND trim(${table.secondaryAuthorizerUid}) <> '' AND ${table.requestedByUid} <> ${table.primaryAuthorizerUid} AND ${table.requestedByUid} <> ${table.secondaryAuthorizerUid} AND ${table.primaryAuthorizerUid} <> ${table.secondaryAuthorizerUid} AND datetime(${table.authorizedAt}) IS NOT NULL AND trim(${table.withdrawnByUid}) <> '' AND datetime(${table.withdrawnAt}) IS NOT NULL)`),
   check("compliance_legacy_mapping_artifacts_created_check", sql`trim(${table.requestedByUid}) <> '' AND datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
+export const complianceLegacyMappingArtifactPayloads = sqliteTable("compliance_legacy_mapping_artifact_payloads", {
+  artifactId: text("artifact_id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  legacySystemKey: text("legacy_system_key").notNull(),
+  mappingVersion: text("mapping_version").notNull(),
+  contractFormat: text("contract_format").notNull().default("creditex-legacy-field-mapping-v1"),
+  canonicalMappingJson: text("canonical_mapping_json").notNull(),
+  artifactSha256: text("artifact_sha256").notNull(),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_legacy_mapping_payloads_version_idx")
+    .on(table.organisationId, table.legacySystemKey, table.mappingVersion),
+  index("compliance_legacy_mapping_payloads_org_time_idx")
+    .on(table.organisationId, table.createdAt, table.artifactId),
+  check("compliance_legacy_mapping_payloads_key_check", sql`trim(${table.legacySystemKey}) <> '' AND length(${table.legacySystemKey}) <= 120 AND trim(${table.mappingVersion}) <> '' AND length(${table.mappingVersion}) <= 120`),
+  check("compliance_legacy_mapping_payloads_contract_check", sql`${table.contractFormat} = 'creditex-legacy-field-mapping-v1'`),
+  check("compliance_legacy_mapping_payloads_json_check", sql`json_valid(${table.canonicalMappingJson}) AND json_type(${table.canonicalMappingJson}) = 'object' AND length(${table.canonicalMappingJson}) BETWEEN 2 AND 131072`),
+  check("compliance_legacy_mapping_payloads_hash_check", sql`length(${table.artifactSha256}) = 64 AND lower(${table.artifactSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_legacy_mapping_payloads_created_check", sql`trim(${table.createdByUid}) <> '' AND datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
+export const complianceLegacyMappingReviewDecisions = sqliteTable("compliance_legacy_mapping_review_decisions", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  artifactId: text("artifact_id").notNull(),
+  legacySystemKey: text("legacy_system_key").notNull(),
+  mappingVersion: text("mapping_version").notNull(),
+  artifactSha256: text("artifact_sha256").notNull(),
+  decision: text("decision").notNull(),
+  supersedesDecisionId: text("supersedes_decision_id").notNull().default(""),
+  reviewNote: text("review_note").notNull(),
+  reviewedByUid: text("reviewed_by_uid").notNull(),
+  reviewedAt: text("reviewed_at").notNull(),
+}, (table) => [
+  index("compliance_legacy_mapping_reviews_subject_idx")
+    .on(table.organisationId, table.artifactId, table.reviewedAt, table.id),
+  index("compliance_legacy_mapping_reviews_state_idx")
+    .on(table.organisationId, table.decision, table.reviewedAt, table.id),
+  check("compliance_legacy_mapping_reviews_key_check", sql`trim(${table.legacySystemKey}) <> '' AND length(${table.legacySystemKey}) <= 120 AND trim(${table.mappingVersion}) <> '' AND length(${table.mappingVersion}) <= 120`),
+  check("compliance_legacy_mapping_reviews_hash_check", sql`length(${table.artifactSha256}) = 64 AND lower(${table.artifactSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_legacy_mapping_reviews_decision_check", sql`${table.decision} IN ('approved', 'rejected', 'withdrawn')`),
+  check("compliance_legacy_mapping_reviews_transition_check", sql`(${table.decision} IN ('approved', 'rejected') AND ${table.supersedesDecisionId} = '') OR (${table.decision} = 'withdrawn' AND trim(${table.supersedesDecisionId}) <> '')`),
+  check("compliance_legacy_mapping_reviews_note_check", sql`trim(${table.reviewNote}) <> '' AND length(${table.reviewNote}) <= 1000`),
+  check("compliance_legacy_mapping_reviews_reviewer_check", sql`trim(${table.reviewedByUid}) <> '' AND datetime(${table.reviewedAt}) IS NOT NULL`),
 ]);
 
 export const complianceCalculatorEngineReceipts = sqliteTable("compliance_calculator_engine_receipts", {
