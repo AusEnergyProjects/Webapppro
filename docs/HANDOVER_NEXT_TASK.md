@@ -1,20 +1,20 @@
 # Next task handover
 
-Status: `CREDITEX-NATIONAL-MANUAL-EVIDENCE-LAB-36` released and live
+Status: `CREDITEX-GOVERNED-MANUAL-FIELD-PREFLIGHT-37` released and live
 
-Prepared: 2 August 2026
+Prepared: 3 August 2026
 
-Milestone ID: `CREDITEX-NATIONAL-MANUAL-EVIDENCE-LAB-36`
+Milestone ID: `CREDITEX-GOVERNED-MANUAL-FIELD-PREFLIGHT-37`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
+Released application source commit: `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb`
 
-Primary application source commit: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
+Primary application source commit: `8c29808a9f4a80acc8e7f2304c4b49268f4f2c49`
 
-Previous production application source: `5eab88950c1047746484ce2ab4880d8e32be824a`
+Previous production application source: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
 
-Current production: Sites version 266 from application commit `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
+Current production: Sites version 268 from application commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -22,7 +22,76 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 266 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 268 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+
+## Released milestone 37 outcome
+
+The next five Creditex priorities are now integrated as one synthetic, fail-closed preflight:
+
+1. AEA Field can capture an exact manual-evidence prompt on its dedicated compliance lane, retain original upload bytes in R2, calculate SHA-256 server-side, inspect capture time, EXIF and GPS, recover multipart and offline uploads, and bind every receipt to the exact device, job, form version and prompt. User sign-out attempts server revocation before local purge, and a server-side revocation forces sign-out on the next successful sync.
+2. Manual forms compose an immutable, independently approved government minimum with a separately editable Creditex operational layer. Creditex can add instructions and additional prompts, but cannot remove, weaken, replace or reorder a government minimum. Exact bytes, hashes, effective dates, dual control and compare-and-swap locking are enforced before approval.
+3. Synthetic manual jobs and the VEU pilot now share one owner-scoped register, populated advanced-search facets and complete audit workspace while preserving the exact 23 supplied Dataforce columns and one row per job.
+4. Every one of the 212 controlled activity templates has one deterministic calculation-readiness result. Six SRES technologies expose a protected estimate; 206 pathways remain visibly blocked or non-executable and no certificate action is enabled.
+5. VEU, NSW TESSA and REC Registry boundaries now have explicit blocked descriptors and preflight status. No exact external serializer, regulator request, certificate creation, trade or settlement action is exposed without retained official dictionaries, independent approval and accepted external receipts.
+
+This is a production-quality synthetic test foundation, not a claim that every government rule, certificate calculation or regulator connector is complete. The simple installer path remains: select a controlled program and activity, use its pinned evidence form, capture each requested item once, resolve visible failures, then hand the complete immutable job to Creditex for audit.
+
+## Milestone 37 owning workflow and files
+
+- Manual field capture, R2 custody, replay protection and physical acceptance: `src/lib/creditex-manual-field-server.ts`, `src/lib/creditex-manual-field-acceptance-server.ts`, `src/app/api/creditex/manual-field/**`, migration `0112_creditex_manual_field_capture.sql` and the matching AEA Field mobile modules.
+- Unified exact register and audit projection: `src/lib/creditex-synthetic-job-register-server.ts`, `src/app/api/creditex/synthetic-job-register/route.ts`, `src/components/CreditexVeuPilotWorkspace.tsx`, `src/components/CreditexManualJobAuditWorkspace.tsx` and migration `0113_creditex_synthetic_register.sql`.
+- Government-minimum and Creditex-layer composition: `src/lib/creditex-manual-policy-merge.ts`, `src/lib/creditex-manual-policy-merge-server.ts`, its protected route and migration `0114_creditex_manual_policy_merge.sql`.
+- National calculation and interchange readiness: `src/lib/creditex-calculation-coverage.ts`, `src/lib/creditex-interchange-preflight.ts`, `src/lib/creditex-tessa-csv.ts`, `src/lib/creditex-rec-bulk-upload.ts` and their protected readiness routes.
+- Regression evidence: the Creditex manual-field, acceptance, policy-merge, register, calculation-coverage, interchange, schema-guard and mobile capture, upload-recovery and sign-out suites.
+
+## Milestone 37 safety boundaries
+
+- Every new manual-form, manual-job, capture and register path remains `synthetic_test`. It cannot create or mutate a regulated case, certificate, regulator submission, trade or settlement.
+- The server hashes and inspects original uploaded bytes. Client-authored filenames, hashes, coordinates, timestamps or completion claims are never treated as proof.
+- Required GPS fails closed when absent, mocked or when reported location accuracy is worse than 100 metres. Physical acceptance remains separate from emulator or source validation.
+- A government minimum must come from a published, effective, independently approved policy record. With the current governed inventory at zero, production form approval remains blocked.
+- Creditex instructions are operational additions only. They never become a private government rule pack.
+- The register contains only the exact Dataforce columns. Program, activity, custody and governance detail remains in filters and the audit workspace.
+- TESSA and REC entries are readiness descriptors only. There is no exact approved parser, serializer, bulk download or live-send control in this release.
+- Deterministic estimates remain preflight values. They cannot register, issue, trade or settle a certificate.
+
+## Milestone 37 validation and release evidence
+
+- Exact corrective application commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,355 main tests with 1,353 passed, 2 intentionally skipped and 0 failed, all 115 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The AEA Field mobile suite passed 20 of 20, together with mobile type checking and lint. Android and iOS Expo exports completed. Android still reports the unresolved `android.googleServicesFile: "./google-services.json"` warning, so native Firebase signing and physical-device acceptance are not claimed.
+- The final D1 register-facet correction passed its focused 5-test set and retained exact facet counts, labels, parent relationships and empty-value exclusion across seven read-only grouped queries in one transactional batch.
+- Archive `.openai/site-release-5d4b540.tar.gz` is 7,703,920 bytes with SHA-256 `f1ce735aed060d55e8461814707f53da22fb8845820629b96b6124db541fa989`, 365 entries, all 115 migrations and zero CSV entries.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_95cd969101b08191b89b03aaea09e827` reports exact source `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb`, 351 stored files, 31,303,680 stored bytes and content hash `sha256:b0d80a9e5d0c61084a227f8661df5d0366845ee5ac298c4a671a3eae753126a9`.
+- Deployment `appgdep_6a6fa22d2bb48191b8bd5fd8317cbe9f` succeeded as Sites version 268 with environment revision 19.
+
+## Milestone 37 live production evidence
+
+- Signed-in Chrome QA loaded 300 of 300 VEU pilot jobs with the exact 23 Dataforce headers, 23 sortable columns and one job per row.
+- Global all-field search reduced the register to the exact requested job and restored the complete register. The compact drawer exposed stored-value source, program, activity, installer, technician, status and postcode filters.
+- The App Id sort menu closed after an outside click. Double-click opened the complete audit workspace, including customer, job, appointment, files and photos, compliance status, program controls and original-evidence custody surfaces.
+- Evidence reported 32 controlled program pathways and 212 activity templates, with the editable form starter, manual-job and installer-preview surfaces present. No production form or job was created during QA.
+- Calculators reported 212 covered templates, 6 executable estimates, 206 blocked or non-executable pathways and 0 enabled certificate actions. Connectors reported 5 blocked descriptors, 0 serializers and 0 external sends, with no send, submit, trade or certificate-creation button.
+- The compact mobile layout retained navigation, global search and the right-edge filter drawer without document-level horizontal overflow; the wide register kept its own horizontal scroller.
+- Sites Worker error-only logs returned zero events after the signed-in checks. Browser logs contained only Chrome-extension asynchronous message-channel closures with no application stack.
+
+Sites version 267 contained the complete milestone implementation from `8c29808a9f4a80acc8e7f2304c4b49268f4f2c49`, but signed-in QA found that production D1 rejected the compound seven-arm facet query and the pilot failed closed. No data mutation was involved. Version 268 replaces that query with seven exact grouped statements executed through one transactional D1 batch; the same signed-in route then loaded successfully.
+
+## Milestone 37 important limits and unverified areas
+
+- No named physical iOS or Android device has completed the online, offline, multipart, GPS, EXIF, retry, R2 restore and sign-out matrix.
+- Native Firebase configuration, platform signing, distribution, device accessibility and background-upload acceptance remain incomplete.
+- The real governed inventory remains 0 published programs, 0 activity versions, 0 complete evidence policies and 0 regulated cases, so no government minimum is yet approved into a production form.
+- No exact approved TESSA v1.7 or REC Registry dictionary, parser, serializer, bulk export, rejection map or accepted external receipt is retained. The ESC VEU authorised API contract and sandbox remain unavailable.
+- Only 6 of 212 pathways expose deterministic SRES estimates. The remaining 206 are blocked or non-executable until exact source assets, lookups, independent formula approval and oracle reconciliation exist.
+- Production certificate creation, regulator submission, trading and settlement remain disabled.
+
+## Next five logical product steps
+
+1. **Pass named physical-device acceptance:** complete one iOS and one Android matrix covering online, offline, multipart recovery, original-byte hash, capture time, EXIF, GPS, R2 restore, device revocation and both sign-out modes; resolve Firebase configuration and signing before marking the lane accepted.
+2. **Publish the first approved VEU government-minimum policy:** retain the exact controlling VEU bytes, hashes, effective dates and supersession chain, complete independent review, publish one government-minimum evidence policy and bind it to one editable Creditex form without weakening it.
+3. **Implement exact TESSA and REC interchange:** retain and approve the current TESSA v1.7 and REC Registry dictionaries, then build exact parsers, serializers, downloadable test files, golden fixtures, rejection mapping and immutable reconciliation receipts while keeping every live send disabled.
+4. **Approve calculations pathway by pathway:** retain formula and lookup sources, add independent approval and official-oracle golden vectors, starting with VEU water heating and SRES cross-checks; keep every result disabled until reconciliation is exact.
+5. **Run a bounded installer-side VEU pilot:** exercise the simple job, field capture, correction and Creditex audit loop with named test installers, measuring completion time, missing evidence, rework and audit time without creating a live certificate, submission or trade.
 
 ## Released milestone 36 outcome
 

@@ -1194,13 +1194,33 @@ Government requirements remain separate. Creditex can improve plain-language ins
 - Signed-in production QA confirmed catalogue metrics for 32 controlled program pathways and 212 controlled activity templates, the custody boundary, Form builder, Manual jobs, Installer preview, the unchanged 300-job register and the compact Advanced search drawer.
 - Actual 320-pixel and 390-pixel responsive verification found no document-level overflow. Browser review found no application error.
 
+## Released milestone: CREDITEX-GOVERNED-MANUAL-FIELD-PREFLIGHT-37
+
+Status: released synthetic manual-field custody, policy composition, unified audit register, calculation coverage and blocked interchange preflight
+
+Release status: primary application commit `8c29808a9f4a80acc8e7f2304c4b49268f4f2c49` and D1-compatible corrective commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb` were validated and pushed to GitHub and Sites managed `main`. Corrective commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb` was saved as `appgprj_6a550c378000819185caf094173422bb~appgver_95cd969101b08191b89b03aaea09e827` and deployed as Sites version 268 through `appgdep_6a6fa22d2bb48191b8bd5fd8317cbe9f` with environment revision 19.
+
+### Outcome
+
+AEA Field now has a dedicated synthetic compliance lane for exact original bytes, SHA-256, capture time, EXIF, GPS, device identity, offline and multipart recovery, R2 restore and device revocation. Manual forms compose immutable approved government minimums with separately editable Creditex operational additions. Synthetic pilot and manual jobs share one exact 23-column Dataforce register, stored-value filters and full audit workspace.
+
+All 212 controlled activity templates now have one deterministic calculation-readiness result. Six SRES technologies expose protected expected-entitlement estimates; 206 remain blocked or non-executable. VEU, NSW TESSA and REC Registry surfaces expose explicit blocked descriptors only. No exact unapproved serializer, external request, certificate creation, submission, trade or settlement action is enabled.
+
+### Safety and release evidence
+
+- Exact corrective commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,355 main tests with 1,353 passed, 2 intentionally skipped and 0 failed, all 115 migrations, the customer-plan PDF audit, Vinext production build and Sites bundle audit.
+- The AEA Field mobile suite passes 20 of 20 together with mobile type checking and lint. Android and iOS Expo exports complete, but native Firebase configuration, signing and named physical-device acceptance remain incomplete.
+- Archive `.openai/site-release-5d4b540.tar.gz` is 7,703,920 bytes with SHA-256 `f1ce735aed060d55e8461814707f53da22fb8845820629b96b6124db541fa989`, 365 entries, all 115 migrations and zero CSV entries. Sites stores 351 files and 31,303,680 bytes with content hash `sha256:b0d80a9e5d0c61084a227f8661df5d0366845ee5ac298c4a671a3eae753126a9`.
+- Signed-in production QA confirmed 300 of 300 jobs, the exact 23 Dataforce headers, all-field search, stored-value advanced facets, outside-click sort dismissal, complete audit drill-down, 32 program pathways, 212 activities, 6 executable estimates, 206 blocked or non-executable pathways, 5 blocked connector descriptors, 0 serializers, 0 external sends and no document-level compact-layout overflow.
+- Sites version 267 exposed a production-only D1 incompatibility in the read-only compound facet query. No data mutation was involved. Version 268 replaces it with seven exact grouped statements in one transactional batch, loads the register successfully and has zero recent Worker error events.
+
 ## Next five logical product steps
 
-1. **Connect the physical field-test path:** bind locked manual-form prompts to AEA Field test-device capture, original bytes, EXIF, GPS, device identity, offline queue, retry and R2 restore, then record named physical acceptance.
-2. **Merge government policy without weakening it:** render independently approved government evidence requirements as immutable fields, layer editable Creditex instructions and additional operational prompts above them, and show an exact version diff before a form can be locked.
-3. **Unify manual jobs with the Creditex audit workflow:** project synthetic manual jobs into the existing register, advanced filters and full audit workspace without changing the exact 23 Dataforce columns or allowing a synthetic row into regulated tables.
-4. **Build regulator interchange dry runs:** implement exact NSW TESSA v1.7 CSV preflight and download, separate REC Registry SGU and SWH/ASHP bulk packs, and a disabled ESC VEU API adapter with immutable manifests, receipts and rejection reconciliation. Keep every live send disabled.
-5. **Complete source-approved calculation coverage:** retain exact formula assets and lookup snapshots, author independently reviewed calculators and golden vectors, and run a complete 212-activity regression before enabling any expected-entitlement result.
+1. **Pass named physical-device acceptance:** complete one iOS and one Android matrix covering online, offline, multipart recovery, original-byte hash, capture time, EXIF, GPS, R2 restore, device revocation and both sign-out modes; resolve Firebase configuration and signing before marking the lane accepted.
+2. **Publish the first approved VEU government-minimum policy:** retain the exact controlling VEU bytes, hashes, effective dates and supersession chain, complete independent review, publish one government-minimum evidence policy and bind it to one editable Creditex form without weakening it.
+3. **Implement exact TESSA and REC interchange:** retain and approve the current TESSA v1.7 and REC Registry dictionaries, then build exact parsers, serializers, downloadable test files, golden fixtures, rejection mapping and immutable reconciliation receipts while keeping every live send disabled.
+4. **Approve calculations pathway by pathway:** retain formula and lookup sources, add independent approval and official-oracle golden vectors, starting with VEU water heating and SRES cross-checks; keep every result disabled until reconciliation is exact.
+5. **Run a bounded installer-side VEU pilot:** exercise the simple job, field capture, correction and Creditex audit loop with named test installers, measuring completion time, missing evidence, rework and audit time without creating a live certificate, submission or trade.
 
 ## Global stop conditions
 
