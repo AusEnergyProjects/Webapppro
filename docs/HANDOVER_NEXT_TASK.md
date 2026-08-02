@@ -1,20 +1,20 @@
 # Next task handover
 
-Status: `CREDITEX-GOVERNED-MANUAL-FIELD-PREFLIGHT-37` released and live
+Status: `CREDITEX-GOVERNED-SOURCE-INTAKE-39` released and live
 
 Prepared: 3 August 2026
 
-Milestone ID: `CREDITEX-GOVERNED-MANUAL-FIELD-PREFLIGHT-37`
+Milestone ID: `CREDITEX-GOVERNED-SOURCE-INTAKE-39`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb`
+Released application source commit: `8baad519d763f0955e481a925ca9114b4d708653`
 
-Primary application source commit: `8c29808a9f4a80acc8e7f2304c4b49268f4f2c49`
+Primary application source commit: `8baad519d763f0955e481a925ca9114b4d708653`
 
-Previous production application source: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
+Previous production application source: `37776ed557d7c0a25d92698f52e87cf59cee05b6`
 
-Current production: Sites version 268 from application commit `5d4b540dcbcb49b3d1d57eda122a4dca86d723bb`
+Current production: Sites version 270 from application commit `8baad519d763f0955e481a925ca9114b4d708653`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -22,7 +22,89 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 268 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+## Released milestone 39 outcome
+
+Outcome: an authorised Creditex operator can capture an exact official source into governed draft-only custody, and an independent reviewer can inspect the same retained bytes before any artifact or rule binding can be approved.
+
+Owning workflow and files:
+
+- official-source custody and target projection: `src/lib/creditex-official-source-custody-server.ts`;
+- protected list and upload route: `src/app/api/creditex/official-sources/route.ts`;
+- protected retained-byte route: `src/app/api/creditex/official-sources/[id]/route.ts`;
+- operator workbench and responsive presentation: `src/components/CreditexOfficialSourceWorkbench.tsx` and its module stylesheet;
+- Creditex workspace mount and role-aware navigation: `src/components/CreditexCompliancePortal.tsx`;
+- focused custody, route, review and portal regressions under `test/`.
+
+In scope:
+
+- list only the signed-in organisation's governed source artifacts and their current independent review state;
+- supply server-controlled draft targets for program, activity, evidence-policy and calculator bindings;
+- upload exact official bytes through the existing multipart custody boundary and show the server-computed SHA-256 and byte count;
+- download exact retained bytes only after organisation scoping, R2 retrieval, byte-length comparison and SHA-256 verification;
+- present the current official URL beside the retained artifact so a reviewer can compare both;
+- preserve artifact review before binding review, different-identity review and verified-governance requirements;
+- keep every record draft-only and every publication, certificate, submission, trade and settlement action blocked.
+
+Out of scope:
+
+- publishing a government rule, activity version, evidence policy or calculator;
+- accepting a source without a named independent reviewer;
+- creating live regulated jobs, certificates, submissions, trades or settlements;
+- treating the research source index as governed custody;
+- claiming complete VEU, TESSA, REC Registry or other program rule coverage;
+- creating production test data during release QA.
+
+Acceptance criteria:
+
+- an empty governed inventory is clearly displayed as zero and is not populated with research-only references;
+- target selectors come from owner-scoped server data and contain only draft records;
+- uploads retain exact bytes, compute the hash on the server and return explicit current artifact and binding decisions;
+- retained-byte download fails closed for missing, altered or wrong-organisation R2 objects;
+- the capturer cannot review the artifact or its binding, and binding approval remains unavailable until the artifact has a current independent approval;
+- no rule activation, policy publication, certificate action or external send is introduced;
+- desktop and compact layouts remain readable with no document-level horizontal overflow.
+
+Validation:
+
+- focused official-source custody, route, review, portal and workspace tests;
+- type checking, warning-free lint, integration and full application tests;
+- all migrations, customer-plan PDF audit, Vinext production build and Sites bundle audit;
+- authenticated empty-state and permission-boundary browser QA without uploading production data.
+
+Stop condition: stop if source bytes cannot be independently inspected, exact-byte integrity cannot be proven, owner scope is ambiguous, a target is not draft-only, or completion would require production data or a regulator submission.
+
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 270 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+
+## Milestone 39 validation and release evidence
+
+- Exact application commit `8baad519d763f0955e481a925ca9114b4d708653` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete application suite, all 115 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The integrated custody, review, workbench, portal, pilot, policy, readiness, calculation and interchange set passed 86 of 86. Independent final review found no remaining blocker against exact-byte replay verification, same-reviewer retained-byte access receipts, authorised-role inventory access, immutable completed decisions and authoritative cursor pagination.
+- Archive `.openai/site-release-8baad51.tar.gz` is 7,736,223 bytes with SHA-256 `BDBED88DB3F6675DFB0AD4BF133651F9B4609DA0432F42390DD591D5715205A8`.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_2deae2c2caa081919a369e1cd193bd5d` reports exact source `8baad519d763f0955e481a925ca9114b4d708653`, 351 stored files, 31,406,080 stored bytes and content hash `sha256:6cf77082dca1a638dc78e094791cd712f2417fdb17bd86c9a0ba772aa041d978`.
+- Deployment `appgdep_6a6fc16429e88191af41bbf10fb18a6a` succeeded as Sites version 270 with environment revision 19.
+
+## Milestone 39 live production evidence
+
+- Signed-in Chrome QA loaded the existing Operations workspace and its zero-case privacy-minimised queue, then opened the permanent `Official sources` tab without changing identity or creating data.
+- The contextual heading changed to `Official source custody`. The governed workbench rendered the exact-source capture form, server-controlled draft-target selector, current-government-link field, citation, exact-file input, optional HTTP metadata and retained-source register.
+- Production correctly reported `0 shown of 0 records`, no eligible draft target, disabled `Retain source`, and disabled previous and next pagination. No research-only link was promoted into governed custody.
+- At a 390 by 844 responsive override, all four compliance tabs, the complete source workbench, zero state and disabled safety controls remained reachable. The override was cleared after QA.
+- The compare-platform homepage at the same responsive override showed `Scroll for more options`, kept `Start` visible and retained all seven navigation destinations. At the default viewport the cue remained hidden while the complete navigation stayed available.
+
+## Milestone 39 important limits and unverified areas
+
+- Exact official VEU, NSW TESSA and REC Registry source bundles have not yet been retained or independently approved in production.
+- The workbench is draft-only custody. It cannot publish a rule or policy, execute a calculator, create a certificate, send a regulator file, trade or settle.
+- A real Creditex reviewer identity still needs to exercise the retained-file download, artifact decision and binding decision sequence against an authorised non-production fixture before the first production policy review.
+- TESSA and REC authenticated uploads, regulator acceptance receipts and rejection payloads remain unavailable; no public authoritative certificate-calculation API contract has been verified.
+
+## Released milestone 38 outcome
+
+The shared compare-platform navigation no longer clips its first destinations. `Start` now begins at the visible scroll origin, all seven existing destinations remain ordered, and layouts up to 1320 pixels move navigation onto a clear full-width row with a visible `Scroll for more options` cue and right-edge continuation fade. The cue is associated with the navigation for assistive technology, compact layouts retain horizontal snap access, and the page itself does not overflow.
+
+Exact application commit `37776ed557d7c0a25d92698f52e87cf59cee05b6` passed the complete `npm.cmd run validate` gate, including 31 of 31 integration tests, the full application suite, all 115 migrations, customer-plan PDF audit, Vinext production build and Sites server-bundle audit. The focused navigation suite passed 21 of 21. Local responsive measurements at desktop, approximately 390 pixels and approximately 320 pixels had zero document-level overflow and kept `Start` visible before scrolling and `Assessments` reachable at the scroll end.
+
+Archive `.openai/site-release-37776ed.tar.gz` is 7,717,752 bytes with SHA-256 `ED56FF26BE5E160878D8A72E022B703CCEC952058687FD66A7962CB51D269030`. Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_ea8944a8b6d08191bf7b8fd3237619c4` reports exact source `37776ed557d7c0a25d92698f52e87cf59cee05b6`, 351 stored files, 31,303,680 stored bytes and content hash `sha256:bdd4fb3fe2ccad379fe6afc94f5ae92470213388ba2f9c236708b8cffbab0aed`. Deployment `appgdep_6a6fb33354ac8191beb6ef116cbe9bca` succeeded as Sites version 269 with environment revision 19.
 
 ## Released milestone 37 outcome
 
@@ -87,11 +169,11 @@ Sites version 267 contained the complete milestone implementation from `8c29808a
 
 ## Next five logical product steps
 
-1. **Pass named physical-device acceptance:** complete one iOS and one Android matrix covering online, offline, multipart recovery, original-byte hash, capture time, EXIF, GPS, R2 restore, device revocation and both sign-out modes; resolve Firebase configuration and signing before marking the lane accepted.
-2. **Publish the first approved VEU government-minimum policy:** retain the exact controlling VEU bytes, hashes, effective dates and supersession chain, complete independent review, publish one government-minimum evidence policy and bind it to one editable Creditex form without weakening it.
-3. **Implement exact TESSA and REC interchange:** retain and approve the current TESSA v1.7 and REC Registry dictionaries, then build exact parsers, serializers, downloadable test files, golden fixtures, rejection mapping and immutable reconciliation receipts while keeping every live send disabled.
-4. **Approve calculations pathway by pathway:** retain formula and lookup sources, add independent approval and official-oracle golden vectors, starting with VEU water heating and SRES cross-checks; keep every result disabled until reconciliation is exact.
-5. **Run a bounded installer-side VEU pilot:** exercise the simple job, field capture, correction and Creditex audit loop with named test installers, measuring completion time, missing evidence, rework and audit time without creating a live certificate, submission or trade.
+1. **Approve the first complete VEU source bundle:** retain the applicable Act, Regulations, Specifications, guidelines, activity guidance, forms and product-register snapshot, enforce freshness and supersession checks, complete independent review, then publish one government-minimum evidence policy without weakening it.
+2. **Build exact offline NSW TESSA interchange:** retain and approve CSV Specification Guide V1.7 plus ESS template V3.4 and PDRS template V2.6, then implement exact parsing, validation, serialization, fixtures and downloadable dry runs while keeping authenticated upload disabled.
+3. **Build separate REC Registry interchange packs:** retain and approve the current SGU, SWH and ASHP dictionaries, the separate battery workbook and dated product lists, then implement exact serializers, 250-row batching, offline rejection reconciliation and downloadable dry runs without a live send.
+4. **Approve calculations pathway by pathway:** bind every executable result to retained dated formulas, effective lookups, independent approval and official-calculator golden vectors, beginning with VEU water heating and the existing SRES estimates; keep certificate actions disabled.
+5. **Pass physical field acceptance and run a bounded VEU pilot:** complete named iOS and Android online, offline, metadata, multipart, R2 restore, revocation and sign-out acceptance, then measure the simple installer capture, correction and Creditex audit loop without creating a live certificate, submission or trade.
 
 ## Released milestone 36 outcome
 
