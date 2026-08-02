@@ -1,8 +1,7 @@
 import type { User } from 'firebase/auth';
 
 import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
-import { purgeLocalData } from '@/lib/database';
-import { forgetPushToken, getDeviceId } from '@/lib/device';
+import { getDeviceId } from '@/lib/device';
 import { firebaseAuth } from '@/lib/auth';
 
 export class ApiError extends Error {
@@ -39,10 +38,6 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
       String(body.code || ''),
       String(body.minimumVersion || ''),
     );
-    if (response.status === 401 || response.status === 403) {
-      await purgeLocalData();
-      await forgetPushToken().catch(() => undefined);
-    }
     throw error;
   }
   return body as T;

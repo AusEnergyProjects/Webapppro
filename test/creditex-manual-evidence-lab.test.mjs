@@ -15,6 +15,7 @@ import {
   validateManualEvidenceResponses,
 } from "../src/lib/creditex-manual-evidence-lab.ts";
 import {
+  assignManualEvidenceFieldTester,
   CreditexManualEvidenceLabError,
   cloneManualEvidenceForm,
   createManualEvidenceTestJob,
@@ -32,6 +33,9 @@ import {
 const read = (path) =>
   fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0111_creditex_manual_evidence_lab.sql");
+const fieldMigration = read(
+  "../drizzle/0112_creditex_manual_field_capture.sql",
+);
 const route = read(
   "../src/app/api/creditex/manual-evidence-lab/route.ts",
 );
@@ -112,8 +116,26 @@ function setupDatabase() {
       id text PRIMARY KEY NOT NULL,
       organisation_id text NOT NULL,
       firebase_uid text NOT NULL,
+      email text NOT NULL,
+      display_name text NOT NULL,
       status text NOT NULL,
-      role text NOT NULL
+      role text NOT NULL,
+      governance_identity_verified integer NOT NULL,
+      governance_identity_verified_by_uid text NOT NULL,
+      governance_identity_verified_at text NOT NULL,
+      governance_identity_verification_basis text NOT NULL
+    );
+    CREATE TABLE compliance_audit_events (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      actor_type text NOT NULL,
+      actor_uid text NOT NULL,
+      event_type text NOT NULL,
+      target_type text NOT NULL,
+      target_id text NOT NULL,
+      summary text NOT NULL,
+      metadata text NOT NULL,
+      created_at text NOT NULL
     );
     CREATE TABLE compliance_pilot_runs (
       id text PRIMARY KEY NOT NULL,
@@ -154,6 +176,7 @@ function setupDatabase() {
     );
   `);
   database.exec(migration);
+  database.exec(fieldMigration);
   for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     (item) => item.name.startsWith("compliance_manual_evidence_"),
   )) {
@@ -163,12 +186,22 @@ function setupDatabase() {
     "INSERT INTO compliance_organisations (id, status) VALUES ('org-1', 'active')",
   ).run();
   database.prepare(`INSERT INTO compliance_users
-      (id, organisation_id, firebase_uid, status, role)
+      (id, organisation_id, firebase_uid, email, display_name, status, role,
+        governance_identity_verified, governance_identity_verified_by_uid,
+        governance_identity_verified_at,
+        governance_identity_verification_basis)
     VALUES
-      ('member-admin', 'org-1', 'admin-uid', 'active', 'admin'),
-      ('member-reviewer', 'org-1', 'reviewer-uid', 'active', 'reviewer'),
-      ('member-case', 'org-1', 'case-uid', 'active', 'case_manager'),
-      ('member-auditor', 'org-1', 'auditor-uid', 'active', 'auditor')`)
+      ('member-admin', 'org-1', 'admin-uid', 'admin@example.test', 'Admin',
+        'active', 'admin', 1, 'governor-uid', '2026-08-01T00:00:00.000Z',
+        'Synthetic test identity'),
+      ('member-reviewer', 'org-1', 'reviewer-uid',
+        'reviewer@example.test', 'Reviewer', 'active', 'reviewer', 1,
+        'governor-uid', '2026-08-01T00:00:00.000Z',
+        'Synthetic test identity'),
+      ('member-case', 'org-1', 'case-uid', 'case@example.test', 'Case',
+        'active', 'case_manager', 0, '', '', ''),
+      ('member-auditor', 'org-1', 'auditor-uid',
+        'auditor@example.test', 'Auditor', 'active', 'auditor', 0, '', '', '')`)
     .run();
   database.prepare(`INSERT INTO compliance_pilot_runs
       (id, organisation_id, status)
@@ -212,6 +245,26 @@ const auditor = {
   role: "auditor",
 };
 
+function verifiedPhysicalCapture(field, captureIndex = 0) {
+  const isPhoto = field.fieldType === "photo";
+  return {
+    captureId: `capture-${field.fieldCode}-${captureIndex + 1}`,
+    fileName: isPhoto
+      ? `${field.fieldCode}-${captureIndex + 1}.jpg`
+      : `${field.fieldCode}-${captureIndex + 1}.pdf`,
+    contentType: isPhoto ? "image/jpeg" : "application/pdf",
+    originalPresent: field.originalRequired,
+    metadataPresent: field.metadataRequired,
+    gpsPresent: field.gpsRequired,
+    captureTimePresent: isPhoto,
+    originalSha256: `${captureIndex + 1}`.padStart(64, "a").slice(-64),
+    deviceId: "aea-field-physical-01",
+    capturedAt: "2026-08-03T01:00:00.000Z",
+    verificationState: "server_verified",
+    physicalDeviceState: "reported_physical",
+  };
+}
+
 function completedResponses(form) {
   const schema = form.schema || form.formSchema;
   return schema.fields.map((field) => ({
@@ -228,18 +281,7 @@ function completedResponses(form) {
     captures: ["photo", "document"].includes(field.fieldType)
       ? Array.from(
           { length: Math.max(1, field.minimumCount) },
-          (_, captureIndex) => ({
-            fileName: field.fieldType === "photo"
-              ? `${field.fieldCode}-${captureIndex + 1}.jpg`
-              : `${field.fieldCode}-${captureIndex + 1}.pdf`,
-            contentType: field.fieldType === "photo"
-              ? "image/jpeg"
-              : "application/pdf",
-            originalPresent: field.originalRequired,
-            metadataPresent: field.metadataRequired,
-            gpsPresent: field.gpsRequired,
-            captureTimePresent: field.fieldType === "photo",
-          }),
+          (_, captureIndex) => verifiedPhysicalCapture(field, captureIndex),
         )
       : [],
     note: "Synthetic manual test response.",
@@ -320,14 +362,25 @@ test("manual capture counts, file types and typed answers are enforced", () => {
   );
   const threeCaptures = {
     ...oneCapture,
-    captures: Array.from({ length: 3 }, (_, index) => ({
-      ...oneCapture.captures[0],
-      fileName: `capture-${index + 1}.jpg`,
-    })),
+    captures: Array.from(
+      { length: 3 },
+      (_, index) => verifiedPhysicalCapture(photo, index),
+    ),
   };
   assert.equal(
     manualEvidenceProgress([photo], [threeCaptures]).readyForAudit,
     true,
+  );
+  assert.equal(
+    manualEvidenceProgress([photo], [{
+      ...threeCaptures,
+      captures: threeCaptures.captures.map((capture) => ({
+        ...capture,
+        verificationState: "manual_metadata_only",
+      })),
+    }]).readyForAudit,
+    false,
+    "tester-authored metadata flags must never count as verified evidence",
   );
   assert.throws(
     () => validateManualEvidenceResponses([photo], [{
@@ -411,7 +464,15 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
   const withPrompt = {
     ...draft.schema,
     fields: [
-      ...draft.schema.fields,
+      ...draft.schema.fields.map((field) =>
+        field.fieldType === "photo" || field.fieldType === "document"
+          ? {
+              ...field,
+              required: false,
+              minimumCount: 0,
+            }
+          : field
+      ),
       {
         ...draft.schema.fields[0],
         fieldCode: "creditex_test_dropdown",
@@ -483,12 +544,35 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
   const progress = manualEvidenceProgress(job.formSchema.fields, responses);
   assert.equal(progress.readyForAudit, true);
 
-  const fieldTesting = await updateManualEvidenceTestJob(d1, admin, {
+  const assigned = await assignManualEvidenceFieldTester(d1, admin, {
     jobId: job.id,
     revision: job.revision,
+  });
+  const initialFieldTesting = await updateManualEvidenceTestJob(d1, admin, {
+    jobId: assigned.id,
+    revision: assigned.revision,
     status: "field_testing",
     responses,
   });
+  const fieldTesting = initialFieldTesting;
+  assert.ok(
+    fieldTesting.responses
+      .filter((response) => {
+        const field = fieldTesting.formSchema.fields.find(
+          (candidate) => candidate.fieldCode === response.fieldCode,
+        );
+        return field?.fieldType === "photo" || field?.fieldType === "document";
+      })
+      .every((response) => response.captures.length === 0),
+    "client-authored capture metadata must be stripped by the server",
+  );
+  assert.equal(
+    manualEvidenceProgress(
+      fieldTesting.formSchema.fields,
+      fieldTesting.responses,
+    ).readyForAudit,
+    true,
+  );
   assert.throws(
     () => database.prepare(`UPDATE compliance_manual_evidence_test_jobs
         SET status = 'changes_required',
@@ -501,10 +585,17 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
     jobId: fieldTesting.id,
     revision: fieldTesting.revision,
     status: "ready_for_audit",
-    responses,
+    responses: fieldTesting.responses,
   });
-  const tamperedResponses = structuredClone(responses);
-  tamperedResponses[0].note = "Changed during the approval request.";
+  const tamperedResponses = structuredClone(submitted.responses);
+  const tamperedResponse = tamperedResponses.find((response) => {
+    const field = submitted.formSchema.fields.find(
+      (candidate) => candidate.fieldCode === response.fieldCode,
+    );
+    return field?.fieldType !== "photo" && field?.fieldType !== "document";
+  });
+  assert.ok(tamperedResponse);
+  tamperedResponse.note = "Changed during the approval request.";
   await assert.rejects(
     updateManualEvidenceTestJob(d1, reviewer, {
       jobId: submitted.id,
@@ -537,7 +628,7 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
     jobId: submitted.id,
     revision: submitted.revision,
     status: "passed",
-    responses,
+    responses: submitted.responses,
     reviewNote: "Reviewed every required synthetic prompt.",
   });
   assert.equal(passed.status, "passed");
@@ -549,14 +640,14 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
     reviewer,
     passed.id,
   );
-  assert.equal(history.length, 4);
+  assert.equal(history.length, 5);
   const passEvent = history.find(
     (event) => event.metadata.status === "passed",
   );
   assert.ok(passEvent);
   assert.equal(passEvent.metadata.reviewNote,
     "Reviewed every required synthetic prompt.");
-  assert.deepEqual(passEvent.metadata.responseSnapshot, responses);
+  assert.deepEqual(passEvent.metadata.responseSnapshot, submitted.responses);
 
   const currentLocked = database.prepare(`SELECT form_schema_sha256, status
       FROM compliance_manual_evidence_form_versions WHERE id = ?`)
@@ -567,7 +658,7 @@ test("manual form versions and jobs are owner-scoped, pinned and immutable", asy
     database.prepare(
       "SELECT COUNT(*) count FROM compliance_manual_evidence_test_events",
     ).get().count,
-    4,
+      5,
   );
   for (const table of [
     "compliance_cases",
@@ -690,7 +781,10 @@ test("manual lab route, UI and responsive preview keep protected boundaries visi
   assert.match(workspace, /Submit for Creditex audit/);
   assert.match(workspace, /Pass synthetic workflow/);
   assert.match(workspace, /APPEND-ONLY HISTORY/);
-  assert.match(workspace, /Add test capture/);
+  assert.match(workspace, /server-verified result/);
+  assert.doesNotMatch(workspace, /Add test capture/);
+  assert.match(workspace, /manual-policy-merge/);
+  assert.match(workspace, /exact composition diff and hashes/);
   assert.match(workspace, /saveAndLockDraft/);
   assert.match(workspace, /No file bytes, regulated case/);
   assert.match(workspace, /MANUAL_EVIDENCE_CAPTURE_TIMINGS/);

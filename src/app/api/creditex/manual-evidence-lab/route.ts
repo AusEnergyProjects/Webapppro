@@ -5,6 +5,7 @@ import {
 } from "@/lib/compliance-access-server";
 import {
   CreditexManualEvidenceLabError,
+  assignManualEvidenceFieldTester,
   cloneManualEvidenceForm,
   createManualEvidenceTestJob,
   createStarterManualEvidenceForm,
@@ -176,6 +177,7 @@ export async function POST(request: Request) {
       clone_form: cloneManualEvidenceForm,
       delete_draft_form: deleteDraftManualEvidenceForm,
       create_test_job: createManualEvidenceTestJob,
+      assign_field_tester: assignManualEvidenceFieldTester,
       update_test_job: updateManualEvidenceTestJob,
     } as const;
     const handler = handlers[action as keyof typeof handlers];

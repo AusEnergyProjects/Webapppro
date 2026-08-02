@@ -15,7 +15,6 @@ import {
   MANUAL_EVIDENCE_RESPONSE_OUTCOMES,
   emptyManualEvidenceResponse,
   manualEvidenceProgress,
-  type ManualEvidenceCapture,
   type ManualEvidenceField,
   type ManualEvidenceFormSchema,
   type ManualEvidenceResponse,
@@ -86,6 +85,7 @@ type ManualJob = {
   installerLabel: string;
   technicianId: string;
   technicianLabel: string;
+  fieldTesterUid: string;
   customerLabel: string;
   siteState: string;
   sitePostcode: string;
@@ -154,6 +154,34 @@ type ManualJobEvent = {
     issueCount?: number;
   };
   createdAt: string;
+};
+
+type ManualPolicyMergeStatus = {
+  inventory: {
+    publishedPrograms: number;
+    publishedActivities: number;
+    publishedCompleteEvidencePolicies: number;
+  };
+  readiness: {
+    status: "blocked" | "ready";
+    code: string;
+    message: string;
+  };
+  bindings: Array<{
+    id: string;
+    activityTemplateId: string;
+    version: number;
+    lifecycleState: "draft" | "approved" | "withdrawn";
+    bindingSnapshotSha256: string;
+    requestedByUid: string;
+    requestedAt: string;
+    approvedByUid: string;
+    approvedAt: string;
+    bindingSnapshot: {
+      requirements: unknown[];
+      evidencePolicy: { title: string };
+    };
+  }>;
 };
 
 type LabView = "forms" | "jobs" | "preview";
@@ -256,6 +284,9 @@ export function CreditexManualEvidenceLab({
     useState<ManualEvidenceResponse[]>([]);
   const [reviewNote, setReviewNote] = useState("");
   const [jobEvents, setJobEvents] = useState<ManualJobEvent[]>([]);
+  const [policyMerge, setPolicyMerge] =
+    useState<ManualPolicyMergeStatus | null>(null);
+  const [policyMergeError, setPolicyMergeError] = useState("");
   const [formPage, setFormPage] = useState(1);
   const [jobPage, setJobPage] = useState(1);
   const [busy, setBusy] = useState("");
@@ -298,6 +329,35 @@ export function CreditexManualEvidenceLab({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setPolicyMergeError("");
+      const params = new URLSearchParams();
+      if (activityTemplateId) {
+        params.set("activityTemplateId", activityTemplateId);
+      }
+      void api(`/api/creditex/manual-policy-merge?${params.toString()}`)
+        .then((result) => {
+          if (!active) return;
+          setPolicyMerge(result.merge as ManualPolicyMergeStatus);
+        })
+        .catch((mergeError) => {
+          if (!active) return;
+          setPolicyMerge(null);
+          setPolicyMergeError(
+            mergeError instanceof Error
+              ? mergeError.message
+              : "Governed evidence-policy status is unavailable.",
+          );
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [activityTemplateId, api]);
 
   const loadEvents = useCallback(async (jobId: string) => {
     if (!jobId) {
@@ -635,57 +695,6 @@ export function CreditexManualEvidenceLab({
     });
   }
 
-  function emptyCapture(field: ManualEvidenceField): ManualEvidenceCapture {
-    return {
-      fileName: "",
-      contentType: field.allowedContentTypes[0] || "",
-      originalPresent: false,
-      metadataPresent: false,
-      gpsPresent: false,
-      captureTimePresent: false,
-    };
-  }
-
-  function addCapture(
-    field: ManualEvidenceField,
-    response: ManualEvidenceResponse,
-  ) {
-    if (
-      field.maximumCount !== 0
-      && response.captures.length >= field.maximumCount
-    ) return;
-    if (response.captures.length >= 20) return;
-    updateResponse(field.fieldCode, {
-      outcome: "provided",
-      captures: [...response.captures, emptyCapture(field)],
-    });
-  }
-
-  function updateCapture(
-    fieldCode: string,
-    response: ManualEvidenceResponse,
-    index: number,
-    patch: Partial<ManualEvidenceCapture>,
-  ) {
-    updateResponse(fieldCode, {
-      captures: response.captures.map((capture, captureIndex) =>
-        captureIndex === index ? { ...capture, ...patch } : capture
-      ),
-    });
-  }
-
-  function removeCapture(
-    fieldCode: string,
-    response: ManualEvidenceResponse,
-    index: number,
-  ) {
-    updateResponse(fieldCode, {
-      captures: response.captures.filter(
-        (_, captureIndex) => captureIndex !== index,
-      ),
-    });
-  }
-
   async function saveJobProgress(status?: ManualJob["status"]) {
     if (!selectedJob) return;
     const nextStatus = status
@@ -832,6 +841,78 @@ export function CreditexManualEvidenceLab({
             {selectedProgramme?.administeringBody || "Program authority"}
           </small>
         </div>
+      </section>
+
+      <section
+        className={styles.policyBoundary}
+        data-ready={policyMerge?.readiness.status === "ready"}
+        aria-label="Governed evidence policy boundary"
+      >
+        <div>
+          <span>GOVERNMENT MINIMUMS</span>
+          <strong>
+            {policyMerge?.readiness.status === "ready"
+              ? "Published policy inventory available"
+              : "Government policy merge blocked"}
+          </strong>
+          <p>
+            {policyMergeError
+              || policyMerge?.readiness.message
+              || "Checking published government requirements and independent source approvals."}
+          </p>
+        </div>
+        <dl>
+          <div>
+            <dt>Programs</dt>
+            <dd>{policyMerge?.inventory.publishedPrograms ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Activities</dt>
+            <dd>{policyMerge?.inventory.publishedActivities ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Complete policies</dt>
+            <dd>
+              {policyMerge?.inventory.publishedCompleteEvidencePolicies
+                ?? "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Approved binding</dt>
+            <dd>
+              {policyMerge?.bindings.some(
+                (binding) => binding.lifecycleState === "approved",
+              )
+                ? "Yes"
+                : "No"}
+            </dd>
+          </div>
+        </dl>
+        {policyMerge?.bindings.map((binding) => (
+          <details key={binding.id}>
+            <summary>
+              Binding v{binding.version} | {readable(binding.lifecycleState)}
+            </summary>
+            <p>
+              {binding.bindingSnapshot.evidencePolicy.title} |{" "}
+              {binding.bindingSnapshot.requirements.length} immutable
+              government requirements
+            </p>
+            <code>{binding.bindingSnapshotSha256}</code>
+            <small>
+              Requested by {binding.requestedByUid}
+              {binding.approvedByUid
+                ? ` | independently approved by ${binding.approvedByUid}`
+                : " | awaiting an independent administrator"}
+            </small>
+          </details>
+        ))}
+        <small className={styles.policyBoundaryNote}>
+          Creditex may add instructions and operational fields, but it cannot
+          remove, weaken, replace or reorder an approved government minimum.
+          The exact composition diff and hashes are generated before a form is
+          locked.
+        </small>
       </section>
 
       <nav className={styles.viewTabs} aria-label="Manual evidence views">
@@ -1655,10 +1736,41 @@ export function CreditexManualEvidenceLab({
                 </header>
 
                 <p className={styles.fileBoundary}>
-                  File references and capture checks are simulated in this
-                  manual lab. Original bytes remain disabled until the AEA
-                  Field custody path is connected and physically accepted.
+                  File prompts are read-only here. Assign this job to your
+                  verified AEA Field login, then capture original bytes on the
+                  device. Creditex shows only the server-verified result and
+                  never trusts a manually ticked metadata box.
                 </p>
+
+                <div className={styles.fieldAssignment}>
+                  <div>
+                    <strong>AEA Field assignment</strong>
+                    <span>
+                      {selectedJob.fieldTesterUid
+                        ? "Assigned to a verified Creditex login"
+                        : "Not assigned to an AEA Field login"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={
+                      !canWrite
+                      || Boolean(busy)
+                      || ["ready_for_audit", "passed", "archived"].includes(
+                        selectedJob.status,
+                      )
+                    }
+                    onClick={() =>
+                      void mutate("assign_field_tester", {
+                        jobId: selectedJob.id,
+                        revision: selectedJob.revision,
+                      }, "This synthetic job is available in AEA Field for the current login.")}
+                  >
+                    {selectedJob.fieldTesterUid
+                      ? "Reassign to my login"
+                      : "Assign to my AEA Field login"}
+                  </button>
+                </div>
 
                 <section className={styles.testFields}>
                   {selectedJob.formSchema.fields.map((field, index) => {
@@ -1689,7 +1801,13 @@ export function CreditexManualEvidenceLab({
                             Test result
                             <select
                               value={response.outcome}
-                              disabled={locked || !canWrite}
+                              disabled={
+                                locked
+                                || !canWrite
+                                || ["photo", "document"].includes(
+                                  field.fieldType,
+                                )
+                              }
                               onChange={(event) =>
                                 updateResponse(field.fieldCode, {
                                   outcome:
@@ -1710,174 +1828,64 @@ export function CreditexManualEvidenceLab({
                               <header>
                                 <div>
                                   <strong>
-                                    {response.captures.length} test captures
+                                    {response.captures.filter(
+                                      (capture) =>
+                                        capture.verificationState
+                                          === "server_verified",
+                                    ).length} verified captures
                                   </strong>
                                   <span>
                                     Required {field.minimumCount} to{" "}
                                     {field.maximumCount || 20}
                                   </span>
                                 </div>
-                                <button
-                                  type="button"
-                                  disabled={
-                                    locked
-                                    || !canWrite
-                                    || response.captures.length >= 20
-                                    || (
-                                      field.maximumCount !== 0
-                                      && response.captures.length
-                                        >= field.maximumCount
-                                    )
-                                  }
-                                  onClick={() => addCapture(field, response)}
-                                >
-                                  Add test capture
-                                </button>
+                                <span>Captured in AEA Field</span>
                               </header>
                               {response.captures.map((capture, captureIndex) => (
                                 <article
-                                  key={`${field.fieldCode}-${captureIndex}`}
+                                  key={capture.captureId
+                                    || `${field.fieldCode}-${captureIndex}`}
                                   className={styles.captureRow}
                                 >
                                   <strong>Capture {captureIndex + 1}</strong>
-                                  <label>
-                                    File name
-                                    <input
-                                      value={capture.fileName}
-                                      disabled={locked || !canWrite}
-                                      placeholder="Example evidence file"
-                                      onChange={(event) =>
-                                        updateCapture(
-                                          field.fieldCode,
-                                          response,
-                                          captureIndex,
-                                          { fileName: event.target.value },
-                                        )}
-                                    />
-                                  </label>
-                                  <label>
-                                    File type
-                                    <select
-                                      value={capture.contentType}
-                                      disabled={locked || !canWrite}
-                                      onChange={(event) =>
-                                        updateCapture(
-                                          field.fieldCode,
-                                          response,
-                                          captureIndex,
-                                          { contentType: event.target.value },
-                                        )}
-                                    >
-                                      <option value="">
-                                        Choose file type
-                                      </option>
-                                      {field.allowedContentTypes.map(
-                                        (contentType) => (
-                                          <option
-                                            key={contentType}
-                                            value={contentType}
-                                          >
-                                            {contentType}
-                                          </option>
-                                        ),
-                                      )}
-                                    </select>
-                                  </label>
-                                  <fieldset>
-                                    <legend>Capture checks</legend>
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={capture.originalPresent}
-                                        disabled={locked || !canWrite}
-                                        onChange={(event) =>
-                                          updateCapture(
-                                            field.fieldCode,
-                                            response,
-                                            captureIndex,
-                                            {
-                                              originalPresent:
-                                                event.target.checked,
-                                            },
-                                          )}
-                                      />
-                                      Original
-                                    </label>
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={capture.metadataPresent}
-                                        disabled={locked || !canWrite}
-                                        onChange={(event) =>
-                                          updateCapture(
-                                            field.fieldCode,
-                                            response,
-                                            captureIndex,
-                                            {
-                                              metadataPresent:
-                                                event.target.checked,
-                                            },
-                                          )}
-                                      />
-                                      Metadata
-                                    </label>
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={capture.gpsPresent}
-                                        disabled={locked || !canWrite}
-                                        onChange={(event) =>
-                                          updateCapture(
-                                            field.fieldCode,
-                                            response,
-                                            captureIndex,
-                                            {
-                                              gpsPresent:
-                                                event.target.checked,
-                                            },
-                                          )}
-                                      />
-                                      GPS
-                                    </label>
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={capture.captureTimePresent}
-                                        disabled={locked || !canWrite}
-                                        onChange={(event) =>
-                                          updateCapture(
-                                            field.fieldCode,
-                                            response,
-                                            captureIndex,
-                                            {
-                                              captureTimePresent:
-                                                event.target.checked,
-                                            },
-                                          )}
-                                      />
-                                      Capture time
-                                    </label>
-                                  </fieldset>
-                                  <button
-                                    type="button"
-                                    className={styles.dangerButton}
-                                    disabled={locked || !canWrite}
-                                    onClick={() =>
-                                      removeCapture(
-                                        field.fieldCode,
-                                        response,
-                                        captureIndex,
-                                      )}
-                                  >
-                                    Remove capture
-                                  </button>
+                                  <dl className={styles.captureFacts}>
+                                    <div>
+                                      <dt>File</dt>
+                                      <dd>{capture.fileName}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Type</dt>
+                                      <dd>{capture.contentType}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Original SHA-256</dt>
+                                      <dd>{capture.originalSha256 || "Not verified"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Device</dt>
+                                      <dd>{capture.deviceId || "Not recorded"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Checks</dt>
+                                      <dd>
+                                        Original {capture.originalPresent ? "yes" : "no"}
+                                        {" | "}Metadata {capture.metadataPresent ? "yes" : "no"}
+                                        {" | "}GPS {capture.gpsPresent ? "yes" : "no"}
+                                        {" | "}Time {capture.captureTimePresent ? "yes" : "no"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Device state</dt>
+                                      <dd>{readable(capture.physicalDeviceState)}</dd>
+                                    </div>
+                                  </dl>
                                 </article>
                               ))}
                               {!response.captures.length && (
                                 <p>
-                                  Add each simulated file separately so minimum,
-                                  maximum, original, metadata, GPS and capture
-                                  time rules can be tested per item.
+                                  No verified original file has arrived. Open
+                                  this assigned job in AEA Field and follow the
+                                  locked prompt.
                                 </p>
                               )}
                             </section>

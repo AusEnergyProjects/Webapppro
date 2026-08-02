@@ -38,6 +38,8 @@ const custodyMigration = [
   "../drizzle/0108_creditex_dataforce_parallel_bindings.sql",
   "../drizzle/0110_creditex_calculator_authoring.sql",
   "../drizzle/0111_creditex_manual_evidence_lab.sql",
+  "../drizzle/0112_creditex_manual_field_capture.sql",
+  "../drizzle/0114_creditex_manual_policy_merge.sql",
 ].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
@@ -360,6 +362,35 @@ test("runtime schema bootstrap fails closed when required Sites migrations are a
     ).get().count,
     0,
   );
+});
+
+test("runtime schema bootstrap requires every manual field and policy table", async () => {
+  for (const table of [
+    "compliance_manual_field_devices",
+    "compliance_manual_field_upload_sessions",
+    "compliance_manual_field_upload_parts",
+    "compliance_manual_evidence_test_captures",
+    "compliance_manual_field_integrity_receipts",
+    "compliance_manual_field_acceptance_runs",
+    "compliance_manual_field_action_receipts",
+    "compliance_manual_policy_bindings",
+    "compliance_manual_policy_composition_locks",
+  ]) {
+    const database = databaseWithComplianceOperations({
+      installGuards: false,
+    });
+    database.exec(`DROP TABLE ${table}`);
+    await assert.rejects(
+      ensureCreditexSchemaGuards(testD1(database)),
+      new RegExp(`CREDITEX_SCHEMA_MIGRATIONS_REQUIRED:.*table:${table}`),
+    );
+    assert.equal(
+      database.prepare(
+        "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+      ).get().count,
+      0,
+    );
+  }
 });
 
 test("schema guard comparison preserves whitespace inside SQL string literals", async () => {

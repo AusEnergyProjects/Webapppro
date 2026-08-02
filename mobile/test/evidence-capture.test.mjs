@@ -97,7 +97,7 @@ test('exact bytes are SHA-256 hashed, encrypted and stored with a durable envelo
 
 test('resumable upload initiation sends the persisted evidence envelope', () => {
   assert.match(uploads, /evidenceEnvelope:\s*evidenceEnvelope\(row\)/);
-  assert.match(uploads, /row\.session_id\s*\?\s*await resume\(row\)\s*:\s*await initiate\(row\)/);
+  assert.match(uploads, /row\.session_id\s*\?\s*await resume\(row,\s*mode\)\s*:\s*await initiate\(row,\s*mode\)/);
   assert.match(uploads, /'EVIDENCE_LOCATION_INVALID'/);
   assert.match(uploads, /'EVIDENCE_GPS_MOCKED'/);
   assert.match(uploads, /'EVIDENCE_MAXIMUM_REACHED'/);
@@ -115,6 +115,85 @@ test('location is foreground-only and uses an explicit evidence permission messa
   assert.match(locationPlugin[1].locationWhenInUsePermission, /installation location.*field evidence/i);
   assert.match(evidence, /requestForegroundPermissionsAsync/);
   assert.doesNotMatch(evidence, /requestBackgroundPermissionsAsync/);
+});
+
+test('camera recovery retains the observations persisted before picker launch', () => {
+  const recovery = jobScreen.match(
+    /const recoverPendingPhoto[\s\S]*?(?=\n  useFocusEffect)/,
+  )?.[0];
+  const pendingProcessor = jobScreen.match(
+    /const processPendingPhoto[\s\S]*?(?=\n  const recoverPendingPhoto)/,
+  )?.[0];
+  const cameraCapture = jobScreen.match(
+    /async function capturePhoto[\s\S]*?(?=\n  async function chooseDocument)/,
+  )?.[0];
+
+  assert.ok(recovery);
+  assert.ok(pendingProcessor);
+  assert.ok(cameraCapture);
+  assert.match(pendingProcessor, /const location = pending\.preCaptureLocation/);
+  assert.match(
+    pendingProcessor,
+    /const locationPermission = pending\.preCaptureLocationPermission/,
+  );
+  assert.doesNotMatch(pendingProcessor, /observeLocation\(/);
+  assert.doesNotMatch(recovery, /observedTime\(\)/);
+  assert.doesNotMatch(
+    cameraCapture,
+    /pending = \{\s*\.\.\.pending,\s*\.\.\.observedTime\(\)/,
+  );
+  assert.ok(
+    cameraCapture.indexOf('...observedTime()')
+      < cameraCapture.indexOf('ImagePicker.launchCameraAsync'),
+    'the capture observation must be persisted before picker launch',
+  );
+});
+
+test('GPS governed capture rejects mocked or imprecise locations before queueing', () => {
+  const blocker = jobScreen.match(
+    /function gpsPreflightBlocker[\s\S]*?(?=\nfunction pendingPhoto)/,
+  )?.[0];
+  const cameraCapture = jobScreen.match(
+    /async function capturePhoto[\s\S]*?(?=\n  async function chooseDocument)/,
+  )?.[0];
+
+  assert.ok(blocker);
+  assert.ok(cameraCapture);
+  assert.match(blocker, /location\.mocked === true/);
+  assert.match(blocker, /location\.accuracyMetres > 100/);
+  assert.match(blocker, /location\.accuracyMetres === null/);
+  assert.match(
+    cameraCapture,
+    /gpsPreflightBlocker\(preCaptureLocation\.location\)/,
+  );
+  assert.ok(
+    cameraCapture.indexOf('gpsPreflightBlocker(preCaptureLocation.location)')
+      < cameraCapture.indexOf(
+        "setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending))",
+      ),
+    'GPS preflight must run before the pending capture is queued',
+  );
+});
+
+test('Creditex manual jobs cannot show or queue unsupported time entries', () => {
+  const addTime = jobScreen.match(
+    /async function addTime[\s\S]*?(?=\n  async function saveForm)/,
+  )?.[0];
+
+  assert.ok(addTime);
+  assert.match(
+    addTime,
+    /job\.fieldLane === 'creditex_manual'/,
+  );
+  assert.ok(
+    addTime.indexOf("job.fieldLane === 'creditex_manual'")
+      < addTime.indexOf("type: 'add_time_entry'"),
+    'the manual-lane guard must run before the time action is queued',
+  );
+  assert.match(
+    jobScreen,
+    /\{!creditexManual \? <View style=\{styles\.card\}>[\s\S]*TIME ENTRY[\s\S]*<\/View> : null\}/,
+  );
 });
 
 test('conflict retry uses the current child revision for tasks and forms', () => {
@@ -138,8 +217,8 @@ test('conflict retry atomically replaces the queued action without a deletion ga
 
   assert.ok(storageHelper);
   assert.ok(screenRetry);
-  assert.match(storageHelper, /UPDATE action_queue[\s\S]*SET id = \?, work_order_id = \?, payload = \?/);
-  assert.match(storageHelper, /WHERE id = \? AND work_order_id = \? AND status = 'conflict'/);
+  assert.match(storageHelper, /UPDATE action_queue[\s\S]*SET id = \?, work_order_id = \?, field_lane = \?, payload = \?/);
+  assert.match(storageHelper, /WHERE id = \? AND work_order_id = \? AND field_lane = \? AND status = 'conflict'/);
   assert.match(storageHelper, /result\.changes !== 1/);
   assert.doesNotMatch(storageHelper, /\bDELETE\b|\bINSERT\b/);
   assert.match(screenRetry, /await retryConflict\(item\.id,/);

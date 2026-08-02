@@ -107,6 +107,7 @@ type ManualJobRow = {
   passed_at: string;
   archived_at: string;
   updated_at: string;
+  field_tester_uid: string;
 };
 
 function recordInput(value: unknown, code: string, message: string) {
@@ -321,6 +322,7 @@ function mapJob(row: ManualJobRow) {
     installerLabel: row.installer_label,
     technicianId: row.technician_id,
     technicianLabel: row.technician_label,
+    fieldTesterUid: row.field_tester_uid,
     customerLabel: row.customer_label,
     siteState: row.site_state,
     sitePostcode: row.site_postcode,
@@ -1168,6 +1170,111 @@ export async function createManualEvidenceTestJob(
   ));
 }
 
+export async function assignManualEvidenceFieldTester(
+  database: D1Database,
+  member: ComplianceIdentity,
+  input: unknown,
+) {
+  assertWriteRole(member);
+  const body = recordInput(
+    input,
+    "MANUAL_EVIDENCE_REQUEST_INVALID",
+    "Enter a valid AEA Field test assignment.",
+  );
+  const jobId = requiredText(
+    body.jobId,
+    180,
+    "MANUAL_EVIDENCE_TEST_JOB_REQUIRED",
+    "Manual evidence test job",
+  );
+  const revision = positiveRevision(body.revision);
+  const current = requireJob(
+    await jobRow(database, member.organisationId, jobId),
+  );
+  if (Number(current.revision) !== revision) {
+    throw new CreditexManualEvidenceLabError(
+      "MANUAL_EVIDENCE_REVISION_CONFLICT",
+      409,
+      "The test job changed before this assignment. Refresh and try again.",
+    );
+  }
+  if (["ready_for_audit", "passed", "archived"].includes(current.status)) {
+    throw new CreditexManualEvidenceLabError(
+      "MANUAL_EVIDENCE_FIELD_ASSIGNMENT_LOCKED",
+      409,
+      "Return the test job to field testing before changing its AEA Field assignment.",
+    );
+  }
+  if (
+    current.field_tester_uid
+    && current.field_tester_uid !== member.uid
+    && member.role !== "admin"
+  ) {
+    throw new CreditexManualEvidenceLabError(
+      "MANUAL_EVIDENCE_FIELD_ASSIGNMENT_REQUIRED",
+      403,
+      "An administrator must replace another tester's AEA Field assignment.",
+    );
+  }
+  const now = new Date().toISOString();
+  const results = await database.batch([
+    database.prepare(`UPDATE compliance_manual_evidence_test_jobs
+      SET field_tester_uid = ?, revision = revision + 1,
+        updated_by_uid = ?, updated_at = ?
+      WHERE id = ? AND organisation_id = ? AND revision = ?
+        AND record_mode = 'synthetic_test'
+        AND status IN ('draft', 'field_testing', 'changes_required')`)
+      .bind(
+        member.uid,
+        member.uid,
+        now,
+        jobId,
+        member.organisationId,
+        revision,
+      ),
+    database.prepare(`INSERT INTO compliance_manual_evidence_test_events (
+        id, organisation_id, job_id, event_type, actor_uid, summary,
+        metadata, created_at
+      ) SELECT ?, ?, ?, 'manual_field.tester_assigned', ?,
+        'Synthetic job assigned to the current verified AEA Field login.',
+        ?, ?
+      WHERE EXISTS (
+        SELECT 1 FROM compliance_manual_evidence_test_jobs
+        WHERE id = ? AND organisation_id = ? AND revision = ?
+          AND field_tester_uid = ?
+      )`)
+      .bind(
+        crypto.randomUUID(),
+        member.organisationId,
+        jobId,
+        member.uid,
+        canonicalJson({
+          previousFieldTesterUid: current.field_tester_uid,
+          fieldTesterUid: member.uid,
+          recordMode: "synthetic_test",
+        }),
+        now,
+        jobId,
+        member.organisationId,
+        revision + 1,
+        member.uid,
+      ),
+  ]);
+  if (
+    Number(results[0]?.meta.changes || 0) !== 1
+    || Number(results[1]?.meta.changes || 0) !== 1
+  ) {
+    throw new CreditexManualEvidenceLabError(
+      "MANUAL_EVIDENCE_REVISION_CONFLICT",
+      409,
+      "The test job changed before the AEA Field assignment completed.",
+    );
+  }
+  return mapJob(requireJob(
+    await jobRow(database, member.organisationId, jobId),
+  ));
+}
+
 function allowedStatusTransition(current: string, next: string) {
   if (current === next) return true;
   const transitions: Record<string, readonly string[]> = {
@@ -1229,6 +1336,19 @@ export async function updateManualEvidenceTestJob(
     responses = body.responses === undefined
       ? currentResponses
       : validateManualEvidenceResponses(schema.fields, body.responses);
+    responses = responses.map((response) => {
+      const field = schema.fields.find(
+        (candidate) => candidate.fieldCode === response.fieldCode,
+      );
+      if (
+        field?.fieldType !== "photo"
+        && field?.fieldType !== "document"
+      ) return response;
+      return currentResponses.find(
+        (currentResponse) =>
+          currentResponse.fieldCode === response.fieldCode,
+      ) || response;
+    });
   } catch (error) {
     if (error instanceof CreditexManualEvidenceContractError) {
       throw new CreditexManualEvidenceLabError(

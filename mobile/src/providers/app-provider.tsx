@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
+import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -27,8 +28,8 @@ import {
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { forgetPushToken, getDeviceId, getDeviceName, rememberPushToken } from '@/lib/device';
 import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
-import { localSyncOutcome, runSync, type SyncOutcome } from '@/lib/sync';
-import type { FieldJob, OfflineAction } from '@/lib/types';
+import { localSyncOutcome, resolveFieldAccessModes, runSync, type SyncOutcome } from '@/lib/sync';
+import type { FieldAccessMode, FieldJob, OfflineAction } from '@/lib/types';
 
 type UploadInput = {
   workOrderId: string;
@@ -69,6 +70,17 @@ const emptySync: AppValue['sync'] = {
 
 const AppContext = createContext<AppValue | null>(null);
 
+function shouldRevalidateFieldAccess(error: unknown): error is ApiError {
+  return error instanceof ApiError && [401, 403, 404].includes(error.status);
+}
+
+function isConfirmedFieldAccessLoss(error: unknown): error is ApiError {
+  return error instanceof ApiError && (
+    (error.status === 401 && error.code === 'AUTH_REQUIRED')
+    || (error.status === 403 && error.code === 'FIELD_ACCESS_REQUIRED')
+  );
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,12 +95,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleAccessError = useCallback(async (error: unknown) => {
-    if (!(error instanceof ApiError) || ![401, 403, 404].includes(error.status)) return false;
-    if (error.status === 404) {
-      await purgeLocalData();
-      await forgetPushToken().catch(() => undefined);
+    if (!shouldRevalidateFieldAccess(error)) return false;
+    let confirmedLoss: ApiError;
+    try {
+      await apiRequest('/api/field/access');
+      return false;
+    } catch (accessError) {
+      if (!isConfirmedFieldAccessLoss(accessError)) return false;
+      confirmedLoss = accessError;
     }
-    const nextAccess = accessStateForServerError(error.status, error.code, error.message);
+    await purgeLocalData();
+    await forgetPushToken().catch(() => undefined);
+    const nextAccess = accessStateForServerError(
+      confirmedLoss.status,
+      confirmedLoss.code,
+      confirmedLoss.message,
+    );
     setAccess(nextAccess);
     setJobs([]);
     setSync((value) => ({
@@ -168,17 +190,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const token = Notifications.addPushTokenListener(async (nextToken) => {
       if (!firebaseAuth.currentUser) return;
       await rememberPushToken(String(nextToken.data));
-      void apiRequest('/api/trade-team/devices', {
-        method: 'POST',
-        body: JSON.stringify({
-          deviceId: await getDeviceId(),
-          platform: MOBILE_PLATFORM,
-          appVersion: APP_VERSION,
-          deviceName: getDeviceName(),
-          pushToken: String(nextToken.data),
-          pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
-        }),
-      }).catch((error) => { void handleAccessError(error); });
+      const modes = await resolveFieldAccessModes().catch(() => []);
+      const deviceId = await getDeviceId();
+      void Promise.allSettled(modes.map((mode) =>
+        apiRequest(mode === 'creditex_manual'
+          ? '/api/creditex/manual-field/devices'
+          : '/api/trade-team/devices', {
+          method: 'POST',
+          body: JSON.stringify({
+            deviceId,
+            platform: MOBILE_PLATFORM,
+            appVersion: APP_VERSION,
+            deviceName: getDeviceName(),
+            isPhysicalDevice: Device.isDevice,
+            pushToken: String(nextToken.data),
+            pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+          }),
+        }).catch((error) => { void handleAccessError(error); })
+      ));
     });
     return () => { network(); response.remove(); token.remove(); };
   }, [handleAccessError, syncNow]);
@@ -208,17 +237,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await unregisterBackgroundSync().catch(() => undefined);
-    await apiRequest('/api/trade-team/devices', {
-      method: 'POST',
-      body: JSON.stringify({
-        deviceId: await getDeviceId(),
-        platform: MOBILE_PLATFORM,
-        appVersion: APP_VERSION,
-        deviceName: getDeviceName(),
-        pushToken: '',
-        pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
-      }),
-    }).catch(() => undefined);
+    const modes = await resolveFieldAccessModes().catch(() => (
+      ['trade_team', 'creditex_manual'] satisfies FieldAccessMode[]
+    ));
+    const deviceId = await getDeviceId();
+    await Promise.allSettled(modes.map((mode) =>
+      mode === 'creditex_manual'
+        ? apiRequest('/api/creditex/manual-field/devices', {
+          method: 'DELETE',
+          body: JSON.stringify({ deviceId }),
+        })
+        : apiRequest('/api/trade-team/devices', {
+          method: 'POST',
+          body: JSON.stringify({
+            deviceId,
+            platform: MOBILE_PLATFORM,
+            appVersion: APP_VERSION,
+            deviceName: getDeviceName(),
+            pushToken: '',
+            pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+          }),
+        })
+    ));
+    await Notifications.unregisterForNotificationsAsync()
+      .catch(() => undefined);
     await purgeLocalData();
     await forgetPushToken();
     await firebaseSignOut();

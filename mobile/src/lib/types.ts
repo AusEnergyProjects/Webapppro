@@ -1,5 +1,6 @@
 export type JobStage = 'backlog' | 'ready' | 'scheduled' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
 export type TaskStatus = 'pending' | 'done';
+export type FieldAccessMode = 'trade_team' | 'creditex_manual';
 
 export type FieldTask = {
   id: string;
@@ -29,7 +30,7 @@ export type FieldForm = {
   jurisdiction: string;
   template: {
     guidance: string;
-    fields: Array<{ key: string; label: string; type: 'checkbox' | 'text' | 'textarea' | 'date' | 'select'; required: boolean; maxLength?: number; options?: string[] }>;
+    fields: Array<{ key: string; label: string; type: 'checkbox' | 'text' | 'textarea' | 'date' | 'select' | 'number' | 'signature'; required: boolean; maxLength?: number; options?: string[] }>;
   };
   answers: Record<string, string | boolean>;
   status: 'draft' | 'complete';
@@ -107,6 +108,8 @@ export type FieldJob = {
   openIssues: number;
   revision: number;
   updatedAt: string;
+  recordMode?: 'regulated' | 'synthetic_test';
+  fieldLane?: FieldAccessMode;
   offlinePolicy: {
     containsPersonalData: boolean;
     maxAgeSeconds: number;
@@ -149,6 +152,7 @@ export type OfflineActionType = 'advance_field_job' | 'set_job_stage' | 'set_tas
 
 export type OfflineAction = {
   clientActionId: string;
+  fieldLane?: FieldAccessMode;
   type: OfflineActionType;
   workOrderId: string;
   taskId?: string;
@@ -167,6 +171,7 @@ export type OfflineAction = {
 export type QueueRow = {
   id: string;
   work_order_id: string;
+  field_lane: FieldAccessMode;
   payload: string;
   status: 'queued' | 'retry' | 'conflict' | 'rejected';
   attempts: number;
@@ -178,6 +183,8 @@ export type QueueRow = {
 export type UploadRow = {
   id: string;
   work_order_id: string;
+  field_lane: FieldAccessMode;
+  client_upload_id: string;
   local_uri: string;
   file_name: string;
   content_type: string;

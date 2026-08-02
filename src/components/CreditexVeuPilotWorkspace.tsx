@@ -13,6 +13,7 @@ import {
   type CreditexJobAuditDetail,
   type JobWorkspaceSection,
 } from "./CreditexVeuJobAuditWorkspace";
+import { CreditexManualJobAuditWorkspace } from "./CreditexManualJobAuditWorkspace";
 import {
   DATAFORCE_JOB_CSV_HEADERS,
   exportDataforceJobCsv,
@@ -382,59 +383,142 @@ type PilotSortKey =
   | "createdAt"
   | "updatedAt";
 
+type RegisterSortKey =
+  | "appId"
+  | "jobId"
+  | "status"
+  | "subStatus"
+  | "type"
+  | "workType"
+  | "scheduledDatetime"
+  | "balance"
+  | "certificates"
+  | "submission"
+  | "invoiced"
+  | "fieldWorker"
+  | "agent"
+  | "client"
+  | "customer"
+  | "companyName"
+  | "extCustRef"
+  | "phone"
+  | "mobile"
+  | "email"
+  | "address"
+  | "suburb"
+  | "postcode";
+
+type SyntheticRegisterFacet = {
+  value: string;
+  label: string;
+  count: number;
+  parentValue?: string;
+};
+
+type SyntheticRegisterRow = {
+  rowKey: string;
+  source: "veu_pilot" | "manual_evidence";
+  sourceId: string;
+  recordMode: "synthetic_test";
+  programCode: string;
+  activityTemplateId: string;
+  installerId: string;
+  technicianId: string;
+  status: string;
+  revision: number;
+  updatedAt: string;
+  cells: DataforceJobCsvRecord;
+};
+
+type SyntheticRegister = {
+  contractVersion: "dataforce-jobs-v1";
+  headers: DataforceJobCsvHeader[];
+  rows: SyntheticRegisterRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    pageCount: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+  };
+  facets: {
+    sources: SyntheticRegisterFacet[];
+    programs: SyntheticRegisterFacet[];
+    activities: SyntheticRegisterFacet[];
+    installers: SyntheticRegisterFacet[];
+    technicians: SyntheticRegisterFacet[];
+    statuses: SyntheticRegisterFacet[];
+    postcodes: SyntheticRegisterFacet[];
+  };
+  boundaries: {
+    recordMode: "synthetic_test";
+    accessMode: "read_only";
+    regulatedWrites: 0;
+    externalSubmissionEnabled: false;
+  };
+};
+
 type PilotColumn = {
   key: string;
   label: DataforceJobCsvHeader;
-  sortKey?: PilotSortKey;
+  sortKey: RegisterSortKey;
   description?: string;
 };
 
 const DATAFORCE_JOB_COLUMN_CONFIG = {
-  "App Id": { key: "appointmentId", sortKey: "appointmentId" },
-  "Job Id": { key: "jobNumber", sortKey: "jobNumber" },
-  "Status": { key: "reviewStatus", sortKey: "reviewStatus" },
+  "App Id": { key: "appointmentId", sortKey: "appId" },
+  "Job Id": { key: "jobNumber", sortKey: "jobId" },
+  "Status": { key: "reviewStatus", sortKey: "status" },
   "SubStatus": {
     key: "legacySubStatus",
+    sortKey: "subStatus",
     description: "Dataforce SubStatus semantics are not yet mapped.",
   },
   "Type": {
     key: "legacyType",
+    sortKey: "type",
     description: "Dataforce Type semantics are not yet mapped.",
   },
   "Work Type": { key: "workType", sortKey: "workType" },
   "Scheduled Datetime": {
     key: "scheduledStart",
-    sortKey: "scheduledStart",
+    sortKey: "scheduledDatetime",
   },
   "Balance": {
     key: "legacyBalance",
+    sortKey: "balance",
     description: "Dataforce Balance semantics require a field dictionary.",
   },
   "Certificates (VEECs)": {
     key: "certificates",
+    sortKey: "certificates",
     description: "Only regulator-issued quantities may appear here.",
   },
-  "Submission": { key: "connectorStatus", sortKey: "connectorStatus" },
-  "Invoiced": { key: "invoiceStatus", sortKey: "invoiceStatus" },
-  "Field Worker": { key: "technician", sortKey: "technician" },
+  "Submission": { key: "connectorStatus", sortKey: "submission" },
+  "Invoiced": { key: "invoiceStatus", sortKey: "invoiced" },
+  "Field Worker": { key: "technician", sortKey: "fieldWorker" },
   "Agent": {
     key: "agent",
+    sortKey: "agent",
     description: "No authoritative pilot agent relationship is stored.",
   },
   "Client": {
     key: "client",
+    sortKey: "client",
     description: "No authoritative pilot client relationship is stored.",
   },
   "Customer": { key: "customer", sortKey: "customer" },
   "Company Name": { key: "companyName", sortKey: "companyName" },
   "Ext Cust Ref": {
     key: "customerNumber",
-    sortKey: "customerNumber",
+    sortKey: "extCustRef",
     description: "TLink customer number is shown; legacy equivalence is pending.",
   },
   "Phone": { key: "phone", sortKey: "phone" },
   "Mobile": {
     key: "mobile",
+    sortKey: "mobile",
     description: "TLink does not yet store a separate mobile field.",
   },
   "Email": { key: "email", sortKey: "email" },
@@ -456,59 +540,50 @@ const PILOT_VISIBLE_SORTABLE_COLUMN_COUNT = PILOT_JOB_COLUMNS.filter(
 ).length;
 
 type Filters = {
+  source: "" | "veu_pilot" | "manual_evidence";
+  programCode: string;
   installerId: string;
   technicianId: string;
   activityTemplateId: string;
-  reviewStatus: string;
-  evidenceStatus: string;
-  lookupStatus: string;
-  ruleStatus: string;
-  calculatorStatus: string;
-  connectorStatus: string;
-  workStage: string;
-  workType: string;
-  priority: string;
-  appointmentType: string;
-  appointmentStatus: string;
-  customerType: string;
-  serviceCategory: string;
-  productCategory: string;
+  status: string;
   postcode: string;
-  tag: string;
-  dateField: "activityDate" | "scheduledStart" | "createdAt" | "updatedAt";
-  dateFrom: string;
-  dateTo: string;
-  sortBy: PilotSortKey;
+  sortBy: RegisterSortKey;
   sortDirection: "asc" | "desc";
   query: string;
   page: number;
   pageSize: 25 | 50 | 100 | 300;
+  // Legacy VEU-only filter fields remain optional for the existing pilot
+  // projection. The unified register exposes only fields that have an
+  // authoritative value across its synthetic sources.
+  reviewStatus?: string;
+  evidenceStatus?: string;
+  lookupStatus?: string;
+  ruleStatus?: string;
+  calculatorStatus?: string;
+  connectorStatus?: string;
+  workStage?: string;
+  workType?: string;
+  priority?: string;
+  appointmentType?: string;
+  appointmentStatus?: string;
+  customerType?: string;
+  serviceCategory?: string;
+  productCategory?: string;
+  tag?: string;
+  dateField?: "activityDate" | "scheduledStart" | "createdAt" | "updatedAt";
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 const EMPTY_FILTERS: Filters = {
+  source: "",
+  programCode: "",
   installerId: "",
   technicianId: "",
   activityTemplateId: "",
-  reviewStatus: "",
-  evidenceStatus: "",
-  lookupStatus: "",
-  ruleStatus: "",
-  calculatorStatus: "",
-  connectorStatus: "",
-  workStage: "",
-  workType: "",
-  priority: "",
-  appointmentType: "",
-  appointmentStatus: "",
-  customerType: "",
-  serviceCategory: "",
-  productCategory: "",
+  status: "",
   postcode: "",
-  tag: "",
-  dateField: "activityDate",
-  dateFrom: "",
-  dateTo: "",
-  sortBy: "jobNumber",
+  sortBy: "jobId",
   sortDirection: "asc",
   query: "",
   page: 0,
@@ -517,7 +592,6 @@ const EMPTY_FILTERS: Filters = {
 
 function activeFilterCount(filters: Filters) {
   const ignored = new Set([
-    "dateField",
     "sortBy",
     "sortDirection",
     "page",
@@ -611,6 +685,53 @@ type StcEstimateResult = {
   certificateActionEnabled: false;
   receiptHash: string;
   operatorMessage: string;
+};
+
+type CalculationCoverageReadiness = {
+  reviewedOn: string;
+  readOnly: true;
+  certificateActionsEnabled: false;
+  coverage: {
+    contract: string;
+    programs: number;
+    activities: number;
+    estimateExecutable: number;
+    certificateActionsEnabled: number;
+    blockedOrNonExecutable: number;
+    coverageSha256: string;
+    stateCounts: Array<{ state: string; count: number }>;
+  };
+};
+
+type InterchangeReadiness = {
+  contract: string;
+  reviewedOn: string;
+  readOnly: true;
+  dryRunOnly: true;
+  externalSubmissionEnabled: false;
+  counts: {
+    adapters: number;
+    ready: number;
+    blocked: number;
+    serializersAvailable: number;
+    externalSubmissionEnabled: number;
+  };
+  adapters: Array<{
+    adapterKey: string;
+    programCode: string;
+    pathway: string;
+    status: "blocked";
+    blockReason: string;
+    schemaState: string;
+    officialSourceUrl?: string;
+    publicRegistryUrl?: string;
+    version?: string;
+    scheme?: string;
+    kind?: string;
+    maximumRecords?: number;
+    serializerAvailable: false;
+    externalSubmissionEnabled: false;
+  }>;
 };
 
 const EMPTY_FOUNDATION_READINESS: FoundationReadiness = {
@@ -727,6 +848,31 @@ function present(value: string, fallback = "Not recorded") {
   return value.trim() || fallback;
 }
 
+function spreadsheetSafeClipboardCell(value: unknown) {
+  const flattened = String(value ?? "")
+    .replace(/[\t\r\n\u2028\u2029]+/g, " ");
+  const formulaCandidate = flattened.replace(/^[\s\uFEFF\u200B]+/, "");
+  return /^[=+\-@]/.test(formulaCandidate)
+    ? `'${flattened}`
+    : flattened;
+}
+
+function dataforceClipboardText(
+  record: DataforceJobCsvRecord,
+  includeHeaders: boolean,
+) {
+  const values = DATAFORCE_JOB_CSV_HEADERS.map(
+    (header) => spreadsheetSafeClipboardCell(record[header]),
+  );
+  return includeHeaders
+    ? [
+        DATAFORCE_JOB_CSV_HEADERS.map(spreadsheetSafeClipboardCell)
+          .join("\t"),
+        values.join("\t"),
+      ].join("\n")
+    : values.join("\t");
+}
+
 function customerName(job: PilotJob) {
   return present(
     [job.customer.firstName, job.customer.lastName].filter(Boolean).join(" "),
@@ -755,7 +901,7 @@ function PilotSortHeader({
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onSort: (sortBy: PilotSortKey, sortDirection: "asc" | "desc") => void;
+  onSort: (sortBy: RegisterSortKey, sortDirection: "asc" | "desc") => void;
 }) {
   const state = sortState(column, filters);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -797,12 +943,12 @@ function PilotSortHeader({
           <span>{column.label}</span>
           <b aria-hidden="true">
             {!column.sortKey
-              ? "⌄"
+              ? "Info"
               : state === "ascending"
-              ? "▲"
+              ? "A-Z"
               : state === "descending"
-              ? "▼"
-              : "↕"}
+              ? "Z-A"
+              : "Sort"}
           </b>
         </button>
         {open && (
@@ -834,7 +980,7 @@ function PilotSortHeader({
                 <button
                   type="button"
                   onClick={() => {
-                    onSort("jobNumber", "asc");
+                    onSort("jobId", "asc");
                     closeAndRestoreFocus();
                   }}
                 >
@@ -850,26 +996,6 @@ function PilotSortHeader({
     </th>
   );
 }
-
-const PILOT_STATUS_COLUMN_KEYS = new Set([
-  "reviewStatus",
-  "connectorStatus",
-  "ruleStatus",
-  "lookupStatus",
-  "evidenceStatus",
-  "calculatorStatus",
-  "workStage",
-  "appointmentStatus",
-]);
-const PILOT_MAPPING_COLUMN_KEYS = new Set([
-  "legacySubStatus",
-  "legacyType",
-  "legacyBalance",
-  "certificates",
-  "agent",
-  "client",
-  "mobile",
-]);
 
 function pilotJobCellValue(columnKey: string, job: PilotJob) {
   switch (columnKey) {
@@ -985,70 +1111,67 @@ function projectPilotJobToDataforceRecord(job: PilotJob) {
   return projectCreditexJobToDataforceRecord(job, overrides);
 }
 
-function PilotJobCell({
+function SyntheticRegisterCell({
   column,
-  job,
+  row,
   onOpen,
   onOpenMenu,
 }: {
   column: PilotColumn;
-  job: PilotJob;
+  row: SyntheticRegisterRow;
   onOpen: (button: HTMLButtonElement) => void;
   onOpenMenu: (button: HTMLButtonElement) => void;
 }) {
-  if (column.key === "appointmentId") {
+  const value = row.cells[column.label] || "";
+  if (column.label === "App Id") {
     return (
       <span className={styles.appIdCell}>
         <button
           className={styles.rowActionButton}
           type="button"
-          aria-label={`Open actions for ${job.jobNumber}`}
+          aria-label={`Open actions for ${row.cells["Job Id"] || "job"}`}
           aria-haspopup="menu"
           onClick={(event) => onOpenMenu(event.currentTarget)}
         >
-          ⋮
+          ...
         </button>
-        <span title={present(job.appointment.id)}>
-          {present(job.appointment.id)}
-        </span>
+        <span title={value || "Not recorded"}>{value || "-"}</span>
       </span>
     );
   }
-  if (column.key === "jobNumber") {
+  if (column.label === "Job Id") {
     return (
       <button
         className={styles.jobLink}
         type="button"
         onClick={(event) => onOpen(event.currentTarget)}
       >
-        {job.jobNumber}
+        {value || row.sourceId}
       </button>
     );
   }
-  const value = pilotJobCellValue(column.key, job);
   const statusTone =
     /blocked|not checked|not started|not staged|dry run/i.test(value)
       ? "blocked"
-      : /changes required|in review|in progress/i.test(value)
+      : /changes required|in review|in progress|field testing/i.test(value)
       ? "attention"
-      : /verified|complete|reconciled/i.test(value)
+      : /verified|complete|reconciled|passed|ready for audit/i.test(value)
       ? "ready"
       : "neutral";
+  const statusColumn = [
+    "Status",
+    "SubStatus",
+    "Submission",
+    "Invoiced",
+    "Certificates (VEECs)",
+  ].includes(column.label);
   return (
     <span
-      className={
-        PILOT_STATUS_COLUMN_KEYS.has(column.key)
-          ? styles.statusCell
-          : PILOT_MAPPING_COLUMN_KEYS.has(column.key)
-          ? styles.mappingCell
-          : undefined
-      }
-      data-tone={
-        PILOT_STATUS_COLUMN_KEYS.has(column.key) ? statusTone : undefined
-      }
-      title={value}
+      className={statusColumn ? styles.statusCell : undefined}
+      data-tone={statusColumn ? statusTone : undefined}
+      title={value || "Not recorded"}
     >
-      {value}
+      {value || "-"}
     </span>
   );
 }
@@ -1058,6 +1181,7 @@ function PilotJobContextMenu({
   job,
   onOpen,
   onCopyRow,
+  onCopySelection,
   onPrint,
   onClose,
 }: {
@@ -1065,6 +1189,7 @@ function PilotJobContextMenu({
   job: PilotJob;
   onOpen: (section: JobWorkspaceSection) => void;
   onCopyRow: () => void;
+  onCopySelection: () => void;
   onPrint: (previewOnly: boolean) => void;
   onClose: () => void;
 }) {
@@ -1132,7 +1257,7 @@ function PilotJobContextMenu({
       </button>
       <div className={styles.contextSubmenu}>
         <button type="button" role="menuitem" aria-haspopup="menu">
-          Job <span aria-hidden="true">›</span>
+          Job <span aria-hidden="true">&gt;</span>
         </button>
         <div role="menu" aria-label="Job actions">
           {JOB_CONTEXT_ITEMS.map((item) => (
@@ -1149,7 +1274,7 @@ function PilotJobContextMenu({
       </div>
       <div className={styles.contextSubmenu}>
         <button type="button" role="menuitem" aria-haspopup="menu">
-          Appointment <span aria-hidden="true">›</span>
+          Appointment <span aria-hidden="true">&gt;</span>
         </button>
         <div role="menu" aria-label="Appointment actions">
           {APPOINTMENT_CONTEXT_ITEMS.map((item) => (
@@ -1171,9 +1296,8 @@ function PilotJobContextMenu({
       <button
         type="button"
         role="menuitem"
-        disabled
-        aria-disabled="true"
-        title="Copy Selection is unavailable until a cell range is selected."
+        onClick={onCopySelection}
+        title="Copy the selected row values without headings."
       >
         Copy Selection
       </button>
@@ -1187,19 +1311,95 @@ function PilotJobContextMenu({
   );
 }
 
-function AdvancedPilotFilters({
-  snapshot,
+function ManualJobContextMenu({
+  state,
+  row,
+  onOpen,
+  onCopyRow,
+  onCopySelection,
+  onClose,
+}: {
+  state: ContextMenuState;
+  row: SyntheticRegisterRow;
+  onOpen: () => void;
+  onCopyRow: () => void;
+  onCopySelection: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const menu = menuRef.current;
+    menu?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    function handlePointer(event: MouseEvent) {
+      if (!menu?.contains(event.target as Node)) onClose();
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={menuRef}
+      className={styles.contextMenu}
+      role="menu"
+      aria-label={`Actions for ${row.cells["Job Id"] || "manual job"}`}
+      style={{
+        left: Math.min(state.x, Math.max(8, window.innerWidth - 360)),
+        top: Math.min(state.y, Math.max(8, window.innerHeight - 260)),
+      }}
+    >
+      <button type="button" role="menuitem" onClick={onOpen}>
+        Open complete audit record
+      </button>
+      <button type="button" role="menuitem" onClick={onOpen}>
+        Evidence checklist and captures
+      </button>
+      <button type="button" role="menuitem" onClick={onOpen}>
+        Job history
+      </button>
+      <hr />
+      <button type="button" role="menuitem" onClick={onCopyRow}>
+        Copy Row
+      </button>
+      <button type="button" role="menuitem" onClick={onCopySelection}>
+        Copy Selection
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          onClose();
+          window.print();
+        }}
+      >
+        Print
+      </button>
+    </div>
+  );
+}
+
+function AdvancedRegisterFilters({
+  register,
   filters,
-  technicians,
   busy,
   onChange,
   onApply,
   onClear,
   onClose,
 }: {
-  snapshot: PilotSnapshot;
+  register: SyntheticRegister;
   filters: Filters;
-  technicians: NonNullable<PilotSnapshot["technicians"]>;
   busy: boolean;
   onChange: (next: Partial<Filters>) => void;
   onApply: () => void;
@@ -1207,6 +1407,17 @@ function AdvancedPilotFilters({
   onClose: () => void;
 }) {
   const drawerRef = useRef<HTMLElement>(null);
+  const visibleActivities = register.facets.activities.filter(
+    (option) => !filters.programCode
+      || option.parentValue === filters.programCode,
+  );
+  const visibleInstallers = register.facets.installers.filter(
+    (option) => !filters.source || option.parentValue === filters.source,
+  );
+  const visibleTechnicians = register.facets.technicians.filter(
+    (option) => !filters.installerId
+      || option.parentValue === filters.installerId,
+  );
 
   useEffect(() => {
     const drawer = drawerRef.current;
@@ -1220,18 +1431,14 @@ function AdvancedPilotFilters({
       );
       (focusable[0] || drawerElement).focus();
     }, 0);
-
-    function keepFocusInside(event: KeyboardEvent) {
+    function trapFocus(event: KeyboardEvent) {
       if (event.key !== "Tab") return;
-      const current = Array.from(
+      const items = Array.from(
         drawerElement.querySelectorAll<HTMLElement>(focusableSelector),
       );
-      if (!current.length) {
-        event.preventDefault();
-        return;
-      }
-      const first = current[0];
-      const last = current[current.length - 1];
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -1240,11 +1447,10 @@ function AdvancedPilotFilters({
         first.focus();
       }
     }
-
-    drawerElement.addEventListener("keydown", keepFocusInside);
+    drawerElement.addEventListener("keydown", trapFocus);
     return () => {
       window.clearTimeout(focusHandle);
-      drawerElement.removeEventListener("keydown", keepFocusInside);
+      drawerElement.removeEventListener("keydown", trapFocus);
     };
   }, []);
 
@@ -1254,13 +1460,15 @@ function AdvancedPilotFilters({
       className={styles.advancedFilters}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="creditex-advanced-filters-title"
+      aria-labelledby="creditex-advanced-register-filters-title"
       tabIndex={-1}
     >
       <header>
         <div>
           <span>ADVANCED SEARCH</span>
-          <h3 id="creditex-advanced-filters-title">All VEU jobs</h3>
+          <h3 id="creditex-advanced-register-filters-title">
+            All synthetic jobs
+          </h3>
         </div>
         <button
           className={styles.closeFilters}
@@ -1268,196 +1476,101 @@ function AdvancedPilotFilters({
           onClick={onClose}
           aria-label="Close advanced filters"
         >
-          ×
+          x
         </button>
       </header>
 
       <p className={styles.filterBoundary}>
-        Jobs only. Regulated bulk actions remain blocked for test records.
+        Every option is populated from stored job data. Blank legacy fields
+        are not guessed, and regulated bulk actions remain disabled.
       </p>
 
-      <section
-        className={styles.quickFilters}
-        aria-labelledby="creditex-quick-filters-title"
-      >
+      <section className={styles.quickFilters}>
         <div className={styles.quickFilterHeading}>
-          <strong id="creditex-quick-filters-title">Quick filters</strong>
-          <small>Filter this job register without leaving the workspace.</small>
+          <strong>Quick filters</strong>
+          <small>Search every populated Dataforce-compatible field.</small>
         </div>
         <label className={styles.quickFilterWide}>
           Search jobs
           <input
             type="search"
             value={filters.query}
-            placeholder="Job, customer, address or activity"
+            placeholder="Job, customer, installer, address or activity"
             onChange={(event) => onChange({ query: event.target.value })}
           />
         </label>
-        <label className={styles.quickFilterWide}>
-          Installer company
+        <label>
+          Record source
           <select
-            value={filters.installerId}
+            value={filters.source}
             onChange={(event) =>
               onChange({
-                installerId: event.target.value,
+                source: event.target.value as Filters["source"],
+                installerId: "",
                 technicianId: "",
               })}
           >
-            <option value="">All test installers</option>
-            {(snapshot.installers || []).map((installer) => (
-              <option key={installer.id} value={installer.id}>
-                {installer.companyCode} | {installer.businessName}
+            <option value="">All synthetic sources</option>
+            {register.facets.sources.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({option.count})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Program
+          <select
+            value={filters.programCode}
+            onChange={(event) =>
+              onChange({
+                programCode: event.target.value,
+                activityTemplateId: "",
+              })}
+          >
+            <option value="">All programs</option>
+            {register.facets.programs.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({option.count})
               </option>
             ))}
           </select>
         </label>
         <label className={styles.quickFilterWide}>
-          VEU activity
+          Program activity
           <select
             value={filters.activityTemplateId}
             onChange={(event) =>
               onChange({ activityTemplateId: event.target.value })}
           >
-            <option value="">All activity families</option>
-            {(snapshot.activities || []).map((activity) => (
-              <option
-                key={activity.activityTemplateId}
-                value={activity.activityTemplateId}
-              >
-                {activity.registryActivityCode} | {activity.title}
+            <option value="">All activities</option>
+            {visibleActivities.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({option.count})
               </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Review
-          <select
-            value={filters.reviewStatus}
-            onChange={(event) => onChange({ reviewStatus: event.target.value })}
-          >
-            <option value="">All review states</option>
-            {snapshot.filters.reviewStatuses.map((option) => (
-              <option key={option} value={option}>{readable(option)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Evidence
-          <select
-            value={filters.evidenceStatus}
-            onChange={(event) =>
-              onChange({ evidenceStatus: event.target.value })}
-          >
-            <option value="">All evidence states</option>
-            {snapshot.filters.evidenceStatuses.map((option) => (
-              <option key={option} value={option}>{readable(option)}</option>
             ))}
           </select>
         </label>
       </section>
 
       <details>
-        <summary>Date filters</summary>
-        <div>
-          <label>
-            Date field
-            <select
-              value={filters.dateField}
-              onChange={(event) =>
-                onChange({
-                  dateField: event.target.value as Filters["dateField"],
-                })}
-            >
-              <option value="activityDate">Activity date</option>
-              <option value="scheduledStart">Scheduled date</option>
-              <option value="createdAt">Created date</option>
-              <option value="updatedAt">Updated date</option>
-            </select>
-          </label>
-          <label>
-            From
-            <input
-              type="date"
-              value={filters.dateFrom}
-              data-date-range-group="creditex-veu-pilot-jobs"
-              data-date-range-role="start"
-              onChange={(event) => onChange({ dateFrom: event.target.value })}
-            />
-          </label>
-          <label>
-            To
-            <input
-              type="date"
-              value={filters.dateTo}
-              data-date-range-group="creditex-veu-pilot-jobs"
-              data-date-range-role="end"
-              onChange={(event) => onChange({ dateTo: event.target.value })}
-            />
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Status filters</summary>
-        <div>
-          {[
-            ["lookupStatus", "Lookup", snapshot.filters.lookupStatuses],
-            ["ruleStatus", "Rules", snapshot.filters.ruleStatuses],
-            [
-              "calculatorStatus",
-              "Calculator",
-              snapshot.filters.calculatorStatuses,
-            ],
-            [
-              "connectorStatus",
-              "Submission",
-              snapshot.filters.connectorStatuses,
-            ],
-          ].map(([key, label, options]) => (
-            <label key={String(key)}>
-              {String(label)}
-              <select
-                value={String(filters[key as keyof Filters] || "")}
-                onChange={(event) =>
-                  onChange({
-                    [String(key)]: event.target.value,
-                  } as Partial<Filters>)}
-              >
-                <option value="">All {String(label).toLowerCase()} states</option>
-                {(options as string[]).map((option) => (
-                  <option key={option} value={option}>{readable(option)}</option>
-                ))}
-              </select>
-            </label>
-          ))}
-        </div>
-      </details>
-
-      <details>
         <summary>Work &amp; personnel</summary>
         <div>
           <label>
-            Work type
+            Installer company
             <select
-              value={filters.workType}
-              onChange={(event) => onChange({ workType: event.target.value })}
-            >
-              <option value="">All work types</option>
-              {snapshot.filters.workTypes.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Service category
-            <select
-              value={filters.serviceCategory}
+              value={filters.installerId}
               onChange={(event) =>
-                onChange({ serviceCategory: event.target.value })}
+                onChange({
+                  installerId: event.target.value,
+                  technicianId: "",
+                })}
             >
-              <option value="">All service categories</option>
-              {snapshot.filters.serviceCategories.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
+              <option value="">All installers</option>
+              {visibleInstallers.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
               ))}
             </select>
           </label>
@@ -1468,64 +1581,31 @@ function AdvancedPilotFilters({
               onChange={(event) =>
                 onChange({ technicianId: event.target.value })}
             >
-              <option value="">All test technicians</option>
-              {technicians.map((technician) => (
-                <option key={technician.id} value={technician.id}>
-                  {technician.technicianCode} | {technician.displayName}
+              <option value="">All technicians</option>
+              {visibleTechnicians.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
                 </option>
               ))}
             </select>
           </label>
-          <label>
-            Priority
-            <select
-              value={filters.priority}
-              onChange={(event) => onChange({ priority: event.target.value })}
-            >
-              <option value="">All priorities</option>
-              {snapshot.filters.priorities.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
         </div>
       </details>
 
       <details>
-        <summary>Client &amp; agent</summary>
+        <summary>Status &amp; location</summary>
         <div>
           <label>
-            Client
-            <select value="" disabled>
-              <option value="">Mapping required</option>
-            </select>
-          </label>
-          <label>
-            Agent
-            <select value="" disabled>
-              <option value="">Mapping required</option>
-            </select>
-          </label>
-          <small>
-            These relationships will not be guessed from installer or program
-            data.
-          </small>
-        </div>
-      </details>
-
-      <details>
-        <summary>Customer &amp; address</summary>
-        <div>
-          <label>
-            Customer type
+            Job status
             <select
-              value={filters.customerType}
-              onChange={(event) =>
-                onChange({ customerType: event.target.value })}
+              value={filters.status}
+              onChange={(event) => onChange({ status: event.target.value })}
             >
-              <option value="">All customer types</option>
-              {snapshot.filters.customerTypes.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
+              <option value="">All job states</option>
+              {register.facets.statuses.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
               ))}
             </select>
           </label>
@@ -1536,8 +1616,10 @@ function AdvancedPilotFilters({
               onChange={(event) => onChange({ postcode: event.target.value })}
             >
               <option value="">All postcodes</option>
-              {snapshot.filters.postcodes.map((option) => (
-                <option key={option} value={option}>{option}</option>
+              {register.facets.postcodes.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
               ))}
             </select>
           </label>
@@ -1545,110 +1627,7 @@ function AdvancedPilotFilters({
       </details>
 
       <details>
-        <summary>Job filters</summary>
-        <div>
-          <label>
-            Job stage
-            <select
-              value={filters.workStage}
-              onChange={(event) => onChange({ workStage: event.target.value })}
-            >
-              <option value="">All job stages</option>
-              {snapshot.filters.workStages.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Appointment filters</summary>
-        <div>
-          <label>
-            Appointment type
-            <select
-              value={filters.appointmentType}
-              onChange={(event) =>
-                onChange({ appointmentType: event.target.value })}
-            >
-              <option value="">All appointment types</option>
-              {snapshot.filters.appointmentTypes.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Appointment status
-            <select
-              value={filters.appointmentStatus}
-              onChange={(event) =>
-                onChange({ appointmentStatus: event.target.value })}
-            >
-              <option value="">All appointment states</option>
-              {snapshot.filters.appointmentStatuses.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Tag filters</summary>
-        <div>
-          <label>
-            Job tag
-            <select
-              value={filters.tag}
-              onChange={(event) => onChange({ tag: event.target.value })}
-            >
-              <option value="">All tags</option>
-              {snapshot.filters.tags.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Product filters</summary>
-        <div>
-          <label>
-            Product category
-            <select
-              value={filters.productCategory}
-              onChange={(event) =>
-                onChange({ productCategory: event.target.value })}
-            >
-              <option value="">All product categories</option>
-              {snapshot.filters.productCategories.map((option) => (
-                <option key={option} value={option}>{readable(option)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Audit filters</summary>
-        <div>
-          <label>
-            Certificate audit
-            <select value="" disabled>
-              <option value="">Blocked: no issued certificates</option>
-            </select>
-          </label>
-          <small>
-            Rule, lookup, evidence, calculator and submission states are
-            available under Status filters.
-          </small>
-        </div>
-      </details>
-
-      <details>
-        <summary>Other filters</summary>
+        <summary>Display</summary>
         <div>
           <label>
             Rows per page
@@ -1659,21 +1638,9 @@ function AdvancedPilotFilters({
                   pageSize: Number(event.target.value) as Filters["pageSize"],
                 })}
             >
-              {snapshot.filters.pageSizes.map((size) => (
+              {[25, 50, 100, 300].map((size) => (
                 <option key={size} value={size}>{size}</option>
               ))}
-            </select>
-          </label>
-        </div>
-      </details>
-
-      <details>
-        <summary>Custom quick filters</summary>
-        <div>
-          <label>
-            Saved filter
-            <select value="" disabled>
-              <option value="">Saved views are not enabled yet</option>
             </select>
           </label>
         </div>
@@ -1699,6 +1666,7 @@ export function CreditexVeuPilotWorkspace({
   role: "admin" | "case_manager" | "reviewer" | "auditor";
 }) {
   const [snapshot, setSnapshot] = useState<PilotSnapshot | null>(null);
+  const [register, setRegister] = useState<SyntheticRegister | null>(null);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [panel, setPanel] = useState<Panel>("overview");
@@ -1733,6 +1701,11 @@ export function CreditexVeuPilotWorkspace({
     useState<StcEstimateResult | null>(null);
   const [stcEstimateBusy, setStcEstimateBusy] = useState(false);
   const [stcEstimateError, setStcEstimateError] = useState("");
+  const [calculationReadiness, setCalculationReadiness] =
+    useState<CalculationCoverageReadiness | null>(null);
+  const [interchangeReadiness, setInterchangeReadiness] =
+    useState<InterchangeReadiness | null>(null);
+  const [readinessError, setReadinessError] = useState("");
   const stcMaximumDeemingYears = String(
     Math.min(
       5,
@@ -1750,10 +1723,58 @@ export function CreditexVeuPilotWorkspace({
   const dataforceImportDialogRef = useRef<HTMLDialogElement>(null);
   const lastRecordTriggerRef = useRef<HTMLElement | null>(null);
 
-  const query = useMemo(() => {
+  const registerQuery = useMemo(() => {
     const params = new URLSearchParams({
       page: String(filters.page),
       pageSize: String(filters.pageSize),
+      sortBy: filters.sortBy,
+      sortDirection: filters.sortDirection,
+    });
+    if (filters.source) params.set("source", filters.source);
+    if (filters.programCode) params.set("programCode", filters.programCode);
+    if (filters.installerId)
+      params.set("installerId", filters.installerId);
+    if (filters.technicianId)
+      params.set("technicianId", filters.technicianId);
+    if (filters.activityTemplateId)
+      params.set("activityTemplateId", filters.activityTemplateId);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.postcode) params.set("postcode", filters.postcode);
+    if (filters.query) params.set("query", filters.query);
+    return params.toString();
+  }, [filters]);
+
+  const pilotQuery = useMemo(() => {
+    const pilotSort: Record<RegisterSortKey, PilotSortKey> = {
+      appId: "appointmentId",
+      jobId: "jobNumber",
+      status: "reviewStatus",
+      subStatus: "jobNumber",
+      type: "jobNumber",
+      workType: "workType",
+      scheduledDatetime: "scheduledStart",
+      balance: "jobNumber",
+      certificates: "jobNumber",
+      submission: "connectorStatus",
+      invoiced: "invoiceStatus",
+      fieldWorker: "technician",
+      agent: "jobNumber",
+      client: "jobNumber",
+      customer: "customer",
+      companyName: "companyName",
+      extCustRef: "customerNumber",
+      phone: "phone",
+      mobile: "jobNumber",
+      email: "email",
+      address: "address",
+      suburb: "suburb",
+      postcode: "postcode",
+    };
+    const params = new URLSearchParams({
+      page: String(filters.page),
+      pageSize: String(filters.pageSize),
+      sortBy: pilotSort[filters.sortBy],
+      sortDirection: filters.sortDirection,
     });
     if (filters.installerId)
       params.set("installerId", filters.installerId);
@@ -1761,37 +1782,8 @@ export function CreditexVeuPilotWorkspace({
       params.set("technicianId", filters.technicianId);
     if (filters.activityTemplateId)
       params.set("activityTemplateId", filters.activityTemplateId);
-    if (filters.reviewStatus)
-      params.set("reviewStatus", filters.reviewStatus);
-    if (filters.evidenceStatus)
-      params.set("evidenceStatus", filters.evidenceStatus);
-    if (filters.lookupStatus)
-      params.set("lookupStatus", filters.lookupStatus);
-    if (filters.ruleStatus) params.set("ruleStatus", filters.ruleStatus);
-    if (filters.calculatorStatus)
-      params.set("calculatorStatus", filters.calculatorStatus);
-    if (filters.connectorStatus)
-      params.set("connectorStatus", filters.connectorStatus);
-    if (filters.workStage) params.set("workStage", filters.workStage);
-    if (filters.workType) params.set("workType", filters.workType);
-    if (filters.priority) params.set("priority", filters.priority);
-    if (filters.appointmentType)
-      params.set("appointmentType", filters.appointmentType);
-    if (filters.appointmentStatus)
-      params.set("appointmentStatus", filters.appointmentStatus);
-    if (filters.customerType)
-      params.set("customerType", filters.customerType);
-    if (filters.serviceCategory)
-      params.set("serviceCategory", filters.serviceCategory);
-    if (filters.productCategory)
-      params.set("productCategory", filters.productCategory);
+    if (filters.status) params.set("reviewStatus", filters.status);
     if (filters.postcode) params.set("postcode", filters.postcode);
-    if (filters.tag) params.set("tag", filters.tag);
-    params.set("dateField", filters.dateField);
-    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-    if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    params.set("sortBy", filters.sortBy);
-    params.set("sortDirection", filters.sortDirection);
     if (filters.query) params.set("q", filters.query);
     return params.toString();
   }, [filters]);
@@ -1802,27 +1794,37 @@ export function CreditexVeuPilotWorkspace({
     setBusy((current) => current || "load");
     setError("");
     try {
-      const result = await api(`/api/creditex/pilot?${query}`);
+      const [pilotResult, registerResult] = await Promise.all([
+        api(`/api/creditex/pilot?${pilotQuery}`),
+        api(`/api/creditex/synthetic-job-register?${registerQuery}`),
+      ]);
       if (requestId !== requestRef.current) return;
-      const nextSnapshot = result.pilot as PilotSnapshot;
+      const nextSnapshot = pilotResult.pilot as PilotSnapshot;
+      const nextRegister = registerResult.register as SyntheticRegister;
       setSnapshot(nextSnapshot);
+      setRegister(nextRegister);
       if (!initialPanelRef.current) {
         initialPanelRef.current = true;
-        if (nextSnapshot.run?.status === "active") setPanel("jobs");
+        if (
+          nextSnapshot.run?.status === "active"
+          || nextRegister.pagination.total > 0
+        ) {
+          setPanel("jobs");
+        }
       }
     } catch (requestError) {
       if (requestId !== requestRef.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The synthetic VEU pilot could not be loaded.",
+          : "The synthetic compliance workspace could not be loaded.",
       );
     } finally {
       if (requestId === requestRef.current) {
         setBusy((current) => current === "load" ? "" : current);
       }
     }
-  }, [api, query]);
+  }, [api, pilotQuery, registerQuery]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -1893,6 +1895,44 @@ export function CreditexVeuPilotWorkspace({
   }, [api, panel]);
 
   useEffect(() => {
+    const path = panel === "calculators"
+      ? "/api/creditex/calculation-coverage"
+      : panel === "connectors"
+      ? "/api/creditex/interchange-readiness"
+      : "";
+    if (!path) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setReadinessError("");
+      void api(path)
+        .then((result) => {
+          if (!active) return;
+          if (panel === "calculators") {
+            setCalculationReadiness(
+              result.readiness as CalculationCoverageReadiness,
+            );
+          } else {
+            setInterchangeReadiness(
+              result.readiness as InterchangeReadiness,
+            );
+          }
+        })
+        .catch((readinessLoadError) => {
+          if (!active) return;
+          setReadinessError(
+            readinessLoadError instanceof Error
+              ? readinessLoadError.message
+              : "Readiness status is temporarily unavailable.",
+          );
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, panel]);
+
+  useEffect(() => {
     if (!openSortColumn) return;
 
     function closeSortMenuOnOutsidePointer(event: PointerEvent) {
@@ -1914,25 +1954,32 @@ export function CreditexVeuPilotWorkspace({
       );
   }, [openSortColumn]);
 
+  const selectedRegisterRow = useMemo(
+    () => register?.rows.find((row) => row.rowKey === selectedJobId) || null,
+    [register?.rows, selectedJobId],
+  );
   const selectedJob = useMemo(
-    () => snapshot?.jobs?.find((job) => job.id === selectedJobId) || null,
-    [selectedJobId, snapshot?.jobs],
+    () => selectedRegisterRow?.source === "veu_pilot"
+      ? snapshot?.jobs?.find(
+        (job) => job.id === selectedRegisterRow.sourceId,
+      ) || null
+      : null,
+    [selectedRegisterRow, snapshot?.jobs],
+  );
+  const contextRow = useMemo(
+    () =>
+      register?.rows.find((row) => row.rowKey === contextMenu?.jobId) || null,
+    [contextMenu?.jobId, register?.rows],
   );
   const contextJob = useMemo(
-    () => snapshot?.jobs?.find((job) => job.id === contextMenu?.jobId) || null,
-    [contextMenu?.jobId, snapshot?.jobs],
+    () => contextRow?.source === "veu_pilot"
+      ? snapshot?.jobs?.find((job) => job.id === contextRow.sourceId) || null
+      : null,
+    [contextRow, snapshot?.jobs],
   );
   const appliedFilterCount = useMemo(
     () => activeFilterCount(filters),
     [filters],
-  );
-  const visibleTechnicians = useMemo(
-    () => (snapshot?.technicians || []).filter(
-      (technician) =>
-        !draftFilters.installerId
-        || technician.installerId === draftFilters.installerId,
-    ),
-    [draftFilters.installerId, snapshot?.technicians],
   );
   const selectedCalculationMethods = useMemo(
     () => governmentActivityCalculationMethods(calculationProgramCode),
@@ -2093,13 +2140,41 @@ export function CreditexVeuPilotWorkspace({
     trigger?: HTMLElement | null,
   ) {
     if (trigger) lastRecordTriggerRef.current = trigger;
+    const rowKey = register?.rows.find(
+      (row) => row.source === "veu_pilot" && row.sourceId === job.id,
+    )?.rowKey || `veu_pilot:${job.id}`;
     setJobDetail(null);
     setJobDetailError("");
-    setSelectedJobId(job.id);
+    setSelectedJobId(rowKey);
     setRecordSection(section);
     setRecordOpen(true);
     setContextMenu(null);
     return loadJobDetail(job.id);
+  }
+
+  function openRegisterRecord(
+    row: SyntheticRegisterRow,
+    section: JobWorkspaceSection = "appointment_summary",
+    trigger?: HTMLElement | null,
+  ) {
+    if (trigger) lastRecordTriggerRef.current = trigger;
+    if (row.source === "manual_evidence") {
+      setJobDetail(null);
+      setJobDetailError("");
+      setSelectedJobId(row.rowKey);
+      setRecordSection(section);
+      setRecordOpen(true);
+      setContextMenu(null);
+      return;
+    }
+    const pilotJob = snapshot?.jobs?.find((job) => job.id === row.sourceId);
+    if (!pilotJob) {
+      setError(
+        "This VEU pilot row changed before its audit record opened. Refresh and try again.",
+      );
+      return;
+    }
+    return openRecord(pilotJob, section, trigger);
   }
 
   const closeRecord = useCallback(() => {
@@ -2112,28 +2187,55 @@ export function CreditexVeuPilotWorkspace({
     window.setTimeout(() => lastRecordTriggerRef.current?.focus(), 0);
   }, []);
 
-  function openContextMenu(
-    job: PilotJob,
+  function openRegisterContextMenu(
+    row: SyntheticRegisterRow,
     x: number,
     y: number,
     trigger?: HTMLElement | null,
   ) {
     if (trigger) lastRecordTriggerRef.current = trigger;
-    setSelectedJobId(job.id);
+    setSelectedJobId(row.rowKey);
     setRecordOpen(false);
-    setContextMenu({ jobId: job.id, x: Math.max(8, x), y: Math.max(8, y) });
+    setContextMenu({
+      jobId: row.rowKey,
+      x: Math.max(8, x),
+      y: Math.max(8, y),
+    });
   }
 
-  async function copyJobRow(job: PilotJob) {
+  async function copyJobRow(
+    job: PilotJob,
+    includeHeaders: boolean,
+  ) {
     const record = projectPilotJobToDataforceRecord(job);
-    const values = DATAFORCE_JOB_CSV_HEADERS.map((header) => record[header]);
-    const content = [
-      DATAFORCE_JOB_CSV_HEADERS.join("\t"),
-      values.join("\t"),
-    ].join("\n");
+    const content = dataforceClipboardText(record, includeHeaders);
     try {
       await navigator.clipboard.writeText(content);
-      setNotice(`${job.jobNumber} row headings and values were copied.`);
+      setNotice(
+        includeHeaders
+          ? `${job.jobNumber} row headings and values were copied safely.`
+          : `${job.jobNumber} selected values were copied safely.`,
+      );
+    } catch {
+      setError("Browser clipboard access was denied. Nothing was copied.");
+    } finally {
+      closeContextMenu();
+    }
+  }
+
+  async function copyRegisterRow(
+    row: SyntheticRegisterRow,
+    includeHeaders: boolean,
+  ) {
+    const content = dataforceClipboardText(row.cells, includeHeaders);
+    try {
+      await navigator.clipboard.writeText(content);
+      const jobLabel = row.cells["Job Id"] || "Job";
+      setNotice(
+        includeHeaders
+          ? `${jobLabel} row headings and values were copied safely.`
+          : `${jobLabel} selected values were copied safely.`,
+      );
     } catch {
       setError("Browser clipboard access was denied. Nothing was copied.");
     } finally {
@@ -2142,7 +2244,7 @@ export function CreditexVeuPilotWorkspace({
   }
 
   async function downloadDataforceCsv() {
-    const expectedTotal = snapshot?.pagination?.total || 0;
+    const expectedTotal = register?.pagination.total || 0;
     if (expectedTotal <= 0) return;
     if (expectedTotal > 20_000) {
       setError(
@@ -2155,32 +2257,32 @@ export function CreditexVeuPilotWorkspace({
     setError("");
     setNotice("");
     try {
-      const params = new URLSearchParams(query);
+      const params = new URLSearchParams(registerQuery);
       params.set("pageSize", "300");
-      const jobsById = new Map<string, PilotJob>();
+      const rowsById = new Map<string, SyntheticRegisterRow>();
       let page = 0;
       let pageCount = 1;
       do {
         params.set("page", String(page));
         const result = await api(
-          `/api/creditex/pilot?${params.toString()}`,
+          `/api/creditex/synthetic-job-register?${params.toString()}`,
         );
-        const pageSnapshot = result.pilot as PilotSnapshot;
-        for (const job of pageSnapshot.jobs || []) {
-          jobsById.set(job.id, job);
+        const pageRegister = result.register as SyntheticRegister;
+        for (const row of pageRegister.rows) {
+          rowsById.set(row.rowKey, row);
         }
-        pageCount = Math.max(1, pageSnapshot.pagination?.pageCount || 1);
+        pageCount = Math.max(1, pageRegister.pagination.pageCount || 1);
         page += 1;
       } while (page < pageCount);
 
-      const jobs = Array.from(jobsById.values());
-      if (jobs.length !== expectedTotal) {
+      const rows = Array.from(rowsById.values());
+      if (rows.length !== expectedTotal) {
         throw new Error(
           "The job register changed during export. Refresh and download again.",
         );
       }
       const csv = exportDataforceJobCsv(
-        jobs.map((job) => projectPilotJobToDataforceRecord(job)),
+        rows.map((row) => row.cells),
         { includeBom: true },
       );
       const url = URL.createObjectURL(
@@ -2189,13 +2291,13 @@ export function CreditexVeuPilotWorkspace({
       const link = document.createElement("a");
       link.href = url;
       link.download =
-        `creditex-veu-jobs-${new Date().toISOString().slice(0, 10)}.csv`;
+        `creditex-synthetic-jobs-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.append(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
       setNotice(
-        `Downloaded ${jobs.length} matching jobs in the exact 23-column Dataforce layout.`,
+        `Downloaded ${rows.length} matching jobs in the exact 23-column Dataforce layout.`,
       );
     } catch (downloadError) {
       setError(
@@ -2416,7 +2518,11 @@ export function CreditexVeuPilotWorkspace({
       });
       setNotice(`${job.jobNumber} synthetic workflow status was audited.`);
       await load();
-      if (recordOpen && selectedJobId === job.id) {
+      if (
+        recordOpen
+        && selectedRegisterRow?.source === "veu_pilot"
+        && selectedRegisterRow.sourceId === job.id
+      ) {
         await loadJobDetail(job.id);
       }
     } catch (actionError) {
@@ -2430,7 +2536,7 @@ export function CreditexVeuPilotWorkspace({
     }
   }
 
-  if (!snapshot) {
+  if (!snapshot || !register) {
     return (
       <section className={styles.workspace} aria-label="VEU pilot">
         <div className={styles.loading}>
@@ -2746,10 +2852,10 @@ export function CreditexVeuPilotWorkspace({
           <div className={styles.jobRegister} inert={filtersOpen}>
             <header>
               <div>
-                <span>VEU TEST JOB REGISTER</span>
+                <span>SYNTHETIC COMPLIANCE JOB REGISTER</span>
                 <h3>
-                  {(snapshot.jobs || []).length} shown of{" "}
-                  {snapshot.pagination?.total || 0} matching jobs
+                  {register.rows.length} shown of{" "}
+                  {register.pagination.total} matching jobs
                 </h3>
                 <p>
                   Double-click a job for its complete audit workspace.
@@ -2810,7 +2916,7 @@ export function CreditexVeuPilotWorkspace({
                       className={styles.compactButtonLabel}
                       aria-hidden="true"
                     >
-                      ⌕
+                      Go
                     </span>
                   </button>
                 </form>
@@ -2825,7 +2931,7 @@ export function CreditexVeuPilotWorkspace({
                     className={styles.compactButtonLabel}
                     aria-hidden="true"
                   >
-                    ↻
+                    Reload
                   </span>
                 </button>
                 <button
@@ -2858,8 +2964,8 @@ export function CreditexVeuPilotWorkspace({
             <div className={styles.tableViewport}>
               <table className={styles.jobTable}>
                 <caption>
-                  Creditex synthetic VEU compliance job register. Every
-                  returned job is represented by one row.
+                  Creditex synthetic compliance job register in the exact
+                  23-column Dataforce layout. Every returned job is one row.
                 </caption>
                 <thead>
                   <tr>
@@ -2895,11 +3001,11 @@ export function CreditexVeuPilotWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {(snapshot.jobs || []).map((job) => (
+                  {register.rows.map((row) => (
                     <tr
-                      key={job.id}
-                      data-selected={selectedJobId === job.id}
-                      aria-selected={selectedJobId === job.id}
+                      key={row.rowKey}
+                      data-selected={selectedJobId === row.rowKey}
+                      aria-selected={selectedJobId === row.rowKey}
                       tabIndex={0}
                       onClick={(event) => {
                         if (
@@ -2909,7 +3015,7 @@ export function CreditexVeuPilotWorkspace({
                         ) {
                           return;
                         }
-                        setSelectedJobId(job.id);
+                        setSelectedJobId(row.rowKey);
                         setRecordOpen(false);
                       }}
                       onDoubleClick={(event) => {
@@ -2920,16 +3026,16 @@ export function CreditexVeuPilotWorkspace({
                         ) {
                           return;
                         }
-                        void openRecord(
-                          job,
+                        void openRegisterRecord(
+                          row,
                           "appointment_summary",
                           event.currentTarget,
                         );
                       }}
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        openContextMenu(
-                          job,
+                        openRegisterContextMenu(
+                          row,
                           event.clientX,
                           event.clientY,
                           event.currentTarget,
@@ -2938,8 +3044,8 @@ export function CreditexVeuPilotWorkspace({
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
-                          void openRecord(
-                            job,
+                          void openRegisterRecord(
+                            row,
                             "appointment_summary",
                             event.currentTarget,
                           );
@@ -2951,8 +3057,8 @@ export function CreditexVeuPilotWorkspace({
                           event.preventDefault();
                           const rect =
                             event.currentTarget.getBoundingClientRect();
-                          openContextMenu(
-                            job,
+                          openRegisterContextMenu(
+                            row,
                             rect.left + 28,
                             rect.top + 24,
                             event.currentTarget,
@@ -2962,19 +3068,19 @@ export function CreditexVeuPilotWorkspace({
                     >
                       {PILOT_JOB_COLUMNS.map((column) => (
                         <td key={column.key} data-column={column.key}>
-                          <PilotJobCell
+                          <SyntheticRegisterCell
                             column={column}
-                            job={job}
+                            row={row}
                             onOpen={(button) =>
-                              void openRecord(
-                                job,
+                              void openRegisterRecord(
+                                row,
                                 "appointment_summary",
                                 button,
                               )}
                             onOpenMenu={(button) => {
                               const rect = button.getBoundingClientRect();
-                              openContextMenu(
-                                job,
+                              openRegisterContextMenu(
+                                row,
                                 rect.left,
                                 rect.bottom + 4,
                                 button,
@@ -2985,7 +3091,7 @@ export function CreditexVeuPilotWorkspace({
                       ))}
                     </tr>
                   ))}
-                  {!snapshot.jobs?.length && (
+                  {!register.rows.length && (
                     <tr>
                       <td
                         className={styles.empty}
@@ -3001,7 +3107,7 @@ export function CreditexVeuPilotWorkspace({
 
             <footer className={styles.registerFooter}>
               <span>
-                Records {(snapshot.jobs || []).length} |{" "}
+                Records {register.rows.length} |{" "}
                 {PILOT_JOB_COLUMNS.length} Dataforce columns |{" "}
                 {PILOT_VISIBLE_SORTABLE_COLUMN_COUNT} sortable
               </span>
@@ -3022,7 +3128,7 @@ export function CreditexVeuPilotWorkspace({
                 type="button"
                 disabled={
                   Boolean(busy)
-                  || (snapshot.pagination?.total || 0) <= 0
+                  || register.pagination.total <= 0
                 }
                 onClick={() => void downloadDataforceCsv()}
               >
@@ -3032,7 +3138,7 @@ export function CreditexVeuPilotWorkspace({
               </button>
               <button
                 type="button"
-                disabled={(snapshot.pagination?.page || 0) <= 0}
+                disabled={!register.pagination.hasPreviousPage}
                 onClick={() => {
                   const next = {
                     ...filters,
@@ -3047,14 +3153,13 @@ export function CreditexVeuPilotWorkspace({
                 Previous
               </button>
               <span>
-                Page {(snapshot.pagination?.page || 0) + 1} of{" "}
-                {Math.max(1, snapshot.pagination?.pageCount || 1)}
+                Page {register.pagination.page + 1} of{" "}
+                {Math.max(1, register.pagination.pageCount)}
               </span>
               <button
                 type="button"
                 disabled={
-                  (snapshot.pagination?.page || 0) + 1
-                  >= (snapshot.pagination?.pageCount || 0)
+                  !register.pagination.hasNextPage
                 }
                 onClick={() => {
                   const next = { ...filters, page: filters.page + 1 };
@@ -3209,10 +3314,9 @@ export function CreditexVeuPilotWorkspace({
             aria-hidden={!filtersOpen}
           >
             {filtersOpen && (
-              <AdvancedPilotFilters
-                snapshot={snapshot}
+              <AdvancedRegisterFilters
+                register={register}
                 filters={draftFilters}
-                technicians={visibleTechnicians}
                 busy={Boolean(busy)}
                 onChange={(next) =>
                   setDraftFilters((current) => ({ ...current, ...next }))}
@@ -3238,8 +3342,20 @@ export function CreditexVeuPilotWorkspace({
               state={contextMenu}
               job={contextJob}
               onOpen={(section) => void openRecord(contextJob, section)}
-              onCopyRow={() => void copyJobRow(contextJob)}
+              onCopyRow={() => void copyJobRow(contextJob, true)}
+              onCopySelection={() => void copyJobRow(contextJob, false)}
               onPrint={(previewOnly) => void openPrint(contextJob, previewOnly)}
+              onClose={closeContextMenu}
+            />
+          )}
+          {contextMenu && contextRow?.source === "manual_evidence" && (
+            <ManualJobContextMenu
+              state={contextMenu}
+              row={contextRow}
+              onOpen={() => openRegisterRecord(contextRow)}
+              onCopyRow={() => void copyRegisterRow(contextRow, true)}
+              onCopySelection={() =>
+                void copyRegisterRow(contextRow, false)}
               onClose={closeContextMenu}
             />
           )}
@@ -3268,6 +3384,14 @@ export function CreditexVeuPilotWorkspace({
           onClose={closeRecord}
           onSave={(next) => void saveJob(selectedJob, next)}
           onPrint={() => window.print()}
+        />
+      )}
+      {recordOpen && selectedRegisterRow?.source === "manual_evidence" && (
+        <CreditexManualJobAuditWorkspace
+          api={api}
+          jobId={selectedRegisterRow.sourceId}
+          role={role}
+          onClose={closeRecord}
         />
       )}
 
@@ -3531,31 +3655,66 @@ export function CreditexVeuPilotWorkspace({
           </div>
           <section className={styles.calculatorSummary}>
             <article>
-              <span>Controlled activities</span>
-              <strong>{GOVERNMENT_ACTIVITY_CALCULATION_METHODS.length}</strong>
-            </article>
-            <article>
-              <span>Estimate available</span>
+              <span>Programs covered</span>
               <strong>
-                {GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
-                  (summary) => summary.state === "estimate_available",
-                )?.count || 0}
+                {calculationReadiness?.coverage.programs
+                  ?? GOVERNMENT_PROGRAM_TEMPLATES.length}
               </strong>
             </article>
             <article>
-              <span>Formula review required</span>
+              <span>Activity templates</span>
               <strong>
-                {GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
-                  (summary) =>
-                    summary.state === "governed_formula_required",
-                )?.count || 0}
+                {calculationReadiness?.coverage.activities
+                  ?? GOVERNMENT_ACTIVITY_CALCULATION_METHODS.length}
+              </strong>
+            </article>
+            <article>
+              <span>Executable estimates</span>
+              <strong>
+                {calculationReadiness?.coverage.estimateExecutable
+                  ?? GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
+                    (summary) => summary.state === "estimate_available",
+                  )?.count
+                  ?? 0}
+              </strong>
+            </article>
+            <article>
+              <span>Blocked or non-executable</span>
+              <strong>
+                {calculationReadiness?.coverage.blockedOrNonExecutable
+                  ?? "Checking"}
               </strong>
             </article>
             <article>
               <span>Certificate actions</span>
-              <strong>0 enabled</strong>
+              <strong>
+                {calculationReadiness?.coverage.certificateActionsEnabled
+                  ?? 0} enabled
+              </strong>
             </article>
           </section>
+          {readinessError && (
+            <p className={styles.error}>{readinessError}</p>
+          )}
+          {calculationReadiness && (
+            <section className={styles.readinessLedger}>
+              <div>
+                <span>COVERAGE REGRESSION</span>
+                <strong>
+                  All {calculationReadiness.coverage.activities} templates
+                  deterministically accounted for
+                </strong>
+                <code>{calculationReadiness.coverage.coverageSha256}</code>
+              </div>
+              <div>
+                {calculationReadiness.coverage.stateCounts.map((state) => (
+                  <span key={state.state}>
+                    {readable(state.state)} <b>{state.count}</b>
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className={styles.calculationWorkspace}>
             <section
@@ -3564,10 +3723,10 @@ export function CreditexVeuPilotWorkspace({
             >
               <header>
                 <div>
-                  <span>SRES · DETERMINISTIC ESTIMATE</span>
+                  <span>SRES | DETERMINISTIC ESTIMATE</span>
                   <h4 id="stc-estimator-title">Estimate STCs</h4>
                   <p>
-                    Controlled 2026–2030 arithmetic with exact decimal inputs,
+                    Controlled 2026 to 2030 arithmetic with exact decimal inputs,
                     a complete trace and final whole-certificate rounding.
                   </p>
                 </div>
@@ -3809,16 +3968,16 @@ export function CreditexVeuPilotWorkspace({
                               event.target.value as StcEstimateForm["zoneRating"],
                           }))}
                       >
-                        <option value="1.622">Zone 1 · 1.622</option>
-                        <option value="1.536">Zone 2 · 1.536</option>
-                        <option value="1.382">Zone 3 · 1.382</option>
-                        <option value="1.185">Zone 4 · 1.185</option>
+                        <option value="1.622">Zone 1 | 1.622</option>
+                        <option value="1.536">Zone 2 | 1.536</option>
+                        <option value="1.382">Zone 3 | 1.382</option>
+                        <option value="1.185">Zone 4 | 1.185</option>
                       </select>
                     </label>
                   </>
                 )}
                 <button type="submit" disabled={stcEstimateBusy}>
-                  {stcEstimateBusy ? "Calculating…" : "Calculate estimate"}
+                  {stcEstimateBusy ? "Calculating..." : "Calculate estimate"}
                 </button>
               </form>
               {stcEstimateError && (
@@ -3860,7 +4019,7 @@ export function CreditexVeuPilotWorkspace({
                       Open official source
                     </a>
                     <code title={stcEstimate.receiptHash}>
-                      Receipt {stcEstimate.receiptHash.slice(0, 22)}…
+                      Receipt {stcEstimate.receiptHash.slice(0, 22)}...
                     </code>
                   </footer>
                 </section>
@@ -3890,7 +4049,7 @@ export function CreditexVeuPilotWorkspace({
                         key={program.programCode}
                         value={program.programCode}
                       >
-                        {program.jurisdiction} · {program.programCode} ·{" "}
+                        {program.jurisdiction} | {program.programCode} |{" "}
                         {program.name}
                       </option>
                     ))}
@@ -3965,6 +4124,89 @@ export function CreditexVeuPilotWorkspace({
               settlement.
             </p>
           </div>
+          {readinessError && (
+            <p className={styles.error}>{readinessError}</p>
+          )}
+          {interchangeReadiness && (
+            <>
+              <section className={styles.calculatorSummary}>
+                <article>
+                  <span>Blocked adapter descriptors</span>
+                  <strong>{interchangeReadiness.counts.adapters}</strong>
+                </article>
+                <article>
+                  <span>Ready</span>
+                  <strong>{interchangeReadiness.counts.ready}</strong>
+                </article>
+                <article>
+                  <span>Blocked safely</span>
+                  <strong>{interchangeReadiness.counts.blocked}</strong>
+                </article>
+                <article>
+                  <span>Serializers available</span>
+                  <strong>
+                    {interchangeReadiness.counts.serializersAvailable}
+                  </strong>
+                </article>
+                <article>
+                  <span>External sends</span>
+                  <strong>
+                    {interchangeReadiness.counts.externalSubmissionEnabled}
+                  </strong>
+                </article>
+              </section>
+              <section className={styles.interchangeAdapters}>
+                {interchangeReadiness.adapters.map((adapter) => (
+                  <article key={adapter.adapterKey}>
+                    <header>
+                      <div>
+                        <span>{adapter.programCode}</span>
+                        <h4>
+                          {adapter.scheme || adapter.kind
+                            ? `${adapter.scheme || adapter.kind} | `
+                            : ""}
+                          {readable(adapter.pathway)}
+                        </h4>
+                      </div>
+                      <b>Blocked</b>
+                    </header>
+                    <p>{adapter.blockReason}</p>
+                    <dl>
+                      <div>
+                        <dt>Descriptor</dt>
+                        <dd>{adapter.adapterKey}</dd>
+                      </div>
+                      <div>
+                        <dt>Schema</dt>
+                        <dd>{readable(adapter.schemaState)}</dd>
+                      </div>
+                      <div>
+                        <dt>Serializer</dt>
+                        <dd>Unavailable</dd>
+                      </div>
+                      <div>
+                        <dt>External send</dt>
+                        <dd>Disabled</dd>
+                      </div>
+                    </dl>
+                    {(adapter.officialSourceUrl
+                      || adapter.publicRegistryUrl) && (
+                      <a
+                        href={
+                          adapter.officialSourceUrl
+                          || adapter.publicRegistryUrl
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open official source
+                      </a>
+                    )}
+                  </article>
+                ))}
+              </section>
+            </>
+          )}
           <div className={styles.connectorGrid}>
             {(snapshot.connectors || []).map((connector) => (
               <article key={`${connector.connectorCode}:${connector.mappingVersion}`}>

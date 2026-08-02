@@ -1737,6 +1737,7 @@ export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   index("trade_crm_appointments_owner_start_idx").on(table.firebaseUid, table.status, table.startsAt),
   index("trade_crm_appointments_work_order_idx").on(table.workOrderId, table.startsAt),
   index("trade_crm_appointments_assignee_start_idx").on(table.firebaseUid, table.assigneeMemberId, table.status, table.startsAt),
+  index("trade_crm_appointments_register_latest_idx").on(table.workOrderId, table.firebaseUid, table.startsAt, table.id),
 ]);
 
 export const tradeCrmAppointmentRevisions = sqliteTable("trade_crm_appointment_revisions", {
@@ -4037,6 +4038,7 @@ export const compliancePilotJobs = sqliteTable("compliance_pilot_jobs", {
   uniqueIndex("compliance_pilot_jobs_work_order_idx").on(table.workOrderId),
   index("compliance_pilot_jobs_run_activity_idx").on(table.pilotRunId, table.activityTemplateId, table.reviewStatus),
   index("compliance_pilot_jobs_run_installer_idx").on(table.pilotRunId, table.installerId, table.technicianId, table.jobNumber),
+  index("compliance_pilot_jobs_register_review_idx").on(table.pilotRunId, table.reviewStatus, table.updatedAt, table.id),
   check("compliance_pilot_jobs_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
 ]);
 
@@ -4126,6 +4128,7 @@ export const complianceManualEvidenceTestJobs = sqliteTable("compliance_manual_e
   installerLabel: text("installer_label").notNull().default("Unassigned test installer"),
   technicianId: text("technician_id").notNull().default(""),
   technicianLabel: text("technician_label").notNull().default("Unassigned test technician"),
+  fieldTesterUid: text("field_tester_uid").notNull().default(""),
   customerLabel: text("customer_label").notNull(),
   siteState: text("site_state").notNull(),
   sitePostcode: text("site_postcode").notNull(),
@@ -4152,6 +4155,18 @@ export const complianceManualEvidenceTestJobs = sqliteTable("compliance_manual_e
     .on(table.organisationId, table.status, table.updatedAt),
   index("compliance_manual_evidence_test_job_activity_idx")
     .on(table.organisationId, table.activityTemplateId, table.updatedAt),
+  index("compliance_manual_evidence_test_job_field_tester_idx")
+    .on(table.organisationId, table.fieldTesterUid, table.status, table.updatedAt),
+  index("compliance_manual_evidence_test_job_register_program_idx")
+    .on(table.organisationId, table.programCode, table.status, table.updatedAt, table.id),
+  index("compliance_manual_evidence_test_job_register_activity_idx")
+    .on(table.organisationId, table.activityTemplateId, table.status, table.updatedAt, table.id),
+  index("compliance_manual_evidence_test_job_register_personnel_idx")
+    .on(table.organisationId, table.installerId, table.technicianId, table.updatedAt, table.id),
+  index("compliance_manual_evidence_test_job_register_postcode_idx")
+    .on(table.organisationId, table.sitePostcode, table.updatedAt, table.id),
+  index("compliance_manual_evidence_test_job_register_created_idx")
+    .on(table.organisationId, table.createdAt, table.id),
   check("compliance_manual_evidence_test_job_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
   check("compliance_manual_evidence_test_job_status_check", sql`${table.status} IN ('draft', 'field_testing', 'ready_for_audit', 'changes_required', 'passed', 'archived')`),
   check("compliance_manual_evidence_test_job_json_check", sql`json_valid(${table.activitySnapshot}) AND json_valid(${table.formSchema}) AND json_valid(${table.responseSnapshot})`),
@@ -4173,6 +4188,272 @@ export const complianceManualEvidenceTestEvents = sqliteTable("compliance_manual
   index("compliance_manual_evidence_test_event_job_idx")
     .on(table.organisationId, table.jobId, table.createdAt, table.id),
   check("compliance_manual_evidence_test_event_json_check", sql`json_valid(${table.metadata})`),
+]);
+
+export const complianceManualFieldDevices = sqliteTable("compliance_manual_field_devices", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  deviceId: text("device_id").notNull(),
+  platform: text("platform").notNull(),
+  deviceName: text("device_name").notNull(),
+  appVersion: text("app_version").notNull(),
+  isPhysicalDevice: integer("is_physical_device").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  registeredAt: text("registered_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  revokedAt: text("revoked_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_field_device_identity_idx")
+    .on(table.organisationId, table.firebaseUid, table.deviceId),
+  index("compliance_manual_field_device_status_idx")
+    .on(table.organisationId, table.firebaseUid, table.status, table.lastSeenAt),
+  check("compliance_manual_field_device_platform_check", sql`${table.platform} IN ('ios', 'android')`),
+  check("compliance_manual_field_device_status_check", sql`${table.status} IN ('active', 'revoked')`),
+  check("compliance_manual_field_device_physical_check", sql`${table.isPhysicalDevice} IN (0, 1)`),
+]);
+
+export const complianceManualFieldUploadSessions = sqliteTable("compliance_manual_field_upload_sessions", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  jobId: text("job_id").notNull(),
+  fieldCode: text("field_code").notNull(),
+  fieldTesterUid: text("field_tester_uid").notNull(),
+  deviceId: text("device_id").notNull(),
+  clientUploadId: text("client_upload_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  uploadId: text("upload_id").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  partSizeBytes: integer("part_size_bytes").notNull(),
+  evidenceEnvelope: text("evidence_envelope").notNull(),
+  declaredSha256: text("declared_sha256").notNull(),
+  status: text("status").notNull().default("initiated"),
+  captureId: text("capture_id").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_field_upload_client_idx")
+    .on(table.organisationId, table.fieldTesterUid, table.clientUploadId),
+  uniqueIndex("compliance_manual_field_upload_object_idx").on(table.objectKey),
+  index("compliance_manual_field_upload_job_idx")
+    .on(table.organisationId, table.jobId, table.status, table.updatedAt),
+  index("compliance_manual_field_upload_device_idx")
+    .on(table.organisationId, table.fieldTesterUid, table.deviceId, table.status),
+  check("compliance_manual_field_upload_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+  check("compliance_manual_field_upload_status_check", sql`${table.status} IN ('initiated', 'uploading', 'completing', 'completed', 'rejected', 'expired', 'aborted')`),
+  check("compliance_manual_field_upload_json_check", sql`json_valid(${table.evidenceEnvelope})`),
+  check("compliance_manual_field_upload_size_check", sql`${table.sizeBytes} >= 1 AND ${table.sizeBytes} <= 52428800 AND ${table.partSizeBytes} = 5242880`),
+  check("compliance_manual_field_upload_hash_check", sql`length(${table.declaredSha256}) = 64 AND lower(${table.declaredSha256}) NOT GLOB '*[^0-9a-f]*'`),
+]);
+
+export const complianceManualFieldUploadParts = sqliteTable("compliance_manual_field_upload_parts", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  partNumber: integer("part_number").notNull(),
+  etag: text("etag").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_field_upload_part_idx").on(table.sessionId, table.partNumber),
+  check("compliance_manual_field_upload_part_check", sql`${table.partNumber} >= 1 AND ${table.sizeBytes} >= 1 AND ${table.sizeBytes} <= 5242880`),
+]);
+
+export const complianceManualEvidenceTestCaptures = sqliteTable("compliance_manual_evidence_test_captures", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  jobId: text("job_id").notNull(),
+  fieldCode: text("field_code").notNull(),
+  fieldTesterUid: text("field_tester_uid").notNull(),
+  deviceId: text("device_id").notNull(),
+  uploadSessionId: text("upload_session_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  originalSha256: text("original_sha256").notNull(),
+  evidenceEnvelope: text("evidence_envelope").notNull(),
+  serverVerification: text("server_verification").notNull(),
+  metadataState: text("metadata_state").notNull(),
+  gpsState: text("gps_state").notNull(),
+  captureTimeState: text("capture_time_state").notNull(),
+  physicalDeviceState: text("physical_device_state").notNull(),
+  status: text("status").notNull().default("captured"),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_evidence_test_capture_session_idx").on(table.uploadSessionId),
+  index("compliance_manual_evidence_test_capture_job_idx")
+    .on(table.organisationId, table.jobId, table.fieldCode, table.status, table.createdAt),
+  check("compliance_manual_evidence_test_capture_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+  check("compliance_manual_evidence_test_capture_status_check", sql`${table.status} IN ('captured', 'superseded', 'rejected')`),
+  check("compliance_manual_evidence_test_capture_json_check", sql`json_valid(${table.evidenceEnvelope}) AND json_valid(${table.serverVerification})`),
+  check("compliance_manual_evidence_test_capture_hash_check", sql`length(${table.originalSha256}) = 64 AND lower(${table.originalSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_manual_evidence_test_capture_state_check", sql`${table.metadataState} IN ('verified', 'not_required', 'missing', 'invalid') AND ${table.gpsState} IN ('verified', 'not_required', 'missing', 'invalid') AND ${table.captureTimeState} IN ('verified', 'not_required', 'missing', 'invalid') AND ${table.physicalDeviceState} IN ('reported_physical', 'reported_emulator')`),
+]);
+
+export const complianceManualFieldIntegrityReceipts = sqliteTable("compliance_manual_field_integrity_receipts", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  captureId: text("capture_id").notNull(),
+  requestId: text("request_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  expectedSha256: text("expected_sha256").notNull(),
+  observedSha256: text("observed_sha256").notNull(),
+  expectedSizeBytes: integer("expected_size_bytes").notNull(),
+  observedSizeBytes: integer("observed_size_bytes").notNull(),
+  result: text("result").notNull(),
+  verificationScope: text("verification_scope").notNull().default("r2_object_bytes_and_embedded_metadata"),
+  verifiedByUid: text("verified_by_uid").notNull(),
+  verifiedAt: text("verified_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_field_integrity_request_idx").on(table.organisationId, table.requestId),
+  index("compliance_manual_field_integrity_capture_idx")
+    .on(table.organisationId, table.captureId, table.verifiedAt),
+  check("compliance_manual_field_integrity_result_check", sql`${table.result} IN ('matched', 'mismatch', 'object_missing', 'storage_unavailable')`),
+  check("compliance_manual_field_integrity_hash_check", sql`length(${table.expectedSha256}) = 64 AND lower(${table.expectedSha256}) NOT GLOB '*[^0-9a-f]*' AND (${table.observedSha256} = '' OR (length(${table.observedSha256}) = 64 AND lower(${table.observedSha256}) NOT GLOB '*[^0-9a-f]*'))`),
+]);
+
+export const complianceManualFieldAcceptanceRuns = sqliteTable("compliance_manual_field_acceptance_runs", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  jobId: text("job_id").notNull(),
+  testerUid: text("tester_uid").notNull(),
+  reviewerUid: text("reviewer_uid").notNull().default(""),
+  deviceId: text("device_id").notNull(),
+  platform: text("platform").notNull(),
+  appVersion: text("app_version").notNull(),
+  scenarioResults: text("scenario_results").notNull().default("[]"),
+  status: text("status").notNull().default("not_run"),
+  testerNote: text("tester_note").notNull().default(""),
+  reviewerNote: text("reviewer_note").notNull().default(""),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  startedAt: text("started_at").notNull().default(""),
+  submittedAt: text("submitted_at").notNull().default(""),
+  reviewedAt: text("reviewed_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("compliance_manual_field_acceptance_job_idx")
+    .on(table.organisationId, table.jobId, table.status, table.updatedAt),
+  check("compliance_manual_field_acceptance_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+  check("compliance_manual_field_acceptance_status_check", sql`${table.status} IN ('not_run', 'in_progress', 'submitted', 'passed', 'failed')`),
+  check("compliance_manual_field_acceptance_json_check", sql`json_valid(${table.scenarioResults})`),
+  check("compliance_manual_field_acceptance_platform_check", sql`${table.platform} IN ('ios', 'android')`),
+  check("compliance_manual_field_acceptance_dual_control_check", sql`${table.reviewerUid} = '' OR ${table.reviewerUid} <> ${table.testerUid}`),
+]);
+
+export const complianceManualFieldActionReceipts = sqliteTable("compliance_manual_field_action_receipts", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  fieldTesterUid: text("field_tester_uid").notNull(),
+  clientActionId: text("client_action_id").notNull(),
+  actionType: text("action_type").notNull(),
+  jobId: text("job_id").notNull(),
+  formId: text("form_id").notNull(),
+  baseRevision: integer("base_revision").notNull(),
+  payloadSha256: text("payload_sha256").notNull(),
+  responseSha256: text("response_sha256").notNull(),
+  resultRevision: integer("result_revision").notNull(),
+  status: text("status").notNull().default("applied"),
+  recordMode: text("record_mode").notNull().default("synthetic_test"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_field_action_receipt_client_idx")
+    .on(table.organisationId, table.fieldTesterUid, table.clientActionId),
+  index("compliance_manual_field_action_receipt_job_idx")
+    .on(table.organisationId, table.jobId, table.createdAt, table.id),
+  check("compliance_manual_field_action_receipt_identity_check", sql`trim(${table.organisationId}) <> '' AND trim(${table.fieldTesterUid}) <> '' AND trim(${table.clientActionId}) <> '' AND trim(${table.jobId}) <> '' AND ${table.formId} = ${table.jobId} || ':technical'`),
+  check("compliance_manual_field_action_receipt_action_check", sql`${table.actionType} = 'save_job_form'`),
+  check("compliance_manual_field_action_receipt_revision_check", sql`${table.baseRevision} >= 1 AND ${table.resultRevision} = ${table.baseRevision} + 1`),
+  check("compliance_manual_field_action_receipt_hash_check", sql`length(${table.payloadSha256}) = 64 AND lower(${table.payloadSha256}) NOT GLOB '*[^0-9a-f]*' AND length(${table.responseSha256}) = 64 AND lower(${table.responseSha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_manual_field_action_receipt_status_check", sql`${table.status} = 'applied'`),
+  check("compliance_manual_field_action_receipt_mode_check", sql`${table.recordMode} = 'synthetic_test'`),
+]);
+
+export const complianceManualPolicyBindings = sqliteTable("compliance_manual_policy_bindings", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(),
+  version: integer("version").notNull(),
+  programId: text("program_id").notNull(),
+  activityVersionId: text("activity_version_id").notNull(),
+  evidencePolicyVersionId: text("evidence_policy_version_id").notNull(),
+  programSourceBindingId: text("program_source_binding_id").notNull(),
+  activitySourceBindingId: text("activity_source_binding_id").notNull(),
+  evidencePolicySourceBindingId: text("evidence_policy_source_binding_id").notNull(),
+  bindingSnapshot: text("binding_snapshot").notNull(),
+  bindingSnapshotSha256: text("binding_snapshot_sha256").notNull(),
+  lifecycleState: text("lifecycle_state").notNull().default("draft"),
+  requestedByUid: text("requested_by_uid").notNull(),
+  requestedAt: text("requested_at").notNull(),
+  approvedByUid: text("approved_by_uid").notNull().default(""),
+  approvedAt: text("approved_at").notNull().default(""),
+  approvalNote: text("approval_note").notNull().default(""),
+  withdrawnByUid: text("withdrawn_by_uid").notNull().default(""),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  withdrawalNote: text("withdrawal_note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_manual_policy_template_version_idx")
+    .on(table.organisationId, table.activityTemplateId, table.version),
+  uniqueIndex("compliance_manual_policy_current_template_idx")
+    .on(table.organisationId, table.activityTemplateId)
+    .where(sql`${table.lifecycleState} IN ('draft', 'approved')`),
+  index("compliance_manual_policy_activity_idx")
+    .on(table.organisationId, table.activityVersionId, table.lifecycleState),
+  index("compliance_manual_policy_evidence_policy_idx")
+    .on(table.organisationId, table.evidencePolicyVersionId, table.lifecycleState),
+  check("compliance_manual_policy_version_check", sql`${table.version} > 0`),
+  check("compliance_manual_policy_identity_check", sql`trim(${table.id}) <> '' AND trim(${table.organisationId}) <> '' AND trim(${table.activityTemplateId}) <> '' AND trim(${table.programId}) <> '' AND trim(${table.activityVersionId}) <> '' AND trim(${table.evidencePolicyVersionId}) <> '' AND trim(${table.programSourceBindingId}) <> '' AND trim(${table.activitySourceBindingId}) <> '' AND trim(${table.evidencePolicySourceBindingId}) <> '' AND trim(${table.requestedByUid}) <> ''`),
+  check("compliance_manual_policy_snapshot_check", sql`json_valid(${table.bindingSnapshot}) AND json_extract(${table.bindingSnapshot}, '$.contract') = 'creditex-manual-policy-binding-v1' AND json_extract(${table.bindingSnapshot}, '$.organisationId') = ${table.organisationId} AND json_extract(${table.bindingSnapshot}, '$.activityTemplate.templateId') = ${table.activityTemplateId} AND json_extract(${table.bindingSnapshot}, '$.program.id') = ${table.programId} AND json_extract(${table.bindingSnapshot}, '$.activity.id') = ${table.activityVersionId} AND json_extract(${table.bindingSnapshot}, '$.evidencePolicy.id') = ${table.evidencePolicyVersionId} AND json_extract(${table.bindingSnapshot}, '$.sourceApprovals.programBindingId') = ${table.programSourceBindingId} AND json_extract(${table.bindingSnapshot}, '$.sourceApprovals.activityBindingId') = ${table.activitySourceBindingId} AND json_extract(${table.bindingSnapshot}, '$.sourceApprovals.evidencePolicyBindingId') = ${table.evidencePolicySourceBindingId} AND json_type(${table.bindingSnapshot}, '$.requirements') = 'array' AND json_array_length(${table.bindingSnapshot}, '$.requirements') > 0 AND length(${table.bindingSnapshotSha256}) = 64 AND lower(${table.bindingSnapshotSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.bindingSnapshotSha256} = lower(${table.bindingSnapshotSha256})`),
+  check("compliance_manual_policy_state_check", sql`${table.lifecycleState} IN ('draft', 'approved', 'withdrawn')`),
+  check("compliance_manual_policy_timestamps_check", sql`datetime(${table.requestedAt}) IS NOT NULL AND datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
+  check("compliance_manual_policy_lifecycle_check", sql`(${table.lifecycleState} = 'draft' AND ${table.approvedByUid} = '' AND ${table.approvedAt} = '' AND ${table.approvalNote} = '' AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '' AND ${table.withdrawalNote} = '') OR (${table.lifecycleState} = 'approved' AND trim(${table.approvedByUid}) <> '' AND ${table.approvedByUid} <> ${table.requestedByUid} AND datetime(${table.approvedAt}) IS NOT NULL AND length(trim(${table.approvalNote})) BETWEEN 10 AND 1000 AND ${table.withdrawnByUid} = '' AND ${table.withdrawnAt} = '' AND ${table.withdrawalNote} = '') OR (${table.lifecycleState} = 'withdrawn' AND trim(${table.approvedByUid}) <> '' AND ${table.approvedByUid} <> ${table.requestedByUid} AND datetime(${table.approvedAt}) IS NOT NULL AND length(trim(${table.approvalNote})) BETWEEN 10 AND 1000 AND trim(${table.withdrawnByUid}) <> '' AND datetime(${table.withdrawnAt}) IS NOT NULL AND length(trim(${table.withdrawalNote})) BETWEEN 10 AND 1000)`),
+]);
+
+export const complianceManualPolicyCompositionLocks = sqliteTable("compliance_manual_policy_composition_locks", {
+  id: text("id").primaryKey(),
+  organisationId: text("organisation_id").notNull(),
+  bindingId: text("binding_id").notNull(),
+  bindingVersion: integer("binding_version").notNull(),
+  bindingSnapshotSha256: text("binding_snapshot_sha256").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(),
+  activityVersionId: text("activity_version_id").notNull(),
+  referenceType: text("reference_type").notNull(),
+  referenceId: text("reference_id").notNull(),
+  referenceActivityDate: text("reference_activity_date").notNull(),
+  referenceUpdatedAt: text("reference_updated_at").notNull(),
+  referenceSnapshotSha256: text("reference_snapshot_sha256").notNull(),
+  revision: integer("revision").notNull(),
+  compositionSnapshot: text("composition_snapshot").notNull(),
+  compositionSha256: text("composition_sha256").notNull(),
+  diffSnapshot: text("diff_snapshot").notNull(),
+  diffSha256: text("diff_sha256").notNull(),
+  lockedByUid: text("locked_by_uid").notNull(),
+  lockedAt: text("locked_at").notNull(),
+  supersededById: text("superseded_by_id").notNull().default(""),
+  supersededAt: text("superseded_at").notNull().default(""),
+}, (table) => [
+  uniqueIndex("compliance_manual_policy_composition_revision_idx")
+    .on(table.organisationId, table.referenceType, table.referenceId, table.revision),
+  uniqueIndex("compliance_manual_policy_composition_current_idx")
+    .on(table.organisationId, table.referenceType, table.referenceId)
+    .where(sql`${table.supersededById} = ''`),
+  index("compliance_manual_policy_composition_binding_idx")
+    .on(table.organisationId, table.bindingId, table.revision),
+  check("compliance_manual_policy_composition_identity_check", sql`trim(${table.id}) <> '' AND trim(${table.organisationId}) <> '' AND trim(${table.bindingId}) <> '' AND ${table.bindingVersion} > 0 AND trim(${table.activityTemplateId}) <> '' AND trim(${table.activityVersionId}) <> '' AND ${table.referenceType} IN ('compliance_case', 'synthetic_pilot_job') AND trim(${table.referenceId}) <> '' AND ${table.revision} > 0 AND trim(${table.lockedByUid}) <> ''`),
+  check("compliance_manual_policy_composition_date_check", sql`length(${table.referenceActivityDate}) = 10 AND ${table.referenceActivityDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(${table.referenceActivityDate}) = ${table.referenceActivityDate} AND datetime(${table.referenceUpdatedAt}) IS NOT NULL`),
+  check("compliance_manual_policy_composition_snapshot_check", sql`json_valid(${table.compositionSnapshot}) AND json_extract(${table.compositionSnapshot}, '$.contract') = 'creditex-manual-evidence-form-v2' AND json_extract(${table.compositionSnapshot}, '$.bindingId') = ${table.bindingId} AND json_extract(${table.compositionSnapshot}, '$.bindingVersion') = ${table.bindingVersion} AND json_extract(${table.compositionSnapshot}, '$.bindingSnapshotSha256') = ${table.bindingSnapshotSha256} AND json_extract(${table.compositionSnapshot}, '$.bindingSnapshot.activityTemplate.templateId') = ${table.activityTemplateId} AND json_extract(${table.compositionSnapshot}, '$.bindingSnapshot.activity.id') = ${table.activityVersionId} AND json_extract(${table.compositionSnapshot}, '$.activityReference.referenceType') = ${table.referenceType} AND json_extract(${table.compositionSnapshot}, '$.activityReference.referenceId') = ${table.referenceId} AND json_extract(${table.compositionSnapshot}, '$.activityReference.activityDate') = ${table.referenceActivityDate} AND json_extract(${table.compositionSnapshot}, '$.activityReference.referenceUpdatedAt') = ${table.referenceUpdatedAt} AND json_extract(${table.compositionSnapshot}, '$.activityReference.referenceSnapshotSha256') = ${table.referenceSnapshotSha256} AND json_valid(${table.diffSnapshot}) AND json_type(${table.diffSnapshot}) = 'array' AND length(${table.bindingSnapshotSha256}) = 64 AND lower(${table.bindingSnapshotSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.bindingSnapshotSha256} = lower(${table.bindingSnapshotSha256}) AND length(${table.referenceSnapshotSha256}) = 64 AND lower(${table.referenceSnapshotSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.referenceSnapshotSha256} = lower(${table.referenceSnapshotSha256}) AND length(${table.compositionSha256}) = 64 AND lower(${table.compositionSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.compositionSha256} = lower(${table.compositionSha256}) AND length(${table.diffSha256}) = 64 AND lower(${table.diffSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.diffSha256} = lower(${table.diffSha256})`),
+  check("compliance_manual_policy_composition_lifecycle_check", sql`datetime(${table.lockedAt}) IS NOT NULL AND ((${table.supersededById} = '' AND ${table.supersededAt} = '') OR (trim(${table.supersededById}) <> '' AND ${table.supersededById} <> ${table.id} AND datetime(${table.supersededAt}) IS NOT NULL))`),
 ]);
 
 export const complianceLegacyImportBatches = sqliteTable("compliance_legacy_import_batches", {

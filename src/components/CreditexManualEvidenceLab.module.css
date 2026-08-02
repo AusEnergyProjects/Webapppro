@@ -188,6 +188,102 @@
   white-space: nowrap;
 }
 
+.policyBoundary {
+  display: grid;
+  grid-template-columns: minmax(20rem, 1fr) minmax(24rem, auto);
+  gap: 0.65rem 0.9rem;
+  border: 1px solid rgba(255, 198, 76, 0.34);
+  border-radius: 0.7rem;
+  background: rgba(61, 42, 9, 0.38);
+  padding: 0.65rem 0.72rem;
+}
+
+.policyBoundary[data-ready="true"] {
+  border-color: rgba(71, 222, 185, 0.38);
+  background: rgba(7, 65, 59, 0.4);
+}
+
+.policyBoundary > div > span {
+  display: block;
+  color: #ffd36f;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.policyBoundary[data-ready="true"] > div > span {
+  color: #68ebce;
+}
+
+.policyBoundary > div > strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: #f8fcff;
+  font-size: 0.86rem;
+}
+
+.policyBoundary p {
+  margin: 0.2rem 0 0;
+  color: #b9cbd1;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.policyBoundary dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(5.2rem, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.policyBoundary dl div {
+  border: 1px solid rgba(126, 184, 189, 0.2);
+  border-radius: 0.45rem;
+  background: rgba(3, 21, 34, 0.52);
+  padding: 0.38rem 0.44rem;
+}
+
+.policyBoundary dt {
+  color: #8faab2;
+  font-size: 0.62rem;
+}
+
+.policyBoundary dd {
+  margin: 0.08rem 0 0;
+  color: #f5fcff;
+  font-size: 0.83rem;
+  font-weight: 900;
+}
+
+.policyBoundary details {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(126, 184, 189, 0.18);
+  padding-top: 0.45rem;
+}
+
+.policyBoundary summary {
+  color: #d9f7f1;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.policyBoundary code,
+.policyBoundary details small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 0.25rem;
+  color: #9eb7be;
+  font-size: 0.64rem;
+}
+
+.policyBoundaryNote {
+  grid-column: 1 / -1;
+  color: #b8cbd1;
+  font-size: 0.67rem;
+  line-height: 1.4;
+}
+
 .viewTabs {
   display: flex;
   min-width: 0;
@@ -254,6 +350,33 @@
   padding: 0.52rem 0.65rem;
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+.fieldAssignment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.55rem;
+  border: 1px solid rgba(108, 207, 192, 0.22);
+  border-radius: 0.55rem;
+  background: #092130;
+  padding: 0.55rem;
+}
+
+.fieldAssignment > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.fieldAssignment strong {
+  color: #edf8fa;
+  font-size: 0.78rem;
+}
+
+.fieldAssignment span {
+  color: #9fb7be;
+  font-size: 0.72rem;
 }
 
 .notice {
@@ -781,8 +904,8 @@
 
 .captureRow {
   display: grid;
-  grid-template-columns: auto minmax(11rem, 1fr) minmax(9rem, 0.7fr);
-  align-items: end;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: 0.45rem;
   border: 1px solid rgba(108, 207, 192, 0.16);
   border-radius: 0.5rem;
@@ -796,13 +919,29 @@
   font-size: 0.72rem;
 }
 
-.captureRow fieldset {
-  grid-column: 2 / 4;
+.captureFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0;
 }
 
-.captureRow > button {
-  grid-column: 3;
-  justify-self: end;
+.captureFacts div {
+  min-width: 0;
+}
+
+.captureFacts dt {
+  color: #8faab2;
+  font-size: 0.68rem;
+}
+
+.captureFacts dd {
+  overflow: hidden;
+  margin: 0.08rem 0 0;
+  color: #edf8fa;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reviewBar {
@@ -1035,6 +1174,14 @@
 }
 
 @media (max-width: 1050px) {
+  .policyBoundary {
+    grid-template-columns: 1fr;
+  }
+
+  .policyBoundary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hero {
     grid-template-columns: 1fr;
   }

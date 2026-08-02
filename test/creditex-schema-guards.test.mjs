@@ -10,6 +10,37 @@ import {
 
 const HASH = "a".repeat(64);
 const NOW = "2026-08-01T00:00:00.000Z";
+const MANUAL_FIELD_SCHEMA_GUARD_NAMES = [
+  "compliance_manual_field_acceptance_insert_guard",
+  "compliance_manual_field_acceptance_review_guard",
+  "compliance_manual_field_acceptance_delete_guard",
+  "compliance_manual_field_action_receipt_insert_guard",
+  "compliance_manual_field_action_receipt_update_guard",
+  "compliance_manual_field_action_receipt_delete_guard",
+  "compliance_manual_field_upload_session_insert_guard",
+  "compliance_manual_field_upload_session_update_guard",
+  "compliance_manual_field_upload_session_delete_guard",
+  "compliance_manual_evidence_test_capture_insert_guard",
+  "compliance_manual_evidence_test_capture_update_guard",
+  "compliance_manual_evidence_test_capture_delete_guard",
+  "compliance_manual_field_integrity_receipt_insert_guard",
+  "compliance_manual_field_integrity_receipt_update_guard",
+  "compliance_manual_field_integrity_receipt_delete_guard",
+];
+const MANUAL_POLICY_SCHEMA_GUARD_NAMES = [
+  "compliance_manual_policy_composition_insert_guard",
+  "compliance_manual_policy_composition_immutable_guard",
+  "compliance_manual_policy_composition_delete_guard",
+  "compliance_manual_policy_insert_requester_guard",
+  "compliance_manual_policy_insert_governed_chain_guard",
+  "compliance_manual_policy_insert_source_guard",
+  "compliance_manual_policy_immutable_guard",
+  "compliance_manual_policy_transition_guard",
+  "compliance_manual_policy_approval_guard",
+  "compliance_manual_policy_approval_source_guard",
+  "compliance_manual_policy_withdrawal_guard",
+  "compliance_manual_policy_delete_guard",
+];
 
 function installGuards(database, names) {
   for (const name of names) {
@@ -158,12 +189,47 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 270);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 297);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    270,
+    297,
   );
-  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 7);
+  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 8);
+});
+
+test("manual field and policy migrations remain table-only with canonical runtime guards", () => {
+  const migrationSources = [
+    fs.readFileSync(
+      new URL(
+        "../drizzle/0112_creditex_manual_field_capture.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    fs.readFileSync(
+      new URL(
+        "../drizzle/0114_creditex_manual_policy_merge.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ];
+  assert.doesNotMatch(migrationSources.join("\n"), /CREATE\s+TRIGGER/i);
+  const expectedNames = [
+    ...MANUAL_FIELD_SCHEMA_GUARD_NAMES,
+    ...MANUAL_POLICY_SCHEMA_GUARD_NAMES,
+  ];
+  const definitions = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
+    (definition) => expectedNames.includes(definition.name),
+  );
+  assert.deepEqual(
+    new Set(definitions.map((definition) => definition.name)),
+    new Set(expectedNames),
+  );
+  for (const definition of definitions) {
+    assert.match(definition.sql, /^CREATE TRIGGER IF NOT EXISTS /);
+    assert.match(canonicalCreditexSchemaGuardSql(definition.sql), /BEGIN /);
+  }
 });
 
 test("lookup and parallel migrations remain table-only with runtime guards", () => {

@@ -1539,6 +1539,56 @@
   font-size: 1.55rem;
 }
 
+.readinessLedger {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.7rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.75rem;
+  background: #071f2e;
+  padding: 0.7rem;
+}
+
+.readinessLedger > div:first-child span {
+  color: var(--pilot-teal);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.readinessLedger > div:first-child strong,
+.readinessLedger > div:first-child code {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 0.28rem;
+}
+
+.readinessLedger > div:first-child code {
+  color: var(--pilot-muted);
+  font-size: 0.62rem;
+}
+
+.readinessLedger > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: start;
+  gap: 0.35rem;
+}
+
+.readinessLedger > div:last-child span {
+  border: 1px solid var(--pilot-line);
+  border-radius: 999px;
+  background: var(--pilot-surface-raised);
+  color: var(--pilot-muted);
+  padding: 0.28rem 0.45rem;
+  font-size: 0.64rem;
+}
+
+.readinessLedger > div:last-child b {
+  color: var(--pilot-ink);
+}
+
 .calculationWorkspace {
   display: grid;
   grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
@@ -1910,6 +1960,96 @@
   color: #e1c16e;
 }
 
+.interchangeAdapters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.interchangeAdapters article {
+  min-width: 0;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.75rem;
+  background: var(--pilot-surface-raised);
+  padding: 0.72rem;
+}
+
+.interchangeAdapters header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.interchangeAdapters header span {
+  color: var(--pilot-teal);
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.interchangeAdapters h4,
+.interchangeAdapters p {
+  margin: 0;
+}
+
+.interchangeAdapters h4 {
+  margin-top: 0.18rem;
+  font-size: 0.86rem;
+}
+
+.interchangeAdapters header b {
+  border-radius: 999px;
+  background: rgba(214, 180, 109, 0.18);
+  color: #f0cf82;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.62rem;
+}
+
+.interchangeAdapters p {
+  margin-top: 0.5rem;
+  color: var(--pilot-muted);
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
+
+.interchangeAdapters dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
+}
+
+.interchangeAdapters dl div {
+  min-width: 0;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.42rem;
+  background: #071f2e;
+  padding: 0.36rem;
+}
+
+.interchangeAdapters dt {
+  color: var(--pilot-muted);
+  font-size: 0.58rem;
+}
+
+.interchangeAdapters dd {
+  overflow-wrap: anywhere;
+  margin: 0.12rem 0 0;
+  color: var(--pilot-ink);
+  font-size: 0.63rem;
+  font-weight: 800;
+}
+
+.interchangeAdapters a {
+  display: inline-block;
+  margin-top: 0.55rem;
+  color: var(--pilot-teal);
+  font-size: 0.67rem;
+  font-weight: 850;
+}
+
 .submissionRoute {
   margin-top: 0.75rem;
   border: 1px solid var(--pilot-line);
@@ -2028,6 +2168,14 @@
 }
 
 @media (max-width: 1100px) {
+  .readinessLedger {
+    grid-template-columns: 1fr;
+  }
+
+  .interchangeAdapters {
+    grid-template-columns: 1fr;
+  }
+
   .metrics,
   .priorities,
   .sourcePackSummary {

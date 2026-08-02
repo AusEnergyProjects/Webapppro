@@ -82,12 +82,18 @@ export type ManualEvidenceFormSchema = {
 };
 
 export type ManualEvidenceCapture = {
+  captureId: string;
   fileName: string;
   contentType: string;
   originalPresent: boolean;
   metadataPresent: boolean;
   gpsPresent: boolean;
   captureTimePresent: boolean;
+  originalSha256: string;
+  deviceId: string;
+  capturedAt: string;
+  verificationState: "manual_metadata_only" | "server_verified";
+  physicalDeviceState: "not_assessed" | "reported_physical" | "reported_emulator";
 };
 
 export type ManualEvidenceResponse = {
@@ -708,7 +714,7 @@ export function validateManualEvidenceResponses(
         "Choose a supported response outcome.",
       );
     }
-    const captures = Array.isArray(value.captures)
+    const captures: ManualEvidenceCapture[] = Array.isArray(value.captures)
       ? value.captures.map((item) => {
           if (!item || typeof item !== "object" || Array.isArray(item)) {
             throw new CreditexManualEvidenceContractError(
@@ -731,6 +737,7 @@ export function validateManualEvidenceResponses(
             );
           }
           return {
+            captureId: normalText(captureValue.captureId, 180),
             fileName: normalText(captureValue.fileName, 240),
             contentType,
             originalPresent: booleanValue(captureValue.originalPresent),
@@ -739,6 +746,22 @@ export function validateManualEvidenceResponses(
             captureTimePresent: booleanValue(
               captureValue.captureTimePresent,
             ),
+            originalSha256: normalText(
+              captureValue.originalSha256,
+              64,
+            ).toLowerCase(),
+            deviceId: normalText(captureValue.deviceId, 120),
+            capturedAt: normalText(captureValue.capturedAt, 60),
+            verificationState:
+              captureValue.verificationState === "server_verified"
+                ? "server_verified"
+                : "manual_metadata_only",
+            physicalDeviceState:
+              captureValue.physicalDeviceState === "reported_physical"
+                ? "reported_physical"
+                : captureValue.physicalDeviceState === "reported_emulator"
+                  ? "reported_emulator"
+                  : "not_assessed",
           };
         })
       : [];
@@ -811,6 +834,14 @@ function captureComplete(
   field: ManualEvidenceField,
   capture: ManualEvidenceCapture,
 ) {
+  if (capture.verificationState !== "server_verified") return false;
+  if (capture.physicalDeviceState !== "reported_physical") return false;
+  if (
+    !capture.captureId
+    || !/^[0-9a-f]{64}$/.test(capture.originalSha256)
+    || !capture.deviceId
+    || !Number.isFinite(Date.parse(capture.capturedAt))
+  ) return false;
   if (!capture.fileName || !capture.contentType) return false;
   if (!field.allowedContentTypes.includes(capture.contentType)) return false;
   if (field.originalRequired && !capture.originalPresent) return false;

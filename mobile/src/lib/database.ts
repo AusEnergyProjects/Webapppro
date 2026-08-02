@@ -5,13 +5,17 @@ import * as SQLite from 'expo-sqlite';
 import { ADDRESS_MAX_AGE_MS } from '@/lib/config';
 import { deleteEncryptedBundle, encryptFileForQueue, purgeEncryptedFiles, purgeEncryptionKey } from '@/lib/encrypted-files';
 import { completeEvidenceEnvelope, type EvidenceCaptureEnvelope } from '@/lib/evidence';
-import type { FieldJob, OfflineAction, QueueRow, SyncChange, UploadRow } from '@/lib/types';
+import type { FieldAccessMode, FieldJob, OfflineAction, QueueRow, SyncChange, UploadRow } from '@/lib/types';
 
 const DATABASE_NAME = 'aea-field.db';
 const DATABASE_KEY_NAME = 'aea-field-database-key-v1';
 const DATABASE_OWNER_KEY = 'aea-field-database-owner-v1';
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let purgePromise: Promise<void> | null = null;
+
+function fieldLane(value: unknown): FieldAccessMode {
+  return value === 'creditex_manual' ? 'creditex_manual' : 'trade_team';
+}
 
 async function databaseKey() {
   const existing = await SecureStore.getItemAsync(DATABASE_KEY_NAME);
@@ -33,6 +37,7 @@ async function openDatabase() {
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY NOT NULL,
+      field_lane TEXT NOT NULL DEFAULT 'trade_team',
       work_number TEXT NOT NULL,
       scheduled_start TEXT NOT NULL DEFAULT '',
       stage TEXT NOT NULL,
@@ -46,6 +51,7 @@ async function openDatabase() {
     CREATE TABLE IF NOT EXISTS action_queue (
       id TEXT PRIMARY KEY NOT NULL,
       work_order_id TEXT NOT NULL,
+      field_lane TEXT NOT NULL DEFAULT 'trade_team',
       payload TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'queued',
       attempts INTEGER NOT NULL DEFAULT 0,
@@ -59,6 +65,8 @@ async function openDatabase() {
     CREATE TABLE IF NOT EXISTS upload_queue (
       id TEXT PRIMARY KEY NOT NULL,
       work_order_id TEXT NOT NULL,
+      field_lane TEXT NOT NULL DEFAULT 'trade_team',
+      client_upload_id TEXT NOT NULL DEFAULT '',
       local_uri TEXT NOT NULL,
       file_name TEXT NOT NULL,
       content_type TEXT NOT NULL,
@@ -80,10 +88,54 @@ async function openDatabase() {
       value TEXT NOT NULL
     );
   `);
+  const jobColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jobs)');
+  if (!jobColumns.some((column) => column.name === 'field_lane')) {
+    await db.execAsync("ALTER TABLE jobs ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
+  }
+  const actionColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(action_queue)');
+  if (!actionColumns.some((column) => column.name === 'field_lane')) {
+    await db.execAsync("ALTER TABLE action_queue ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
+  }
   const uploadColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(upload_queue)');
   if (!uploadColumns.some((column) => column.name === 'evidence_envelope')) {
     await db.execAsync("ALTER TABLE upload_queue ADD COLUMN evidence_envelope TEXT NOT NULL DEFAULT '{}';");
   }
+  if (!uploadColumns.some((column) => column.name === 'field_lane')) {
+    await db.execAsync("ALTER TABLE upload_queue ADD COLUMN field_lane TEXT NOT NULL DEFAULT 'trade_team';");
+  }
+  if (!uploadColumns.some((column) => column.name === 'client_upload_id')) {
+    await db.execAsync("ALTER TABLE upload_queue ADD COLUMN client_upload_id TEXT NOT NULL DEFAULT '';");
+  }
+  const existingJobs = await db.getAllAsync<{ id: string; payload: string }>('SELECT id, payload FROM jobs');
+  for (const row of existingJobs) {
+    let lane: FieldAccessMode = 'trade_team';
+    try {
+      lane = fieldLane((JSON.parse(row.payload) as FieldJob).fieldLane);
+    } catch {
+      // A malformed cached row remains isolated in the trade lane until the
+      // next authoritative bootstrap replaces it.
+    }
+    await db.runAsync('UPDATE jobs SET field_lane = ? WHERE id = ?', lane, row.id);
+  }
+  await db.execAsync(`
+    UPDATE action_queue
+      SET field_lane = COALESCE(
+        (SELECT jobs.field_lane FROM jobs WHERE jobs.id = action_queue.work_order_id),
+        'trade_team'
+      );
+    UPDATE upload_queue
+      SET field_lane = COALESCE(
+        (SELECT jobs.field_lane FROM jobs WHERE jobs.id = upload_queue.work_order_id),
+        'trade_team'
+      );
+    UPDATE upload_queue SET client_upload_id = id WHERE client_upload_id = '';
+    CREATE INDEX IF NOT EXISTS jobs_field_lane_schedule_idx
+      ON jobs(field_lane, scheduled_start, work_number);
+    CREATE INDEX IF NOT EXISTS action_queue_field_lane_status_idx
+      ON action_queue(field_lane, status, created_at);
+    CREATE INDEX IF NOT EXISTS upload_queue_field_lane_status_idx
+      ON upload_queue(field_lane, status, created_at);
+  `);
   return db;
 }
 
@@ -93,53 +145,85 @@ export function getDatabase() {
 }
 
 async function saveJob(db: SQLite.SQLiteDatabase, job: FieldJob, cachedAt: string) {
+  const lane = fieldLane(job.fieldLane);
+  const storedJob = { ...job, fieldLane: lane };
   await db.runAsync(
-    `INSERT INTO jobs (id, work_number, scheduled_start, stage, protected_job, has_address, revision, payload, cached_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET work_number = excluded.work_number,
+    `INSERT INTO jobs (id, field_lane, work_number, scheduled_start, stage, protected_job, has_address, revision, payload, cached_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET field_lane = excluded.field_lane,
+        work_number = excluded.work_number,
         scheduled_start = excluded.scheduled_start, stage = excluded.stage,
         protected_job = excluded.protected_job, has_address = excluded.has_address,
         revision = excluded.revision, payload = excluded.payload, cached_at = excluded.cached_at`,
     job.id,
+    lane,
     job.workNumber,
     job.scheduledStart || '',
     job.stage,
     job.protectedJob ? 1 : 0,
     job.serviceAddress ? 1 : 0,
     job.revision,
-    JSON.stringify(job),
+    JSON.stringify(storedJob),
     cachedAt,
   );
 }
 
-export async function applyChanges(changes: SyncChange[], bootstrap: boolean, serverTime: string) {
+export async function applyChanges(
+  changes: SyncChange[],
+  bootstrap: boolean,
+  serverTime: string,
+  mode: FieldAccessMode,
+) {
   const db = await getDatabase();
   const bootstrapIds = new Set(changes.filter((item) => item.operation === 'upsert').map((item) => item.entityId));
   await db.withTransactionAsync(async () => {
-    if (bootstrap) await db.runAsync('DELETE FROM jobs');
+    if (bootstrap) await db.runAsync('DELETE FROM jobs WHERE field_lane = ?', mode);
     for (const change of changes.filter((item) => item.operation === 'delete')) {
-      await db.runAsync('DELETE FROM jobs WHERE id = ?', change.entityId);
-      await db.runAsync("DELETE FROM action_queue WHERE work_order_id = ? AND status <> 'conflict'", change.entityId);
-      const uploads = await db.getAllAsync<{ local_uri: string }>('SELECT local_uri FROM upload_queue WHERE work_order_id = ?', change.entityId);
+      await db.runAsync('DELETE FROM jobs WHERE id = ? AND field_lane = ?', change.entityId, mode);
+      await db.runAsync(
+        "DELETE FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status <> 'conflict'",
+        change.entityId,
+        mode,
+      );
+      const uploads = await db.getAllAsync<{ local_uri: string }>(
+        'SELECT local_uri FROM upload_queue WHERE work_order_id = ? AND field_lane = ?',
+        change.entityId,
+        mode,
+      );
       for (const upload of uploads) {
         deleteEncryptedBundle(upload.local_uri);
       }
-      await db.runAsync('DELETE FROM upload_queue WHERE work_order_id = ?', change.entityId);
+      await db.runAsync(
+        'DELETE FROM upload_queue WHERE work_order_id = ? AND field_lane = ?',
+        change.entityId,
+        mode,
+      );
     }
     for (const change of changes.filter((item) => item.operation === 'upsert' && item.entity)) {
-      await saveJob(db, change.entity as FieldJob, serverTime);
+      await saveJob(db, { ...(change.entity as FieldJob), fieldLane: mode }, serverTime);
     }
     if (bootstrap) {
-      const uploads = await db.getAllAsync<{ work_order_id: string; local_uri: string }>('SELECT work_order_id, local_uri FROM upload_queue');
+      const uploads = await db.getAllAsync<{ work_order_id: string; local_uri: string }>(
+        'SELECT work_order_id, local_uri FROM upload_queue WHERE field_lane = ?',
+        mode,
+      );
       for (const upload of uploads.filter((item) => !bootstrapIds.has(item.work_order_id))) deleteEncryptedBundle(upload.local_uri);
       const allowed = [...bootstrapIds];
       if (!allowed.length) {
-        await db.runAsync('DELETE FROM action_queue');
-        await db.runAsync('DELETE FROM upload_queue');
+        await db.runAsync('DELETE FROM action_queue WHERE field_lane = ?', mode);
+        await db.runAsync('DELETE FROM upload_queue WHERE field_lane = ?', mode);
       } else {
         const placeholders = allowed.map(() => '?').join(', ');
-        await db.runAsync(`DELETE FROM action_queue WHERE work_order_id NOT IN (${placeholders})`, ...allowed);
-        await db.runAsync(`DELETE FROM upload_queue WHERE work_order_id NOT IN (${placeholders})`, ...allowed);
+        await db.runAsync(
+          `DELETE FROM action_queue WHERE field_lane = ? AND work_order_id NOT IN (${placeholders})`,
+          mode,
+          ...allowed,
+        );
+        await db.runAsync(
+          `DELETE FROM upload_queue WHERE field_lane = ? AND work_order_id NOT IN (${placeholders})`,
+          mode,
+          ...allowed,
+        );
       }
     }
   });
@@ -178,30 +262,59 @@ export async function getJob(id: string) {
   return row ? JSON.parse(row.payload) as FieldJob : null;
 }
 
+async function workOrderFieldLane(
+  db: SQLite.SQLiteDatabase,
+  workOrderId: string,
+  requested?: FieldAccessMode,
+) {
+  if (requested) return fieldLane(requested);
+  const row = await db.getFirstAsync<{ field_lane: string }>(
+    'SELECT field_lane FROM jobs WHERE id = ?',
+    workOrderId,
+  );
+  if (!row) {
+    throw new Error('This job is no longer available on this device.');
+  }
+  return fieldLane(row?.field_lane);
+}
+
 export async function queueAction(action: OfflineAction) {
   const db = await getDatabase();
   const now = new Date().toISOString();
-  let queuedAction = action;
+  const lane = await workOrderFieldLane(db, action.workOrderId, action.fieldLane);
+  let queuedAction = { ...action, fieldLane: lane };
   if (action.type === 'save_job_form' && action.formId) {
     const candidates = await db.getAllAsync<{ id: string; payload: string }>(
-      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND status IN ('queued', 'retry')",
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
+      lane,
     );
     const existing = candidates.map((row) => ({ ...row, action: JSON.parse(row.payload) as OfflineAction }))
       .find((row) => row.action.type === 'save_job_form' && row.action.formId === action.formId);
     if (existing) {
-      queuedAction = { ...action, clientActionId: existing.action.clientActionId, baseRevision: existing.action.baseRevision };
+      queuedAction = {
+        ...action,
+        fieldLane: lane,
+        clientActionId: existing.action.clientActionId,
+        baseRevision: existing.action.baseRevision,
+      };
       await db.runAsync("UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
         JSON.stringify(queuedAction), now, existing.id);
     } else {
-      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, payload, status, created_at, updated_at)
-        VALUES (?, ?, ?, 'queued', ?, ?)`, action.clientActionId, action.workOrderId, JSON.stringify(action), now, now);
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
     }
   } else {
-    await db.runAsync(`INSERT INTO action_queue (id, work_order_id, payload, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'queued', ?, ?)`, action.clientActionId, action.workOrderId, JSON.stringify(action), now, now);
+    await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+    action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
   }
-  const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM jobs WHERE id = ?', action.workOrderId);
+  const row = await db.getFirstAsync<{ payload: string }>(
+    'SELECT payload FROM jobs WHERE id = ? AND field_lane = ?',
+    action.workOrderId,
+    lane,
+  );
   if (!row) return;
   const job = JSON.parse(row.payload) as FieldJob;
   if (action.type === 'set_job_stage' && action.stage) job.stage = action.stage;
@@ -231,11 +344,12 @@ export async function queueAction(action: OfflineAction) {
   await saveJob(db, job, now);
 }
 
-export async function queuedActions(limit = 50) {
+export async function queuedActions(mode: FieldAccessMode, limit = 50) {
   const db = await getDatabase();
   return db.getAllAsync<QueueRow>(
-    `SELECT * FROM action_queue WHERE status IN ('queued', 'retry')
+    `SELECT * FROM action_queue WHERE field_lane = ? AND status IN ('queued', 'retry')
       AND (retry_after = '' OR retry_after <= ?) ORDER BY created_at LIMIT ?`,
+    mode,
     new Date().toISOString(),
     limit,
   );
@@ -270,18 +384,22 @@ export async function resolveAction(
 export async function retryConflict(id: string, action: OfflineAction) {
   const db = await getDatabase();
   const now = new Date().toISOString();
+  const lane = await workOrderFieldLane(db, action.workOrderId, action.fieldLane);
+  const queuedAction = { ...action, fieldLane: lane };
   const result = await db.runAsync(
     `UPDATE action_queue
-      SET id = ?, work_order_id = ?, payload = ?, status = 'queued', attempts = 0,
+      SET id = ?, work_order_id = ?, field_lane = ?, payload = ?, status = 'queued', attempts = 0,
         retry_after = '', error_code = '', error_message = '', created_at = ?, updated_at = ?
-      WHERE id = ? AND work_order_id = ? AND status = 'conflict'`,
+      WHERE id = ? AND work_order_id = ? AND field_lane = ? AND status = 'conflict'`,
     action.clientActionId,
     action.workOrderId,
-    JSON.stringify(action),
+    lane,
+    JSON.stringify(queuedAction),
     now,
     now,
     id,
     action.workOrderId,
+    lane,
   );
   if (result.changes !== 1) {
     throw new Error('This saved change was updated before it could be retried.');
@@ -302,7 +420,7 @@ export async function listProblemActions() {
 
 type AddUploadInput = Omit<
   UploadRow,
-  'evidence_envelope' | 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message' | 'created_at'
+  'field_lane' | 'client_upload_id' | 'evidence_envelope' | 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message' | 'created_at'
 > & {
   evidenceEnvelope: Omit<EvidenceCaptureEnvelope, 'integrity'>;
   clearSettingKey?: string;
@@ -312,6 +430,7 @@ export async function addUpload(input: AddUploadInput) {
   const encrypted = await encryptFileForQueue(input.local_uri, input.id);
   const db = await getDatabase();
   const now = new Date().toISOString();
+  const lane = await workOrderFieldLane(db, input.work_order_id);
   const evidenceEnvelope = completeEvidenceEnvelope(input.evidenceEnvelope, {
     digestHex: encrypted.sha256Hex,
     byteLength: encrypted.sizeBytes,
@@ -320,11 +439,13 @@ export async function addUpload(input: AddUploadInput) {
     await db.withTransactionAsync(async () => {
       await db.runAsync(
         `INSERT INTO upload_queue
-          (id, work_order_id, local_uri, file_name, content_type, size_bytes, category, caption,
+          (id, work_order_id, field_lane, client_upload_id, local_uri, file_name, content_type, size_bytes, category, caption,
            evidence_envelope, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         input.id,
         input.work_order_id,
+        lane,
+        input.id,
         encrypted.bundle,
         input.file_name,
         input.content_type,
@@ -348,10 +469,11 @@ export async function addUpload(input: AddUploadInput) {
   }
 }
 
-export async function queuedUploads() {
+export async function queuedUploads(mode: FieldAccessMode) {
   const db = await getDatabase();
   return db.getAllAsync<UploadRow>(
-    "SELECT * FROM upload_queue WHERE status IN ('queued', 'uploading', 'retry') ORDER BY created_at LIMIT 10",
+    "SELECT * FROM upload_queue WHERE field_lane = ? AND status IN ('queued', 'uploading', 'retry') ORDER BY created_at LIMIT 10",
+    mode,
   );
 }
 
@@ -362,13 +484,14 @@ export async function listProblemUploads() {
   );
 }
 
-export async function updateUpload(id: string, values: Partial<Pick<UploadRow, 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message'>>) {
+export async function updateUpload(id: string, values: Partial<Pick<UploadRow, 'client_upload_id' | 'session_id' | 'uploaded_parts' | 'status' | 'attempts' | 'error_message'>>) {
   const db = await getDatabase();
   const current = await db.getFirstAsync<UploadRow>('SELECT * FROM upload_queue WHERE id = ?', id);
   if (!current) return;
   await db.runAsync(
-    `UPDATE upload_queue SET session_id = ?, uploaded_parts = ?, status = ?, attempts = ?,
+    `UPDATE upload_queue SET client_upload_id = ?, session_id = ?, uploaded_parts = ?, status = ?, attempts = ?,
       error_message = ?, updated_at = ? WHERE id = ?`,
+    values.client_upload_id ?? current.client_upload_id,
     values.session_id ?? current.session_id,
     values.uploaded_parts ?? current.uploaded_parts,
     values.status ?? current.status,

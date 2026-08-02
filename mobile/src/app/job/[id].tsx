@@ -69,6 +69,24 @@ function evidenceCaption(requirement?: ComplianceEvidenceRequirement) {
   return requirement ? `${requirement.code}: ${requirement.title}`.slice(0, 300) : '';
 }
 
+function gpsPreflightBlocker(location: PendingPhotoCapture['preCaptureLocation']) {
+  if (location.state !== 'captured') {
+    return 'Allow precise location and turn on location services before taking the photo.';
+  }
+  if (location.mocked === true) {
+    return 'Mocked device locations cannot be used for governed evidence. Use the physical device at the installation site.';
+  }
+  if (
+    location.accuracyMetres === null
+    || !Number.isFinite(location.accuracyMetres)
+    || location.accuracyMetres < 0
+    || location.accuracyMetres > 100
+  ) {
+    return 'Location accuracy must be reported within 100 metres before taking the photo. Move to a clearer area and try again.';
+  }
+  return '';
+}
+
 function pendingPhoto(value: string) {
   if (!value) return null;
   try {
@@ -96,17 +114,15 @@ export default function JobScreen() {
     const busyKey = `photo:${pending.identifiers.evidenceRequirementId || 'general'}`;
     setBusy(busyKey);
     try {
-      const latestLocation = await observeLocation(false);
-      const location = latestLocation.location.state === 'captured'
-        ? latestLocation.location
-        : pending.preCaptureLocation;
-      const locationPermission = latestLocation.permission.status === 'not_requested'
-        ? pending.preCaptureLocationPermission
-        : latestLocation.permission;
-      if (pending.gpsRequired && location.state !== 'captured') {
+      const location = pending.preCaptureLocation;
+      const locationPermission = pending.preCaptureLocationPermission;
+      const gpsBlocker = pending.gpsRequired
+        ? gpsPreflightBlocker(location)
+        : '';
+      if (gpsBlocker) {
         Alert.alert(
           'Location evidence is required',
-          'This photo remains pending on this device. Enable precise location services, then reopen the job so the evidence can be completed.',
+          `${gpsBlocker} This photo remains pending on this device and its original pre-capture observation will not be replaced.`,
         );
         return;
       }
@@ -182,7 +198,6 @@ export default function JobScreen() {
       }
       pending = {
         ...pending,
-        ...observedTime(),
         asset: serialisableAsset(result.assets[0]),
       };
       await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
@@ -217,6 +232,12 @@ export default function JobScreen() {
 
   async function addTime() {
     if (!job) return;
+    if (job.fieldLane === 'creditex_manual') {
+      return Alert.alert(
+        'Time entry unavailable',
+        'Creditex manual test jobs do not support time entries.',
+      );
+    }
     const minutes = Number(duration);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return Alert.alert('Check the time', 'Enter the number of minutes worked, from 1 to 1440.');
     setBusy('time');
@@ -251,10 +272,13 @@ export default function JobScreen() {
         return;
       }
       const preCaptureLocation = await observeLocation(true);
-      if (requirement?.gpsRequired && preCaptureLocation.location.state !== 'captured') {
+      const gpsBlocker = requirement?.gpsRequired
+        ? gpsPreflightBlocker(preCaptureLocation.location)
+        : '';
+      if (gpsBlocker) {
         Alert.alert(
           'Location evidence is required',
-          'This requirement needs a current location record. Allow precise location and turn on location services before taking the photo.',
+          gpsBlocker,
         );
         return;
       }
@@ -283,7 +307,6 @@ export default function JobScreen() {
       }
       pending = {
         ...pending,
-        ...observedTime(),
         asset: serialisableAsset(result.assets[0]),
       };
       await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
@@ -354,10 +377,12 @@ export default function JobScreen() {
   const complianceRequirements = job.compliance?.requirements || [];
   const fieldAction = fieldActions[job.appointmentStatus];
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
+  const creditexManual = job.fieldLane === 'creditex_manual';
+  const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
   return (
     <Screen>
       <View style={styles.hero}>
-        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{readable(job.stage)}</Text></View></View>
+        <View style={styles.badges}><View style={styles.jobNumber}><Text style={styles.jobNumberText}>{job.workNumber}</Text></View><View style={styles.stage}><Text style={styles.stageText}>{readable(job.stage)}</Text></View>{syntheticManual ? <View style={styles.syntheticBadge}><Text style={styles.syntheticBadgeText}>SYNTHETIC TEST ONLY</Text></View> : null}</View>
         <Text style={styles.title}>{job.title || 'Field job'}</Text>
         <Text style={styles.body}>{job.customerName} | {job.protectedJob ? job.siteArea || 'Protected service area' : job.serviceAddress || job.siteArea || 'Service site not added'}</Text>
         {job.appointmentStartsAt ? <Text style={styles.meta}>{new Date(job.appointmentStartsAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</Text> : null}
@@ -365,7 +390,7 @@ export default function JobScreen() {
 
       <View style={[styles.privacy, job.protectedJob && styles.protected]}>
         <MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-check-outline'} size={26} color={colours.green} />
-        <View style={styles.flex}><Text style={styles.cardTitle}>{job.protectedJob ? 'AEA protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the AEA platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
+        <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Creditex manual workflow test' : job.protectedJob ? 'AEA protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the AEA platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
       </View>
 
       <View style={styles.card}>
@@ -393,6 +418,7 @@ export default function JobScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
         <Text style={styles.body}>The app preserves the exact file returned by the camera picker without further editing or recompression, requests available EXIF, adds independent time and location observations, and hashes the exact queued bytes with SHA-256. Files save encrypted on this device first and resume automatically after a connection drops.</Text>
+        {syntheticManual ? <Text style={styles.warningText}>Manual program testing only. A physical-device report and server-verified retained bytes are required before a prompt counts as complete. Creditex review is still separate.</Text> : null}
         <Text style={styles.meta}>These records support audit review. They are not a government or scheme acceptance decision.</Text>
         {job.compliance ? <View style={styles.complianceBlock}>
           <View style={styles.complianceHeading}>
@@ -469,17 +495,17 @@ export default function JobScreen() {
             );
           }) : <Text style={styles.body}>No governed evidence requirements have been assigned. Do not treat general uploads as compliance evidence.</Text>}
         </View> : null}
-        <Text style={styles.inputLabel}>{job.compliance ? 'General job files' : 'Job files'}</Text>
-        <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View>
+        {!syntheticManual ? <><Text style={styles.inputLabel}>{job.compliance ? 'General job files' : 'Job files'}</Text>
+        <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View></> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
       </View>
 
-      <View style={styles.card}>
+      {!creditexManual ? <View style={styles.card}>
         <Text style={styles.label}>TIME ENTRY</Text><Text style={styles.cardTitle}>Record today&apos;s work</Text>
         <Text style={styles.inputLabel}>Minutes worked</Text><TextInput style={styles.input} value={duration} onChangeText={setDuration} keyboardType="number-pad" placeholder="For example, 90" />
         <Text style={styles.inputLabel}>Work note, optional</Text><TextInput style={[styles.input, styles.notes]} multiline value={notes} onChangeText={setNotes} placeholder={job.protectedJob ? 'Describe the work only. Do not add customer contact details.' : 'Briefly describe completed work'} maxLength={500} />
         <FieldButton loading={busy === 'time'} disabled={!duration} onPress={() => void addTime()}>Save time entry</FieldButton>
-      </View>
+      </View> : null}
 
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
     </Screen>
@@ -500,7 +526,8 @@ function JobFieldForm({ form, busy, onSave }: { form: FieldForm; busy: boolean; 
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
       {field.type === 'checkbox' ? <Pressable disabled={form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
         : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
-        : <TextInput editable={form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : 'Enter technical job information'} />}
+        : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested AEA Field build. This required item remains blocked and cannot be marked complete.</Text></View>
+        : <TextInput editable={form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
     </View>)}{form.status !== 'complete' && <View style={styles.formActions}><FieldButton variant="secondary" loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, false)}>Save draft</FieldButton><FieldButton loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, true)}>Complete</FieldButton></View>}</View>}
   </View>;
 }
@@ -512,6 +539,9 @@ const styles = StyleSheet.create({
   jobNumberText: { color: colours.white, fontSize: 12, fontWeight: '800' },
   stage: { backgroundColor: colours.mint, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 6 },
   stageText: { color: colours.ink, fontSize: 12, fontWeight: '700' },
+  signatureBlocked: { alignItems: 'center', backgroundColor: '#fff4d6', borderColor: '#d99000', borderRadius: 8, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, padding: spacing.sm },
+  syntheticBadge: { backgroundColor: '#fff0bf', borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  syntheticBadgeText: { color: '#674b00', fontSize: 11, fontWeight: '900' },
   title: { color: colours.ink, fontSize: 28, lineHeight: 34, fontWeight: '800' },
   body: { color: colours.muted, lineHeight: 21 },
   privacy: { flexDirection: 'row', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colours.white, borderWidth: 1, borderColor: colours.line },

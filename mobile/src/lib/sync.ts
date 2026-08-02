@@ -12,7 +12,7 @@ import {
   setSetting,
 } from '@/lib/database';
 import { deviceRegistration, forgetPushToken, getDeviceId } from '@/lib/device';
-import type { OfflineAction, SyncResponse } from '@/lib/types';
+import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
 
 let activeSync: Promise<SyncOutcome> | null = null;
@@ -26,21 +26,66 @@ export type SyncOutcome = {
   message: string;
 };
 
-async function registerDevice() {
+function isFieldAccessMode(value: unknown): value is FieldAccessMode {
+  return value === 'trade_team' || value === 'creditex_manual';
+}
+
+export async function resolveFieldAccessModes() {
+  const response = await apiRequest<{ mode: FieldAccessMode; modes?: FieldAccessMode[] }>('/api/field/access');
+  const modes = [...new Set((response.modes?.length ? response.modes : [response.mode])
+    .filter(isFieldAccessMode))];
+  if (!modes.length) {
+    throw new ApiError('No active field access was returned.', 403, 'FIELD_ACCESS_REQUIRED');
+  }
+  await setSetting('field_access_mode', modes[0]);
+  return modes;
+}
+
+export async function resolveFieldAccessMode() {
+  const [mode] = await resolveFieldAccessModes();
+  if (!mode) {
+    throw new ApiError('No active field access was returned.', 403, 'FIELD_ACCESS_REQUIRED');
+  }
+  return mode;
+}
+
+function cursorSetting(mode: FieldAccessMode) {
+  return `sync_cursor_${mode}`;
+}
+
+function actionForServer(row: { payload: string }) {
+  const serverAction = { ...(JSON.parse(row.payload) as OfflineAction) };
+  delete serverAction.fieldLane;
+  return serverAction;
+}
+
+function devicePath(mode: FieldAccessMode) {
+  return mode === 'creditex_manual'
+    ? '/api/creditex/manual-field/devices'
+    : '/api/trade-team/devices';
+}
+
+function syncPath(mode: FieldAccessMode) {
+  return mode === 'creditex_manual'
+    ? '/api/creditex/manual-field/sync'
+    : '/api/trade-team/sync';
+}
+
+async function registerDevice(mode: FieldAccessMode) {
   const registration = await deviceRegistration();
-  await apiRequest('/api/trade-team/devices', {
+  await apiRequest(devicePath(mode), {
     method: 'POST',
     body: JSON.stringify(registration),
   });
 }
 
-async function sendActions() {
-  const rows = await queuedActions();
+async function sendActions(mode: FieldAccessMode) {
+  const rows = await queuedActions(mode);
   if (!rows.length) return;
-  const actions = rows.map((row) => JSON.parse(row.payload) as OfflineAction);
+  const actions = rows.map(actionForServer);
   const response = await apiRequest<{
     results: { clientActionId: string; status: string; code?: string; error?: string; retryAfterSeconds?: number }[];
-  }>('/api/trade-team/sync', {
+  }>(syncPath(mode), {
     method: 'POST',
     body: JSON.stringify({
       deviceId: await getDeviceId(),
@@ -52,8 +97,9 @@ async function sendActions() {
   for (const result of response.results) await resolveAction(result.clientActionId, result);
 }
 
-async function fetchChanges() {
-  let cursor = await getSetting('sync_cursor');
+async function fetchChanges(mode: FieldAccessMode) {
+  const setting = cursorSetting(mode);
+  let cursor = await getSetting(setting);
   let hasMore = true;
   while (hasMore) {
     const params = new URLSearchParams({
@@ -63,10 +109,10 @@ async function fetchChanges() {
       limit: '200',
     });
     if (cursor) params.set('cursor', cursor);
-    const response = await apiRequest<SyncResponse>(`/api/trade-team/sync?${params}`);
-    await applyChanges(response.changes, response.bootstrap, response.serverTime);
+    const response = await apiRequest<SyncResponse>(`${syncPath(mode)}?${params}`);
+    await applyChanges(response.changes, response.bootstrap, response.serverTime, mode);
     cursor = response.nextCursor;
-    await setSetting('sync_cursor', cursor);
+    await setSetting(setting, cursor);
     hasMore = response.hasMore;
   }
 }
@@ -81,11 +127,14 @@ async function performSync(): Promise<SyncOutcome> {
   if (!currentUser) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
   await prepareLocalDataOwner(currentUser.uid);
   try {
+    const modes = await resolveFieldAccessModes();
     await purgeExpiredAddresses();
-    await registerDevice();
-    await sendActions();
-    await processUploadQueue();
-    await fetchChanges();
+    for (const mode of modes) {
+      await registerDevice(mode);
+      await sendActions(mode);
+      await processUploadQueue(mode);
+      await fetchChanges(mode);
+    }
     const lastSyncedAt = new Date().toISOString();
     await setSetting('last_synced_at', lastSyncedAt);
     const counts = await queueCounts();

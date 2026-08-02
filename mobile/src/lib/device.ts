@@ -63,6 +63,7 @@ export async function deviceRegistration() {
     platform: MOBILE_PLATFORM,
     appVersion: APP_VERSION,
     deviceName: getDeviceName(),
+    isPhysicalDevice: Device.isDevice,
     pushToken: push.token,
     pushProvider: push.provider,
   };
