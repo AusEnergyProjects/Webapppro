@@ -1172,13 +1172,35 @@ The Calculators panel exposes readiness and source windows for all 212 activitie
 - Signed-in production QA confirmed the 300-job register and exact 23 headers, identical 28-pixel Search, Refresh and Advanced search controls, outside-click sort dismissal, a 212-activity calculator catalogue, live 45-STC photovoltaic and 164-STC battery vectors, explicit NSW future and closed states, and no certificate action.
 - Actual 320-pixel and 390-pixel CSS-width verification found no document overflow; the register retained table-owned horizontal scrolling and the calculator stacked into one readable column. Browser review found no application exception.
 
+## Released milestone: CREDITEX-NATIONAL-MANUAL-EVIDENCE-LAB-36
+
+Status: released national synthetic manual-evidence forms and job testing
+
+Release status: exact application commit `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f` was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_e42b1932db8481918304dad9fcf28bd2` and deployed as Sites version 266 through `appgdep_6a6f4c3dc8b88191a33403ba9acbd5d9` with environment revision 19.
+
+### Outcome
+
+Creditex can select any of the 32 controlled Australian program pathways and 212 controlled activity templates, generate an editable evidence starter form, add or reorder operational prompts, lock an immutable test-ready version and exercise that exact form through an owner-scoped synthetic manual job.
+
+The builder supports photo, document, text, number, controlled select, declaration, date and signature fields with capture timing, minimum and maximum captures, MIME restrictions, original-file retention, metadata and GPS controls. Manual jobs pin the exact activity and form snapshots and support field testing, audit, change request, pass and archive states with append-only event history.
+
+Government requirements remain separate. Creditex can improve plain-language instructions and add operational checks, but a government-requirement candidate needs a complete official-source citation and cannot become authoritative through the manual lab. No manual-test action creates a regulated case, evidence object, certificate, submission, trade or settlement.
+
+### Safety and release evidence
+
+- Exact application commit `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,289 main tests with 1,287 passed, 2 intentionally skipped and 0 failed, all 112 migrations, the customer-plan PDF audit, Vinext production build and Sites bundle audit.
+- The final focused manual-evidence, schema-guard, VEU-pilot and operations-control set passed 62 of 62. Independent review found no P0 or P1 blocker, and its one database review-role hardening finding was corrected and regression-tested before release.
+- Archive `.openai/site-release-ecec39a.tar.gz` is 7,629,648 bytes with SHA-256 `2BAFF556C8F963612F6FC4878326C2A1924B38F0AB8E5D1046B00C5ED2044F53`, 361 entries, all 112 migrations and zero CSV entries. Sites stored 347 files and 30,883,840 bytes with content hash `sha256:ac05eacd1792bacdb6b5ef4e0dae86149f8cb484678401061e86ca96ddce69cd`.
+- Signed-in production QA confirmed catalogue metrics for 32 controlled program pathways and 212 controlled activity templates, the custody boundary, Form builder, Manual jobs, Installer preview, the unchanged 300-job register and the compact Advanced search drawer.
+- Actual 320-pixel and 390-pixel responsive verification found no document-level overflow. Browser review found no application error.
+
 ## Next five logical product steps
 
-1. **Retain and approve the exact current rule packs:** store the exact VEU v24/v25, SRES law and register, and NSW ESS/PDRS source bytes in R2 with SHA-256, effective dates, supersession links and named independent approvals.
-2. **Replace manual inputs with official effective-dated lookups:** import participant, product, licence, recall, suspension, postcode-zone and model-register snapshots so supported installer choices become authoritative dropdowns.
-3. **Implement reviewed VEU and NSW calculation drafts:** transcribe VEU, ESS and PDRS formulas with premises-history and cross-claim eligibility, deterministic receipts and regulator-oracle golden-vector reconciliation while keeping activation independently gated.
-4. **Build authorised submission interchange:** implement TESSA CSV v1.7 import, export and preflight, then obtain the current ESC VEU API pack or sandbox and REC Registry bulk-upload contract before enabling controlled adapters.
-5. **Connect installer cases to field evidence custody:** bind post-acceptance job creation to the selected program and activity, generate its evidence template, and complete named iOS, Android, offline, GPS, EXIF, upload-recovery and R2-restore acceptance.
+1. **Connect the physical field-test path:** bind locked manual-form prompts to AEA Field test-device capture, original bytes, EXIF, GPS, device identity, offline queue, retry and R2 restore, then record named physical acceptance.
+2. **Merge government policy without weakening it:** render independently approved government evidence requirements as immutable fields, layer editable Creditex instructions and additional operational prompts above them, and show an exact version diff before a form can be locked.
+3. **Unify manual jobs with the Creditex audit workflow:** project synthetic manual jobs into the existing register, advanced filters and full audit workspace without changing the exact 23 Dataforce columns or allowing a synthetic row into regulated tables.
+4. **Build regulator interchange dry runs:** implement exact NSW TESSA v1.7 CSV preflight and download, separate REC Registry SGU and SWH/ASHP bulk packs, and a disabled ESC VEU API adapter with immutable manifests, receipts and rejection reconciliation. Keep every live send disabled.
+5. **Complete source-approved calculation coverage:** retain exact formula assets and lookup snapshots, author independently reviewed calculators and golden vectors, and run a complete 212-activity regression before enabling any expected-entitlement result.
 
 ## Global stop conditions
 

@@ -1,20 +1,20 @@
 # Next task handover
 
-Status: `CREDITEX-NATIONAL-CALCULATION-FOUNDATIONS-35` released and live
+Status: `CREDITEX-NATIONAL-MANUAL-EVIDENCE-LAB-36` released and live
 
 Prepared: 2 August 2026
 
-Milestone ID: `CREDITEX-NATIONAL-CALCULATION-FOUNDATIONS-35`
+Milestone ID: `CREDITEX-NATIONAL-MANUAL-EVIDENCE-LAB-36`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `5eab88950c1047746484ce2ab4880d8e32be824a`
+Released application source commit: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
 
-Primary application source commit: `5eab88950c1047746484ce2ab4880d8e32be824a`
+Primary application source commit: `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
 
-Previous production application source: `31b152933273db33bfa866bdbc491f6fdc35360a`
+Previous production application source: `5eab88950c1047746484ce2ab4880d8e32be824a`
 
-Current production: Sites version 265 from application commit `5eab88950c1047746484ce2ab4880d8e32be824a`
+Current production: Sites version 266 from application commit `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -22,7 +22,65 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 265 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 266 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+
+## Released milestone 36 outcome
+
+Creditex now has a national synthetic manual-test lab for all 32 controlled Australian program pathways and all 212 controlled activity templates. An administrator, case manager or reviewer can select any catalogued activity, generate an editable starter form, add and reorder installer prompts, lock an exact test-ready form version, create a synthetic manual job and move it through field testing, audit, changes required, passed and archived states.
+
+The form builder supports photo, document, text, number, controlled select, declaration checkbox, date and signature prompts. Each prompt can record capture timing, minimum and maximum files, permitted MIME types, original-file retention, metadata retention and GPS requirements. Jobs pin the exact activity snapshot, form bytes and SHA-256 so a later form edit cannot silently change work already under test.
+
+Creditex operational instructions remain separate from government rules. A prompt can be identified as a government-requirement candidate only when it carries an HTTPS official source, title, version, clause and exact SHA-256. This lab cannot publish that candidate as government policy. The independently governed evidence-policy workflow remains the authority for government requirements.
+
+## Milestone 36 owning workflow and files
+
+- Manual evidence contracts and validation: `src/lib/creditex-manual-evidence-lab.ts`.
+- Owner-scoped form, job and append-only event operations: `src/lib/creditex-manual-evidence-lab-server.ts`.
+- Protected same-origin API: `src/app/api/creditex/manual-evidence-lab/route.ts`.
+- Creditex operator and installer-preview interface: `src/components/CreditexManualEvidenceLab.tsx` and `src/components/CreditexManualEvidenceLab.module.css`.
+- Storage and runtime protection: `drizzle/0111_creditex_manual_evidence_lab.sql`, `db/schema.ts` and `src/lib/creditex-schema-guards.ts`.
+- Regression evidence: `test/creditex-manual-evidence-lab.test.mjs`, `test/creditex-schema-guards.test.mjs`, `test/creditex-operations-control.test.mjs` and `test/creditex-veu-pilot.test.mjs`.
+
+## Milestone 36 safety boundaries
+
+- Every form and job is `synthetic_test`; real customer aliases are rejected and no regulated case, evidence object, certificate, submission, trade or settlement is written.
+- Draft forms are editable. Locked form versions are immutable and must be cloned before change. Started jobs retain their pinned form and activity snapshots.
+- A ready-for-audit response snapshot cannot be modified during approval. Only an administrator or reviewer can require changes or pass a test, at both API and database boundaries.
+- Required counts, file counts, MIME types, typed answers, GPS, metadata, original-file and review-note requirements fail closed.
+- The lab records filenames and capture checks only. Physical file bytes, camera capture, EXIF, offline sync and R2 storage are not represented as accepted.
+- The exact 23-column Dataforce register and its CSV contract remain unchanged.
+
+## Milestone 36 validation and release evidence
+
+- Exact application commit `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,289 main tests with 1,287 passed, 2 intentionally skipped and 0 failed, all 112 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The final manual-evidence, schema-guard, VEU-pilot and operations-control set passed 62 of 62. Independent release review found no P0 or P1 blocker. Its one database review-role hardening finding was corrected and covered by a regression test before release.
+- Archive `.openai/site-release-ecec39a.tar.gz` is 7,629,648 bytes with SHA-256 `2BAFF556C8F963612F6FC4878326C2A1924B38F0AB8E5D1046B00C5ED2044F53`, 361 entries, all 112 migrations and zero CSV entries.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_e42b1932db8481918304dad9fcf28bd2` reports exact source `ecec39abbc65fb5d25aa5d21d6dcfead724bcc0f`, 347 stored files, 30,883,840 stored bytes and content hash `sha256:ac05eacd1792bacdb6b5ef4e0dae86149f8cb484678401061e86ca96ddce69cd`.
+- Deployment `appgdep_6a6f4c3dc8b88191a33403ba9acbd5d9` succeeded as Sites version 266 with environment revision 19.
+
+## Milestone 36 live production evidence
+
+- Signed-in Chrome QA loaded the Evidence workspace with catalogue metrics for 32 controlled program pathways and 212 controlled activity templates, two controlled catalogue selectors, the original-evidence custody boundary and no application alert.
+- Form builder, Manual jobs and Installer preview all rendered. The manual-job panel exposed a synthetic-only job creator and the preview rendered the TLink Field handoff without creating a production record.
+- The exact 300-job register still opened, and Advanced search exposed its compact right-edge drawer with installer, activity, review, evidence and the existing Dataforce-equivalent filter families.
+- At 390-pixel and 320-pixel responsive overrides the document width equalled the viewport width. Wide controls used bounded internal horizontal scrolling instead of document overflow.
+- Browser review found zero application errors. Three Chrome-extension asynchronous message-channel closures were excluded because they carried no application stack.
+
+## Milestone 36 important limits and unverified areas
+
+- The starter generator is available for every activity, but exact government evidence requirements are not automatically published into forms until retained source bytes and independent evidence-policy approval exist.
+- Production QA did not create a synthetic form or job. The complete create, lock, field-test, review, change and pass loop is proven by the owner-scoped database and API regression suite rather than a new production row.
+- Original photo and document bytes, EXIF, GPS, device identity, offline recovery, upload recovery and R2 restore remain outside this manual simulator.
+- Manual test jobs do not yet appear in the main 23-column Jobs register or full job-audit workspace.
+- TESSA, ESC VEU and REC Registry interchange remains disabled. Certificate creation, submission, trading and settlement remain disabled.
+
+## Next five logical product steps
+
+1. **Connect the physical field-test path:** bind locked manual-form prompts to AEA Field test-device capture, original bytes, EXIF, GPS, device identity, offline queue, retry and R2 restore, then record named physical acceptance.
+2. **Merge government policy without weakening it:** render independently approved government evidence requirements as immutable fields, layer editable Creditex instructions and additional operational prompts above them, and show an exact version diff before a form can be locked.
+3. **Unify manual jobs with the Creditex audit workflow:** project synthetic manual jobs into the existing register, advanced filters and full audit workspace without changing the exact 23 Dataforce columns or allowing a synthetic row into regulated tables.
+4. **Build regulator interchange dry runs:** implement exact NSW TESSA v1.7 CSV preflight and download, separate REC Registry SGU and SWH/ASHP bulk packs, and a disabled ESC VEU API adapter with immutable manifests, receipts and rejection reconciliation. Keep every live send disabled.
+5. **Complete source-approved calculation coverage:** retain exact formula assets and lookup snapshots, author independently reviewed calculators and golden vectors, and run a complete 212-activity regression before enabling any expected-entitlement result.
 
 ## Released milestone 35 outcome
 
@@ -74,15 +132,15 @@ The released SRES estimator covers 2026 through 2030 solar photovoltaic, wind, h
 - Physical iOS, Android, offline, GPS, EXIF, upload-recovery and R2-restore acceptance remain incomplete.
 - External certificate creation, submission, trading and settlement remain disabled.
 
-## Active milestone 36 contract
+## Active milestone 37 contract
 
 ### One user outcome
 
-Give an installer and Creditex one source-governed post-acceptance case for a selected VEU, SRES or NSW activity: authoritative dropdowns, the right evidence checklist, an independently approved expected calculation where available and a clear blocker everywhere else, without submitting a real certificate.
+Connect one locked manual form to the AEA Field test-device path and prove that the original bytes, capture time, device identity, EXIF, GPS, offline queue, retry and R2 restore all reconcile to the exact synthetic job and prompt without weakening a government requirement or enabling a real certificate action.
 
 ### Stop condition
 
-Stop and open a new milestone before any real certificate action, undocumented external integration, formula activation without retained exact bytes and independent approval, production customer-case calculation, new paid service, physical-device acceptance claim or change to tenant, identity, payment or evidence-custody boundaries.
+Stop and open a new milestone before any real customer evidence, regulated case, certificate action, undocumented external integration, formula activation without retained exact bytes and independent approval, new paid service or change to tenant, identity or payment boundaries. Do not claim physical acceptance until the named iOS, Android, offline, metadata, GPS, upload-recovery and R2-restore matrix passes.
 
 ## Released milestone 34 outcome
 
@@ -376,7 +434,7 @@ Stop before any regulated-case onboarding when:
 4. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline, original-byte, metadata, GPS and R2 restore evidence for one independently approved activity.
 5. **Run one verified end-to-end parallel activity:** reconcile an independently approved calculator, golden vectors, authorised Dataforce and Runabout mappings and a registry sandbox or approved interface without touching real certificate inventory.
 
-## Next five logical product steps
+## Superseded next-five sequence after milestone 35
 
 1. **Retain and approve the exact current rule packs:** store the exact VEU v24/v25, SRES law and register, and NSW ESS/PDRS source bytes in R2 with SHA-256, effective dates, supersession links and named independent approvals.
 2. **Replace manual inputs with official effective-dated lookups:** import participant, product, licence, recall, suspension, postcode-zone and model-register snapshots so supported installer choices become authoritative dropdowns.
