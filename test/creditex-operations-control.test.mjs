@@ -11,6 +11,7 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
+const dataforceMigration = read("../drizzle/0100_creditex_dataforce_staging.sql");
 const acceptedHandoffMigration = read(
   "../drizzle/0101_compliance_accepted_handoff.sql",
 );
@@ -242,6 +243,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
     );
   `);
   applyStatements(database, foundationMigration);
+  applyStatements(database, dataforceMigration);
   applyStatements(database, acceptedHandoffMigration);
   applyStatements(database, operationsMigration);
   applyStatements(database, custodyMigration);
@@ -370,6 +372,21 @@ test("runtime schema bootstrap fails closed when a same-name guard has different
   await assert.rejects(
     ensureCreditexSchemaGuards(testD1(database)),
     /CREDITEX_SCHEMA_GUARD_MISMATCH:compliance_programs_publish_requirements/,
+  );
+});
+
+test("runtime schema bootstrap fails closed when required Sites migrations are absent", async () => {
+  const database = databaseWithComplianceOperations({ installGuards: false });
+  database.exec("DROP TABLE compliance_official_source_artifacts");
+  await assert.rejects(
+    ensureCreditexSchemaGuards(testD1(database)),
+    /CREDITEX_SCHEMA_MIGRATIONS_REQUIRED:.*table:compliance_official_source_artifacts/,
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+    ).get().count,
+    0,
   );
 });
 

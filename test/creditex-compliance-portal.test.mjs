@@ -184,6 +184,7 @@ test("first access installs schema guards in quota-safe batches and retries visi
   assert.match(portal, /Preparing governed compliance controls/);
   assert.match(portal, /Retry workspace/);
   assert.match(sessionRoute, /CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED/);
+  assert.match(sessionRoute, /CREDITEX_SCHEMA_MIGRATIONS_REQUIRED/);
 });
 
 test("every Creditex endpoint enforces same-origin no-store verified membership access", () => {

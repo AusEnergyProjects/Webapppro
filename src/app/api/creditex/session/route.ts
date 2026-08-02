@@ -44,6 +44,7 @@ function errorResponse(error: unknown) {
     && (
       error.message.startsWith("CREDITEX_SCHEMA_GUARD_MISMATCH:")
       || error.message.startsWith("CREDITEX_SCHEMA_GUARDS_UNAVAILABLE:")
+      || error.message.startsWith("CREDITEX_SCHEMA_MIGRATIONS_REQUIRED:")
     )
   ) {
     const [code, names = ""] = error.message.split(":", 2);

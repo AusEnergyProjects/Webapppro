@@ -265,6 +265,23 @@ export const CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS =
 const SCHEMA_INSTALL_BATCH_SIZE = 40;
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
 const pilotReadinessByDatabase = new WeakMap<object, Promise<void>>();
+const CREDITEX_REQUIRED_SCHEMA_TABLES = [
+  "compliance_legacy_import_batches",
+  "compliance_legacy_import_rows",
+  "compliance_official_source_artifacts",
+  "compliance_official_source_bindings",
+  "compliance_evidence_integrity_receipts",
+  "compliance_operational_lookup_imports",
+  "compliance_operational_lookup_records",
+  "compliance_legacy_mapping_artifacts",
+  "compliance_parallel_reconciliation_runs",
+  "compliance_parallel_reconciliation_rows",
+] as const;
+const CREDITEX_REQUIRED_CASE_COLUMNS = [
+  "commercial_handoff_id",
+  "accepted_quote_version_id",
+  "accepted_scope_sha256",
+] as const;
 
 type SchemaGuardDefinition = {
   readonly name: string;
@@ -327,10 +344,42 @@ async function installedGuards(database: D1Database) {
   return installed;
 }
 
+async function requireCreditexSchemaMigrations(database: D1Database) {
+  const tableNames = CREDITEX_REQUIRED_SCHEMA_TABLES
+    .map((name) => `'${name}'`)
+    .join(", ");
+  const tables = await database.prepare(
+    `SELECT name FROM sqlite_schema
+      WHERE type = 'table'
+        AND name IN (${tableNames})`,
+  ).all<{ name: string }>();
+  const caseColumns = await database.prepare(
+    "PRAGMA table_xinfo(`compliance_cases`)",
+  ).all<{ name: string }>();
+  const installedTables = new Set(
+    tables.results.map((row) => String(row.name)),
+  );
+  const installedCaseColumns = new Set(
+    caseColumns.results.map((row) => String(row.name)),
+  );
+  const missing = [
+    ...CREDITEX_REQUIRED_SCHEMA_TABLES
+      .filter((name) => !installedTables.has(name))
+      .map((name) => `table:${name}`),
+    ...CREDITEX_REQUIRED_CASE_COLUMNS
+      .filter((name) => !installedCaseColumns.has(name))
+      .map((name) => `column:compliance_cases.${name}`),
+  ];
+  if (missing.length) {
+    throw new Error(`CREDITEX_SCHEMA_MIGRATIONS_REQUIRED:${missing.join(",")}`);
+  }
+}
+
 async function installCreditexSchemaGuards(
   database: D1Database,
   definitions: readonly SchemaGuardDefinition[],
 ) {
+  await requireCreditexSchemaMigrations(database);
   const installed = await installedGuards(database);
   const mismatched = definitions.filter(
     (definition) =>
