@@ -2461,8 +2461,24 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
   assert.match(workspace, /Append-only review ledger/);
   assert.match(workspace, /Physical acceptance ledger/);
-  assert.match(workspace, /Execution engine/);
-  assert.match(workspace, /Deterministic v2 exact decimal/);
+  assert.match(workspace, /National certificate calculation workspace/);
+  assert.match(workspace, /Estimate STCs/);
+  assert.match(workspace, /Activity calculation readiness/);
+  assert.match(workspace, /\/api\/creditex\/stc-estimates/);
+  assert.match(workspace, /REC Registry check required/);
+  assert.match(workspace, /Safety certification date/);
+  assert.match(workspace, /Site-assessed hours \| audit required/);
+  assert.match(workspace, /Controlled submission boundary/);
+  assert.match(workspace, /External submission blocked/);
+  assert.match(workspace, /No public national calculation API exists/);
+  assert.match(
+    workspaceStyles,
+    /\.registerTools \.filterToggle\[aria-expanded="true"\]\s*\{[\s\S]*border-color:\s*var\(--pilot-line-strong\)[\s\S]*background:\s*#0d2a39[\s\S]*color:\s*var\(--pilot-ink\)/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.jobRegister > header \.registerTools button,[\s\S]*height:\s*28px[\s\S]*max-height:\s*28px/,
+  );
   assert.match(workspace, /Exact staged-row binding available/);
   assert.match(workspace, /External transport remains blocked/);
   assert.match(

@@ -89,3 +89,18 @@ test("VEU Part 6 is ordinary catalogue data and incomplete variants fail closed"
   assert.equal(examples[0].productCategory, "");
   assert.equal(examples[0].scenario, "");
 });
+
+test("NSW catalogue preserves expired gas activities as historical closed records", () => {
+  const activities = new Map(
+    governmentActivityTemplates("NSW-ESS").map((activityTemplate) => [
+      activityTemplate.registryActivityCode,
+      activityTemplate,
+    ]),
+  );
+  for (const code of ["D11", "D12", "D21", "F8", "F9"]) {
+    assert.equal(activities.get(code)?.catalogueState, "closed");
+  }
+  for (const code of ["D6", "D7", "D8", "D9"]) {
+    assert.equal(activities.get(code)?.catalogueState, "future");
+  }
+});

@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34` released and live; exact source-byte approval and the first official current-effective lookup cohort are next
+Status: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34` released and live
 
 Prepared: 2 August 2026
 
@@ -23,6 +23,59 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 Production access: public host with an authenticated Creditex portal
 
 The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 264 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+
+## Active milestone 35 contract
+
+### One user outcome
+
+Give Creditex one clear national calculation workspace: the Jobs register keeps a visually consistent Advanced search control, every catalogued government activity declares how its benefit is calculated or why it is blocked, and the first Small-scale Renewable Energy Scheme (SRES) Small-scale Technology Certificate (STC) estimates run deterministically from controlled dropdowns without pretending to be a regulator acceptance.
+
+### Owning workflow and expected files
+
+- National program and activity coverage: `src/lib/australian-government-program-catalogue.ts` and a calculation-method catalogue beside it.
+- Deterministic STC estimates: a bounded server-owned SRES calculator and a protected Creditex estimate route.
+- Operator workflow: `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Regression evidence: focused catalogue, calculator, route and Creditex pilot tests.
+- Release state: this handover, `docs/RELEASE_TRUTH.md` and `ROADMAP.md`.
+
+### In scope
+
+1. Make Advanced search use the same 28-pixel visual treatment as Search and Refresh in both collapsed and expanded states.
+2. Give every controlled Australian program and activity an explicit calculation pathway: deterministic estimate, official-calculator reconciliation, registry or project method, governed formula pending review, or non-certificate administration.
+3. Implement exact base-10 2026-to-2030 SRES estimates for small generation units, registered solar water heaters or air-source heat pumps, and eligible solar batteries, with source version, effective period, trace and deterministic receipt.
+4. Expose the supported STC estimate through a same-origin authenticated Creditex API and a simple dropdown-led Calculators panel.
+5. Pin current VEU version 24/version 25 and NSW Energy Savings Scheme (ESS)/Peak Demand Reduction Scheme (PDRS) rule windows in the calculation catalogue, while keeping unapproved VEEC, Energy Savings Certificate (ESC) and Peak Reduction Certificate (PRC) formulas non-executable.
+
+### Out of scope
+
+- Creating, registering, submitting, trading or settling any certificate.
+- Treating an estimate as product eligibility, evidence acceptance, regulator acceptance or a customer rebate promise.
+- Guessing a VEU, ESS, PDRS, Australian Carbon Credit Unit, Large-scale Generation Certificate, Renewable Electricity Guarantee of Origin, ACT or South Australian formula that has not been retained and independently approved.
+- Calling an undocumented regulator endpoint or scraping an interactive registry as if it were an authorised transactional API.
+- Completing physical iOS, Android, offline, recovery or R2 restore acceptance without the named devices, testers and distinct reviewer.
+- Self-approving official-source, lookup, mapping or calculator records from the shared bootstrap account.
+
+### Acceptance criteria
+
+- Search, Refresh and Advanced search compute to the same height, border, background, text colour and font treatment; expanded state remains communicated by ARIA and the open drawer.
+- The calculation-method catalogue has exactly one entry for every controlled activity template and no orphan program or activity code.
+- Every non-certificate program is explicitly marked as having no certificate calculation, rather than returning zero.
+- Supported STC inputs are dropdown-led wherever values are controlled, reject unsupported dates and ranges, use decimal strings only and round down only at the official final step.
+- Each successful estimate includes a source-pinned formula version, input hash, trace hash, output hash and receipt hash; malformed, ineligible or unsupported requests fail closed.
+- VEU, ESS and PDRS activity methods show their current source/effective window and remain non-executable until retained-source and independent calculator approval gates pass.
+- The authenticated estimate route is same-origin, no-store, bounded and cannot mutate a customer, job, case, certificate or external registry.
+- The Calculators panel is usable at desktop and 320/390-pixel widths without adding register columns or document-level overflow.
+
+### Smallest meaningful validation
+
+- Focused national catalogue, STC calculation, estimate-route and Creditex pilot UI tests.
+- Type checking, warning-free lint and `git diff --check`.
+- Complete `npm.cmd run validate` on the exact release commit.
+- Signed-in Chrome checks for toolbar parity, STC estimate interaction, responsive layout and absence of application exceptions.
+
+### Stop condition
+
+Stop and open a new milestone before any real certificate action, undocumented external integration, unreviewed formula activation, production customer-case calculation, new paid service, physical-device acceptance claim or change to tenant, identity, payment or evidence-custody boundaries.
 
 ## Released milestone 34 outcome
 

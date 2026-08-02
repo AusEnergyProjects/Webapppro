@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
 import {
   CreditexVeuJobAuditWorkspace,
@@ -21,6 +22,16 @@ import {
   type DataforceJobCsvRecord,
   type DataforceJobCsvValidation,
 } from "@/lib/creditex-dataforce-job-csv";
+import {
+  GOVERNMENT_ACTIVITY_CALCULATION_METHODS,
+  GOVERNMENT_CALCULATION_METHOD_SUMMARY,
+  GOVERNMENT_PROGRAM_SUBMISSION_ROUTES,
+  governmentActivityCalculationMethods,
+  governmentCalculationSourceWindows,
+} from "@/lib/australian-certificate-calculation-catalogue";
+import {
+  GOVERNMENT_PROGRAM_TEMPLATES,
+} from "@/lib/australian-government-program-catalogue";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
 type Api = (
@@ -557,6 +568,50 @@ type FoundationReadiness = {
   error: string;
 };
 
+type StcEstimateForm = {
+  technology:
+    | "solar_pv"
+    | "small_wind"
+    | "small_hydro"
+    | "solar_water_heater"
+    | "air_source_heat_pump"
+    | "solar_battery";
+  effectiveDate: string;
+  ratedCapacityKw: string;
+  zoneRating: "1.622" | "1.536" | "1.382" | "1.185";
+  resourceAvailability: "default" | "site_assessed";
+  resourceHoursPerYear: string;
+  deemingYears: string;
+  registeredTenYearStcs: string;
+  nominalCapacityKwh: string;
+  usableCapacityKwh: string;
+};
+
+type StcEstimateResult = {
+  technology: StcEstimateForm["technology"];
+  formulaKey: string;
+  formulaVersion: string;
+  officialSourceUrl: string;
+  officialSourceTitle: string;
+  effectiveDate: string;
+  trace: Array<{
+    key: string;
+    label: string;
+    input: string;
+    operation: string;
+    output: string;
+    unit: string;
+  }>;
+  output: {
+    quantity: string;
+    unit: "STC";
+  };
+  status: "estimate_only_registry_reconciliation_required";
+  certificateActionEnabled: false;
+  receiptHash: string;
+  operatorMessage: string;
+};
+
 const EMPTY_FOUNDATION_READINESS: FoundationReadiness = {
   sourceDecisions: null,
   lookupDecisions: null,
@@ -569,6 +624,19 @@ const EMPTY_DATAFORCE_IMPORT: DataforceImportDraft = {
   fileName: "",
   csv: "",
   validation: null,
+};
+
+const EMPTY_STC_ESTIMATE_FORM: StcEstimateForm = {
+  technology: "solar_pv",
+  effectiveDate: "2026-08-02",
+  ratedCapacityKw: "6.6",
+  zoneRating: "1.382",
+  resourceAvailability: "default",
+  resourceHoursPerYear: "2001",
+  deemingYears: "5",
+  registeredTenYearStcs: "30",
+  nominalCapacityKwh: "20",
+  usableCapacityKwh: "18",
 };
 
 const JOB_CONTEXT_ITEMS: ReadonlyArray<{
@@ -1657,6 +1725,22 @@ export function CreditexVeuPilotWorkspace({
     useState<DataforceImportDraft>(EMPTY_DATAFORCE_IMPORT);
   const [foundationReadiness, setFoundationReadiness] =
     useState<FoundationReadiness>(EMPTY_FOUNDATION_READINESS);
+  const [calculationProgramCode, setCalculationProgramCode] = useState("SRES");
+  const [stcEstimateForm, setStcEstimateForm] =
+    useState<StcEstimateForm>(EMPTY_STC_ESTIMATE_FORM);
+  const [stcEstimate, setStcEstimate] =
+    useState<StcEstimateResult | null>(null);
+  const [stcEstimateBusy, setStcEstimateBusy] = useState(false);
+  const [stcEstimateError, setStcEstimateError] = useState("");
+  const stcMaximumDeemingYears = String(
+    Math.min(
+      5,
+      Math.max(
+        1,
+        2031 - Number(stcEstimateForm.effectiveDate.slice(0, 4) || 2030),
+      ),
+    ),
+  );
   const requestRef = useRef(0);
   const detailRequestRef = useRef(0);
   const initialPanelRef = useRef(false);
@@ -1849,12 +1933,91 @@ export function CreditexVeuPilotWorkspace({
     ),
     [draftFilters.installerId, snapshot?.technicians],
   );
+  const selectedCalculationMethods = useMemo(
+    () => governmentActivityCalculationMethods(calculationProgramCode),
+    [calculationProgramCode],
+  );
+  const selectedCalculationWindows = useMemo(
+    () => governmentCalculationSourceWindows(calculationProgramCode),
+    [calculationProgramCode],
+  );
+  const selectedSubmissionRoute = useMemo(
+    () =>
+      GOVERNMENT_PROGRAM_SUBMISSION_ROUTES.find(
+        (route) => route.programCode === calculationProgramCode,
+      ) || GOVERNMENT_PROGRAM_SUBMISSION_ROUTES[0],
+    [calculationProgramCode],
+  );
 
   async function runAction(body: Record<string, unknown>) {
     return api("/api/creditex/pilot", {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  async function calculateStcEstimate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStcEstimateBusy(true);
+    setStcEstimateError("");
+    setStcEstimate(null);
+    const common = stcEstimateForm.technology === "solar_battery"
+      ? {
+          technology: stcEstimateForm.technology,
+          certificationDate: stcEstimateForm.effectiveDate,
+        }
+      : {
+          technology: stcEstimateForm.technology,
+          installationDate: stcEstimateForm.effectiveDate,
+        };
+    const payload = stcEstimateForm.technology === "solar_battery"
+      ? {
+          ...common,
+          claimScope: "new_system",
+          nominalCapacityKwh: stcEstimateForm.nominalCapacityKwh,
+          usableCapacityKwh: stcEstimateForm.usableCapacityKwh,
+        }
+      : stcEstimateForm.technology === "solar_water_heater"
+          || stcEstimateForm.technology === "air_source_heat_pump"
+        ? {
+            ...common,
+            registeredTenYearStcs:
+              stcEstimateForm.registeredTenYearStcs,
+          }
+        : stcEstimateForm.technology === "small_wind"
+            || stcEstimateForm.technology === "small_hydro"
+          ? {
+              ...common,
+              ratedCapacityKw: stcEstimateForm.ratedCapacityKw,
+              resourceAvailability: stcEstimateForm.resourceAvailability,
+              ...(stcEstimateForm.resourceAvailability === "site_assessed"
+                ? {
+                    resourceHoursPerYear:
+                      stcEstimateForm.resourceHoursPerYear,
+                  }
+                : {}),
+              deemingYears: stcEstimateForm.deemingYears,
+            }
+        : {
+            ...common,
+            ratedCapacityKw: stcEstimateForm.ratedCapacityKw,
+            zoneRating: stcEstimateForm.zoneRating,
+          };
+    try {
+      const result = await api("/api/creditex/stc-estimates", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setStcEstimate(result.estimate as StcEstimateResult);
+    } catch (estimateError) {
+      setStcEstimateError(
+        estimateError instanceof Error
+          ? estimateError.message
+          : "The STC estimate could not be completed safely.",
+      );
+    } finally {
+      setStcEstimateBusy(false);
+    }
   }
 
   const closeContextMenu = useCallback(() => {
@@ -3343,54 +3506,432 @@ export function CreditexVeuPilotWorkspace({
         <section className={styles.dataPanel}>
           <div className={styles.sectionHeading}>
             <span>PRIORITY 04</span>
-            <h3>Typed VEEC calculator contracts</h3>
+            <h3>National certificate calculation workspace</h3>
             <p>
-              All activity families have a versionable typed boundary. Formula
-              execution remains disabled until official tables, units, caps,
-              rounding and independent golden vectors reconcile.
+              Every controlled activity has one explicit calculation path.
+              STC estimates are available for the supported SRES technologies;
+              VEU, NSW and other schemes stay blocked wherever an effective
+              rule, lookup or independently approved formula is unresolved.
             </p>
           </div>
           <section className={styles.calculatorSummary}>
             <article>
-              <span>Execution engine</span>
-              <strong>Deterministic v2 exact decimal</strong>
+              <span>Controlled activities</span>
+              <strong>{GOVERNMENT_ACTIVITY_CALCULATION_METHODS.length}</strong>
             </article>
             <article>
-              <span>Typed contracts</span>
-              <strong>{snapshot.calculatorSummary?.total || 0}</strong>
-            </article>
-            <article>
-              <span>Verified formulas</span>
-              <strong>{snapshot.calculatorSummary?.verified || 0}</strong>
-            </article>
-            <article>
-              <span>Reconciled vectors</span>
+              <span>Estimate available</span>
               <strong>
-                {snapshot.calculatorSummary?.reconciledVectors || 0}
+                {GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
+                  (summary) => summary.state === "estimate_available",
+                )?.count || 0}
               </strong>
             </article>
             <article>
-              <span>Execution</span>
+              <span>Formula review required</span>
               <strong>
-                {snapshot.calculatorSummary?.executionEnabled
-                  ? "Enabled"
-                  : "Blocked"}
-                </strong>
+                {GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
+                  (summary) =>
+                    summary.state === "governed_formula_required",
+                )?.count || 0}
+              </strong>
             </article>
             <article>
-              <span>Official VEU formulas loaded</span>
-              <strong>0</strong>
+              <span>Certificate actions</span>
+              <strong>0 enabled</strong>
             </article>
           </section>
-          <div className={styles.activityTable}>
-            {(snapshot.activities || []).map((activity) => (
-              <article key={activity.activityTemplateId}>
-                <strong>{activity.registryActivityCode}</strong>
-                <span>{activity.title}</span>
-                <small>{readable(activity.catalogueState)}</small>
-                <b>Formula blocked</b>
-              </article>
-            ))}
+
+          <div className={styles.calculationWorkspace}>
+            <section
+              className={styles.stcEstimator}
+              aria-labelledby="stc-estimator-title"
+            >
+              <header>
+                <div>
+                  <span>SRES · DETERMINISTIC ESTIMATE</span>
+                  <h4 id="stc-estimator-title">Estimate STCs</h4>
+                  <p>
+                    Controlled 2026–2030 arithmetic with exact decimal inputs,
+                    a complete trace and final whole-certificate rounding.
+                  </p>
+                </div>
+                <strong>REC Registry check required</strong>
+              </header>
+              <form
+                className={styles.estimatorForm}
+                onSubmit={calculateStcEstimate}
+              >
+                <label>
+                  Technology
+                  <select
+                    value={stcEstimateForm.technology}
+                    onChange={(event) => {
+                      const technology =
+                        event.target.value as StcEstimateForm["technology"];
+                      setStcEstimate(null);
+                      setStcEstimateError("");
+                      setStcEstimateForm((current) => ({
+                        ...current,
+                        technology,
+                        resourceAvailability: "default",
+                        resourceHoursPerYear:
+                          technology === "small_hydro"
+                            ? "4001"
+                            : technology === "small_wind"
+                              ? "2001"
+                              : current.resourceHoursPerYear,
+                        deemingYears: stcMaximumDeemingYears,
+                      }));
+                    }}
+                  >
+                    <option value="solar_pv">Small-scale solar PV</option>
+                    <option value="small_wind">Small wind system</option>
+                    <option value="small_hydro">Small hydro system</option>
+                    <option value="solar_water_heater">
+                      Registered solar water heater
+                    </option>
+                    <option value="air_source_heat_pump">
+                      Registered air-source heat pump
+                    </option>
+                    <option value="solar_battery">
+                      Eligible new solar battery
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  {stcEstimateForm.technology === "solar_battery"
+                    ? "Safety certification date"
+                    : "Installation date"}
+                  <input
+                    type="date"
+                    min="2026-01-01"
+                    max="2030-12-31"
+                    required
+                    value={stcEstimateForm.effectiveDate}
+                    onChange={(event) =>
+                      setStcEstimateForm((current) => ({
+                        ...current,
+                        effectiveDate: event.target.value,
+                        deemingYears: String(
+                          Math.min(
+                            5,
+                            Math.max(
+                              1,
+                              2031
+                                - Number(
+                                  event.target.value.slice(0, 4) || 2030,
+                                ),
+                            ),
+                          ),
+                        ),
+                      }))}
+                  />
+                </label>
+
+                {stcEstimateForm.technology === "solar_battery" ? (
+                  <>
+                    <label>
+                      Claim scope
+                      <select value="new_system" disabled>
+                        <option value="new_system">
+                          New eligible battery system
+                        </option>
+                      </select>
+                    </label>
+                    <label>
+                      Nominal capacity (kWh)
+                      <input
+                        inputMode="decimal"
+                        required
+                        value={stcEstimateForm.nominalCapacityKwh}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            nominalCapacityKwh: event.target.value,
+                          }))}
+                      />
+                    </label>
+                    <label>
+                      Usable capacity (kWh)
+                      <input
+                        inputMode="decimal"
+                        required
+                        value={stcEstimateForm.usableCapacityKwh}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            usableCapacityKwh: event.target.value,
+                          }))}
+                      />
+                    </label>
+                  </>
+                ) : stcEstimateForm.technology === "solar_water_heater"
+                    || stcEstimateForm.technology
+                      === "air_source_heat_pump" ? (
+                  <label>
+                    Current register 10-year STCs
+                    <input
+                      inputMode="numeric"
+                      required
+                      value={stcEstimateForm.registeredTenYearStcs}
+                      onChange={(event) =>
+                        setStcEstimateForm((current) => ({
+                          ...current,
+                          registeredTenYearStcs: event.target.value,
+                        }))}
+                    />
+                    <small>
+                      Use the value for the exact model and zone in the current
+                      CER register.
+                    </small>
+                  </label>
+                ) : stcEstimateForm.technology === "small_wind"
+                    || stcEstimateForm.technology === "small_hydro" ? (
+                  <>
+                    <label>
+                      Rated capacity (kW)
+                      <input
+                        inputMode="decimal"
+                        required
+                        value={stcEstimateForm.ratedCapacityKw}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            ratedCapacityKw: event.target.value,
+                          }))}
+                      />
+                      <small>
+                        Maximum 10 kW for wind or 6.4 kW for hydro.
+                      </small>
+                    </label>
+                    <label>
+                      Resource availability
+                      <select
+                        value={stcEstimateForm.resourceAvailability}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            resourceAvailability:
+                              event.target
+                                .value as StcEstimateForm["resourceAvailability"],
+                          }))}
+                      >
+                        <option value="default">
+                          Government default |{" "}
+                          {stcEstimateForm.technology === "small_wind"
+                            ? "2,000"
+                            : "4,000"}{" "}
+                          hours
+                        </option>
+                        <option value="site_assessed">
+                          Site-assessed hours | audit required
+                        </option>
+                      </select>
+                    </label>
+                    {stcEstimateForm.resourceAvailability
+                      === "site_assessed" && (
+                      <label>
+                        Assessed hours per year
+                        <input
+                          inputMode="numeric"
+                          required
+                          value={stcEstimateForm.resourceHoursPerYear}
+                          onChange={(event) =>
+                            setStcEstimateForm((current) => ({
+                              ...current,
+                              resourceHoursPerYear: event.target.value,
+                            }))}
+                        />
+                        <small>
+                          Must exceed the government default and retain the
+                          required site-specific audit.
+                        </small>
+                      </label>
+                    )}
+                    <label>
+                      Certificate period
+                      <select
+                        value={stcEstimateForm.deemingYears}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            deemingYears: event.target.value,
+                          }))}
+                      >
+                        <option value="1">1 year</option>
+                        {stcMaximumDeemingYears !== "1" && (
+                          <option value={stcMaximumDeemingYears}>
+                            {stcMaximumDeemingYears} years | maximum
+                          </option>
+                        )}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      Rated capacity (kW)
+                      <input
+                        inputMode="decimal"
+                        required
+                        value={stcEstimateForm.ratedCapacityKw}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            ratedCapacityKw: event.target.value,
+                          }))}
+                      />
+                    </label>
+                    <label>
+                      Official postcode zone rating
+                      <select
+                        value={stcEstimateForm.zoneRating}
+                        onChange={(event) =>
+                          setStcEstimateForm((current) => ({
+                            ...current,
+                            zoneRating:
+                              event.target.value as StcEstimateForm["zoneRating"],
+                          }))}
+                      >
+                        <option value="1.622">Zone 1 · 1.622</option>
+                        <option value="1.536">Zone 2 · 1.536</option>
+                        <option value="1.382">Zone 3 · 1.382</option>
+                        <option value="1.185">Zone 4 · 1.185</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+                <button type="submit" disabled={stcEstimateBusy}>
+                  {stcEstimateBusy ? "Calculating…" : "Calculate estimate"}
+                </button>
+              </form>
+              {stcEstimateError && (
+                <p className={styles.error}>{stcEstimateError}</p>
+              )}
+              {stcEstimate && (
+                <section
+                  className={styles.estimateResult}
+                  aria-live="polite"
+                >
+                  <header>
+                    <div>
+                      <span>Estimated quantity</span>
+                      <strong>
+                        {stcEstimate.output.quantity}{" "}
+                        {stcEstimate.output.unit}
+                      </strong>
+                    </div>
+                    <b>Estimate only</b>
+                  </header>
+                  <ol>
+                    {stcEstimate.trace.map((step) => (
+                      <li key={step.key}>
+                        <div>
+                          <strong>{step.label}</strong>
+                          <span>{step.operation}</span>
+                        </div>
+                        <b>{step.output} {step.unit}</b>
+                      </li>
+                    ))}
+                  </ol>
+                  <p>{stcEstimate.operatorMessage}</p>
+                  <footer>
+                    <a
+                      href={stcEstimate.officialSourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open official source
+                    </a>
+                    <code title={stcEstimate.receiptHash}>
+                      Receipt {stcEstimate.receiptHash.slice(0, 22)}…
+                    </code>
+                  </footer>
+                </section>
+              )}
+            </section>
+
+            <section
+              className={styles.methodBrowser}
+              aria-labelledby="calculation-method-title"
+            >
+              <header>
+                <div>
+                  <span>ALL AUSTRALIAN PATHWAYS</span>
+                  <h4 id="calculation-method-title">
+                    Activity calculation readiness
+                  </h4>
+                </div>
+                <label>
+                  Program
+                  <select
+                    value={calculationProgramCode}
+                    onChange={(event) =>
+                      setCalculationProgramCode(event.target.value)}
+                  >
+                    {GOVERNMENT_PROGRAM_TEMPLATES.map((program) => (
+                      <option
+                        key={program.programCode}
+                        value={program.programCode}
+                      >
+                        {program.jurisdiction} · {program.programCode} ·{" "}
+                        {program.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </header>
+              {selectedCalculationWindows.length > 0 && (
+                <div className={styles.sourceWindows}>
+                  {selectedCalculationWindows.map((window) => (
+                    <article key={window.sourceKey}>
+                      <div>
+                        <strong>{window.version}</strong>
+                        <span>
+                          {window.effectiveFrom}
+                          {window.effectiveTo
+                            ? ` to ${window.effectiveTo}`
+                            : " onward"}
+                        </span>
+                      </div>
+                      <p>{window.scope}</p>
+                      <a
+                        href={window.officialSourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Source
+                      </a>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <div className={styles.methodRows}>
+                {selectedCalculationMethods.map((method) => (
+                  <article key={method.activityTemplateId}>
+                    <strong>{method.registryActivityCode}</strong>
+                    <div>
+                      <span>{method.activityTitle}</span>
+                      <small>
+                        {readable(method.catalogueState)} activity.{" "}
+                        {method.operatorMessage}
+                      </small>
+                    </div>
+                    <b data-state={method.state}>
+                      {readable(method.state)}
+                    </b>
+                    <em>{method.unit === "none" ? "No certificate" : method.unit}</em>
+                  </article>
+                ))}
+              </div>
+              <p className={styles.calculationBoundary}>
+                No public national calculation API exists. TLink uses
+                effective-dated government sources and deterministic local
+                estimates, then reconciles through each authorised registry,
+                calculator or submission channel.
+              </p>
+            </section>
           </div>
         </section>
       )}
@@ -3435,6 +3976,61 @@ export function CreditexVeuPilotWorkspace({
               </p>
             )}
           </div>
+          {selectedSubmissionRoute && (
+            <section className={styles.submissionRoute}>
+              <header>
+                <div>
+                  <span>NATIONAL CHANNEL MAP</span>
+                  <h4>Controlled submission boundary</h4>
+                  <p>
+                    Every program has an explicit transport or administrative
+                    route. None can submit externally from this pilot.
+                  </p>
+                </div>
+                <label>
+                  Program
+                  <select
+                    value={calculationProgramCode}
+                    onChange={(event) =>
+                      setCalculationProgramCode(event.target.value)}
+                  >
+                    {GOVERNMENT_PROGRAM_TEMPLATES.map((program) => (
+                      <option
+                        key={program.programCode}
+                        value={program.programCode}
+                      >
+                        {program.programCode} | {program.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </header>
+              <article>
+                <div>
+                  <span>{selectedSubmissionRoute.programCode}</span>
+                  <strong>{selectedSubmissionRoute.programName}</strong>
+                </div>
+                <div>
+                  <span>Channel</span>
+                  <strong>{selectedSubmissionRoute.channel}</strong>
+                </div>
+                <div>
+                  <span>Adapter boundary</span>
+                  <strong>
+                    {readable(selectedSubmissionRoute.adapterBoundary)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Contract state</span>
+                  <strong>
+                    {readable(selectedSubmissionRoute.routeState)}
+                  </strong>
+                </div>
+                <p>{selectedSubmissionRoute.operatorMessage}</p>
+                <b>External submission blocked</b>
+              </article>
+            </section>
+          )}
           <div className={styles.cutoverGrid}>
             <article>
               <span>DATAFORCE</span>

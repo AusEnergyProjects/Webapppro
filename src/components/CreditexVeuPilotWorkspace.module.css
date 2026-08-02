@@ -557,8 +557,13 @@
 .jobRegister > header .registerTools button,
 .jobRegister > header .registerTools select,
 .jobRegister > header .registerSearch input {
+  height: 28px;
   min-height: 28px;
+  max-height: 28px;
+  border: 1px solid var(--pilot-line-strong);
   border-radius: 0.4rem;
+  background: #0d2a39;
+  color: var(--pilot-ink);
   padding: 0.22rem 0.48rem;
   font-size: 0.7rem;
 }
@@ -572,9 +577,9 @@
 }
 
 .registerTools .filterToggle[aria-expanded="true"] {
-  border-color: #20cbb8;
-  background: #123b47;
-  color: #8af0d8;
+  border-color: var(--pilot-line-strong);
+  background: #0d2a39;
+  color: var(--pilot-ink);
 }
 
 .registerSearch {
@@ -1508,6 +1513,344 @@
   font-size: 1.55rem;
 }
 
+.calculationWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.stcEstimator,
+.methodBrowser {
+  min-width: 0;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.8rem;
+  background: var(--pilot-surface-raised);
+  padding: 0.9rem;
+}
+
+.stcEstimator > header,
+.methodBrowser > header,
+.estimateResult > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.stcEstimator > header span,
+.methodBrowser > header span,
+.estimateResult > header span {
+  color: var(--pilot-teal);
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.stcEstimator > header h4,
+.methodBrowser > header h4 {
+  margin: 0.15rem 0 0;
+  color: var(--pilot-ink);
+  font-size: 1rem;
+}
+
+.stcEstimator > header p {
+  max-width: 34rem;
+  margin: 0.25rem 0 0;
+  color: var(--pilot-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.stcEstimator > header > strong {
+  flex: 0 0 auto;
+  border: 1px solid rgba(214, 180, 109, 0.35);
+  border-radius: 999px;
+  background: rgba(140, 91, 10, 0.24);
+  color: #f0cf82;
+  padding: 0.3rem 0.52rem;
+  font-size: 0.65rem;
+}
+
+.estimatorForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.estimatorForm label,
+.methodBrowser > header label {
+  display: grid;
+  gap: 0.28rem;
+  color: var(--pilot-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.estimatorForm input,
+.estimatorForm select,
+.methodBrowser > header select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--pilot-line-strong);
+  border-radius: 0.45rem;
+  background: #061724;
+  color: var(--pilot-ink);
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 0.72rem;
+  color-scheme: dark;
+}
+
+.estimatorForm select:disabled {
+  opacity: 0.78;
+}
+
+.estimatorForm label small {
+  color: var(--pilot-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.estimatorForm button {
+  min-height: 34px;
+  align-self: end;
+  border: 1px solid rgba(126, 231, 210, 0.36);
+  border-radius: 0.45rem;
+  background: linear-gradient(135deg, #0e9f68, #18bd78);
+  color: #fff;
+  padding: 0.42rem 0.7rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.estimatorForm button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.stcEstimator > .error {
+  margin-top: 0.7rem;
+  border-color: rgba(235, 119, 119, 0.38);
+  background: rgba(105, 25, 33, 0.38);
+  color: #ffd9d9;
+  font-size: 0.72rem;
+}
+
+.estimateResult {
+  margin-top: 0.8rem;
+  border: 1px solid rgba(32, 203, 184, 0.32);
+  border-radius: 0.7rem;
+  background: #061d2b;
+  padding: 0.75rem;
+}
+
+.estimateResult > header strong {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--pilot-ink);
+  font-size: 1.45rem;
+}
+
+.estimateResult > header b {
+  border-radius: 999px;
+  background: rgba(214, 180, 109, 0.18);
+  color: #f0cf82;
+  padding: 0.26rem 0.48rem;
+  font-size: 0.64rem;
+}
+
+.estimateResult ol {
+  display: grid;
+  gap: 0;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.estimateResult li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  border-top: 1px solid var(--pilot-line);
+  padding: 0.42rem 0;
+  font-size: 0.68rem;
+}
+
+.estimateResult li strong,
+.estimateResult li span {
+  display: block;
+}
+
+.estimateResult li span,
+.estimateResult > p {
+  color: var(--pilot-muted);
+  line-height: 1.4;
+}
+
+.estimateResult li b {
+  color: var(--pilot-ink);
+  text-align: right;
+}
+
+.estimateResult > p {
+  margin: 0.55rem 0 0;
+  font-size: 0.68rem;
+}
+
+.estimateResult > footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.estimateResult a,
+.sourceWindows a {
+  color: #8af0d8;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.estimateResult code {
+  overflow: hidden;
+  color: var(--pilot-muted);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.methodBrowser > header {
+  align-items: end;
+}
+
+.methodBrowser > header label {
+  width: min(24rem, 54%);
+}
+
+.sourceWindows {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.sourceWindows article {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.75fr) minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.55rem;
+  background: #071f2e;
+  padding: 0.48rem 0.55rem;
+}
+
+.sourceWindows strong,
+.sourceWindows span {
+  display: block;
+}
+
+.sourceWindows strong {
+  color: var(--pilot-ink);
+  font-size: 0.68rem;
+}
+
+.sourceWindows span,
+.sourceWindows p {
+  color: var(--pilot-muted);
+  font-size: 0.62rem;
+}
+
+.sourceWindows p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.methodRows {
+  max-height: 28rem;
+  margin-top: 0.75rem;
+  overflow: auto;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.55rem;
+  scrollbar-color: #2b776f #061724;
+  scrollbar-width: thin;
+}
+
+.methodRows article {
+  display: grid;
+  grid-template-columns: 4.25rem minmax(0, 1fr) 9.5rem 5.2rem;
+  gap: 0.55rem;
+  align-items: center;
+  border-bottom: 1px solid var(--pilot-line);
+  padding: 0.5rem 0.55rem;
+  font-size: 0.68rem;
+}
+
+.methodRows article:last-child {
+  border-bottom: 0;
+}
+
+.methodRows article > strong {
+  color: var(--pilot-teal);
+}
+
+.methodRows article div > span,
+.methodRows article div > small {
+  display: block;
+}
+
+.methodRows article div > span {
+  color: var(--pilot-ink);
+  font-weight: 750;
+}
+
+.methodRows article div > small {
+  margin-top: 0.16rem;
+  color: var(--pilot-muted);
+  line-height: 1.35;
+}
+
+.methodRows article > b {
+  border-radius: 999px;
+  background: rgba(214, 180, 109, 0.17);
+  color: #f0cf82;
+  padding: 0.24rem 0.38rem;
+  font-size: 0.6rem;
+  text-align: center;
+}
+
+.methodRows article > b[data-state="estimate_available"] {
+  background: rgba(24, 184, 137, 0.18);
+  color: #8af0d8;
+}
+
+.methodRows article > b[data-state="not_applicable"] {
+  background: rgba(148, 172, 181, 0.13);
+  color: #b9cdd3;
+}
+
+.methodRows article > em {
+  color: var(--pilot-muted);
+  font-size: 0.62rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.calculationBoundary {
+  margin: 0.7rem 0 0;
+  color: var(--pilot-muted);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
 .activityTable {
   display: grid;
   margin-top: 1rem;
@@ -1541,6 +1884,116 @@
   color: #e1c16e;
 }
 
+.submissionRoute {
+  margin-top: 0.75rem;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.8rem;
+  background: var(--pilot-surface-raised);
+  padding: 0.85rem;
+}
+
+.submissionRoute > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.submissionRoute > header span,
+.submissionRoute article span {
+  display: block;
+  color: var(--pilot-teal);
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.submissionRoute > header h4,
+.submissionRoute > header p {
+  margin: 0;
+}
+
+.submissionRoute > header h4 {
+  margin-top: 0.15rem;
+  color: var(--pilot-ink);
+  font-size: 1rem;
+}
+
+.submissionRoute > header p,
+.submissionRoute article p {
+  color: var(--pilot-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.submissionRoute > header p {
+  margin-top: 0.2rem;
+}
+
+.submissionRoute > header label {
+  display: grid;
+  flex: 0 1 29rem;
+  gap: 0.25rem;
+  color: var(--pilot-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.submissionRoute > header select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--pilot-line-strong);
+  border-radius: 0.45rem;
+  background: #061724;
+  color: var(--pilot-ink);
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 0.72rem;
+  color-scheme: dark;
+}
+
+.submissionRoute article {
+  display: grid;
+  grid-template-columns:
+    minmax(8rem, 0.7fr)
+    minmax(12rem, 1.35fr)
+    minmax(10rem, 1fr)
+    minmax(10rem, 1fr)
+    minmax(13rem, 1.5fr)
+    auto;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 0.7rem;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.6rem;
+  background: #071f2e;
+  padding: 0.65rem;
+}
+
+.submissionRoute article strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--pilot-ink);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.submissionRoute article p {
+  margin: 0;
+}
+
+.submissionRoute article b {
+  border-radius: 999px;
+  background: rgba(214, 180, 109, 0.18);
+  color: #f0cf82;
+  padding: 0.3rem 0.48rem;
+  font-size: 0.64rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .cutoverGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1559,6 +2012,19 @@
   .controlGrid,
   .evidenceGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calculationWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .submissionRoute article {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .submissionRoute article p,
+  .submissionRoute article b {
+    grid-column: 1 / -1;
   }
 
   .advancedFilters {
@@ -1599,6 +2065,24 @@
   .calculatorSummary,
   .cutoverGrid {
     grid-template-columns: 1fr;
+  }
+
+  .submissionRoute > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .submissionRoute > header label {
+    flex-basis: auto;
+  }
+
+  .submissionRoute article {
+    grid-template-columns: 1fr;
+  }
+
+  .submissionRoute article p,
+  .submissionRoute article b {
+    grid-column: auto;
   }
 
   .jobRegister > header {
@@ -1643,7 +2127,7 @@
   }
 
   .registerTools button {
-    min-height: 29px;
+    min-height: 28px;
     padding-inline: 0.45rem;
   }
 
@@ -1668,6 +2152,34 @@
   }
 
   .activityTable article > *:nth-child(n + 3) {
+    display: none;
+  }
+
+  .estimatorForm {
+    grid-template-columns: 1fr;
+  }
+
+  .methodBrowser > header {
+    display: grid;
+  }
+
+  .methodBrowser > header label {
+    width: 100%;
+  }
+
+  .sourceWindows article {
+    grid-template-columns: 1fr auto;
+  }
+
+  .sourceWindows article p {
+    grid-column: 1 / -1;
+  }
+
+  .methodRows article {
+    grid-template-columns: 3.5rem minmax(0, 1fr) 4.7rem;
+  }
+
+  .methodRows article > b {
     display: none;
   }
 }
