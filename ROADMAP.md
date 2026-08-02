@@ -1150,13 +1150,35 @@ The release corrects official VEU version 25 to 21 July 2026 and version 24 to 3
 - Signed-in production QA confirmed 10 installers, 30 field technicians, 300 jobs, all 34 activity families, the exact 23 headers and 23 cells per row, 300 row actions, table-owned desktop scrolling with no document overflow, one-line compact toolbars, working global search and reset, one 25-select advanced-search dialog with focus restoration, outside-click sort dismissal, stable tab positions and the complete double-click audit workspace.
 - Browser review found only Chrome extension asynchronous-channel warnings and no application exception.
 
+## Released milestone: CREDITEX-NATIONAL-CALCULATION-FOUNDATIONS-35
+
+Status: released national calculation-readiness catalogue and deterministic SRES estimates
+
+Release status: exact application commit `5eab88950c1047746484ce2ab4880d8e32be824a` was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_123d03e2e4b08191b196236068cca9b0` and deployed as Sites version 265 through `appgdep_6a6f2bac3b588191bb64b2b29c6e1b1b` with environment revision 19.
+
+### Outcome
+
+Creditex now has one controlled national calculation-readiness catalogue spanning 32 Australian government program pathways and 212 activity templates, with exactly one explicit pathway per activity. Closed, future, registry, project, governed-formula and non-certificate activities remain visibly distinct. No unsupported activity returns a fabricated zero or executable estimate.
+
+The first deterministic SRES estimator covers 2026-to-2030 solar photovoltaic, wind, hydro, registered solar water heater, air-source heat pump and eligible solar-battery expected entitlements. It uses exact decimal arithmetic, official final-step rounding, controlled inputs, effective-dated source identifiers, complete trace output and deterministic receipt hashes. The same-origin protected route is authenticated, role-controlled, no-store, streaming-body bounded and non-mutating.
+
+The Calculators panel exposes readiness and source windows for all 212 activities, the connector panel records the known REC Registry, ESC VEU, NSW TESSA, ACT, SA and federal boundaries, and all external certificate actions remain disabled. The Jobs register remains exactly the supplied 23 Dataforce columns. Search, Refresh and Advanced search now use the same 28-pixel visual contract in both collapsed and expanded states.
+
+### Safety and release evidence
+
+- The real governed inventory remains 0 published programs, 0 activity versions, 0 policies and 0 regulated cases. An expected entitlement is not labelled as created, validated, registered or accepted.
+- Exact application commit `5eab88950c1047746484ce2ab4880d8e32be824a` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,281 main tests with 1,279 passed, 2 intentionally skipped and 0 failed, all 111 migrations, the customer-plan PDF audit, Vinext production build and Sites bundle audit. The focused national suite passed 34 of 34, and independent final review found no remaining P1 or P2 defect.
+- Archive `.openai/site-release-5eab889.tar.gz` is 7,598,597 bytes with SHA-256 `402682B1F6BB535EA63FDA1DA26B4D9A37D351445457C75A3612B86FDCB32C6F`, 360 entries, all 111 migrations and zero CSV entries. Sites stored 346 files and 30,638,080 bytes with content hash `sha256:7ee3e873e71c98c648f2fba25ae6d0b83c30eb47b7a6a17bea2c422c14abd0dc`.
+- Signed-in production QA confirmed the 300-job register and exact 23 headers, identical 28-pixel Search, Refresh and Advanced search controls, outside-click sort dismissal, a 212-activity calculator catalogue, live 45-STC photovoltaic and 164-STC battery vectors, explicit NSW future and closed states, and no certificate action.
+- Actual 320-pixel and 390-pixel CSS-width verification found no document overflow; the register retained table-owned horizontal scrolling and the calculator stacked into one readable column. Browser review found no application exception.
+
 ## Next five logical product steps
 
-1. **Retain and independently approve the exact VEU v24 and v25 source bytes:** retain the exact bytes in R2, verify hashes and effective periods, obtain independent approvals and apply the Part 6 clause-specific 30 September requirement.
-2. **Approve the first official current-effective lookup cohort:** import participant, product, licence, recall and suspension records, independently approve them and add an aggregate multi-batch manifest.
-3. **Execute the physical AEA Field custody matrix:** run iOS, Android, offline, recovery and R2 restore scenarios with named testers and a distinct reviewer.
-4. **Review and dual-approve the first official calculator draft:** add authoritative golden vectors and a protected receipt-bound runner while keeping the current slice draft-only.
-5. **Approve the first mapping artifact and run one authorised Dataforce-bound parallel receipt:** proceed only after source, activity, calculator, Runabout and registry sandbox contracts are approved, with all external actions disabled.
+1. **Retain and approve the exact current rule packs:** store the exact VEU v24/v25, SRES law and register, and NSW ESS/PDRS source bytes in R2 with SHA-256, effective dates, supersession links and named independent approvals.
+2. **Replace manual inputs with official effective-dated lookups:** import participant, product, licence, recall, suspension, postcode-zone and model-register snapshots so supported installer choices become authoritative dropdowns.
+3. **Implement reviewed VEU and NSW calculation drafts:** transcribe VEU, ESS and PDRS formulas with premises-history and cross-claim eligibility, deterministic receipts and regulator-oracle golden-vector reconciliation while keeping activation independently gated.
+4. **Build authorised submission interchange:** implement TESSA CSV v1.7 import, export and preflight, then obtain the current ESC VEU API pack or sandbox and REC Registry bulk-upload contract before enabling controlled adapters.
+5. **Connect installer cases to field evidence custody:** bind post-acceptance job creation to the selected program and activity, generate its evidence template, and complete named iOS, Android, offline, GPS, EXIF, upload-recovery and R2-restore acceptance.
 
 ## Global stop conditions
 

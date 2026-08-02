@@ -1,20 +1,20 @@
 # Next task handover
 
-Status: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34` released and live
+Status: `CREDITEX-NATIONAL-CALCULATION-FOUNDATIONS-35` released and live
 
 Prepared: 2 August 2026
 
-Milestone ID: `CREDITEX-DATAFORCE-REGISTER-GOVERNED-AUTHORING-34`
+Milestone ID: `CREDITEX-NATIONAL-CALCULATION-FOUNDATIONS-35`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `31b152933273db33bfa866bdbc491f6fdc35360a`
+Released application source commit: `5eab88950c1047746484ce2ab4880d8e32be824a`
 
-Primary application source commit: `58b92e1f859c62de00e4d8bda11624ab3f1633b8`
+Primary application source commit: `5eab88950c1047746484ce2ab4880d8e32be824a`
 
-Previous production application source: `11b06b88d68609a9fcf254877a4afe379a95f8b3`
+Previous production application source: `31b152933273db33bfa866bdbc491f6fdc35360a`
 
-Current production: Sites version 264 from application commit `31b152933273db33bfa866bdbc491f6fdc35360a`
+Current production: Sites version 265 from application commit `5eab88950c1047746484ce2ab4880d8e32be824a`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -22,60 +22,67 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 264 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 265 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
-## Active milestone 35 contract
+## Released milestone 35 outcome
+
+Creditex now has one national calculation-readiness workspace across 32 controlled Australian government program pathways and 212 controlled activity templates. Every activity declares exactly one calculation or administration pathway, including deterministic estimate, governed formula review, official registry, project method, not commenced, closed or non-certificate administration. Unsupported and unapproved paths fail visibly closed instead of returning a misleading zero.
+
+The released SRES estimator covers 2026 through 2030 solar photovoltaic, wind, hydro, registered solar water heater, air-source heat pump and eligible solar-battery expected entitlements. It uses exact base-10 arithmetic, official final-step rounding, controlled inputs, source and effective-period identifiers, a complete calculation trace and deterministic input, trace, output and receipt hashes. Expected STCs remain separate from any future registry-accepted quantity.
+
+## Milestone 35 owning workflow and files
+
+- National program and activity coverage: `src/lib/australian-government-program-catalogue.ts` and `src/lib/australian-certificate-calculation-catalogue.ts`.
+- Deterministic STC estimates: `src/lib/creditex-stc-estimator.ts`, `src/lib/bounded-json-request.ts` and `src/app/api/creditex/stc-estimates/route.ts`.
+- Operator workflow: `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
+- Regression evidence: `test/australian-government-program-catalogue.test.mjs`, `test/australian-certificate-calculation-catalogue.test.mjs`, `test/creditex-stc-estimator.test.mjs`, `test/creditex-stc-estimate-route.test.mjs` and `test/creditex-veu-pilot-workspace.test.mjs`.
+
+## Milestone 35 safety boundaries
+
+- The estimator returns an expected entitlement only. It cannot create, validate, register, trade or settle a certificate and cannot promise a customer rebate.
+- VEU, ESS, PDRS, ACCU, LGC, REGOs, ACT EEIS and SA REPS remain non-executable unless their exact governing source bytes, formula assets and independent approvals exist.
+- Closed and future activities are explicitly unavailable, not presented as formula-pending or current.
+- The protected estimate route is authenticated, role-controlled, same-origin, no-store, streaming-body bounded to 16 KiB and non-mutating.
+- No undocumented regulator endpoint is called. Registry, portal, CSV and partner connectors remain controlled disabled contracts.
+- The Jobs register retains only the exact 23 supplied Dataforce columns; national programme and calculation fields remain in the calculation and audit workspaces.
+
+## Milestone 35 validation and release evidence
+
+- Exact application commit `5eab88950c1047746484ce2ab4880d8e32be824a` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,281 main tests with 1,279 passed, 2 intentionally skipped and 0 failed, all 111 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The focused national catalogue, estimator, protected route and operator-workspace suite passed 34 of 34. Independent final review found no remaining P1 or P2 defect and reconciled six live REC Registry oracle vectors.
+- Archive `.openai/site-release-5eab889.tar.gz` is 7,598,597 bytes with SHA-256 `402682B1F6BB535EA63FDA1DA26B4D9A37D351445457C75A3612B86FDCB32C6F`, 360 entries, all 111 migrations and zero CSV entries.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_123d03e2e4b08191b196236068cca9b0` reports exact source `5eab88950c1047746484ce2ab4880d8e32be824a`, 346 stored files, 30,638,080 stored bytes and content hash `sha256:7ee3e873e71c98c648f2fba25ae6d0b83c30eb47b7a6a17bea2c422c14abd0dc`.
+- Deployment `appgdep_6a6f2bac3b588191bb64b2b29c6e1b1b` succeeded as Sites version 265 with environment revision 19.
+
+## Milestone 35 live production evidence
+
+- Signed-in Chrome QA confirmed the 10-installer, 30-technician and 300-job VEU pilot still loads, with the exact 23 Dataforce headers and no added register column.
+- Search, Refresh and Advanced search computed to the same 28-pixel height, border, background, text colour, font weight and radius in collapsed and expanded states. Advanced search exposed one drawer and the Status menu closed after an outside click.
+- The Calculators panel reported 212 activities, including 6 estimate-available activities and 131 governed-formula-review activities, with zero certificate actions.
+- Live calculations returned 45 expected STCs for the default PV vector and 164 expected STCs for a 40 kWh battery with a 1 May 2026 safety-certification date.
+- NSW PDRS BESS3, BESS4, BESS5 and V2G1 showed `Activity Not Commenced`, WH1 showed `Activity Closed`, and current unapproved NSW formulas remained blocked.
+- At actual 390-pixel and 320-pixel CSS widths there was no document overflow, the table retained its own horizontal scroll and the calculator stacked into one readable column.
+- Browser review found only Chrome-extension asynchronous-channel warnings and no application exception.
+
+## Milestone 35 important limits and unverified areas
+
+- No single national government calculation API or documented public certificate-write API was found. TLink therefore needs effective-dated local rule assets, official calculator or registry reconciliation and separately authorised submission adapters.
+- Exact current VEU, SRES and NSW source bytes are not yet retained in R2 with approved hashes and supersession links.
+- Official participant, product, licence, recall, suspension, postcode-zone and model-register snapshots are not yet imported and independently approved.
+- VEU, ESS and PDRS formula drafts, eligibility history and cross-claim logic remain non-executable.
+- TESSA CSV v1.7, the current ESC VEU API pack and REC Registry bulk-upload adapters are not implemented.
+- Physical iOS, Android, offline, GPS, EXIF, upload-recovery and R2-restore acceptance remain incomplete.
+- External certificate creation, submission, trading and settlement remain disabled.
+
+## Active milestone 36 contract
 
 ### One user outcome
 
-Give Creditex one clear national calculation workspace: the Jobs register keeps a visually consistent Advanced search control, every catalogued government activity declares how its benefit is calculated or why it is blocked, and the first Small-scale Renewable Energy Scheme (SRES) Small-scale Technology Certificate (STC) estimates run deterministically from controlled dropdowns without pretending to be a regulator acceptance.
-
-### Owning workflow and expected files
-
-- National program and activity coverage: `src/lib/australian-government-program-catalogue.ts` and a calculation-method catalogue beside it.
-- Deterministic STC estimates: a bounded server-owned SRES calculator and a protected Creditex estimate route.
-- Operator workflow: `src/components/CreditexVeuPilotWorkspace.tsx` and `src/components/CreditexVeuPilotWorkspace.module.css`.
-- Regression evidence: focused catalogue, calculator, route and Creditex pilot tests.
-- Release state: this handover, `docs/RELEASE_TRUTH.md` and `ROADMAP.md`.
-
-### In scope
-
-1. Make Advanced search use the same 28-pixel visual treatment as Search and Refresh in both collapsed and expanded states.
-2. Give every controlled Australian program and activity an explicit calculation pathway: deterministic estimate, official-calculator reconciliation, registry or project method, governed formula pending review, or non-certificate administration.
-3. Implement exact base-10 2026-to-2030 SRES estimates for small generation units, registered solar water heaters or air-source heat pumps, and eligible solar batteries, with source version, effective period, trace and deterministic receipt.
-4. Expose the supported STC estimate through a same-origin authenticated Creditex API and a simple dropdown-led Calculators panel.
-5. Pin current VEU version 24/version 25 and NSW Energy Savings Scheme (ESS)/Peak Demand Reduction Scheme (PDRS) rule windows in the calculation catalogue, while keeping unapproved VEEC, Energy Savings Certificate (ESC) and Peak Reduction Certificate (PRC) formulas non-executable.
-
-### Out of scope
-
-- Creating, registering, submitting, trading or settling any certificate.
-- Treating an estimate as product eligibility, evidence acceptance, regulator acceptance or a customer rebate promise.
-- Guessing a VEU, ESS, PDRS, Australian Carbon Credit Unit, Large-scale Generation Certificate, Renewable Electricity Guarantee of Origin, ACT or South Australian formula that has not been retained and independently approved.
-- Calling an undocumented regulator endpoint or scraping an interactive registry as if it were an authorised transactional API.
-- Completing physical iOS, Android, offline, recovery or R2 restore acceptance without the named devices, testers and distinct reviewer.
-- Self-approving official-source, lookup, mapping or calculator records from the shared bootstrap account.
-
-### Acceptance criteria
-
-- Search, Refresh and Advanced search compute to the same height, border, background, text colour and font treatment; expanded state remains communicated by ARIA and the open drawer.
-- The calculation-method catalogue has exactly one entry for every controlled activity template and no orphan program or activity code.
-- Every non-certificate program is explicitly marked as having no certificate calculation, rather than returning zero.
-- Supported STC inputs are dropdown-led wherever values are controlled, reject unsupported dates and ranges, use decimal strings only and round down only at the official final step.
-- Each successful estimate includes a source-pinned formula version, input hash, trace hash, output hash and receipt hash; malformed, ineligible or unsupported requests fail closed.
-- VEU, ESS and PDRS activity methods show their current source/effective window and remain non-executable until retained-source and independent calculator approval gates pass.
-- The authenticated estimate route is same-origin, no-store, bounded and cannot mutate a customer, job, case, certificate or external registry.
-- The Calculators panel is usable at desktop and 320/390-pixel widths without adding register columns or document-level overflow.
-
-### Smallest meaningful validation
-
-- Focused national catalogue, STC calculation, estimate-route and Creditex pilot UI tests.
-- Type checking, warning-free lint and `git diff --check`.
-- Complete `npm.cmd run validate` on the exact release commit.
-- Signed-in Chrome checks for toolbar parity, STC estimate interaction, responsive layout and absence of application exceptions.
+Give an installer and Creditex one source-governed post-acceptance case for a selected VEU, SRES or NSW activity: authoritative dropdowns, the right evidence checklist, an independently approved expected calculation where available and a clear blocker everywhere else, without submitting a real certificate.
 
 ### Stop condition
 
-Stop and open a new milestone before any real certificate action, undocumented external integration, unreviewed formula activation, production customer-case calculation, new paid service, physical-device acceptance claim or change to tenant, identity, payment or evidence-custody boundaries.
+Stop and open a new milestone before any real certificate action, undocumented external integration, formula activation without retained exact bytes and independent approval, production customer-case calculation, new paid service, physical-device acceptance claim or change to tenant, identity, payment or evidence-custody boundaries.
 
 ## Released milestone 34 outcome
 
@@ -371,11 +378,11 @@ Stop before any regulated-case onboarding when:
 
 ## Next five logical product steps
 
-1. **Retain and independently approve the exact VEU v24 and v25 source bytes:** retain the exact bytes in R2, verify hashes and effective periods, obtain independent approvals and apply the Part 6 clause-specific 30 September requirement.
-2. **Approve the first official current-effective lookup cohort:** import participant, product, licence, recall and suspension records, independently approve them and add an aggregate multi-batch manifest.
-3. **Execute the physical AEA Field custody matrix:** run iOS, Android, offline, recovery and R2 restore scenarios with named testers and a distinct reviewer.
-4. **Review and dual-approve the first official calculator draft:** add authoritative golden vectors and a protected receipt-bound runner while keeping the current slice draft-only.
-5. **Approve the first mapping artifact and run one authorised Dataforce-bound parallel receipt:** proceed only after source, activity, calculator, Runabout and registry sandbox contracts are approved, with all external actions disabled.
+1. **Retain and approve the exact current rule packs:** store the exact VEU v24/v25, SRES law and register, and NSW ESS/PDRS source bytes in R2 with SHA-256, effective dates, supersession links and named independent approvals.
+2. **Replace manual inputs with official effective-dated lookups:** import participant, product, licence, recall, suspension, postcode-zone and model-register snapshots so supported installer choices become authoritative dropdowns.
+3. **Implement reviewed VEU and NSW calculation drafts:** transcribe VEU, ESS and PDRS formulas with premises-history and cross-claim eligibility, deterministic receipts and regulator-oracle golden-vector reconciliation while keeping activation independently gated.
+4. **Build authorised submission interchange:** implement TESSA CSV v1.7 import, export and preflight, then obtain the current ESC VEU API pack or sandbox and REC Registry bulk-upload contract before enabling controlled adapters.
+5. **Connect installer cases to field evidence custody:** bind post-acceptance job creation to the selected program and activity, generate its evidence template, and complete named iOS, Android, offline, GPS, EXIF, upload-recovery and R2-restore acceptance.
 
 ## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
 
