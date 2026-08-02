@@ -1,22 +1,18 @@
 # Next task handover
 
-Status: `CREDITEX-CONTROLLED-INTAKE-FOUNDATIONS-32` released and live; the first exact VEU source pack and authorised operational sources are next
+Status: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33` released and live; exact source-byte approval and the first authorised operational snapshots are next
 
 Prepared: 2 August 2026
 
-Milestone ID: `CREDITEX-CONTROLLED-INTAKE-FOUNDATIONS-32`
+Milestone ID: `CREDITEX-GOVERNED-OPERATIONS-FOUNDATIONS-33`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `d441d41cad4d5299a882e73ea006a963fa360cf4`
+Released application source commit: `11b06b88d68609a9fcf254877a4afe379a95f8b3`
 
-Primary controlled-intake implementation: `c423f3c3938b43bf92c8ec98d285b49e63024ee6`
+Previous production application source: `d441d41cad4d5299a882e73ea006a963fa360cf4`
 
-Corrective Sites migration packaging: `d441d41cad4d5299a882e73ea006a963fa360cf4`
-
-Previous production application source: `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1`
-
-Current production: Sites version 261 from application commit `d441d41cad4d5299a882e73ea006a963fa360cf4`
+Current production: Sites version 262 from application commit `11b06b88d68609a9fcf254877a4afe379a95f8b3`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -24,9 +20,67 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Production access: public host with an authenticated Creditex portal
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 261 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 262 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
-## Released milestone 32 outcome
+## Released milestone 33 outcome
+
+Creditex now has the governed approval and parallel-operation foundations needed to move retained government material, operational lookup snapshots, physical-device custody evidence, official formulas and exact Dataforce references through independent review without allowing an unapproved item to become a rule, eligibility result, certificate, submission, trade or settlement.
+
+The released operator workflow also closes the presentation defects raised during production review:
+
+- Operations, VEU test pilot and Government rules keep one dark visual system and one fixed 36-pixel primary tab bar in the same position;
+- Pilot control, Jobs, Sources, Lookups, Evidence, Calculators and Connectors keep one clear, fixed 35-pixel inner tab bar in the same position on every panel;
+- the Jobs toolbar is ordered Density, all-field search, Filters and Refresh, with every control 28 pixels high;
+- the global search covers every populated scalar job, customer, site, installer, technician, work and appointment field;
+- advanced search is a compact right-edge drawer and the removed installer/activity-family bottom rail does not return;
+- column option menus close on outside action, Escape or selection; and
+- the full job audit workspace now uses the same dark palette, with independent scrolling for its main record and compliance rail.
+
+The five governed foundations delivered in this milestone are:
+
+1. an append-only official-source approval bridge with exact R2 object, SHA-256, binding, reviewer separation and current-approval checks;
+2. an operational-lookup approval bridge that verifies every row hash, row count and aggregate records hash before materialisation;
+3. tester-authored physical-custody acceptance with a distinct governance decision, exact artifact hashes and append-only database protection;
+4. a deterministic version-2 exact-decimal calculator engine with canonical receipts and contract hashes; and
+5. exact, case-sensitive Dataforce Job ID and App ID bindings with immutable server-generated comparison receipts and insert-time approval guards.
+
+## Milestone 33 owning workflow and files
+
+- Portal and dark workspaces: `src/components/CreditexCompliancePortal.tsx`, `src/components/CreditexVeuPilotWorkspace.tsx`, `src/components/CreditexOperationsWorkspace.module.css`, `src/components/CreditexEvidencePolicyGovernance.module.css` and `src/components/CreditexVeuJobAuditWorkspace.module.css`.
+- Source and lookup approval: `src/lib/creditex-source-lookup-review-server.ts` and the protected official-source and lookup review routes.
+- Field custody: `src/lib/creditex-field-custody-acceptance-server.ts` and its protected API route.
+- Calculator: `src/lib/creditex-calculator-engine.ts`.
+- Dataforce parallel operation: `src/lib/creditex-parallel-reconciliation-server.ts` and `src/app/api/creditex/parallel-reconciliation/route.ts`.
+- Schema: `db/schema.ts`, `src/lib/creditex-schema-guards.ts` and migrations `0106` through `0108`.
+
+## Milestone 33 safety boundaries
+
+- Approval is append-only and requires a governance identity distinct from the retained-source or tester identity.
+- Withdrawing the latest approval blocks subsequent activity use, lookup materialisation and calculator execution; insert-time guards close the approval-withdrawal race.
+- Physical-custody acceptance proves only the exact tester artifact reviewed. It does not generalise to an untested device, operating system, offline path or field activity.
+- Calculator receipts are deterministic and immutable, but no official VEU formula has yet been independently approved for certificate estimation.
+- Dataforce reconciliation is non-evidentiary and exact-reference bound. It cannot create a certificate, regulator submission, trade or settlement.
+- Runabout and registry interfaces remain unconnected, and real regulated work remains disabled.
+
+## Milestone 33 validation and release evidence
+
+- Exact application commit `11b06b88d68609a9fcf254877a4afe379a95f8b3` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,244 main tests with 1,242 passed, 2 intentionally skipped and 0 failed, all 109 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+- The integrated Creditex suite passed 110 of 110 tests; the UI suite passed 40 of 40. Independent security review approved the source, lookup, custody, calculator and Dataforce boundaries with no P1, P2 or P3 blocker. Independent UI review passed the corrected contrast and compact-control gates.
+- Local archive `.openai/site-release-11b06b8.tar.gz` is 7,544,418 bytes with SHA-256 `E0F5B94C49CCA3776F3CEE2734C076F33F2E59324A301A211A7F55A6B94BACE4`, 358 archive entries and all 109 migrations.
+- Saved Sites version `appgprj_6a550c378000819185caf094173422bb~appgver_f2d304f9c9b481919b8d9588f0ef034f` reports exact source `11b06b88d68609a9fcf254877a4afe379a95f8b3`, 344 stored files, 30,412,800 stored bytes and content hash `sha256:60ede71e262e365ed8aa39fced47e8a550623266d6636ef8c326a821efdadb3c`.
+- Deployment `appgdep_6a6edfb2b8e08191b295825c3db65d4d` succeeded as Sites version 262 with environment revision 19.
+- Signed-in production QA confirmed all three primary tabs at the same 52.7-pixel top position, all seven pilot tabs at the same 142.7-pixel top position, a working all-field technician-code search returning 10 of 300 jobs, 28-pixel Density/Search/Filters/Refresh controls, compact right-edge filtering, outside-click sort dismissal and the dark double-click audit workspace.
+- The audit main pane and compliance rail exposed independent vertical scrolling. Recent Worker logs contained no Creditex failure; the only error in the review window was an unrelated existing `/api/trade-job-notifications` HTTP 500 from the Direct Trade dashboard.
+
+## Milestone 33 important limits and unverified areas
+
+- Exact current VEU source bytes have not yet been retained in TLink R2 and independently approved through the new bridge.
+- Authorised participant, product, licence, recall and suspension snapshots have not yet been imported and approved.
+- Physical iOS, Android, offline, upload-recovery and R2-restore acceptance remain incomplete.
+- Approved official formulas and authoritative golden vectors remain 0.
+- Runabout and registry sandbox contracts remain unavailable, and routine Creditex use still requires named individual MFA accounts rather than the shared bootstrap administrator.
+
+## Prior released milestone 32 outcome
 
 Creditex now has the controlled post-acceptance intake foundations needed to receive an installer job, stage legacy Dataforce records, retain official-source and evidence bytes, review effective-dated operational facts and compare external references without claiming a real certificate outcome. Government and regulators remain the sole rule authority; Creditex administers, audits and submits within those rules.
 
@@ -196,11 +250,11 @@ Stop before any regulated-case onboarding when:
 
 ## Next five logical product steps
 
-1. **Approve the first exact VEU source pack:** independently verify the retained Version 25 bytes, hashes, effective dates, clause citations, Version 24 to 25 diff and current accredited-provider artefacts, then publish only the first approved activity and evidence policy.
-2. **Connect authorised operational source adapters:** ingest participant, product, licence, recall and suspension records from approved government interfaces, approve their mappings, define freshness windows and enforce stale-data rechecks before eligibility.
-3. **Prove physical AEA Field custody:** complete iOS, Android and offline capture acceptance for one approved activity, including original bytes, EXIF, GPS, capture time, upload recovery and an independently tested R2 restore.
-4. **Approve the first calculator:** transcribe one official formula, units, caps and rounding, obtain independent approval and pass authoritative golden vectors before any certificate estimate is shown.
-5. **Run one governed parallel activity:** store an immutable accepted-scope hash, permit program-scoped multi-claim work, approve the exact Dataforce mapping artifact, obtain the Runabout field contract, bind reference rows to immutable legacy imports, reconcile them against TLink and an authorised registry sandbox, and retain external submission and certificate creation disabled until every variance is resolved.
+1. **Approve the first exact VEU version-25 source pack:** retain the authorised bytes in R2, verify hashes and effective dates, bind the activity, evidence and calculator records, and obtain independent artifact and binding approvals before publishing any governed activity.
+2. **Approve the first authorised operational lookup set:** import participant, product, licence, recall and suspension snapshots from approved government interfaces, validate every row and aggregate hash, approve the mapping and materialise only the current effective set.
+3. **Complete the physical AEA Field custody matrix:** run iOS, Android, offline, upload-recovery and R2-restore scenarios, retain tester-authored artifacts and obtain distinct governance decisions for every required path.
+4. **Approve one official VEU calculator contract:** transcribe one official formula into the exact-decimal engine, bind units, caps and rounding, pass authoritative golden vectors and complete dual source approval before exposing any estimate.
+5. **Execute one exact governed parallel activity:** bind a Dataforce Job ID and App ID to one approved TLink activity, create the immutable comparison receipt, obtain written Runabout and registry sandbox contracts and keep certificate creation, submission, trading and settlement disabled until all variances are accepted.
 
 ## Prior released milestone record: `CUSTOMER-TRADE-LOCALITY-24`
 
