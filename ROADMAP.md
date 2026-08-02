@@ -1056,7 +1056,7 @@ Right click, the row action control and keyboard access expose Dataforce-style C
 
 Status: released readable, compact Creditex VEU operator workflow
 
-Release status: primary implementation commit `96ecb9698943445c57ba7f4caec99ff3839d3499` was validated, pushed to GitHub and Sites managed `main`, then saved and deployed as intermediate Sites version 258. Final heading correction `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1` is the current exact application source. It was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_195313bad4888191a7b5472c6b215cc5` and deployed as current Sites version 259 through `appgdep_6a6e5248b7048191acfe5904b1d4628b`.
+Release status: primary implementation commit `96ecb9698943445c57ba7f4caec99ff3839d3499` was validated, pushed to GitHub and Sites managed `main`, then saved and deployed as intermediate Sites version 258. Final heading correction `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1` is the historical exact application source for this milestone. It was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_195313bad4888191a7b5472c6b215cc5` and deployed as historical Sites version 259 through `appgdep_6a6e5248b7048191acfe5904b1d4628b`.
 
 ### Outcome
 
@@ -1073,17 +1073,48 @@ The direct-trade installer integration is designed as a proposed post-quote-acce
 - Exact final application commit `19a1e0b98db0cb7be5eae9e9e1371251220e8fc1` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete main suite, all 100 migrations, the customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
 - The focused Creditex VEU pilot suite passed 15 of 15 tests. `git diff --check` passed. Independent final review reported no P0 or P1 defect.
 - Signed-in production QA at 2048 by 927 pixels confirmed no page-level overflow, a 303.2-pixel drawer, all secondary groups initially collapsed, exactly one installer filter and one activity filter, 30 installer matches, one combined installer and Part 6 match, outside-click dismissal, Escape dismissal, close-after-sort and focus return.
-- Current version 259 shows the compact `All VEU jobs` drawer heading without the crowded count badge.
+- Historical version 259 shows the compact `All VEU jobs` drawer heading without the crowded count badge.
 - The final local archive is 6,894,158 bytes with SHA-256 `605BEE1AC610C7D4F82BD9CEBD5C2706B55BFB7F73B2640D1D5FBB6F041B21FF`. Sites stored 178 files and 18,780,160 bytes with content hash `sha256:81e8a258e445954acf669266c31c6fd7141d591925ff30148b6f70c4118172e9`.
 - The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases. Source activation, installer case handoff, calculators and external certificate actions remain fail-closed.
 
+## Released milestone: CREDITEX-CONTROLLED-INTAKE-FOUNDATIONS-32
+
+Status: released controlled Creditex intake, custody and Dataforce-interchange foundations
+
+Release status: primary application commit `c423f3c3938b43bf92c8ec98d285b49e63024ee6` was validated, pushed to GitHub and Sites managed `main`, then saved and deployed as Sites version 260. Signed-in QA found that the Sites package omitted migrations `0100` through `0105`, so version 260 was operationally blocked even though its deployment completed. Corrective application commit `d441d41cad4d5299a882e73ea006a963fa360cf4` packages and audits the complete migration inventory, fails closed when required schema objects are absent and is the current exact production source. It is saved as `appgprj_6a550c378000819185caf094173422bb~appgver_138b4cc8cf988191a4f3e4be4404a6d6` and deployed as Sites version 261 through `appgdep_6a6eb97d1978819180b729e922f33971`.
+
+### Outcome
+
+Creditex now has a dark, full-viewport VEU test workspace with table-owned scrolling, one semantic row per job, compact advanced search and no fixed activity-family rail. Installer and VEU activity filtering live in the right-edge drawer. Every column menu closes after a choice, outside action or Escape. Import and Download CSV controls sit in the register footer.
+
+The Dataforce interchange uses the exact supplied 23-column order: App Id, Job Id, Status, SubStatus, Type, Work Type, Scheduled Datetime, Balance, Certificates (VEECs), Submission, Invoiced, Field Worker, Agent, Client, Customer, Company Name, Ext Cust Ref, Phone, Mobile, Email, Address, Suburb and Postcode. Export includes every matching filtered job, uses UTF-8 with BOM and CRLF and neutralises spreadsheet formulas. Import accepts only that exact schema, at most 5 MiB and 2,500 rows, and creates immutable `staged_unmapped` records only. It cannot create a customer, job, compliance case, certificate, submission, trade or settlement.
+
+The installer compliance intake now starts after an accepted quote. TLink derives the accepted work, customer site, jurisdiction, date and accepted-scope hash, then exposes governed Program, Activity, Product category, Scenario and effective-version selectors. Initial job creation remains outside Creditex and has no activity choice.
+
+Manual official-source byte custody, R2 evidence-integrity receipts, effective-dated operational lookup staging and a non-evidentiary parallel-reconciliation foundation are present. Government sources remain the only rule authority. Creditex can retain, verify, audit and operate an approved transcription, but cannot author a private rule pack or activate a local assertion.
+
+### Safety and release evidence
+
+- The supplied private Dataforce export was validated locally only: 849 rows, 23 exact headers, 0 rejected rows, 0 duplicate rows and an exact cell-preserving round trip. Its SHA-256 is `22470CED083B3BAA4571108E34B5F91BD89154AD8381B54B693B3F9BDEF9BF31`. It was never uploaded, staged or published.
+- A signed-in live export produced 300 synthetic rows and the exact 23-column header with no formula-leading cells.
+- Source-artifact intake is manual, retains original bytes and hash in R2, records the asserted government URL and remains pending independent review. It does not activate rules.
+- Evidence receipts prove application-to-R2 byte custody only. Physical iOS, Android, offline, GPS, EXIF and restore acceptance remain unproved.
+- Operational lookup records are immutable, effective-dated and permanently staged pending governance approval. Live eligibility verification and local assertions remain disabled.
+- Parallel comparisons are explicitly caller-supplied and non-evidentiary. External submission and certificate creation remain disabled.
+- One active compliance case per work order supports the VEU pilot but does not yet support a combined VEU and STC claim on one installation.
+- The accepted-scope hash is derived by the application; the database does not yet bind it to an immutable commercial-handoff hash.
+- Exact corrective commit `d441d41cad4d5299a882e73ea006a963fa360cf4` passes `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, 1,220 main tests with 1,218 passed, 2 intentionally skipped and 0 failed, all 106 migrations through `0105_creditex_parallel_reconciliation.sql`, the customer-plan PDF audit, Vinext production build and the Sites bundle audit. The focused compliance correction suite passed 62 of 62.
+- The 7,511,787-byte local archive has SHA-256 `FFBDCAFEA54E7FF72AD1E8E19B0983193E8C554583E3248129CD5E9FEAAE8CB1` and contains 355 entries including all 106 migrations. Sites stored 341 files and 30,177,280 bytes with content hash `sha256:9b6fd4e639695ea43eb2623fb495b680c6130e7d1539abb3c645b0291898c2b1`.
+- Signed-in production QA confirmed 202 application tables, 21 `compliance_cases` columns, the protected 300-job register, compact advanced search, installer and activity selectors, menu dismissal, internal scrolling and the exact CSV export. The post-release Worker error-only query returned zero events.
+- Production governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases. No real certificate, submission, trade or settlement was created.
+
 ## Next five logical product steps
 
-1. **Retain and independently approve the exact VEU source pack:** retain the authorised bytes, hashes, effective periods, Version 24 to 25 clause diff, Part 6 branch-trigger semantics and current accredited-provider portal artefacts before publishing any governed activity.
-2. **Implement the direct-trade post-acceptance handoff:** remove compliance selection from initial job setup, derive accepted job facts server-side, add the controlled installer panel and enforce one active case per work order while the zero-program state remains fail-closed.
-3. **Connect authoritative operational lookups:** add effective-dated participant, product, licence, recall and suspension snapshots with source timestamps and fail-closed rechecks.
-4. **Prove AEA Field evidence custody:** complete real-device iOS, Android, offline, original-byte, metadata, GPS and R2 restore evidence for one independently approved activity.
-5. **Run one verified end-to-end parallel activity:** reconcile an independently approved calculator, golden vectors, authorised Dataforce and Runabout mappings and a registry sandbox or approved interface without touching real certificate inventory.
+1. **Approve the first exact VEU source pack:** independently verify the retained Version 25 bytes, hashes, effective dates, clause citations, Version 24 to 25 diff and current accredited-provider artefacts, then publish only the first approved activity and evidence policy.
+2. **Connect authorised operational source adapters:** ingest participant, product, licence, recall and suspension records from approved government interfaces, approve their mappings, define freshness windows and enforce stale-data rechecks before eligibility.
+3. **Prove physical AEA Field custody:** complete iOS, Android and offline capture acceptance for one approved activity, including original bytes, EXIF, GPS, capture time, upload recovery and an independently tested R2 restore.
+4. **Approve the first calculator:** transcribe one official formula, units, caps and rounding, obtain independent approval and pass authoritative golden vectors before any certificate estimate is shown.
+5. **Run one governed parallel activity:** store an immutable accepted-scope hash, permit program-scoped multi-claim work, approve the exact Dataforce mapping artifact, obtain the Runabout field contract, bind reference rows to immutable legacy imports, reconcile them against TLink and an authorised registry sandbox, and retain external submission and certificate creation disabled until every variance is resolved.
 
 ## Global stop conditions
 
