@@ -6,9 +6,13 @@ import {
 import {
   CREDITEX_PARALLEL_RECONCILIATION_LIMITS,
   CreditexParallelReconciliationError,
+  createCreditexCalculatorEngineReceipt,
   createCreditexParallelReconciliationRun,
   listCreditexParallelReconciliationRuns,
 } from "@/lib/creditex-parallel-reconciliation-server";
+import {
+  CreditexSourceLookupReviewError,
+} from "@/lib/creditex-source-lookup-review-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -45,6 +49,7 @@ function errorResponse(error: unknown) {
   if (
     error instanceof ComplianceAccessError
     || error instanceof CreditexParallelReconciliationError
+    || error instanceof CreditexSourceLookupReviewError
   ) {
     return json({
       ok: false,
@@ -130,11 +135,34 @@ export async function POST(request: Request) {
       allowedRoles: ["admin", "case_manager", "reviewer"],
     }, database);
     const body = requiredBody(await request.json().catch(() => null));
-    if (String(body.action || "").trim() !== "create_dry_run") {
+    const action = String(body.action || "").trim();
+    if (action === "create_engine_receipt") {
+      if (
+        Object.keys(body).some((key) => (
+          key !== "action" && key !== "calculatorVersionId"
+        ))
+      ) {
+        throw new CreditexParallelReconciliationError(
+          "PARALLEL_ENGINE_RECEIPT_INPUT_INVALID",
+          400,
+          "Receipt hashes and results are produced only by the server-side engine.",
+        );
+      }
+      const result = await createCreditexCalculatorEngineReceipt(
+        database,
+        member,
+        { calculatorVersionId: body.calculatorVersionId },
+      );
+      return json(
+        { ok: true, ...result },
+        result.receipt.reused ? 200 : 201,
+      );
+    }
+    if (action !== "create_dry_run") {
       throw new CreditexParallelReconciliationError(
         "PARALLEL_ACTION_INVALID",
         400,
-        "Choose the supported dry-run comparison action.",
+        "Choose a supported engine-receipt or dry-run comparison action.",
       );
     }
     const result = await createCreditexParallelReconciliationRun(

@@ -989,6 +989,172 @@
   font-size: 8px;
 }
 
+/* Match the protected Creditex workspace while keeping print output white. */
+.workspace {
+  --ink: #f4fbff;
+  --muted: #94acb5;
+  --line: rgba(108, 207, 192, 0.2);
+  --soft: #071b2a;
+  --brand: #20cbb8;
+  color: #d7e7eb;
+  background: #020b18;
+}
+
+.topbar {
+  background: linear-gradient(135deg, #031524, #075b59);
+  box-shadow: 0 1px 0 rgba(108, 207, 192, 0.22);
+}
+
+.leftRail,
+.rightRail,
+.main {
+  background: #04121f;
+  scrollbar-color: #2b776f #061724;
+}
+
+.navIdentity,
+.appointmentSelector,
+.summaryToolbar,
+.cardHeader,
+.railSection,
+.printToolbar {
+  border-color: var(--line);
+  background: #071b2a;
+}
+
+.navGroup {
+  border-color: var(--line);
+}
+
+.navIdentity strong,
+.cardHeader h3,
+.railSection h2,
+.timeline strong,
+.emptyState strong {
+  color: #b9fff0;
+}
+
+.navGroup h2,
+.navGroup button,
+.appointmentSelector label,
+.appointmentSelector > span,
+.summaryToolbar button,
+.recordText,
+.timeline time,
+.timeline p,
+.eventProvenance,
+.gateGrid span:first-child,
+.railGates > div > span:first-child,
+.boundaryList dt {
+  color: #a9c0c8;
+}
+
+.navGroup button:hover,
+.navGroup button:focus-visible,
+.navGroup button[aria-current="page"],
+.summaryToolbar button[aria-pressed="true"] {
+  color: #b9fff0;
+  background: #123b47;
+}
+
+.card,
+.field,
+.emptyState,
+.captureSummary,
+.captureSummary div,
+.gateGrid > div,
+.issueList > div,
+.capabilityList details,
+.sourceList a {
+  border-color: var(--line);
+  background: #092331;
+}
+
+.field dt,
+.captureSummary span,
+.statusEditor label,
+.capabilityList p,
+.sourceList span,
+.permissionNote {
+  color: var(--muted);
+}
+
+.field dd,
+.captureSummary strong,
+.sourceList a,
+.capabilityList summary,
+.boundaryList dd {
+  color: #d7e7eb;
+}
+
+.emptyState,
+.captureSummary p {
+  color: #a9c0c8;
+}
+
+.textButton {
+  color: #7ee7d2;
+}
+
+.privateRecordNote {
+  border-color: rgba(214, 180, 109, 0.42);
+  background: #352a16;
+  color: #f1d38e;
+}
+
+.zero {
+  color: #ffb7ac;
+}
+
+.field dd[data-unavailable="true"],
+.disabledAction,
+.captureSummary,
+.boundaryPending {
+  border-color: rgba(214, 180, 109, 0.38);
+  background: #352a16;
+  color: #f1d38e;
+}
+
+.appointmentSelector select,
+.statusEditor select {
+  border-color: rgba(108, 220, 199, 0.36);
+  color: #f4fbff;
+  background: #061724;
+}
+
+.dataTable th {
+  background: #0c665f;
+}
+
+.dataTable td,
+.timeline li {
+  border-color: var(--line);
+}
+
+.dataTable tbody tr:nth-child(even) {
+  background: #071b2a;
+}
+
+.dataTable tbody tr[data-current="true"] {
+  background: #123b47;
+}
+
+.detailNotice {
+  border-color: rgba(67, 211, 158, 0.4);
+  background: #0a362f;
+  color: #8cf0cb;
+}
+
+.detailError {
+  border-color: rgba(241, 120, 101, 0.42);
+  background: #3b1e20;
+  color: #ffb7ac;
+}
+
+.printSheet {
+  color: #153d36;
+}
+
 .mobileScrim {
   display: none;
 }
@@ -1102,8 +1268,9 @@
     align-items: center;
     gap: 5px;
     padding: 5px 8px;
-    color: #496862;
-    background: #e5f0ed;
+    border-bottom: 1px solid var(--line);
+    color: #b9fff0;
+    background: #092331;
     font-size: 10px;
   }
 
@@ -1205,5 +1372,11 @@
     padding: 0;
     border: 0;
     box-shadow: none;
+  }
+
+  .privateRecordNote {
+    border-color: #dccda8;
+    background: #fff9e9;
+    color: #57482a;
   }
 }

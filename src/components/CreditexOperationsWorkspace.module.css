@@ -1428,6 +1428,143 @@
   padding: 4px 8px;
 }
 
+/* Inherit the shared protected Creditex palette. */
+.workspace,
+.areaContent,
+.selectedCase,
+.controlCentre,
+.privateDetails {
+  color: var(--portal-text, #d7e7eb);
+  background: #020b18;
+}
+
+.workspaceHeader,
+.areaNav,
+.summaryGrid > div,
+.reportGrid > div,
+.ruleMetrics > div,
+.advancedFilters,
+.filterAccordion details,
+.queueContext,
+.queueItem,
+.activitySummary,
+.nextAction,
+.accessPolicy,
+.prerequisiteGrid > div,
+.auditGrid > div,
+.controlGrid > section,
+.localForm,
+.recordCard,
+.disabledPanel,
+.compactList article,
+.evidenceModal,
+.evidenceFacts,
+.privateAccessBanner,
+.privateDetailGrid > article,
+.programTabs,
+.programTabs button {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: var(--portal-soft, #071b2a);
+  color: var(--portal-text, #d7e7eb);
+}
+
+.empty,
+.unavailable {
+  border-color: var(--portal-line-strong, rgba(108, 220, 199, 0.36));
+  background: #092331;
+  color: #b7cbd1;
+}
+
+.areaNav button:hover,
+.areaNav button[aria-current="page"],
+.queueItem:hover,
+.queueItem[data-selected="true"],
+.filterAccordion details[open] summary,
+.programTabs button[aria-current="page"] {
+  background: #123b47;
+  color: #b9fff0;
+}
+
+.filters input,
+.filters select,
+.filterFields input,
+.filterFields select,
+.localForm input,
+.localForm select,
+.localForm textarea,
+.memberAccessControls select {
+  border-color: var(--portal-line-strong, rgba(108, 220, 199, 0.36));
+  background: var(--portal-input, #061724);
+  color: var(--portal-ink, #f4fbff);
+}
+
+.workspaceHeader h2,
+.sectionHeader h3,
+.selectedTopline h3,
+.recordCard h4,
+.compactList strong,
+.evidenceFacts h4,
+.privateDetailGrid h5,
+.privateSubList > strong {
+  color: var(--portal-ink, #f4fbff);
+}
+
+.filters label,
+.filterFields label,
+.queueContext,
+.queueContext small,
+.privateAccessState > span:not(.statusPill),
+.privateAccessState small,
+.sectionHeader p,
+.privateAccessBanner p,
+.privateDetailGrid article > p,
+.privateSubList p {
+  color: var(--portal-muted, #a9c0c8);
+}
+
+.queueContext strong {
+  color: #b9fff0;
+}
+
+.advancedFilterToggle,
+.filterActions button:not(.primaryAction),
+.refreshButton,
+.loadButton,
+.inlineAction,
+.modalClose {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: var(--portal-raised, #0b2635);
+  color: var(--portal-ink, #f4fbff);
+}
+
+.unavailableFilter,
+.filterSuggestions,
+.inlineUnavailable,
+.reportNote,
+.programTabsEmpty {
+  border-color: rgba(214, 180, 109, 0.38);
+  background: #352a16;
+  color: #f1d38e;
+}
+
+.error {
+  border-color: rgba(241, 120, 101, 0.42);
+  background: #3b1e20;
+  color: #ffb7ac;
+}
+
+.success {
+  border-color: rgba(67, 211, 158, 0.4);
+  background: #0a362f;
+  color: #8cf0cb;
+}
+
+.warning {
+  border-color: rgba(214, 180, 109, 0.42);
+  background: #352a16;
+  color: #f1d38e;
+}
+
 @media (max-width: 1080px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

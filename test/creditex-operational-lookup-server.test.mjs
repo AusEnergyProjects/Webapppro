@@ -18,6 +18,13 @@ const migration = fs.readFileSync(
   ),
   "utf8",
 );
+const reviewMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0107_creditex_source_lookup_approval_bridge.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const routeSource = fs.readFileSync(
   new URL(
     "../src/app/api/creditex/operational-lookups/route.ts",
@@ -133,6 +140,7 @@ function fixture() {
         );
   `);
   database.exec(migration);
+  database.exec(reviewMigration);
   for (const guard of CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     ({ name }) => name.startsWith("compliance_operational_lookup_"),
   )) {

@@ -174,9 +174,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 106);
+  assert.equal(completeMigrationChain.length, 109);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0105_/);
+  assert.match(completeMigrationChain.at(-1), /^0108_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -765,6 +765,51 @@ test("complete migration chain provisions and reconciles the governed 10/30/300 
   assert.equal(dashboard.jobs[0].customer.phone, "");
   assert.ok(dashboard.jobs[0].workOrderId);
   assert.ok(dashboard.jobs[0].createdAt);
+  assert.equal(
+    dashboard.currentSourcePack.packId,
+    "veu-v25-2026-07-21-program-pack-draft-v1",
+  );
+  assert.equal(dashboard.currentSourcePack.activationEnabled, false);
+  assert.equal(
+    dashboard.currentSourcePack.independentApprovalState,
+    "not_approved",
+  );
+
+  for (const [query, field, expected] of [
+    [dashboard.jobs[0].technician.technicianCode, "technicianCode", 10],
+    [dashboard.jobs[0].installer.companyCode, "installerCode", 30],
+    [dashboard.jobs[0].scenario, "scenario", null],
+    ["not started", "invoiceStatus", 300],
+    ["VIC", "state", 300],
+  ]) {
+    const searched = await pilotServer.loadCreditexVeuPilotDashboard(
+      d1,
+      member,
+      pilotServer.parseCreditexPilotFilters(new URLSearchParams({
+        q: query,
+        page: "0",
+        pageSize: "300",
+      })),
+    );
+    assert.ok(searched.pagination.total > 0, `${field} search returned no jobs`);
+    if (expected !== null) assert.equal(searched.pagination.total, expected);
+    assert.ok(
+      searched.jobs.every((job) => {
+        if (field === "technicianCode") {
+          return job.technician.technicianCode === query;
+        }
+        if (field === "installerCode") {
+          return job.installer.companyCode === query;
+        }
+        if (field === "scenario") return job.scenario === query;
+        if (field === "invoiceStatus") {
+          return job.crm.invoiceStatus === "not_started";
+        }
+        return job.site.state === query;
+      }),
+      `${field} search returned a job outside its matching cohort`,
+    );
+  }
 
   const allRowsFilters = pilotServer.parseCreditexPilotFilters(
     new URLSearchParams({
@@ -2234,6 +2279,9 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspace, /Download CSV/);
   assert.match(workspace, /Import CSV/);
   assert.match(workspace, /\/api\/creditex\/dataforce/);
+  assert.match(workspace, /\/api\/creditex\/official-sources\/reviews/);
+  assert.match(workspace, /\/api\/creditex\/operational-lookups\/reviews/);
+  assert.match(workspace, /\/api\/creditex\/field-custody-acceptance/);
   assert.match(workspace, /projectCreditexJobToDataforceRecord/);
   assert.match(workspace, /exportDataforceJobCsv/);
   assert.match(
@@ -2316,14 +2364,60 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(workspaceStyles, /\.tableViewport\s*\{[\s\S]*overflow:\s*auto/);
   assert.match(
     workspaceStyles,
-    /\.workspace:not\(\[data-panel="jobs"\]\)\s*\{[\s\S]*height:\s*100%[\s\S]*overflow-y:\s*auto/,
+    /\.workspace\s*\{[\s\S]*display:\s*flex[\s\S]*height:\s*100%[\s\S]*overflow:\s*hidden/,
   );
   assert.match(
     workspaceStyles,
-    /\.workspace\[data-panel="jobs"\]\s*\{[\s\S]*overflow:\s*hidden/,
+    /\.panelViewport\s*\{[\s\S]*overflow-y:\s*auto/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.panelViewport\[data-panel="jobs"\]\s*\{[\s\S]*overflow:\s*hidden/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.panelTabs\s*\{[\s\S]*overflow-y:\s*hidden/,
+  );
+  assert.doesNotMatch(workspaceStyles, /\.workspace\[data-panel="jobs"\] \.header/);
+  assert.match(workspace, /role="tablist"/);
+  assert.match(workspace, /role="tabpanel"/);
+  assert.match(workspace, /aria-selected=\{panel === key\}/);
+  assert.match(workspace, /aria-labelledby=\{`creditex-veu-pilot-tab-\$\{panel\}`\}/);
+  assert.match(workspace, /aria-label="Search all populated job data"/);
+  assert.match(workspace, /placeholder="Search all populated job data"/);
+  assert.ok(
+    workspace.indexOf("Density")
+      < workspace.indexOf('className={styles.registerSearch}'),
+  );
+  assert.ok(
+    workspace.indexOf('className={styles.registerSearch}')
+      < workspace.indexOf('aria-label="Advanced search"'),
+  );
+  assert.match(workspace, />\s*Filters\s*\{/);
+  for (const expression of [
+    "job.scenario",
+    "installer.company_code",
+    "technician.technician_code",
+    "detail.invoice_status",
+    "customer.email",
+    "customer.phone",
+    "site.address_state",
+    "appointment.status",
+  ]) {
+    assert.match(server, new RegExp(`"${expression.replaceAll(".", "\\.")}"`));
+  }
+  assert.match(
+    server,
+    /PILOT_SEARCH_EXPRESSIONS\.map[\s\S]*REPLACE\(LOWER\(CAST\(COALESCE/,
   );
   assert.match(workspaceStyles, /--pilot-canvas:\s*#020b18/);
   assert.match(workspaceStyles, /--pilot-teal:\s*#20cbb8/);
+  assert.match(workspace, /Append-only review ledger/);
+  assert.match(workspace, /Physical acceptance ledger/);
+  assert.match(workspace, /Execution engine/);
+  assert.match(workspace, /Deterministic v2 exact decimal/);
+  assert.match(workspace, /Exact staged-row binding available/);
+  assert.match(workspace, /External transport remains blocked/);
   assert.match(
     portalStyles,
     /\.pilotShell\s*\{[\s\S]*background:\s*#020b18/,
@@ -2435,6 +2529,11 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(
     auditWorkspaceStyles,
     /\.workspace\s*\{[\s\S]*position:\s*fixed[\s\S]*inset:\s*0/,
+  );
+  assert.match(auditWorkspaceStyles, /background:\s*#020b18/);
+  assert.match(
+    auditWorkspaceStyles,
+    /background:\s*linear-gradient\(135deg, #031524, #075b59\)/,
   );
   assert.match(auditWorkspace, /detailMatchesJob\(job, detail\)/);
   assert.match(auditWorkspace, /disabled=\{writeBlocked\}/);

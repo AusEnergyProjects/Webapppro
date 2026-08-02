@@ -18,6 +18,9 @@ const operations = read("../src/components/CreditexOperationsWorkspace.tsx");
 const operationsStyles = read(
   "../src/components/CreditexOperationsWorkspace.module.css",
 );
+const jobAuditStyles = read(
+  "../src/components/CreditexVeuJobAuditWorkspace.module.css",
+);
 const governmentCatalogue = read(
   "../src/lib/australian-government-program-catalogue.ts",
 );
@@ -605,11 +608,31 @@ test("authorised case detail renders private CRM data only after audited case ac
 });
 
 test("portal tabs and disabled actions expose accessible semantics", () => {
+  const portalStyles = read(
+    "../src/components/CreditexCompliancePortal.module.css",
+  );
   assert.match(portal, /role="tablist"/);
   assert.match(portal, /aria-controls="creditex-panel-cases"/);
   assert.match(portal, /aria-controls="creditex-panel-governance"/);
   assert.match(portal, /role="tabpanel"/);
   assert.match(portal, /handleWorkspaceTabKeyDown/);
+  assert.ok(
+    portal.indexOf('className={styles.tabs}')
+      < portal.indexOf('{tab !== "pilot" && ('),
+    "The permanent workspace tabs must render before tab-specific content.",
+  );
+  assert.match(
+    portalStyles,
+    /\.shell\s*\{[\s\S]*height:\s*100dvh[\s\S]*overflow:\s*hidden/,
+  );
+  assert.match(
+    portalStyles,
+    /\.frame\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/,
+  );
+  assert.match(portalStyles, /--portal-ink:\s*#f4fbff/);
+  assert.match(portalStyles, /--portal-soft:\s*#071b2a/);
+  assert.match(operationsStyles, /shared protected Creditex palette/);
+  assert.match(evidenceGovernanceStyles, /shared protected Creditex palette/);
   assert.match(operations, /aria-describedby=\{reasonId\}/);
   assert.match(operations, /className=\{styles\.disabledReason\}/);
 });
@@ -695,7 +718,13 @@ test("Creditex program rails remain reachable and critical audit text is legible
     /\.programTabs button small\s*\{[^}]*font-size: \.7rem/s,
     /\.privateDetailGrid dt\s*\{[^}]*font-size: \.7rem/s,
     /\.privateDetailGrid dd\s*\{[^}]*font-size: \.75rem/s,
+    /\.empty,\s*\.unavailable\s*\{[^}]*background: #092331;[^}]*color: #b7cbd1;/s,
   ]) assert.match(operationsStyles, contract);
+  for (const contract of [
+    /\.privateRecordNote\s*\{[^}]*background: #352a16;[^}]*color: #f1d38e;/s,
+    /\.mobileContext\s*\{[^}]*background: #092331;/s,
+    /@media print[\s\S]*\.privateRecordNote\s*\{[^}]*background: #fff9e9;/s,
+  ]) assert.match(jobAuditStyles, contract);
 });
 
 test("named member access can be changed without enabling shared team credentials", () => {

@@ -558,6 +558,118 @@
   text-align: center;
 }
 
+/* Inherit the shared protected Creditex palette. */
+.workspace {
+  color: var(--portal-text, #d7e7eb);
+}
+
+.intro,
+.editor,
+.reviewSection,
+.historySection,
+.policySection,
+.loadState,
+.reviewList > article,
+.historyList > article,
+.policy,
+.requirementList > article,
+.readiness,
+.empty {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: var(--portal-soft, #071b2a);
+  color: var(--portal-text, #d7e7eb);
+}
+
+.formGrid input,
+.formGrid select,
+.formGrid textarea,
+.formGrid fieldset {
+  border-color: var(--portal-line-strong, rgba(108, 220, 199, 0.36));
+  background: var(--portal-input, #061724);
+  color: var(--portal-ink, #f4fbff);
+}
+
+.formGrid label,
+.formGrid fieldset,
+.editor header p,
+.reviewSection > p,
+.historySection > p,
+.policySection > p,
+.historyList dt,
+.historyList dd,
+.requirementList p,
+.pagination p {
+  color: var(--portal-muted, #a9c0c8);
+}
+
+.reviewList code,
+.historyList code,
+.readiness code {
+  color: #b9fff0;
+}
+
+.policyHeader a {
+  color: #7ee7d2;
+}
+
+.policyHeader > div > span {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: var(--portal-raised, #0b2635);
+  color: #b9fff0;
+}
+
+.historyList dl > div {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: #092331;
+}
+
+.intro h3,
+.editor h4,
+.reviewSection h4,
+.historySection h4,
+.policySection h4,
+.reviewList h5,
+.historyList h5,
+.policyHeader h5,
+.requirementList h6,
+.loadState h4 {
+  color: var(--portal-ink, #f4fbff);
+}
+
+.actions .secondary,
+.policyActions .secondary,
+.requirementActions .secondary,
+.pagination .secondary,
+.requirementBadges small {
+  border-color: var(--portal-line, rgba(108, 207, 192, 0.2));
+  background: var(--portal-raised, #0b2635);
+  color: var(--portal-ink, #f4fbff);
+}
+
+.notice,
+.readiness:not([data-ready="true"]) {
+  border-color: rgba(214, 180, 109, 0.42);
+  background: #352a16;
+  color: #f1d38e;
+}
+
+.notice[data-kind="success"],
+.readiness[data-ready="true"] {
+  border-color: rgba(67, 211, 158, 0.4);
+  background: #0a362f;
+  color: #8cf0cb;
+}
+
+.notice[data-kind="error"],
+.actions .danger,
+.policyActions .danger,
+.reviewActions .danger,
+.requirementActions .danger {
+  border-color: rgba(241, 120, 101, 0.42);
+  background: #3b1e20;
+  color: #ffb7ac;
+}
+
 @media (max-width: 980px) {
   .editorGrid,
   .intro {

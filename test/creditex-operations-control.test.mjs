@@ -10,6 +10,11 @@ import {
 } from "../src/lib/creditex-schema-guards.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+class MockCreditexSourceLookupReviewError extends Error {}
+const approvedSourceReviewMock = {
+  CreditexSourceLookupReviewError: MockCreditexSourceLookupReviewError,
+  requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
+};
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
 const dataforceMigration = read("../drizzle/0100_creditex_dataforce_staging.sql");
 const acceptedHandoffMigration = read(
@@ -28,6 +33,9 @@ const custodyMigration = [
   "../drizzle/0103_creditex_evidence_integrity_receipts.sql",
   "../drizzle/0104_creditex_operational_lookup_snapshots.sql",
   "../drizzle/0105_creditex_parallel_reconciliation.sql",
+  "../drizzle/0106_creditex_field_custody_acceptance.sql",
+  "../drizzle/0107_creditex_source_lookup_approval_bridge.sql",
+  "../drizzle/0108_creditex_dataforce_parallel_bindings.sql",
 ].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
@@ -508,7 +516,99 @@ function seedApprovedPublication(database, {
       requestId,
       organisationId,
     );
-  return { requestId, reviewerUid };
+  return { requestId, requesterUid, reviewerUid };
+}
+
+function seedApprovedSourceBinding(database, {
+  organisationId,
+  targetType,
+  targetId,
+  key,
+  requesterUid,
+  reviewerUid,
+  sourceSha256 = TEST_HASH,
+}) {
+  const artifactId = `source-artifact-${key}`;
+  const bindingId = `source-binding-${key}`;
+  const objectKey = `creditex/test/${organisationId}/${key}.pdf`;
+  database.prepare(`INSERT INTO compliance_official_source_artifacts (
+      id, organisation_id, client_request_id, source_url, source_host,
+      source_title, source_version, original_file_name, content_type,
+      size_bytes, sha256, object_key, retrieval_method,
+      asserted_retrieved_at, source_etag, source_last_modified,
+      custody_state, rule_activation_enabled, captured_by_uid, captured_at
+    ) VALUES (
+      ?, ?, ?, ?, 'energy.gov.au', 'Test official source', '1',
+      'test-source.pdf', 'application/pdf', 1, ?, ?, 'manual_upload',
+      ?, '', '', 'pending_review', 0, ?, ?
+    )`)
+    .run(
+      artifactId,
+      organisationId,
+      `source-request-${key}`,
+      `https://energy.gov.au/test/${key}.pdf`,
+      sourceSha256,
+      objectKey,
+      TEST_NOW,
+      requesterUid,
+      TEST_NOW,
+    );
+  database.prepare(`INSERT INTO compliance_official_source_bindings (
+      id, organisation_id, artifact_id, target_type, target_id,
+      citation_location, binding_state, rule_activation_enabled,
+      created_by_uid, created_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, 'Test clause 1', 'pending_review', 0, ?, ?
+    )`)
+    .run(
+      bindingId,
+      organisationId,
+      artifactId,
+      targetType,
+      targetId,
+      requesterUid,
+      TEST_NOW,
+    );
+  database.prepare(`INSERT INTO compliance_official_source_review_decisions (
+      id, organisation_id, subject_type, subject_id, artifact_id,
+      artifact_sha256, artifact_object_key, binding_target_type,
+      binding_target_id, citation_location, decision,
+      supersedes_decision_id, review_note, reviewed_by_uid, reviewed_at
+    ) VALUES (
+      ?, ?, 'artifact', ?, ?, ?, ?, '', '', '', 'approved', '',
+      'Fixture retained source approval', ?, ?
+    )`)
+    .run(
+      `source-review-artifact-${key}`,
+      organisationId,
+      artifactId,
+      artifactId,
+      sourceSha256,
+      objectKey,
+      reviewerUid,
+      TEST_NOW,
+    );
+  database.prepare(`INSERT INTO compliance_official_source_review_decisions (
+      id, organisation_id, subject_type, subject_id, artifact_id,
+      artifact_sha256, artifact_object_key, binding_target_type,
+      binding_target_id, citation_location, decision,
+      supersedes_decision_id, review_note, reviewed_by_uid, reviewed_at
+    ) VALUES (
+      ?, ?, 'binding', ?, ?, ?, ?, ?, ?, 'Test clause 1', 'approved', '',
+      'Fixture governed target binding approval', ?, ?
+    )`)
+    .run(
+      `source-review-binding-${key}`,
+      organisationId,
+      bindingId,
+      artifactId,
+      sourceSha256,
+      objectKey,
+      targetType,
+      targetId,
+      reviewerUid,
+      TEST_NOW,
+    );
 }
 
 function seedGovernedActivity(database, {
@@ -548,6 +648,14 @@ function seedGovernedActivity(database, {
     targetType: "program",
     targetId: programId,
     key: `${key}-program`,
+  });
+  seedApprovedSourceBinding(database, {
+    organisationId,
+    targetType: "program",
+    targetId: programId,
+    key: `${key}-program`,
+    requesterUid: programPublication.requesterUid,
+    reviewerUid: programPublication.reviewerUid,
   });
   database.prepare(`UPDATE compliance_programs
     SET publish_state = 'published', publication_request_id = ?,
@@ -590,6 +698,14 @@ function seedGovernedActivity(database, {
     targetType: "activity",
     targetId: activityVersionId,
     key: `${key}-activity`,
+  });
+  seedApprovedSourceBinding(database, {
+    organisationId,
+    targetType: "activity",
+    targetId: activityVersionId,
+    key: `${key}-activity`,
+    requesterUid: activityPublication.requesterUid,
+    reviewerUid: activityPublication.reviewerUid,
   });
   database.prepare(`UPDATE compliance_activity_versions
     SET publish_state = 'published', publication_request_id = ?,
@@ -641,6 +757,14 @@ function seedGovernedActivity(database, {
     targetId: policyVersionId,
     key: `${key}-policy`,
   });
+  seedApprovedSourceBinding(database, {
+    organisationId,
+    targetType: "evidence_policy",
+    targetId: policyVersionId,
+    key: `${key}-policy`,
+    requesterUid: policyPublication.requesterUid,
+    reviewerUid: policyPublication.reviewerUid,
+  });
   database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'published', publication_request_id = ?,
       publication_snapshot_sha256 = ?, published_by_uid = ?,
@@ -665,6 +789,8 @@ function seedGovernedActivity(database, {
     programName,
     activityKey,
     activityTitle,
+    sourceRequesterUid: programPublication.requesterUid,
+    sourceReviewerUid: programPublication.reviewerUid,
   };
 }
 
@@ -959,6 +1085,14 @@ function seedCalculator(database, governed, {
       TEST_NOW,
       TEST_NOW,
     );
+  seedApprovedSourceBinding(database, {
+    organisationId: governed.organisationId,
+    targetType: "calculator",
+    targetId: calculatorId,
+    key: `${key}-calculator`,
+    requesterUid: governed.sourceRequesterUid,
+    reviewerUid: governed.sourceReviewerUid,
+  });
 }
 
 function seedSubmissionBatch(database, governed, {
@@ -1314,6 +1448,7 @@ test("audited local operations execute against the schema and financial guards r
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-source-lookup-review-server": approvedSourceReviewMock,
     },
   );
   const now = TEST_NOW;
@@ -1490,7 +1625,9 @@ test("audited local operations execute against the schema and financial guards r
     (error) => error.code === "CREDITEX_EXTERNAL_ACTION_DISABLED",
   );
   assert.equal(
-    database.prepare("SELECT COUNT(*) count FROM compliance_audit_events").get().count,
+    database.prepare(`SELECT COUNT(*) count
+      FROM compliance_audit_events
+      WHERE event_type NOT LIKE 'official_source.%'`).get().count,
     12,
   );
   assert.equal(
@@ -1906,7 +2043,7 @@ test("evidence policies require complete requirements and become immutable when 
   const database = databaseWithComplianceOperations();
   const now = TEST_NOW;
   const hash = TEST_HASH;
-  seedGovernedActivity(database, {
+  const governed = seedGovernedActivity(database, {
     key: "policy",
     policyVersionId: "base-policy",
     requirementId: "base-requirement",
@@ -1918,7 +2055,16 @@ test("evidence policies require complete requirements and become immutable when 
      publish_state, created_by_uid, created_at, updated_at)
     VALUES ('policy', 'org_creditex_au', 'activity', 2, 'Evidence policy',
       'https://regulator.example/rule', 'Rule', '1', ?, ?, 0, 'draft',
-      'admin-1', ?, ?)`).run(hash, now, now, now);
+       'admin-1', ?, ?)`).run(hash, now, now, now);
+  seedApprovedSourceBinding(database, {
+    organisationId: "org_creditex_au",
+    targetType: "evidence_policy",
+    targetId: "policy",
+    key: "policy-manual-source",
+    requesterUid: governed.sourceRequesterUid,
+    reviewerUid: governed.sourceReviewerUid,
+    sourceSha256: hash,
+  });
   assert.throws(() => database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'published', published_by_uid = 'admin-1', published_at = ?
     WHERE id = 'policy'`).run(now), /COMPLIANCE_DUAL_CONTROL_REQUIRED/);
@@ -2665,6 +2811,7 @@ test("publication requires two different named administrators and a sealed appro
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-source-lookup-review-server": approvedSourceReviewMock,
     },
   );
   database.prepare(`INSERT INTO admin_users
@@ -2741,6 +2888,14 @@ test("publication requires two different named administrators and a sealed appro
     createdAt: TEST_NOW,
   });
   await program.statement.run();
+  seedApprovedSourceBinding(database, {
+    organisationId: "org_creditex_au",
+    targetType: "program",
+    targetId: program.id,
+    key: "dual-control-program",
+    requesterUid: "author-admin",
+    reviewerUid: "reviewer-admin",
+  });
   await assert.rejects(
     domain.prepareCompliancePublicationRequestStatements(d1, {
       organisationId: "org_creditex_au",
@@ -2832,6 +2987,7 @@ test("evidence policy governance blocks unverified originals and publishes one i
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-source-lookup-review-server": approvedSourceReviewMock,
     },
   );
   const governed = seedGovernedActivity(database, {
@@ -2887,6 +3043,15 @@ test("evidence policy governance blocks unverified originals and publishes one i
     {},
     TEST_NOW,
   );
+  seedApprovedSourceBinding(database, {
+    organisationId: governed.organisationId,
+    targetType: "evidence_policy",
+    targetId: policyId,
+    key: "policy-lifecycle-source",
+    requesterUid: author.uid,
+    reviewerUid: reviewer.uid,
+    sourceSha256: policyHash,
+  });
 
   const requirementInput = (originalRequired, captureTiming = "any") => ({
     organisationId: governed.organisationId,

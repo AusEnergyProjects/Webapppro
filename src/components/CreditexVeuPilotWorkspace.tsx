@@ -181,6 +181,34 @@ type PilotSnapshot = {
     sourcePriority: number;
     capturedAt: string;
   }>;
+  currentSourcePack?: {
+    packId: string;
+    programCode: string;
+    jurisdiction: string;
+    governingVersion: string;
+    effectiveFrom: string;
+    activityScope: string;
+    custodyState: string;
+    bindingState: string;
+    independentApprovalState: string;
+    activationEnabled: boolean;
+    certificateCreationEnabled: boolean;
+    externalSubmissionEnabled: boolean;
+    sources: Array<{
+      sourceKey: string;
+      sourceKind: string;
+      title: string;
+      officialSourceUrl: string;
+      officialVersion: string;
+      effectiveFrom: string;
+      effectiveTo: string;
+      officialSourceSha256: string;
+      hashStatus: string;
+      sourcePriority: number;
+      verificationStatus: string;
+      bytesRetained: boolean;
+    }>;
+  };
   controls?: Record<string, Array<{
     code: string;
     label: string;
@@ -572,6 +600,31 @@ type DataforceImportDraft = {
   fileName: string;
   csv: string;
   validation: DataforceJobCsvValidation | null;
+};
+
+type GovernanceDecisionSummary = {
+  decision: string;
+};
+
+type FieldAcceptanceSummary = {
+  status: string;
+  physicalCustodyAccepted: boolean;
+};
+
+type FoundationReadiness = {
+  sourceDecisions: GovernanceDecisionSummary[] | null;
+  lookupDecisions: GovernanceDecisionSummary[] | null;
+  fieldAcceptances: FieldAcceptanceSummary[] | null;
+  loading: "sources" | "lookups" | "evidence" | "";
+  error: string;
+};
+
+const EMPTY_FOUNDATION_READINESS: FoundationReadiness = {
+  sourceDecisions: null,
+  lookupDecisions: null,
+  fieldAcceptances: null,
+  loading: "",
+  error: "",
 };
 
 const EMPTY_DATAFORCE_IMPORT: DataforceImportDraft = {
@@ -1646,6 +1699,8 @@ export function CreditexVeuPilotWorkspace({
   const [dataforceImportOpen, setDataforceImportOpen] = useState(false);
   const [dataforceImport, setDataforceImport] =
     useState<DataforceImportDraft>(EMPTY_DATAFORCE_IMPORT);
+  const [foundationReadiness, setFoundationReadiness] =
+    useState<FoundationReadiness>(EMPTY_FOUNDATION_READINESS);
   const requestRef = useRef(0);
   const detailRequestRef = useRef(0);
   const initialPanelRef = useRef(false);
@@ -1732,6 +1787,69 @@ export function CreditexVeuPilotWorkspace({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    const configuration = panel === "sources"
+      ? {
+          key: "sources" as const,
+          path: "/api/creditex/official-sources/reviews",
+          resultKey: "decisions",
+        }
+      : panel === "lookups"
+      ? {
+          key: "lookups" as const,
+          path: "/api/creditex/operational-lookups/reviews",
+          resultKey: "decisions",
+        }
+      : panel === "evidence"
+      ? {
+          key: "evidence" as const,
+          path: "/api/creditex/field-custody-acceptance",
+          resultKey: "acceptances",
+        }
+      : null;
+    if (!configuration) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      setFoundationReadiness((current) => ({
+        ...current,
+        loading: configuration.key,
+        error: "",
+      }));
+      void api(configuration.path)
+        .then((result) => {
+          if (!active) return;
+          const records = Array.isArray(result[configuration.resultKey])
+            ? result[configuration.resultKey]
+            : [];
+          setFoundationReadiness((current) => ({
+            ...current,
+            ...(configuration.key === "sources"
+              ? { sourceDecisions: records as GovernanceDecisionSummary[] }
+              : configuration.key === "lookups"
+              ? { lookupDecisions: records as GovernanceDecisionSummary[] }
+              : { fieldAcceptances: records as FieldAcceptanceSummary[] }),
+            loading: "",
+            error: "",
+          }));
+        })
+        .catch((readinessError) => {
+          if (!active) return;
+          setFoundationReadiness((current) => ({
+            ...current,
+            loading: "",
+            error: readinessError instanceof Error
+              ? readinessError.message
+              : "Governed foundation status is unavailable.",
+          }));
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, panel]);
 
   useEffect(() => {
     if (!openSortColumn) return;
@@ -2274,6 +2392,57 @@ export function CreditexVeuPilotWorkspace({
         </div>
       </header>
 
+      <nav
+        className={styles.panelTabs}
+        aria-label="VEU pilot workspaces"
+        role="tablist"
+        inert={filtersOpen}
+      >
+        {PANELS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`creditex-veu-pilot-tab-${key}`}
+            aria-controls="creditex-veu-pilot-panel"
+            aria-selected={panel === key}
+            tabIndex={panel === key ? 0 : -1}
+            data-selected={panel === key}
+            onClick={() => setPanel(key)}
+            onKeyDown={(event) => {
+              const currentIndex = PANELS.findIndex(([candidate]) =>
+                candidate === key);
+              const nextIndex = event.key === "ArrowRight"
+                ? (currentIndex + 1) % PANELS.length
+                : event.key === "ArrowLeft"
+                ? (currentIndex - 1 + PANELS.length) % PANELS.length
+                : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                ? PANELS.length - 1
+                : -1;
+              if (nextIndex < 0) return;
+              event.preventDefault();
+              const nextPanel = PANELS[nextIndex][0];
+              setPanel(nextPanel);
+              window.requestAnimationFrame(() =>
+                document.getElementById(
+                  `creditex-veu-pilot-tab-${nextPanel}`,
+                )?.focus());
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div
+        id="creditex-veu-pilot-panel"
+        className={styles.panelViewport}
+        data-panel={panel}
+        role="tabpanel"
+        aria-labelledby={`creditex-veu-pilot-tab-${panel}`}
+      >
       {error && <p className={styles.error} role="alert">{error}</p>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
       {provisionProgress && (
@@ -2281,24 +2450,6 @@ export function CreditexVeuPilotWorkspace({
           {provisionProgress}
         </p>
       )}
-
-      <nav
-        className={styles.panelTabs}
-        aria-label="VEU pilot workspaces"
-        inert={filtersOpen}
-      >
-        {PANELS.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={panel === key}
-            data-selected={panel === key}
-            onClick={() => setPanel(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
 
       {panel === "overview" && (
         <>
@@ -2527,10 +2678,46 @@ export function CreditexVeuPilotWorkspace({
                     <option value="comfortable">Comfortable</option>
                   </select>
                 </label>
+                <form
+                  className={styles.registerSearch}
+                  role="search"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const registerQuery = draftFilters.query.trim();
+                    const next = {
+                      ...filters,
+                      query: registerQuery,
+                      page: 0,
+                    };
+                    setFilters(next);
+                    setDraftFilters((current) => ({
+                      ...current,
+                      query: registerQuery,
+                      page: 0,
+                    }));
+                    setOpenSortColumn("");
+                    setRecordOpen(false);
+                    setSelectedJobId("");
+                  }}
+                >
+                  <input
+                    type="search"
+                    aria-label="Search all populated job data"
+                    value={draftFilters.query}
+                    placeholder="Search all populated job data"
+                    onChange={(event) =>
+                      setDraftFilters((current) => ({
+                        ...current,
+                        query: event.target.value,
+                      }))}
+                  />
+                  <button type="submit">Search</button>
+                </form>
                 <button
                   ref={filterToggleRef}
                   type="button"
                   className={styles.filterToggle}
+                  aria-label="Advanced search"
                   aria-expanded={filtersOpen}
                   aria-controls="creditex-veu-advanced-filters"
                   onClick={() => {
@@ -2538,7 +2725,7 @@ export function CreditexVeuPilotWorkspace({
                     setFiltersOpen((current) => !current);
                   }}
                 >
-                  Advanced search
+                  Filters
                   {appliedFilterCount > 0 && (
                     <b aria-label={`${appliedFilterCount} active filters`}>
                       {appliedFilterCount}
@@ -2975,16 +3162,64 @@ export function CreditexVeuPilotWorkspace({
         <section className={styles.dataPanel}>
           <div className={styles.sectionHeading}>
             <span>PRIORITY 01</span>
-            <h3>Official VEU instrument hierarchy</h3>
+            <h3>Current VEU source pack</h3>
             <p>
-              Source capture is separate from independent verification. A hash
-              is shown only where downloaded bytes were hashed during the
-              research pass. The source bytes are not yet retained in TLink,
-              so publication remains blocked.
+              This program-wide pack covers every catalogued VEU activity
+              family. Exact custody, binding and independent approval remain
+              separate gates, so no rule, certificate quantity or submission
+              is activated from research data.
             </p>
           </div>
+          {snapshot.currentSourcePack && (
+            <section className={styles.sourcePackSummary}>
+              <article>
+                <span>Pack</span>
+                <strong>{snapshot.currentSourcePack.packId}</strong>
+              </article>
+              <article>
+                <span>Controlling version</span>
+                <strong>{snapshot.currentSourcePack.governingVersion}</strong>
+              </article>
+              <article>
+                <span>Independent approval</span>
+                <strong>
+                  {readable(
+                    snapshot.currentSourcePack.independentApprovalState,
+                  )}
+                </strong>
+              </article>
+              <article>
+                <span>Activation</span>
+                <strong>
+                  {snapshot.currentSourcePack.activationEnabled
+                    ? "Enabled"
+                    : "Blocked"}
+                </strong>
+              </article>
+              <article>
+                <span>Append-only review ledger</span>
+                <strong>
+                  {foundationReadiness.loading === "sources"
+                    ? "Loading"
+                    : `${foundationReadiness.sourceDecisions?.length || 0} decisions`}
+                </strong>
+              </article>
+              <article>
+                <span>Approval entries</span>
+                <strong>
+                  {foundationReadiness.sourceDecisions?.filter(
+                    (decision) => decision.decision === "approved",
+                  ).length || 0}
+                </strong>
+              </article>
+            </section>
+          )}
+          {foundationReadiness.error && panel === "sources" && (
+            <p className={styles.error}>{foundationReadiness.error}</p>
+          )}
           <div className={styles.sourceRows}>
-            {(snapshot.sources || []).map((source) => (
+            {(snapshot.currentSourcePack?.sources || snapshot.sources || [])
+              .map((source) => (
               <article key={source.sourceKey}>
                 <span>{source.sourcePriority}</span>
                 <div>
@@ -3009,7 +3244,7 @@ export function CreditexVeuPilotWorkspace({
                   Open official source
                 </a>
               </article>
-            ))}
+              ))}
           </div>
         </section>
       )}
@@ -3025,6 +3260,35 @@ export function CreditexVeuPilotWorkspace({
               verified from a local assertion.
             </p>
           </div>
+          <section className={styles.sourcePackSummary}>
+            <article>
+              <span>Governance bridge</span>
+              <strong>Append-only</strong>
+            </article>
+            <article>
+              <span>Recorded decisions</span>
+              <strong>
+                {foundationReadiness.loading === "lookups"
+                  ? "Loading"
+                  : foundationReadiness.lookupDecisions?.length || 0}
+              </strong>
+            </article>
+            <article>
+              <span>Approval entries</span>
+              <strong>
+                {foundationReadiness.lookupDecisions?.filter(
+                  (decision) => decision.decision === "approved",
+                ).length || 0}
+              </strong>
+            </article>
+            <article>
+              <span>Eligibility activation</span>
+              <strong>Blocked by default</strong>
+            </article>
+          </section>
+          {foundationReadiness.error && panel === "lookups" && (
+            <p className={styles.error}>{foundationReadiness.error}</p>
+          )}
           <div className={styles.controlGrid}>
             {Object.entries(snapshot.controls || {}).map(
               ([controlType, options]) => (
@@ -3062,6 +3326,38 @@ export function CreditexVeuPilotWorkspace({
               government evidence policy for any VEU activity.
             </p>
           </div>
+          <section className={styles.sourcePackSummary}>
+            <article>
+              <span>Physical acceptance ledger</span>
+              <strong>Available</strong>
+            </article>
+            <article>
+              <span>Recorded physical runs</span>
+              <strong>
+                {foundationReadiness.loading === "evidence"
+                  ? "Loading"
+                  : foundationReadiness.fieldAcceptances?.length || 0}
+              </strong>
+            </article>
+            <article>
+              <span>Passed custody runs</span>
+              <strong>
+                {foundationReadiness.fieldAcceptances?.filter(
+                  (acceptance) => (
+                    acceptance.status === "passed"
+                    && acceptance.physicalCustodyAccepted
+                  ),
+                ).length || 0}
+              </strong>
+            </article>
+            <article>
+              <span>Unrecorded result</span>
+              <strong>Never treated as passed</strong>
+            </article>
+          </section>
+          {foundationReadiness.error && panel === "evidence" && (
+            <p className={styles.error}>{foundationReadiness.error}</p>
+          )}
           <div className={styles.evidenceGrid}>
             {(snapshot.evidenceContracts || []).map((requirement) => (
               <article key={requirement.requirementCode}>
@@ -3107,6 +3403,10 @@ export function CreditexVeuPilotWorkspace({
           </div>
           <section className={styles.calculatorSummary}>
             <article>
+              <span>Execution engine</span>
+              <strong>Deterministic v2 exact decimal</strong>
+            </article>
+            <article>
               <span>Typed contracts</span>
               <strong>{snapshot.calculatorSummary?.total || 0}</strong>
             </article>
@@ -3126,7 +3426,11 @@ export function CreditexVeuPilotWorkspace({
                 {snapshot.calculatorSummary?.executionEnabled
                   ? "Enabled"
                   : "Blocked"}
-              </strong>
+                </strong>
+            </article>
+            <article>
+              <span>Official VEU formulas loaded</span>
+              <strong>0</strong>
             </article>
           </section>
           <div className={styles.activityTable}>
@@ -3185,11 +3489,11 @@ export function CreditexVeuPilotWorkspace({
           <div className={styles.cutoverGrid}>
             <article>
               <span>DATAFORCE</span>
-              <h4>Authorised export required</h4>
+              <h4>Exact staged-row binding available</h4>
               <p>
-                Field dictionary, enumerations, source hashes, counts, open
-                case states, exceptions and rollback acceptance are still
-                required.
+                Dry runs can derive certificate quantity from an exact,
+                hash-checked staged Dataforce row. An independently approved
+                mapping is required and the result remains non-evidentiary.
               </p>
             </article>
             <article>
@@ -3201,10 +3505,20 @@ export function CreditexVeuPilotWorkspace({
                 still required.
               </p>
             </article>
+            <article>
+              <span>REGISTRY</span>
+              <h4>External transport remains blocked</h4>
+              <p>
+                No certificate creation, submission, trade or settlement is
+                enabled until a written registry contract and accepted sandbox
+                result exist.
+              </p>
+            </article>
           </div>
         </section>
       )}
 
+      </div>
     </section>
   );
 }

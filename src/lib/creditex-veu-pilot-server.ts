@@ -11,6 +11,8 @@ import {
   CREDITEX_VEU_PILOT_SEED_VERSION,
   CREDITEX_VEU_PILOT_SOURCES,
   CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER,
+  CREDITEX_VEU_CURRENT_SOURCE_PACK,
+  CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES,
   calculatorInputSchema,
   calculatorOutputSchema,
   type CreditexVeuPilotJobDetailCapability,
@@ -125,6 +127,79 @@ const PILOT_SORT_COLUMNS = {
   createdAt: "job.created_at",
   updatedAt: "job.updated_at",
 } as const;
+
+const PILOT_SEARCH_EXPRESSIONS = [
+  "job.id",
+  "job.work_order_id",
+  "job.case_number",
+  "job.job_number",
+  "job.activity_template_id",
+  "job.activity_key",
+  "job.registry_activity_code",
+  "job.specification_part",
+  "job.title",
+  "job.service_category",
+  "job.product_category",
+  "job.scenario_code",
+  "job.scenario",
+  "job.catalogue_state",
+  "job.activity_date",
+  "job.record_mode",
+  "job.rule_status",
+  "job.lookup_status",
+  "job.evidence_status",
+  "job.calculator_status",
+  "job.connector_status",
+  "job.review_status",
+  "job.created_at",
+  "job.updated_at",
+  "installer.id",
+  "installer.company_code",
+  "installer.business_name",
+  "technician.id",
+  "technician.technician_code",
+  "technician.display_name",
+  "work.work_type",
+  "work.source_type",
+  "work.source_reference",
+  "work.stage",
+  "work.priority",
+  "work.scheduled_start",
+  "work.scheduled_end",
+  "work.assignee_label",
+  "detail.customer_source",
+  "detail.pipeline_stage",
+  "detail.building_type",
+  "detail.customer_reference",
+  "detail.tags",
+  "detail.estimated_value_cents",
+  "detail.quoted_value_cents",
+  "detail.invoiced_value_cents",
+  "detail.paid_value_cents",
+  "detail.quote_status",
+  "detail.invoice_status",
+  "appointment.id",
+  "appointment.appointment_type",
+  "appointment.starts_at",
+  "appointment.ends_at",
+  "appointment.status",
+  "customer.id",
+  "customer.customer_number",
+  "customer.customer_type",
+  "customer.first_name",
+  "customer.last_name",
+  "customer.business_name",
+  "customer.business_number",
+  "customer.email",
+  "customer.phone",
+  "site.id",
+  "site.site_label",
+  "site.address_line_1",
+  "site.address_line_2",
+  "site.suburb",
+  "site.address_state",
+  "site.postcode",
+] as const;
 type PilotSortKey = keyof typeof PILOT_SORT_COLUMNS;
 type PilotDateField = keyof typeof PILOT_DATE_FIELDS;
 
@@ -558,6 +633,17 @@ function pilotTargets() {
     techniciansPerInstaller: CREDITEX_VEU_PILOT_TECHNICIANS_PER_INSTALLER,
     jobsPerTechnician: CREDITEX_VEU_PILOT_JOBS_PER_TECHNICIAN,
     activityFamilies: CREDITEX_VEU_PILOT_ACTIVITIES.length,
+  };
+}
+
+function currentSourcePackProjection() {
+  return {
+    ...CREDITEX_VEU_CURRENT_SOURCE_PACK,
+    sources: CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES.map((source) => ({
+      ...source,
+      verificationStatus: "pending_independent_review",
+      bytesRetained: false,
+    })),
   };
 }
 
@@ -2849,6 +2935,7 @@ export async function loadCreditexVeuPilotDashboard(
       previousRun: previousRun ? projectionRun(previousRun) : null,
       targets: pilotTargets(),
       activities: CREDITEX_VEU_PILOT_ACTIVITIES,
+      currentSourcePack: currentSourcePackProjection(),
       priorities: pilotPriorities(null),
       filters: {
         reviewStatuses: Array.from(REVIEW_STATUSES),
@@ -2966,25 +3053,23 @@ export async function loadCreditexVeuPilotDashboard(
     bindings.push(filters.dateTo);
   }
   if (filters.query) {
-    conditions.push(`(
-      job.job_number LIKE ? ESCAPE '\\'
-      OR job.case_number LIKE ? ESCAPE '\\'
-      OR job.registry_activity_code LIKE ? ESCAPE '\\'
-      OR job.title LIKE ? ESCAPE '\\'
-      OR installer.business_name LIKE ? ESCAPE '\\'
-      OR technician.display_name LIKE ? ESCAPE '\\'
-      OR customer.customer_number LIKE ? ESCAPE '\\'
-      OR customer.first_name LIKE ? ESCAPE '\\'
-      OR customer.last_name LIKE ? ESCAPE '\\'
-      OR detail.customer_reference LIKE ? ESCAPE '\\'
-      OR site.address_line_1 LIKE ? ESCAPE '\\'
-      OR site.postcode LIKE ? ESCAPE '\\'
-    )`);
+    const searchSql = PILOT_SEARCH_EXPRESSIONS.map((expression) =>
+      `REPLACE(LOWER(CAST(COALESCE(${expression}, '') AS TEXT)), '_', ' ')
+        LIKE ? ESCAPE '\\'`
+    ).join(" OR ");
+    conditions.push(`(${searchSql})`);
     const escaped = filters.query
+      .trim()
+      .toLowerCase()
+      .replaceAll("_", " ")
       .replaceAll("\\", "\\\\")
       .replaceAll("%", "\\%")
       .replaceAll("_", "\\_");
-    for (let index = 0; index < 12; index += 1) {
+    for (
+      let index = 0;
+      index < PILOT_SEARCH_EXPRESSIONS.length;
+      index += 1
+    ) {
       bindings.push(`%${escaped}%`);
     }
   }
@@ -3195,6 +3280,7 @@ export async function loadCreditexVeuPilotDashboard(
     confirmationPhrase: CREDITEX_VEU_PILOT_CONFIRMATION,
     run: projectionRun(run),
     targets: pilotTargets(),
+    currentSourcePack: currentSourcePackProjection(),
     counts,
     priorities: pilotPriorities(run),
     sources: sources.results.map((row) => ({

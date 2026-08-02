@@ -1,24 +1,34 @@
 .shell {
-  --portal-ink: #102b25;
-  --portal-text: #29453d;
-  --portal-muted: #62766f;
-  --portal-line: #d5e2dd;
-  --portal-soft: #f3f8f6;
-  --portal-green: #0b7258;
-  --portal-green-dark: #07533f;
+  --portal-ink: #f4fbff;
+  --portal-text: #d7e7eb;
+  --portal-muted: #94acb5;
+  --portal-line: rgba(108, 207, 192, .2);
+  --portal-line-strong: rgba(108, 220, 199, .36);
+  --portal-soft: #071b2a;
+  --portal-raised: #0b2635;
+  --portal-input: #061724;
+  --portal-green: #20cbb8;
+  --portal-green-dark: #7ee7d2;
   --portal-warn: #8c5b0a;
   background:
     radial-gradient(circle at 8% 0%, rgba(18, 126, 167, .2), transparent 34rem),
     radial-gradient(circle at 92% 18%, rgba(18, 166, 106, .13), transparent 30rem),
     #020b18;
   color: var(--portal-text);
-  min-height: 100vh;
-  padding: 22px;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .frame {
-  margin: 0 auto;
-  max-width: 1480px;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .pilotShell {
@@ -94,16 +104,30 @@
   overflow: hidden;
 }
 
+.frame > [role="tabpanel"] {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.frame.pilotFrame > [role="tabpanel"] {
+  overflow: hidden;
+}
+
 .topbar {
   align-items: center;
   background: linear-gradient(135deg, rgba(3, 21, 36, .97), rgba(7, 48, 60, .95));
-  border: 1px solid rgba(108, 207, 192, .24);
-  border-radius: 18px;
-  box-shadow: 0 18px 46px rgba(0, 5, 14, .4);
+  min-height: 48px;
+  flex: 0 0 auto;
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: rgba(108, 207, 192, .24);
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   gap: 20px;
   justify-content: space-between;
-  padding: 15px 18px;
+  padding: 5px 12px;
 }
 
 .brand {
@@ -114,6 +138,8 @@
 }
 
 .brand img {
+  width: 34px;
+  height: 34px;
   border-radius: 11px;
   flex: 0 0 auto;
 }
@@ -312,13 +338,17 @@
 
 .tabs {
   align-items: end;
-  border: 1px solid rgba(108, 207, 192, .18);
-  border-radius: 12px;
+  min-height: 36px;
+  flex: 0 0 auto;
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: rgba(108, 207, 192, .18);
+  border-radius: 0;
   background: rgba(6, 23, 36, .94);
   display: flex;
   gap: 4px;
-  margin-bottom: 16px;
-  padding: 0 6px;
+  margin: 0;
+  padding: 0 10px;
 }
 
 .tab {
@@ -327,7 +357,7 @@
   color: #94acb5;
   font-size: .7rem;
   font-weight: 800;
-  padding: 12px 15px 10px;
+  padding: 7px 10px 5px;
 }
 
 .tab[aria-selected="true"] {
@@ -337,7 +367,7 @@
 
 .panel,
 .signInCard {
-  background: #fff;
+  background: var(--portal-soft);
   border: 1px solid var(--portal-line);
   border-radius: 18px;
   box-shadow: 0 14px 38px rgba(18, 57, 47, .06);
@@ -398,8 +428,8 @@
 .input,
 .select,
 .textarea {
-  background: #fff;
-  border: 1px solid #afc7be;
+  background: var(--portal-input);
+  border: 1px solid var(--portal-line-strong);
   border-radius: 10px;
   color: var(--portal-text);
   font: inherit;
@@ -902,6 +932,87 @@
   outline-offset: 2px;
 }
 
+/* Shared Creditex dark surface system. */
+.hero {
+  margin: 12px;
+}
+
+.status {
+  margin: 0 12px 10px;
+}
+
+.panel {
+  color: var(--portal-text);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.caseCard,
+.cataloguePanel,
+.catalogueSummary,
+.catalogueGrid > section,
+.formCard,
+.templateNotice,
+.record,
+.governanceProgramTabs {
+  border-color: var(--portal-line);
+  background: var(--portal-raised);
+  color: var(--portal-text);
+}
+
+.catalogueGrid article {
+  border-color: var(--portal-line);
+}
+
+.badge,
+.catalogueGrid article span,
+.governanceProgramTabs button {
+  background: #123b47;
+  color: #8fe9da;
+}
+
+.empty {
+  border-color: var(--portal-line-strong);
+  background: var(--portal-input);
+}
+
+.templateNotice,
+.record {
+  background: #092331;
+}
+
+.warning,
+.status,
+.status[data-kind="success"],
+.status[data-kind="error"] {
+  border-color: rgba(214, 180, 109, .42);
+  background: #352a16;
+  color: #f1d38e;
+}
+
+.status[data-kind="success"] {
+  border-color: rgba(67, 211, 158, .4);
+  background: #0a362f;
+  color: #8cf0cb;
+}
+
+.status[data-kind="error"] {
+  border-color: rgba(241, 120, 101, .42);
+  background: #3b1e20;
+  color: #ffb7ac;
+}
+
+.secondaryButton {
+  border: 1px solid var(--portal-line);
+  background: var(--portal-raised);
+  color: var(--portal-ink);
+}
+
+.dangerButton {
+  background: #3b1e20;
+  color: #ffb7ac;
+}
+
 .signInWrap {
   align-items: center;
   display: grid;
@@ -1003,7 +1114,7 @@
 
 @media (max-width: 780px) {
   .shell {
-    padding: 12px;
+    padding: 0;
   }
 
   .pilotShell {

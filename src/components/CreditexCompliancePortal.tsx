@@ -1105,7 +1105,7 @@ export function CreditexCompliancePortal() {
           <div className={styles.identity}>
             <div>
               <strong>
-                {session.displayName || session.email} · {readable(session.role)}
+                {session.displayName || session.email} | {readable(session.role)}
               </strong>
               <span>
                 {session.organisation.tradingName ||
@@ -1121,38 +1121,6 @@ export function CreditexCompliancePortal() {
             </button>
           </div>
         </header>
-
-        {tab !== "pilot" && (
-          <section className={styles.hero}>
-            <div className={styles.heroCopy}>
-              <span className={styles.eyebrow}>Protected partner operations</span>
-              <h1>Compliance case control</h1>
-              <p>
-                Queue lists minimise private data. Authorised Creditex staff can
-                open the audited case workspace for the customer, installer, site, appointments, evidence originals and
-                captured metadata needed to review, correct and submit that exact job.
-              </p>
-            </div>
-            <aside className={styles.guardrail}>
-              <strong>Governance boundary</strong>
-              <p>
-                Activity publication records source provenance and effective
-                dates. It does not make a financial, technical or regulator
-                decision for a case.
-              </p>
-            </aside>
-          </section>
-        )}
-
-        {notice && tab !== "pilot" && (
-          <p
-            className={styles.status}
-            data-kind={noticeKind}
-            role={noticeKind === "error" ? "alert" : "status"}
-          >
-            {notice}
-          </p>
-        )}
 
         <nav
           className={styles.tabs}
@@ -1187,20 +1155,52 @@ export function CreditexCompliancePortal() {
           </button>
           {session.role === "admin" && (
             <button
-                className={styles.tab}
-                type="button"
-                role="tab"
-                id="creditex-tab-governance"
-                aria-controls="creditex-panel-governance"
-                aria-selected={tab === "governance"}
-                tabIndex={tab === "governance" ? 0 : -1}
-                onClick={() => setTab("governance")}
-                onKeyDown={handleWorkspaceTabKeyDown}
-              >
+              className={styles.tab}
+              type="button"
+              role="tab"
+              id="creditex-tab-governance"
+              aria-controls="creditex-panel-governance"
+              aria-selected={tab === "governance"}
+              tabIndex={tab === "governance" ? 0 : -1}
+              onClick={() => setTab("governance")}
+              onKeyDown={handleWorkspaceTabKeyDown}
+            >
               Government rules
             </button>
           )}
         </nav>
+
+        {tab !== "pilot" && (
+          <section className={styles.hero}>
+            <div className={styles.heroCopy}>
+              <span className={styles.eyebrow}>Protected partner operations</span>
+              <h1>Compliance case control</h1>
+              <p>
+                Queue lists minimise private data. Authorised Creditex staff can
+                open the audited case workspace for the customer, installer, site, appointments, evidence originals and
+                captured metadata needed to review, correct and submit that exact job.
+              </p>
+            </div>
+            <aside className={styles.guardrail}>
+              <strong>Governance boundary</strong>
+              <p>
+                Activity publication records source provenance and effective
+                dates. It does not make a financial, technical or regulator
+                decision for a case.
+              </p>
+            </aside>
+          </section>
+        )}
+
+        {notice && tab !== "pilot" && (
+          <p
+            className={styles.status}
+            data-kind={noticeKind}
+            role={noticeKind === "error" ? "alert" : "status"}
+          >
+            {notice}
+          </p>
+        )}
 
         {tab === "cases" && (
           <div

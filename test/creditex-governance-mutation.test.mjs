@@ -21,6 +21,14 @@ const require = (specifier) => {
   if (specifier === "./creditex-schema-guards") {
     return { ensureCreditexSchemaGuards: async () => {} };
   }
+  if (specifier === "./creditex-source-lookup-review-server") {
+    return {
+      CreditexSourceLookupReviewError: class extends Error {},
+      requireCurrentApprovedOfficialSourceBinding: async () => (
+        "test-approved-binding"
+      ),
+    };
+  }
   throw new Error(`Unexpected module dependency: ${specifier}`);
 };
 new Function("require", "module", "exports", output)(

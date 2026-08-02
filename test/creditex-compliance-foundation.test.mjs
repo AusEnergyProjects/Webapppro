@@ -11,6 +11,13 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0093_creditex_compliance_foundation.sql");
 const schema = read("../db/schema.ts");
 
+class MockCreditexSourceLookupReviewError extends Error {}
+
+const approvedSourceReviewMock = {
+  CreditexSourceLookupReviewError: MockCreditexSourceLookupReviewError,
+  requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
+};
+
 class TestD1Statement {
   constructor(database, sql, values = []) {
     this.database = database;
@@ -236,6 +243,18 @@ test("0093 creates a separate constrained compliance domain without production s
 });
 
 test("published programs and activity versions are source-backed, immutable, and date filtered", async () => {
+  let sourceApprovalCurrent = true;
+  const sourceReviewMock = {
+    CreditexSourceLookupReviewError: MockCreditexSourceLookupReviewError,
+    requireCurrentApprovedOfficialSourceBinding: async () => {
+      if (!sourceApprovalCurrent) {
+        throw new MockCreditexSourceLookupReviewError(
+          "Current approval was withdrawn.",
+        );
+      }
+      return "test-binding";
+    },
+  };
   const database = new DatabaseSync(":memory:");
   applyFoundation(database);
   applyEvidencePolicyFixtureSchema(database);
@@ -272,6 +291,7 @@ test("published programs and activity versions are source-backed, immutable, and
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-source-lookup-review-server": sourceReviewMock,
     },
   );
   assert.throws(() => domain.prepareComplianceProgramCreateStatement(d1, {
@@ -519,6 +539,17 @@ test("published programs and activity versions are source-backed, immutable, and
   assert.equal(selectable[0].activityKey, "veu-hot-water");
   assert.equal(selectable[0].serviceCategory, "hot-water");
   assert.equal(selectable[0].requirementsSnapshot.photos[0].code, "installed-unit");
+  sourceApprovalCurrent = false;
+  assert.equal((await domain.listInstallerSelectableActivities(d1, {
+    serviceCategory: "hot-water",
+    jurisdiction: "VIC",
+    onDate: "2026-06-15",
+  })).length, 0);
+  await assert.rejects(
+    domain.resolveLiveComplianceActivity(d1, activity.id, "2026-06-15"),
+    (error) => error.code === "CURRENT_SOURCE_APPROVAL_REQUIRED",
+  );
+  sourceApprovalCurrent = true;
   assert.equal((await domain.listInstallerSelectableActivities(d1, {
     serviceCategory: "hot-water",
     jurisdiction: "VIC",
@@ -665,6 +696,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-source-lookup-review-server": approvedSourceReviewMock,
     },
   );
 

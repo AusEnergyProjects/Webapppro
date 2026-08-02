@@ -144,19 +144,20 @@ export type PilotSourceInstrument = {
   sourcePriority: number;
 };
 
-export const CREDITEX_VEU_PILOT_SOURCES:
+export const CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES:
   readonly PilotSourceInstrument[] = [
     {
       sourceKey: "veu-act-2007",
       sourceKind: "act",
       title: "Victorian Energy Efficiency Target Act 2007",
       officialSourceUrl:
-        "https://www.legislation.vic.gov.au/in-force/acts/victorian-energy-efficiency-target-act-2007",
-      officialVersion: "In-force landing record",
-      effectiveFrom: "",
+        "https://content.legislation.vic.gov.au/sites/default/files/2025-07/07-70aa023-authorised.pdf",
+      officialVersion: "Authorised version 023",
+      effectiveFrom: "2025-07-01",
       effectiveTo: "",
-      officialSourceSha256: "",
-      hashStatus: "dynamic_registry",
+      officialSourceSha256:
+        "dc9408bb0f66cb5fa955cc24feb1e7353db81063f86b1e062dd549330cc6fd23",
+      hashStatus: "research_hashed_bytes_not_retained",
       sourcePriority: 1,
     },
     {
@@ -164,12 +165,13 @@ export const CREDITEX_VEU_PILOT_SOURCES:
       sourceKind: "regulations",
       title: "Victorian Energy Efficiency Target Regulations 2018",
       officialSourceUrl:
-        "https://www.legislation.vic.gov.au/in-force/statutory-rules/victorian-energy-efficiency-target-regulations-2018/020",
+        "https://content.legislation.vic.gov.au/sites/default/files/2026-06/18-145sra020-authorised.pdf",
       officialVersion: "Authorised version 020",
       effectiveFrom: "2026-06-30",
       effectiveTo: "",
-      officialSourceSha256: "",
-      hashStatus: "download_blocked_pending_hash",
+      officialSourceSha256:
+        "6524a36510e770acafae023406f4331b5302e715ff0313852fee47f7b514f20f",
+      hashStatus: "research_hashed_bytes_not_retained",
       sourcePriority: 2,
     },
     {
@@ -181,6 +183,19 @@ export const CREDITEX_VEU_PILOT_SOURCES:
       officialVersion: "25.0",
       effectiveFrom: "2026-07-21",
       effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "download_blocked_pending_hash",
+      sourcePriority: 3,
+    },
+    {
+      sourceKey: "veu-specifications-v24-comparison",
+      sourceKind: "specification",
+      title: "Victorian Energy Upgrades Specifications 2018 Version 24.0",
+      officialSourceUrl:
+        "https://www.energy.vic.gov.au/__data/assets/pdf_file/0031/792904/victorian-energy-upgrades-specifications-2018-version-24.pdf",
+      officialVersion: "24.0 comparison source",
+      effectiveFrom: "2026-07-06",
+      effectiveTo: "2026-07-20",
       officialSourceSha256: "",
       hashStatus: "download_blocked_pending_hash",
       sourcePriority: 3,
@@ -200,17 +215,44 @@ export const CREDITEX_VEU_PILOT_SOURCES:
       sourcePriority: 4,
     },
     {
-      sourceKey: "veu-obligations-guide-2025-10",
+      sourceKey: "veu-obligations-guide-v3-8",
       sourceKind: "guideline",
       title: "Obligations and Program Guide for Accredited Persons",
       officialSourceUrl:
-        "https://www.esc.vic.gov.au/sites/default/files/documents/Final%20Obligations%20and%20Program%20guide%20for%20Accredited%20Persons%2020251001.pdf",
-      officialVersion: "1 October 2025",
-      effectiveFrom: "2025-10-01",
+        "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Obligations%20and%20Program%20Guide%20for%20Accredited%20Persons%20-%20V%203.8%20-%2020260324.pdf",
+      officialVersion: "3.8",
+      effectiveFrom: "2026-03-24",
       effectiveTo: "",
       officialSourceSha256:
-        "30f78ce41ad58ce7184989a9316aeb7aef642ca638a000eb11d44dc8652389ad",
+        "ae5bc56b6c4d8faef088419dc5073d9ebb46232c9e7fdfe82ce3890bf9ac8038",
       hashStatus: "research_hashed_bytes_not_retained",
+      sourcePriority: 5,
+    },
+    {
+      sourceKey: "veu-water-space-activity-guide-v3-17",
+      sourceKind: "activity_guide",
+      title: "Water Heating and Space Heating and Cooling Activity Guide",
+      officialSourceUrl:
+        "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.17%20-%2020250901.pdf",
+      officialVersion: "3.17",
+      effectiveFrom: "2025-09-01",
+      effectiveTo: "",
+      officialSourceSha256:
+        "165e4c1496f0e041631b47e2c19bb67409426d24547c9738534b782aaf426132",
+      hashStatus: "research_hashed_bytes_not_retained",
+      sourcePriority: 5,
+    },
+    {
+      sourceKey: "veu-consumer-factsheet",
+      sourceKind: "program_document",
+      title: "Victorian Energy Efficiency Target scheme consumer factsheet",
+      officialSourceUrl:
+        "https://www.energy.vic.gov.au/__data/assets/pdf_file/0028/585154/Victorian-Energy-Efficiency-Target-scheme-consumer-factsheet.pdf",
+      officialVersion: "Current published factsheet",
+      effectiveFrom: "",
+      effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "download_blocked_pending_hash",
       sourcePriority: 5,
     },
     {
@@ -265,6 +307,56 @@ export const CREDITEX_VEU_PILOT_SOURCES:
       sourcePriority: 5,
     },
     {
+      sourceKey: "veu-product-register",
+      sourceKind: "registry",
+      title: "Victorian Energy Upgrades product register",
+      officialSourceUrl: "https://veu.esc.vic.gov.au/vpr/s/productregister",
+      officialVersion: "Live product register",
+      effectiveFrom: "",
+      effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "dynamic_registry",
+      sourcePriority: 6,
+    },
+    {
+      sourceKey: "energy-safe-victoria-registers",
+      sourceKind: "registry",
+      title: "Energy Safe Victoria public licence registers",
+      officialSourceUrl:
+        "https://www.energysafe.vic.gov.au/licensing/search-public-register",
+      officialVersion: "Live public register",
+      effectiveFrom: "",
+      effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "dynamic_registry",
+      sourcePriority: 6,
+    },
+    {
+      sourceKey: "victoria-plumbing-practitioner-register",
+      sourceKind: "registry",
+      title: "Victorian plumbing practitioner public register",
+      officialSourceUrl:
+        "https://bams.vba.vic.gov.au/bams/s/practitioner-search?id=e515fcd6-d348-e811-9cdb-0050569e63ae",
+      officialVersion: "Live public register",
+      effectiveFrom: "",
+      effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "dynamic_registry",
+      sourcePriority: 6,
+    },
+    {
+      sourceKey: "product-safety-australia-recalls",
+      sourceKind: "registry",
+      title: "Product Safety Australia recalls",
+      officialSourceUrl: "https://www.productsafety.gov.au/recalls",
+      officialVersion: "Live national recalls register",
+      effectiveFrom: "",
+      effectiveTo: "",
+      officialSourceSha256: "",
+      hashStatus: "dynamic_registry",
+      sourcePriority: 6,
+    },
+    {
       sourceKey: "veu-program-documents",
       sourceKind: "program_document",
       title: "Victorian Energy Upgrades industry program documents",
@@ -278,6 +370,79 @@ export const CREDITEX_VEU_PILOT_SOURCES:
       sourcePriority: 5,
     },
   ];
+
+const CURRENT_ONLY_SOURCE_KEYS = new Set([
+  "veu-specifications-v24-comparison",
+  "veu-water-space-activity-guide-v3-17",
+  "veu-consumer-factsheet",
+  "veu-product-register",
+  "energy-safe-victoria-registers",
+  "victoria-plumbing-practitioner-register",
+  "product-safety-australia-recalls",
+]);
+
+/**
+ * Immutable compatibility manifest for the active synthetic v2 cohort.
+ * Current official sources are exposed separately and never rewrite a seeded
+ * test run in place.
+ */
+export const CREDITEX_VEU_PILOT_SOURCES:
+  readonly PilotSourceInstrument[] =
+    CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES
+      .filter((source) => !CURRENT_ONLY_SOURCE_KEYS.has(source.sourceKey))
+      .map((source) => {
+        if (source.sourceKey === "veu-act-2007") {
+          return {
+            ...source,
+            officialSourceUrl:
+              "https://www.legislation.vic.gov.au/in-force/acts/victorian-energy-efficiency-target-act-2007",
+            officialVersion: "In-force landing record",
+            effectiveFrom: "",
+            officialSourceSha256: "",
+            hashStatus: "dynamic_registry" as const,
+          };
+        }
+        if (source.sourceKey === "veu-regulations-2018-v020") {
+          return {
+            ...source,
+            officialSourceUrl:
+              "https://www.legislation.vic.gov.au/in-force/statutory-rules/victorian-energy-efficiency-target-regulations-2018/020",
+            officialSourceSha256: "",
+            hashStatus: "download_blocked_pending_hash" as const,
+          };
+        }
+        if (source.sourceKey === "veu-obligations-guide-v3-8") {
+          return {
+            ...source,
+            sourceKey: "veu-obligations-guide-2025-10",
+            officialSourceUrl:
+              "https://www.esc.vic.gov.au/sites/default/files/documents/Final%20Obligations%20and%20Program%20guide%20for%20Accredited%20Persons%2020251001.pdf",
+            officialVersion: "1 October 2025",
+            effectiveFrom: "2025-10-01",
+            officialSourceSha256:
+              "30f78ce41ad58ce7184989a9316aeb7aef642ca638a000eb11d44dc8652389ad",
+          };
+        }
+        return source;
+      });
+
+export const CREDITEX_VEU_CURRENT_SOURCE_PACK = {
+  packId: "veu-v25-2026-07-21-program-pack-draft-v1",
+  programCode: "VEU",
+  jurisdiction: "VIC",
+  governingVersion: "VEU Specifications 25.0",
+  effectiveFrom: "2026-07-21",
+  activityScope: "all_catalogued_veu_activity_families",
+  custodyState: "pending_review",
+  bindingState: "pending_review",
+  independentApprovalState: "not_approved",
+  activationEnabled: false,
+  certificateCreationEnabled: false,
+  externalSubmissionEnabled: false,
+  sourceKeys: CREDITEX_VEU_CURRENT_SOURCE_PACK_SOURCES.map(
+    (source) => source.sourceKey,
+  ),
+} as const;
 
 export type PilotControlOption = {
   controlType:

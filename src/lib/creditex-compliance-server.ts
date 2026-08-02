@@ -1,4 +1,8 @@
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
+import {
+  CreditexSourceLookupReviewError,
+  requireCurrentApprovedOfficialSourceBinding,
+} from "./creditex-source-lookup-review-server";
 
 export const COMPLIANCE_SERVICE_CATEGORIES = [
   "assessment",
@@ -291,7 +295,8 @@ function checkedHttpsUrl(value: unknown, code: string, label: string) {
     const parsed = new URL(result);
     if (parsed.protocol !== "https:") throw new Error("HTTPS_REQUIRED");
     return parsed.toString();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof CreditexSourceLookupReviewError)) throw error;
     throw new ComplianceDomainError(
       code,
       400,
@@ -567,6 +572,7 @@ const ACTIVITY_SELECT = `SELECT
     program.scheme_kind,
     program.jurisdiction program_jurisdiction,
     program.administering_body,
+    program.official_source_sha256 program_official_source_sha256,
     program.publish_state program_publish_state,
     activity.activity_key,
     activity.version,
@@ -681,7 +687,51 @@ export async function listInstallerSelectableActivities(
     LIMIT ?`)
     .bind(...bindings, limit)
     .all<Record<string, unknown>>();
-  return rows.results.map(activityProjection);
+  const selectable = [];
+  for (const row of rows.results) {
+    const activity = activityProjection(row);
+    try {
+      await requireCurrentApprovedOfficialSourceBinding(
+        database,
+        activity.organisationId,
+        "program",
+        activity.programId,
+        String(row.program_official_source_sha256 || ""),
+      );
+      await requireCurrentApprovedOfficialSourceBinding(
+        database,
+        activity.organisationId,
+        "activity",
+        activity.id,
+        activity.officialSourceSha256,
+      );
+      const evidencePolicy = await database.prepare(`SELECT
+          evidence_policy.id,
+          evidence_policy.official_source_sha256
+        FROM compliance_evidence_policy_versions evidence_policy
+        WHERE evidence_policy.organisation_id = ?
+          AND evidence_policy.activity_version_id = ?
+          AND evidence_policy.publish_state = 'published'
+          AND evidence_policy.requirements_complete = 1
+        ORDER BY evidence_policy.version DESC, evidence_policy.id DESC
+        LIMIT 1`)
+        .bind(activity.organisationId, activity.id)
+        .first<Record<string, unknown>>();
+      if (!evidencePolicy) continue;
+      await requireCurrentApprovedOfficialSourceBinding(
+        database,
+        activity.organisationId,
+        "evidence_policy",
+        String(evidencePolicy.id),
+        String(evidencePolicy.official_source_sha256),
+      );
+      selectable.push(activity);
+    } catch (error) {
+      if (error instanceof CreditexSourceLookupReviewError) continue;
+      throw error;
+    }
+  }
+  return selectable;
 }
 
 export async function resolveLiveComplianceActivity(
@@ -728,6 +778,28 @@ export async function resolveLiveComplianceActivity(
       "ACTIVITY_NOT_PUBLISHED",
       409,
       "The selected compliance activity version is not published.",
+    );
+  }
+  try {
+    await requireCurrentApprovedOfficialSourceBinding(
+      database,
+      activity.organisationId,
+      "program",
+      activity.programId,
+      String(row.program_official_source_sha256 || ""),
+    );
+    await requireCurrentApprovedOfficialSourceBinding(
+      database,
+      activity.organisationId,
+      "activity",
+      activity.id,
+      activity.officialSourceSha256,
+    );
+  } catch {
+    throw new ComplianceDomainError(
+      "CURRENT_SOURCE_APPROVAL_REQUIRED",
+      409,
+      "The selected compliance activity is unavailable until its exact official-source approvals are current.",
     );
   }
   if (activity.effectiveFrom > caseDate) {
@@ -3636,12 +3708,16 @@ export async function appendLiveComplianceCaseStatements(
     activityDate,
   );
   const evidencePolicyRow = await database.prepare(
-    `SELECT id, version, official_source_title, official_source_version,
-        official_source_sha256
-      FROM compliance_evidence_policy_versions
-      WHERE organisation_id = ? AND activity_version_id = ?
-        AND publish_state = 'published' AND requirements_complete = 1
-      ORDER BY version DESC, id DESC
+    `SELECT evidence_policy.id, evidence_policy.version,
+        evidence_policy.official_source_title,
+        evidence_policy.official_source_version,
+        evidence_policy.official_source_sha256
+      FROM compliance_evidence_policy_versions evidence_policy
+      WHERE evidence_policy.organisation_id = ?
+        AND evidence_policy.activity_version_id = ?
+        AND evidence_policy.publish_state = 'published'
+        AND evidence_policy.requirements_complete = 1
+      ORDER BY evidence_policy.version DESC, evidence_policy.id DESC
       LIMIT 1`,
   ).bind(activity.organisationId, activity.id).first<Record<string, unknown>>();
   if (!evidencePolicyRow) {
@@ -3688,6 +3764,22 @@ export async function appendLiveComplianceCaseStatements(
       "INVALID_EVIDENCE_POLICY",
       500,
       "The published evidence policy version is invalid.",
+    );
+  }
+  try {
+    await requireCurrentApprovedOfficialSourceBinding(
+      database,
+      activity.organisationId,
+      "evidence_policy",
+      evidencePolicy.id,
+      evidencePolicy.officialSourceSha256,
+    );
+  } catch (error) {
+    if (!(error instanceof CreditexSourceLookupReviewError)) throw error;
+    throw new ComplianceDomainError(
+      "CURRENT_SOURCE_APPROVAL_REQUIRED",
+      409,
+      "The selected compliance evidence policy is unavailable until its exact official-source approval is current.",
     );
   }
   if (
