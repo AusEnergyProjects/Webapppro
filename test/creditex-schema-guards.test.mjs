@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
+  CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS,
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
   canonicalCreditexSchemaGuardSql,
 } from "../src/lib/creditex-schema-guards.ts";
@@ -157,12 +158,12 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 238);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 252);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    238,
+    252,
   );
-  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 6);
+  assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 7);
 });
 
 test("lookup and parallel migrations remain table-only with runtime guards", () => {
@@ -184,6 +185,34 @@ test("lookup and parallel migrations remain table-only with runtime guards", () 
   ));
   assert.equal(definitions.length, 27);
   for (const definition of definitions) {
+    assert.match(definition.sql, /^CREATE TRIGGER IF NOT EXISTS /);
+    assert.match(canonicalCreditexSchemaGuardSql(definition.sql), /BEGIN /);
+  }
+});
+
+test("calculator authoring migration is table-only with runtime guards", () => {
+  const migration = fs.readFileSync(
+    new URL(
+      "../drizzle/0110_creditex_calculator_authoring.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(migration, /CREATE\s+TRIGGER/i);
+  assert.equal(
+    CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS.length,
+    14,
+  );
+  assert.equal(
+    new Set(
+      CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS
+        .map((definition) => definition.name),
+    ).size,
+    14,
+  );
+  for (
+    const definition of CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS
+  ) {
     assert.match(definition.sql, /^CREATE TRIGGER IF NOT EXISTS /);
     assert.match(canonicalCreditexSchemaGuardSql(definition.sql), /BEGIN /);
   }

@@ -36,6 +36,7 @@ const custodyMigration = [
   "../drizzle/0106_creditex_field_custody_acceptance.sql",
   "../drizzle/0107_creditex_source_lookup_approval_bridge.sql",
   "../drizzle/0108_creditex_dataforce_parallel_bindings.sql",
+  "../drizzle/0110_creditex_calculator_authoring.sql",
 ].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
@@ -276,40 +277,22 @@ test("runtime schema bootstrap installs every governed trigger before compliance
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
     preinstalled,
   );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(d1),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 40)}`,
-    ),
-  );
-  assert.equal(
-    database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
-    preinstalled + 40,
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(d1),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 80)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(d1),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 120)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(d1),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 160)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(d1),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 200)}`,
-    ),
-  );
+  let installed = preinstalled;
+  while (expectedRemaining(installed) > 40) {
+    installed += 40;
+    await assert.rejects(
+      ensureCreditexSchemaGuards(d1),
+      new RegExp(
+        `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(installed)}`,
+      ),
+    );
+    assert.equal(
+      database.prepare(
+        "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
+      ).get().count,
+      installed,
+    );
+  }
   await ensureCreditexSchemaGuards(d1);
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'").get().count,
@@ -333,36 +316,16 @@ test("runtime schema bootstrap accepts legacy multiline guards across stateless 
     "SELECT COUNT(*) count FROM sqlite_schema WHERE type = 'trigger'",
   ).get().count;
   assert.equal(preinstalled, 1);
-  await assert.rejects(
-    ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 40)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 80)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 120)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 160)}`,
-    ),
-  );
-  await assert.rejects(
-    ensureCreditexSchemaGuards(testD1(database)),
-    new RegExp(
-      `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(preinstalled + 200)}`,
-    ),
-  );
+  let installed = preinstalled;
+  while (expectedRemaining(installed) > 40) {
+    installed += 40;
+    await assert.rejects(
+      ensureCreditexSchemaGuards(testD1(database)),
+      new RegExp(
+        `CREDITEX_SCHEMA_GUARDS_INSTALLING:${expectedRemaining(installed)}`,
+      ),
+    );
+  }
   await ensureCreditexSchemaGuards(testD1(database));
   assert.equal(
     database.prepare(

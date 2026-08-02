@@ -12,6 +12,11 @@ import {
 import {
   CREDITEX_CALCULATOR_SPEC_SCHEMA,
 } from "../src/lib/creditex-calculator-engine.ts";
+import {
+  CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS,
+  CREDITEX_SCHEMA_GUARD_DEFINITIONS,
+  ensureCreditexSchemaGuards,
+} from "../src/lib/creditex-schema-guards.ts";
 
 const sourceCustodyMigration = fs.readFileSync(
   new URL(
@@ -90,6 +95,70 @@ function testD1(database) {
   };
 }
 
+function schemaGuardD1(database) {
+  const base = testD1(database);
+  return {
+    ...base,
+    prepare(sql) {
+      if (
+        sql.includes(
+          "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
+        )
+      ) {
+        return {
+          async all() {
+            const installed = database.prepare(
+              "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
+            ).all();
+            const calculatorNames = new Set(
+              CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS
+                .map((definition) => definition.name),
+            );
+            return {
+              results: [
+                ...CREDITEX_SCHEMA_GUARD_DEFINITIONS
+                  .filter((definition) => !calculatorNames.has(definition.name))
+                  .map((definition) => ({
+                    name: definition.name,
+                    sql: definition.sql,
+                  })),
+                ...installed,
+              ],
+            };
+          },
+        };
+      }
+      if (
+        sql.includes("SELECT name FROM sqlite_schema")
+        && sql.includes("WHERE type = 'table'")
+      ) {
+        return {
+          async all() {
+            return {
+              results: [...sql.matchAll(/'([^']+)'/g)]
+                .map((match) => ({ name: match[1] })),
+            };
+          },
+        };
+      }
+      if (sql === "PRAGMA table_xinfo(`compliance_cases`)") {
+        return {
+          async all() {
+            return {
+              results: [
+                { name: "commercial_handoff_id" },
+                { name: "accepted_quote_version_id" },
+                { name: "accepted_scope_sha256" },
+              ],
+            };
+          },
+        };
+      }
+      return base.prepare(sql);
+    },
+  };
+}
+
 const sourceBytes = new TextEncoder().encode(
   "Official government calculator clause retained exactly.",
 );
@@ -121,7 +190,7 @@ function bucket(bytes = sourceBytes) {
   };
 }
 
-function fixture() {
+async function fixture({ installSchemaGuards = true } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     CREATE TABLE compliance_organisations (
@@ -284,9 +353,13 @@ function fixture() {
       );
   `);
   database.exec(authoringMigration);
+  const d1 = schemaGuardD1(database);
+  if (installSchemaGuards) {
+    await ensureCreditexSchemaGuards(d1);
+  }
   return {
     database,
-    d1: testD1(database),
+    d1,
     author: identity("author-1", "admin", true, "author@example.com"),
     reviewer: identity(
       "reviewer-1",
@@ -389,8 +462,67 @@ function assertAuthoringError(code) {
   };
 }
 
+test("calculator authoring guards install lazily and reject preseed bypasses", async () => {
+  assert.doesNotMatch(authoringMigration, /CREATE\s+TRIGGER/i);
+  assert.equal(
+    CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS.length,
+    14,
+  );
+  for (const definition of
+    CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS) {
+    assert.match(definition.sql, /^CREATE TRIGGER IF NOT EXISTS /);
+  }
+
+  const preseeded = await fixture({ installSchemaGuards: false });
+  preseeded.database.prepare(`
+    INSERT INTO compliance_calculator_authoring_receipts (
+      id, organisation_id, client_request_id, request_sha256,
+      calculator_version_id, activity_version_id, source_artifact_id,
+      activity_source_binding_id, calculator_source_binding_id,
+      source_artifact_sha256, specification_sha256, engine_contract_hash,
+      authoring_contract_sha256, created_by_uid, created_at
+    ) VALUES (
+      'preseeded-receipt', 'org-1', 'preseeded-request', ?,
+      'preseeded-calculator', 'activity-1', 'artifact-1',
+      'activity-binding-1', 'calculator-binding-1',
+      ?, ?, ?, ?, 'author-1', '2026-08-02T00:00:00.000Z'
+    )
+  `).run(
+    "a".repeat(64),
+    sourceSha256,
+    "b".repeat(64),
+    `sha256:${"c".repeat(64)}`,
+    "d".repeat(64),
+  );
+  await assert.rejects(
+    () => ensureCreditexSchemaGuards(preseeded.d1),
+    /CREDITEX_CALCULATOR_AUTHORING_PRESEED_ROWS_BLOCKED/,
+  );
+  assert.equal(
+    preseeded.database.prepare(`SELECT COUNT(*) count
+      FROM sqlite_schema
+      WHERE type = 'trigger'
+        AND name LIKE 'compliance_calculator_%'`).get().count,
+    0,
+  );
+});
+
 test("a named governance member authors an immutable source-bound draft only", async () => {
-  const current = fixture();
+  const current = await fixture();
+  assert.equal(
+    current.database.prepare(`SELECT COUNT(*) count
+      FROM sqlite_schema
+      WHERE type = 'trigger'
+        AND name IN (${
+          CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS
+            .map(() => "?")
+            .join(", ")
+        })`).get(
+      ...CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS
+        .map((definition) => definition.name),
+    ).count,
+    14,
+  );
   const created = await createDraft(current);
   assert.equal(created.draft.approvalState, "draft");
   assert.equal(created.draft.authoringState, "pending_review");
@@ -426,6 +558,27 @@ test("a named governance member authors an immutable source-bound draft only", a
     binding_state: "pending_review",
     rule_activation_enabled: 0,
   });
+  const draftAudit = current.database.prepare(`
+    SELECT event_type, target_type, target_id, actor_uid, metadata
+    FROM compliance_audit_events
+    WHERE target_id = ?
+  `).get(created.draft.id);
+  assert.deepEqual(
+    {
+      eventType: draftAudit.event_type,
+      targetType: draftAudit.target_type,
+      targetId: draftAudit.target_id,
+      actorUid: draftAudit.actor_uid,
+      authoringState: JSON.parse(draftAudit.metadata).authoringState,
+    },
+    {
+      eventType: "calculator.draft_authored",
+      targetType: "calculator_version",
+      targetId: created.draft.id,
+      actorUid: "author-1",
+      authoringState: "pending_review",
+    },
+  );
   assert.throws(
     () => current.database.prepare(`
       UPDATE compliance_calculator_versions
@@ -472,7 +625,7 @@ test("a named governance member authors an immutable source-bound draft only", a
 });
 
 test("authoring is idempotent and owner-scoped", async () => {
-  const current = fixture();
+  const current = await fixture();
   const first = await createDraft(current);
   const reused = await createCreditexCalculatorDraft(
     current.d1,
@@ -516,7 +669,7 @@ test("authoring is idempotent and owner-scoped", async () => {
 });
 
 test("shared, unverified and non-governance identities fail closed", async () => {
-  const current = fixture();
+  const current = await fixture();
   for (const member of [
     identity(
       "bootstrap-1",
@@ -558,7 +711,7 @@ test("shared, unverified and non-governance identities fail closed", async () =>
 });
 
 test("source custody and typed specification boundaries reject unsafe drafts", async () => {
-  const current = fixture();
+  const current = await fixture();
   await assert.rejects(
     () => createCreditexCalculatorDraft(
       current.d1,
@@ -604,7 +757,7 @@ test("source custody and typed specification boundaries reject unsafe drafts", a
 });
 
 test("draft creation requires the exact currently approved activity source binding", async () => {
-  const current = fixture();
+  const current = await fixture();
   current.database.prepare(`
     DELETE FROM compliance_official_source_review_decisions
     WHERE id = 'binding-review-1'
@@ -645,7 +798,7 @@ test("draft creation requires the exact currently approved activity source bindi
 });
 
 test("unexpected source approval storage failures remain server errors", async () => {
-  const current = fixture();
+  const current = await fixture();
   const brokenD1 = {
     ...current.d1,
     prepare(sql) {
@@ -677,7 +830,7 @@ test("unexpected source approval storage failures remain server errors", async (
 });
 
 test("authoritative vectors are append-only hashes and never execution receipts", async () => {
-  const current = fixture();
+  const current = await fixture();
   const created = await createDraft(current);
   const vectorInput = {
     clientRequestId: "vector-request-0001",
@@ -726,6 +879,27 @@ test("authoritative vectors are append-only hashes and never execution receipts"
   );
   assert.equal(canonicalReuse.vector.id, vector.vector.id);
   assert.equal(canonicalReuse.vector.reused, true);
+  const vectorAudit = current.database.prepare(`
+    SELECT event_type, target_type, target_id, actor_uid, metadata
+    FROM compliance_audit_events
+    WHERE target_id = ?
+  `).get(vector.vector.id);
+  assert.deepEqual(
+    {
+      eventType: vectorAudit.event_type,
+      targetType: vectorAudit.target_type,
+      targetId: vectorAudit.target_id,
+      actorUid: vectorAudit.actor_uid,
+      authoringState: JSON.parse(vectorAudit.metadata).authoringState,
+    },
+    {
+      eventType: "calculator.vector_authored",
+      targetType: "calculator_test_vector",
+      targetId: vector.vector.id,
+      actorUid: "reviewer-1",
+      authoringState: "pending_review",
+    },
+  );
   assert.throws(
     () => current.database.prepare(`
       UPDATE compliance_calculator_test_vectors
@@ -747,7 +921,7 @@ test("authoritative vectors are append-only hashes and never execution receipts"
 });
 
 test("stored calculator and vector corruption fails closed on every read", async () => {
-  const corruptedDraft = fixture();
+  const corruptedDraft = await fixture();
   const createdDraft = await createDraft(corruptedDraft);
   corruptedDraft.database.exec(`
     DROP TRIGGER compliance_calculator_authoring_receipt_immutable_update;
@@ -765,7 +939,7 @@ test("stored calculator and vector corruption fails closed on every read", async
     assertAuthoringError("CALCULATOR_STORED_INTEGRITY_FAILED"),
   );
 
-  const corruptedVector = fixture();
+  const corruptedVector = await fixture();
   const createdVectorDraft = await createDraft(corruptedVector);
   const createdVector = await appendCreditexCalculatorVector(
     corruptedVector.d1,
@@ -800,7 +974,7 @@ test("stored calculator and vector corruption fails closed on every read", async
 });
 
 test("vectors reject caller status, receipts, numeric decimals and wrong units", async () => {
-  const current = fixture();
+  const current = await fixture();
   const created = await createDraft(current);
   const base = {
     clientRequestId: "vector-request-0002",
