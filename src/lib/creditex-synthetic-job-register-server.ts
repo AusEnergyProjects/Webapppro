@@ -318,6 +318,61 @@ const REGISTER_CTE = `WITH register_rows AS (
     AND job.record_mode = 'synthetic_test'
 )`;
 
+const FACET_QUERIES = [
+  {
+    facet: "source",
+    value: "source",
+    label: `CASE source
+      WHEN 'veu_pilot' THEN 'VEU pilot'
+      ELSE 'Manual evidence'
+    END`,
+    parentValue: "''",
+    groupBy: "source",
+  },
+  {
+    facet: "program",
+    value: "program_code",
+    label: "program_code",
+    parentValue: "''",
+    groupBy: "program_code",
+  },
+  {
+    facet: "activity",
+    value: "activity_template_id",
+    label: "activity_title",
+    parentValue: "program_code",
+    groupBy: "activity_template_id, activity_title, program_code",
+  },
+  {
+    facet: "installer",
+    value: "installer_id",
+    label: "installer_label",
+    parentValue: "source",
+    groupBy: "installer_id, installer_label, source",
+  },
+  {
+    facet: "technician",
+    value: "technician_id",
+    label: "technician_label",
+    parentValue: "installer_id",
+    groupBy: "technician_id, technician_label, installer_id",
+  },
+  {
+    facet: "status",
+    value: "status_value",
+    label: "status_value",
+    parentValue: "''",
+    groupBy: "status_value",
+  },
+  {
+    facet: "postcode",
+    value: "postcode",
+    label: "postcode",
+    parentValue: "''",
+    groupBy: "postcode",
+  },
+] as const;
+
 function boundedParameter(
   searchParams: URLSearchParams,
   name: string,
@@ -594,7 +649,7 @@ export async function loadCreditexSyntheticJobRegister(
     member.organisationId,
   ];
 
-  const [totalRow, listResult, facetResult] = await Promise.all([
+  const [totalRow, listResult, facetResults] = await Promise.all([
     database.prepare(`${REGISTER_CTE}
       SELECT COUNT(*) AS total
       FROM register_rows
@@ -618,41 +673,19 @@ export async function loadCreditexSyntheticJobRegister(
         filters.page * filters.pageSize,
       )
       .all<RegisterSqlRow>(),
-    database.prepare(`${REGISTER_CTE}
-      SELECT facet, value, label, parent_value,
-        COUNT(*) AS option_count
-      FROM (
-        SELECT 'source' AS facet, source AS value,
-          CASE source
-            WHEN 'veu_pilot' THEN 'VEU pilot'
-            ELSE 'Manual evidence'
-          END AS label,
-          '' AS parent_value
+    database.batch(FACET_QUERIES.map((facet) =>
+      database.prepare(`${REGISTER_CTE}
+        SELECT '${facet.facet}' AS facet,
+          ${facet.value} AS value,
+          ${facet.label} AS label,
+          ${facet.parentValue} AS parent_value,
+          COUNT(*) AS option_count
         FROM register_rows
-        UNION ALL
-        SELECT 'program', program_code, program_code, ''
-        FROM register_rows
-        UNION ALL
-        SELECT 'activity', activity_template_id, activity_title, program_code
-        FROM register_rows
-        UNION ALL
-        SELECT 'installer', installer_id, installer_label, source
-        FROM register_rows
-        UNION ALL
-        SELECT 'technician', technician_id, technician_label, installer_id
-        FROM register_rows
-        UNION ALL
-        SELECT 'status', status_value, status_value, ''
-        FROM register_rows
-        UNION ALL
-        SELECT 'postcode', postcode, postcode, ''
-        FROM register_rows
-      )
-      WHERE value <> ''
-      GROUP BY facet, value, label, parent_value
-      ORDER BY facet COLLATE NOCASE, label COLLATE NOCASE, value COLLATE NOCASE`)
-      .bind(...organisationBindings)
-      .all<FacetSqlRow>(),
+        WHERE ${facet.value} <> ''
+        GROUP BY ${facet.groupBy}
+        ORDER BY label COLLATE NOCASE, value COLLATE NOCASE`)
+        .bind(...organisationBindings)
+    )),
   ]);
 
   const total = Number(totalRow?.total || 0);
@@ -672,7 +705,11 @@ export async function loadCreditexSyntheticJobRegister(
       hasPreviousPage: filters.page > 0,
       hasNextPage: filters.page + 1 < pageCount,
     },
-    facets: projectFacets(facetResult.results),
+    facets: projectFacets(
+      facetResults.flatMap(
+        (result) => result.results as FacetSqlRow[],
+      ),
+    ),
     filters: {
       ...filters,
       sortKeys: Object.keys(

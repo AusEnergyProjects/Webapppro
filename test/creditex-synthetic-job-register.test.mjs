@@ -85,6 +85,11 @@ class ReadOnlyD1Statement {
       /^(?:WITH|SELECT)\b/i,
       "Synthetic register statements must remain read-only",
     );
+    assert.doesNotMatch(
+      this.sql,
+      /FROM\s*\(\s*SELECT 'source' AS facet[\s\S]*UNION ALL\s+SELECT 'program'/,
+      "Facet aggregation must use D1-compatible grouped statements",
+    );
     return {
       results: this.database.prepare(this.sql).all(...this.values),
     };
@@ -101,6 +106,13 @@ function readOnlyD1(database) {
     metrics,
     prepare(sql) {
       return new ReadOnlyD1Statement(database, metrics, sql);
+    },
+    async batch(statements) {
+      const results = [];
+      for (const statement of statements) {
+        results.push(await statement.all());
+      }
+      return results;
     },
   };
 }
@@ -451,7 +463,11 @@ test("unified register projects exact Dataforce cells without crossing synthetic
   assert.deepEqual(regulatedCounts(database), before);
   assert.equal(register.boundaries.accessMode, "read_only");
   assert.equal(register.boundaries.regulatedWrites, 0);
-  assert.ok(d1.metrics.statements.length >= 3);
+  assert.equal(
+    d1.metrics.statements.length,
+    9,
+    "The register executes count, page and seven exact facet statements",
+  );
   assert.ok(d1.metrics.statements.every(
     (sql) => !/\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b/i
       .test(sql),
@@ -662,6 +678,58 @@ test("register filters, facets, search, sort and pagination remain source-aware"
   assert.equal(secondPage.pagination.hasNextPage, false);
   assert.equal(secondPage.rows.length, 1);
   assert.equal(secondPage.rows[0].cells["Job Id"], "PAGE-26");
+  const exactFacet = (collection, value) =>
+    collection.find((facet) => facet.value === value);
+  assert.equal(
+    exactFacet(secondPage.facets.sources, "manual_evidence")?.count,
+    28,
+  );
+  assert.equal(
+    exactFacet(secondPage.facets.sources, "veu_pilot")?.count,
+    1,
+  );
+  assert.equal(
+    exactFacet(secondPage.facets.programs, "SRES")?.count,
+    27,
+  );
+  assert.deepEqual(
+    exactFacet(secondPage.facets.activities, "sres:paging"),
+    {
+      value: "sres:paging",
+      label: "Paging activity",
+      count: 26,
+      parentValue: "SRES",
+    },
+  );
+  assert.deepEqual(
+    exactFacet(secondPage.facets.installers, "manual-installer"),
+    {
+      value: "manual-installer",
+      label: "[TEST] Manual Installer",
+      count: 28,
+      parentValue: "manual_evidence",
+    },
+  );
+  assert.deepEqual(
+    exactFacet(secondPage.facets.technicians, "manual-tech"),
+    {
+      value: "manual-tech",
+      label: "[TEST] Manual Technician",
+      count: 28,
+      parentValue: "manual-installer",
+    },
+  );
+  assert.equal(
+    exactFacet(secondPage.facets.statuses, "draft")?.count,
+    26,
+  );
+  assert.equal(
+    exactFacet(secondPage.facets.postcodes, "3121")?.count,
+    27,
+  );
+  for (const collection of Object.values(secondPage.facets)) {
+    assert.ok(collection.every((facet) => facet.value !== ""));
+  }
 });
 
 test("filter parser rejects unbounded, unknown and unsafe register controls", () => {
