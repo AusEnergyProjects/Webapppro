@@ -11,7 +11,6 @@ const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 const addressRoute = read("../src/app/api/trade-address-suggestions/route.ts");
 const dedup = read("../src/lib/trade-customer-dedup-server.ts");
 const newJob = read("../src/components/TradeNewJobForm.tsx");
-const quickInvoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const fieldPanel = read("../src/components/TradeFieldWorkPanel.tsx");
 const menu = read("../src/components/AccessibleMenu.tsx");
@@ -59,10 +58,12 @@ test("new job uses structured sites, provider-neutral suggestions and manual fal
 
 test("guided intake removes manual titles and carries scheduling into the same flow", () => {
   assert.doesNotMatch(newJob, /name="title"|datalist|type your own|Appointment title/);
-  for (const step of ["Create the job", "Add or attach the customer", "Choose who and what", "Schedule the time", "Request information", "TradeQuickInvoiceStep"]) assert.match(newJob, new RegExp(step));
+  assert.match(newJob, /const steps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  for (const step of ["Choose the work", "Add or attach the customer", "Choose the program, if relevant", "Set the appointment", "Review and create"]) assert.match(newJob, new RegExp(step));
   assert.match(newJob, /name="buildingType"/);
   assert.match(newJob, /name="startsAt"/);
-  assert.match(`${newJob}\n${quickInvoiceStep}`, /Schedule and request info/);
+  assert.match(newJob, /More appointment options/);
+  assert.doesNotMatch(newJob, /TradeQuickInvoiceStep|Evidence", "Invoice|evidenceRequirements|deliveryConsent/);
   assert.match(crmRoute, /action === "create_scheduled_job"/);
   assert.match(crmRoute, /moneyValue\(body\.estimatedValueCents\)/);
 });
@@ -71,11 +72,10 @@ test("guided creation mirrors its saved appointment to every connected calendar"
   assert.match(crmRoute, /syncCreatedAppointmentToConnectedCalendars\(identity\.uid, appointmentId\)/);
   assert.match(crmRoute, /await db\.batch[\s\S]*syncCreatedAppointmentToConnectedCalendars/);
   assert.match(crmRoute, /catch \{[\s\S]*calendarFailed = 1/);
-  const photoDelivery = crmRoute.indexOf("await sendPhotoRequestDelivery");
-  const invoiceDelivery = crmRoute.indexOf("await sendQuickInvoiceDelivery");
+  const creationBatch = crmRoute.indexOf("await db.batch(batchStatements)");
   const calendarDelivery = crmRoute.indexOf("await syncCreatedAppointmentToConnectedCalendars");
-  assert.ok(photoDelivery > 0 && photoDelivery < calendarDelivery, "photo-request delivery must finish before calendar network sync");
-  assert.ok(invoiceDelivery > 0 && invoiceDelivery < calendarDelivery, "invoice delivery must finish before calendar network sync");
+  assert.ok(creationBatch > 0 && creationBatch < calendarDelivery, "job and appointment must commit before calendar network sync");
+  assert.doesNotMatch(crmRoute, /sendPhotoRequestDelivery|sendQuickInvoiceDelivery/);
   assert.match(calendarSync, /provider IN \('google_calendar', 'microsoft_calendar'\) AND status = 'connected'/);
   assert.match(calendarSync, /a\.firebase_uid = \? AND a\.id = \? AND a\.status = 'scheduled'/);
   assert.match(calendarSync, /syncCalendarConnections\(ownerUid, connections\.results, \[appointment\]\)/);

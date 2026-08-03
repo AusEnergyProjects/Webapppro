@@ -62,10 +62,17 @@ function singleOrSelected<T extends string>(
 export function TradeComplianceIntake({
   user,
   workOrderId,
+  initialIntent,
   onChanged,
 }: {
   user: User;
   workOrderId: string;
+  initialIntent?: {
+    programCode: string;
+    activityKey: string;
+    registryActivityCode: string;
+    activityTitle: string;
+  };
   onChanged: () => Promise<void>;
 }) {
   const [activities, setActivities] = useState<ComplianceActivity[]>([]);
@@ -151,9 +158,29 @@ export function TradeComplianceIntake({
       setActivities(nextActivities);
       setContext(nextContext);
       setReady(nextActivities.length > 0);
+      const plannedActivity = initialIntent
+        ? nextActivities.find((item) =>
+          item.programCode === initialIntent.programCode
+          && (
+            initialIntent.registryActivityCode
+              ? item.registryActivityCode === initialIntent.registryActivityCode
+              : item.activityKey === initialIntent.activityKey
+          ))
+        : undefined;
+      if (plannedActivity) {
+        setProgramId(plannedActivity.programId);
+        setActivityKey(plannedActivity.activityKey);
+        setProductCategory("");
+        setScenario("");
+        setActivityVersionId("");
+      }
       setMessage(nextActivities.length
-        ? "Choose the exact government activity for the accepted work."
-        : "No governed published activity applies to this job type, state and planned installation date.");
+        ? plannedActivity
+          ? `${initialIntent?.programCode} ${initialIntent?.registryActivityCode || initialIntent?.activityKey} was planned when the job was created. Confirm the exact governed product, scenario and source version.`
+          : "Choose the exact government activity for the accepted work."
+        : initialIntent
+          ? `${initialIntent.programCode} ${initialIntent.registryActivityCode || initialIntent.activityKey} is planned, but Creditex has not published a matching governed activity and evidence policy for this job yet.`
+          : "No governed published activity applies to this job type, state and planned installation date.");
     } catch (error) {
       setActivities([]);
       setReady(false);
@@ -165,7 +192,7 @@ export function TradeComplianceIntake({
     } finally {
       setLoading(false);
     }
-  }, [user, workOrderId]);
+  }, [initialIntent, user, workOrderId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -307,7 +334,7 @@ export function TradeComplianceIntake({
     <header>
       <div>
         <span>Accepted quote compliance</span>
-        <h4>Link the government activity</h4>
+        <h4>{initialIntent ? "Confirm the planned activity" : "Link the government activity"}</h4>
       </div>
       <strong>{loading ? "Checking..." : ready ? "Ready to link" : "Not ready"}</strong>
     </header>

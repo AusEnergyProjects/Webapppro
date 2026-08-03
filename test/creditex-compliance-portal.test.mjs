@@ -32,6 +32,19 @@ const tradeComplianceIntake = read(
   "../src/components/TradeComplianceIntake.tsx",
 );
 const tradeComplianceRoute = read("../src/app/api/trade-compliance/route.ts");
+const tradeCrmRoute = read("../src/app/api/trade-crm/route.ts");
+const tradeComplianceIntent = read(
+  "../src/lib/trade-compliance-intent.ts",
+);
+const plannedIntakeQueue = read(
+  "../src/components/CreditexPlannedIntakeQueue.tsx",
+);
+const plannedJobIntentRoute = read(
+  "../src/app/api/creditex/job-intents/route.ts",
+);
+const plannedJobAuditRoute = read(
+  "../src/app/api/creditex/job-intents/[intentId]/route.ts",
+);
 const sessionRoute = read("../src/app/api/creditex/session/route.ts");
 const caseRoute = read("../src/app/api/creditex/cases/route.ts");
 const activityRoute = read("../src/app/api/creditex/activities/route.ts");
@@ -41,7 +54,7 @@ const evidencePolicyRoute = read(
 const evidenceRoute = read("../src/app/api/creditex/evidence/[id]/route.ts");
 const schemaGuards = read("../src/lib/creditex-schema-guards.ts");
 const routeSource =
-  `${sessionRoute}\n${caseRoute}\n${activityRoute}\n${evidencePolicyRoute}`;
+  `${sessionRoute}\n${caseRoute}\n${activityRoute}\n${evidencePolicyRoute}\n${plannedJobIntentRoute}\n${plannedJobAuditRoute}`;
 const surfaceSource =
   `${page}\n${portal}\n${evidenceGovernance}\n${officialSourceWorkbench}\n${routeSource}`;
 
@@ -225,6 +238,8 @@ test("every Creditex endpoint enforces same-origin no-store verified membership 
     caseRoute,
     activityRoute,
     evidencePolicyRoute,
+    plannedJobIntentRoute,
+    plannedJobAuditRoute,
   ]) {
     assert.match(route, /if \(!sameOrigin\(request\)\)/);
     assert.match(route, /requireComplianceAccess\(request/);
@@ -235,6 +250,168 @@ test("every Creditex endpoint enforces same-origin no-store verified membership 
   assert.match(caseRoute, /"admin", "case_manager", "reviewer", "auditor"/);
   assert.match(activityRoute, /allowedRoles: \["admin"\]/);
   assert.match(evidencePolicyRoute, /allowedRoles: \["admin"\]/);
+});
+
+test("planned intake exposes private job context only to the exact Creditex organisation", () => {
+  assert.match(
+    tradeComplianceIntent,
+    /CREDITEX_PARTNER_ORGANISATION_CODE = "CREDITEX-AU"/,
+  );
+  for (const contract of [
+    /requireComplianceAccess\(request, \{\}, database\)/,
+    /access\.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE/,
+    /"CREDITEX_PARTNER_REQUIRED",\s*403/,
+    /WHERE intent\.compliance_organisation_id = \?/,
+    /queueBindings\(\s*access\.organisationId,\s*status,/,
+  ]) assert.match(plannedJobIntentRoute, contract);
+  assert.doesNotMatch(
+    plannedJobIntentRoute,
+    /export async function (POST|PUT|PATCH|DELETE)/,
+  );
+  assert.ok(
+    plannedJobIntentRoute.indexOf(
+      "access.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE",
+    ) < plannedJobIntentRoute.indexOf("database.prepare(`SELECT"),
+    "The exact Creditex organisation gate must run before private queue data is queried.",
+  );
+  for (const privateJoin of [
+    /LEFT JOIN trade_crm_job_details details[\s\S]*details\.firebase_uid = work\.firebase_uid[\s\S]*details\.customer_source = 'trade_owned'/,
+    /LEFT JOIN trade_crm_customers customer[\s\S]*customer\.firebase_uid = work\.firebase_uid/,
+    /LEFT JOIN trade_crm_service_sites site[\s\S]*site\.firebase_uid = work\.firebase_uid[\s\S]*site\.customer_id = customer\.id/,
+  ]) assert.match(plannedJobIntentRoute, privateJoin);
+  assert.doesNotMatch(
+    plannedJobIntentRoute,
+    /(?:work|customer|site)\.record_status = 'active'/,
+  );
+  assert.match(plannedJobIntentRoute, /const PAGE_SIZE = 75/);
+  assert.match(plannedJobIntentRoute, /count\(\*\) total/);
+  assert.match(plannedJobIntentRoute, /totalPages/);
+  assert.match(plannedJobIntentRoute, /value === "superseded"/);
+
+  const projection = plannedJobIntentRoute.slice(
+    plannedJobIntentRoute.indexOf("items: rows.results.map"),
+    plannedJobIntentRoute.indexOf("} catch (error)"),
+  );
+  for (const field of [
+    "id",
+    "jobId",
+    "jobNumber",
+    "jobTitle",
+    "jobStage",
+    "jobPriority",
+    "workRecordStatus",
+    "jobDetailRecordStatus",
+    "scheduledStart",
+    "scheduledEnd",
+    "assigneeLabel",
+    "pipelineStage",
+    "buildingType",
+    "jobDescription",
+    "nextAction",
+    "jobTags",
+    "estimatedValueCents",
+    "quotedValueCents",
+    "invoicedValueCents",
+    "paidValueCents",
+    "quoteStatus",
+    "invoiceStatus",
+    "installerBusiness",
+    "customerNumber",
+    "customerType",
+    "customerName",
+    "businessNumber",
+    "customerEmail",
+    "customerPhone",
+    "customerTags",
+    "customerPrivateNotes",
+    "customerRecordStatus",
+    "siteLabel",
+    "serviceAddress",
+    "accessInstructions",
+    "parkingInstructions",
+    "hazardNotes",
+    "siteRecordStatus",
+    "planningCurrent",
+    "siteJurisdiction",
+    "plannedStart",
+    "programCode",
+    "claimOutputCode",
+    "claimOutputLabel",
+    "registryActivityCode",
+    "activityKey",
+    "activityTitle",
+    "serviceCategory",
+    "catalogueReviewedOn",
+    "status",
+    "complianceCaseId",
+    "updatedAt",
+  ]) assert.match(projection, new RegExp(`\\b${field}\\b`));
+  assert.doesNotMatch(
+    plannedJobIntentRoute,
+    /trade_crm_job_media|object_key|firebase_id_token|refresh_token|password_hash|session_cookie/i,
+  );
+  for (const contract of [
+    /Creditex can inspect every assigned installer job, customer, service site and retained workflow record from planning onward/,
+    /Open full audit workspace/,
+    /All retained records/,
+    /Superseded planning history/,
+    /requestSequence/,
+    /aria-expanded=\{expandedId === item\.id\}/,
+    /item\.customerName/,
+    /item\.customerPhone, item\.customerEmail/,
+    /item\.serviceAddress/,
+    /item\.customerPrivateNotes/,
+    /item\.accessInstructions/,
+    /item\.parkingInstructions/,
+    /item\.hazardNotes/,
+    /item\.estimatedValueCents/,
+    /item\.quotedValueCents/,
+    /item\.invoicedValueCents/,
+    /item\.paidValueCents/,
+    /Re-plan required/,
+    /Planning snapshot:/,
+  ]) assert.match(plannedIntakeQueue, contract);
+
+  for (const contract of [
+    /requireComplianceAccess\(request, \{\}, database\)/,
+    /access\.organisationCode !== CREDITEX_PARTNER_ORGANISATION_CODE/,
+    /WHERE id = \? AND compliance_organisation_id = \?/,
+    /AND partner_type = 'installer'[\s\S]*AND source_type = 'internal'/,
+    /AND customer_source = 'trade_owned'/,
+    /WHERE id = \? AND firebase_uid = \? AND customer_id = \?/,
+    /const enquiryIdsSql = `SELECT id FROM trade_crm_enquiries[\s\S]*AND id = \?[\s\S]*AND customer_id = \?[\s\S]*AND service_site_id = \?`/,
+    /CREDITEX_JOB_GRAPH_INCOMPLETE/,
+    /CREDITEX_JOB_GRAPH_MISMATCH/,
+    /trade_crm_enquiry_messages/,
+    /trade_work_order_tasks/,
+    /trade_crm_appointments/,
+    /trade_crm_job_notes/,
+    /trade_crm_job_media/,
+    /trade_crm_quote_versions/,
+    /trade_crm_quick_invoice_revisions/,
+    /trade_installed_assets/,
+    /compliance_case_evidence/,
+    /PRIVATE_SERVER_FIELDS/,
+    /PRIVATE_GROUP_FIELDS/,
+    /privateServerField/,
+    /"encrypted_token"/,
+    /"object_key"/,
+    /"idempotency_key"/,
+    /field\.endsWith\("_token"\)/,
+    /field\.endsWith\("_uid"\)/,
+    /photoRequestDeliveries: new Set\(\["provider_message_id", "last_error"\]\)/,
+    /accountingDocuments: new Set\(\[/,
+    /'job\.private_details_viewed'/,
+    /INSERT INTO compliance_audit_events/,
+  ]) assert.match(plannedJobAuditRoute, contract);
+  assert.doesNotMatch(
+    plannedJobAuditRoute,
+    /customer_id = \?[\s\S]{0,100}\(\? = '' OR service_site_id = \?\)/,
+  );
+  assert.match(
+    plannedJobAuditRoute,
+    /Object\.entries\(row\)\.filter\(\(\[field\]\) => !privateServerField\(field, groupKey\)\)/,
+  );
 });
 
 test("case queue is read-only and returns only the approved privacy-minimised projection", () => {
@@ -595,13 +772,75 @@ test("accepted-job installer intake uses governed dropdowns and binds the exact 
     /accepted quote scope and exact government source/,
   ]) assert.match(tradeComplianceIntake, contract);
   assert.doesNotMatch(tradeNewJobForm, /complianceActivityVersionId/);
-  assert.match(tradeNewJobForm, /after the customer accepts the quote/);
+  assert.match(
+    tradeNewJobForm,
+    /After quote acceptance, TLink will recheck the site, installation date, exact published government source and Creditex evidence policy/,
+  );
   assert.match(tradeComplianceRoute, /programId: activity\.programId/);
   assert.match(tradeComplianceRoute, /ensureAcceptedCommercialHandoff/);
   assert.match(tradeComplianceRoute, /acceptedScopeSha256/);
   assert.doesNotMatch(
     `${tradeNewJobForm}\n${tradeComplianceIntake}`,
     /6\(23\)|synthetic/i,
+  );
+});
+
+test("planned activity stays non-regulated until an accepted quote promotes the same job", () => {
+  const createJobStart = tradeCrmRoute.indexOf(
+    'if (action === "create_job" || action === "create_scheduled_job")',
+  );
+  const createJobEnd = tradeCrmRoute.indexOf(
+    "const workOrderId = cleanAdminText(body.workOrderId",
+    createJobStart,
+  );
+  assert.ok(createJobStart >= 0 && createJobEnd > createJobStart);
+  const createJobSource = tradeCrmRoute.slice(createJobStart, createJobEnd);
+
+  for (const contract of [
+    /resolveTradeComplianceIntent\(/,
+    /INSERT INTO trade_work_order_compliance_intents/,
+    /'planned', '', 1/,
+    /compliance_intent_planned/,
+    /No regulated case was created/,
+    /complianceIntentPlanned: Boolean\(complianceIntent\)/,
+  ]) assert.match(createJobSource, contract);
+  assert.doesNotMatch(
+    createJobSource,
+    /INSERT INTO compliance_cases|INSERT INTO compliance_case_evidence|appendLiveComplianceCaseStatements/,
+  );
+  assert.match(
+    tradeComplianceIntent,
+    /governance:\s*\{[\s\S]*state: "setup_required"[\s\S]*accepted quote and evidence policy before Creditex intake opens/,
+  );
+  assert.match(
+    tradeNewJobForm,
+    /regulated case and exact evidence form remain blocked until the accepted quote/,
+  );
+
+  const compliancePost = tradeComplianceRoute.slice(
+    tradeComplianceRoute.indexOf("export async function POST"),
+  );
+  const acceptedHandoff = compliancePost.indexOf(
+    "ensureAcceptedCommercialHandoff(",
+  );
+  const createRegulatedCase = compliancePost.indexOf(
+    "appendLiveComplianceCaseStatements(",
+  );
+  assert.ok(
+    acceptedHandoff >= 0 && createRegulatedCase > acceptedHandoff,
+    "The accepted commercial handoff must be proven before case creation.",
+  );
+  assert.match(
+    compliancePost,
+    /if \(!handoff\)[\s\S]*"ACCEPTED_HANDOFF_REQUIRED"[\s\S]*customer must accept the quote/,
+  );
+  assert.match(
+    compliancePost,
+    /acceptedQuoteVersionId: String\(handoff\.quote_version_id\)[\s\S]*acceptedScopeSha256/,
+  );
+  assert.match(
+    compliancePost,
+    /UPDATE trade_work_order_compliance_intents[\s\S]*SET status = 'case_linked', compliance_case_id = \?/,
   );
 });
 

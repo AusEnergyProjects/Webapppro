@@ -12,6 +12,9 @@ import {
   ensureAcceptedCommercialHandoff,
 } from "@/lib/trade-commercial-handoff-server";
 import {
+  CREDITEX_PARTNER_ORGANISATION_CODE,
+} from "@/lib/trade-compliance-intent";
+import {
   requireVerifiedTradeAccess,
   TradeAccessError,
 } from "@/lib/trade-access-server";
@@ -34,6 +37,11 @@ type JobComplianceContext = {
   activeCaseId: string;
   activeCaseNumber: string;
   activeActivityVersionId: string;
+};
+
+type ComplianceOrganisationRef = {
+  id: string;
+  code: string;
 };
 
 function errorResponse(error: unknown) {
@@ -87,6 +95,28 @@ function requiredInput(
   return result;
 }
 
+async function activeCreditexOrganisation(
+  database: D1Database,
+): Promise<ComplianceOrganisationRef> {
+  const row = await database.prepare(`SELECT id, organisation_code
+    FROM compliance_organisations
+    WHERE organisation_code = ? AND status = 'active'
+    LIMIT 1`)
+    .bind(CREDITEX_PARTNER_ORGANISATION_CODE)
+    .first<Row>();
+  if (!row?.id || row.organisation_code !== CREDITEX_PARTNER_ORGANISATION_CODE) {
+    throw new ComplianceDomainError(
+      "CREDITEX_PARTNER_UNAVAILABLE",
+      503,
+      "Creditex compliance intake is temporarily unavailable.",
+    );
+  }
+  return {
+    id: String(row.id),
+    code: CREDITEX_PARTNER_ORGANISATION_CODE,
+  };
+}
+
 async function sha256Hex(value: string) {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -101,6 +131,7 @@ async function ownedJobContext(
   database: D1Database,
   installerUid: string,
   workOrderId: string,
+  complianceOrganisationId: string,
 ): Promise<JobComplianceContext> {
   const row = await database.prepare(`SELECT
       work.id,
@@ -134,13 +165,14 @@ async function ownedJobContext(
     LEFT JOIN compliance_cases active_case
       ON active_case.work_order_id = work.id
       AND active_case.installer_uid = work.firebase_uid
+      AND active_case.organisation_id = ?
       AND active_case.status <> 'closed'
     WHERE work.id = ? AND work.firebase_uid = ?
       AND work.partner_type = 'installer'
       AND work.record_status = 'active'
     ORDER BY active_case.created_at DESC
     LIMIT 1`)
-    .bind(workOrderId, installerUid)
+    .bind(complianceOrganisationId, workOrderId, installerUid)
     .first<Row>();
   if (!row) {
     throw new ComplianceDomainError(
@@ -244,6 +276,7 @@ export async function GET(request: Request) {
     });
     const database = getD1();
     await ensureCreditexSchemaGuards(database);
+    const creditexOrganisation = await activeCreditexOrganisation(database);
     const url = new URL(request.url);
     const workOrderId = requiredInput(
       url.searchParams.get("workOrderId"),
@@ -253,6 +286,7 @@ export async function GET(request: Request) {
       database,
       access.identity.uid,
       workOrderId,
+      creditexOrganisation.id,
     );
     if (context.activeCaseId) {
       return adminJson({
@@ -290,6 +324,7 @@ export async function GET(request: Request) {
     const page = await listInstallerSelectableActivities(database, {
       serviceCategory: context.serviceCategory,
       jurisdiction: context.jurisdiction,
+      organisationCode: creditexOrganisation.code,
       onDate: context.activityDate,
       limit: ACTIVITY_PAGE_SIZE + 1,
       afterActivityId,
@@ -317,15 +352,19 @@ export async function GET(request: Request) {
 
 async function activeCase(
   database: D1Database,
+  complianceOrganisationId: string,
   installerUid: string,
   workOrderId: string,
 ) {
   return database.prepare(`SELECT id, case_number, activity_version_id
     FROM compliance_cases
-    WHERE installer_uid = ? AND work_order_id = ? AND status <> 'closed'
+    WHERE organisation_id = ?
+      AND installer_uid = ?
+      AND work_order_id = ?
+      AND status <> 'closed'
     ORDER BY created_at DESC
     LIMIT 1`)
-    .bind(installerUid, workOrderId)
+    .bind(complianceOrganisationId, installerUid, workOrderId)
     .first<Row>();
 }
 
@@ -402,13 +441,16 @@ export async function POST(request: Request) {
     );
     const database = getD1();
     await ensureCreditexSchemaGuards(database);
+    const creditexOrganisation = await activeCreditexOrganisation(database);
     const context = await ownedJobContext(
       database,
       access.identity.uid,
       workOrderId,
+      creditexOrganisation.id,
     );
     const currentCase = await activeCase(
       database,
+      creditexOrganisation.id,
       access.identity.uid,
       workOrderId,
     );
@@ -454,6 +496,7 @@ export async function POST(request: Request) {
         installerUid: access.identity.uid,
         actorType: "installer",
         actorUid: access.identity.uid,
+        expectedOrganisation: creditexOrganisation,
         caseId: `compliance-case-${idempotencyDigest}`,
         eventId: `compliance-case-event-${idempotencyDigest}`,
         createdAt: now,
@@ -469,11 +512,80 @@ export async function POST(request: Request) {
         `${prepared.caseNumber} opened from the accepted quote handoff.`,
         now,
       ));
+    const caseProgramCode = String(
+      prepared.activitySnapshot.programCode || "",
+    );
+    const caseRegistryActivityCode = String(
+      prepared.activitySnapshot.registryActivityCode || "",
+    );
+    const caseActivityKey = String(
+      prepared.activitySnapshot.activityKey || "",
+    );
+    statements.push(
+      database.prepare(`UPDATE trade_work_order_compliance_intents
+        SET status = 'case_linked', compliance_case_id = ?, updated_at = ?
+        WHERE compliance_organisation_id = ?
+          AND work_order_id = ? AND installer_uid = ? AND status = 'planned'
+          AND program_code = ?
+          AND (
+            (registry_activity_code <> '' AND registry_activity_code = ?)
+            OR (
+              registry_activity_code = ''
+              AND json_extract(intent_snapshot, '$.activity.activityKey') = ?
+            )
+          )
+          AND service_category = ?
+          AND site_jurisdiction = ?
+          AND substr(planned_start, 1, 10) = ?`)
+        .bind(
+          prepared.caseId,
+          now,
+          prepared.organisationId,
+          workOrderId,
+          access.identity.uid,
+          caseProgramCode,
+          caseRegistryActivityCode,
+          caseActivityKey,
+          context.serviceCategory,
+          context.jurisdiction,
+          context.activityDate,
+        ),
+      database.prepare(`UPDATE trade_work_order_compliance_intents
+        SET status = 'superseded', compliance_case_id = '', updated_at = ?
+        WHERE compliance_organisation_id = ?
+          AND work_order_id = ? AND installer_uid = ? AND status = 'planned'
+          AND NOT (
+            program_code = ?
+            AND (
+              (registry_activity_code <> '' AND registry_activity_code = ?)
+              OR (
+                registry_activity_code = ''
+                AND json_extract(intent_snapshot, '$.activity.activityKey') = ?
+              )
+            )
+            AND service_category = ?
+            AND site_jurisdiction = ?
+            AND substr(planned_start, 1, 10) = ?
+          )`)
+        .bind(
+          now,
+          prepared.organisationId,
+          workOrderId,
+          access.identity.uid,
+          caseProgramCode,
+          caseRegistryActivityCode,
+          caseActivityKey,
+          context.serviceCategory,
+          context.jurisdiction,
+          context.activityDate,
+        ),
+    );
     try {
       await database.batch(statements);
     } catch (error) {
       const concurrentCase = await activeCase(
         database,
+        creditexOrganisation.id,
         access.identity.uid,
         workOrderId,
       );

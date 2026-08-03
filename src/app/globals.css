@@ -4938,7 +4938,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-address-options button { background: #fff; border: 0; border-radius: 7px; color: var(--color-aea-ink); cursor: pointer; padding: 10px; text-align: left; }
 .crm-address-options button[aria-selected="true"], .crm-address-options button:hover { background: #edf8f3; }
 .crm-address-fields label:first-child { position: relative; }
-.crm-wizard-steps { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); list-style: none; margin: 0 0 22px; padding: 0; }
+.crm-wizard-steps { display: grid; gap: 8px; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; margin: 0 0 22px; padding: 0; }
 .crm-wizard-steps li { align-items: center; border-bottom: 3px solid #dbe7e2; color: #71827d; display: flex; font-size: .6rem; font-weight: 850; gap: 7px; padding: 7px 4px 10px; }
 .crm-wizard-steps li span { align-items: center; background: #edf3f0; border-radius: 999px; display: flex; height: 22px; justify-content: center; width: 22px; }
 .crm-wizard-steps li.active { border-bottom-color: #0caf7d; color: #075e45; }
@@ -4952,6 +4952,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-wizard-actions { align-items: center; display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
 .crm-wizard-actions > button:not(.btn) { background: #fff; border: 1px solid #bcd2ca; border-radius: 9px; color: #17684f; cursor: pointer; font-size: .65rem; font-weight: 850; min-height: 42px; padding: 9px 16px; }
 .crm-wizard-message { background: #fff6df; border: 1px solid #e8cc88; border-radius: 9px; color: #694d0d; font-size: .63rem; margin: 0 0 14px; padding: 10px 12px; }
+.crm-job-wizard .crm-create-panel > .crm-form-grid { border-top: 1px solid var(--color-aea-line); padding: 16px; }
 .crm-duplicate-match { background: #eef8f4; border: 1px solid #9fd2bf; border-left: 4px solid #0caf7d; border-radius: 10px; display: grid; gap: 8px; margin-bottom: 14px; padding: 13px; }
 .crm-duplicate-match > strong, .crm-duplicate-match > p { margin: 0; }
 .crm-duplicate-match > p { color: var(--color-aea-muted); font-size: .62rem; }
@@ -5078,7 +5079,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-invoice-preview-dialog > p { background: #edf8f3; color: #536f67; font-size: .57rem; line-height: 1.45; margin: 0 16px 10px; padding: 10px 12px; }
 @keyframes crm-wizard-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 680px) {
-  .crm-wizard-steps { grid-template-columns: repeat(6, 1fr); }
+  .crm-wizard-steps { grid-template-columns: repeat(5, 1fr); }
   .crm-wizard-steps li { font-size: 0; justify-content: center; }
   .crm-wizard-actions { align-items: stretch; flex-direction: column-reverse; }
   .crm-wizard-actions > button { width: 100%; }

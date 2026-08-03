@@ -3596,6 +3596,10 @@ export type CreateLiveComplianceCaseInput = {
   installerUid: string;
   actorType?: ComplianceActorType;
   actorUid: string;
+  expectedOrganisation?: {
+    id: string;
+    code: string;
+  };
   caseId?: string;
   caseNumber?: string;
   eventId?: string;
@@ -3707,6 +3711,30 @@ export async function appendLiveComplianceCaseStatements(
     input.activityVersionId,
     activityDate,
   );
+  if (input.expectedOrganisation) {
+    const expectedOrganisationId = requiredText(
+      input.expectedOrganisation.id,
+      180,
+      "EXPECTED_ORGANISATION_REQUIRED",
+      "Expected compliance organisation",
+    );
+    const expectedOrganisationCode = requiredText(
+      input.expectedOrganisation.code,
+      80,
+      "EXPECTED_ORGANISATION_REQUIRED",
+      "Expected compliance organisation code",
+    );
+    if (
+      activity.organisationId !== expectedOrganisationId
+      || activity.organisationCode !== expectedOrganisationCode
+    ) {
+      throw new ComplianceDomainError(
+        "COMPLIANCE_ORGANISATION_MISMATCH",
+        409,
+        "The selected compliance activity does not belong to the configured compliance partner.",
+      );
+    }
+  }
   const evidencePolicyRow = await database.prepare(
     `SELECT evidence_policy.id, evidence_policy.version,
         evidence_policy.official_source_title,

@@ -1,5 +1,86 @@
 # Next task handover
 
+Status: `TRADE-CREDITEX-JOB-HANDOFF-40` in progress
+
+Prepared: 3 August 2026
+
+Milestone ID: `TRADE-CREDITEX-JOB-HANDOFF-40`
+
+## Active milestone contract
+
+Outcome: an installer creates one scheduled TLink job, optionally selects a
+controlled government program and activity once, and carries that exact
+pre-case intent through accepted-quote linking, on-site governed evidence
+questions and the Creditex audit workflow without re-entering the same fields.
+
+Owning workflow:
+
+- guided installer job creation in `TradeNewJobForm` and `trade-crm`;
+- the durable installer-to-Creditex pre-case intent contract;
+- accepted-quote conversion in `trade-compliance`;
+- installer job overview and Creditex planned-intake visibility;
+- focused schema, contract, route and responsive regressions.
+
+In scope:
+
+- replace the evidence-and-invoice-heavy creation tail with a short
+  program/activity and appointment flow;
+- validate controlled program/activity identifiers, jurisdiction and service
+  category server-side and retain an immutable catalogue snapshot;
+- keep a non-program job path;
+- keep regulated case creation behind an accepted commercial handoff and an
+  independently governed published activity and evidence policy;
+- preselect the governed activity from the saved intent when an exact current
+  match exists;
+- make every assigned planned job visible to the authorised Creditex
+  organisation with its customer, service-site, installer, commercial,
+  appointment and retained workflow details, while withholding authentication
+  secrets and storage credentials;
+- preserve the existing AEA Field governed-question and original-evidence
+  custody path after the case is opened.
+
+Out of scope:
+
+- activating a government rule or evidence policy;
+- claiming that a discovery catalogue template is an approved compliance rule;
+- creating a certificate, regulator submission, trade or settlement;
+- creating production test customers, jobs or compliance records;
+- changing the customer enquiry, quoting, invoicing or external registry
+  systems beyond the fields needed for this handoff.
+
+Acceptance criteria:
+
+- program and activity are controlled dropdowns, not free text;
+- the activity determines the TLink work category and the service-site
+  jurisdiction is validated;
+- an appointment can be created with the assignee and start time while optional
+  visit details stay progressively disclosed;
+- one atomic write creates the customer, site, job, appointment and optional
+  compliance intent;
+- Creditex can see its assigned planned intents and open the complete authorised
+  job audit workspace, while the installer sees the same program/activity on
+  the job;
+- accepted-quote case creation pins the exact governed version and marks the
+  intent linked;
+- no regulated action is enabled by a catalogue-only intent;
+- desktop and mobile layouts remain usable without document-level horizontal
+  overflow.
+
+Validation:
+
+- focused intent, migration, wizard, CRM, accepted-handoff, Creditex portal and
+  field-contract regressions;
+- type checking, warning-free lint, integration tests, full application tests,
+  migration replay, production build and Sites bundle audit;
+- signed-in installer and Creditex browser QA without creating production data.
+
+Stop condition: stop if program/activity identity cannot remain stable across
+the job and case, if an unauthorised organisation could see an intent, if the
+flow would bypass accepted quote or governed policy controls, or if completion
+would require production data or an external regulator submission.
+
+## Previous released milestone
+
 Status: `CREDITEX-GOVERNED-SOURCE-INTAKE-39` released and live
 
 Prepared: 3 August 2026

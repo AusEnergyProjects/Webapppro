@@ -63,7 +63,8 @@ test("direct customers have full addresses while global TLink job IDs are read o
   assert.match(crm, /name="addressLine1"/);
   assert.match(crm, /name="addressLine2"/);
   assert.match(newJob, /Assigned automatically/);
-  assert.match(crm, /This same ID is used by your team and TLink support/);
+  assert.match(newJob, /One private global reference is shown to your team, Creditex and TLink support/);
+  assert.doesNotMatch(newJob, /name="(?:workNumber|jobId)"/);
   assert.doesNotMatch(crm, /name="customerReference"/);
   assert.match(route, /nextTlinkJobNumber/);
   assert.match(numberer, /ON CONFLICT\(firebase_uid, counter_key\) DO UPDATE/);
@@ -278,7 +279,10 @@ test("My day exposes owner scoped local workload and direct action charts", () =
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,[\s\S]*appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,[\s\S]*invoiceSent, invoiceDeliveryError, calendarSynced, calendarFailed \}, 201\)/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: Boolean\(complianceIntent\),\s*calendarSynced, calendarFailed \}, 201\)/);
+  assert.match(crm, /type CreateJobResult = \{ ok\?: boolean; id\?: string; workNumber\?: string; customerId\?: string; serviceSiteId\?: string; complianceIntentPlanned\?: boolean; calendarSynced\?: number; calendarFailed\?: number;/);
+  assert.match(newJob, /Creditex receives a planning queue item now/);
+  assert.match(newJob, /The regulated case and exact evidence form remain blocked until the accepted quote and a published governed activity are revalidated/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
   assert.match(crm, /CustomerLookupSelect/);
   assert.match(crm, /Name, number, phone, suburb or postcode/);

@@ -109,6 +109,11 @@ test("unified inbox keeps protected marketplace records reference-only and requi
   assert.match(enquiryRoute, /new Set\(\["create_new", "use_existing"\]\)/);
   assert.match(enquiryRoute, /trade_crm_customer_contacts/);
   assert.match(enquiryRoute, /trade_crm_service_sites/);
+  assert.match(enquiryRoute, /requestedServiceSiteId = cleanAdminText\(body\.serviceSiteId/);
+  assert.match(enquiryRoute, /WHERE id = \? AND customer_id = \? AND firebase_uid = \? AND record_status = 'active'/);
+  assert.match(enquiryRoute, /else if \(!requestedServiceSiteSupplied\)/);
+  assert.match(enquiryInbox, /serviceSiteId: decision === "use_existing" \? existingServiceSiteId : ""/);
+  assert.match(enquiryInbox, /createNewSite: !result\.serviceSiteId/);
   assert.match(enquiryInbox, /Duplicate review/);
   assert.match(enquiryInbox, /Privacy boundary active/);
 });

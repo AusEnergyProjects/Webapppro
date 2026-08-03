@@ -304,6 +304,40 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
   index("trade_work_orders_source_idx").on(table.firebaseUid, table.sourceType, table.sourceReference),
 ]);
 
+export const tradeWorkOrderComplianceIntents = sqliteTable("trade_work_order_compliance_intents", {
+  id: text("id").primaryKey(),
+  workOrderId: text("work_order_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  complianceOrganisationId: text("compliance_organisation_id").notNull().default(""),
+  programTemplateId: text("program_template_id").notNull(),
+  activityTemplateId: text("activity_template_id").notNull(),
+  programCode: text("program_code").notNull(),
+  registryActivityCode: text("registry_activity_code").notNull().default(""),
+  serviceCategory: text("service_category").notNull(),
+  siteJurisdiction: text("site_jurisdiction").notNull(),
+  plannedStart: text("planned_start").notNull().default(""),
+  catalogueReviewedOn: text("catalogue_reviewed_on").notNull(),
+  intentSnapshot: text("intent_snapshot").notNull(),
+  intentSnapshotSha256: text("intent_snapshot_sha256").notNull(),
+  status: text("status").notNull().default("planned"),
+  complianceCaseId: text("compliance_case_id").notNull().default(""),
+  revision: integer("revision").notNull().default(1),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_compliance_intent_work_revision_idx").on(table.workOrderId, table.revision),
+  uniqueIndex("trade_compliance_intent_active_work_idx").on(table.workOrderId).where(sql`${table.status} = 'planned'`),
+  uniqueIndex("trade_compliance_intent_case_idx").on(table.complianceCaseId).where(sql`${table.complianceCaseId} <> ''`),
+  index("trade_compliance_intent_installer_status_idx").on(table.installerUid, table.status, table.updatedAt),
+  index("trade_compliance_intent_creditex_queue_idx").on(table.complianceOrganisationId, table.status, table.plannedStart, table.updatedAt),
+  check("trade_compliance_intent_identity_check", sql`trim(${table.workOrderId}) <> '' AND trim(${table.installerUid}) <> '' AND trim(${table.complianceOrganisationId}) <> '' AND trim(${table.programTemplateId}) <> '' AND trim(${table.activityTemplateId}) <> '' AND trim(${table.programCode}) <> '' AND trim(${table.serviceCategory}) <> '' AND ${table.siteJurisdiction} IN ('ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA') AND ${table.revision} > 0`),
+  check("trade_compliance_intent_status_check", sql`${table.status} IN ('planned', 'case_linked', 'superseded')`),
+  check("trade_compliance_intent_case_check", sql`(${table.status} = 'case_linked' AND trim(${table.complianceCaseId}) <> '') OR (${table.status} <> 'case_linked' AND ${table.complianceCaseId} = '')`),
+  check("trade_compliance_intent_snapshot_check", sql`json_valid(${table.intentSnapshot}) AND json_extract(${table.intentSnapshot}, '$.contract') = 'tlink-creditex-job-intent-v1' AND json_extract(${table.intentSnapshot}, '$.program.templateId') = ${table.programTemplateId} AND json_extract(${table.intentSnapshot}, '$.activity.templateId') = ${table.activityTemplateId} AND json_extract(${table.intentSnapshot}, '$.program.programCode') = ${table.programCode} AND json_extract(${table.intentSnapshot}, '$.activity.serviceCategory') = ${table.serviceCategory} AND json_extract(${table.intentSnapshot}, '$.siteJurisdiction') = ${table.siteJurisdiction} AND json_extract(${table.intentSnapshot}, '$.catalogueReviewedOn') = ${table.catalogueReviewedOn} AND length(${table.intentSnapshotSha256}) = 64 AND lower(${table.intentSnapshotSha256}) NOT GLOB '*[^0-9a-f]*' AND ${table.intentSnapshotSha256} = lower(${table.intentSnapshotSha256})`),
+  check("trade_compliance_intent_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
 export const tradeTeamMembers = sqliteTable("trade_team_members", {
   id: text("id").primaryKey(),
   ownerUid: text("owner_uid").notNull(),
@@ -493,6 +527,21 @@ export const tradeCrmCounters = sqliteTable("trade_crm_counters", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_counters_owner_key_idx").on(table.firebaseUid, table.counterKey),
+]);
+
+export const tradeCrmWriteGuards = sqliteTable("trade_crm_write_guards", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  operationId: text("operation_id").notNull(),
+  stepNumber: integer("step_number").notNull(),
+  verified: integer("verified").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_write_guards_operation_step_idx").on(table.operationId, table.stepNumber),
+  index("trade_crm_write_guards_owner_time_idx").on(table.firebaseUid, table.createdAt, table.id),
+  check("trade_crm_write_guard_identity_check", sql`trim(${table.firebaseUid}) <> '' AND trim(${table.operationId}) <> '' AND ${table.stepNumber} > 0`),
+  check("trade_crm_write_guard_verified_check", sql`${table.verified} = 1`),
+  check("trade_crm_write_guard_time_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
 ]);
 
 export const tradeWorkOrderTasks = sqliteTable("trade_work_order_tasks", {

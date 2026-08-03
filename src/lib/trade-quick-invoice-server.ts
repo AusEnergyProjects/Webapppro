@@ -62,6 +62,21 @@ export function quickInvoiceNumber(workNumber: string) {
   return `INV-${clean(workNumber, 40)}`;
 }
 
+export const QUICK_INVOICE_SUCCESS_UPDATE_SQL = `UPDATE trade_crm_quick_invoices
+  SET status = 'issued',
+    delivery_status = 'sent',
+    delivery_provider = ?,
+    provider_message_id = ?,
+    consent_confirmed_at = CASE
+      WHEN consent_confirmed_at = '' THEN ?
+      ELSE consent_confirmed_at
+    END,
+    attempts = attempts + 1,
+    last_error = '',
+    sent_at = ?,
+    updated_at = ?
+  WHERE id = ? AND firebase_uid = ?`;
+
 function money(cents: number) {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 }
@@ -120,9 +135,15 @@ export async function sendQuickInvoiceDelivery(input: { invoiceId: string; owner
       messageType: "quick_invoice",
     });
     await db.batch([
-      db.prepare(`UPDATE trade_crm_quick_invoices SET status = 'issued', delivery_status = 'sent', delivery_provider = ?,
-        provider_message_id = ?, attempts = attempts + 1, last_error = '', sent_at = ?, updated_at = ?
-        WHERE id = ? AND firebase_uid = ?`).bind(result.provider, result.providerMessageId, now, now, input.invoiceId, input.ownerUid),
+      db.prepare(QUICK_INVOICE_SUCCESS_UPDATE_SQL).bind(
+        result.provider,
+        result.providerMessageId,
+        now,
+        now,
+        now,
+        input.invoiceId,
+        input.ownerUid,
+      ),
       db.prepare(`UPDATE trade_crm_job_details SET invoice_status = 'issued', invoiced_value_cents = ?, payment_due_at = ?, updated_at = ?
         WHERE work_order_id = ? AND firebase_uid = ?`).bind(row.total_cents, row.due_at, now, row.work_order_id, input.ownerUid),
       db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)

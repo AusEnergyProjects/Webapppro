@@ -10,12 +10,14 @@ import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 import { ensureOwnerTeamMember } from "@/lib/trade-team-server";
-import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
-import { sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
-import { quickInvoiceNumber, resolveQuickInvoiceDraft, sendQuickInvoiceDelivery, type QuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
-import { defaultPhotoRequirements, hashPhotoRequestSecret, newPhotoRequestSecret, normalisePhotoRequirements, photoRequestExpiry } from "@/lib/trade-photo-requests";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
 import { ComplianceDomainError } from "@/lib/creditex-compliance-server";
+import {
+  CREDITEX_PARTNER_ORGANISATION_CODE,
+  resolveTradeComplianceIntent,
+  stableTradeComplianceIntentJson,
+  TradeComplianceIntentError,
+} from "@/lib/trade-compliance-intent";
 
 export const runtime = "edge";
 
@@ -95,6 +97,9 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeComplianceIntentError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, 409);
+  }
   if (error instanceof ComplianceDomainError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -130,6 +135,16 @@ function errorResponse(error: unknown) {
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
   if (code === "INVALID_CURSOR") return adminJson({ ok: false, error: "This CRM page link has expired. Start again from the first page." }, 400);
   return adminJson({ ok: false, error: "The private installer CRM request could not be completed." }, 500);
+}
+
+async function sha256Text(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return [...new Uint8Array(digest)]
+    .map((item) => item.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function addSummaryDays(date: string, days: number) {
@@ -224,7 +239,7 @@ function indexedJob(row: Record<string, unknown>) {
     quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
     paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
     invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
-    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [],
+    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [], complianceIntent: null,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -250,6 +265,35 @@ function indexedComplianceCase(row: Record<string, unknown>) {
     officialSourceVersion: String(snapshot.officialSourceVersion || ""),
     status: String(row.status),
     evidenceStatus: String(row.evidence_status),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function indexedComplianceIntent(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  const snapshot = storedObject(row.intent_snapshot);
+  const program = storedObject(snapshot.program);
+  const activity = storedObject(snapshot.activity);
+  const governance = storedObject(snapshot.governance);
+  return {
+    id: String(row.id),
+    status: String(row.status),
+    programTemplateId: String(row.program_template_id),
+    activityTemplateId: String(row.activity_template_id),
+    programCode: String(row.program_code),
+    programName: String(program.name || ""),
+    activityKey: String(activity.activityKey || ""),
+    registryActivityCode: String(row.registry_activity_code || ""),
+    activityTitle: String(activity.title || ""),
+    serviceCategory: String(row.service_category),
+    siteJurisdiction: String(row.site_jurisdiction),
+    plannedStart: String(row.planned_start || ""),
+    catalogueReviewedOn: String(row.catalogue_reviewed_on),
+    governanceState: String(governance.state || "setup_required"),
+    governanceMessage: String(governance.message || ""),
+    officialSourceUrl: String(program.officialSourceUrl || ""),
+    complianceCaseId: String(row.compliance_case_id || ""),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -494,7 +538,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     .bind(id, identity.uid).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   const customerId = String(row.crm_customer_id || "");
-  const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases] = await Promise.all([
+  const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases, complianceIntent] = await Promise.all([
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
@@ -517,6 +561,11 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     db.prepare(`SELECT id, case_number, activity_date, activity_snapshot, status, evidence_status, created_at, updated_at
       FROM compliance_cases WHERE work_order_id = ? AND installer_uid = ?
       ORDER BY created_at, id LIMIT 50`).bind(id, identity.uid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT * FROM trade_work_order_compliance_intents
+      WHERE work_order_id = ? AND installer_uid = ?
+      ORDER BY revision DESC, created_at DESC LIMIT 1`)
+      .bind(id, identity.uid)
+      .first<Record<string, unknown>>(),
   ]);
   const job = indexedJob(row);
   return { customer: customer ? indexedCustomer(customer) : null,
@@ -525,6 +574,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at, endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes })),
     notes: notes.results.map((item: Record<string, unknown>) => ({ id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status, createdAt: item.created_at, updatedAt: item.updated_at })),
     complianceCases: complianceCases.results.map(indexedComplianceCase),
+    complianceIntent: indexedComplianceIntent(complianceIntent),
   } };
 }
 
@@ -957,6 +1007,7 @@ export async function POST(request: Request) {
       const addressState = cleanAdminText(body.addressState, 10).toUpperCase();
       const postcode = cleanAdminText(body.postcode, 12);
       const intakeStatements: D1PreparedStatement[] = [];
+      let sourceEnquirySiteAdopted = false;
       if (createCustomer) {
         const customerCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_customers WHERE firebase_uid = ? AND record_status = 'active'")
           .bind(identity.uid).first<Record<string, unknown>>();
@@ -1010,11 +1061,96 @@ export async function POST(request: Request) {
         if (serviceSiteId && !createCustomer && serviceSiteMode !== "new") await ownedServiceSite(db, identity, serviceSiteId, customerId);
       }
       if (!customerId && serviceSiteId) throw new Error("SERVICE_SITE_NOT_FOUND");
+      const sourceEnquiryId = cleanAdminText(body.sourceEnquiryId, 180);
+      if (sourceEnquiryId) {
+        const enquiry = await db.prepare(`SELECT id, customer_id, service_site_id,
+            record_status
+          FROM trade_crm_enquiries
+          WHERE id = ? AND firebase_uid = ? AND protected_source = 0
+            AND record_status = 'active'`)
+          .bind(sourceEnquiryId, identity.uid)
+          .first<Record<string, unknown>>();
+        const enquiryCustomerId = String(enquiry?.customer_id || "");
+        const enquiryServiceSiteId = String(enquiry?.service_site_id || "");
+        sourceEnquirySiteAdopted = Boolean(
+          enquiry
+          && enquiryCustomerId === customerId
+          && !enquiryServiceSiteId
+          && !createCustomer
+          && serviceSiteMode === "new"
+          && serviceSiteId,
+        );
+        if (
+          !enquiry
+          || enquiryCustomerId !== customerId
+          || (
+            enquiryServiceSiteId !== serviceSiteId
+            && !sourceEnquirySiteAdopted
+          )
+        ) {
+          return adminJson({
+            ok: false,
+            error: "The converted enquiry no longer matches this customer and service site.",
+          }, 409);
+        }
+        if (sourceEnquirySiteAdopted) {
+          const adoptionOperationId = crypto.randomUUID();
+          intakeStatements.push(
+            db.prepare(`UPDATE trade_crm_enquiries
+              SET service_site_id = ?, updated_at = ?
+              WHERE id = ? AND firebase_uid = ? AND customer_id = ?
+                AND service_site_id = '' AND protected_source = 0
+                AND record_status = 'active'`)
+              .bind(
+                serviceSiteId,
+                now,
+                sourceEnquiryId,
+                identity.uid,
+                customerId,
+              ),
+            db.prepare(`INSERT INTO trade_crm_write_guards (
+                id, firebase_uid, operation_id, step_number, verified, created_at
+              ) VALUES (?, ?, ?, 1,
+                CASE WHEN changes() = 1 THEN 1 ELSE 0 END, ?)`)
+              .bind(
+                crypto.randomUUID(),
+                identity.uid,
+                adoptionOperationId,
+                now,
+              ),
+            db.prepare(`INSERT INTO trade_crm_enquiry_events (
+                id, enquiry_id, firebase_uid, event_type, summary, created_at
+              ) VALUES (?, ?, ?, 'service_site_attached',
+                'New service site attached during converted-enquiry job creation.',
+                ?)`)
+              .bind(
+                crypto.randomUUID(),
+                sourceEnquiryId,
+                identity.uid,
+                now,
+              ),
+          );
+        }
+      }
+      const serviceSite = serviceSiteId
+        ? createCustomer || serviceSiteMode === "new"
+          ? { suburb, address_state: addressState, postcode }
+          : await ownedServiceSite(db, identity, serviceSiteId, customerId)
+        : null;
+      const complianceIntent = resolveTradeComplianceIntent({
+        mode: body.complianceIntentMode,
+        programTemplateId: body.programTemplateId,
+        activityTemplateId: body.activityTemplateId,
+        siteJurisdiction: serviceSite?.address_state,
+        plannedStart: cleanAdminText(body.startsAt || body.scheduledStart, 40),
+      });
       const templateId = cleanAdminText(body.templateId, 180);
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
       if (templateId && !template) return adminJson({ ok: false, error: "Job template not found." }, 404);
-      const requestedCategory = cleanAdminText(body.serviceCategory, 60) || cleanAdminText(template?.service_category, 60);
+      const requestedCategory = complianceIntent?.activity.serviceCategory
+        || cleanAdminText(body.serviceCategory, 60)
+        || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
       const displayName = createCustomer
         ? (businessName || `${firstName} ${lastName}`.trim())
@@ -1042,15 +1178,6 @@ export async function POST(request: Request) {
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       let appointmentId = "";
       let appointmentTitle = "";
-      let photoRequestId = "";
-      let photoSecret = "";
-      let photoTokenHash = "";
-      let encryptedPhotoToken = "";
-      let photoRequirements = defaultPhotoRequirements(serviceCategory);
-      let quickInvoice: QuickInvoiceDraft | null = null;
-      let quickInvoiceId = "";
-      let quickInvoiceDueAt = "";
-      let quickInvoiceReference = "";
       if (guided) {
         if (!customerId || !serviceSiteId) return adminJson({ ok: false, error: "Attach a customer and service address before scheduling." }, 400);
         scheduledStart = dateValue(body.startsAt);
@@ -1061,38 +1188,31 @@ export async function POST(request: Request) {
         catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
         appointmentId = crypto.randomUUID();
         appointmentTitle = `${displayName} ${SERVICE_LABELS[serviceCategory]}`.trim();
-        try {
-          const rawRequirements = typeof body.evidenceRequirements === "string"
-            ? JSON.parse(body.evidenceRequirements) : body.evidenceRequirements;
-          photoRequirements = normalisePhotoRequirements(rawRequirements);
-        } catch { return adminJson({ ok: false, error: "Choose at least one evidence request." }, 400); }
-        if (body.deliveryConsent !== true && body.deliveryConsent !== "true" && body.deliveryConsent !== "on") {
-          return adminJson({ ok: false, error: "Confirm that the customer asked to receive this information request by email." }, 400);
-        }
-        const deliveryEmail = createCustomer ? email : String(existingCustomer?.email || "").toLowerCase();
-        if (!EMAIL_PATTERN.test(deliveryEmail)) return adminJson({ ok: false, error: "Add a valid customer email before requesting information." }, 400);
-        photoRequestId = crypto.randomUUID();
-        photoSecret = newPhotoRequestSecret();
-        photoTokenHash = await hashPhotoRequestSecret(photoSecret);
-        encryptedPhotoToken = await encryptProtectedPayload({ requestId: photoRequestId, secret: photoSecret, tokenIssue: 1 });
-        if (cleanAdminText(body.invoiceMode, 20) === "send") {
-          if (body.quickInvoiceConsent !== true && body.quickInvoiceConsent !== "true" && body.quickInvoiceConsent !== "on") {
-            return adminJson({ ok: false, error: "Confirm that the customer asked to receive this invoice by email." }, 400);
-          }
-          quickInvoice = await resolveQuickInvoiceDraft(identity.uid, body.quickInvoiceLines);
-          const dueDays = Number(body.quickInvoiceDueDays);
-          if (![0, 7, 14, 30].includes(dueDays)) return adminJson({ ok: false, error: "Choose a valid invoice due date." }, 400);
-          quickInvoiceId = crypto.randomUUID();
-          quickInvoiceReference = quickInvoiceNumber(workNumber);
-          quickInvoiceDueAt = new Date(Date.parse(now) + dueDays * 86_400_000).toISOString().slice(0, 10);
-        }
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
-      if (serviceSiteId) {
-        const site = createCustomer || serviceSiteMode === "new" ? { suburb, address_state: addressState, postcode } : await ownedServiceSite(db, identity, serviceSiteId, customerId);
-        serviceArea = [site.suburb, site.address_state, site.postcode].filter(Boolean).join(" ").trim();
+      if (serviceSite) serviceArea = [serviceSite.suburb, serviceSite.address_state, serviceSite.postcode].filter(Boolean).join(" ").trim();
+      const creditexOrganisation = complianceIntent
+        ? await db.prepare(`SELECT id FROM compliance_organisations
+            WHERE organisation_code = ? AND status = 'active' LIMIT 1`)
+          .bind(CREDITEX_PARTNER_ORGANISATION_CODE)
+          .first<Record<string, unknown>>()
+        : null;
+      if (complianceIntent && !creditexOrganisation?.id) {
+        throw new TradeComplianceIntentError(
+          "CREDITEX_PARTNER_UNAVAILABLE",
+          "Creditex planning is not configured. Create an ordinary job or ask TLink support to restore the compliance partner connection.",
+        );
       }
+      const intentSnapshot = complianceIntent
+        ? stableTradeComplianceIntentJson({
+          ...complianceIntent.snapshot,
+          plannedStart: scheduledStart,
+        })
+        : "";
+      const intentSnapshotSha256 = intentSnapshot
+        ? await sha256Text(intentSnapshot)
+        : "";
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
       const batchStatements: D1PreparedStatement[] = [
@@ -1100,21 +1220,21 @@ export async function POST(request: Request) {
         db.prepare(`INSERT INTO trade_work_orders
           (id, firebase_uid, partner_type, work_type, source_type, source_reference, work_number, title,
            service_category, site_area, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label,
-            record_status, created_at, updated_at)
-          VALUES (?, ?, 'installer', 'job', 'internal', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-          .bind(workOrderId, identity.uid, workNumber, title, serviceCategory, serviceArea,
+             record_status, created_at, updated_at)
+          VALUES (?, ?, 'installer', 'job', 'internal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+          .bind(workOrderId, identity.uid, sourceEnquiryId, workNumber, title, serviceCategory, serviceArea,
             recordStage, priority, scheduledStart, scheduledEnd, assigneeMemberId, assignee, now, now),
         db.prepare(`INSERT INTO trade_crm_job_details
           (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, customer_source, pipeline_stage, building_type, description,
            customer_reference, next_action, tags, estimated_value_cents, quoted_value_cents,
-           invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 'not_started', ?, ?, ?, ?)`)
+            invoiced_value_cents, paid_value_cents, quote_status, invoice_status, payment_due_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'not_started', 'not_started', '', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, identity.uid, customerId, serviceSiteId, customerId ? "trade_owned" : "internal",
             pipelineStage, buildingType, cleanAdminText(body.description, 3000) || cleanAdminText(template?.description, 3000), "", cleanAdminText(body.nextAction, 200),
-            JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), quickInvoice?.totalCents || 0,
-            quickInvoice ? "draft" : "not_started", quickInvoiceDueAt, now, now),
+            JSON.stringify(cleanList(body.tags)), moneyValue(body.estimatedValueCents), now, now),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-          VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid, `${workNumber} created in installer CRM.`, now),
+          VALUES (?, ?, ?, 'work_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, identity.uid,
+            sourceEnquiryId ? `${workNumber} created from converted enquiry ${sourceEnquiryId}.` : `${workNumber} created in installer CRM.`, now),
         ...templateTasks.map((taskTitle, index) => db.prepare(`INSERT INTO trade_work_order_tasks
           (id, work_order_id, firebase_uid, title, due_at, status, completed_at, revision, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, '', 'pending', '', 1, ?, ?, ?)`)
@@ -1126,72 +1246,48 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, 1, ?, ?)`)
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
-          db.prepare(`INSERT INTO trade_crm_photo_requests
-            (id, work_order_id, firebase_uid, crm_customer_id, token_hash, encrypted_token, token_issue, status, requirements, revision,
-             expires_at, last_shared_at, source_template_id, source_template_version_id, source_template_version,
-             source_template_edited, template_feedback, template_missing_feedback, created_by_uid, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, 1, ?, ?, '', '', 0, 0, '{}', 0, ?, ?, ?)`)
-            .bind(photoRequestId, workOrderId, identity.uid, customerId, photoTokenHash, encryptedPhotoToken,
-              JSON.stringify(photoRequirements), photoRequestExpiry(new Date(now)), now, identity.uid, now, now),
-          db.prepare(`INSERT INTO trade_crm_photo_request_events
-            (id, photo_request_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type, request_revision, created_at)
-            VALUES (?, ?, ?, ?, 'installer', ?, 'request_created', 1, ?)`)
-            .bind(crypto.randomUUID(), photoRequestId, workOrderId, identity.uid, identity.uid, now),
-          db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-            VALUES (?, ?, ?, 'customer_photo_request_created', 'Secure customer photo request created.', ?)`)
-            .bind(crypto.randomUUID(), workOrderId, identity.uid, now),
-          ...(quickInvoice ? [
-            db.prepare(`INSERT INTO trade_crm_quick_invoices
-              (id, work_order_id, firebase_uid, crm_customer_id, invoice_number, currency, line_items_json,
-               subtotal_cents, tax_cents, total_cents, due_at, status, delivery_status, delivery_provider,
-               provider_message_id, consent_confirmed_at, attempts, last_error, sent_at, created_by_uid, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, 'draft', 'queued', 'resend', '', ?, 0, '', '', ?, ?, ?)`)
-              .bind(quickInvoiceId, workOrderId, identity.uid, customerId, quickInvoiceReference,
-                JSON.stringify(quickInvoice.lines), quickInvoice.subtotalCents, quickInvoice.taxCents, quickInvoice.totalCents,
-                quickInvoiceDueAt, now, identity.uid, now, now),
-            db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
-              (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents, tax_cents, total_cents,
-               due_at, change_reason, created_by_uid, created_at)
-              VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, 'Initial invoice snapshot', ?, ?)`)
-              .bind(crypto.randomUUID(), quickInvoiceId, identity.uid, JSON.stringify(quickInvoice.lines), quickInvoice.subtotalCents,
-                quickInvoice.taxCents, quickInvoice.totalCents, quickInvoiceDueAt, identity.uid, now),
-            db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
-              VALUES (?, ?, ?, 'quick_invoice_created', ?, ?)`)
-              .bind(crypto.randomUUID(), workOrderId, identity.uid, `${quickInvoiceReference} created with the guided job.`, now),
-          ] : []),
+        ] : []),
+        ...(complianceIntent ? [
+          db.prepare(`INSERT INTO trade_work_order_compliance_intents
+            (id, work_order_id, installer_uid, compliance_organisation_id, program_template_id,
+             activity_template_id, program_code, registry_activity_code, service_category,
+             site_jurisdiction, planned_start, catalogue_reviewed_on, intent_snapshot,
+             intent_snapshot_sha256, status, compliance_case_id, revision, created_by_uid,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', '', 1, ?, ?, ?)`)
+            .bind(
+              crypto.randomUUID(),
+              workOrderId,
+              identity.uid,
+              String(creditexOrganisation?.id),
+              complianceIntent.program.templateId,
+              complianceIntent.activity.templateId,
+              complianceIntent.program.programCode,
+              complianceIntent.activity.registryActivityCode,
+              complianceIntent.activity.serviceCategory,
+              complianceIntent.snapshot.siteJurisdiction,
+              scheduledStart,
+              complianceIntent.snapshot.catalogueReviewedOn,
+              intentSnapshot,
+              intentSnapshotSha256,
+              identity.uid,
+              now,
+              now,
+            ),
+          db.prepare(`INSERT INTO trade_work_order_events
+            (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'compliance_intent_planned', ?, ?)`)
+            .bind(
+              crypto.randomUUID(),
+              workOrderId,
+              identity.uid,
+              `${complianceIntent.program.programCode} ${complianceIntent.activity.registryActivityCode || complianceIntent.activity.activityKey} planned for Creditex setup review. No regulated case was created.`,
+              now,
+            ),
         ] : []),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
       await db.batch(batchStatements);
-      let requestSent = false;
-      let deliveryError = "";
-      let invoiceSent = false;
-      let invoiceDeliveryError = "";
-      if (guided) {
-        try {
-          const delivery = await sendPhotoRequestDelivery({ requestId: photoRequestId, ownerUid: identity.uid, actorUid: identity.uid,
-            channel: "email", requestedIntent: "initial", consentConfirmed: true, origin: new URL(request.url).origin });
-          if (!delivery.ok) throw new Error(String("error" in delivery ? delivery.error : "PHOTO_REQUEST_DELIVERY_FAILED"));
-          requestSent = true;
-        } catch (error) {
-          const code = error instanceof Error ? error.message : "";
-          deliveryError = code === "waiting_for_channel"
-            ? "The job and appointment were saved, but the email provider is not active. Send the request from the job once email is available."
-            : code === "waiting_for_limit" ? "The job and appointment were saved, but the daily email limit was reached. Retry the information request from the job."
-              : "The job and appointment were saved, but the information request email could not be sent. Retry it from the job.";
-        }
-        if (quickInvoice) {
-          try {
-            await sendQuickInvoiceDelivery({ invoiceId: quickInvoiceId, ownerUid: identity.uid, actorUid: identity.uid, origin: new URL(request.url).origin });
-            invoiceSent = true;
-          } catch (error) {
-            const code = error instanceof Error ? error.message : "";
-            invoiceDeliveryError = code === "waiting_for_channel"
-              ? "The quick invoice was saved, but the email provider is not active. Retry it from the job invoice tab once email is available."
-              : "The quick invoice was saved, but its email could not be sent. Retry it from the job invoice tab.";
-          }
-        }
-      }
       let calendarSynced = 0;
       let calendarFailed = 0;
       if (guided) {
@@ -1204,8 +1300,8 @@ export async function POST(request: Request) {
         }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
-        appointmentId, photoRequestId, requestSent, deliveryError, quickInvoiceId, invoiceNumber: quickInvoiceReference,
-        invoiceSent, invoiceDeliveryError, calendarSynced, calendarFailed }, 201);
+        appointmentId, complianceIntentPlanned: Boolean(complianceIntent),
+        calendarSynced, calendarFailed }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);

@@ -41,6 +41,10 @@ const MANUAL_POLICY_SCHEMA_GUARD_NAMES = [
   "compliance_manual_policy_withdrawal_guard",
   "compliance_manual_policy_delete_guard",
 ];
+const TRADE_COMPLIANCE_INTENT_SCHEMA_GUARD_NAMES = [
+  "trade_compliance_intent_update_guard",
+  "trade_compliance_intent_delete_guard",
+];
 
 function installGuards(database, names) {
   for (const name of names) {
@@ -189,15 +193,15 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 297);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 299);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    297,
+    299,
   );
   assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 8);
 });
 
-test("manual field and policy migrations remain table-only with canonical runtime guards", () => {
+test("manual field, policy and trade-intent migrations remain table-only with canonical runtime guards", () => {
   const migrationSources = [
     fs.readFileSync(
       new URL(
@@ -213,11 +217,19 @@ test("manual field and policy migrations remain table-only with canonical runtim
       ),
       "utf8",
     ),
+    fs.readFileSync(
+      new URL(
+        "../drizzle/0115_trade_creditex_job_intent.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
   ];
   assert.doesNotMatch(migrationSources.join("\n"), /CREATE\s+TRIGGER/i);
   const expectedNames = [
     ...MANUAL_FIELD_SCHEMA_GUARD_NAMES,
     ...MANUAL_POLICY_SCHEMA_GUARD_NAMES,
+    ...TRADE_COMPLIANCE_INTENT_SCHEMA_GUARD_NAMES,
   ];
   const definitions = CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     (definition) => expectedNames.includes(definition.name),

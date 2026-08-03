@@ -771,6 +771,33 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     (error) => error.code === "ACTIVITY_JURISDICTION_MISMATCH",
   );
 
+  for (const expectedOrganisation of [
+    { id: "another-organisation", code: "creditex" },
+    { id: "creditex-org", code: "ANOTHER-ORGANISATION" },
+  ]) {
+    const rejectedStatements = [];
+    await assert.rejects(
+      domain.appendLiveComplianceCaseStatements(d1, rejectedStatements, {
+        activityVersionId: "activity",
+        activityDate: "2026-06-15",
+        serviceCategory: "hot-water",
+        jurisdiction: "VIC",
+        workOrderId: "job-1",
+        installerUid: "installer-1",
+        actorUid: "installer-1",
+        expectedOrganisation,
+      }),
+      (error) =>
+        error.code === "COMPLIANCE_ORGANISATION_MISMATCH"
+        && error.status === 409,
+    );
+    assert.equal(
+      rejectedStatements.length,
+      0,
+      "an organisation mismatch must fail before any case statement is staged",
+    );
+  }
+
   const prepared = await domain.prepareLiveComplianceCaseStatements(d1, {
     activityVersionId: "activity",
     activityDate: "2026-06-15",

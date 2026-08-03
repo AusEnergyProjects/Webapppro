@@ -41,6 +41,10 @@ const custodyMigration = [
   "../drizzle/0112_creditex_manual_field_capture.sql",
   "../drizzle/0114_creditex_manual_policy_merge.sql",
 ].map(read).join("\n");
+const tradeComplianceMigration = [
+  "../drizzle/0115_trade_creditex_job_intent.sql",
+  "../drizzle/0116_trade_crm_write_guard.sql",
+].map(read).join("\n");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 
@@ -259,6 +263,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
   applyStatements(database, acceptedHandoffMigration);
   applyStatements(database, operationsMigration);
   applyStatements(database, custodyMigration);
+  applyStatements(database, tradeComplianceMigration);
   if (installGuards) {
     for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS) {
       database.exec(definition.sql);

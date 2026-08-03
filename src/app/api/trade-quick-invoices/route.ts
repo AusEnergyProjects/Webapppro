@@ -1,8 +1,13 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerOperations } from "@/lib/trade-integrations-server";
-import { sendQuickInvoiceDelivery, resolveQuickInvoiceDraft } from "@/lib/trade-quick-invoice-server";
+import {
+  quickInvoiceNumber,
+  resolveQuickInvoiceDraft,
+  sendQuickInvoiceDelivery,
+} from "@/lib/trade-quick-invoice-server";
 import { creditTotals, invoiceBalance } from "@/lib/trade-invoice-balance";
+import { australiaLocalDateTime } from "@/lib/trade-schedule";
 
 export const runtime = "edge";
 
@@ -13,6 +18,9 @@ function invoiceError(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "This installer account does not currently have invoice access." }, 403);
   if (code === "QUICK_INVOICE_NOT_FOUND") return adminJson({ ok: false, error: "Quick invoice not found." }, 404);
+  if (code === "QUICK_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has a TLink invoice." }, 409);
+  if (code === "QUICK_INVOICE_JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active direct-customer job." }, 404);
+  if (code === "QUICK_INVOICE_RECIPIENT_INVALID") return adminJson({ ok: false, error: "Add a valid email to the customer record before sending this invoice." }, 409);
   if (code === "waiting_for_channel") return adminJson({ ok: false, error: "Email delivery is not active yet. The invoice remains saved in the job." }, 503);
   if (code === "QUICK_INVOICE_DELIVERY_FAILED") return adminJson({ ok: false, error: "The invoice remains saved, but the email could not be sent. Try again." }, 502);
   if (code === "QUICK_INVOICE_CHANGED") return adminJson({ ok: false, error: "This invoice changed in another session. Reload it before saving." }, 409);
@@ -26,7 +34,12 @@ function invoiceError(error: unknown) {
 
 function cleanDate(value: unknown) {
   const date = cleanAdminText(value, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) throw new Error("INVALID_QUICK_INVOICE");
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    || Number.isNaN(parsed.getTime())
+    || parsed.toISOString().slice(0, 10) !== date
+  ) throw new Error("INVALID_QUICK_INVOICE");
   return date;
 }
 
@@ -96,11 +109,113 @@ export async function POST(request: Request) {
     const identity = await requireInstallerOperations(request);
     const body = await request.json().catch(() => ({})) as Row;
     const action = cleanAdminText(body.action, 40);
+    const db = getD1();
+    const now = new Date().toISOString();
+    const australiaSydneyToday = australiaLocalDateTime(
+      "NSW",
+      new Date(now),
+    ).slice(0, 10);
+    if (action === "create_draft") {
+      const workOrderId = cleanAdminText(body.workOrderId, 180);
+      const job = await db.prepare(`SELECT
+          work.id,
+          work.work_number,
+          details.crm_customer_id
+        FROM trade_work_orders work
+        JOIN trade_crm_job_details details
+          ON details.work_order_id = work.id
+          AND details.firebase_uid = work.firebase_uid
+        JOIN trade_crm_customers customer
+          ON customer.id = details.crm_customer_id
+          AND customer.firebase_uid = work.firebase_uid
+          AND customer.record_status = 'active'
+        WHERE work.id = ?
+          AND work.firebase_uid = ?
+          AND work.partner_type = 'installer'
+          AND work.record_status = 'active'
+          AND details.customer_source = 'trade_owned'
+        LIMIT 1`)
+        .bind(workOrderId, identity.uid)
+        .first<Row>();
+      if (!job) throw new Error("QUICK_INVOICE_JOB_NOT_FOUND");
+      if (await invoiceRow(identity.uid, "work_order_id", workOrderId)) {
+        throw new Error("QUICK_INVOICE_EXISTS");
+      }
+      const draft = await resolveQuickInvoiceDraft(identity.uid, body.lines);
+      const dueAt = cleanDate(body.dueAt);
+      if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
+      const invoiceId = crypto.randomUUID();
+      const invoiceNumber = quickInvoiceNumber(String(job.work_number));
+      const linesJson = JSON.stringify(draft.lines);
+      try {
+        await db.batch([
+          db.prepare(`INSERT INTO trade_crm_quick_invoices
+            (id, work_order_id, firebase_uid, crm_customer_id, invoice_number, currency,
+             line_items_json, subtotal_cents, tax_cents, total_cents, due_at, status,
+             delivery_status, delivery_provider, provider_message_id, consent_confirmed_at,
+             attempts, last_error, sent_at, created_by_uid, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, 'draft', 'queued', 'resend', '',
+              '', 0, '', '', ?, ?, ?)`)
+            .bind(
+              invoiceId,
+              workOrderId,
+              identity.uid,
+              job.crm_customer_id,
+              invoiceNumber,
+              linesJson,
+              draft.subtotalCents,
+              draft.taxCents,
+              draft.totalCents,
+              dueAt,
+              identity.uid,
+              now,
+              now,
+            ),
+          db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
+            (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents,
+             tax_cents, total_cents, due_at, change_reason, created_by_uid, created_at)
+            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, 'Initial invoice snapshot', ?, ?)`)
+            .bind(
+              crypto.randomUUID(),
+              invoiceId,
+              identity.uid,
+              linesJson,
+              draft.subtotalCents,
+              draft.taxCents,
+              draft.totalCents,
+              dueAt,
+              identity.uid,
+              now,
+            ),
+          db.prepare(`UPDATE trade_crm_job_details
+            SET invoiced_value_cents = ?, invoice_status = 'draft',
+              payment_due_at = ?, updated_at = ?
+            WHERE work_order_id = ? AND firebase_uid = ?`)
+            .bind(draft.totalCents, dueAt, now, workOrderId, identity.uid),
+          db.prepare(`INSERT INTO trade_work_order_events
+            (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'quick_invoice_created', ?, ?)`)
+            .bind(
+              crypto.randomUUID(),
+              workOrderId,
+              identity.uid,
+              `${invoiceNumber} draft created from the saved job.`,
+              now,
+            ),
+        ]);
+      } catch (error) {
+        if (String(error).includes("UNIQUE")) throw new Error("QUICK_INVOICE_EXISTS");
+        throw error;
+      }
+      const created = await invoiceRow(identity.uid, "id", invoiceId);
+      return adminJson({
+        ok: true,
+        invoice: created ? await completePayload(created) : null,
+      }, 201);
+    }
     const invoiceId = cleanAdminText(body.invoiceId, 180);
     const current = await invoiceRow(identity.uid, "id", invoiceId);
     if (!current) throw new Error("QUICK_INVOICE_NOT_FOUND");
-    const db = getD1();
-    const now = new Date().toISOString();
     if (action === "retry_delivery") {
       if (body.consentConfirmed !== true) return adminJson({ ok: false, error: "Confirm the customer asked to receive this invoice." }, 400);
       await sendQuickInvoiceDelivery({ invoiceId, ownerUid: identity.uid, actorUid: identity.uid, origin: new URL(request.url).origin });
@@ -110,7 +225,7 @@ export async function POST(request: Request) {
       if (Number(body.expectedRevision) !== Number(current.revision || 1)) throw new Error("QUICK_INVOICE_CHANGED");
       const draft = await resolveQuickInvoiceDraft(identity.uid, body.lines);
       const dueAt = cleanDate(body.dueAt);
-      if (dueAt < now.slice(0, 10)) throw new Error("INVALID_QUICK_INVOICE");
+      if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
       const reason = cleanAdminText(body.reason, 240) || "Draft invoice corrected before issue";
       const nextRevision = Number(current.revision || 1) + 1;
       const linesJson = JSON.stringify(draft.lines);

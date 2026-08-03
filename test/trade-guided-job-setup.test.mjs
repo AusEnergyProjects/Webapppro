@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
 const form = read("../src/components/TradeNewJobForm.tsx");
-const invoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
+const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");
 const numbers = read("../src/lib/trade-job-number-server.ts");
 const workOrders = read("../src/app/api/trade-work-orders/route.ts");
@@ -44,25 +44,99 @@ test("admin and installer expose and search the same job ID", () => {
   assert.match(form, /TLJ-X3KHTUEF/);
   assert.match(adminDirectory, /TLJ-X3KHTUEF/);
   assert.doesNotMatch(`${form}\n${adminDirectory}`, /TLJ-00000124/);
-  assert.match(workspace, /This same ID is used by your team and TLink support/);
+  assert.match(workspace, /This same ID is used by your team, Creditex and TLink support/);
   assert.match(adminJobs, /LOWER\(w\.work_number\) LIKE/);
   assert.match(adminJobs, /LOWER\(w\.id\) LIKE/);
   assert.match(adminJobs, /installer_business/);
 });
 
-test("guided setup attaches duplicates and creates appointment plus evidence request together", () => {
+test("guided setup attaches duplicates and creates one appointment plus planned compliance intent", () => {
   assert.match(form, /find_customer_duplicates/);
   assert.match(form, /Use this customer/);
-  assert.match(`${form}\n${invoiceStep}`, /Schedule and request info/);
+  assert.match(enquiryInbox, /Create job from enquiry/);
+  assert.match(enquiryInbox, /sourceEnquiryId: detail\.id/);
+  assert.match(workspace, /setNewJobSeed\(seed\)[\s\S]*setCreating\("job"\)/);
+  assert.match(form, /const steps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
   assert.doesNotMatch(form, /name="title"|datalist/);
   assert.doesNotMatch(workspace, /placeholder="Appointment title"/);
   assert.match(crm, /INSERT INTO trade_crm_appointments/);
-  assert.match(crm, /INSERT INTO trade_crm_photo_requests/);
-  assert.match(crm, /sendPhotoRequestDelivery/);
-  assert.match(crm, /if \(!delivery\.ok\)/);
-  assert.match(workspace, /appointment and photo request email was accepted for delivery/);
+  assert.match(crm, /INSERT INTO trade_work_order_compliance_intents/);
+  assert.match(crm, /INSERT INTO trade_work_order_events[\s\S]*'compliance_intent_planned'/);
+  assert.doesNotMatch(crm, /INSERT INTO trade_crm_photo_requests|sendPhotoRequestDelivery/);
+  assert.doesNotMatch(crm, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
+  assert.match(workspace, /planned government activity is visible to Creditex for setup review/);
+  assert.match(workspace, /TradePhotoRequestPanel/);
+  assert.match(workspace, /TradeQuickInvoicePanel/);
   assert.match(crm, /appointmentTitle = `\$\{displayName\} \$\{SERVICE_LABELS\[serviceCategory\]\}`/);
-  assert.match(form, /"Evidence", "Invoice"/);
+  assert.match(form, /When a governed case and compatible evidence form are linked/);
+});
+
+test("enquiry handoff keeps the selected service site and safely supports customers without one", () => {
+  assert.match(enquiryInbox, /serviceSiteId: decision === "use_existing" \? existingServiceSiteId : ""/);
+  assert.match(enquiryInbox, /createNewSite: !result\.serviceSiteId/);
+  assert.match(form, /createNewSite\?: boolean/);
+  assert.match(form, /useState\(Boolean\(initial\?\.createNewSite\)\)/);
+  assert.match(form, /sites\.some\(\(site\) => site\.id === serviceSiteId\)/);
+  assert.match(form, /Choose an existing service site, or add a new service site/);
+  assert.match(form, /customerMode === "existing" && customerId && !loadingSites && !siteLoadError && sites\.length > 0/);
+});
+
+test("certificate planning cascades from output type to jurisdiction program and activity", () => {
+  assert.match(form, /Certificate or support type/);
+  assert.match(form, /claimOutputOptions/);
+  assert.match(form, /program\.claimOutputCode === claimOutputCode/);
+  assert.match(form, /setProgramTemplateId\(""\);[\s\S]*setActivityTemplateId\(""\)/);
+  assert.match(form, /aria-current=\{step === index \+ 1 \? "step" : undefined\}/);
+  assert.match(form, /querySelector<HTMLHeadingElement>\(`\[data-step="\$\{step\}"\] h3`\)/);
+  assert.match(form, /If governed activity is linked, it also follows compatible field evidence and Creditex audit/);
+});
+
+test("enquiry selection ignores stale detail responses and refreshes only the current record", () => {
+  assert.match(enquiryInbox, /const detailRequestSequence = useRef\(0\)/);
+  assert.match(enquiryInbox, /const selectedIdRef = useRef\(""\)/);
+  assert.match(
+    enquiryInbox,
+    /requestId !== detailRequestSequence\.current \|\| selectedIdRef\.current !== id/,
+  );
+  assert.match(
+    enquiryInbox,
+    /const currentSelectedId = selectedIdRef\.current;[\s\S]*loadDetail\(currentSelectedId\)/,
+  );
+  assert.match(
+    enquiryInbox,
+    /return \(\) => \{[\s\S]*detailRequestSequence\.current \+= 1;[\s\S]*cancelAnimationFrame/,
+  );
+});
+
+test("guided setup clears incompatible plans and recovers when customer sites cannot load", () => {
+  assert.match(
+    form,
+    /function changeServiceCategory\(value: string, preserveCompliance = false\)[\s\S]*if \(!preserveCompliance\) clearCompliancePlan\(\)/,
+  );
+  assert.match(form, /changeServiceCategory\(activity\.serviceCategory, true\)/);
+  assert.match(
+    form,
+    /const customer = result\.customer;[\s\S]*if \(!response\.ok \|\| !customer\)/,
+  );
+  assert.match(form, /Retry customer sites/);
+  assert.match(form, /Add a new service site instead/);
+  assert.match(form, /disabled=\{checkingDuplicates \|\| loadingSites\}/);
+});
+
+test("planned certificate work remains tied to the Installation appointment", () => {
+  assert.match(
+    form,
+    /nextStep === 5 && complianceMode === "planned" && appointmentType !== "installation"/,
+  );
+  assert.match(
+    form,
+    /disabled=\{complianceMode === "planned" && value !== "installation"\}/,
+  );
+  assert.match(form, /Certificate planning uses the Installation appointment date/);
+  assert.match(
+    form,
+    /complianceMode === "planned" && appointmentType !== "installation"[\s\S]*setStep\(4\)/,
+  );
 });
 
 test("address search supports structured Google Australian results and manual fallback", () => {
@@ -73,12 +147,17 @@ test("address search supports structured Google Australian results and manual fa
   assert.match(form, /enter the address manually/i);
 });
 
-test("compliance intake starts only after the customer accepts the quote", () => {
+test("planning starts with the job while governed compliance intake waits for quote acceptance", () => {
   assert.doesNotMatch(form, /name="complianceActivityVersionId"/);
   assert.doesNotMatch(form, /\/api\/trade-compliance/);
-  assert.match(form, /Government program activity is linked from the accepted job after the customer accepts the quote/);
+  assert.match(form, /name="complianceIntentMode"/);
+  assert.match(form, /name="programTemplateId"/);
+  assert.match(form, /name="activityTemplateId"/);
+  assert.match(form, /Planning choice only\. After quote acceptance/);
   assert.match(crm, /Link the government activity after the customer accepts the quote/);
   assert.doesNotMatch(crm, /appendLiveComplianceCaseStatements\(db, batchStatements/);
+  assert.match(crm, /resolveTradeComplianceIntent/);
+  assert.match(crm, /INSERT INTO trade_work_order_compliance_intents/);
   assert.match(workspace, /TradeComplianceIntake/);
 
   assert.match(complianceIntake, /new URLSearchParams\(\{ workOrderId \}\)/);

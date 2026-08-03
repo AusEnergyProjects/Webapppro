@@ -147,13 +147,33 @@ export async function POST(request: Request) {
     const statements: D1PreparedStatement[] = [];
     if (decision === "use_existing") {
       customerId = cleanAdminText(body.customerId, 180);
+      const requestedServiceSiteSupplied = Object.prototype.hasOwnProperty.call(body, "serviceSiteId");
+      const requestedServiceSiteId = cleanAdminText(body.serviceSiteId, 180);
       const customer = await db.prepare("SELECT id FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active'").bind(customerId, uid).first();
       if (!customer) return adminJson({ ok: false, error: "Choose an existing customer from the duplicate review." }, 400);
-      const primary = await db.prepare(`SELECT
-        COALESCE((SELECT c.id FROM trade_crm_customer_contacts c WHERE c.customer_id = customer.id AND c.firebase_uid = customer.firebase_uid AND c.record_status = 'active' ORDER BY c.is_primary DESC, c.created_at LIMIT 1), '') contact_id,
-        COALESCE((SELECT s.id FROM trade_crm_service_sites s WHERE s.customer_id = customer.id AND s.firebase_uid = customer.firebase_uid AND s.record_status = 'active' ORDER BY s.is_primary DESC, s.created_at LIMIT 1), '') service_site_id
-        FROM trade_crm_customers customer WHERE customer.id = ? AND customer.firebase_uid = ? LIMIT 1`).bind(customerId, uid).first<Record<string, unknown>>();
-      contactId = String(primary?.contact_id || ""); serviceSiteId = String(primary?.service_site_id || "");
+      const primaryContact = await db.prepare(`SELECT id FROM trade_crm_customer_contacts
+        WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active'
+        ORDER BY is_primary DESC, created_at LIMIT 1`)
+        .bind(customerId, uid)
+        .first<Record<string, unknown>>();
+      contactId = String(primaryContact?.id || "");
+      if (requestedServiceSiteId) {
+        const selectedSite = await db.prepare(`SELECT id FROM trade_crm_service_sites
+          WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
+          .bind(requestedServiceSiteId, customerId, uid)
+          .first<Record<string, unknown>>();
+        if (!selectedSite) {
+          return adminJson({ ok: false, error: "Choose a service site that belongs to the selected customer." }, 400);
+        }
+        serviceSiteId = String(selectedSite.id);
+      } else if (!requestedServiceSiteSupplied) {
+        const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
+          WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active'
+          ORDER BY is_primary DESC, created_at LIMIT 1`)
+          .bind(customerId, uid)
+          .first<Record<string, unknown>>();
+        serviceSiteId = String(primarySite?.id || "");
+      }
     } else {
       customerId = crypto.randomUUID(); contactId = crypto.randomUUID(); serviceSiteId = crypto.randomUUID();
       const siteContactId = crypto.randomUUID();

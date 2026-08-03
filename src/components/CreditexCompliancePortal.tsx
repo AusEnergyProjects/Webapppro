@@ -32,6 +32,7 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
+import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
 import { CreditexVeuPilotWorkspace } from "./CreditexVeuPilotWorkspace";
 import styles from "./CreditexCompliancePortal.module.css";
 
@@ -1290,6 +1291,7 @@ export function CreditexCompliancePortal() {
             role="tabpanel"
             aria-labelledby="creditex-tab-cases"
           >
+            <CreditexPlannedIntakeQueue api={api} />
             <CreditexOperationsWorkspace
               session={session}
               seedCases={visibleCases}
