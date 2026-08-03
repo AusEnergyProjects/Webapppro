@@ -1270,13 +1270,34 @@ Creditex receives every assigned planning record in the `Certificate-work regist
 - Archive `.openai/site-release-a45f250.tar.gz` is 7,758,795 bytes with SHA-256 `23C885EF9D4BD11FA837107740E9B44381D0E8B71CA4432364F3531CFF148CC9`. Sites stored 355 files and 31,518,720 bytes with content hash `sha256:28daf91f4202cf79d0c3c5ecbb7b4f42822bec6725644c3077423b3869e83e0e`.
 - Signed-in installer QA opened all five New Job stages without submission. Signed-in Creditex QA loaded the permanent compliance navigation and `Certificate-work register`, which reported 0 assigned jobs. Desktop and compact checks found no document-level horizontal overflow; image capture timed out, so the retained evidence is rendered-DOM, width and interaction verification rather than a screenshot artifact.
 
+## Released milestone: TRADE-CREDITEX-OPERATING-ALIGNMENT-41
+
+Status: released installer workflow alignment, exact Dataforce job register and bounded Creditex full-audit recovery
+
+Release status: primary application commit `836bc779f33a5f77fc4a18a41227dc76dfbf9914` implemented the milestone, corrective commit `c32be214558dd1a20ccb26d04bcf7b054b00f110` restored the installer Jobs index, and final application commit `c51934456c2248da4cfde9a0b759b70d69df56ee` restored the production-schema Creditex audit workspace. The final commit was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac` and deployed as Sites version 274 through `appgdep_6a7082f95d2881919e97336aa038fc5a` with environment revision 19.
+
+### Outcome
+
+The installer New Job workflow now keeps all reached stages clickable, removes the unused visible site name, keeps appointment controls visible and presents one detail-rich final review. Australian state and postcode combinations are validated. A signed provider selection is retained when an approved provider is configured; otherwise manual entry is explicitly marked for Creditex review. A progressing installer job can create its immutable certificate-work planning intent without an accepted quote, while any optional quote linkage remains all-or-none and immutable.
+
+Installer Jobs now mirrors the exact known Dataforce 23-column order with one company-scoped job per row, no visible row-selection controls and complete filtered CSV export. Creditex receives the same planning record and can open the authorised customer, installer, service site, job, appointment and address provenance. Fifty-three retained audit domains load independently in deterministic 50-record keyset pages, replacing the original 53-domain burst and avoiding one unbounded private-data response. Production-scale D1 rows-read and latency telemetry remain unverified.
+
+### Safety and release evidence
+
+- `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31 integration tests, the complete application suite, all 119 migrations, customer-plan PDF audit, Vinext production build and Sites bundle audit.
+- A persistent production-schema regression executed all 53 audit-domain first-page queries and all 53 cursor-page queries against a fresh database: 106 of 106 passed. Independent final review found no remaining P0, P1 or P2 defect.
+- Archive `.openai/site-release-c519344.tar.gz` is 7,775,395 bytes with SHA-256 `CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C` and 373 entries. Sites stored 359 files and 31,590,400 bytes with content hash `sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`.
+- Signed-in installer QA loaded 7 company-scoped jobs, all 23 columns and the successful 7-row CSV status. Signed-in Creditex QA opened the single assigned job, complete audit core, manual-address warning, one appointment and correct empty quote, case and governed-evidence groups. The custom-domain health endpoint returned HTTP 200. No customer, job, intent, case, evidence, certificate, submission, trade or settlement record was created or changed; the authorised workspace and group reads appended their designed audit-view events.
+- Sites versions 272 and 273 were superseded during signed-in QA. Version 272 exposed the missing installer Jobs index; version 273 restored that index but exposed invented installer projection columns and an over-broad audit request. Both defects are covered by the final production-schema regression.
+- Production still lacks `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` and `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual entry remains available and visibly fails closed to `manual_pending_review`; an approved provider and credential remain required for verified autocomplete.
+
 ## Next five logical product steps
 
-1. **Add automatic intent revision and return workflow:** create a new immutable planning version when the job, service site, activity or installation date changes, supersede the prior version visibly, and let Creditex accept or return the exact current plan without weakening the accepted-quote or governed-policy gate.
-2. **Approve the first governed VEU, SRES and NSW bundles:** retain the complete current official source bytes, effective periods, product and participant snapshots, formulas and evidence requirements under two-person review, then publish one bounded activity chain per program.
-3. **Bind dynamic compliance forms into AEA Field:** render the case-pinned government minimum plus editable Creditex operational prompts, declarations and signatures with controlled conditional logic, offline capture and immutable version identity.
-4. **Enforce evidence-complete job gates:** prevent installer completion and Creditex submission readiness until every required question, original file, photo metadata, geolocation rule, declaration and signature passes the pinned policy, while keeping correction instructions simple.
-5. **Complete Creditex pre-case evidence operations:** add audited original-byte access where authority permits, operational notifications, Dataforce import mapping and bounded legacy backfill so Creditex can manage real volume without creating certificates or external submissions prematurely.
+1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
+2. **Add immutable intent revision and case supersession:** create a new planning version when the address, installation date, activity, product or technician changes, visibly supersede the prior version and provide a clear Creditex return-to-installer path.
+3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
+4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
+5. **Bind the pinned evidence form into the field job:** deliver Creditex-editable operational prompts, original photo bytes and metadata, offline recovery and simple evidence-complete installer and auditor gates.
 
 ## Global stop conditions
 

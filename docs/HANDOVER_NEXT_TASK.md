@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` implementation complete, release validation pending
+Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` released and live
 
 Prepared: 3 August 2026
 
@@ -8,7 +8,17 @@ Milestone ID: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Production baseline: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`
+Released application source commit: `c51934456c2248da4cfde9a0b759b70d69df56ee`
+
+Primary implementation source commit: `836bc779f33a5f77fc4a18a41227dc76dfbf9914`
+
+Installer-register corrective commit: `c32be214558dd1a20ccb26d04bcf7b054b00f110`
+
+Current production: Sites version 274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
+
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac`
+
+Deployment: `appgdep_6a7082f95d2881919e97336aa038fc5a`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -86,23 +96,66 @@ not independently verified, if an address provider requires an unapproved
 credential or contract, if a tenant or actor boundary fails, if migration
 replay diverges, or if release verification would mutate production data.
 
+## Release result
+
+The complete operating-alignment slice is live. The installer New Job stages
+are clickable, appointment controls stay visible, the unused site-name field is
+removed, address provenance is retained, progressing work can create the
+planning intent without an accepted quote, the review is detail rich, and both
+installer and Creditex registers use the exact known 23-column Dataforce
+contract. Creditex can open the complete authorised customer, installer,
+service-site and job projection, then load each retained audit domain in
+bounded 50-record keyset pages.
+
+The release required two production corrections after the primary
+implementation. Sites version 272 from
+`836bc779f33a5f77fc4a18a41227dc76dfbf9914` exposed a missing installer Jobs
+index. Sites version 273 from
+`c32be214558dd1a20ccb26d04bcf7b054b00f110` restored that index, then live
+Creditex QA exposed invented installer projection fields and a request shape
+that could exceed the D1 Free query limit. Current commit
+`c51934456c2248da4cfde9a0b759b70d69df56ee` removes those fields, uses the
+production schema as the executable contract, loads core records first and
+loads each of 53 audit domains on demand.
+
+Validation and release evidence:
+
+- `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+  integration tests, the complete application suite, all 119 migrations,
+  customer-plan PDF audit, Vinext production build and Sites bundle audit.
+- The persistent SQL regression replayed all 53 first pages and all 53 cursor
+  pages against a fresh database: 106 of 106 audit-group statements passed.
+- Independent final review found no remaining P0, P1 or P2 defect.
+- Archive `.openai/site-release-c519344.tar.gz` is 7,775,395 bytes with
+  SHA-256
+  `CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C`
+  and 373 entries. Sites stored 359 files and 31,590,400 bytes with content
+  hash
+  `sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`.
+- Sites version 274 was deployed through
+  `appgdep_6a7082f95d2881919e97336aa038fc5a` with environment revision 19.
+  The custom-domain health endpoint returned HTTP 200.
+- Signed-in installer QA loaded 7 company-scoped jobs, the exact 23 columns,
+  no visible row-selection checkboxes and a successful 7-row exact-order CSV
+  export. Signed-in Creditex QA loaded the single assigned planning job,
+  complete private audit core, manual-address provenance, one appointment and
+  correct empty quote, compliance-case and governed-evidence groups. No
+  customer, job, intent, case, evidence, certificate, submission, trade or
+  settlement record was created or changed during release QA. The authorised
+  workspace and group reads appended their designed audit-view events.
+
+Remaining controlled limitation: production has no
+`TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` or
+`TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual address entry remains available,
+but it is explicitly stored and shown to Creditex as `manual_pending_review`.
+
 ## Next five logical product steps
 
-1. Retain and independently approve one complete current VEU, SRES and NSW
-   governed bundle each, including official source bytes, effective dates,
-   product and participant registers, evidence policy and calculation vectors,
-   then exercise each through a manual non-submitting job.
-2. Add immutable intent revision and case supersession when the job address,
-   installation date, activity, product or technician changes, with a clear
-   Creditex return-to-installer path.
-3. Configure one approved Australian production address provider and reuse the
-   same signed address component in customer, service-site and New Job edits.
-4. Split Phone and Mobile into explicit durable fields and complete bounded
-   Dataforce import reconciliation for unresolved lifecycle, agent, client,
-   submission and certificate mappings.
-5. Bind the case-pinned evidence form into the installer field job with
-   editable Creditex operational prompts, original photo metadata, offline
-   recovery and simple evidence-complete submission gates.
+1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
+2. **Add immutable intent revision and case supersession:** create a new planning version when the address, installation date, activity, product or technician changes, visibly supersede the prior version and provide a clear Creditex return-to-installer path.
+3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
+4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
+5. **Bind the pinned evidence form into the field job:** deliver Creditex-editable operational prompts, original photo bytes and metadata, offline recovery and simple evidence-complete installer and auditor gates.
 
 ## Previous released milestone
 
@@ -118,7 +171,7 @@ Released application source commit: `a45f250ee805aac1545c8643726dfde3964de22b`
 
 Previous production application source: `8baad519d763f0955e481a925ca9114b4d708653`
 
-Current production: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`
+Historical production for milestone 40: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
