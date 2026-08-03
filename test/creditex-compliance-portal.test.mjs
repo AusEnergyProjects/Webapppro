@@ -401,9 +401,32 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /field\.endsWith\("_uid"\)/,
     /photoRequestDeliveries: new Set\(\["provider_message_id", "last_error"\]\)/,
     /accountingDocuments: new Set\(\[/,
-    /'job\.private_details_viewed'/,
+    /const AUDIT_GROUP_PAGE_SIZE = 50/,
+    /const cursorSql = cursor/,
+    /ORDER BY \$\{sortField\} DESC, id DESC LIMIT \?/,
+    /cursorValue/,
+    /cursorId/,
+    /const requestedGroup = requestedGroupKey[\s\S]*groups\.find/,
+    /requestedGroup\.statement\.all<Row>\(\)/,
+    /loaded: group\.key === requestedGroupKey/,
+    /hasMore: group\.key === requestedGroupKey && requestedHasMore/,
+    /job\.audit_workspace_opened/,
+    /job\.audit_group_page_viewed/,
+    /returnedRows: returnedRows\.length/,
     /INSERT INTO compliance_audit_events/,
   ]) assert.match(plannedJobAuditRoute, contract);
+  assert.doesNotMatch(
+    plannedJobAuditRoute,
+    /groups\.map\(\(group\) => group\.statement\)/,
+  );
+  for (const lazyUiContract of [
+    /const loadAuditGroup = useCallback/,
+    /group: groupKey/,
+    /event\.currentTarget\.open[\s\S]*!group\.loaded/,
+    /Open to load/,
+    /Load 50 more records/,
+    /retryCursor: cursor/,
+  ]) assert.match(plannedIntakeQueue, lazyUiContract);
   for (const provenanceContract of [
     /function addressProvenance\(serviceSite: Row\)/,
     /serviceSite\.address_entry_mode \|\| "manual_pending_review"/,
@@ -412,7 +435,7 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /serviceSite\.address_verified_at/,
     /status: providerVerified[\s\S]*"provider_verified"[\s\S]*"manual_review_required"/,
     /reviewRequired: !providerVerified/,
-    /serviceSiteAddressProvenance: addressProvenance\(serviceSite\)/,
+    /serviceSiteAddressProvenance: requestedGroup[\s\S]*addressProvenance\(serviceSite\)/,
   ]) assert.match(plannedJobAuditRoute, provenanceContract);
   for (const reviewContract of [
     /serviceSiteAddressProvenance: ServiceSiteAddressProvenance/,

@@ -13,6 +13,9 @@ import {
 import {
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
 } from "../src/lib/creditex-schema-guards.ts";
+import {
+  CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
+} from "../src/lib/creditex-job-audit-sql.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
@@ -170,6 +173,152 @@ function routeTemplate(name) {
   assert.ok(match, `Missing ${name} SQL template`);
   return match[1];
 }
+
+test("Creditex full-audit installer projection executes on the production schema", () => {
+  const database = new DatabaseSync(":memory:");
+  applyCompleteMigrationChain(database);
+
+  assert.doesNotThrow(() => {
+    database
+      .prepare(CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL)
+      .get("installer-not-present");
+  });
+  for (const requiredField of [
+    "business_name",
+    "contact_name",
+    "email",
+    "phone",
+    "abn",
+    "address_line_1",
+    "service_states",
+    "capabilities",
+    "account_status",
+    "verification_status",
+  ]) {
+    assert.match(CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL, new RegExp(`\\b${requiredField}\\b`));
+  }
+  for (const inventedField of [
+    "address_line_2",
+    "service_areas",
+    "service_categories",
+    "licence_number",
+    "licence_state",
+    "licence_expiry",
+    "partner_status",
+  ]) {
+    assert.doesNotMatch(
+      CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
+      new RegExp(`\\b${inventedField}\\b`),
+    );
+  }
+  database.close();
+});
+
+test("every Creditex audit group supports bounded deterministic pagination", () => {
+  const database = new DatabaseSync(":memory:");
+  applyCompleteMigrationChain(database);
+  const groupBlock = creditexAuditRoute.match(
+    /const groups: AuditGroup\[\] = \[([\s\S]*?)\n    \];\n\n    const requestedGroup/,
+  )?.[1];
+  assert.ok(groupBlock, "Missing Creditex audit group definitions");
+  const sqlFragments = new Map(
+    [...creditexAuditRoute.matchAll(
+      /const ([a-zA-Z0-9_]+Sql) = `([\s\S]*?)`;/g,
+    )].map((match) => [match[1], match[2]]),
+  );
+  const resolveSqlFragments = (sql) => sql.replace(
+    /\$\{([a-zA-Z0-9_]+)\}/g,
+    (_, name) => {
+      assert.ok(sqlFragments.has(name), `Missing SQL fragment ${name}`);
+      return sqlFragments.get(name);
+    },
+  );
+  const definitions = [
+    ...[...groupBlock.matchAll(
+      /jobGroup\(\s*database,\s*"([^"]+)",\s*"[^"]+",\s*"([^"]+)",\s*ownerUid,\s*workOrderId,\s*groupCursor\s*\)/g,
+    )].map((match) => ({
+      key: match[1],
+      table: match[2],
+      sql: `SELECT * FROM ${match[2]} WHERE firebase_uid = ? AND work_order_id = ?`,
+      bindingCount: 2,
+    })),
+    ...[...groupBlock.matchAll(
+      /auditGroup\(\s*database,\s*"([^"]+)",\s*"[^"]+",\s*`([\s\S]*?)`,\s*\[([\s\S]*?)\],\s*groupCursor\s*,?\s*\)/g,
+    )].map((match) => {
+      const sql = resolveSqlFragments(match[2]);
+      const table = sql.match(/\bFROM\s+([a-z0-9_]+)/i)?.[1];
+      assert.ok(table, `${match[1]} must select from a table`);
+      return {
+        key: match[1],
+        table,
+        sql,
+        bindingCount: match[3].split(",")
+          .map((binding) => binding.trim())
+          .filter(Boolean).length,
+      };
+    }),
+  ];
+  assert.equal(definitions.length, 53);
+  assert.equal(new Set(definitions.map(({ key }) => key)).size, 53);
+  const exceptionalSortFields = {
+    quoteEvents: "occurred_at",
+    quoteQuestions: "asked_at",
+    accountingEvents: "occurred_at",
+  };
+  for (const { key, table, sql, bindingCount } of definitions) {
+    const columns = new Map(
+      database.prepare(`PRAGMA table_info(${table})`).all()
+        .map((column) => [column.name, column]),
+    );
+    assert.ok(columns.has("id"), `${key} must have an id tie-breaker`);
+    const sortField = exceptionalSortFields[key] || "created_at";
+    assert.ok(
+      columns.has(sortField),
+      `${key} must have deterministic ${sortField} ordering`,
+    );
+    assert.equal(
+      columns.get(sortField).notnull,
+      1,
+      `${key} cursor field ${sortField} must not be nullable`,
+    );
+    const firstPageSql = `${sql} ORDER BY ${sortField} DESC, id DESC LIMIT ?`;
+    const cursorPageSql = `${sql} AND (${sortField} < ? OR (${sortField} = ? AND id < ?)) ORDER BY ${sortField} DESC, id DESC LIMIT ?`;
+    const baseBindings = Array(bindingCount).fill("test-binding");
+    assert.equal(
+      (firstPageSql.match(/\?/g) || []).length,
+      baseBindings.length + 1,
+      `${key} first-page bindings must match`,
+    );
+    assert.equal(
+      (cursorPageSql.match(/\?/g) || []).length,
+      baseBindings.length + 4,
+      `${key} cursor-page bindings must match`,
+    );
+    assert.doesNotThrow(
+      () => database.prepare(firstPageSql).all(...baseBindings, 51),
+      `${key} first-page SQL must execute`,
+    );
+    assert.doesNotThrow(
+      () => database.prepare(cursorPageSql).all(
+        ...baseBindings,
+        "9999-12-31T23:59:59.999Z",
+        "9999-12-31T23:59:59.999Z",
+        "zzzzzzzz",
+        51,
+      ),
+      `${key} cursor-page SQL must execute`,
+    );
+  }
+  assert.match(
+    creditexAuditRoute,
+    /ORDER BY \$\{sortField\} DESC, id DESC LIMIT \?/,
+  );
+  assert.match(
+    creditexAuditRoute,
+    /\(\$\{sortField\} < \? OR \(\$\{sortField\} = \? AND id < \?\)\)/,
+  );
+  database.close();
+});
 
 test("SRES is nationally compatible while VEU and NSW ESS remain state-bound", () => {
   for (const siteJurisdiction of AUSTRALIAN_STATES) {
@@ -534,7 +683,8 @@ test("Creditex register retains every assigned status and opens an audited full 
   assert.match(creditexAuditRoute, /trade_crm_quick_invoice_revisions/);
   assert.match(creditexAuditRoute, /compliance_case_evidence/);
   assert.match(creditexAuditRoute, /INSERT INTO compliance_audit_events/);
-  assert.match(creditexAuditRoute, /'job\.private_details_viewed'/);
+  assert.match(creditexAuditRoute, /"job\.audit_workspace_opened"/);
+  assert.match(creditexAuditRoute, /"job\.audit_group_page_viewed"/);
   assert.match(creditexAuditRoute, /"encrypted_token"/);
   assert.match(creditexAuditRoute, /"object_key"/);
   assert.match(creditexAuditRoute, /"idempotency_key"/);

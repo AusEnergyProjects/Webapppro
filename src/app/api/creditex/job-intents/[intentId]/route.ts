@@ -3,6 +3,9 @@ import {
   ComplianceAccessError,
   requireComplianceAccess,
 } from "@/lib/compliance-access-server";
+import {
+  CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
+} from "@/lib/creditex-job-audit-sql";
 import { CREDITEX_PARTNER_ORGANISATION_CODE } from "@/lib/trade-compliance-intent";
 
 export const runtime = "edge";
@@ -47,7 +50,7 @@ function errorResponse(error: unknown) {
   return json({
     ok: false,
     code: "CREDITEX_JOB_AUDIT_UNAVAILABLE",
-    error: "The complete job audit workspace could not be loaded.",
+    error: "The assigned-job audit request could not be loaded.",
   }, 500);
 }
 
@@ -143,8 +146,49 @@ function addressProvenance(serviceSite: Row) {
 type AuditGroup = {
   key: string;
   label: string;
+  sortField: string;
   statement: D1PreparedStatement;
 };
+type AuditGroupCursor = {
+  value: string;
+  id: string;
+};
+
+const AUDIT_GROUP_PAGE_SIZE = 50;
+const AUDIT_GROUP_SORT_FIELDS: Readonly<Record<string, string>> = {
+  quoteEvents: "occurred_at",
+  quoteQuestions: "asked_at",
+  accountingEvents: "occurred_at",
+};
+
+function auditGroup(
+  database: D1Database,
+  key: string,
+  label: string,
+  sql: string,
+  bindings: unknown[],
+  cursor: AuditGroupCursor | null,
+): AuditGroup {
+  const sortField = AUDIT_GROUP_SORT_FIELDS[key] || "created_at";
+  const cursorSql = cursor
+    ? ` AND (${sortField} < ? OR (${sortField} = ? AND id < ?))`
+    : "";
+  const cursorBindings = cursor
+    ? [cursor.value, cursor.value, cursor.id]
+    : [];
+  return {
+    key,
+    label,
+    sortField,
+    statement: database.prepare(
+      `${sql}${cursorSql} ORDER BY ${sortField} DESC, id DESC LIMIT ?`,
+    ).bind(
+      ...bindings,
+      ...cursorBindings,
+      AUDIT_GROUP_PAGE_SIZE + 1,
+    ),
+  };
+}
 
 function jobGroup(
   database: D1Database,
@@ -153,14 +197,16 @@ function jobGroup(
   table: string,
   ownerUid: string,
   workOrderId: string,
+  cursor: AuditGroupCursor | null,
 ): AuditGroup {
-  return {
+  return auditGroup(
+    database,
     key,
     label,
-    statement: database.prepare(
-      `SELECT * FROM ${table} WHERE firebase_uid = ? AND work_order_id = ?`,
-    ).bind(ownerUid, workOrderId),
-  };
+    `SELECT * FROM ${table} WHERE firebase_uid = ? AND work_order_id = ?`,
+    [ownerUid, workOrderId],
+    cursor,
+  );
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -181,6 +227,29 @@ export async function GET(request: Request, context: RouteContext) {
     const intentId = cleanId(routeIntentId);
     if (!intentId) {
       return json({ ok: false, error: "Job intent is required." }, 400);
+    }
+    const requestUrl = new URL(request.url);
+    const requestedGroupKey = cleanId(
+      requestUrl.searchParams.get("group"),
+    );
+    const cursorValue = cleanId(requestUrl.searchParams.get("cursorValue"));
+    const cursorId = cleanId(requestUrl.searchParams.get("cursorId"));
+    if (Boolean(cursorValue) !== Boolean(cursorId)) {
+      return json({
+        ok: false,
+        code: "CREDITEX_AUDIT_CURSOR_INVALID",
+        error: "The audit record cursor is incomplete.",
+      }, 400);
+    }
+    const groupCursor = cursorValue && cursorId
+      ? { value: cursorValue, id: cursorId }
+      : null;
+    if (groupCursor && !requestedGroupKey) {
+      return json({
+        ok: false,
+        code: "CREDITEX_AUDIT_CURSOR_INVALID",
+        error: "An audit record cursor must name its record group.",
+      }, 400);
     }
     const intent = await database.prepare(`SELECT *
       FROM trade_work_order_compliance_intents
@@ -210,13 +279,7 @@ export async function GET(request: Request, context: RouteContext) {
           AND customer_source = 'trade_owned'
         LIMIT 1`)
         .bind(workOrderId, ownerUid),
-      database.prepare(`SELECT id, firebase_uid, business_name, contact_name,
-          email, phone, abn, address_line_1, address_line_2, suburb,
-          address_state, postcode, service_areas, service_categories,
-          licence_number, licence_state, licence_expiry, verification_status,
-          partner_status, created_at, updated_at
-        FROM trade_accounts
-        WHERE firebase_uid = ? LIMIT 1`)
+      database.prepare(CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL)
         .bind(ownerUid),
     ]);
     const workOrder = (workResult.results[0] || null) as Row | null;
@@ -270,274 +333,326 @@ export async function GET(request: Request, context: RouteContext) {
       WHERE firebase_uid = ? AND work_order_id = ?`;
 
     const groups: AuditGroup[] = [
-      {
-        key: "customerContacts",
-        label: "Customer contacts",
-        statement: database.prepare(`SELECT * FROM trade_crm_customer_contacts
-          WHERE firebase_uid = ? AND customer_id = ?`)
-          .bind(ownerUid, customerId),
-      },
-      {
-        key: "siteContacts",
-        label: "Service-site contacts",
-        statement: database.prepare(`SELECT * FROM trade_crm_site_contacts
-          WHERE firebase_uid = ? AND service_site_id = ?`)
-          .bind(ownerUid, serviceSiteId),
-      },
-      {
-        key: "enquiries",
-        label: "Enquiry history",
-        statement: database.prepare(`SELECT * FROM trade_crm_enquiries
+      auditGroup(
+        database,
+        "customerContacts",
+        "Customer contacts",
+        `SELECT * FROM trade_crm_customer_contacts
+          WHERE firebase_uid = ? AND customer_id = ?`,
+        [ownerUid, customerId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "siteContacts",
+        "Service-site contacts",
+        `SELECT * FROM trade_crm_site_contacts
+          WHERE firebase_uid = ? AND service_site_id = ?`,
+        [ownerUid, serviceSiteId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "enquiries",
+        "Enquiry history",
+        `SELECT * FROM trade_crm_enquiries
           WHERE firebase_uid = ?
             AND id = ?
             AND customer_id = ?
-            AND service_site_id = ?`)
-          .bind(
-            ownerUid,
-            sourceEnquiryId,
-            customerId,
-            serviceSiteId,
-          ),
-      },
-      {
-        key: "enquiryMessages",
-        label: "Enquiry conversations",
-        statement: database.prepare(`SELECT * FROM trade_crm_enquiry_messages
-          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`)
-          .bind(
-            ownerUid,
-            ownerUid,
-            sourceEnquiryId,
-            customerId,
-            serviceSiteId,
-          ),
-      },
-      {
-        key: "enquiryAttachments",
-        label: "Enquiry attachments",
-        statement: database.prepare(`SELECT * FROM trade_crm_enquiry_attachments
-          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`)
-          .bind(
-            ownerUid,
-            ownerUid,
-            sourceEnquiryId,
-            customerId,
-            serviceSiteId,
-          ),
-      },
-      {
-        key: "enquiryEvents",
-        label: "Enquiry audit history",
-        statement: database.prepare(`SELECT * FROM trade_crm_enquiry_events
-          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`)
-          .bind(
-            ownerUid,
-            ownerUid,
-            sourceEnquiryId,
-            customerId,
-            serviceSiteId,
-          ),
-      },
-      jobGroup(database, "tasks", "Job tasks", "trade_work_order_tasks", ownerUid, workOrderId),
-      jobGroup(database, "jobEvents", "Job audit history", "trade_work_order_events", ownerUid, workOrderId),
-      jobGroup(database, "appointments", "Appointments", "trade_crm_appointments", ownerUid, workOrderId),
-      jobGroup(database, "appointmentRevisions", "Appointment revisions", "trade_crm_appointment_revisions", ownerUid, workOrderId),
-      jobGroup(database, "rescheduleRequests", "Reschedule requests", "trade_crm_appointment_reschedule_requests", ownerUid, workOrderId),
-      jobGroup(database, "rescheduleEvents", "Reschedule audit history", "trade_crm_appointment_reschedule_events", ownerUid, workOrderId),
-      jobGroup(database, "jobNotes", "Job notes and issues", "trade_crm_job_notes", ownerUid, workOrderId),
-      jobGroup(database, "timeEntries", "Time entries", "trade_crm_time_entries", ownerUid, workOrderId),
-      jobGroup(database, "jobForms", "Job forms and answers", "trade_job_forms", ownerUid, workOrderId),
-      jobGroup(database, "jobMedia", "Files, photos and metadata", "trade_crm_job_media", ownerUid, workOrderId),
-      jobGroup(database, "photoRequests", "Photo requests", "trade_crm_photo_requests", ownerUid, workOrderId),
-      jobGroup(database, "photoRequestEvents", "Photo-request audit history", "trade_crm_photo_request_events", ownerUid, workOrderId),
-      jobGroup(database, "photoRequestCompletions", "Photo checklist completions", "trade_crm_photo_request_completions", ownerUid, workOrderId),
-      jobGroup(database, "photoRequirementReviews", "Photo compliance reviews", "trade_crm_photo_requirement_reviews", ownerUid, workOrderId),
-      jobGroup(database, "photoRequestDeliveries", "Photo-request delivery history", "trade_crm_photo_request_deliveries", ownerUid, workOrderId),
-      jobGroup(database, "signoffs", "Customer and installer sign-offs", "trade_crm_signoffs", ownerUid, workOrderId),
-      jobGroup(database, "quotes", "Quotes", "trade_crm_quotes", ownerUid, workOrderId),
-      {
-        key: "quoteVersions",
-        label: "Quote revisions",
-        statement: database.prepare(`SELECT * FROM trade_crm_quote_versions
-          WHERE firebase_uid = ? AND quote_id IN (${quoteIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      {
-        key: "quoteItems",
-        label: "Quote line items",
-        statement: database.prepare(`SELECT * FROM trade_crm_quote_items
-          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      {
-        key: "quoteExecutionSnapshots",
-        label: "Quote execution snapshots",
-        statement: database.prepare(`SELECT * FROM trade_crm_quote_execution_snapshots
-          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      {
-        key: "quoteChoices",
-        label: "Customer quote choices",
-        statement: database.prepare(`SELECT * FROM trade_crm_quote_choices
-          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      jobGroup(database, "quoteAcceptances", "Quote acceptances", "trade_crm_quote_acceptances", ownerUid, workOrderId),
-      jobGroup(database, "commercialHandovers", "Accepted commercial handoffs", "trade_crm_commercial_handovers", ownerUid, workOrderId),
-      jobGroup(database, "quoteLinks", "Quote access links", "trade_crm_quote_links", ownerUid, workOrderId),
-      jobGroup(database, "quoteEvents", "Quote audit history", "trade_crm_quote_events", ownerUid, workOrderId),
-      jobGroup(database, "quoteQuestions", "Customer quote questions", "trade_crm_quote_questions", ownerUid, workOrderId),
-      jobGroup(database, "quoteDeliveries", "Quote delivery history", "trade_crm_quote_deliveries", ownerUid, workOrderId),
-      jobGroup(database, "jobPlans", "Accepted job plans", "trade_crm_job_plans", ownerUid, workOrderId),
-      {
-        key: "jobPlanPhases",
-        label: "Job-plan phases",
-        statement: database.prepare(`SELECT * FROM trade_crm_job_plan_phases
-          WHERE firebase_uid = ? AND job_plan_id IN (${jobPlanIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      {
-        key: "jobPlanRequirements",
-        label: "Job-plan requirements",
-        statement: database.prepare(`SELECT * FROM trade_crm_job_plan_requirements
-          WHERE firebase_uid = ? AND job_plan_id IN (${jobPlanIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      jobGroup(database, "jobActuals", "On-site job actuals", "trade_crm_job_actuals", ownerUid, workOrderId),
-      jobGroup(database, "quickInvoices", "Invoices", "trade_crm_quick_invoices", ownerUid, workOrderId),
-      {
-        key: "quickInvoiceRevisions",
-        label: "Invoice revisions",
-        statement: database.prepare(`SELECT * FROM trade_crm_quick_invoice_revisions
-          WHERE firebase_uid = ? AND invoice_id IN (${invoiceIdsSql})`)
-          .bind(ownerUid, ownerUid, workOrderId),
-      },
-      jobGroup(database, "quickInvoiceCredits", "Invoice credits", "trade_crm_quick_invoice_credits", ownerUid, workOrderId),
-      jobGroup(database, "accountingDocuments", "Accounting documents and payments", "trade_crm_accounting_documents", ownerUid, workOrderId),
-      jobGroup(database, "accountingEvents", "Accounting audit history", "trade_crm_accounting_events", ownerUid, workOrderId),
-      jobGroup(database, "handoverPacks", "Handover packs", "trade_handover_packs", ownerUid, workOrderId),
-      jobGroup(database, "handoverDocuments", "Handover documents", "trade_handover_documents", ownerUid, workOrderId),
-      jobGroup(database, "installedAssets", "Installed assets and equipment", "trade_installed_assets", ownerUid, workOrderId),
-      jobGroup(database, "tradeComplianceItems", "Installer compliance checklist", "trade_compliance_items", ownerUid, workOrderId),
-      jobGroup(database, "assetServicePlans", "Asset service plans", "trade_asset_service_plans", ownerUid, workOrderId),
-      jobGroup(database, "assetServiceEvents", "Asset service history", "trade_asset_service_events", ownerUid, workOrderId),
-      {
-        key: "complianceCases",
-        label: "Creditex compliance cases",
-        statement: database.prepare(`SELECT * FROM compliance_cases
-          WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?`)
-          .bind(access.organisationId, workOrderId, ownerUid),
-      },
-      {
-        key: "complianceCaseEvents",
-        label: "Creditex case audit history",
-        statement: database.prepare(`SELECT * FROM compliance_case_events
+            AND service_site_id = ?`,
+        [ownerUid, sourceEnquiryId, customerId, serviceSiteId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "enquiryMessages",
+        "Enquiry conversations",
+        `SELECT * FROM trade_crm_enquiry_messages
+          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`,
+        [ownerUid, ownerUid, sourceEnquiryId, customerId, serviceSiteId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "enquiryAttachments",
+        "Enquiry attachments",
+        `SELECT * FROM trade_crm_enquiry_attachments
+          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`,
+        [ownerUid, ownerUid, sourceEnquiryId, customerId, serviceSiteId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "enquiryEvents",
+        "Enquiry audit history",
+        `SELECT * FROM trade_crm_enquiry_events
+          WHERE firebase_uid = ? AND enquiry_id IN (${enquiryIdsSql})`,
+        [ownerUid, ownerUid, sourceEnquiryId, customerId, serviceSiteId],
+        groupCursor,
+      ),
+      jobGroup(database, "tasks", "Job tasks", "trade_work_order_tasks", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "jobEvents", "Job audit history", "trade_work_order_events", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "appointments", "Appointments", "trade_crm_appointments", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "appointmentRevisions", "Appointment revisions", "trade_crm_appointment_revisions", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "rescheduleRequests", "Reschedule requests", "trade_crm_appointment_reschedule_requests", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "rescheduleEvents", "Reschedule audit history", "trade_crm_appointment_reschedule_events", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "jobNotes", "Job notes and issues", "trade_crm_job_notes", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "timeEntries", "Time entries", "trade_crm_time_entries", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "jobForms", "Job forms and answers", "trade_job_forms", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "jobMedia", "Files, photos and metadata", "trade_crm_job_media", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "photoRequests", "Photo requests", "trade_crm_photo_requests", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "photoRequestEvents", "Photo-request audit history", "trade_crm_photo_request_events", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "photoRequestCompletions", "Photo checklist completions", "trade_crm_photo_request_completions", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "photoRequirementReviews", "Photo compliance reviews", "trade_crm_photo_requirement_reviews", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "photoRequestDeliveries", "Photo-request delivery history", "trade_crm_photo_request_deliveries", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "signoffs", "Customer and installer sign-offs", "trade_crm_signoffs", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quotes", "Quotes", "trade_crm_quotes", ownerUid, workOrderId, groupCursor),
+      auditGroup(
+        database,
+        "quoteVersions",
+        "Quote revisions",
+        `SELECT * FROM trade_crm_quote_versions
+          WHERE firebase_uid = ? AND quote_id IN (${quoteIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "quoteItems",
+        "Quote line items",
+        `SELECT * FROM trade_crm_quote_items
+          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "quoteExecutionSnapshots",
+        "Quote execution snapshots",
+        `SELECT * FROM trade_crm_quote_execution_snapshots
+          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "quoteChoices",
+        "Customer quote choices",
+        `SELECT * FROM trade_crm_quote_choices
+          WHERE firebase_uid = ? AND quote_version_id IN (${quoteVersionIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      jobGroup(database, "quoteAcceptances", "Quote acceptances", "trade_crm_quote_acceptances", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "commercialHandovers", "Accepted commercial handoffs", "trade_crm_commercial_handovers", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quoteLinks", "Quote access links", "trade_crm_quote_links", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quoteEvents", "Quote audit history", "trade_crm_quote_events", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quoteQuestions", "Customer quote questions", "trade_crm_quote_questions", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quoteDeliveries", "Quote delivery history", "trade_crm_quote_deliveries", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "jobPlans", "Accepted job plans", "trade_crm_job_plans", ownerUid, workOrderId, groupCursor),
+      auditGroup(
+        database,
+        "jobPlanPhases",
+        "Job-plan phases",
+        `SELECT * FROM trade_crm_job_plan_phases
+          WHERE firebase_uid = ? AND job_plan_id IN (${jobPlanIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "jobPlanRequirements",
+        "Job-plan requirements",
+        `SELECT * FROM trade_crm_job_plan_requirements
+          WHERE firebase_uid = ? AND job_plan_id IN (${jobPlanIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      jobGroup(database, "jobActuals", "On-site job actuals", "trade_crm_job_actuals", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "quickInvoices", "Invoices", "trade_crm_quick_invoices", ownerUid, workOrderId, groupCursor),
+      auditGroup(
+        database,
+        "quickInvoiceRevisions",
+        "Invoice revisions",
+        `SELECT * FROM trade_crm_quick_invoice_revisions
+          WHERE firebase_uid = ? AND invoice_id IN (${invoiceIdsSql})`,
+        [ownerUid, ownerUid, workOrderId],
+        groupCursor,
+      ),
+      jobGroup(database, "quickInvoiceCredits", "Invoice credits", "trade_crm_quick_invoice_credits", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "accountingDocuments", "Accounting documents and payments", "trade_crm_accounting_documents", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "accountingEvents", "Accounting audit history", "trade_crm_accounting_events", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "handoverPacks", "Handover packs", "trade_handover_packs", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "handoverDocuments", "Handover documents", "trade_handover_documents", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "installedAssets", "Installed assets and equipment", "trade_installed_assets", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "tradeComplianceItems", "Installer compliance checklist", "trade_compliance_items", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "assetServicePlans", "Asset service plans", "trade_asset_service_plans", ownerUid, workOrderId, groupCursor),
+      jobGroup(database, "assetServiceEvents", "Asset service history", "trade_asset_service_events", ownerUid, workOrderId, groupCursor),
+      auditGroup(
+        database,
+        "complianceCases",
+        "Creditex compliance cases",
+        `SELECT * FROM compliance_cases
+          WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?`,
+        [access.organisationId, workOrderId, ownerUid],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "complianceCaseEvents",
+        "Creditex case audit history",
+        `SELECT * FROM compliance_case_events
           WHERE organisation_id = ? AND case_id IN (
             SELECT id FROM compliance_cases
             WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?
-          )`)
-          .bind(
-            access.organisationId,
-            access.organisationId,
-            workOrderId,
-            ownerUid,
-          ),
-      },
-      {
-        key: "complianceEvidence",
-        label: "Governed compliance evidence",
-        statement: database.prepare(`SELECT * FROM compliance_case_evidence
+          )`,
+        [
+          access.organisationId,
+          access.organisationId,
+          workOrderId,
+          ownerUid,
+        ],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "complianceEvidence",
+        "Governed compliance evidence",
+        `SELECT * FROM compliance_case_evidence
           WHERE organisation_id = ? AND case_id IN (
             SELECT id FROM compliance_cases
             WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?
-          )`)
-          .bind(
-            access.organisationId,
-            access.organisationId,
-            workOrderId,
-            ownerUid,
-          ),
-      },
-      {
-        key: "complianceFindings",
-        label: "Creditex findings",
-        statement: database.prepare(`SELECT * FROM compliance_case_findings
+          )`,
+        [
+          access.organisationId,
+          access.organisationId,
+          workOrderId,
+          ownerUid,
+        ],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "complianceFindings",
+        "Creditex findings",
+        `SELECT * FROM compliance_case_findings
           WHERE organisation_id = ? AND case_id IN (
             SELECT id FROM compliance_cases
             WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?
-          )`)
-          .bind(
-            access.organisationId,
-            access.organisationId,
-            workOrderId,
-            ownerUid,
-          ),
-      },
-      {
-        key: "complianceDecisions",
-        label: "Creditex decisions",
-        statement: database.prepare(`SELECT * FROM compliance_case_decisions
+          )`,
+        [
+          access.organisationId,
+          access.organisationId,
+          workOrderId,
+          ownerUid,
+        ],
+        groupCursor,
+      ),
+      auditGroup(
+        database,
+        "complianceDecisions",
+        "Creditex decisions",
+        `SELECT * FROM compliance_case_decisions
           WHERE organisation_id = ? AND case_id IN (
             SELECT id FROM compliance_cases
             WHERE organisation_id = ? AND work_order_id = ? AND installer_uid = ?
-          )`)
-          .bind(
-            access.organisationId,
-            access.organisationId,
-            workOrderId,
-            ownerUid,
-          ),
-      },
+          )`,
+        [
+          access.organisationId,
+          access.organisationId,
+          workOrderId,
+          ownerUid,
+        ],
+        groupCursor,
+      ),
     ];
 
-    const results = await database.batch(
-      groups.map((group) => group.statement),
-    );
+    const requestedGroup = requestedGroupKey
+      ? groups.find((group) => group.key === requestedGroupKey)
+      : null;
+    if (requestedGroupKey && !requestedGroup) {
+      return json({
+        ok: false,
+        code: "CREDITEX_AUDIT_GROUP_NOT_FOUND",
+        error: "The requested audit record group is not available.",
+      }, 404);
+    }
+    const requestedGroupResult = requestedGroup
+      ? await requestedGroup.statement.all<Row>()
+      : null;
+    const requestedRows = requestedGroupResult?.results || [];
+    const requestedHasMore = requestedRows.length > AUDIT_GROUP_PAGE_SIZE;
+    const returnedRows = requestedRows.slice(0, AUDIT_GROUP_PAGE_SIZE);
+    const finalReturnedRow = returnedRows.at(-1);
+    const requestedNextCursor = requestedGroup
+      && requestedHasMore
+      && finalReturnedRow
+      ? {
+        value: String(finalReturnedRow[requestedGroup.sortField]),
+        id: String(finalReturnedRow.id),
+      }
+      : null;
+    const auditEventType = requestedGroup
+      ? "job.audit_group_page_viewed"
+      : "job.audit_workspace_opened";
+    const auditSummary = requestedGroup
+      ? "Authorised Creditex member viewed one bounded assigned-job record group page."
+      : "Authorised Creditex member opened the assigned-job core audit workspace.";
     const viewedAt = new Date().toISOString();
     await database.prepare(`INSERT INTO compliance_audit_events (
         id, organisation_id, actor_type, actor_uid, event_type,
         target_type, target_id, summary, metadata, created_at
-      ) VALUES (?, ?, 'compliance', ?, 'job.private_details_viewed',
-        'trade_compliance_intent', ?,
-        'Authorised Creditex member viewed the complete assigned job record.',
-        ?, ?)`)
+      ) VALUES (?, ?, 'compliance', ?, ?,
+        'trade_compliance_intent', ?, ?, ?, ?)`)
       .bind(
         crypto.randomUUID(),
         access.organisationId,
         access.uid,
+        auditEventType,
         intentId,
+        auditSummary,
         JSON.stringify({
           purpose: "assigned_job_compliance_review",
           role: access.role,
           workOrderId,
-          dataClasses: [
-            "installer",
-            "customer",
-            "service_site",
-            "job",
-            "commercial",
-            "field",
-            "evidence",
-            "audit_history",
-          ],
+          group: requestedGroupKey || "core",
+          cursor: groupCursor,
+          returnedRows: returnedRows.length,
+          hasMore: requestedHasMore,
+          pageSize: AUDIT_GROUP_PAGE_SIZE,
+          dataClasses: requestedGroup
+            ? [requestedGroupKey]
+            : ["installer", "customer", "service_site", "job"],
         }),
         viewedAt,
       )
       .run();
     return json({
       ok: true,
-      intent: safeRow(intent),
-      workOrder: safeRow(workOrder),
-      jobDetails: safeRow(jobDetails),
-      installer: safeRow(installer),
-      customer: safeRow(customer),
-      serviceSite: safeRow(serviceSite),
-      serviceSiteAddressProvenance: addressProvenance(serviceSite),
-      groups: groups.map((group, index) => ({
+      intent: requestedGroup ? null : safeRow(intent),
+      workOrder: requestedGroup ? null : safeRow(workOrder),
+      jobDetails: requestedGroup ? null : safeRow(jobDetails),
+      installer: requestedGroup ? null : safeRow(installer),
+      customer: requestedGroup ? null : safeRow(customer),
+      serviceSite: requestedGroup ? null : safeRow(serviceSite),
+      serviceSiteAddressProvenance: requestedGroup
+        ? null
+        : addressProvenance(serviceSite),
+      groups: groups.map((group) => ({
         key: group.key,
         label: group.label,
-        rows: safeRows((results[index]?.results || []) as Row[], group.key),
+        loaded: group.key === requestedGroupKey,
+        rows: group.key === requestedGroupKey
+          ? safeRows(
+            returnedRows as Row[],
+            group.key,
+          )
+          : [],
+        pageSize: AUDIT_GROUP_PAGE_SIZE,
+        hasMore: group.key === requestedGroupKey && requestedHasMore,
+        nextCursor: group.key === requestedGroupKey
+          ? requestedNextCursor
+          : null,
       })),
     });
   } catch (error) {

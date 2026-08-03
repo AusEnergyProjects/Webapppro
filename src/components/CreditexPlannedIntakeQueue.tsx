@@ -67,10 +67,20 @@ type PlannedIntake = {
 };
 
 type AuditRecord = Record<string, unknown>;
+type AuditGroupCursor = {
+  value: string;
+  id: string;
+};
 type AuditGroup = {
   key: string;
   label: string;
   rows: AuditRecord[];
+  loaded: boolean;
+  loading?: boolean;
+  hasMore: boolean;
+  nextCursor: AuditGroupCursor | null;
+  retryCursor?: AuditGroupCursor | null;
+  error?: string;
 };
 type ServiceSiteAddressProvenance = {
   entryMode: string;
@@ -270,7 +280,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       );
       if (result.ok !== true) {
         throw new Error(
-          String(result.error || "The complete audit workspace could not be loaded."),
+          String(result.error || "The full audit workspace could not be opened."),
         );
       }
       if (requestId !== auditSequence.current) return;
@@ -282,14 +292,24 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         customer: (result.customer || null) as AuditRecord | null,
         serviceSite: (result.serviceSite || null) as AuditRecord | null,
         serviceSiteAddressProvenance: result.serviceSiteAddressProvenance as ServiceSiteAddressProvenance,
-        groups: (result.groups || []) as AuditGroup[],
+        groups: ((result.groups || []) as AuditGroup[]).map((group) => ({
+          ...group,
+          rows: group.rows || [],
+          loaded: group.loaded === true,
+          loading: false,
+          hasMore: group.hasMore === true,
+          nextCursor: group.nextCursor?.value && group.nextCursor?.id
+            ? group.nextCursor
+            : null,
+          retryCursor: null,
+        })),
       });
     } catch (error) {
       if (requestId !== auditSequence.current) return;
       setAuditMessage(
         error instanceof Error
           ? error.message
-          : "The complete audit workspace could not be loaded.",
+          : "The full audit workspace could not be opened.",
       );
     } finally {
       if (requestId === auditSequence.current) {
@@ -298,6 +318,83 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       }
     }
   }, [api]);
+
+  const loadAuditGroup = useCallback(async (
+    groupKey: string,
+    cursor: AuditGroupCursor | null = null,
+  ) => {
+    const itemId = auditItem?.id;
+    const requestId = auditSequence.current;
+    if (!itemId) return;
+    setAudit((current) => current
+      ? {
+        ...current,
+        groups: current.groups.map((group) => group.key === groupKey
+          ? { ...group, loading: true, error: "" }
+          : group),
+      }
+      : current);
+    try {
+      const query = new URLSearchParams({ group: groupKey });
+      if (cursor) {
+        query.set("cursorValue", cursor.value);
+        query.set("cursorId", cursor.id);
+      }
+      const result = await api(
+        `/api/creditex/job-intents/${encodeURIComponent(itemId)}?${query}`,
+      );
+      if (result.ok !== true) {
+        throw new Error(
+          String(result.error || "This audit record group could not be loaded."),
+        );
+      }
+      const loadedGroup = ((result.groups || []) as AuditGroup[])
+        .find((group) => group.key === groupKey && group.loaded === true);
+      if (!loadedGroup) {
+        throw new Error("The requested audit record group was not returned.");
+      }
+      if (requestId !== auditSequence.current) return;
+      setAudit((current) => current
+        ? {
+          ...current,
+          groups: current.groups.map((group) => group.key === groupKey
+            ? {
+              ...group,
+              rows: cursor
+                ? [...group.rows, ...(loadedGroup.rows || [])]
+                : (loadedGroup.rows || []),
+              loaded: true,
+              loading: false,
+              hasMore: loadedGroup.hasMore === true,
+              nextCursor: loadedGroup.nextCursor?.value
+                && loadedGroup.nextCursor?.id
+                ? loadedGroup.nextCursor
+                : null,
+              retryCursor: null,
+              error: "",
+            }
+            : group),
+        }
+        : current);
+    } catch (error) {
+      if (requestId !== auditSequence.current) return;
+      setAudit((current) => current
+        ? {
+          ...current,
+          groups: current.groups.map((group) => group.key === groupKey
+            ? {
+              ...group,
+              loading: false,
+              retryCursor: cursor,
+              error: error instanceof Error
+                ? error.message
+                : "This audit record group could not be loaded.",
+            }
+            : group),
+        }
+        : current);
+    }
+  }, [api, auditItem?.id]);
 
   function closeAudit() {
     const launcher = auditLauncherRef.current;
@@ -403,15 +500,15 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
     {auditItem && <section id="creditex-full-audit-workspace" className={styles.auditWorkspace} aria-labelledby="creditex-full-audit-title">
       <header>
         <div>
-          <span>Complete authorised record</span>
+          <span>Authorised job audit</span>
           <h3 id="creditex-full-audit-title" tabIndex={-1} ref={auditHeadingRef}>
             {auditItem.jobNumber || auditItem.jobId} audit workspace
           </h3>
-          <p>Private customer, installer, job, commercial, field, evidence and retained history records assigned to Creditex are shown below. Delivery tokens and authentication secrets are never exposed.</p>
+          <p>The job, customer, installer and service site are shown first. Open each retained domain below to load its bounded commercial, field, evidence and audit records. Delivery tokens and authentication secrets are never exposed.</p>
         </div>
         <button type="button" onClick={closeAudit}>Close workspace</button>
       </header>
-      {auditLoading && <p className={styles.message} role="status">Loading the complete job record...</p>}
+      {auditLoading && <p className={styles.message} role="status">Loading the authorised job overview...</p>}
       {auditMessage && <p className={styles.message} role="alert">{auditMessage}</p>}
       {audit && <>
         <div className={styles.auditCore}>
@@ -424,15 +521,57 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
           <AddressProvenanceView provenance={audit.serviceSiteAddressProvenance} />
         </div>
         <div className={styles.auditGroups}>
-          {audit.groups.map((group) => <details key={group.key} open={group.rows.length > 0 && group.rows.length <= 3}>
-            <summary><strong>{group.label}</strong><span>{group.rows.length} records</span></summary>
-            {group.rows.length
+          {audit.groups.map((group) => <details
+            key={group.key}
+            onToggle={(event) => {
+              if (
+                event.currentTarget.open
+                && !group.loaded
+                && !group.loading
+                && !group.error
+              ) {
+                void loadAuditGroup(group.key);
+              }
+            }}
+          >
+            <summary><strong>{group.label}</strong><span>{
+              group.loading
+                ? "Loading..."
+                : group.loaded
+                  ? `${group.rows.length}${group.hasMore ? "+" : ""} records`
+                  : "Open to load"
+            }</span></summary>
+            {group.error && <p className={styles.message} role="alert">
+              {group.error}
+              <button
+                type="button"
+                className={styles.detailButton}
+                onClick={() => void loadAuditGroup(
+                  group.key,
+                  group.retryCursor || null,
+                )}
+              >Retry</button>
+            </p>}
+            {!group.loaded && !group.loading && !group.error
+              && <p>Open this section to load its authorised records.</p>}
+            {group.loading && <p role="status">Loading authorised records...</p>}
+            {group.loaded && group.rows.length
               ? <div className={styles.auditGroupRows}>{group.rows.map((record, index) => <AuditRecordView
                 key={String(record.id || `${group.key}-${index}`)}
                 title={`${group.label} ${index + 1}`}
                 record={record}
-              />)}</div>
-              : <p>No records are stored for this job.</p>}
+              />)}{group.hasMore && group.nextCursor !== null && <button
+                type="button"
+                className={styles.detailButton}
+                disabled={group.loading}
+                onClick={() => void loadAuditGroup(
+                  group.key,
+                  group.nextCursor,
+                )}
+              >Load 50 more records</button>}</div>
+              : group.loaded
+                ? <p>No records are stored for this job.</p>
+                : null}
           </details>)}
         </div>
       </>}
