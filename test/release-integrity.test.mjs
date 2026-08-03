@@ -98,7 +98,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /## Customer plan trade enquiry and home-fact refinement release/);
   assert.match(releaseTruth, /## Creditex evidence-policy governance release/);
   assert.match(releaseTruth, /## Prior shared compare-navigation discovery release/);
-  assert.match(releaseTruth, /## Current Creditex governed source intake release/);
+  assert.match(releaseTruth, /## Current installer-to-Creditex job handoff release/);
+  assert.match(releaseTruth, /## Prior Creditex governed source intake release/);
+  assert.match(
+    releaseTruth,
+    /## Prior Creditex governed source intake release[\s\S]{0,200}`CREDITEX-GOVERNED-SOURCE-INTAKE-39` is the prior release/,
+  );
   assert.match(releaseTruth, /## Prior Creditex governed manual-field preflight release/);
   assert.match(releaseTruth, /## Prior Creditex national manual-evidence lab release/);
   assert.match(releaseTruth, /## Prior Creditex national calculation foundations release/);
@@ -146,8 +151,17 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_ea8944a8b6d08191bf7b8fd3237619c4/);
   assert.match(releaseTruth, /appgdep_6a6fb33354ac8191beb6ef116cbe9bca/);
   assert.match(releaseTruth, /sha256:bdd4fb3fe2ccad379fe6afc94f5ae92470213388ba2f9c236708b8cffbab0aed/);
-  assert.match(releaseTruth, /Current Creditex application source \| `8baad519d763f0955e481a925ca9114b4d708653`/);
-  assert.match(releaseTruth, /Current executable application identity \| Sites version 270 from `8baad519d763f0955e481a925ca9114b4d708653`/);
+  assert.match(releaseTruth, /Historical Creditex governed-source application source \| `8baad519d763f0955e481a925ca9114b4d708653`/);
+  assert.match(releaseTruth, /Current Creditex application source \| `a45f250ee805aac1545c8643726dfde3964de22b`/);
+  assert.match(releaseTruth, /Current executable application identity \| Sites version 271 from `a45f250ee805aac1545c8643726dfde3964de22b`/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_1e6ba2c1ae64819197a3b33a13cbb364/);
+  assert.match(releaseTruth, /appgdep_6a701f23b43c8191ab61ef23e35166de/);
+  assert.match(releaseTruth, /7,758,795 bytes/);
+  assert.match(releaseTruth, /23C885EF9D4BD11FA837107740E9B44381D0E8B71CA4432364F3531CFF148CC9/);
+  assert.match(releaseTruth, /369 entries and all 117 migrations/);
+  assert.match(releaseTruth, /355 files and 31,518,720 bytes/);
+  assert.match(releaseTruth, /sha256:28daf91f4202cf79d0c3c5ecbb7b4f42822bec6725644c3077423b3869e83e0e/);
+  assert.match(releaseTruth, /regression set passed 105 of 105/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_2deae2c2caa081919a369e1cd193bd5d/);
   assert.match(releaseTruth, /appgdep_6a6fc16429e88191af41bbf10fb18a6a/);
   assert.match(releaseTruth, /sha256:6cf77082dca1a638dc78e094791cd712f2417fdb17bd86c9a0ba772aa041d978/);
@@ -178,8 +192,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /1,281 main tests with 1,279 passed, 2 intentionally skipped and 0 failed/);
   assert.match(releaseTruth, /32 controlled Australian government program pathways and 212 activity templates/);
   assert.match(releaseTruth, /six live REC Registry oracle vectors reconciled/);
-  assert.match(releaseTruth, /The current verified deployed topology for Sites version 270 is:/);
-  assert.doesNotMatch(releaseTruth, /current verified deployed topology for Sites version 264/i);
+  assert.match(releaseTruth, /The current verified deployed topology for Sites version 271 is:/);
+  assert.doesNotMatch(releaseTruth, /current verified deployed topology for Sites version 270/i);
   assert.match(releaseTruth, /Sites version 262 built from `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
   assert.match(releaseTruth, /appgdep_6a6edfb2b8e08191b295825c3db65d4d/);
   assert.match(releaseTruth, /sha256:60ede71e262e365ed8aa39fced47e8a550623266d6636ef8c326a821efdadb3c/);
@@ -295,7 +309,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /sha256:38dfcd7487aa2a6cde6eedc11b628e55dadd3d1cac4430a8beeeecf20f523357/);
   assert.match(releaseTruth, /https:\/\/compare\.ausenergyassessments\.com\/creditex\/compliance/);
   assert.match(releaseTruth, /https:\/\/aea-energy-comparison\.info294029\.chatgpt\.site/);
-  assert.match(releaseTruth, /0 published programs, 0 activity versions, 0 policies and 0 regulated cases/);
+  assert.match(releaseTruth, /0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_bc9f3157a9e88191881c5989f7de7ba0/);
   assert.match(releaseTruth, /appgdep_6a6cc08dc6f881919a349de607f5a8a9/);
   assert.match(releaseTruth, /sha256:3d7535003e6b3fae6b2b7f4f86b5c69a59737a8aa607ba7feabdbd407fd890f0/);
@@ -397,9 +411,23 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /exact application commit `37776ed557d7c0a25d92698f52e87cf59cee05b6`[\s\S]{0,500}Sites version 269/i);
   assert.match(roadmap, /## Released milestone: CREDITEX-GOVERNED-SOURCE-INTAKE-39/);
   assert.match(roadmap, /exact application commit `8baad519d763f0955e481a925ca9114b4d708653`[\s\S]{0,500}Sites version 270/i);
+  assert.match(roadmap, /## Released milestone: TRADE-CREDITEX-JOB-HANDOFF-40/);
+  assert.match(roadmap, /exact application commit `a45f250ee805aac1545c8643726dfde3964de22b`[\s\S]{0,500}Sites version 271/i);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-CREDITEX-JOB-HANDOFF-40` released and live/);
+  assert.match(handover, /Milestone ID: `TRADE-CREDITEX-JOB-HANDOFF-40`/);
+  assert.match(handover, /Current production: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`/);
+  assert.match(handover, /Released application source commit: `a45f250ee805aac1545c8643726dfde3964de22b`/);
+  assert.match(handover, /Previous production application source: `8baad519d763f0955e481a925ca9114b4d708653`/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_1e6ba2c1ae64819197a3b33a13cbb364/);
+  assert.match(handover, /appgdep_6a701f23b43c8191ab61ef23e35166de/);
+  assert.match(handover, /7,758,795 bytes/);
+  assert.match(handover, /23C885EF9D4BD11FA837107740E9B44381D0E8B71CA4432364F3531CFF148CC9/);
+  assert.match(handover, /355 stored files, 31,518,720 stored bytes/);
+  assert.match(handover, /sha256:28daf91f4202cf79d0c3c5ecbb7b4f42822bec6725644c3077423b3869e83e0e/);
+  assert.match(handover, /regression set passed 105 of 105/);
   assert.match(handover, /Status: `CREDITEX-GOVERNED-SOURCE-INTAKE-39` released and live/);
   assert.match(handover, /Milestone ID: `CREDITEX-GOVERNED-SOURCE-INTAKE-39`/);
-  assert.match(handover, /Current production: Sites version 270 from application commit `8baad519d763f0955e481a925ca9114b4d708653`/);
+  assert.match(handover, /Prior production for milestone 39: Sites version 270 from application commit `8baad519d763f0955e481a925ca9114b4d708653`/);
   assert.match(handover, /Released application source commit: `8baad519d763f0955e481a925ca9114b4d708653`/);
   assert.match(handover, /Primary application source commit: `8baad519d763f0955e481a925ca9114b4d708653`/);
   assert.match(handover, /Previous production application source: `37776ed557d7c0a25d92698f52e87cf59cee05b6`/);
@@ -503,11 +531,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   const normalisedRoadmapNextFive = roadmapNextFive.replaceAll("\r\n", "\n");
   const normalisedHandoverNextFive = handoverNextFive.replaceAll("\r\n", "\n");
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Approve the first complete VEU source bundle:/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Build exact offline NSW TESSA interchange:/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Build separate REC Registry interchange packs:/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Approve calculations pathway by pathway:/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Pass physical field acceptance and run a bounded VEU pilot:/);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Add automatic intent revision and return workflow:/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Approve the first governed VEU, SRES and NSW bundles:/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Bind dynamic compliance forms into AEA Field:/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Enforce evidence-complete job gates:/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Complete Creditex pre-case evidence operations:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

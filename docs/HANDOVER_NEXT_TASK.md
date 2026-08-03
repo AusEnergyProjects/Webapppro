@@ -1,12 +1,28 @@
 # Next task handover
 
-Status: `TRADE-CREDITEX-JOB-HANDOFF-40` in progress
+Status: `TRADE-CREDITEX-JOB-HANDOFF-40` released and live
 
 Prepared: 3 August 2026
 
 Milestone ID: `TRADE-CREDITEX-JOB-HANDOFF-40`
 
-## Active milestone contract
+Working branch: `codex/sites-custom-domain-migration`
+
+Released application source commit: `a45f250ee805aac1545c8643726dfde3964de22b`
+
+Previous production application source: `8baad519d763f0955e481a925ca9114b4d708653`
+
+Current production: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`
+
+Production URL: `https://compare.ausenergyassessments.com`
+
+Creditex URL: `https://compare.ausenergyassessments.com/creditex/compliance`
+
+Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
+
+Production access: public comparison host with authenticated installer and Creditex workspaces
+
+## Released milestone contract
 
 Outcome: an installer creates one scheduled TLink job, optionally selects a
 controlled government program and activity once, and carries that exact
@@ -79,6 +95,94 @@ the job and case, if an unauthorised organisation could see an intent, if the
 flow would bypass accepted quote or governed policy controls, or if completion
 would require production data or an external regulator submission.
 
+## Released milestone 40 outcome
+
+The installer New Job flow now has five short stages: Work, Customer, Program,
+Appointment and Review. Certificate and support selection stays conditional on
+the work type and service-site jurisdiction. Where a pathway applies, the
+installer chooses controlled claim output, program and activity values. Where
+it does not apply, the ordinary non-program job path remains available.
+
+One guarded transaction creates or attaches the customer and service site,
+creates the TLink job and appointment, and optionally writes an immutable
+`tlink-creditex-job-intent-v1` planning snapshot. The snapshot retains the
+selected catalogue version, program, activity, claim output, jurisdiction,
+service category, installation date and installer/customer/job references. It
+is planning evidence only and cannot create a regulated case or certificate.
+
+Creditex now has a `Certificate-work register` containing every assigned
+installer planning record from job creation onward. Authorised Creditex roles
+can open the full customer, service-site, installer, commercial, appointment
+and workflow audit projection. Authentication credentials, tokens, raw storage
+keys and unrelated internal identifiers are not exposed. The installer sees
+the same planned program and activity from the job.
+
+Accepted-quote conversion revalidates the exact intent against a published,
+effective governed program, activity and evidence policy before it creates a
+case. A matching case pins the governed version and links the intent in the
+same database batch. A stale or incompatible intent is visibly marked
+`Re-plan required` and cannot silently create a case.
+
+## Milestone 40 validation and release evidence
+
+- Exact application commit `a45f250ee805aac1545c8643726dfde3964de22b`
+  passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31
+  integration tests, the complete application suite, all 117 migrations,
+  customer-plan PDF audit, Vinext production build and Sites server-bundle
+  audit.
+- The final intent, migration, installer wizard, CRM, accepted-handoff,
+  Creditex portal and field-contract regression set passed 105 of 105.
+  Independent security, data-boundary and interface review findings were fixed
+  before release.
+- Archive `.openai/site-release-a45f250.tar.gz` is 7,758,795 bytes with
+  SHA-256
+  `23C885EF9D4BD11FA837107740E9B44381D0E8B71CA4432364F3531CFF148CC9`,
+  369 entries and all 117 migrations.
+- Saved Sites version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_1e6ba2c1ae64819197a3b33a13cbb364`
+  reports exact source `a45f250ee805aac1545c8643726dfde3964de22b`,
+  355 stored files, 31,518,720 stored bytes and content hash
+  `sha256:28daf91f4202cf79d0c3c5ecbb7b4f42822bec6725644c3077423b3869e83e0e`.
+- Deployment `appgdep_6a701f23b43c8191ab61ef23e35166de` succeeded
+  as Sites version 271 with environment revision 19.
+
+## Milestone 40 live production evidence
+
+- Signed-in installer QA opened the dashboard and New Job flow without
+  submitting it. All five stages, controlled certificate/support selector,
+  customer selection, appointment controls and review boundary rendered with
+  no document-level horizontal overflow.
+- The default energy-assessment work type correctly offered only `No government
+  certificate or support activity`; program and activity choices remain
+  conditional until the installer selects compatible certificate-generating
+  work and a service jurisdiction.
+- Signed-in Creditex QA recovered the existing administrator session and loaded
+  `Compliance case control`, the permanent compliance navigation and the
+  `Certificate-work register`. The assigned-work queue reported 0 jobs and no
+  production record was created.
+- Desktop and compact homepage checks kept the corrected shared heading and all
+  navigation destinations reachable without document-level horizontal
+  overflow. Browser image capture timed out, so this release retains live
+  rendered-DOM, width and interaction evidence rather than a new screenshot
+  artifact.
+
+## Milestone 40 important limits and unverified areas
+
+- The 32 program pathways and 212 activity templates are controlled planning
+  catalogue records, not independently approved government rules.
+- This release did not directly re-query production governed program, activity,
+  evidence-policy or case counts. It created no production data, and the live
+  Creditex assigned-work register reported 0 jobs.
+- No certificate, regulator submission, trade or settlement is created. No
+  single public authoritative API contract has been verified for every
+  Australian certificate calculation.
+- A changed job, service site or installation date does not yet create an
+  automatic replacement intent. The current system detects the mismatch,
+  displays `Re-plan required` and blocks case linking.
+- Pre-case Creditex audit exposes authorised photo and file metadata. Original
+  governed evidence bytes remain available only after case creation through
+  the existing protected evidence viewer.
+
 ## Previous released milestone
 
 Status: `CREDITEX-GOVERNED-SOURCE-INTAKE-39` released and live
@@ -95,7 +199,7 @@ Primary application source commit: `8baad519d763f0955e481a925ca9114b4d708653`
 
 Previous production application source: `37776ed557d7c0a25d92698f52e87cf59cee05b6`
 
-Current production: Sites version 270 from application commit `8baad519d763f0955e481a925ca9114b4d708653`
+Prior production for milestone 39: Sites version 270 from application commit `8baad519d763f0955e481a925ca9114b4d708653`
 
 Production URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -154,7 +258,7 @@ Validation:
 
 Stop condition: stop if source bytes cannot be independently inspected, exact-byte integrity cannot be proven, owner scope is ambiguous, a target is not draft-only, or completion would require production data or a regulator submission.
 
-The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 270 is the current production identity. The real governed inventory remains 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
+The [complete current-state audit](./audit/2026-07-21-complete-current-state/README.md) remains the immutable evidence baseline. [RELEASE_TRUTH.md](./RELEASE_TRUTH.md) owns released implementation status and deployment identity. [ROADMAP.md](../ROADMAP.md) owns approved forward sequencing. Sites version 270 was the production identity for milestone 39. The governed inventory verified during that release was 0 published programs, 0 activity versions, 0 evidence policies and 0 regulated cases.
 
 ## Milestone 39 validation and release evidence
 
@@ -250,11 +354,11 @@ Sites version 267 contained the complete milestone implementation from `8c29808a
 
 ## Next five logical product steps
 
-1. **Approve the first complete VEU source bundle:** retain the applicable Act, Regulations, Specifications, guidelines, activity guidance, forms and product-register snapshot, enforce freshness and supersession checks, complete independent review, then publish one government-minimum evidence policy without weakening it.
-2. **Build exact offline NSW TESSA interchange:** retain and approve CSV Specification Guide V1.7 plus ESS template V3.4 and PDRS template V2.6, then implement exact parsing, validation, serialization, fixtures and downloadable dry runs while keeping authenticated upload disabled.
-3. **Build separate REC Registry interchange packs:** retain and approve the current SGU, SWH and ASHP dictionaries, the separate battery workbook and dated product lists, then implement exact serializers, 250-row batching, offline rejection reconciliation and downloadable dry runs without a live send.
-4. **Approve calculations pathway by pathway:** bind every executable result to retained dated formulas, effective lookups, independent approval and official-calculator golden vectors, beginning with VEU water heating and the existing SRES estimates; keep certificate actions disabled.
-5. **Pass physical field acceptance and run a bounded VEU pilot:** complete named iOS and Android online, offline, metadata, multipart, R2 restore, revocation and sign-out acceptance, then measure the simple installer capture, correction and Creditex audit loop without creating a live certificate, submission or trade.
+1. **Add automatic intent revision and return workflow:** create a new immutable planning version when the job, service site, activity or installation date changes, supersede the prior version visibly, and let Creditex accept or return the exact current plan without weakening the accepted-quote or governed-policy gate.
+2. **Approve the first governed VEU, SRES and NSW bundles:** retain the complete current official source bytes, effective periods, product and participant snapshots, formulas and evidence requirements under two-person review, then publish one bounded activity chain per program.
+3. **Bind dynamic compliance forms into AEA Field:** render the case-pinned government minimum plus editable Creditex operational prompts, declarations and signatures with controlled conditional logic, offline capture and immutable version identity.
+4. **Enforce evidence-complete job gates:** prevent installer completion and Creditex submission readiness until every required question, original file, photo metadata, geolocation rule, declaration and signature passes the pinned policy, while keeping correction instructions simple.
+5. **Complete Creditex pre-case evidence operations:** add audited original-byte access where authority permits, operational notifications, Dataforce import mapping and bounded legacy backfill so Creditex can manage real volume without creating certificates or external submissions prematurely.
 
 ## Released milestone 36 outcome
 

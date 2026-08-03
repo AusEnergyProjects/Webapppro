@@ -1250,13 +1250,33 @@ The workbench exposes the current government link beside retained bytes, server 
 - Archive `.openai/site-release-8baad51.tar.gz` is 7,736,223 bytes with SHA-256 `BDBED88DB3F6675DFB0AD4BF133651F9B4609DA0432F42390DD591D5715205A8`. Sites stored 351 files and 31,406,080 bytes with content hash `sha256:6cf77082dca1a638dc78e094791cd712f2417fdb17bd86c9a0ba772aa041d978`.
 - Signed-in production QA opened the permanent source workspace at desktop and a 390 by 844 responsive override, confirmed `0 shown of 0 records`, no eligible draft target and disabled capture and pagination controls, and created no production data.
 
+## Released milestone: TRADE-CREDITEX-JOB-HANDOFF-40
+
+Status: released guided installer job creation, immutable compliance planning and Creditex pre-case audit handoff
+
+Release status: exact application commit `a45f250ee805aac1545c8643726dfde3964de22b` was validated, pushed to GitHub and Sites managed `main`, saved as `appgprj_6a550c378000819185caf094173422bb~appgver_1e6ba2c1ae64819197a3b33a13cbb364` and deployed as Sites version 271 through `appgdep_6a701f23b43c8191ab61ef23e35166de` with environment revision 19.
+
+### Outcome
+
+The installer New Job flow now moves through Work, Customer, Program, Appointment and Review. Compatible certificate and support work uses controlled claim-output, program and activity selectors conditioned by service-site jurisdiction. One guarded transaction creates or attaches the customer and site, creates the job and appointment, and optionally retains an immutable `tlink-creditex-job-intent-v1` planning snapshot.
+
+Creditex receives every assigned planning record in the `Certificate-work register` and can inspect the complete authorised customer, service-site, installer, commercial, appointment and workflow projection. Accepted-quote conversion links only an exact current intent to a published, effective governed activity and evidence policy. A mismatch is marked `Re-plan required` and cannot silently create a case.
+
+### Safety and release evidence
+
+- The planning catalogue cannot publish a government rule, create a certificate, submit to a regulator, trade or settle. No production customer, job, intent, case or evidence record was created during release QA.
+- Exact application commit `a45f250ee805aac1545c8643726dfde3964de22b` passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration tests, the complete application suite, all 117 migrations, customer-plan PDF audit, Vinext production build and Sites bundle audit.
+- The final intent, migration, installer wizard, CRM, accepted-handoff, Creditex portal and field-contract set passed 105 of 105. Independent security, data-boundary and interface review findings were fixed before release.
+- Archive `.openai/site-release-a45f250.tar.gz` is 7,758,795 bytes with SHA-256 `23C885EF9D4BD11FA837107740E9B44381D0E8B71CA4432364F3531CFF148CC9`. Sites stored 355 files and 31,518,720 bytes with content hash `sha256:28daf91f4202cf79d0c3c5ecbb7b4f42822bec6725644c3077423b3869e83e0e`.
+- Signed-in installer QA opened all five New Job stages without submission. Signed-in Creditex QA loaded the permanent compliance navigation and `Certificate-work register`, which reported 0 assigned jobs. Desktop and compact checks found no document-level horizontal overflow; image capture timed out, so the retained evidence is rendered-DOM, width and interaction verification rather than a screenshot artifact.
+
 ## Next five logical product steps
 
-1. **Approve the first complete VEU source bundle:** retain the applicable Act, Regulations, Specifications, guidelines, activity guidance, forms and product-register snapshot, enforce freshness and supersession checks, complete independent review, then publish one government-minimum evidence policy without weakening it.
-2. **Build exact offline NSW TESSA interchange:** retain and approve CSV Specification Guide V1.7 plus ESS template V3.4 and PDRS template V2.6, then implement exact parsing, validation, serialization, fixtures and downloadable dry runs while keeping authenticated upload disabled.
-3. **Build separate REC Registry interchange packs:** retain and approve the current SGU, SWH and ASHP dictionaries, the separate battery workbook and dated product lists, then implement exact serializers, 250-row batching, offline rejection reconciliation and downloadable dry runs without a live send.
-4. **Approve calculations pathway by pathway:** bind every executable result to retained dated formulas, effective lookups, independent approval and official-calculator golden vectors, beginning with VEU water heating and the existing SRES estimates; keep certificate actions disabled.
-5. **Pass physical field acceptance and run a bounded VEU pilot:** complete named iOS and Android online, offline, metadata, multipart, R2 restore, revocation and sign-out acceptance, then measure the simple installer capture, correction and Creditex audit loop without creating a live certificate, submission or trade.
+1. **Add automatic intent revision and return workflow:** create a new immutable planning version when the job, service site, activity or installation date changes, supersede the prior version visibly, and let Creditex accept or return the exact current plan without weakening the accepted-quote or governed-policy gate.
+2. **Approve the first governed VEU, SRES and NSW bundles:** retain the complete current official source bytes, effective periods, product and participant snapshots, formulas and evidence requirements under two-person review, then publish one bounded activity chain per program.
+3. **Bind dynamic compliance forms into AEA Field:** render the case-pinned government minimum plus editable Creditex operational prompts, declarations and signatures with controlled conditional logic, offline capture and immutable version identity.
+4. **Enforce evidence-complete job gates:** prevent installer completion and Creditex submission readiness until every required question, original file, photo metadata, geolocation rule, declaration and signature passes the pinned policy, while keeping correction instructions simple.
+5. **Complete Creditex pre-case evidence operations:** add audited original-byte access where authority permits, operational notifications, Dataforce import mapping and bounded legacy backfill so Creditex can manage real volume without creating certificates or external submissions prematurely.
 
 ## Global stop conditions
 
