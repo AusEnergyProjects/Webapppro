@@ -301,6 +301,44 @@
   white-space: pre-wrap;
 }
 
+.addressProvenanceHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.addressProvenanceHeading h4 {
+  margin: 0;
+}
+
+.addressProvenanceHeading strong {
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: .6rem;
+  white-space: nowrap;
+}
+
+.addressReviewRequired {
+  border-color: #b87925;
+  background: #302411;
+}
+
+.addressReviewRequired .addressProvenanceHeading strong {
+  background: #71430e;
+  color: #ffe0a3;
+}
+
+.addressProviderVerified {
+  border-color: #1f7968;
+}
+
+.addressProviderVerified .addressProvenanceHeading strong {
+  background: #0e5148;
+  color: #9af3df;
+}
+
 .auditGroups {
   display: grid;
   gap: 7px;

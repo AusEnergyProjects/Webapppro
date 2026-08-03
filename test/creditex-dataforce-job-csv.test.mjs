@@ -9,6 +9,7 @@ import {
   parseDataforceJobCsv,
   projectCreditexJobToDataforceRecord,
   projectDataforceRecordToCreditexJob,
+  projectInstallerWorkOrderToDataforceRecord,
   validateDataforceJobCsv,
 } from "../src/lib/creditex-dataforce-job-csv.ts";
 
@@ -347,6 +348,132 @@ test("Creditex job export leaves a missing Dataforce App Id blank", () => {
 
   assert.equal(projected["App Id"], "");
   assert.equal(projected["Job Id"], "JOB-7");
+});
+
+test("installer work-order projection produces one exact Dataforce register record", () => {
+  const projected = projectInstallerWorkOrderToDataforceRecord({
+    identifiers: {
+      appointmentId: " APP-INSTALL-1 ",
+      jobId: " JOB-INSTALL-1 ",
+    },
+    work: {
+      workType: "Water heating",
+      scheduledStart: "2026-08-04T08:00:00+10:00",
+    },
+    appointment: {
+      startsAt: "2026-08-04T09:30:00+10:00",
+    },
+    financials: {
+      invoicedValueCents: 350_000,
+      paidValueCents: 125_000,
+      invoiceStatus: "Part paid",
+    },
+    customer: {
+      firstName: "Test",
+      lastName: "Installer Customer",
+      businessName: "Test Customer Company",
+      phone: "03 9000 0000",
+      mobile: "0400 000 000",
+      email: "installer-customer@example.invalid",
+    },
+    serviceSite: {
+      addressLine1: "18 Example Road",
+      addressLine2: "Unit 4",
+      suburb: "Melbourne",
+      postcode: "3000",
+    },
+    technician: {
+      displayName: "Test Field Technician",
+    },
+    customerReference: "CUSTOMER-REF-1",
+    verifiedCertificateIssuance: {
+      basis: "verified-case-issuance",
+      quantity: 5,
+    },
+  });
+
+  assert.deepEqual(Object.keys(projected), DATAFORCE_JOB_CSV_HEADERS);
+  assert.equal(projected["App Id"], "APP-INSTALL-1");
+  assert.equal(projected["Job Id"], "JOB-INSTALL-1");
+  assert.equal(projected["Work Type"], "Water heating");
+  assert.equal(
+    projected["Scheduled Datetime"],
+    "2026-08-04T09:30:00+10:00",
+  );
+  assert.equal(projected.Balance, "$ 2250.00");
+  assert.equal(projected["Certificates (VEECs)"], "5");
+  assert.equal(projected.Invoiced, "Part paid");
+  assert.equal(projected["Field Worker"], "Test Field Technician");
+  assert.equal(projected.Customer, "Test Installer Customer");
+  assert.equal(projected["Company Name"], "Test Customer Company");
+  assert.equal(projected["Ext Cust Ref"], "CUSTOMER-REF-1");
+  assert.equal(projected.Phone, "03 9000 0000");
+  assert.equal(projected.Mobile, "0400 000 000");
+  assert.equal(projected.Email, "installer-customer@example.invalid");
+  assert.equal(projected.Address, "18 Example Road, Unit 4");
+  assert.equal(projected.Suburb, "Melbourne");
+  assert.equal(projected.Postcode, "3000");
+});
+
+test("installer work-order projection leaves unresolved semantics and unverified certificates blank", () => {
+  const projected = projectInstallerWorkOrderToDataforceRecord({
+    identifiers: {
+      appointmentId: null,
+      jobId: "JOB-INSTALL-2",
+    },
+    work: {
+      scheduledStart: "2026-08-05T10:00:00+10:00",
+    },
+    appointment: null,
+    financials: {
+      invoicedValueCents: null,
+      paidValueCents: null,
+      invoiceStatus: null,
+    },
+    customer: {
+      firstName: null,
+      lastName: null,
+      businessName: "Fallback Customer Company",
+      phone: null,
+      mobile: null,
+    },
+    serviceSite: {
+      addressLine1: null,
+      addressLine2: null,
+      suburb: null,
+      postcode: null,
+    },
+    verifiedCertificateIssuance: {
+      basis: "batch-apportionment",
+      quantity: 7.5,
+    },
+  });
+
+  assert.equal(projected["App Id"], "");
+  assert.equal(projected["Job Id"], "JOB-INSTALL-2");
+  assert.equal(
+    projected["Scheduled Datetime"],
+    "2026-08-05T10:00:00+10:00",
+  );
+  assert.equal(projected.Customer, "Fallback Customer Company");
+  assert.equal(projected.Balance, "");
+  assert.equal(projected.Invoiced, "");
+  assert.equal(projected["Certificates (VEECs)"], "");
+  for (const header of [
+    "Status",
+    "SubStatus",
+    "Type",
+    "Submission",
+    "Agent",
+    "Client",
+  ]) {
+    assert.equal(projected[header], "");
+  }
+  assert.equal(projected.Address, "");
+  assert.equal(projected.Suburb, "");
+  assert.equal(projected.Postcode, "");
+  assert.equal(projected.Phone, "");
+  assert.equal(projected.Mobile, "");
 });
 
 test("Dataforce import projection preserves unresolved fields for review", () => {

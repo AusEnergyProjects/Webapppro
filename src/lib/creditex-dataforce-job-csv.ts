@@ -804,6 +804,52 @@ export type CreditexDataforceProjectionJob = {
   } | null;
 };
 
+export const INSTALLER_VERIFIED_CERTIFICATE_BASIS =
+  "verified-case-issuance" as const;
+
+export type InstallerVerifiedCertificateIssuance = {
+  basis: typeof INSTALLER_VERIFIED_CERTIFICATE_BASIS;
+  quantity: number;
+};
+
+export type InstallerWorkOrderDataforceProjection = {
+  identifiers: {
+    appointmentId?: string | null;
+    jobId: string;
+  };
+  work?: {
+    workType?: string | null;
+    scheduledStart?: string | null;
+  } | null;
+  appointment?: {
+    startsAt?: string | null;
+  } | null;
+  financials?: {
+    invoicedValueCents?: number | null;
+    paidValueCents?: number | null;
+    invoiceStatus?: string | null;
+  } | null;
+  customer?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    businessName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    mobile?: string | null;
+  } | null;
+  serviceSite?: {
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    suburb?: string | null;
+    postcode?: string | null;
+  } | null;
+  technician?: {
+    displayName?: string | null;
+  } | null;
+  customerReference?: string | null;
+  verifiedCertificateIssuance?: InstallerVerifiedCertificateIssuance | null;
+};
+
 function value(value: unknown) {
   return value === null || value === undefined ? "" : String(value);
 }
@@ -843,6 +889,50 @@ function balanceDisplay(
     ? Number(crm?.paidValueCents)
     : 0;
   return `$ ${((invoiced - paid) / 100).toFixed(2)}`;
+}
+
+function verifiedCertificateDisplay(
+  issuance: InstallerWorkOrderDataforceProjection[
+    "verifiedCertificateIssuance"
+  ],
+) {
+  if (
+    issuance?.basis !== INSTALLER_VERIFIED_CERTIFICATE_BASIS
+    || !Number.isSafeInteger(issuance.quantity)
+    || issuance.quantity < 0
+  ) {
+    return "";
+  }
+  return String(issuance.quantity);
+}
+
+export function projectInstallerWorkOrderToDataforceRecord(
+  job: InstallerWorkOrderDataforceProjection,
+): DataforceJobCsvRecord {
+  return {
+    ...emptyDataforceRecord(),
+    "App Id": value(job.identifiers.appointmentId).trim(),
+    "Job Id": value(job.identifiers.jobId).trim(),
+    "Work Type": value(job.work?.workType),
+    "Scheduled Datetime": value(
+      job.appointment?.startsAt || job.work?.scheduledStart,
+    ),
+    "Balance": balanceDisplay(job.financials),
+    "Certificates (VEECs)": verifiedCertificateDisplay(
+      job.verifiedCertificateIssuance,
+    ),
+    "Invoiced": value(job.financials?.invoiceStatus),
+    "Field Worker": value(job.technician?.displayName),
+    "Customer": customerDisplayName(job.customer),
+    "Company Name": value(job.customer?.businessName),
+    "Ext Cust Ref": value(job.customerReference),
+    "Phone": value(job.customer?.phone),
+    "Mobile": value(job.customer?.mobile),
+    "Email": value(job.customer?.email),
+    "Address": addressDisplay(job.serviceSite),
+    "Suburb": value(job.serviceSite?.suburb),
+    "Postcode": value(job.serviceSite?.postcode),
+  };
 }
 
 export function projectCreditexJobToDataforceRecord(

@@ -3857,6 +3857,13 @@ export async function appendLiveComplianceCaseStatements(
       "The compliance actor type is invalid.",
     );
   }
+  if (actorType === "installer" && actorUid !== installerUid) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_INSTALLER_ACTOR_MISMATCH",
+      403,
+      "Installer compliance intake must be attributed to the installer account that owns the job.",
+    );
+  }
   const commercialHandoffId = cleanText(input.commercialHandoffId, 180);
   const acceptedQuoteVersionId = cleanText(
     input.acceptedQuoteVersionId,
@@ -3865,19 +3872,66 @@ export async function appendLiveComplianceCaseStatements(
   const acceptedScopeSha256 = checkedSourceSha256(
     input.acceptedScopeSha256,
   );
+  const acceptedHandoffFieldCount = [
+    commercialHandoffId,
+    acceptedQuoteVersionId,
+    acceptedScopeSha256,
+  ].filter(Boolean).length;
   if (
-    actorType === "installer"
-    && (
-      !commercialHandoffId
-      || !acceptedQuoteVersionId
-      || !acceptedScopeSha256
-    )
+    acceptedHandoffFieldCount !== 0
+    && acceptedHandoffFieldCount !== 3
   ) {
     throw new ComplianceDomainError(
-      "ACCEPTED_HANDOFF_REQUIRED",
-      409,
-      "Accept the customer quote before opening a compliance intake.",
+      "COMPLIANCE_HANDOFF_INCOMPLETE",
+      400,
+      "Optional accepted quote linkage must include the handoff, quote version and scope digest together.",
     );
+  }
+  if (acceptedHandoffFieldCount === 3) {
+    const acceptedHandoff = await database.prepare(`SELECT
+        handoff.scope_snapshot_json
+      FROM trade_crm_commercial_handovers handoff
+      JOIN trade_crm_quote_acceptances acceptance
+        ON acceptance.id = handoff.acceptance_id
+        AND acceptance.firebase_uid = handoff.firebase_uid
+        AND acceptance.work_order_id = handoff.work_order_id
+        AND acceptance.quote_version_id = handoff.quote_version_id
+      WHERE handoff.id = ?
+        AND handoff.work_order_id = ?
+        AND handoff.firebase_uid = ?
+        AND handoff.quote_version_id = ?
+        AND handoff.status = 'accepted'
+        AND acceptance.decision = 'accepted'
+      LIMIT 1`)
+      .bind(
+        commercialHandoffId,
+        workOrderId,
+        installerUid,
+        acceptedQuoteVersionId,
+      )
+      .first<Record<string, unknown>>();
+    const scopeSnapshot = String(
+      acceptedHandoff?.scope_snapshot_json || "",
+    );
+    let parsedScope: unknown;
+    try {
+      parsedScope = JSON.parse(scopeSnapshot);
+    } catch {
+      parsedScope = null;
+    }
+    if (
+      !acceptedHandoff
+      || !Array.isArray(parsedScope)
+      || parsedScope.length < 1
+      || await complianceSnapshotSha256(scopeSnapshot)
+        !== acceptedScopeSha256
+    ) {
+      throw new ComplianceDomainError(
+        "COMPLIANCE_HANDOFF_LINKAGE_INVALID",
+        409,
+        "The optional accepted quote linkage does not match this installer job.",
+      );
+    }
   }
   const caseId = cleanText(input.caseId, 180) || crypto.randomUUID();
   const eventId = cleanText(input.eventId, 180) || crypto.randomUUID();

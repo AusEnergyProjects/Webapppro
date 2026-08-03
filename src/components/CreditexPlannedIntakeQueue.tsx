@@ -72,6 +72,15 @@ type AuditGroup = {
   label: string;
   rows: AuditRecord[];
 };
+type ServiceSiteAddressProvenance = {
+  entryMode: string;
+  provider: string;
+  providerReference: string;
+  formattedAddress: string;
+  verifiedAt: string;
+  status: "provider_verified" | "manual_review_required";
+  reviewRequired: boolean;
+};
 type AuditWorkspace = {
   intent: AuditRecord | null;
   workOrder: AuditRecord | null;
@@ -79,6 +88,7 @@ type AuditWorkspace = {
   installer: AuditRecord | null;
   customer: AuditRecord | null;
   serviceSite: AuditRecord | null;
+  serviceSiteAddressProvenance: ServiceSiteAddressProvenance;
   groups: AuditGroup[];
 };
 
@@ -144,6 +154,35 @@ function AuditRecordView({
         <dd>{auditValue(value)}</dd>
       </div>)}</dl>
       : <p>No record is currently stored.</p>}
+  </section>;
+}
+
+function AddressProvenanceView({
+  provenance,
+}: {
+  provenance: ServiceSiteAddressProvenance;
+}) {
+  return <section className={`${styles.auditRecord} ${provenance.reviewRequired
+    ? styles.addressReviewRequired
+    : styles.addressProviderVerified}`}>
+    <div className={styles.addressProvenanceHeading}>
+      <h4>Service-site address provenance</h4>
+      <strong>{provenance.reviewRequired
+        ? "Manual address: review required"
+        : "Provider-selected address"}</strong>
+    </div>
+    <p>{provenance.reviewRequired
+      ? "This address was entered manually. Creditex must compare it with the job evidence before relying on it for compliance."
+      : "This address was selected from the configured provider and retains its provider reference for audit."}</p>
+    <dl>
+      <div><dt>Entry mode</dt><dd>{humanField(provenance.entryMode)}</dd></div>
+      <div><dt>Provider</dt><dd>{provenance.provider || "No provider: manual entry"}</dd></div>
+      <div><dt>Provider reference</dt><dd>{provenance.providerReference || "Not recorded"}</dd></div>
+      <div><dt>Formatted address</dt><dd>{provenance.formattedAddress || "Not recorded"}</dd></div>
+      <div><dt>Verified at</dt><dd>{provenance.verifiedAt
+        ? dateTime(provenance.verifiedAt)
+        : "Not verified"}</dd></div>
+    </dl>
   </section>;
 }
 
@@ -242,6 +281,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
         installer: (result.installer || null) as AuditRecord | null,
         customer: (result.customer || null) as AuditRecord | null,
         serviceSite: (result.serviceSite || null) as AuditRecord | null,
+        serviceSiteAddressProvenance: result.serviceSiteAddressProvenance as ServiceSiteAddressProvenance,
         groups: (result.groups || []) as AuditGroup[],
       });
     } catch (error) {
@@ -280,7 +320,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
       <div>
         <span>Installer handoff</span>
         <h2 id="creditex-planned-intake-title">Certificate-work register</h2>
-        <p>Creditex can inspect every assigned installer job, customer, service site and retained workflow record from planning onward. Regulated audit actions open only after an accepted quote becomes a governed case.</p>
+        <p>Creditex can inspect every assigned installer job, customer, service site and retained workflow record from planning onward. Regulated audit actions open only after the exact governed activity and evidence policy are verified.</p>
       </div>
       <strong>{loading ? "Loading" : `${total} jobs`}</strong>
     </header>
@@ -381,6 +421,7 @@ export function CreditexPlannedIntakeQueue({ api }: { api: Api }) {
           <AuditRecordView title="Installer business" record={audit.installer} />
           <AuditRecordView title="Customer" record={audit.customer} />
           <AuditRecordView title="Service site" record={audit.serviceSite} />
+          <AddressProvenanceView provenance={audit.serviceSiteAddressProvenance} />
         </div>
         <div className={styles.auditGroups}>
           {audit.groups.map((group) => <details key={group.key} open={group.rows.length > 0 && group.rows.length <= 3}>

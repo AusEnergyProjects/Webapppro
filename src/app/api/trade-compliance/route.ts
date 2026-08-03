@@ -8,10 +8,6 @@ import {
 } from "@/lib/creditex-compliance-server";
 import { ensureCreditexSchemaGuards } from "@/lib/creditex-schema-guards";
 import {
-  commercialHandoffScopeSha256,
-  ensureAcceptedCommercialHandoff,
-} from "@/lib/trade-commercial-handoff-server";
-import {
   CREDITEX_PARTNER_ORGANISATION_CODE,
 } from "@/lib/trade-compliance-intent";
 import {
@@ -26,8 +22,17 @@ const POST_FIELDS = new Set([
   "workOrderId",
   "activityVersionId",
   "idempotencyKey",
+  "commercialHandoffId",
+  "acceptedQuoteVersionId",
+  "acceptedScopeSha256",
 ]);
 type Row = Record<string, unknown>;
+
+type OptionalCommercialHandoff = {
+  commercialHandoffId: string;
+  acceptedQuoteVersionId: string;
+  acceptedScopeSha256: string;
+};
 
 type JobComplianceContext = {
   workOrderId: string;
@@ -65,13 +70,6 @@ function errorResponse(error: unknown) {
       error: "Compliance intake is available for your own direct customer jobs.",
     }, 403);
   }
-  if (code === "INVALID_COMMERCIAL_HANDOFF") {
-    return adminJson({
-      ok: false,
-      code,
-      error: "The accepted quote could not produce a safe compliance handoff.",
-    }, 409);
-  }
   console.error("Installer compliance intake failure", error);
   return adminJson({
     ok: false,
@@ -93,6 +91,67 @@ function requiredInput(
     );
   }
   return result;
+}
+
+function optionalInput(
+  value: unknown,
+  field: string,
+  maximum: number,
+) {
+  const result = typeof value === "string" ? value.trim() : "";
+  if (result.length > maximum) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_VALUE_TOO_LONG",
+      400,
+      `${field} must be ${maximum} characters or fewer.`,
+    );
+  }
+  return result;
+}
+
+function optionalCommercialHandoff(body: Row): OptionalCommercialHandoff {
+  const commercialHandoffId = optionalInput(
+    body.commercialHandoffId,
+    "Commercial handoff",
+    180,
+  );
+  const acceptedQuoteVersionId = optionalInput(
+    body.acceptedQuoteVersionId,
+    "Accepted quote version",
+    180,
+  );
+  const acceptedScopeSha256 = optionalInput(
+    body.acceptedScopeSha256,
+    "Accepted scope digest",
+    64,
+  ).toLowerCase();
+  const suppliedCount = [
+    commercialHandoffId,
+    acceptedQuoteVersionId,
+    acceptedScopeSha256,
+  ].filter(Boolean).length;
+  if (suppliedCount !== 0 && suppliedCount !== 3) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_HANDOFF_INCOMPLETE",
+      400,
+      "Optional accepted quote linkage must include the handoff, quote version and scope digest together.",
+    );
+  }
+  if (
+    suppliedCount === 3
+    && !/^[0-9a-f]{64}$/.test(acceptedScopeSha256)
+  ) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_HANDOFF_LINKAGE_INVALID",
+      400,
+      "The optional accepted quote scope digest is invalid.",
+    );
+  }
+  return {
+    commercialHandoffId,
+    acceptedQuoteVersionId,
+    acceptedScopeSha256,
+  };
 }
 
 async function activeCreditexOrganisation(
@@ -305,18 +364,6 @@ export async function GET(request: Request) {
         },
       });
     }
-    const handoff = await ensureAcceptedCommercialHandoff(
-      database,
-      access.identity.uid,
-      workOrderId,
-    );
-    if (!handoff) {
-      throw new ComplianceDomainError(
-        "ACCEPTED_HANDOFF_REQUIRED",
-        409,
-        "The customer must accept the quote before you link a government activity.",
-      );
-    }
     const afterActivityId = cleanAdminText(
       url.searchParams.get("afterActivityId"),
       180,
@@ -334,10 +381,6 @@ export async function GET(request: Request) {
     return adminJson({
       ok: true,
       context,
-      acceptedHandoff: {
-        id: String(handoff.id),
-        quoteVersionId: String(handoff.quote_version_id),
-      },
       activities: activities.map(activityJson),
       pagination: {
         pageSize: ACTIVITY_PAGE_SIZE,
@@ -356,7 +399,9 @@ async function activeCase(
   installerUid: string,
   workOrderId: string,
 ) {
-  return database.prepare(`SELECT id, case_number, activity_version_id
+  return database.prepare(`SELECT id, case_number, activity_version_id,
+      commercial_handoff_id, accepted_quote_version_id,
+      accepted_scope_sha256
     FROM compliance_cases
     WHERE organisation_id = ?
       AND installer_uid = ?
@@ -368,12 +413,33 @@ async function activeCase(
     .first<Row>();
 }
 
-function activeCaseResponse(row: Row, requestedActivityVersionId: string) {
+function activeCaseResponse(
+  row: Row,
+  requestedActivityVersionId: string,
+  requestedHandoff: OptionalCommercialHandoff,
+) {
   if (String(row.activity_version_id) !== requestedActivityVersionId) {
     throw new ComplianceDomainError(
       "ACTIVE_COMPLIANCE_CASE_EXISTS",
       409,
       "This job already has an active compliance case. Close or supersede it before choosing another activity.",
+    );
+  }
+  if (
+    requestedHandoff.commercialHandoffId
+    && (
+      String(row.commercial_handoff_id || "")
+        !== requestedHandoff.commercialHandoffId
+      || String(row.accepted_quote_version_id || "")
+        !== requestedHandoff.acceptedQuoteVersionId
+      || String(row.accepted_scope_sha256 || "")
+        !== requestedHandoff.acceptedScopeSha256
+    )
+  ) {
+    throw new ComplianceDomainError(
+      "ACTIVE_COMPLIANCE_CASE_HANDOFF_MISMATCH",
+      409,
+      "This job already has an active compliance case with different accepted quote linkage.",
     );
   }
   return adminJson({
@@ -427,7 +493,7 @@ export async function POST(request: Request) {
     if (unexpected.length) {
       return adminJson({
         ok: false,
-        error: "Compliance intake only accepts the job, activity version and idempotency key.",
+        error: "Compliance intake only accepts the job, activity version, idempotency key and optional accepted quote linkage.",
       }, 400);
     }
     const workOrderId = requiredInput(body.workOrderId, "Work order");
@@ -439,6 +505,7 @@ export async function POST(request: Request) {
       body.idempotencyKey,
       "Idempotency key",
     );
+    const optionalHandoff = optionalCommercialHandoff(body);
     const database = getD1();
     await ensureCreditexSchemaGuards(database);
     const creditexOrganisation = await activeCreditexOrganisation(database);
@@ -455,21 +522,12 @@ export async function POST(request: Request) {
       workOrderId,
     );
     if (currentCase) {
-      return activeCaseResponse(currentCase, activityVersionId);
-    }
-    const handoff = await ensureAcceptedCommercialHandoff(
-      database,
-      access.identity.uid,
-      workOrderId,
-    );
-    if (!handoff) {
-      throw new ComplianceDomainError(
-        "ACCEPTED_HANDOFF_REQUIRED",
-        409,
-        "The customer must accept the quote before you open compliance intake.",
+      return activeCaseResponse(
+        currentCase,
+        activityVersionId,
+        optionalHandoff,
       );
     }
-    const acceptedScopeSha256 = await commercialHandoffScopeSha256(handoff);
     const idempotencyDigest = await sha256Hex(
       [
         "tlink-compliance-intake-v1",
@@ -477,6 +535,9 @@ export async function POST(request: Request) {
         workOrderId,
         activityVersionId,
         idempotencyKey,
+        optionalHandoff.commercialHandoffId,
+        optionalHandoff.acceptedQuoteVersionId,
+        optionalHandoff.acceptedScopeSha256,
       ].join("\n"),
     );
     const now = new Date().toISOString();
@@ -490,9 +551,7 @@ export async function POST(request: Request) {
         serviceCategory: context.serviceCategory,
         jurisdiction: context.jurisdiction,
         workOrderId,
-        commercialHandoffId: String(handoff.id),
-        acceptedQuoteVersionId: String(handoff.quote_version_id),
-        acceptedScopeSha256,
+        ...optionalHandoff,
         installerUid: access.identity.uid,
         actorType: "installer",
         actorUid: access.identity.uid,
@@ -509,7 +568,7 @@ export async function POST(request: Request) {
         `compliance-work-event-${idempotencyDigest}`,
         workOrderId,
         access.identity.uid,
-        `${prepared.caseNumber} opened from the accepted quote handoff.`,
+        `${prepared.caseNumber} opened from the governed installer job.`,
         now,
       ));
     const caseProgramCode = String(
@@ -590,7 +649,11 @@ export async function POST(request: Request) {
         workOrderId,
       );
       if (concurrentCase) {
-        return activeCaseResponse(concurrentCase, activityVersionId);
+        return activeCaseResponse(
+          concurrentCase,
+          activityVersionId,
+          optionalHandoff,
+        );
       }
       throw error;
     }

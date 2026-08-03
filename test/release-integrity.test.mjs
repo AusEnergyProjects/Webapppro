@@ -413,7 +413,9 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /exact application commit `8baad519d763f0955e481a925ca9114b4d708653`[\s\S]{0,500}Sites version 270/i);
   assert.match(roadmap, /## Released milestone: TRADE-CREDITEX-JOB-HANDOFF-40/);
   assert.match(roadmap, /exact application commit `a45f250ee805aac1545c8643726dfde3964de22b`[\s\S]{0,500}Sites version 271/i);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-CREDITEX-JOB-HANDOFF-40` released and live/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` implementation complete, release validation pending/);
+  assert.match(handover, /Milestone ID: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41`/);
+  assert.match(handover, /Production baseline: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`/);
   assert.match(handover, /Milestone ID: `TRADE-CREDITEX-JOB-HANDOFF-40`/);
   assert.match(handover, /Current production: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`/);
   assert.match(handover, /Released application source commit: `a45f250ee805aac1545c8643726dfde3964de22b`/);

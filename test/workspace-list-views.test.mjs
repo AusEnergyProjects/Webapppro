@@ -81,11 +81,13 @@ test("named trade views stay owner and index scoped with a bounded server contra
 test("installer indexes apply named views, movable columns and matching visible exports", () => {
   assert.match(crmUi, /WorkspaceSavedViews/);
   assert.match(crmUi, /WorkspaceTableTools/);
-  assert.match(crmUi, /downloadWorkspaceCsv\("tlink-jobs\.csv"/);
+  assert.match(crmUi, /downloadAllFilteredJobs/);
+  assert.match(crmUi, /Download all filtered jobs CSV/);
+  assert.match(crmUi, /safeDataforceJobColumns\(preferences\.columns\)/);
   assert.match(crmUi, /downloadWorkspaceCsv\("tlink-customers\.csv"/);
   assert.match(crmUi, /jobCursors\.current = \[""\]; jobTotalReady\.current = false/);
   assert.match(crmUi, /customerCursors\.current = \[""\]; customerTotalReady\.current = false/);
-  assert.match(shared, /"installer-jobs": \["customer", "service", "assignee"/);
+  assert.match(shared, /"installer-jobs": \[\.\.\.DATAFORCE_JOB_CSV_HEADERS\]/);
   assert.match(shared, /"installer-customers": \["customer", "firstName", "lastName"/);
   assert.match(savedViewsUi, /Save current view/);
   assert.match(savedViewsUi, /Update view/);
@@ -121,7 +123,7 @@ test("all business and operations result lists expose consistent saved paging co
   assert.match(supplierUi, /WorkspaceTableTools/);
   assert.match(directoryUi, /WorkspaceTableTools/);
   assert.match(tableTools, /Pin left/);
-  assert.match(tableTools, /Export visible \{noun\} CSV/);
+  assert.match(tableTools, /`Export visible \$\{noun\} CSV`/);
   assert.match(tableTools, /\/\^\[=\+\\-@\]\//);
   assert.match(adminUi, /AdminAccountWorkspace/);
   assert.match(adminAccountUi, /admin-partners/);

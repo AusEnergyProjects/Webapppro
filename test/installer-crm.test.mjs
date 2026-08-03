@@ -107,6 +107,40 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(crm, /Name A to Z/);
 });
 
+test("installer jobs export every filtered page through the owner scoped Dataforce projection", () => {
+  assert.match(crm, /DATAFORCE_JOB_EXPORT_PAGE_SIZE = 100/);
+  assert.match(crm, /DATAFORCE_JOB_EXPORT_MAX_ROWS = 5000/);
+  assert.match(crm, /const downloadAllFilteredJobs = useCallback\(async \(\) =>/);
+  assert.match(crm, /jobIndexParams\(page, DATAFORCE_JOB_EXPORT_PAGE_SIZE, cursor, page === 1\)/);
+  assert.match(crm, /headers: \{ Authorization: `Bearer \$\{token\}` \}/);
+  assert.match(crm, /while \(true\)/);
+  assert.match(crm, /seenCursors\.has\(nextCursor\)/);
+  assert.match(crm, /seenJobIds\.has\(item\.id\)/);
+  assert.match(crm, /records\.length !== expectedTotal/);
+  assert.match(crm, /DATAFORCE_JOB_CSV_HEADERS\.some\(\(header\) => typeof record\[header\] !== "string"\)/);
+  assert.match(crm, /exportDataforceJobCsv\(records\)/);
+  assert.match(crm, /tlink-dataforce-compatible-jobs\.csv/);
+  assert.match(crm, /exportLabel="Download all filtered jobs CSV"/);
+  assert.match(crm, /exportBusyLabel="Downloading all filtered jobs CSV\.\.\."/);
+  assert.doesNotMatch(crm, /indexedJobs\.map\(\(job\) => job\.dataforceRecord\)/);
+  assert.match(route, /w\.firebase_uid = \?/);
+  assert.match(route, /customerSource === "platform_private" \? undefined/);
+});
+
+test("obsolete saved job columns reset to the complete Dataforce register contract", () => {
+  assert.match(crm, /const DATAFORCE_JOB_COLUMN_KEYS: string\[\] = \[\.\.\.DATAFORCE_JOB_CSV_HEADERS\]/);
+  assert.match(crm, /function safeDataforceJobColumns\(columns: unknown\): string\[\]/);
+  assert.match(crm, /!DATAFORCE_JOB_COLUMN_KEY_SET\.has\(key\)/);
+  assert.match(crm, /new Set\(columns\)\.size !== columns\.length/);
+  assert.equal((crm.match(/setJobColumns\(safeDataforceJobColumns\(preferences\.columns\)\)/g) || []).length, 2);
+  assert.doesNotMatch(crm, /setJobColumns\(preferences\.columns\?\./);
+});
+
+test("the New Job mobile field projects to Dataforce Mobile rather than Phone", () => {
+  assert.match(newJob, /<span>Mobile, optional<\/span><input type="tel" name="phone"/);
+  assert.match(route, /phone: "",\s+mobile: String\(row\.customer_phone \|\| ""\)/);
+});
+
 test("saved preferences and job or customer reads cancel stale requests before they can replace current state", () => {
   assert.match(crm, /loadJobIndex = useCallback\(async \(signal: AbortSignal\)/);
   assert.match(crm, /loadCustomerIndex = useCallback\(async \(signal: AbortSignal\)/);
@@ -195,7 +229,7 @@ test("bulk CRM actions are bounded, owner scoped and protect active customer wor
   assert.match(route, /firebase_uid = \? AND partner_type = 'installer'/);
   assert.match(route, /Customers with active jobs cannot be archived/);
   assert.match(route, /jobSyncChangeStatements/);
-  assert.match(crm, /ids: selectedJobIds/);
+  assert.doesNotMatch(crm, /selectedJobIds|crm-row-select[\s\S]*Select \$\{job\.workNumber\}/);
   assert.match(crm, /ids: selectedCustomerIds/);
   assert.match(crm, /Only customers with no active jobs can be archived/);
 });
@@ -281,8 +315,8 @@ test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
   assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: Boolean\(complianceIntent\),\s*calendarSynced, calendarFailed \}, 201\)/);
   assert.match(crm, /type CreateJobResult = \{ ok\?: boolean; id\?: string; workNumber\?: string; customerId\?: string; serviceSiteId\?: string; complianceIntentPlanned\?: boolean; calendarSynced\?: number; calendarFailed\?: number;/);
-  assert.match(newJob, /Creditex receives a planning queue item now/);
-  assert.match(newJob, /The regulated case and exact evidence form remain blocked until the accepted quote and a published governed activity are revalidated/);
+  assert.match(newJob, /This creates the Creditex intake with the job/);
+  assert.match(newJob, /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
   assert.match(crm, /CustomerLookupSelect/);
   assert.match(crm, /Name, number, phone, suburb or postcode/);

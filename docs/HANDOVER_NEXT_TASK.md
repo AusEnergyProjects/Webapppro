@@ -1,5 +1,111 @@
 # Next task handover
 
+Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` implementation complete, release validation pending
+
+Prepared: 3 August 2026
+
+Milestone ID: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41`
+
+Working branch: `codex/sites-custom-domain-migration`
+
+Production baseline: Sites version 271 from application commit `a45f250ee805aac1545c8643726dfde3964de22b`
+
+Production URL: `https://compare.ausenergyassessments.com`
+
+Creditex URL: `https://compare.ausenergyassessments.com/creditex/compliance`
+
+## Active milestone contract
+
+Outcome: an installer can create one accurate scheduled certificate-work job
+without duplicate entry, while Creditex receives the complete authorised
+planning record immediately and both teams operate the same exact 23-column
+Dataforce-compatible job register.
+
+Owning workflow:
+
+- guided job creation and review in `TradeNewJobForm`;
+- service-address validation and provenance in `trade-crm` and
+  `trade-address-suggestions`;
+- installer-to-Creditex case initiation in `trade-compliance`;
+- exact Dataforce projection and complete filtered export in
+  `InstallerCrmWorkspace` and `creditex-dataforce-job-csv`;
+- additive address and compliance-policy migrations plus focused regressions.
+
+In scope:
+
+- make every reached New Job stage directly clickable and keep appointment
+  type, duration and notes visible;
+- remove the unused visible site-name field and keep one automatic internal
+  service-site label;
+- validate the complete Australian address and state/postcode combination,
+  retain signed provider provenance when configured, and visibly mark manual
+  addresses for Creditex review;
+- replace the shallow final card with a detail-rich customer, site, work,
+  commercial, program, certificate, product, evidence, schedule and technician
+  review;
+- expose one installer-owned job per row using the exact known Dataforce
+  23-column contract, remove row-selection checkboxes and download every
+  filtered row through the authoritative CSV exporter;
+- let governed intake start from the progressing job without requiring quote
+  acceptance, while recording the installer as the actor and validating any
+  optional accepted-quote linkage at application and database boundaries.
+
+Out of scope:
+
+- activating an unverified government rule, evidence policy or calculator;
+- calculating or creating a certificate from discovery-only catalogue data;
+- sending a regulator submission, trade or settlement;
+- adding or guessing Dataforce meanings that are absent from the supplied
+  23-column export;
+- provisioning an address-provider account or secret;
+- creating production customers, jobs, evidence or compliance cases during
+  release verification.
+
+Acceptance criteria:
+
+- the wizard stages are accessible buttons and only forward progress is
+  validation-gated;
+- a guided job cannot use a malformed postcode or mismatched state and
+  postcode;
+- editing any provider-selected address either proves the new provider
+  selection or downgrades the address to manual Creditex review;
+- the review shows the exact captured customer, contact, address, job,
+  certificate plan, approved-product state, evidence-policy state, appointment
+  and technician without implying that a certificate exists;
+- Creditex receives the planning intent with the job and private data remains
+  organisation-scoped;
+- installer case initiation records the authenticated installer actor; quote
+  linkage is optional, all-or-none and immutable when present;
+- the Jobs register has the exact supplied 23 headers in order, one job per
+  row, no selection checkboxes and one bounded complete filtered CSV export;
+- type checking, lint, focused tests, migration replay, integration tests, the
+  complete suite, production build and Sites bundle audit pass.
+
+Stop condition: stop if the exact official government source and policy are
+not independently verified, if an address provider requires an unapproved
+credential or contract, if a tenant or actor boundary fails, if migration
+replay diverges, or if release verification would mutate production data.
+
+## Next five logical product steps
+
+1. Retain and independently approve one complete current VEU, SRES and NSW
+   governed bundle each, including official source bytes, effective dates,
+   product and participant registers, evidence policy and calculation vectors,
+   then exercise each through a manual non-submitting job.
+2. Add immutable intent revision and case supersession when the job address,
+   installation date, activity, product or technician changes, with a clear
+   Creditex return-to-installer path.
+3. Configure one approved Australian production address provider and reuse the
+   same signed address component in customer, service-site and New Job edits.
+4. Split Phone and Mobile into explicit durable fields and complete bounded
+   Dataforce import reconciliation for unresolved lifecycle, agent, client,
+   submission and certificate mappings.
+5. Bind the case-pinned evidence form into the installer field job with
+   editable Creditex operational prompts, original photo metadata, offline
+   recovery and simple evidence-complete submission gates.
+
+## Previous released milestone
+
 Status: `TRADE-CREDITEX-JOB-HANDOFF-40` released and live
 
 Prepared: 3 August 2026

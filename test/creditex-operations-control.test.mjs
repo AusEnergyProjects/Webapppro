@@ -1258,6 +1258,233 @@ test("operations dashboard and access queries execute against the operations sch
   assert.equal(access.invitations.length, 1);
 });
 
+test("installer case creation is quote-free while optional handoff linkage remains fail-closed", async () => {
+  const database = databaseWithComplianceOperations();
+  const d1 = testD1(database);
+  const complianceDomain = loadTypescriptModule(
+    "../src/lib/creditex-compliance-server.ts",
+    {
+      "./creditex-schema-guards": {
+        ensureCreditexSchemaGuards: async () => {},
+      },
+      "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+    },
+  );
+  const governed = seedGovernedActivity(database);
+  seedTradeJob(database, {
+    workOrderId: "job-quote-free",
+    key: "quote-free",
+  });
+  const quoteFree = await complianceDomain.prepareLiveComplianceCaseStatements(
+    d1,
+    {
+      activityVersionId: governed.activityVersionId,
+      activityDate: "2026-08-01",
+      serviceCategory: "hot-water",
+      jurisdiction: "VIC",
+      workOrderId: "job-quote-free",
+      installerUid: "installer-uid",
+      actorType: "installer",
+      actorUid: "installer-uid",
+      caseId: "case-quote-free",
+      eventId: "event-quote-free",
+      createdAt: TEST_NOW,
+    },
+  );
+  await d1.batch(quoteFree.statements);
+  assert.deepEqual(
+    { ...database.prepare(`SELECT created_by_type, created_by_uid,
+        commercial_handoff_id, accepted_quote_version_id,
+        accepted_scope_sha256
+      FROM compliance_cases WHERE id = 'case-quote-free'`).get() },
+    {
+      created_by_type: "installer",
+      created_by_uid: "installer-uid",
+      commercial_handoff_id: "",
+      accepted_quote_version_id: "",
+      accepted_scope_sha256: "",
+    },
+  );
+  assert.deepEqual(
+    { ...database.prepare(`SELECT actor_type, actor_uid
+      FROM compliance_case_events WHERE id = 'event-quote-free'`).get() },
+    {
+      actor_type: "installer",
+      actor_uid: "installer-uid",
+    },
+  );
+
+  seedTradeJob(database, {
+    workOrderId: "job-partial",
+    key: "partial",
+  });
+  const partialStatements = [];
+  await assert.rejects(
+    complianceDomain.appendLiveComplianceCaseStatements(
+      d1,
+      partialStatements,
+      {
+        activityVersionId: governed.activityVersionId,
+        activityDate: "2026-08-01",
+        serviceCategory: "hot-water",
+        jurisdiction: "VIC",
+        workOrderId: "job-partial",
+        commercialHandoffId: "handoff-partial",
+        installerUid: "installer-uid",
+        actorType: "installer",
+        actorUid: "installer-uid",
+        caseId: "case-partial",
+        eventId: "event-partial",
+        createdAt: TEST_NOW,
+      },
+    ),
+    (error) =>
+      error.code === "COMPLIANCE_HANDOFF_INCOMPLETE"
+      && error.status === 400,
+  );
+  assert.equal(partialStatements.length, 0);
+
+  seedTradeJob(database, {
+    workOrderId: "job-forged",
+    key: "forged",
+  });
+  await assert.rejects(
+    complianceDomain.prepareLiveComplianceCaseStatements(d1, {
+      activityVersionId: governed.activityVersionId,
+      activityDate: "2026-08-01",
+      serviceCategory: "hot-water",
+      jurisdiction: "VIC",
+      workOrderId: "job-forged",
+      commercialHandoffId: "handoff-forged",
+      acceptedQuoteVersionId: "quote-version-forged",
+      acceptedScopeSha256: TEST_HASH,
+      installerUid: "installer-uid",
+      actorType: "installer",
+      actorUid: "installer-uid",
+      caseId: "case-forged",
+      eventId: "event-forged",
+      createdAt: TEST_NOW,
+    }),
+    (error) =>
+      error.code === "COMPLIANCE_HANDOFF_LINKAGE_INVALID"
+      && error.status === 409,
+  );
+
+  seedTradeJob(database, {
+    workOrderId: "job-linked",
+    key: "linked",
+  });
+  const acceptedHandoff = seedAcceptedHandoff(database, {
+    workOrderId: "job-linked",
+    acceptanceId: "acceptance-linked",
+    quoteVersionId: "quote-version-linked",
+    handoffId: "handoff-linked",
+  });
+  const acceptedScopeSha256 =
+    await complianceDomain.complianceSnapshotSha256(
+      '[{"description":"Accepted work"}]',
+    );
+  const linked = await complianceDomain.prepareLiveComplianceCaseStatements(
+    d1,
+    {
+      activityVersionId: governed.activityVersionId,
+      activityDate: "2026-08-01",
+      serviceCategory: "hot-water",
+      jurisdiction: "VIC",
+      workOrderId: "job-linked",
+      commercialHandoffId: acceptedHandoff.handoffId,
+      acceptedQuoteVersionId: acceptedHandoff.quoteVersionId,
+      acceptedScopeSha256,
+      installerUid: "installer-uid",
+      actorType: "installer",
+      actorUid: "installer-uid",
+      caseId: "case-linked",
+      eventId: "event-linked",
+      createdAt: TEST_NOW,
+    },
+  );
+  await d1.batch(linked.statements);
+  assert.deepEqual(
+    { ...database.prepare(`SELECT commercial_handoff_id,
+        accepted_quote_version_id, accepted_scope_sha256
+      FROM compliance_cases WHERE id = 'case-linked'`).get() },
+    {
+      commercial_handoff_id: "handoff-linked",
+      accepted_quote_version_id: "quote-version-linked",
+      accepted_scope_sha256: acceptedScopeSha256,
+    },
+  );
+
+  seedTradeJob(database, {
+    workOrderId: "job-direct-partial",
+    key: "direct-partial",
+  });
+  assert.throws(
+    () => seedGovernedCase(database, governed, {
+      caseId: "case-direct-partial",
+      caseNumber: "CREDITEX-DIRECT-PARTIAL",
+      workOrderId: "job-direct-partial",
+      createdByType: "installer",
+      commercialHandoffId: "handoff-partial",
+      snapshot: activitySnapshot(governed, {
+        acceptedHandoff: {
+          commercialHandoffId: "handoff-partial",
+          acceptedQuoteVersionId: "",
+          acceptedScopeSha256: "",
+        },
+      }),
+    }),
+    /COMPLIANCE_ACCEPTED_HANDOFF_INVALID/,
+  );
+
+  seedTradeJob(database, {
+    workOrderId: "job-direct-forged",
+    key: "direct-forged",
+  });
+  assert.throws(
+    () => seedGovernedCase(database, governed, {
+      caseId: "case-direct-forged",
+      caseNumber: "CREDITEX-DIRECT-FORGED",
+      workOrderId: "job-direct-forged",
+      createdByType: "installer",
+      commercialHandoffId: "handoff-forged",
+      acceptedQuoteVersionId: "quote-version-forged",
+      acceptedScopeSha256: TEST_HASH,
+      snapshot: activitySnapshot(governed, {
+        acceptedHandoff: {
+          commercialHandoffId: "handoff-forged",
+          acceptedQuoteVersionId: "quote-version-forged",
+          acceptedScopeSha256: TEST_HASH,
+        },
+      }),
+    }),
+    /COMPLIANCE_ACCEPTED_HANDOFF_INVALID/,
+  );
+
+  seedTradeJob(database, {
+    workOrderId: "job-actor-mismatch",
+    key: "actor-mismatch",
+  });
+  await assert.rejects(
+    complianceDomain.prepareLiveComplianceCaseStatements(d1, {
+      activityVersionId: governed.activityVersionId,
+      activityDate: "2026-08-01",
+      serviceCategory: "hot-water",
+      jurisdiction: "VIC",
+      workOrderId: "job-actor-mismatch",
+      installerUid: "installer-uid",
+      actorType: "installer",
+      actorUid: "another-installer",
+      caseId: "case-actor-mismatch",
+      eventId: "event-actor-mismatch",
+      createdAt: TEST_NOW,
+    }),
+    (error) =>
+      error.code === "COMPLIANCE_INSTALLER_ACTOR_MISMATCH"
+      && error.status === 403,
+  );
+});
+
 test("Creditex workspace applies authoritative Dataforce-equivalent filters without returning private list data", async () => {
   const database = databaseWithComplianceOperations();
   const operations = loadTypescriptModule(
@@ -1473,7 +1700,7 @@ test("audited local operations execute against the schema and financial guards r
       jurisdiction: "VIC",
       workOrderId: "job",
       installerUid: "installer-uid",
-      actorType: "platform",
+      actorType: "installer",
       actorUid: "installer-uid",
       caseId: "case",
       eventId: "case-created",

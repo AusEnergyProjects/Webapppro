@@ -193,12 +193,58 @@ function governanceDatabase() {
 }
 
 test("schema guard inventory remains quota-safe at forty statements per batch", () => {
-  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 299);
+  assert.equal(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length, 300);
   assert.equal(
     new Set(CREDITEX_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
-    299,
+    300,
   );
   assert.equal(Math.ceil(CREDITEX_SCHEMA_GUARD_DEFINITIONS.length / 40), 8);
+});
+
+test("optional compliance handoff migration replaces the live guard with canonical fail-closed rules", () => {
+  const migration = fs.readFileSync(
+    new URL(
+      "../drizzle/0118_optional_compliance_handoff.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /DROP TRIGGER IF EXISTS `compliance_cases_accepted_handoff_guard`/,
+  );
+  for (const name of [
+    "compliance_cases_installer_actor_guard",
+    "compliance_cases_accepted_handoff_guard",
+  ]) {
+    const definition = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+      (candidate) => candidate.name === name,
+    );
+    assert.ok(definition, `Missing schema guard definition: ${name}`);
+    const migrationStatement = migration
+      .split("--> statement-breakpoint")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(
+        `CREATE TRIGGER IF NOT EXISTS \`${name}\``,
+      ));
+    assert.ok(migrationStatement, `Missing migration trigger: ${name}`);
+    assert.equal(
+      canonicalCreditexSchemaGuardSql(migrationStatement),
+      canonicalCreditexSchemaGuardSql(definition.sql),
+    );
+  }
+  const handoffGuard = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+    (candidate) =>
+      candidate.name === "compliance_cases_accepted_handoff_guard",
+  );
+  assert.match(
+    handoffGuard?.sql || "",
+    /commercial_handoff_id` = ''[\s\S]*accepted_quote_version_id` = ''[\s\S]*accepted_scope_sha256` = ''/,
+  );
+  assert.match(
+    handoffGuard?.sql || "",
+    /COMPLIANCE_ACCEPTED_HANDOFF_INVALID/,
+  );
 });
 
 test("manual field, policy and trade-intent migrations remain table-only with canonical runtime guards", () => {

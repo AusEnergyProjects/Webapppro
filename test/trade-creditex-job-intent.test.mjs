@@ -125,9 +125,9 @@ function assertIntentError(action, expectedCode) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 117);
+  assert.equal(completeMigrationChain.length, 119);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0116_/);
+  assert.match(completeMigrationChain.at(-1), /^0118_/);
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
       new URL(name, migrationDirectory),
@@ -341,7 +341,7 @@ test("planned intent snapshot is deterministic and remains setup-required", () =
     governance: {
       state: "setup_required",
       message:
-        "Planning choice only. TLink must revalidate a published government rule, accepted quote and evidence policy before Creditex intake opens.",
+        "Creditex intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
     },
   };
   assert.equal(

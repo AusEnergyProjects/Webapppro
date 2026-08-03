@@ -404,6 +404,26 @@ test("planned intake exposes private job context only to the exact Creditex orga
     /'job\.private_details_viewed'/,
     /INSERT INTO compliance_audit_events/,
   ]) assert.match(plannedJobAuditRoute, contract);
+  for (const provenanceContract of [
+    /function addressProvenance\(serviceSite: Row\)/,
+    /serviceSite\.address_entry_mode \|\| "manual_pending_review"/,
+    /serviceSite\.address_provider_reference/,
+    /serviceSite\.address_formatted/,
+    /serviceSite\.address_verified_at/,
+    /status: providerVerified[\s\S]*"provider_verified"[\s\S]*"manual_review_required"/,
+    /reviewRequired: !providerVerified/,
+    /serviceSiteAddressProvenance: addressProvenance\(serviceSite\)/,
+  ]) assert.match(plannedJobAuditRoute, provenanceContract);
+  for (const reviewContract of [
+    /serviceSiteAddressProvenance: ServiceSiteAddressProvenance/,
+    /Manual address: review required/,
+    /Creditex must compare it with the job evidence before relying on it for compliance/,
+    /Provider-selected address/,
+    /provenance\.providerReference/,
+    /provenance\.formattedAddress/,
+    /provenance\.verifiedAt/,
+    /<AddressProvenanceView provenance=\{audit\.serviceSiteAddressProvenance\} \/>/,
+  ]) assert.match(plannedIntakeQueue, reviewContract);
   assert.doesNotMatch(
     plannedJobAuditRoute,
     /customer_id = \?[\s\S]{0,100}\(\? = '' OR service_site_id = \?\)/,
@@ -757,7 +777,7 @@ test("government catalogue distinguishes national outcomes and remains discovery
   assert.doesNotMatch(governmentCatalogue, /6\(23\)/);
 });
 
-test("accepted-job installer intake uses governed dropdowns and binds the exact source version", () => {
+test("governed installer intake uses controlled dropdowns and binds the exact source version", () => {
   for (const contract of [
     /const \[programId, setProgramId\]/,
     /const \[activityKey, setActivityKey\]/,
@@ -769,23 +789,23 @@ test("accepted-job installer intake uses governed dropdowns and binds the exact 
     /<span>Activity scenario<\/span>/,
     /<span>Effective source version<\/span>/,
     /activityVersionId: effectiveActivityVersionId/,
-    /accepted quote scope and exact government source/,
+    /pin the exact government source, activity, product/,
   ]) assert.match(tradeComplianceIntake, contract);
   assert.doesNotMatch(tradeNewJobForm, /complianceActivityVersionId/);
   assert.match(
     tradeNewJobForm,
-    /After quote acceptance, TLink will recheck the site, installation date, exact published government source and Creditex evidence policy/,
+    /This creates the Creditex intake with the job/,
   );
   assert.match(tradeComplianceRoute, /programId: activity\.programId/);
-  assert.match(tradeComplianceRoute, /ensureAcceptedCommercialHandoff/);
-  assert.match(tradeComplianceRoute, /acceptedScopeSha256/);
+  assert.doesNotMatch(tradeComplianceRoute, /ensureAcceptedCommercialHandoff/);
+  assert.match(tradeComplianceRoute, /actorType: "installer"/);
   assert.doesNotMatch(
     `${tradeNewJobForm}\n${tradeComplianceIntake}`,
     /6\(23\)|synthetic/i,
   );
 });
 
-test("planned activity stays non-regulated until an accepted quote promotes the same job", () => {
+test("planned activity stays non-regulated until an exact governed chain promotes the same job", () => {
   const createJobStart = tradeCrmRoute.indexOf(
     'if (action === "create_job" || action === "create_scheduled_job")',
   );
@@ -810,33 +830,24 @@ test("planned activity stays non-regulated until an accepted quote promotes the 
   );
   assert.match(
     tradeComplianceIntent,
-    /governance:\s*\{[\s\S]*state: "setup_required"[\s\S]*accepted quote and evidence policy before Creditex intake opens/,
+    /governance:\s*\{[\s\S]*state: "setup_required"[\s\S]*exact published government rule and evidence policy/,
   );
   assert.match(
     tradeNewJobForm,
-    /regulated case and exact evidence form remain blocked until the accepted quote/,
+    /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/,
   );
 
   const compliancePost = tradeComplianceRoute.slice(
     tradeComplianceRoute.indexOf("export async function POST"),
   );
-  const acceptedHandoff = compliancePost.indexOf(
-    "ensureAcceptedCommercialHandoff(",
-  );
   const createRegulatedCase = compliancePost.indexOf(
     "appendLiveComplianceCaseStatements(",
   );
-  assert.ok(
-    acceptedHandoff >= 0 && createRegulatedCase > acceptedHandoff,
-    "The accepted commercial handoff must be proven before case creation.",
-  );
+  assert.ok(createRegulatedCase >= 0);
+  assert.doesNotMatch(compliancePost, /ensureAcceptedCommercialHandoff|ACCEPTED_HANDOFF_REQUIRED/);
   assert.match(
     compliancePost,
-    /if \(!handoff\)[\s\S]*"ACCEPTED_HANDOFF_REQUIRED"[\s\S]*customer must accept the quote/,
-  );
-  assert.match(
-    compliancePost,
-    /acceptedQuoteVersionId: String\(handoff\.quote_version_id\)[\s\S]*acceptedScopeSha256/,
+    /optionalCommercialHandoff\(body\)[\s\S]*actorType: "installer"/,
   );
   assert.match(
     compliancePost,

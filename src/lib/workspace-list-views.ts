@@ -1,5 +1,6 @@
 import { getD1 } from "../../db";
 import { cleanAdminText } from "@/lib/admin-server";
+import { DATAFORCE_JOB_CSV_HEADERS } from "@/lib/creditex-dataforce-job-csv";
 
 export const PAGE_SIZES = new Set([25, 50, 100]);
 
@@ -55,7 +56,7 @@ type ListViewDefaults = {
 };
 
 const columnsByView: Record<string, string[]> = {
-  "installer-jobs": ["customer", "service", "assignee", "suburb", "pipeline", "stage", "scheduled", "value", "reference"],
+  "installer-jobs": [...DATAFORCE_JOB_CSV_HEADERS],
   "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "latestJob", "status"],
   "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
   "admin-accounts": ["account", "type", "status", "updated"],

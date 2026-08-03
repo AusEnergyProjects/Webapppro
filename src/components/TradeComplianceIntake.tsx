@@ -333,15 +333,15 @@ export function TradeComplianceIntake({
   return <section className="crm-job-compliance">
     <header>
       <div>
-        <span>Accepted quote compliance</span>
+        <span>Governed job compliance</span>
         <h4>{initialIntent ? "Confirm the planned activity" : "Link the government activity"}</h4>
       </div>
       <strong>{loading ? "Checking..." : ready ? "Ready to link" : "Not ready"}</strong>
     </header>
     <p>
-      TLink uses the accepted quote, job address, work type and planned
-      installation date. Creditex receives the resulting case and evidence for
-      audit.
+      TLink uses the job address, work type and planned installation date.
+      Creditex receives the complete authorised record and resulting governed
+      case for audit.
     </p>
     {ready && <div className="crm-form-grid">
       <label>
@@ -413,8 +413,8 @@ export function TradeComplianceIntake({
     {selectedActivity && <div className="crm-compliance-notice">
       <strong>{selectedActivity.organisationName} will audit this case</strong>
       <p>
-        TLink will pin the accepted quote scope and exact government source,
-        activity, product, scenario and evidence policy version.
+        TLink will pin the exact government source, activity, product,
+        scenario and evidence policy version.
       </p>
       <a href={selectedActivity.officialSourceUrl} target="_blank" rel="noreferrer">
         Open official {selectedActivity.officialSourceVersion || "activity"} source

@@ -112,6 +112,34 @@ function safeRows(rows: Row[], groupKey: string) {
   return rows.map((row) => safeRow(row, groupKey) as Row);
 }
 
+function addressProvenance(serviceSite: Row) {
+  const entryMode = String(
+    serviceSite.address_entry_mode || "manual_pending_review",
+  );
+  const provider = String(serviceSite.address_provider || "");
+  const providerReference = String(
+    serviceSite.address_provider_reference || "",
+  );
+  const formattedAddress = String(serviceSite.address_formatted || "");
+  const verifiedAt = String(serviceSite.address_verified_at || "");
+  const providerVerified = entryMode === "provider_selected"
+    && provider !== ""
+    && providerReference !== ""
+    && formattedAddress !== ""
+    && verifiedAt !== "";
+  return {
+    entryMode,
+    provider,
+    providerReference,
+    formattedAddress,
+    verifiedAt,
+    status: providerVerified
+      ? "provider_verified"
+      : "manual_review_required",
+    reviewRequired: !providerVerified,
+  };
+}
+
 type AuditGroup = {
   key: string;
   label: string;
@@ -505,6 +533,7 @@ export async function GET(request: Request, context: RouteContext) {
       installer: safeRow(installer),
       customer: safeRow(customer),
       serviceSite: safeRow(serviceSite),
+      serviceSiteAddressProvenance: addressProvenance(serviceSite),
       groups: groups.map((group, index) => ({
         key: group.key,
         label: group.label,

@@ -1352,6 +1352,11 @@ export const tradeCrmServiceSites = sqliteTable("trade_crm_service_sites", {
   suburb: text("suburb").notNull().default(""),
   addressState: text("address_state").notNull().default(""),
   postcode: text("postcode").notNull().default(""),
+  addressEntryMode: text("address_entry_mode").notNull().default("manual_pending_review"),
+  addressProvider: text("address_provider").notNull().default(""),
+  addressProviderReference: text("address_provider_reference").notNull().default(""),
+  addressFormatted: text("address_formatted").notNull().default(""),
+  addressVerifiedAt: text("address_verified_at").notNull().default(""),
   accessInstructions: text("access_instructions").notNull().default(""),
   parkingInstructions: text("parking_instructions").notNull().default(""),
   hazardNotes: text("hazard_notes").notNull().default(""),
@@ -1362,6 +1367,7 @@ export const tradeCrmServiceSites = sqliteTable("trade_crm_service_sites", {
 }, (table) => [
   index("trade_crm_service_sites_owner_customer_idx").on(table.firebaseUid, table.customerId, table.recordStatus),
   index("trade_crm_service_sites_owner_postcode_idx").on(table.firebaseUid, table.postcode),
+  index("trade_crm_service_sites_address_verification_idx").on(table.firebaseUid, table.addressEntryMode, table.addressVerifiedAt),
 ]);
 
 export const tradeCrmSiteContacts = sqliteTable("trade_crm_site_contacts", {

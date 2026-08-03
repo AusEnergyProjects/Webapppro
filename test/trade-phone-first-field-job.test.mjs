@@ -62,7 +62,10 @@ test("guided intake removes manual titles and carries scheduling into the same f
   for (const step of ["Choose the work", "Add or attach the customer", "Choose the program, if relevant", "Set the appointment", "Review and create"]) assert.match(newJob, new RegExp(step));
   assert.match(newJob, /name="buildingType"/);
   assert.match(newJob, /name="startsAt"/);
-  assert.match(newJob, /More appointment options/);
+  assert.doesNotMatch(newJob, /More appointment options/);
+  assert.match(newJob, /<span>Appointment type<\/span>/);
+  assert.match(newJob, /<span>Duration <strong>/);
+  assert.match(newJob, /<span>Appointment notes, optional<\/span>/);
   assert.doesNotMatch(newJob, /TradeQuickInvoiceStep|Evidence", "Invoice|evidenceRequirements|deliveryConsent/);
   assert.match(crmRoute, /action === "create_scheduled_job"/);
   assert.match(crmRoute, /moneyValue\(body\.estimatedValueCents\)/);

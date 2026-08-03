@@ -193,7 +193,7 @@ export function resolveTradeComplianceIntent(input: {
     governance: {
       state: "setup_required",
       message:
-        "Planning choice only. TLink must revalidate a published government rule, accepted quote and evidence policy before Creditex intake opens.",
+        "Creditex intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
     },
   };
   return { program, activity, snapshot };

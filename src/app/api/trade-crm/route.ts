@@ -18,6 +18,15 @@ import {
   stableTradeComplianceIntentJson,
   TradeComplianceIntentError,
 } from "@/lib/trade-compliance-intent";
+import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataforce-job-csv";
+import { integrationEnvironment } from "@/lib/trade-integrations-server";
+import {
+  canonicalAustralianAddress,
+  resolveTradeAddressProvenance,
+  TradeAddressVerificationError,
+  type AustralianAddressComponents,
+  type TradeAddressProvenance,
+} from "@/lib/trade-address-verification";
 
 export const runtime = "edge";
 
@@ -77,6 +86,78 @@ const CUSTOMER_SORTS: Record<string, CrmSort> = {
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
 
 type CrmIdentity = { uid: string; email: string; memberId: string; businessName: string; addressState: string; teamAccess: boolean };
+type AddressCandidate = AustralianAddressComponents & {
+  addressEntryMode?: unknown;
+  addressProvider?: unknown;
+  addressProviderReference?: unknown;
+  addressFormatted?: unknown;
+  addressSelectionProof?: unknown;
+};
+
+const ADDRESS_COMPONENT_KEYS = ["addressLine1", "addressLine2", "suburb", "addressState", "postcode"] as const;
+const ADDRESS_PROVENANCE_KEYS = ["addressEntryMode", "addressProvider", "addressProviderReference", "addressFormatted", "addressSelectionProof"] as const;
+
+function addressCandidate(body: Record<string, unknown>, current?: Record<string, unknown>): AddressCandidate {
+  return {
+    addressLine1: body.addressLine1 === undefined ? String(current?.address_line_1 || "") : cleanAdminText(body.addressLine1, 140),
+    addressLine2: body.addressLine2 === undefined ? String(current?.address_line_2 || "") : cleanAdminText(body.addressLine2, 140),
+    suburb: body.suburb === undefined ? String(current?.suburb || "") : cleanAdminText(body.suburb, 80),
+    addressState: body.addressState === undefined ? String(current?.address_state || "") : cleanAdminText(body.addressState, 20).toUpperCase(),
+    postcode: body.postcode === undefined ? String(current?.postcode || "") : cleanAdminText(body.postcode, 12),
+    addressEntryMode: body.addressEntryMode,
+    addressProvider: body.addressProvider,
+    addressProviderReference: body.addressProviderReference,
+    addressFormatted: body.addressFormatted,
+    addressSelectionProof: body.addressSelectionProof,
+  };
+}
+
+function addressHasContent(candidate: AustralianAddressComponents) {
+  return ADDRESS_COMPONENT_KEYS.some((key) => String(candidate[key] || "").trim());
+}
+
+function addressComponentsChanged(current: Record<string, unknown>, candidate: AustralianAddressComponents) {
+  const currentValues = [
+    String(current.address_line_1 || "").trim(),
+    String(current.address_line_2 || "").trim(),
+    String(current.suburb || "").trim(),
+    String(current.address_state || "").trim().toUpperCase(),
+    String(current.postcode || "").trim(),
+  ];
+  return ADDRESS_COMPONENT_KEYS.some((key, index) => String(candidate[key] || "").trim() !== currentValues[index]);
+}
+
+function provenanceWasSubmitted(body: Record<string, unknown>) {
+  return ADDRESS_PROVENANCE_KEYS.some((key) => body[key] !== undefined);
+}
+
+function addressComponentsWereSubmitted(body: Record<string, unknown>) {
+  return ADDRESS_COMPONENT_KEYS.some((key) => body[key] !== undefined);
+}
+
+async function resolvedAddressWrite(
+  body: Record<string, unknown>,
+  identity: CrmIdentity,
+  candidate = addressCandidate(body),
+): Promise<TradeAddressProvenance> {
+  if (!addressHasContent(candidate)) {
+    return {
+      ...candidate,
+      addressEntryMode: "manual_pending_review",
+      addressProvider: "",
+      addressProviderReference: "",
+      addressFormatted: "",
+      addressVerifiedAt: "",
+    };
+  }
+  return resolveTradeAddressProvenance({
+    ...candidate,
+    addressEntryMode: candidate.addressEntryMode || "manual_pending_review",
+  }, {
+    ownerUid: identity.uid,
+    secret: String(integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY || ""),
+  });
+}
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
   const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
@@ -97,6 +178,9 @@ async function crmIdentity(request: Request): Promise<CrmIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof TradeAddressVerificationError) {
+    return adminJson({ ok: false, code: error.code, error: error.message }, 400);
+  }
   if (error instanceof TradeComplianceIntentError) {
     return adminJson({ ok: false, code: error.code, error: error.message }, 409);
   }
@@ -226,6 +310,39 @@ function pagination(url: URL) {
 function indexedJob(row: Record<string, unknown>) {
   const sourceType = String(row.source_type);
   const customerSource = sourceType === "opportunity" ? "platform_private" : String(row.customer_source || "internal");
+  const dataforceRecord = projectInstallerWorkOrderToDataforceRecord({
+    identifiers: {
+      appointmentId: String(row.appointment_id || ""),
+      jobId: String(row.work_number || ""),
+    },
+    work: {
+      workType: String(row.governed_work_type || SERVICE_LABELS[String(row.service_category)] || row.service_category || ""),
+      scheduledStart: String(row.scheduled_start || ""),
+    },
+    appointment: { startsAt: String(row.appointment_starts_at || "") },
+    financials: {
+      invoicedValueCents: Number(row.invoiced_value_cents || 0),
+      paidValueCents: Number(row.paid_value_cents || 0),
+      invoiceStatus: String(row.invoice_status || "not_started"),
+    },
+    customer: customerSource === "platform_private" ? undefined : {
+      firstName: String(row.first_name || ""),
+      lastName: String(row.last_name || ""),
+      businessName: String(row.business_name || ""),
+      email: String(row.customer_email || ""),
+      phone: "",
+      mobile: String(row.customer_phone || ""),
+    },
+    serviceSite: customerSource === "platform_private" ? undefined : {
+      addressLine1: String(row.site_address_line_1 || ""),
+      addressLine2: String(row.site_address_line_2 || ""),
+      suburb: String(row.site_suburb || ""),
+      postcode: String(row.site_postcode || ""),
+    },
+    technician: { displayName: String(row.assignee_label || "") },
+    customerReference: customerSource === "platform_private" ? "" : String(row.customer_reference || ""),
+    verifiedCertificateIssuance: null,
+  });
   return {
     id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
@@ -240,6 +357,7 @@ function indexedJob(row: Record<string, unknown>) {
     paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
     invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
     handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [], complianceIntent: null,
+    dataforceRecord,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -313,6 +431,11 @@ function indexedServiceSite(row: Record<string, unknown>, siteContacts: Record<s
     id: String(row.id), customerId: String(row.customer_id), siteLabel: String(row.site_label || "Primary site"),
     addressLine1: String(row.address_line_1 || ""), addressLine2: String(row.address_line_2 || ""),
     suburb: String(row.suburb || ""), addressState: String(row.address_state || ""), postcode: String(row.postcode || ""),
+    addressEntryMode: String(row.address_entry_mode || "manual_pending_review"),
+    addressProvider: String(row.address_provider || ""),
+    addressProviderReference: String(row.address_provider_reference || ""),
+    addressFormatted: String(row.address_formatted || ""),
+    addressVerifiedAt: String(row.address_verified_at || ""),
     accessInstructions: String(row.access_instructions || ""), parkingInstructions: String(row.parking_instructions || ""),
     hazardNotes: String(row.hazard_notes || ""), isPrimary: Boolean(row.is_primary),
     contacts: siteContacts.filter((contact) => contact.service_site_id === row.id).map((contact) => ({
@@ -350,8 +473,20 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   if (resource === "jobs") {
     const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", "w.record_status = 'active'"];
     if (search) {
-      conditions.push(`LOWER(w.work_number || ' ' || w.title || ' ' || w.site_area || ' ' ||
-        CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
+      conditions.push(`LOWER(
+        COALESCE(w.work_number, '') || ' ' || COALESCE(w.title, '') || ' ' || COALESCE(w.site_area, '') || ' ' ||
+        COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || COALESCE(w.scheduled_start, '') || ' ' ||
+        COALESCE(d.customer_reference, '') || ' ' || COALESCE(d.invoice_status, '') || ' ' ||
+        COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') || ' ' || COALESCE(c.business_name, '') || ' ' ||
+        COALESCE(c.email, '') || ' ' || COALESCE(c.phone, '') || ' ' ||
+        COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' ||
+        COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '') || ' ' ||
+        COALESCE((SELECT json_extract(ci.intent_snapshot, '$.activity.title')
+          FROM trade_work_order_compliance_intents ci
+          WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
+            AND ci.status IN ('planned', 'case_linked')
+          ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1), '')
+      ) LIKE ?`);
       bindings.push(`%${search}%`);
     }
     const customer = cleanAdminText(url.searchParams.get("customer"), 100).toLowerCase();
@@ -369,7 +504,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     if (assignee) { conditions.push("LOWER(w.assignee_label) LIKE ?"); bindings.push(`%${assignee}%`); }
     const location = cleanAdminText(url.searchParams.get("location"), 100).toLowerCase();
     if (location) {
-      conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(c.address_line_1, '') || ' ' || COALESCE(c.address_line_2, '') || ' ' || COALESCE(c.suburb, '') || ' ' || COALESCE(c.address_state, '') || ' ' || COALESCE(c.postcode, '')) LIKE ?`);
+      conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' || COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '')) LIKE ?`);
       bindings.push(`%${location}%`);
     }
     if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
@@ -379,7 +514,8 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     else if (filter !== "all") conditions.push("w.stage NOT IN ('completed', 'cancelled')");
     const where = conditions.join(" AND ");
     const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
-      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid`;
+      LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
     const sort = JOB_SORTS[sortValue] ? sortValue : "updated-desc";
     const selectedSort = JOB_SORTS[sort];
     let cursor;
@@ -393,7 +529,21 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
+        c.first_name, c.last_name, c.business_name, c.email customer_email, c.phone customer_phone,
+        ss.address_line_1 site_address_line_1, ss.address_line_2 site_address_line_2,
+        ss.suburb site_suburb, ss.address_state site_address_state, ss.postcode site_postcode,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+        (SELECT a.id FROM trade_crm_appointments a
+          WHERE a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid AND a.status <> 'cancelled'
+          ORDER BY CASE WHEN a.starts_at = w.scheduled_start THEN 0 ELSE 1 END, a.starts_at, a.created_at, a.id LIMIT 1) appointment_id,
+        (SELECT a.starts_at FROM trade_crm_appointments a
+          WHERE a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid AND a.status <> 'cancelled'
+          ORDER BY CASE WHEN a.starts_at = w.scheduled_start THEN 0 ELSE 1 END, a.starts_at, a.created_at, a.id LIMIT 1) appointment_starts_at,
+        (SELECT json_extract(ci.intent_snapshot, '$.activity.title')
+          FROM trade_work_order_compliance_intents ci
+          WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
+            AND ci.status IN ('planned', 'case_linked')
+          ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1) governed_work_type,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
         w.scheduled_start = '' schedule_empty
         ${joins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
@@ -881,18 +1031,14 @@ export async function POST(request: Request) {
       const contactId = crypto.randomUUID();
       const siteId = crypto.randomUUID();
       const customerNumber = `CUS-${now.slice(2, 7).replace("-", "")}-${id.replaceAll("-", "").slice(0, 5).toUpperCase()}`;
-      const addressLine1 = cleanAdminText(body.addressLine1, 140);
-      const addressLine2 = cleanAdminText(body.addressLine2, 140);
-      const suburb = cleanAdminText(body.suburb, 80);
-      const addressState = cleanAdminText(body.addressState, 20).toUpperCase();
-      const postcode = cleanAdminText(body.postcode, 12);
+      const address = await resolvedAddressWrite(body, identity);
       await db.batch([db.prepare(`INSERT INTO trade_crm_customers
         (id, firebase_uid, customer_number, customer_type, first_name, last_name, business_name, business_number, email,
          phone, address_line_1, address_line_2, suburb, address_state, postcode, tags, private_notes,
          record_status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
         .bind(id, identity.uid, customerNumber, customerType, firstName, lastName, businessName, businessNumber, email,
-          phone, addressLine1, addressLine2, suburb, addressState, postcode,
+          phone, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
           JSON.stringify(cleanList(body.tags)), cleanAdminText(body.privateNotes, 2000), now, now),
         db.prepare(`INSERT INTO trade_crm_customer_contacts
           (id, firebase_uid, customer_id, first_name, last_name, role_label, email, phone, is_primary, record_status, created_at, updated_at)
@@ -900,9 +1046,12 @@ export async function POST(request: Request) {
           .bind(contactId, identity.uid, id, firstName, lastName, email, phone, now, now),
         db.prepare(`INSERT INTO trade_crm_service_sites
           (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+           address_entry_mode, address_provider, address_provider_reference, address_formatted, address_verified_at,
            access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
-          VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
-          .bind(siteId, identity.uid, id, addressLine1, addressLine2, suburb, addressState, postcode, now, now),
+          VALUES (?, ?, ?, 'Primary site', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+          .bind(siteId, identity.uid, id, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
+            address.addressEntryMode, address.addressProvider, address.addressProviderReference, address.addressFormatted,
+            address.addressVerifiedAt, now, now),
         db.prepare(`INSERT INTO trade_crm_site_contacts
           (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
           VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
@@ -938,17 +1087,22 @@ export async function POST(request: Request) {
     if (action === "create_service_site") {
       const customerId = cleanAdminText(body.customerId, 180);
       await ownedCustomer(db, identity, customerId);
-      const siteLabel = cleanAdminText(body.siteLabel, 100);
-      if (!siteLabel) return adminJson({ ok: false, error: "Add a clear site name." }, 400);
+      const siteLabel = cleanAdminText(body.siteLabel, 100) || "Service address";
+      const address = await resolvedAddressWrite(body, identity);
+      if (!addressHasContent(address)) {
+        return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
+      }
       const siteId = crypto.randomUUID();
       const contactId = cleanAdminText(body.customerContactId, 180);
       if (contactId) await ownedContact(db, identity, contactId, customerId);
       const statements = [db.prepare(`INSERT INTO trade_crm_service_sites
         (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+         address_entry_mode, address_provider, address_provider_reference, address_formatted, address_verified_at,
          access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
-        .bind(siteId, identity.uid, customerId, siteLabel, cleanAdminText(body.addressLine1, 140), cleanAdminText(body.addressLine2, 140),
-          cleanAdminText(body.suburb, 80), cleanAdminText(body.addressState, 20).toUpperCase(), cleanAdminText(body.postcode, 12),
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`)
+        .bind(siteId, identity.uid, customerId, siteLabel, address.addressLine1, address.addressLine2,
+          address.suburb, address.addressState, address.postcode, address.addressEntryMode, address.addressProvider,
+          address.addressProviderReference, address.addressFormatted, address.addressVerifiedAt,
           cleanAdminText(body.accessInstructions, 2000), cleanAdminText(body.parkingInstructions, 1000), cleanAdminText(body.hazardNotes, 2000), now, now)];
       if (contactId) statements.push(db.prepare(`INSERT INTO trade_crm_site_contacts
         (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
@@ -980,7 +1134,7 @@ export async function POST(request: Request) {
       if (complianceActivityVersionId) {
         return adminJson({
           ok: false,
-          error: "Link the government activity after the customer accepts the quote.",
+          error: "The governed activity version is resolved by TLink and Creditex. Choose the program and activity instead.",
         }, 409);
       }
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
@@ -1001,11 +1155,28 @@ export async function POST(request: Request) {
       const email = cleanAdminText(body.email, 180).toLowerCase();
       const phone = cleanAdminText(body.phone, 40);
       const siteLabel = cleanAdminText(body.siteLabel, 100) || "Primary site";
-      const addressLine1 = cleanAdminText(body.addressLine1, 140);
-      const addressLine2 = cleanAdminText(body.addressLine2, 140);
-      const suburb = cleanAdminText(body.suburb, 80);
-      const addressState = cleanAdminText(body.addressState, 10).toUpperCase();
-      const postcode = cleanAdminText(body.postcode, 12);
+      const addressProvenance = createCustomer || serviceSiteMode === "new"
+        ? await resolveTradeAddressProvenance({
+          addressLine1: body.addressLine1,
+          addressLine2: body.addressLine2,
+          suburb: body.suburb,
+          addressState: body.addressState,
+          postcode: body.postcode,
+          addressEntryMode: body.addressEntryMode,
+          addressProvider: body.addressProvider,
+          addressProviderReference: body.addressProviderReference,
+          addressFormatted: body.addressFormatted,
+          addressSelectionProof: body.addressSelectionProof,
+        }, {
+          ownerUid: identity.uid,
+          secret: String(integrationEnvironment().CRM_INTEGRATION_ENCRYPTION_KEY || ""),
+        })
+        : null;
+      const addressLine1 = addressProvenance?.addressLine1 || "";
+      const addressLine2 = addressProvenance?.addressLine2 || "";
+      const suburb = addressProvenance?.suburb || "";
+      const addressState = addressProvenance?.addressState || "";
+      const postcode = addressProvenance?.postcode || "";
       const intakeStatements: D1PreparedStatement[] = [];
       let sourceEnquirySiteAdopted = false;
       if (createCustomer) {
@@ -1033,9 +1204,16 @@ export async function POST(request: Request) {
             .bind(contactId, identity.uid, customerId, firstName, lastName, email, phone, now, now),
           db.prepare(`INSERT INTO trade_crm_service_sites
             (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+             address_entry_mode, address_provider, address_provider_reference, address_formatted, address_verified_at,
              access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
-            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode, now, now),
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 1, 'active', ?, ?)`)
+            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode,
+              addressProvenance?.addressEntryMode || "manual_pending_review",
+              addressProvenance?.addressProvider || "",
+              addressProvenance?.addressProviderReference || "",
+              addressProvenance?.addressFormatted || "",
+              addressProvenance?.addressVerifiedAt || "",
+              now, now),
           db.prepare(`INSERT INTO trade_crm_site_contacts
             (id, firebase_uid, service_site_id, customer_contact_id, role_label, is_primary, record_status, created_at, updated_at)
             VALUES (?, ?, ?, ?, 'Primary service contact', 1, 'active', ?, ?)`)
@@ -1049,9 +1227,16 @@ export async function POST(request: Request) {
           serviceSiteId = crypto.randomUUID();
           intakeStatements.push(db.prepare(`INSERT INTO trade_crm_service_sites
             (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2, suburb, address_state, postcode,
+             address_entry_mode, address_provider, address_provider_reference, address_formatted, address_verified_at,
              access_instructions, parking_instructions, hazard_notes, is_primary, record_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 0, 'active', ?, ?)`)
-            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode, now, now));
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 0, 'active', ?, ?)`)
+            .bind(serviceSiteId, identity.uid, customerId, siteLabel, addressLine1, addressLine2, suburb, addressState, postcode,
+              addressProvenance?.addressEntryMode || "manual_pending_review",
+              addressProvenance?.addressProvider || "",
+              addressProvenance?.addressProviderReference || "",
+              addressProvenance?.addressFormatted || "",
+              addressProvenance?.addressVerifiedAt || "",
+              now, now));
         } else if (!serviceSiteId) {
           const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
             WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' ORDER BY is_primary DESC, created_at LIMIT 1`)
@@ -1132,11 +1317,34 @@ export async function POST(request: Request) {
           );
         }
       }
-      const serviceSite = serviceSiteId
+      let serviceSite = serviceSiteId
         ? createCustomer || serviceSiteMode === "new"
-          ? { suburb, address_state: addressState, postcode }
+          ? {
+            address_line_1: addressLine1,
+            address_line_2: addressLine2,
+            suburb,
+            address_state: addressState,
+            postcode,
+          }
           : await ownedServiceSite(db, identity, serviceSiteId, customerId)
         : null;
+      if (guided && serviceSite) {
+        const canonicalSite = canonicalAustralianAddress({
+          addressLine1: serviceSite.address_line_1,
+          addressLine2: serviceSite.address_line_2,
+          suburb: serviceSite.suburb,
+          addressState: serviceSite.address_state,
+          postcode: serviceSite.postcode,
+        });
+        serviceSite = {
+          ...serviceSite,
+          address_line_1: canonicalSite.addressLine1,
+          address_line_2: canonicalSite.addressLine2,
+          suburb: canonicalSite.suburb,
+          address_state: canonicalSite.addressState,
+          postcode: canonicalSite.postcode,
+        };
+      }
       const complianceIntent = resolveTradeComplianceIntent({
         mode: body.complianceIntentMode,
         programTemplateId: body.programTemplateId,
@@ -1469,17 +1677,29 @@ export async function PATCH(request: Request) {
       const site = await ownedServiceSite(db, identity, siteId, customerId);
       const siteLabel = body.siteLabel === undefined ? String(site.site_label) : cleanAdminText(body.siteLabel, 100);
       if (!siteLabel) return adminJson({ ok: false, error: "Add a clear site name." }, 400);
-      const values = {
-        addressLine1: body.addressLine1 === undefined ? String(site.address_line_1) : cleanAdminText(body.addressLine1, 140),
-        addressLine2: body.addressLine2 === undefined ? String(site.address_line_2) : cleanAdminText(body.addressLine2, 140),
-        suburb: body.suburb === undefined ? String(site.suburb) : cleanAdminText(body.suburb, 80),
-        addressState: body.addressState === undefined ? String(site.address_state) : cleanAdminText(body.addressState, 20).toUpperCase(),
-        postcode: body.postcode === undefined ? String(site.postcode) : cleanAdminText(body.postcode, 12),
-      };
+      const candidate = addressCandidate(body, site);
+      if (addressComponentsWereSubmitted(body) && !addressHasContent(candidate)) {
+        return adminJson({ ok: false, error: "A service address cannot be empty." }, 400);
+      }
+      const addressChanged = addressComponentsChanged(site, candidate);
+      const address = addressChanged || provenanceWasSubmitted(body)
+        ? await resolvedAddressWrite(body, identity, candidate)
+        : {
+          ...candidate,
+          addressEntryMode: String(site.address_entry_mode || "manual_pending_review") as TradeAddressProvenance["addressEntryMode"],
+          addressProvider: String(site.address_provider || ""),
+          addressProviderReference: String(site.address_provider_reference || ""),
+          addressFormatted: String(site.address_formatted || ""),
+          addressVerifiedAt: String(site.address_verified_at || ""),
+        };
       const statements = [db.prepare(`UPDATE trade_crm_service_sites SET site_label = ?, address_line_1 = ?, address_line_2 = ?,
-        suburb = ?, address_state = ?, postcode = ?, access_instructions = ?, parking_instructions = ?, hazard_notes = ?, updated_at = ?
+        suburb = ?, address_state = ?, postcode = ?, address_entry_mode = ?, address_provider = ?,
+        address_provider_reference = ?, address_formatted = ?, address_verified_at = ?,
+        access_instructions = ?, parking_instructions = ?, hazard_notes = ?, updated_at = ?
         WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
-        .bind(siteLabel, values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode,
+        .bind(siteLabel, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
+          address.addressEntryMode, address.addressProvider, address.addressProviderReference, address.addressFormatted,
+          address.addressVerifiedAt,
           body.accessInstructions === undefined ? site.access_instructions : cleanAdminText(body.accessInstructions, 2000),
           body.parkingInstructions === undefined ? site.parking_instructions : cleanAdminText(body.parkingInstructions, 1000),
           body.hazardNotes === undefined ? site.hazard_notes : cleanAdminText(body.hazardNotes, 2000),
@@ -1487,7 +1707,7 @@ export async function PATCH(request: Request) {
       if (Boolean(site.is_primary)) statements.push(db.prepare(`UPDATE trade_crm_customers
         SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ?`)
-        .bind(values.addressLine1, values.addressLine2, values.suburb, values.addressState, values.postcode, now, customerId, identity.uid));
+        .bind(address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode, now, customerId, identity.uid));
       await db.batch(statements);
       return adminJson({ ok: true });
     }
@@ -1506,11 +1726,17 @@ export async function PATCH(request: Request) {
       const firstName = body.firstName === undefined ? String(current.first_name) : cleanAdminText(body.firstName, 80);
       const lastName = body.lastName === undefined ? String(current.last_name) : cleanAdminText(body.lastName, 80);
       const phone = body.phone === undefined ? String(current.phone) : cleanAdminText(body.phone, 40);
-      const addressLine1 = body.addressLine1 === undefined ? String(current.address_line_1) : cleanAdminText(body.addressLine1, 140);
-      const addressLine2 = body.addressLine2 === undefined ? String(current.address_line_2) : cleanAdminText(body.addressLine2, 140);
-      const suburb = body.suburb === undefined ? String(current.suburb) : cleanAdminText(body.suburb, 80);
-      const addressState = body.addressState === undefined ? String(current.address_state) : cleanAdminText(body.addressState, 20).toUpperCase();
-      const postcode = body.postcode === undefined ? String(current.postcode) : cleanAdminText(body.postcode, 12);
+      const primarySite = await db.prepare(`SELECT * FROM trade_crm_service_sites
+        WHERE customer_id = ? AND firebase_uid = ? AND is_primary = 1 AND record_status = 'active' LIMIT 1`)
+        .bind(customerId, identity.uid).first<Record<string, unknown>>();
+      const candidate = addressCandidate(body, current);
+      const addressSubmitted = addressComponentsWereSubmitted(body);
+      const addressChanged = addressComponentsChanged(current, candidate)
+        || Boolean(addressSubmitted && primarySite && addressComponentsChanged(primarySite, candidate));
+      const resolvedAddress = addressChanged || provenanceWasSubmitted(body)
+        ? await resolvedAddressWrite(body, identity, candidate)
+        : null;
+      const address = resolvedAddress || candidate;
       const statements = [db.prepare(`UPDATE trade_crm_customers SET first_name = ?, last_name = ?, business_name = ?, business_number = ?, email = ?,
         phone = ?, address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
         tags = ?, private_notes = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`)
@@ -1518,7 +1744,7 @@ export async function PATCH(request: Request) {
           firstName, lastName,
           body.businessName === undefined ? current.business_name : cleanAdminText(body.businessName, 140),
           body.businessNumber === undefined ? current.business_number : cleanAdminText(body.businessNumber, 30), email,
-          phone, addressLine1, addressLine2, suburb, addressState, postcode,
+          phone, address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
           body.tags === undefined ? current.tags : JSON.stringify(cleanList(body.tags)),
           body.privateNotes === undefined ? current.private_notes : cleanAdminText(body.privateNotes, 2000),
           now, customerId, identity.uid,
@@ -1526,10 +1752,21 @@ export async function PATCH(request: Request) {
         db.prepare(`UPDATE trade_crm_customer_contacts SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = ?
           WHERE customer_id = ? AND firebase_uid = ? AND is_primary = 1 AND record_status = 'active'`)
           .bind(firstName, lastName, email, phone, now, customerId, identity.uid),
-        db.prepare(`UPDATE trade_crm_service_sites SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?, updated_at = ?
-          WHERE customer_id = ? AND firebase_uid = ? AND is_primary = 1 AND record_status = 'active'`)
-          .bind(addressLine1, addressLine2, suburb, addressState, postcode, now, customerId, identity.uid),
       ];
+      if (primarySite && (addressSubmitted || provenanceWasSubmitted(body))) {
+        statements.push(resolvedAddress
+          ? db.prepare(`UPDATE trade_crm_service_sites SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?,
+              address_entry_mode = ?, address_provider = ?, address_provider_reference = ?, address_formatted = ?, address_verified_at = ?, updated_at = ?
+            WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
+            .bind(resolvedAddress.addressLine1, resolvedAddress.addressLine2, resolvedAddress.suburb, resolvedAddress.addressState,
+              resolvedAddress.postcode, resolvedAddress.addressEntryMode, resolvedAddress.addressProvider,
+              resolvedAddress.addressProviderReference, resolvedAddress.addressFormatted, resolvedAddress.addressVerifiedAt,
+              now, String(primarySite.id), customerId, identity.uid)
+          : db.prepare(`UPDATE trade_crm_service_sites SET address_line_1 = ?, address_line_2 = ?, suburb = ?, address_state = ?, postcode = ?, updated_at = ?
+            WHERE id = ? AND customer_id = ? AND firebase_uid = ? AND record_status = 'active'`)
+            .bind(address.addressLine1, address.addressLine2, address.suburb, address.addressState, address.postcode,
+              now, String(primarySite.id), customerId, identity.uid));
+      }
       for (const job of relatedJobs.results) {
         const revision = nextJobRevision(job.revision); const workOrderId = String(job.id);
         statements.push(db.prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")

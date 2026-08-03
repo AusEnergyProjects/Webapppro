@@ -39,6 +39,9 @@ export function WorkspaceTableTools({
   onVisibleKeys,
   onExport,
   exportDisabled = false,
+  exportBusy = false,
+  exportLabel,
+  exportBusyLabel,
   noun = "rows",
 }: {
   columns: WorkspaceTableColumn[];
@@ -46,6 +49,9 @@ export function WorkspaceTableTools({
   onVisibleKeys: (keys: string[]) => void;
   onExport: () => void;
   exportDisabled?: boolean;
+  exportBusy?: boolean;
+  exportLabel?: string;
+  exportBusyLabel?: string;
   noun?: string;
 }) {
   const visible = visibleKeys.filter((key) => columns.some((column) => column.key === key));
@@ -101,8 +107,10 @@ export function WorkspaceTableTools({
           </div>
         </div>
       </details>
-      <button className="workspace-csv-export" type="button" disabled={exportDisabled} onClick={onExport}>
-        Export visible {noun} CSV
+      <button className="workspace-csv-export" type="button" disabled={exportDisabled || exportBusy} onClick={onExport}>
+        {exportBusy
+          ? exportBusyLabel || `Preparing ${noun} CSV...`
+          : exportLabel || `Export visible ${noun} CSV`}
       </button>
     </div>
   );
