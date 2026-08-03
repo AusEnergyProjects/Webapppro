@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "../src/lib/trade-crm-job-index-sql.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -105,6 +106,46 @@ test("large installer job and customer directories use server paging, sorting an
   assert.match(crm, /mode=detail&resource=customer/);
   assert.match(crm, /Recently updated/);
   assert.match(crm, /Name A to Z/);
+});
+
+test("the installer job index selects the scheduled appointment with D1-compatible SQL", () => {
+  assert.match(route, /d\.crm_customer_id, d\.service_site_id, d\.customer_source, d\.pipeline_stage, d\.building_type/);
+  const db = new DatabaseSync(":memory:");
+  db.exec(`
+    CREATE TABLE trade_work_orders (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      scheduled_start text NOT NULL
+    );
+    CREATE TABLE trade_crm_appointments (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL,
+      starts_at text NOT NULL,
+      created_at text NOT NULL
+    );
+    INSERT INTO trade_work_orders VALUES ('job-1', 'installer-1', '2026-08-04T10:00:00.000Z');
+    INSERT INTO trade_work_orders VALUES ('job-2', 'installer-1', '2026-08-06T10:00:00.000Z');
+    INSERT INTO trade_work_orders VALUES ('job-3', 'installer-1', '2026-08-07T10:00:00.000Z');
+    INSERT INTO trade_crm_appointments VALUES
+      ('job-1-old', 'job-1', 'installer-1', 'scheduled', '2026-08-03T10:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+      ('job-1-current', 'job-1', 'installer-1', 'scheduled', '2026-08-04T10:00:00.000Z', '2026-08-02T00:00:00.000Z'),
+      ('job-2-cancelled', 'job-2', 'installer-1', 'cancelled', '2026-08-05T10:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+      ('job-2-fallback', 'job-2', 'installer-1', 'scheduled', '2026-08-08T10:00:00.000Z', '2026-08-02T00:00:00.000Z');
+  `);
+  const rows = db.prepare(`
+    SELECT w.id, selected_appointment.id appointment_id, selected_appointment.starts_at appointment_starts_at
+    FROM trade_work_orders w
+    ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}
+    ORDER BY w.id
+  `).all();
+  assert.deepEqual(rows.map((row) => ({ ...row })), [
+    { id: "job-1", appointment_id: "job-1-current", appointment_starts_at: "2026-08-04T10:00:00.000Z" },
+    { id: "job-2", appointment_id: "job-2-fallback", appointment_starts_at: "2026-08-08T10:00:00.000Z" },
+    { id: "job-3", appointment_id: null, appointment_starts_at: null },
+  ]);
+  assert.doesNotMatch(TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL, /ORDER BY[^;]*w\.scheduled_start/s);
 });
 
 test("installer jobs export every filtered page through the owner scoped Dataforce projection", () => {

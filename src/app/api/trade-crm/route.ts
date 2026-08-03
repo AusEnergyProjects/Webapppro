@@ -20,6 +20,7 @@ import {
 } from "@/lib/trade-compliance-intent";
 import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataforce-job-csv";
 import { integrationEnvironment } from "@/lib/trade-integrations-server";
+import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "@/lib/trade-crm-job-index-sql";
 import {
   canonicalAustralianAddress,
   resolveTradeAddressProvenance,
@@ -516,6 +517,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const joins = `FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
+    const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
     const sort = JOB_SORTS[sortValue] ? sortValue : "updated-desc";
     const selectedSort = JOB_SORTS[sort];
     let cursor;
@@ -526,19 +528,16 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     const rowWhere = rowConditions.join(" AND ");
     const [countRow, rows] = await Promise.all([
       includeTotal ? db.prepare(`SELECT COUNT(*) total ${joins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
-      db.prepare(`SELECT w.*, d.crm_customer_id, d.customer_source, d.pipeline_stage, d.description, d.customer_reference,
+      db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
+        d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
         c.first_name, c.last_name, c.business_name, c.email customer_email, c.phone customer_phone,
         ss.address_line_1 site_address_line_1, ss.address_line_2 site_address_line_2,
         ss.suburb site_suburb, ss.address_state site_address_state, ss.postcode site_postcode,
         CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
-        (SELECT a.id FROM trade_crm_appointments a
-          WHERE a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid AND a.status <> 'cancelled'
-          ORDER BY CASE WHEN a.starts_at = w.scheduled_start THEN 0 ELSE 1 END, a.starts_at, a.created_at, a.id LIMIT 1) appointment_id,
-        (SELECT a.starts_at FROM trade_crm_appointments a
-          WHERE a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid AND a.status <> 'cancelled'
-          ORDER BY CASE WHEN a.starts_at = w.scheduled_start THEN 0 ELSE 1 END, a.starts_at, a.created_at, a.id LIMIT 1) appointment_starts_at,
+        selected_appointment.id appointment_id,
+        selected_appointment.starts_at appointment_starts_at,
         (SELECT json_extract(ci.intent_snapshot, '$.activity.title')
           FROM trade_work_order_compliance_intents ci
           WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
@@ -546,7 +545,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
           ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1) governed_work_type,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
         w.scheduled_start = '' schedule_empty
-        ${joins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
+        ${rowJoins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
