@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 2 August 2026
+Last reconciled: 4 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -1291,10 +1291,24 @@ Installer Jobs now mirrors the exact known Dataforce 23-column order with one co
 - Sites versions 272 and 273 were superseded during signed-in QA. Version 272 exposed the missing installer Jobs index; version 273 restored that index but exposed invented installer projection columns and an over-broad audit request. Both defects are covered by the final production-schema regression.
 - Production still lacks `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` and `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual entry remains available and visibly fails closed to `manual_pending_review`; an approved provider and credential remain required for verified autocomplete.
 
-## Release candidate milestone: TRADE-MULTI-ACTIVITY-USABILITY-42
+## Released milestone: TRADE-MULTI-ACTIVITY-USABILITY-42
 
-Status: implementation and validation complete; exact-source publication and
-signed-in production inspection pending
+Status: released and live with atomic multi-activity planning, installer and
+customer usability, evidence-complete field gates and D1-compatible customer
+asset history
+
+Release status: primary application commit
+`103439d03a5c322757cea27e77e8b147b6c85590` implemented the milestone.
+CRM diagnostic `ce0996779818690751016dfd5b3efdd8e7c1586e` and guard correction
+`82e0faf64906047a5f42fabf83c605edf320cb63` resolved a separate production
+CRM schema-guard failure. Subsequent asset diagnostic
+`eeb636665a21d230b7150e03d60f614b7f71b1db` isolated the remaining
+production-only D1 asset timeline incompatibility. Final application commit
+`13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` was validated, pushed to GitHub
+and Sites managed `main`, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487`
+and deployed as Sites version 279 through
+`appgdep_6a7178bb43c08191b86b568dabd45b94` with environment revision 19.
 
 ### Outcome
 
@@ -1329,16 +1343,44 @@ preparation.
 - Government activity, evidence policy and calculation authority remains
   external and independently governed. This milestone does not create a
   certificate, regulator submission, trade or settlement.
-- Production remains Sites version 274 from application commit
-  `c51934456c2248da4cfde9a0b759b70d69df56ee` until release and signed-in
-  inspection complete.
+- Production is Sites version 279 from exact final application commit
+  `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`.
 
 `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
-integration tests, 1,440 main tests with 1,438 passed, 2 intentionally skipped
+integration tests, 1,443 main tests with 1,441 passed, 2 intentionally skipped
 and 0 failed, all 120 migrations through
 `0119_trade_multi_activity_jobs.sql`, the customer-plan PDF audit, Vinext
-production build and Sites server-bundle audit. Independent final diff review
-is required before publication.
+production build and Sites server-bundle audit. The focused asset timeline suite
+passed 9 of 9, and independent final review found no remaining P0, P1 or P2
+defect.
+
+Archive `.openai/site-release-13dbf2d.tar.gz` is 7,781,979 bytes with SHA-256
+`D6AC82425EC5EE82B84318978177D49F0E41E54DF755094FEC935F7549FDAA67`
+and 374 entries, including all 120 migrations and zero CSV entries. Sites stored
+360 files and 31,682,560 bytes with content hash
+`sha256:1630c642f67fb83d38fd428197e05e4ae32e4bad97c29eb111d6c090760d7dc3`.
+
+Signed-in installer QA exercised New Job without submission, all 23 Dataforce
+columns and CSV export, customer A-to-Z sorting and filters, callable contacts,
+dated latest jobs, schedule quote access and the assigned internal compliance
+workspace. Signed-in customer asset QA rendered the asset and timeline
+workspace; `/api/trade-assets` returned HTTP 200 under request/ray
+`a25b2c9d7a1275df`, and errors-only worker logs contained zero events. The
+custom-domain health endpoint returned HTTP 200. No production customer, job,
+business, intent, case, evidence, certificate, submission, trade or settlement
+record was created or changed.
+
+Sites versions 277 and 278 were superseded during signed-in QA. Version 277
+proved the production schema was present but the customer asset workspace still
+failed. Version 278 isolated the seven-arm compound timeline query. Version 279
+executes seven bounded owner-, customer- and site-scoped statements in one D1
+batch, globally sorts them by the unchanged API contract and returns at most 500
+rows without presenting a partial history as complete.
+
+Production still lacks `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` and
+`TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual entry remains available and visibly
+fails closed to `manual_pending_review`; an approved provider and credential
+remain required for verified autocomplete.
 
 ## Next five logical product steps
 

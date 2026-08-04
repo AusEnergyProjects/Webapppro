@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` in progress
+Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` released and live
 
 Prepared: 4 August 2026
 
@@ -8,17 +8,23 @@ Milestone ID: `TRADE-MULTI-ACTIVITY-USABILITY-42`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Baseline production application source: `c51934456c2248da4cfde9a0b759b70d69df56ee`
+Previous production application source: `c51934456c2248da4cfde9a0b759b70d69df56ee`
 
-Current production: Sites version 274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
+Released application source: `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac`
+Current production: Sites version 279 from application commit `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
 
-Deployment: `appgdep_6a7082f95d2881919e97336aa038fc5a`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487`
+
+Deployment: `appgdep_6a7178bb43c08191b86b568dabd45b94`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
 Creditex URL: `https://compare.ausenergyassessments.com/creditex/compliance`
+
+Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
+
+Environment revision: 19
 
 ## Active milestone contract
 
@@ -101,20 +107,17 @@ release verification would mutate production data.
 
 ## Release result
 
-Release candidate assembled and validated; production remains Sites version
-274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
-until the exact-source commit, Sites package and signed-in read-only inspection
-all pass.
-
-The candidate keeps new-customer entry open beside existing-customer search,
-requires phone and email, and creates every selected controlled activity in one
-atomic job transaction. Each activity retains its exact program, activity,
-policy and later case identity across web and mobile field capture. The
-installer Jobs register preserves the exact known 23-column Dataforce contract
-while showing identity first, callable contact details, complete filters and
-explicit navigation. Customer sorting, latest-job dates, schedule quote
-actions, the portalled date-time picker and detail-rich multi-activity review
-are included.
+Released application source `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
+is live as Sites version 279. Primary implementation commit
+`103439d03a5c322757cea27e77e8b147b6c85590` keeps new-customer entry open
+beside existing-customer search, requires phone and email, and creates every
+selected controlled activity in one atomic job transaction. Each activity
+retains its exact program, activity, policy and later case identity across web
+and mobile field capture. The installer Jobs register preserves the exact known
+23-column Dataforce contract while showing identity first, callable contact
+details, complete filters and explicit navigation. Customer A-to-Z sorting,
+latest-job dates, schedule quote actions, the portalled date-time picker and
+detail-rich multi-activity review are included.
 
 The completion boundary now fails closed if any active governed case is missing
 submitted evidence, if an evidence item has been superseded, or if photo proof
@@ -128,15 +131,66 @@ activity intent and inserts its exact next revision in the same guarded
 schedule transaction. Concurrent schedule writes roll back completely, while
 case-linked intents remain date-locked.
 
+CRM diagnostic `ce0996779818690751016dfd5b3efdd8e7c1586e` and guard correction
+`82e0faf64906047a5f42fabf83c605edf320cb63` resolved a separate production
+CRM schema-guard failure. Subsequent asset diagnostic
+`eeb636665a21d230b7150e03d60f614b7f71b1db` isolated the remaining customer
+asset failure to a seven-arm compound timeline query. Final commit
+`13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` executes the seven bounded
+owner-, customer- and optional-site-scoped reads in one D1 batch, globally sorts
+them by the unchanged API contract and returns at most 500 rows without
+presenting partial history as complete.
+
 `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
-integration tests, 1,440 main tests with 1,438 passed, 2 intentionally skipped
+integration tests, 1,443 main tests with 1,441 passed, 2 intentionally skipped
 and 0 failed, all 120 migrations through
 `0119_trade_multi_activity_jobs.sql`, the customer-plan PDF audit, Vinext
-production build and Sites server-bundle audit. Exact release provenance and
-signed-in production inspection remain pending. Historical version-274
-evidence below describes the production baseline, not this candidate.
+production build and Sites server-bundle audit. The focused asset timeline suite
+passed 9 of 9. Independent final review found no remaining P0, P1 or P2 defect.
 
-Production baseline provenance for released milestone 41:
+Release provenance:
+
+- Application source: `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
+- Archive `.openai/site-release-13dbf2d.tar.gz`: 7,781,979 bytes, SHA-256
+  `D6AC82425EC5EE82B84318978177D49F0E41E54DF755094FEC935F7549FDAA67`,
+  374 entries, all 120 migrations and zero CSV entries
+- Saved version:
+  `appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487`
+- Deployment: `appgdep_6a7178bb43c08191b86b568dabd45b94`
+- Sites version 279, environment revision 19
+- Sites stored 360 files and 31,682,560 bytes with content hash
+  `sha256:1630c642f67fb83d38fd428197e05e4ae32e4bad97c29eb111d6c090760d7dc3`
+
+Signed-in QA exercised New Job without submission, the exact 23-column job
+register and CSV contract, customer sorting, filters and callable contacts,
+dated latest jobs, schedule quote access, the assigned internal compliance
+workspace and the customer asset register. The final `/api/trade-assets`
+request returned HTTP 200 under request/ray `a25b2c9d7a1275df`; the asset and
+timeline UI rendered, and errors-only worker logs contained zero events. The
+custom-domain health endpoint returned HTTP 200. No production customer, job,
+business, intent, case, evidence, certificate, submission, trade or settlement
+record was created or changed.
+
+Superseded signed-in QA releases:
+
+- Sites version 277 from `82e0faf64906047a5f42fabf83c605edf320cb63`:
+  saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_3037473e40d88191817b148c76b46504`,
+  deployment `appgdep_6a716eaea7a481919682286140434b24`, archive 7,791,568
+  bytes with SHA-256
+  `5634F3374E72FA45620F3FF0EA9178C3DD65090C283E9365E3B127FE9DCF06FC`.
+- Sites version 278 from `eeb636665a21d230b7150e03d60f614b7f71b1db`:
+  saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_1825408c19508191a3f8fc69e969d7ac`,
+  deployment `appgdep_6a7172b2ed008191b9460a81e8296993`, archive 7,791,566
+  bytes with SHA-256
+  `D72C597AE7075C1FCE24EDBA3F2236966B9F3ADBA5B3366EACB42B0A9C25E8FA`.
+
+## Previous released milestone
+
+Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` released and historical
+
+Historical Sites version 274 provenance:
 
 - Primary implementation source commit: `836bc779f33a5f77fc4a18a41227dc76dfbf9914`
 - Installer-register corrective commit: `c32be214558dd1a20ccb26d04bcf7b054b00f110`
@@ -163,7 +217,7 @@ but it is explicitly stored and shown to Creditex as `manual_pending_review`.
 4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
 5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
 
-## Previous released milestone
+## Earlier released milestone
 
 Status: `TRADE-CREDITEX-JOB-HANDOFF-40` released and live
 

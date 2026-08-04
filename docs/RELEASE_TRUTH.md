@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 3 August 2026
+Last reconciled locally: 4 August 2026
 
-Deployment evidence last verified: 3 August 2026
+Deployment evidence last verified: 4 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -106,72 +106,104 @@ This is the only current implementation and release-status document. The [dated 
 | Superseded operating-alignment saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_b4c31e72b728819184de2e54a102dfec` | Sites version 272 from `836bc779f33a5f77fc4a18a41227dc76dfbf9914`; 359 files; 31,580,160 bytes; content hash `sha256:62841c6571135be4d987c7bcc4d7e36be4b91bdbdde5435092826bd4c722f762`; superseded during live QA |
 | Installer-register corrective application source | `c32be214558dd1a20ccb26d04bcf7b054b00f110` | Restored the production installer Jobs index without weakening company scope; deployed as Sites version 273, then superseded when signed-in Creditex QA exposed a schema-invalid and over-broad full-audit projection |
 | Superseded installer-register saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_18bbab7ef36c8191a958c7512e3b02b0` | Sites version 273 from `c32be214558dd1a20ccb26d04bcf7b054b00f110`; 359 files; 31,580,160 bytes; content hash `sha256:7de1f8dbe50e1870b797ee11418b577f4307a10c4dcb8cf9c6cc8f41d7a2ad7f`; deployment `appgdep_6a70797ba4308191b7701e2a05ff8e97` was superseded |
-| Current Creditex application source | `c51934456c2248da4cfde9a0b759b70d69df56ee` | Exact validated production-schema source for the company-scoped installer register and bounded Creditex full-audit workspace; GitHub `main`, the working branch and Sites managed `main` contain this commit |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac` | Exact Sites version 274 built from `c51934456c2248da4cfde9a0b759b70d69df56ee`; 359 files; 31,590,400 bytes; content hash `sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7` |
-| Current executable application identity | Sites version 274 from `c51934456c2248da4cfde9a0b759b70d69df56ee` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7082f95d2881919e97336aa038fc5a` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Historical Creditex application source | `c51934456c2248da4cfde9a0b759b70d69df56ee` | Exact validated production-schema source for the company-scoped installer register and bounded Creditex full-audit workspace; deployed as Sites version 274 |
+| Historical Sites version 274 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac` | Built from `c51934456c2248da4cfde9a0b759b70d69df56ee`; 359 files; 31,590,400 bytes; content hash `sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`; deployment `appgdep_6a7082f95d2881919e97336aa038fc5a` |
+| Multi-activity usability implementation source | `103439d03a5c322757cea27e77e8b147b6c85590` | Exact validated primary source for atomic multi-activity jobs, mandatory new-customer contacts, viewport-safe scheduling, installer register usability, customer filters and schedule quote actions |
+| CRM production-diagnostic source | `ce0996779818690751016dfd5b3efdd8e7c1586e` | Added a privacy-safe diagnostic boundary for the separate production CRM schema-guard failure |
+| CRM schema-guard correction source | `82e0faf64906047a5f42fabf83c605edf320cb63` | Corrected that CRM guard after production inspection proved the required schema was present |
+| Superseded Sites version 277 | `appgprj_6a550c378000819185caf094173422bb~appgver_3037473e40d88191817b148c76b46504` | Built from `82e0faf64906047a5f42fabf83c605edf320cb63`; deployment `appgdep_6a716eaea7a481919682286140434b24`; signed-in QA still found the customer asset workspace failed |
+| Asset-query diagnostic source | `eeb636665a21d230b7150e03d60f614b7f71b1db` | Isolated the remaining production failure to the asset timeline read without exposing SQL or private identifiers |
+| Superseded Sites version 278 | `appgprj_6a550c378000819185caf094173422bb~appgver_1825408c19508191a3f8fc69e969d7ac` | Built from `eeb636665a21d230b7150e03d60f614b7f71b1db`; deployment `appgdep_6a7172b2ed008191b9460a81e8296993`; request `a25b0663ff18f2c1` confirmed the seven-arm timeline compound query remained incompatible with production D1 |
+| Current multi-activity application source | `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` | Exact validated final source with the D1-compatible seven-statement asset timeline batch; GitHub `main`, the working branch and Sites managed `main` contain this commit |
+| Current release archive | `.openai/site-release-13dbf2d.tar.gz` | 7,781,979 bytes; SHA-256 `D6AC82425EC5EE82B84318978177D49F0E41E54DF755094FEC935F7549FDAA67`; 374 entries, all 120 migrations and zero CSV entries |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487` | Exact Sites version 279 built from `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`; 360 stored files; 31,682,560 stored bytes; content hash `sha256:1630c642f67fb83d38fd428197e05e4ae32e4bad97c29eb111d6c090760d7dc3` |
+| Current executable application identity | Sites version 279 from `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7178bb43c08191b86b568dabd45b94` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer, installer and trade releases, protected-trade locality, Creditex foundation, operations portal, evidence-policy governance, national government-activity workflow and isolated VEU synthetic pilot are deployed to production. Sites version 274 from exact application commit `c51934456c2248da4cfde9a0b759b70d69df56ee` is the exact current executable application source. Failed versions 243, 244, 245 and 263 never activated. Intermediate versions 247, 255, 256 and 258 exposed production-only or final usability issues during signed-in QA and were corrected before final handoff. Version 260 technically deployed but its unpreflighted guard batch rolled back when a trigger referenced a table omitted with migrations `0100` through `0105`; version 261 corrected that package boundary, version 262 added governed approval, physical-custody, exact-decimal calculator and exact Dataforce parallel-operation foundations, version 264 added the exact 23-column operator register plus guarded mapping and draft-only calculator authoring, version 265 added 212 calculation-readiness records across 32 controlled Australian program pathways plus the first deterministic SRES expected-entitlement estimator, version 266 added the synthetic national manual-evidence form and job-testing lab, version 267 added the five-part manual-field preflight but exposed a production-only D1 facet-query incompatibility during signed-in QA, version 268 replaced that read-only query with an exact transactional D1 batch, version 269 corrected shared compare navigation discovery, version 270 added exact official-source custody plus audited independent review, version 271 connected guided installer job creation to immutable pre-case planning and the Creditex certificate-work register, version 272 aligned the installer workflow and Dataforce job register but exposed a missing installer Jobs index during signed-in QA, version 273 restored that index but exposed invented installer fields and an over-broad Creditex audit request, and version 274 replaces both failures with an executable production-schema regression and 53 independently paged audit domains. The controlled 10-installer, 30-technician, 300-job VEU pilot remains a stable dark full-viewport compliance register with exact Dataforce interchange and controlled source, evidence, lookup and comparison foundations. Release QA did not create or change customer, job, intent, case, evidence, certificate, submission, trade or settlement records; authorised workspace and group reads appended their designed audit-view events. Signed-in installer QA reported 7 company-scoped jobs, and signed-in Creditex QA opened the single existing assigned planning job and its complete authorised audit core. Every unverified calculator and external execution path remains disabled.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer, installer and trade releases, protected-trade locality, authorised compliance operations, evidence-policy governance, national government-activity workflow and isolated VEU synthetic pilot are deployed to production. Sites version 279 from exact application commit `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` is the current executable application source. Milestone 42 adds atomic multi-activity planning, mandatory new-customer contacts, viewport-safe scheduling, a detail-rich review, exact Dataforce interchange, customer and schedule usability, evidence-complete field gates, immutable planned-date revisions and bounded request/offline protections. Signed-in QA superseded versions 277 and 278 after isolating a production D1 compound-query incompatibility; version 279 replaces that query with seven bounded owner-, customer- and site-scoped reads in one D1 batch and preserves the exact global 500-row timeline contract. Release QA did not create or change a customer, job, business, intent, case, evidence, certificate, submission, trade or settlement record. The controlled 10-installer, 30-technician, 300-job VEU pilot and every unverified calculator or external execution path remain isolated and disabled.
 
-## Current installer-to-Creditex operating alignment release
+## Current trade multi-activity usability release
 
-`TRADE-CREDITEX-OPERATING-ALIGNMENT-41` is the current release. Primary
-application commit `836bc779f33a5f77fc4a18a41227dc76dfbf9914`
-implemented clickable wizard stages, address provenance, a detail-rich review,
-optional quote linkage and the exact installer Dataforce register. Corrective
-commit `c32be214558dd1a20ccb26d04bcf7b054b00f110` restored the installer
-Jobs index. Final application commit
-`c51934456c2248da4cfde9a0b759b70d69df56ee` restores the Creditex full-audit
-workspace against the exact production schema and keeps all 53 retained audit
-domains inside bounded 50-record keyset pages.
+`TRADE-MULTI-ACTIVITY-USABILITY-42` is the current release. Primary application
+commit `103439d03a5c322757cea27e77e8b147b6c85590` implemented atomic
+multi-activity jobs, mandatory phone and email for new customers, an open
+new-customer form beside existing-customer search, a viewport-safe date-time
+picker, customer directory filters, callable contacts, dated latest jobs and
+schedule quote actions. CRM diagnostic
+`ce0996779818690751016dfd5b3efdd8e7c1586e` and guard correction
+`82e0faf64906047a5f42fabf83c605edf320cb63` resolved a separate production
+CRM schema-guard failure. Subsequent asset diagnostic
+`eeb636665a21d230b7150e03d60f614b7f71b1db` isolated the remaining
+production-only customer asset failure. Final application commit
+`13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` replaces the incompatible
+seven-arm timeline compound query with seven bounded reads executed in one D1
+batch.
 
-The New Job flow has one automatic internal service-site label rather than a
-visible site-name input. Australian state and postcode combinations are
-validated, provider provenance is retained when configured, and a changed or
-manual address fails visibly to `manual_pending_review`. A progressing
-installer job can create the immutable planning intent without an accepted
-quote. Optional quote linkage is all-or-none and immutable when present.
+Every selected activity is validated and retained in the same atomic job
+transaction. The final review shows each program, activity, schedule,
+technician, customer, address and commercial context without implying that a
+certificate, rebate or governed case already exists. Installer Jobs keeps the
+exact supplied 23-column Dataforce interchange, one job per row and complete
+filtered CSV export. The customer directory defaults to first-name then
+last-name order. Trade and customer surfaces omit the compliance partner name;
+the separately authorised internal portal retains full assigned-job access.
 
-Installer Jobs shows one company-scoped job per row using the exact known
-Dataforce 23-column order. Row-selection controls are absent from the visible
-register, and complete filtered export uses the same authoritative column
-contract. Creditex receives the same planning job and can load the complete
-authorised customer, installer, service site, appointment and retained domain
-history without one unbounded private-data response. Workspace-open and
-group-page reads create distinct bounded audit events.
+Web and offline completion now fail closed when active governed cases lack
+submitted evidence, contain superseded evidence or have changed photo proof.
+Changed planned installation dates immutably supersede every still-planned
+activity intent in the same guarded schedule transaction. JSON control bodies
+are bounded by actual streamed bytes, and offline companion rows remain inside
+the selected 500-job cohort and an overall fail-closed cardinality limit.
 
-Exact application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
+Exact application commit `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
 passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31
-integration tests, the complete application suite, all 119 migrations, the
-customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
-The persistent production-schema regression executed all 53 first-page and all
-53 cursor-page audit-group statements: 106 of 106 passed. Independent final
-review found no remaining P0, P1 or P2 defect.
+integration tests, 1,443 main tests with 1,441 passed, 2 intentionally skipped
+and 0 failed, all 120 migrations, the customer-plan PDF audit, Vinext
+production build and Sites server-bundle audit. The focused D1 asset timeline
+suite passed 9 of 9, and independent final review found no remaining P0, P1 or
+P2 defect.
 
-Archive `.openai/site-release-c519344.tar.gz` is 7,775,395 bytes with SHA-256
-`CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C`
-and 373 entries. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac`
-stores 359 files and 31,590,400 bytes with content hash
-`sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`.
-Deployment `appgdep_6a7082f95d2881919e97336aa038fc5a` succeeded as
-Sites version 274 with environment revision 19.
+Archive `.openai/site-release-13dbf2d.tar.gz` is 7,781,979 bytes with SHA-256
+`D6AC82425EC5EE82B84318978177D49F0E41E54DF755094FEC935F7549FDAA67`
+and 374 entries, including all 120 migrations and zero CSV entries. Saved
+version
+`appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487`
+stores 360 files and 31,682,560 bytes with content hash
+`sha256:1630c642f67fb83d38fd428197e05e4ae32e4bad97c29eb111d6c090760d7dc3`.
+Deployment `appgdep_6a7178bb43c08191b86b568dabd45b94` succeeded as Sites
+version 279 with environment revision 19.
 
-Signed-in installer QA loaded all 7 company-scoped jobs, all 23 columns, no
-visible row checkboxes and the successful 7-row exact-order CSV export.
-Signed-in Creditex QA loaded the one assigned job, complete private audit core,
-manual-address warning, one appointment and correct empty quotes, compliance
-cases and governed evidence. The custom-domain health endpoint returned HTTP
-200. No customer, job, intent, case, evidence, certificate, submission, trade
-or settlement record was created or changed; the authorised workspace and
-group reads appended their designed audit-view events.
+Signed-in QA exercised New Job without submission, the exact installer job
+register and CSV contract, customer sorting, filters and contact actions,
+schedule quote access, the assigned internal compliance workspace and the
+customer asset register. The final `/api/trade-assets` request returned HTTP
+200 under request/ray `a25b2c9d7a1275df`; the asset and timeline UI rendered,
+and errors-only worker logs contained zero events. The custom-domain health
+endpoint also returned HTTP 200. No customer, job, business, intent, case,
+evidence, certificate, submission, trade or settlement record was created or
+changed during release QA.
 
-Production environment revision 19 contains
-`CRM_INTEGRATION_ENCRYPTION_KEY` but no
-`TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` or
+Production environment revision 19 contains `CRM_INTEGRATION_ENCRYPTION_KEY`
+but no `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` or
 `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Verified Australian autocomplete therefore
 remains blocked on an approved provider and credential; manual entry remains
-available with explicit Creditex review.
+available as `manual_pending_review`.
+
+## Prior installer-to-Creditex operating alignment release
+
+`TRADE-CREDITEX-OPERATING-ALIGNMENT-41` is the prior release. Primary
+application commit `836bc779f33a5f77fc4a18a41227dc76dfbf9914`,
+installer-register correction `c32be214558dd1a20ccb26d04bcf7b054b00f110`
+and final production-schema correction
+`c51934456c2248da4cfde9a0b759b70d69df56ee` were deployed as Sites versions
+272 through 274. Version 274 retained the exact known 23-column Dataforce
+register and bounded all 53 internal audit domains to 50-record keyset pages.
+Its `.openai/site-release-c519344.tar.gz` archive was 7,775,395 bytes with
+SHA-256
+`CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C`;
+Sites stored 359 files and 31,590,400 bytes with content hash
+`sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`.
+Its persistent production-schema regression reported 106 of 106 passed.
 
 ## Prior installer-to-Creditex job handoff release
 
@@ -1088,7 +1120,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 274 is:
+The current verified deployed topology for Sites version 279 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -1113,7 +1145,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt, one authoritative installer-submit transaction, a bounded installer enquiry pack, complete request-bound photo sharing, the full installer-safe plan and PDF, durable dispatch jobs, independent operations and business alerts, staged submit progress, a top-level customer Quotes centre, exact owner-scoped quote deep links, customer quote-submitted email, trade Work updates, quote submission idempotency, one immutable one-business claim, Resend callback retry handling, contact-only customer handover, owner-scoped new-lead bell items, compact lead cards, aligned quote sections, reliable next-step scroll focus, a privacy-first public-plan enquiry bridge, precise gas hot-water choices, reported electrical-phase planning clues, plain household exhaust-fan choices, a visible account form, refreshed customer verification state, connected-customer identity presented first in the authorised trade lead, consent beside installer-request submission, aligned shared customer navigation, reciprocal product branding, exact-current protected suburb/postcode/state matching, the Creditex compliance foundation, the signed-in activity-agnostic Creditex operations portal, Creditex evidence-policy governance, the national government-activity workflow, the isolated VEU synthetic pilot, its dense register, the complete owner-scoped job audit workspace, the readable compact operator-usability refinement, the controlled-intake foundations, the governed approval, custody, calculator and exact Dataforce parallel-operation foundations, the exact 23-column Dataforce operator register, effective-dated lookup approval, legacy mapping authoring, draft-only calculator authoring, the national calculation-readiness catalogue, deterministic SRES expected-entitlement estimator, national synthetic manual-evidence lab, exact manual-field custody, government-minimum composition, unified synthetic register, complete calculation coverage, blocked regulator interchange preflight, shared-navigation discovery, exact official-source custody with audited independent review, guided installer program/activity planning, immutable pre-case job intent, accepted-quote governed case linking, the Creditex certificate-work register, clickable installer workflow stages, validated address provenance, exact company-scoped Dataforce export and bounded on-demand Creditex audit domains. Those capabilities are deployed in Sites version 274 alongside the earlier owner Database Console. Public enquiry placement and handoff, account privacy explanation, selected home-fact continuity, simplified fan intake, account-control presentation, verification return routing, signed-in Quotes, connected contact disclosure, lead compaction, Work updates, consent presentation, reciprocal navigation, the signed-out Creditex boundary, signed-in Creditex administration, Dataforce-parity advanced filters, government-source discovery, activity-source governance, controlled installer selectors, evidence-policy transcription, four-eyes notice, Access membership, the 10-installer and 30-technician pilot population, 300 one-row jobs, the exact 23 Dataforce register columns in order, 23 cells per row, 300 row actions embedded within `App Id`, the stable dark full-height register, fixed primary and pilot tab bars, global all-field search, compact right-edge drawer, removal of the fixed activity rail, exact 23-column CSV export and stage-only import, source and lookup independent approvals, evidence and physical-custody foundations, exact-decimal calculator receipts, guarded draft-only calculator authoring, exact Dataforce-bound non-evidentiary comparisons, controlled mapping authoring, Dataforce-style context actions, double-click records, collapsible record rails, job-level compliance counts, deterministic dry-run manifest, synthetic isolation guards, 212 explicit calculation pathways, protected STC estimates, responsive calculator layouts, editable form versions, synthetic manual jobs, installer preview, exact byte and metadata custody contracts, policy-layer composition, source-aware advanced facets, guarded interchange readiness, visible compact navigation discovery, draft-only official-source custody and the production-safe planned-work handoff are verified. A newly written version-242 opportunity and locality-bearing notification were not created during release QA; production provider inbox receipt and a newly generated customer verification email action remain unverified. The controlled catalogue contains 32 program pathways and 212 calculation-readiness activity templates. This release did not directly re-query governed production inventory; regulated evidence and real registry activity remain incomplete as recorded above.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt, one authoritative installer-submit transaction, a bounded installer enquiry pack, complete request-bound photo sharing, the full installer-safe plan and PDF, durable dispatch jobs, independent operations and business alerts, staged submit progress, a top-level customer Quotes centre, exact owner-scoped quote deep links, customer quote-submitted email, trade Work updates, quote submission idempotency, one immutable one-business claim, Resend callback retry handling, contact-only customer handover, owner-scoped new-lead bell items, compact lead cards, aligned quote sections, reliable next-step scroll focus, a privacy-first public-plan enquiry bridge, precise gas hot-water choices, reported electrical-phase planning clues, plain household exhaust-fan choices, a visible account form, refreshed customer verification state, connected-customer identity presented first in the authorised trade lead, consent beside installer-request submission, aligned shared customer navigation, reciprocal product branding, exact-current protected suburb/postcode/state matching, the authorised compliance foundation and operations portal, evidence-policy governance, the national government-activity workflow, the isolated VEU synthetic pilot, its dense register, the complete owner-scoped job audit workspace, the readable compact operator-usability refinement, the controlled-intake foundations, governed approval, custody, calculator and exact Dataforce parallel-operation foundations, the exact 23-column Dataforce operator register, effective-dated lookup approval, legacy mapping authoring, draft-only calculator authoring, the national calculation-readiness catalogue, deterministic SRES expected-entitlement estimator, national synthetic manual-evidence lab, exact manual-field custody, government-minimum composition, unified synthetic register, complete calculation coverage, blocked regulator interchange preflight, shared-navigation discovery, exact official-source custody with audited independent review, guided installer multi-activity planning, immutable pre-case job intent and planned-date revision, accepted-quote governed case linking, evidence-complete web and offline gates, viewport-safe scheduling, callable customer contacts, dated customer jobs, schedule quote actions, exact company-scoped Dataforce export, bounded on-demand internal audit domains and the D1-compatible customer asset timeline. Those capabilities are deployed in Sites version 279 alongside the earlier owner Database Console. Public enquiry placement and handoff, account privacy explanation, selected home-fact continuity, simplified fan intake, account-control presentation, verification return routing, signed-in Quotes, connected contact disclosure, lead compaction, Work updates, consent presentation, reciprocal navigation, the signed-out compliance boundary, signed-in compliance administration, Dataforce-parity advanced filters, government-source discovery, activity-source governance, controlled installer selectors, evidence-policy transcription, four-eyes notice, Access membership, the 10-installer and 30-technician pilot population, 300 one-row jobs, the exact 23 Dataforce register columns in order, 23 cells per row, 300 row actions embedded within `App Id`, the stable dark full-height register, fixed primary and pilot tab bars, global all-field search, compact right-edge drawer, removal of the fixed activity rail, exact 23-column CSV export and stage-only import, source and lookup independent approvals, evidence and physical-custody foundations, exact-decimal calculator receipts, guarded draft-only calculator authoring, exact Dataforce-bound non-evidentiary comparisons, controlled mapping authoring, Dataforce-style context actions, double-click records, collapsible record rails, job-level compliance counts, deterministic dry-run manifest, synthetic isolation guards, 212 explicit calculation pathways, protected STC estimates, responsive calculator layouts, editable form versions, synthetic manual jobs, installer preview, exact byte and metadata custody contracts, policy-layer composition, source-aware advanced facets, guarded interchange readiness, visible compact navigation discovery, draft-only official-source custody and the production-safe planned-work handoff are verified. A newly written version-242 opportunity and locality-bearing notification were not created during release QA; production provider inbox receipt and a newly generated customer verification email action remain unverified. The controlled catalogue contains 32 program pathways and 212 calculation-readiness activity templates. This release did not directly re-query governed production inventory; regulated evidence and real registry activity remain incomplete as recorded above.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 
