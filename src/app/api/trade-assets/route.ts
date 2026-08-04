@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
+import { mergeTradeAssetTimeline } from "@/lib/trade-asset-timeline.mjs";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
@@ -117,60 +118,55 @@ async function pendingHandoverRows(uid: string, customerId = "") {
 }
 
 async function timelineRows(uid: string, customerId: string, siteId: string) {
-  const rows = await getD1().prepare(`SELECT * FROM (
-    SELECT ev.id, 'enquiry' source_type, ev.event_type, 'Enquiry' title, ev.summary,
+  const db = getD1();
+  const statements = [
+    db.prepare(`SELECT ev.id, 'enquiry' source_type, ev.event_type, 'Enquiry' title, ev.summary,
       ev.created_at occurred_at, e.source_reference, e.service_site_id, '' work_order_id
     FROM trade_crm_enquiry_events ev JOIN trade_crm_enquiries e ON e.id = ev.enquiry_id AND e.firebase_uid = ev.firebase_uid
     WHERE ev.firebase_uid = ? AND e.customer_id = ? AND (? = '' OR e.service_site_id = ?)
-    UNION ALL
-    SELECT ev.id, 'job' source_type, ev.event_type, w.work_number || ' | ' || w.title title, ev.summary,
+    ORDER BY ev.created_at DESC, ev.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT ev.id, 'job' source_type, ev.event_type, w.work_number || ' | ' || w.title title, ev.summary,
       ev.created_at occurred_at, w.source_reference, d.service_site_id, w.id work_order_id
     FROM trade_work_order_events ev JOIN trade_work_orders w ON w.id = ev.work_order_id AND w.firebase_uid = ev.firebase_uid
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE ev.firebase_uid = ? AND d.crm_customer_id = ? AND (? = '' OR d.service_site_id = ?)
-    UNION ALL
-    SELECT ap.id, 'appointment' source_type, ap.appointment_type event_type, ap.title, ap.status summary,
+    ORDER BY ev.created_at DESC, ev.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT ap.id, 'appointment' source_type, ap.appointment_type event_type, ap.title, ap.status summary,
       ap.starts_at occurred_at, w.work_number source_reference, d.service_site_id, w.id work_order_id
     FROM trade_crm_appointments ap JOIN trade_work_orders w ON w.id = ap.work_order_id AND w.firebase_uid = ap.firebase_uid
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE ap.firebase_uid = ? AND d.crm_customer_id = ? AND (? = '' OR d.service_site_id = ?)
-    UNION ALL
-    SELECT n.id, 'note' source_type, n.note_type event_type, w.work_number || ' note' title, n.body summary,
+    ORDER BY ap.starts_at DESC, ap.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT n.id, 'note' source_type, n.note_type event_type, w.work_number || ' note' title, n.body summary,
       n.created_at occurred_at, w.work_number source_reference, d.service_site_id, w.id work_order_id
     FROM trade_crm_job_notes n JOIN trade_work_orders w ON w.id = n.work_order_id AND w.firebase_uid = n.firebase_uid
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE n.firebase_uid = ? AND d.crm_customer_id = ? AND (? = '' OR d.service_site_id = ?)
-    UNION ALL
-    SELECT p.id, 'handover' source_type, 'handover_' || p.status event_type, w.work_number || ' handover' title,
+    ORDER BY n.created_at DESC, n.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT p.id, 'handover' source_type, 'handover_' || p.status event_type, w.work_number || ' handover' title,
       'Handover pack status: ' || REPLACE(p.status, '_', ' ') summary,
       CASE WHEN p.published_at != '' THEN p.published_at WHEN p.submitted_at != '' THEN p.submitted_at ELSE p.created_at END occurred_at,
       p.id source_reference, d.service_site_id, w.id work_order_id
     FROM trade_handover_packs p JOIN trade_work_orders w ON w.id = p.work_order_id AND w.firebase_uid = p.firebase_uid
     JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     WHERE p.firebase_uid = ? AND d.crm_customer_id = ? AND (? = '' OR d.service_site_id = ?)
-    UNION ALL
-    SELECT a.id, 'asset' source_type, 'asset_registered' event_type,
+    ORDER BY occurred_at DESC, p.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT a.id, 'asset' source_type, 'asset_registered' event_type,
       CASE WHEN a.asset_label != '' THEN a.asset_label ELSE a.brand || ' ' || a.model_number END title,
       'Installed asset linked to this customer and service site.' summary,
       CASE WHEN a.installed_at != '' THEN a.installed_at || 'T12:00:00.000Z' ELSE a.created_at END occurred_at,
       a.source_reference, a.service_site_id, a.work_order_id
     FROM trade_installed_assets a WHERE a.firebase_uid = ? AND a.crm_customer_id = ? AND a.record_status = 'active'
       AND a.review_status = 'confirmed' AND (? = '' OR a.service_site_id = ?)
-    UNION ALL
-    SELECT se.id, 'service' source_type, se.event_type, a.brand || ' ' || a.model_number title,
+    ORDER BY occurred_at DESC, a.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+    db.prepare(`SELECT se.id, 'service' source_type, se.event_type, a.brand || ' ' || a.model_number title,
       se.summary, se.serviced_at || 'T12:00:00.000Z' occurred_at, a.source_reference, a.service_site_id, a.work_order_id
     FROM trade_asset_service_events se JOIN trade_installed_assets a ON a.id = se.asset_id AND a.firebase_uid = se.firebase_uid
     WHERE se.firebase_uid = ? AND a.crm_customer_id = ? AND (? = '' OR a.service_site_id = ?)
-  ) timeline ORDER BY occurred_at DESC, source_type ASC, id DESC LIMIT 500`)
-    .bind(uid, customerId, siteId, siteId, uid, customerId, siteId, siteId, uid, customerId, siteId, siteId,
-      uid, customerId, siteId, siteId, uid, customerId, siteId, siteId, uid, customerId, siteId, siteId,
-      uid, customerId, siteId, siteId)
-    .all<Record<string, unknown>>();
-  return rows.results.map((row) => ({
-    id: String(row.id), sourceType: String(row.source_type), eventType: String(row.event_type), title: String(row.title),
-    summary: String(row.summary || ""), occurredAt: String(row.occurred_at), sourceReference: String(row.source_reference || ""),
-    serviceSiteId: String(row.service_site_id || ""), workOrderId: String(row.work_order_id || ""),
-  }));
+    ORDER BY occurred_at DESC, se.id DESC LIMIT 500`).bind(uid, customerId, siteId, siteId),
+  ];
+  const results = await db.batch<Record<string, unknown>>(statements);
+  return mergeTradeAssetTimeline(results);
 }
 
 export async function GET(request: Request) {
