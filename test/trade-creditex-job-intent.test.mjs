@@ -54,8 +54,9 @@ const creditexAuditRoute = read(
   "../src/app/api/creditex/job-intents/[intentId]/route.ts",
 );
 const migration = read("../drizzle/0115_trade_creditex_job_intent.sql");
+const MULTI_ACTIVITY_MIGRATION_NAME = "0119_trade_multi_activity_jobs.sql";
 const multiActivityMigration = read(
-  "../drizzle/0119_trade_multi_activity_jobs.sql",
+  `../drizzle/${MULTI_ACTIVITY_MIGRATION_NAME}`,
 );
 const crmWriteGuardMigration = read(
   "../drizzle/0116_trade_crm_write_guard.sql",
@@ -174,9 +175,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 120);
+  assert.equal(completeMigrationChain.length, 121);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0119_/);
+  assert.match(completeMigrationChain.at(-1), /^0120_/);
   applyMigrationChain(database, completeMigrationChain);
 }
 
@@ -887,7 +888,14 @@ test("governed case creation links only the exact planned intent without superse
 
 test("multi-activity migration upgrades existing guarded intents and linked cases without losing identity", () => {
   const database = new DatabaseSync(":memory:");
-  applyMigrationChain(database, completeMigrationChain.slice(0, -1));
+  const migrationIndex = completeMigrationChain.indexOf(
+    MULTI_ACTIVITY_MIGRATION_NAME,
+  );
+  assert.ok(
+    migrationIndex > 0,
+    `Missing ${MULTI_ACTIVITY_MIGRATION_NAME} from the migration chain`,
+  );
+  applyMigrationChain(database, completeMigrationChain.slice(0, migrationIndex));
   const snapshot = resolve({
     programCode: "SRES",
     registryActivityCode: "PV",

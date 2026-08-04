@@ -13,6 +13,7 @@ export type ReminderProviderMessage = {
   subject: string;
   body: string;
   html?: string;
+  replyTo?: string;
   idempotencyKey: string;
   callbackUrl: string;
   messageType?: string;
@@ -27,6 +28,15 @@ function runtimeValues(runtime: Runtime = process.env) {
 
 function present(value: unknown, minimum = 1) {
   return String(value || "").trim().length >= minimum;
+}
+
+function providerReplyTo(value: unknown) {
+  const email = String(value || "").trim();
+  if (!email) return undefined;
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("The email reply address is not valid.");
+  }
+  return email;
 }
 
 export function serviceReminderProviderConfiguration(runtime: Runtime = process.env): ProviderConfiguration {
@@ -78,6 +88,7 @@ export async function sendServiceReminderProviderMessage(
 ) {
   const values = runtimeValues(runtime);
   if (input.channel === "email") {
+    const replyTo = providerReplyTo(input.replyTo || values.RESEND_REPLY_TO);
     const response = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -91,7 +102,7 @@ export async function sendServiceReminderProviderMessage(
         subject: input.subject,
         text: input.body,
         html: input.html || undefined,
-        reply_to: values.RESEND_REPLY_TO || undefined,
+        reply_to: replyTo,
         attachments: input.attachments?.map((attachment) => ({
           filename: attachment.filename,
           content: attachment.content,

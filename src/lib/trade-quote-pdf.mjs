@@ -1,0 +1,709 @@
+import {
+  PDFDocument,
+  rgb,
+} from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { tradeQuoteDocumentDisplayTotals } from "./trade-quote-document-totals.mjs";
+
+const A4_WIDTH = 595.28;
+const A4_HEIGHT = 841.89;
+const MARGIN = 42;
+const CONTENT_WIDTH = A4_WIDTH - MARGIN * 2;
+const MAX_FONT_BYTES = 2_000_000;
+
+const THEMES = {
+  emerald_navy: {
+    ink: rgb(0.02, 0.18, 0.23),
+    primary: rgb(0.03, 0.37, 0.34),
+    accent: rgb(0.04, 0.70, 0.49),
+    soft: rgb(0.93, 0.97, 0.96),
+    line: rgb(0.79, 0.88, 0.86),
+  },
+  ocean_mint: {
+    ink: rgb(0.03, 0.17, 0.25),
+    primary: rgb(0.03, 0.40, 0.55),
+    accent: rgb(0.14, 0.72, 0.61),
+    soft: rgb(0.92, 0.97, 0.98),
+    line: rgb(0.77, 0.88, 0.91),
+  },
+  cobalt_aqua: {
+    ink: rgb(0.04, 0.11, 0.29),
+    primary: rgb(0.12, 0.29, 0.72),
+    accent: rgb(0.07, 0.71, 0.78),
+    soft: rgb(0.94, 0.96, 1),
+    line: rgb(0.79, 0.84, 0.94),
+  },
+  violet_sunset: {
+    ink: rgb(0.18, 0.09, 0.28),
+    primary: rgb(0.37, 0.20, 0.68),
+    accent: rgb(0.90, 0.34, 0.55),
+    soft: rgb(0.98, 0.94, 0.98),
+    line: rgb(0.88, 0.80, 0.91),
+  },
+  amber_ink: {
+    ink: rgb(0.16, 0.13, 0.08),
+    primary: rgb(0.39, 0.29, 0.05),
+    accent: rgb(0.91, 0.58, 0.06),
+    soft: rgb(0.99, 0.97, 0.91),
+    line: rgb(0.90, 0.84, 0.69),
+  },
+  charcoal_silver: {
+    ink: rgb(0.10, 0.12, 0.14),
+    primary: rgb(0.20, 0.23, 0.25),
+    accent: rgb(0.48, 0.54, 0.57),
+    soft: rgb(0.95, 0.96, 0.96),
+    line: rgb(0.82, 0.84, 0.85),
+  },
+};
+
+function bytes(value, label) {
+  const result =
+    value instanceof Uint8Array
+      ? value
+      : value instanceof ArrayBuffer
+        ? new Uint8Array(value)
+        : null;
+  if (
+    !result ||
+    result.byteLength < 10_000 ||
+    result.byteLength > MAX_FONT_BYTES
+  ) {
+    throw new TypeError(`A valid embedded ${label} font is required.`);
+  }
+  return result;
+}
+
+function characterSet(fontBytes, label) {
+  try {
+    const font = fontkit.create(fontBytes);
+    const values = new Set(font?.characterSet || []);
+    if (!values.size) throw new Error("EMPTY_CHARACTER_SET");
+    return values;
+  } catch {
+    throw new TypeError(`The embedded ${label} font could not be read.`);
+  }
+}
+
+function safeText(value, supported) {
+  const clean = String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ")
+    .replace(/[\u2013\u2014]/g, "-");
+  let output = "";
+  for (const character of clean) {
+    if (character === "\n" || supported.has(character.codePointAt(0))) {
+      output += character;
+    } else {
+      output += "?";
+    }
+  }
+  return output;
+}
+
+function amount(cents) {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+  }).format(Math.max(0, Number(cents) || 0) / 100);
+}
+
+function wrapLine(font, value, size, width) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const output = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= width) {
+      line = candidate;
+      continue;
+    }
+    if (line) {
+      output.push(line);
+      line = "";
+    }
+    let remainder = word;
+    while (
+      remainder &&
+      font.widthOfTextAtSize(remainder, size) > width
+    ) {
+      let split = 1;
+      while (
+        split < remainder.length &&
+        font.widthOfTextAtSize(remainder.slice(0, split + 1), size) <= width
+      ) {
+        split += 1;
+      }
+      output.push(remainder.slice(0, split));
+      remainder = remainder.slice(split);
+    }
+    line = remainder;
+  }
+  if (line) output.push(line);
+  return output;
+}
+
+function wrapText(font, value, size, width, supported) {
+  return safeText(value, supported)
+    .split("\n")
+    .flatMap((paragraph, index, all) => {
+      const lines = wrapLine(font, paragraph, size, width);
+      return index < all.length - 1 ? [...lines, ""] : lines;
+    });
+}
+
+function fitImage(image, maximumWidth, maximumHeight) {
+  const scale = Math.min(
+    maximumWidth / image.width,
+    maximumHeight / image.height,
+    1,
+  );
+  return {
+    width: image.width * scale,
+    height: image.height * scale,
+  };
+}
+
+async function embeddedImage(pdf, asset) {
+  if (
+    !asset ||
+    !(asset.bytes instanceof Uint8Array) ||
+    asset.bytes.byteLength < 20 ||
+    asset.bytes.byteLength > 4_000_000
+  ) {
+    return null;
+  }
+  try {
+    return asset.contentType === "image/png"
+      ? await pdf.embedPng(asset.bytes)
+      : asset.contentType === "image/jpeg"
+        ? await pdf.embedJpg(asset.bytes)
+        : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function createTradeQuotePdfBytes(
+  suppliedSnapshot,
+  suppliedFonts,
+  suppliedAssets = {},
+) {
+  const snapshot =
+    suppliedSnapshot &&
+    typeof suppliedSnapshot === "object" &&
+    !Array.isArray(suppliedSnapshot)
+      ? suppliedSnapshot
+      : null;
+  if (
+    !snapshot ||
+    snapshot.schemaVersion !== "trade-quote-document-v1" ||
+    !snapshot.quoteNumber ||
+    !snapshot.business?.name
+  ) {
+    throw new TypeError("A valid quote document snapshot is required.");
+  }
+  const regularBytes = bytes(suppliedFonts?.regular, "regular");
+  const boldBytes = bytes(suppliedFonts?.bold, "bold");
+  const regularCharacters = characterSet(regularBytes, "regular");
+  const boldCharacters = characterSet(boldBytes, "bold");
+  const supported = new Set(
+    [...regularCharacters].filter((code) => boldCharacters.has(code)),
+  );
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const regular = await pdf.embedFont(regularBytes, { subset: false });
+  const bold = await pdf.embedFont(boldBytes, { subset: false });
+  const logo = await embeddedImage(pdf, suppliedAssets.logo);
+  const banner = await embeddedImage(pdf, suppliedAssets.banner);
+  const palette =
+    THEMES[snapshot.business.themeKey] || THEMES.emerald_navy;
+  const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
+  const pages = [];
+  let page;
+  let y;
+
+  function addPage() {
+    page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
+    pages.push(page);
+    page.drawRectangle({
+      x: 0,
+      y: A4_HEIGHT - 8,
+      width: A4_WIDTH,
+      height: 8,
+      color: palette.accent,
+    });
+    y = A4_HEIGHT - MARGIN;
+    return page;
+  }
+
+  function ensureSpace(height) {
+    if (!page || y - height < 54) addPage();
+  }
+
+  function drawText(value, {
+    font = regular,
+    size = 9.5,
+    color = palette.ink,
+    x = MARGIN,
+    width = CONTENT_WIDTH,
+    lineHeight = size * 1.35,
+    gapAfter = 0,
+  } = {}) {
+    const chars = font === bold ? boldCharacters : regularCharacters;
+    const lines = wrapText(font, value, size, width, chars);
+    ensureSpace(lines.length * lineHeight + gapAfter);
+    for (const line of lines) {
+      if (line) page.drawText(line, { x, y, font, size, color });
+      y -= lineHeight;
+    }
+    y -= gapAfter;
+    return lines.length * lineHeight + gapAfter;
+  }
+
+  function label(value) {
+    drawText(String(value).toUpperCase(), {
+      font: bold,
+      size: 7.5,
+      color: palette.primary,
+      lineHeight: 10,
+      gapAfter: 7,
+    });
+  }
+
+  function rule(gap = 12) {
+    ensureSpace(gap * 2 + 1);
+    y -= gap;
+    page.drawLine({
+      start: { x: MARGIN, y },
+      end: { x: A4_WIDTH - MARGIN, y },
+      thickness: 0.7,
+      color: palette.line,
+    });
+    y -= gap;
+  }
+
+  function sectionTitle(kicker, title, description = "") {
+    ensureSpace(description ? 73 : 51);
+    label(kicker);
+    drawText(title, {
+      font: bold,
+      size: 17,
+      lineHeight: 21,
+      color: palette.ink,
+      gapAfter: description ? 4 : 10,
+    });
+    if (description) {
+      drawText(description, {
+        size: 9,
+        color: rgb(0.27, 0.39, 0.39),
+        lineHeight: 13,
+        gapAfter: 10,
+      });
+    }
+  }
+
+  function lineItem(item) {
+    const amountWidth = 90;
+    const descriptionWidth = CONTENT_WIDTH - amountWidth - 16;
+    const lines = wrapText(
+      regular,
+      item.description,
+      9.25,
+      descriptionWidth,
+      regularCharacters,
+    );
+    const height = Math.max(22, lines.length * 12 + 9);
+    ensureSpace(height);
+    for (let index = 0; index < lines.length; index += 1) {
+      page.drawText(lines[index], {
+        x: MARGIN,
+        y: y - index * 12,
+        font: index === 0 ? bold : regular,
+        size: index === 0 ? 9.25 : 8.5,
+        color: palette.ink,
+      });
+    }
+    const amountText = safeText(amount(item.totalCents), boldCharacters);
+    page.drawText(amountText, {
+      x:
+        A4_WIDTH -
+        MARGIN -
+        bold.widthOfTextAtSize(amountText, 9.25),
+      y,
+      font: bold,
+      size: 9.25,
+      color: palette.ink,
+    });
+    y -= height;
+    page.drawLine({
+      start: { x: MARGIN, y: y + 3 },
+      end: { x: A4_WIDTH - MARGIN, y: y + 3 },
+      thickness: 0.45,
+      color: palette.line,
+    });
+  }
+
+  function summaryCell(labelValue, value, x, width, secondary = "") {
+    const top = y;
+    page.drawText(
+      safeText(String(labelValue).toUpperCase(), boldCharacters),
+      {
+        x,
+        y: top,
+        font: bold,
+        size: 7.25,
+        color: palette.primary,
+      },
+    );
+    const valueLines = wrapText(
+      bold,
+      value,
+      10,
+      width,
+      boldCharacters,
+    ).slice(0, 3);
+    valueLines.forEach((line, index) => {
+      page.drawText(line, {
+        x,
+        y: top - 16 - index * 13,
+        font: bold,
+        size: 10,
+        color: palette.ink,
+      });
+    });
+    if (secondary) {
+      const secondaryLines = wrapText(
+        regular,
+        secondary,
+        7.75,
+        width,
+        regularCharacters,
+      ).slice(0, 2);
+      secondaryLines.forEach((line, index) => {
+        page.drawText(line, {
+          x,
+          y: top - 16 - valueLines.length * 13 - index * 10,
+          font: regular,
+          size: 7.75,
+          color: rgb(0.34, 0.45, 0.45),
+        });
+      });
+    }
+  }
+
+  addPage();
+  if (banner) {
+    const size = fitImage(banner, CONTENT_WIDTH, 74);
+    page.drawImage(banner, {
+      x: MARGIN + (CONTENT_WIDTH - size.width) / 2,
+      y: y - size.height,
+      width: size.width,
+      height: size.height,
+      opacity: 0.96,
+    });
+    y -= size.height + 18;
+  }
+
+  if (logo) {
+    const size = fitImage(logo, 96, 52);
+    page.drawImage(logo, {
+      x: MARGIN,
+      y: y - size.height,
+      width: size.width,
+      height: size.height,
+    });
+    y -= size.height + 12;
+  } else {
+    label("Quote from");
+    drawText(snapshot.business.name, {
+      font: bold,
+      size: 23,
+      lineHeight: 27,
+      color: palette.ink,
+      gapAfter: 7,
+    });
+  }
+  const contact = [
+    snapshot.business.phone,
+    snapshot.business.email,
+    snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  if (contact) {
+    drawText(contact, {
+      size: 8.5,
+      color: rgb(0.31, 0.43, 0.43),
+      lineHeight: 12,
+      gapAfter: 8,
+    });
+  }
+
+  ensureSpace(104);
+  const summaryTop = y;
+  page.drawRectangle({
+    x: MARGIN,
+    y: y - 94,
+    width: CONTENT_WIDTH,
+    height: 98,
+    color: palette.soft,
+    borderColor: palette.line,
+    borderWidth: 0.7,
+  });
+  y -= 16;
+  const half = (CONTENT_WIDTH - 30) / 2;
+  summaryCell(
+    "Quote",
+    `${snapshot.quoteNumber} | Version ${snapshot.versionNumber}`,
+    MARGIN + 14,
+    half,
+    snapshot.validUntil
+      ? `Valid until ${snapshot.validUntil}`
+      : "Ask the trade business about validity",
+  );
+  summaryCell(
+    "Prepared for",
+    snapshot.customer.name,
+    MARGIN + half + 22,
+    half,
+    snapshot.site.summary,
+  );
+  y = summaryTop - 110;
+  label("Work");
+  drawText(snapshot.work.title, {
+    font: bold,
+    size: 15,
+    lineHeight: 19,
+    gapAfter: 3,
+  });
+  drawText(snapshot.work.number, {
+    size: 8.5,
+    color: rgb(0.34, 0.45, 0.45),
+    lineHeight: 11,
+    gapAfter: 8,
+  });
+
+  if (snapshot.customerMessage) {
+    ensureSpace(58);
+    page.drawRectangle({
+      x: MARGIN,
+      y: y - 6,
+      width: 4,
+      height: 38,
+      color: palette.accent,
+    });
+    drawText(snapshot.customerMessage, {
+      x: MARGIN + 14,
+      width: CONTENT_WIDTH - 14,
+      size: 9.25,
+      lineHeight: 13,
+      color: rgb(0.24, 0.35, 0.35),
+      gapAfter: 8,
+    });
+  }
+
+  if (snapshot.items?.length) {
+    sectionTitle("Always included", "Your base scope");
+    const headings = [
+      ...new Set(
+        snapshot.items.map(
+          (item) => item.sectionHeading || "Included work",
+        ),
+      ),
+    ];
+    for (const heading of headings) {
+      ensureSpace(34);
+      drawText(heading, {
+        font: bold,
+        size: 10,
+        color: palette.primary,
+        lineHeight: 13,
+        gapAfter: 5,
+      });
+      snapshot.items
+        .filter(
+          (item) =>
+            (item.sectionHeading || "Included work") === heading,
+        )
+        .forEach(lineItem);
+      y -= 7;
+    }
+  }
+
+  ensureSpace(94);
+  y -= 8;
+  page.drawRectangle({
+    x: MARGIN,
+    y: y - 73,
+    width: CONTENT_WIDTH,
+    height: 78,
+    color: palette.ink,
+  });
+  page.drawText(
+    safeText(displayTotals.label.toUpperCase(), boldCharacters),
+    {
+    x: MARGIN + 16,
+    y: y - 16,
+    font: bold,
+    size: 7.5,
+    color: palette.accent,
+    },
+  );
+  const total = safeText(amount(displayTotals.totalCents), boldCharacters);
+  page.drawText(total, {
+    x: MARGIN + 16,
+    y: y - 48,
+    font: bold,
+    size: 25,
+    color: rgb(1, 1, 1),
+  });
+  const tax = safeText(
+    `Subtotal ${amount(displayTotals.subtotalCents)} | GST ${amount(displayTotals.taxCents)}`,
+    regularCharacters,
+  );
+  page.drawText(tax, {
+    x: A4_WIDTH - MARGIN - regular.widthOfTextAtSize(tax, 8),
+    y: y - 43,
+    font: regular,
+    size: 8,
+    color: rgb(0.87, 0.94, 0.93),
+  });
+  y -= 92;
+
+  if (snapshot.choices?.length) {
+    sectionTitle(
+      "Customer choices",
+      "Options to review online",
+      "The secure online quote records the exact package, choose-one options and extras selected before acceptance.",
+    );
+    for (const choice of snapshot.choices) {
+      ensureSpace(94);
+      page.drawRectangle({
+        x: MARGIN,
+        y: y - 5,
+        width: CONTENT_WIDTH,
+        height: 1,
+        color: palette.line,
+      });
+      y -= 18;
+      const kind =
+        choice.kind === "addon"
+          ? "Optional extra"
+          : choice.kind === "package"
+            ? "Package"
+            : "Choose one";
+      const headlineChoice = displayTotals.selectedChoiceIds.includes(
+        String(choice.id || ""),
+      );
+      label(
+        `${kind}${
+          choice.recommended
+            ? " | Recommended"
+            : headlineChoice
+              ? " | Included in headline total"
+              : ""
+        }`,
+      );
+      drawText(choice.name, {
+        font: bold,
+        size: 13.5,
+        lineHeight: 17,
+        gapAfter: choice.summary ? 2 : 6,
+      });
+      if (choice.summary) {
+        drawText(choice.summary, {
+          size: 8.75,
+          color: rgb(0.32, 0.43, 0.43),
+          lineHeight: 12,
+          gapAfter: 5,
+        });
+      }
+      choice.items?.forEach(lineItem);
+      drawText(
+        `${
+          choice.kind === "addon" ? "Optional extra" : "This choice"
+        } adds ${amount(choice.totalCents)} including GST to the included scope`,
+        {
+        font: bold,
+        size: 9.25,
+        color: palette.primary,
+        lineHeight: 13,
+        gapAfter: 10,
+        },
+      );
+    }
+  }
+
+  if (snapshot.terms) {
+    rule();
+    sectionTitle(
+      "Recorded terms",
+      "Scope, exclusions and completion terms",
+    );
+    drawText(snapshot.terms, {
+      size: 8.75,
+      color: rgb(0.24, 0.34, 0.34),
+      lineHeight: 12.5,
+      gapAfter: 12,
+    });
+  }
+
+  rule(9);
+  drawText(
+    `This PDF is a copy of quote ${snapshot.quoteNumber}, version ${snapshot.versionNumber}. Review and acceptance take place through the private quote link sent by ${snapshot.business.name}.`,
+    {
+      size: 7.75,
+      color: rgb(0.39, 0.49, 0.49),
+      lineHeight: 10.5,
+    },
+  );
+
+  pages.forEach((pdfPage, index) => {
+    const footer = safeText(
+      `${snapshot.quoteNumber} | Page ${index + 1} of ${pages.length}`,
+      regularCharacters,
+    );
+    pdfPage.drawLine({
+      start: { x: MARGIN, y: 38 },
+      end: { x: A4_WIDTH - MARGIN, y: 38 },
+      thickness: 0.5,
+      color: palette.line,
+    });
+    pdfPage.drawText(footer, {
+      x: MARGIN,
+      y: 24,
+      font: regular,
+      size: 7.5,
+      color: rgb(0.39, 0.49, 0.49),
+    });
+    const business = safeText(snapshot.business.name, regularCharacters);
+    pdfPage.drawText(business, {
+      x:
+        A4_WIDTH -
+        MARGIN -
+        regular.widthOfTextAtSize(business, 7.5),
+      y: 24,
+      font: regular,
+      size: 7.5,
+      color: rgb(0.39, 0.49, 0.49),
+    });
+  });
+
+  pdf.setTitle(
+    safeText(
+      `Quote ${snapshot.quoteNumber} from ${snapshot.business.name}`,
+      supported,
+    ),
+  );
+  pdf.setAuthor(safeText(snapshot.business.name, supported));
+  pdf.setSubject(
+    safeText(
+      `Quote for ${snapshot.customer.name}: ${snapshot.work.title}`,
+      supported,
+    ),
+  );
+  pdf.setCreator("TLink");
+  pdf.setProducer("TLink");
+  return pdf.save({ useObjectStreams: false });
+}

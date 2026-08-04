@@ -13,11 +13,25 @@ import {
   approvedTradeReviewPredicate,
   requireVerifiedTradeIdentity,
 } from "@/lib/trade-access-server";
+import {
+  DEFAULT_QUOTE_EMAIL_INTRO,
+  DEFAULT_QUOTE_EMAIL_SUBJECT,
+  DEFAULT_TRADE_BRAND_BORDER,
+  DEFAULT_TRADE_BRAND_THEME,
+  QUOTE_SUBJECT_PLACEHOLDERS,
+  TRADE_BRAND_BORDER_STYLES,
+  TRADE_BRAND_THEME_KEYS,
+} from "@/lib/trade-business-branding";
 
 export const runtime = "edge";
 
 const NOTICE_VERSION = "2026-07-14";
+const ACCOUNT_CLOSURE_RETENTION_NOTICE_VERSION = "2026-08-04";
+const ACCOUNT_CLOSURE_RECENT_AUTH_SECONDS = 15 * 60;
+const ACCOUNT_CLOSURE_CLOCK_SKEW_SECONDS = 60;
 const STATES = new Set(AUSTRALIAN_STATE_CODES);
+const BRAND_THEMES = new Set<string>(TRADE_BRAND_THEME_KEYS);
+const BRAND_BORDERS = new Set<string>(TRADE_BRAND_BORDER_STYLES);
 const CAPABILITIES = new Set([
   "assessment",
   "solar",
@@ -57,15 +71,104 @@ function cleanText(value: unknown, maximum: number) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
 }
 
+function cleanSingleLine(value: unknown, maximum: number) {
+  return cleanText(value, maximum).replace(/[\r\n]+/g, " ").replace(/\s+/g, " ");
+}
+
+function canonicalHttpsWebsite(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  if (!candidate) return "";
+  if (candidate.length > 300 || /[\u0000-\u001f\u007f]/.test(candidate)) return null;
+  try {
+    const website = new URL(candidate);
+    if (
+      website.protocol !== "https:"
+      || !website.hostname
+      || website.username
+      || website.password
+    ) return null;
+    const canonical = website.toString();
+    return canonical.length <= 300 ? canonical : null;
+  } catch {
+    return null;
+  }
+}
+
 function cleanList(value: unknown, allowed: Set<string>) {
   return Array.isArray(value)
     ? [...new Set(value.filter((item): item is string => typeof item === "string" && allowed.has(item)))]
     : [];
 }
 
+function parseStringList(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+type ServiceArea = {
+  postcode: string;
+  radiusKm: number;
+};
+
+function parseServiceAreas(value: unknown): ServiceArea[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) return null;
+  const serviceAreas: ServiceArea[] = [];
+  const postcodes = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const area = item as Record<string, unknown>;
+    const postcode = cleanText(area.postcode, 4);
+    const radiusKm = Number(area.radiusKm);
+    if (
+      !/^\d{4}$/.test(postcode)
+      || !postcodeCoordinate(postcode)
+      || !Number.isInteger(radiusKm)
+      || radiusKm < 10
+      || radiusKm > 1000
+      || postcodes.has(postcode)
+    ) return null;
+    postcodes.add(postcode);
+    serviceAreas.push({ postcode, radiusKm });
+  }
+  return serviceAreas;
+}
+
+function validateQuoteSubjectTemplate(value: string) {
+  if (!value || !value.includes("{business_name}")) return false;
+  const placeholders = [...value.matchAll(/\{([^{}]+)\}/g)].map((match) => match[1]);
+  const unmatchedBraces = value.replace(/\{[^{}]+\}/g, "").match(/[{}]/);
+  return !unmatchedBraces
+    && placeholders.every((placeholder) => QUOTE_SUBJECT_PLACEHOLDERS.has(placeholder));
+}
+
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
+}
+
+function hasRecentFirebaseAuthentication(authTime: number, nowSeconds = Math.floor(Date.now() / 1000)) {
+  return Number.isFinite(authTime)
+    && authTime > 0
+    && authTime <= nowSeconds + ACCOUNT_CLOSURE_CLOCK_SKEW_SECONDS
+    && nowSeconds - authTime <= ACCOUNT_CLOSURE_RECENT_AUTH_SECONDS;
+}
+
+async function stableAccountClosureId(firebaseUid: string, closureCycle: number) {
+  const cycle = Math.max(0, Math.trunc(closureCycle));
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`tlink-trade-account-closure:v1:${firebaseUid}:${cycle}`),
+  );
+  return `closure_${Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")).join("").slice(0, 32)}`;
 }
 
 async function identityOrResponse(request: Request) {
@@ -93,6 +196,11 @@ export async function GET(request: Request) {
            account.availability_status, account.service_base_postcode,
            account.service_radius_km, account.email_opportunities,
            account.email_weekly_summary, account.settings_updated_at,
+           account.brand_theme_key, account.brand_border_style,
+           account.logo_object_key, account.logo_content_type,
+           account.banner_object_key, account.banner_content_type,
+           account.quote_email_subject_template, account.quote_email_intro,
+           account.quote_default_terms, account.account_closed_at,
            CASE WHEN ${approvedTradeReviewPredicate("account")}
              THEN 1 ELSE 0 END approval_review_exists
     FROM trade_accounts account
@@ -100,6 +208,14 @@ export async function GET(request: Request) {
   `).bind(identity.uid).first<Record<string, unknown>>();
 
   if (!record) return json({ ok: true, profile: null });
+  const businessWebsite = canonicalHttpsWebsite(record.business_website) || "";
+  const serviceAreaRows = await db.prepare(`
+    SELECT postcode, radius_km
+    FROM trade_account_service_areas
+    WHERE firebase_uid = ? AND record_status = 'active'
+    ORDER BY position, created_at, id
+    LIMIT 6
+  `).bind(identity.uid).all<{ postcode: string; radius_km: number }>();
   const accessApproved = approvedAbnAccess({
     abn: String(record.abn || ""),
     partnerType: String(record.partner_type),
@@ -127,9 +243,9 @@ export async function GET(request: Request) {
       contactName: record.contact_name,
       phone: record.phone,
       partnerType: record.partner_type,
-      businessWebsite: record.business_website,
-      serviceStates: JSON.parse(String(record.service_states || "[]")),
-      capabilities: JSON.parse(String(record.capabilities || "[]")),
+      businessWebsite,
+      serviceStates: parseStringList(record.service_states),
+      capabilities: parseStringList(record.capabilities),
       summary: record.summary,
       accountStatus: record.account_status,
       verificationStatus: record.verification_status,
@@ -144,6 +260,20 @@ export async function GET(request: Request) {
       emailOpportunities: Boolean(record.email_opportunities),
       emailWeeklySummary: Boolean(record.email_weekly_summary),
       settingsUpdatedAt: record.settings_updated_at,
+      brandThemeKey: record.brand_theme_key || DEFAULT_TRADE_BRAND_THEME,
+      brandBorderStyle: record.brand_border_style || DEFAULT_TRADE_BRAND_BORDER,
+      hasLogo: Boolean(record.logo_object_key && record.logo_content_type),
+      hasBanner: Boolean(record.banner_object_key && record.banner_content_type),
+      logoMediaUrl: record.logo_object_key ? "/api/trade-profile-media?kind=logo" : "",
+      bannerMediaUrl: record.banner_object_key ? "/api/trade-profile-media?kind=banner" : "",
+      quoteEmailSubjectTemplate: record.quote_email_subject_template || DEFAULT_QUOTE_EMAIL_SUBJECT,
+      quoteEmailIntro: record.quote_email_intro || DEFAULT_QUOTE_EMAIL_INTRO,
+      quoteDefaultTerms: record.quote_default_terms || "",
+      serviceAreas: serviceAreaRows.results.map((area) => ({
+        postcode: area.postcode,
+        radiusKm: Number(area.radius_km),
+      })),
+      accountClosedAt: record.account_closed_at || "",
       entitlements,
     },
   });
@@ -155,6 +285,12 @@ type SettingsPayload = {
   serviceRadiusKm?: unknown;
   emailOpportunities?: unknown;
   emailWeeklySummary?: unknown;
+  serviceAreas?: unknown;
+  brandThemeKey?: unknown;
+  brandBorderStyle?: unknown;
+  quoteEmailSubjectTemplate?: unknown;
+  quoteEmailIntro?: unknown;
+  quoteDefaultTerms?: unknown;
 };
 
 export async function PATCH(request: Request) {
@@ -186,24 +322,108 @@ export async function PATCH(request: Request) {
     return json({ ok: false, error: "Choose valid email preferences." }, 400);
   }
 
-  const account = await getD1().prepare("SELECT partner_type, postcode, service_base_postcode, service_radius_km FROM trade_accounts WHERE firebase_uid = ?")
+  const db = getD1();
+  const account = await db.prepare(`SELECT partner_type, postcode, service_base_postcode,
+      service_radius_km, brand_theme_key, brand_border_style,
+      quote_email_subject_template, quote_email_intro, quote_default_terms
+    FROM trade_accounts WHERE firebase_uid = ?`)
     .bind(identity.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
-  const requestedBase = cleanText(raw.serviceBasePostcode, 4);
-  const requestedRadius = Number(raw.serviceRadiusKm);
-  const serviceBasePostcode = account.partner_type === "installer" ? (requestedBase || String(account.service_base_postcode || account.postcode)) : String(account.service_base_postcode || account.postcode);
-  const serviceRadiusKm = account.partner_type === "installer" ? requestedRadius : Number(account.service_radius_km || 50);
-  if (account.partner_type === "installer" && (!/^\d{4}$/.test(serviceBasePostcode) || !postcodeCoordinate(serviceBasePostcode))) {
-    return json({ ok: false, error: "Enter a recognised Australian service-base postcode." }, 400);
-  }
-  if (account.partner_type === "installer" && (!Number.isInteger(serviceRadiusKm) || serviceRadiusKm < 10 || serviceRadiusKm > 1000)) {
-    return json({ ok: false, error: "Choose a service radius from 10 to 1,000 kilometres." }, 400);
+
+  const currentAreaRows = await db.prepare(`
+    SELECT postcode, radius_km
+    FROM trade_account_service_areas
+    WHERE firebase_uid = ? AND record_status = 'active'
+    ORDER BY position, created_at, id
+    LIMIT 6
+  `).bind(identity.uid).all<{ postcode: string; radius_km: number }>();
+  const currentAreas = currentAreaRows.results.map((area) => ({
+    postcode: area.postcode,
+    radiusKm: Number(area.radius_km),
+  }));
+  const requestedAreas = raw.serviceAreas === undefined
+    ? null
+    : parseServiceAreas(raw.serviceAreas);
+  if (raw.serviceAreas !== undefined && !requestedAreas) {
+    return json({
+      ok: false,
+      error: "Add from one to six recognised Australian postcodes, each with a service radius from 10 to 1,000 kilometres.",
+    }, 400);
   }
 
+  const hasLegacyAreaChange = raw.serviceBasePostcode !== undefined || raw.serviceRadiusKm !== undefined;
+  let serviceAreas = requestedAreas || currentAreas;
+  if (!requestedAreas && hasLegacyAreaChange) {
+    const postcode = cleanText(raw.serviceBasePostcode, 4)
+      || currentAreas[0]?.postcode
+      || String(account.service_base_postcode || account.postcode);
+    const requestedRadius = raw.serviceRadiusKm === undefined
+      ? currentAreas[0]?.radiusKm || Number(account.service_radius_km || 50)
+      : Number(raw.serviceRadiusKm);
+    const legacyArea = parseServiceAreas([{ postcode, radiusKm: requestedRadius }]);
+    if (!legacyArea) {
+      return json({
+        ok: false,
+        error: "Enter a recognised Australian service postcode and choose a radius from 10 to 1,000 kilometres.",
+      }, 400);
+    }
+    serviceAreas = [legacyArea[0], ...currentAreas.filter((area) => area.postcode !== postcode)].slice(0, 6);
+  } else if (!serviceAreas.length && account.partner_type === "installer") {
+    const fallbackArea = parseServiceAreas([{
+      postcode: String(account.service_base_postcode || account.postcode),
+      radiusKm: Number(account.service_radius_km || 50),
+    }]);
+    if (!fallbackArea) {
+      return json({
+        ok: false,
+        error: "Add at least one recognised Australian service postcode before saving business settings.",
+      }, 400);
+    }
+    serviceAreas = fallbackArea;
+  }
+
+  const brandThemeKey = raw.brandThemeKey === undefined
+    ? String(account.brand_theme_key || DEFAULT_TRADE_BRAND_THEME)
+    : cleanText(raw.brandThemeKey, 40);
+  if (!BRAND_THEMES.has(brandThemeKey)) {
+    return json({ ok: false, error: "Choose an available business colour theme." }, 400);
+  }
+  const brandBorderStyle = raw.brandBorderStyle === undefined
+    ? String(account.brand_border_style || DEFAULT_TRADE_BRAND_BORDER)
+    : cleanText(raw.brandBorderStyle, 24);
+  if (!BRAND_BORDERS.has(brandBorderStyle)) {
+    return json({ ok: false, error: "Choose an available document border style." }, 400);
+  }
+  const quoteEmailSubjectTemplate = raw.quoteEmailSubjectTemplate === undefined
+    ? String(account.quote_email_subject_template || DEFAULT_QUOTE_EMAIL_SUBJECT)
+    : cleanSingleLine(raw.quoteEmailSubjectTemplate, 180);
+  if (!validateQuoteSubjectTemplate(quoteEmailSubjectTemplate)) {
+    return json({
+      ok: false,
+      error: "The quote email subject must include {business_name} and may use {quote_number}, {customer_name} or {work_title}.",
+    }, 400);
+  }
+  const quoteEmailIntro = raw.quoteEmailIntro === undefined
+    ? String(account.quote_email_intro || DEFAULT_QUOTE_EMAIL_INTRO)
+    : cleanText(raw.quoteEmailIntro, 1200);
+  if (!quoteEmailIntro) {
+    return json({ ok: false, error: "Add the standard introduction shown in quote emails." }, 400);
+  }
+  const quoteDefaultTerms = raw.quoteDefaultTerms === undefined
+    ? String(account.quote_default_terms || "")
+    : cleanText(raw.quoteDefaultTerms, 5000);
+
+  const serviceBasePostcode = serviceAreas[0]?.postcode
+    || String(account.service_base_postcode || account.postcode);
+  const serviceRadiusKm = serviceAreas[0]?.radiusKm
+    || Number(account.service_radius_km || 50);
   const now = new Date().toISOString();
-  const result = await getD1().prepare(`
+  const statements = [db.prepare(`
     UPDATE trade_accounts
-    SET availability_status = ?, service_base_postcode = ?, service_radius_km = ?, email_opportunities = ?, email_weekly_summary = ?,
+    SET availability_status = ?, service_base_postcode = ?, service_radius_km = ?,
+        email_opportunities = ?, email_weekly_summary = ?,
+        brand_theme_key = ?, brand_border_style = ?,
+        quote_email_subject_template = ?, quote_email_intro = ?, quote_default_terms = ?,
         settings_updated_at = ?, updated_at = ?
     WHERE firebase_uid = ?
   `).bind(
@@ -212,15 +432,56 @@ export async function PATCH(request: Request) {
     serviceRadiusKm,
     raw.emailOpportunities ? 1 : 0,
     raw.emailWeeklySummary ? 1 : 0,
+    brandThemeKey,
+    brandBorderStyle,
+    quoteEmailSubjectTemplate,
+    quoteEmailIntro,
+    quoteDefaultTerms,
     now,
     now,
     identity.uid,
-  ).run();
+  )];
 
+  if (requestedAreas || hasLegacyAreaChange || (!currentAreas.length && serviceAreas.length)) {
+    statements.push(
+      db.prepare("DELETE FROM trade_account_service_areas WHERE firebase_uid = ?")
+        .bind(identity.uid),
+    );
+    serviceAreas.forEach((area, index) => {
+      statements.push(db.prepare(`
+        INSERT INTO trade_account_service_areas
+          (id, firebase_uid, position, postcode, radius_km, record_status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        identity.uid,
+        index + 1,
+        area.postcode,
+        area.radiusKm,
+        now,
+        now,
+      ));
+    });
+  }
+
+  const [result] = await db.batch(statements);
   if (!result.meta.changes) return json({ ok: false, error: "Complete the business profile first." }, 404);
   return json({
     ok: true,
-    settings: { availabilityStatus, serviceBasePostcode, serviceRadiusKm, emailOpportunities: raw.emailOpportunities, emailWeeklySummary: raw.emailWeeklySummary, settingsUpdatedAt: now },
+    settings: {
+      availabilityStatus,
+      serviceBasePostcode,
+      serviceRadiusKm,
+      emailOpportunities: raw.emailOpportunities,
+      emailWeeklySummary: raw.emailWeeklySummary,
+      serviceAreas,
+      brandThemeKey,
+      brandBorderStyle,
+      quoteEmailSubjectTemplate,
+      quoteEmailIntro,
+      quoteDefaultTerms,
+      settingsUpdatedAt: now,
+    },
   });
 }
 
@@ -244,16 +505,60 @@ export async function POST(request: Request) {
   const postcode = cleanText(raw.postcode, 4);
   const contactName = cleanText(raw.contactName, 120);
   const phone = cleanText(raw.phone, 40);
-  const partnerType = raw.partnerType === "supplier" ? "supplier" : "installer";
-  const businessWebsite = cleanText(raw.businessWebsite, 300);
+  const requestedPartnerType = raw.partnerType === "supplier"
+    ? "supplier"
+    : raw.partnerType === "installer"
+      ? "installer"
+      : "";
+  const businessWebsite = canonicalHttpsWebsite(raw.businessWebsite);
   const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
     ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
     : [])];
   const capabilities = cleanList(raw.capabilities, CAPABILITIES);
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
+  const db = getD1();
+  const existingAccount = await db.prepare(
+    "SELECT firebase_uid, business_name, abn, partner_type, account_status FROM trade_accounts WHERE firebase_uid = ?",
+  ).bind(identity.uid).first<{
+    firebase_uid: string;
+    business_name: string;
+    abn: string;
+    partner_type: string;
+    account_status: string;
+  }>();
+  if (existingAccount?.account_status === "closed") {
+    return json({
+      ok: false,
+      code: "ACCOUNT_CLOSED",
+      error:
+        "This TLink account is closed. Restoring access requires a separate authorised administrator recovery process.",
+    }, 409);
+  }
+  if (
+    existingAccount
+    && requestedPartnerType
+    && existingAccount.partner_type !== requestedPartnerType
+  ) {
+    return json({
+      ok: false,
+      code: "ACCOUNT_TYPE_LOCKED",
+      error: "The account type is fixed after setup. Contact TLink support if the business was registered incorrectly.",
+    }, 409);
+  }
+  const partnerType = (existingAccount?.partner_type === "supplier"
+    ? "supplier"
+    : existingAccount?.partner_type === "installer"
+      ? "installer"
+      : requestedPartnerType || "installer") as PartnerType;
 
   if (!businessName) return json({ ok: false, error: "Enter the business name." }, 400);
+  if (businessWebsite === null) {
+    return json({
+      ok: false,
+      error: "Enter a complete HTTPS business website without sign-in details, or leave it blank.",
+    }, 400);
+  }
   if (!isValidAbn(abn)) return json({ ok: false, error: "Enter a valid 11 digit Australian Business Number." }, 400);
   if (!addressLine1) return json({ ok: false, error: "Enter the business street address." }, 400);
   if (!suburb) return json({ ok: false, error: "Enter the business suburb or locality." }, 400);
@@ -267,16 +572,11 @@ export async function POST(request: Request) {
   if (!consent) return json({ ok: false, error: "Confirm the account and contact consent." }, 400);
 
   const now = new Date().toISOString();
-  const db = getD1();
-  const existingAccount = await db.prepare(
-    "SELECT firebase_uid, business_name, abn, partner_type FROM trade_accounts WHERE firebase_uid = ?",
-  ).bind(identity.uid).first<{ firebase_uid: string; business_name: string; abn: string; partner_type: string }>();
   const materialIdentityChanged = Boolean(
     existingAccount &&
     (
       normalizeAbn(existingAccount.abn) !== abn ||
-      existingAccount.business_name !== businessName ||
-      existingAccount.partner_type !== partnerType
+      existingAccount.business_name !== businessName
     ),
   );
   const profileStatement = db.prepare(`
@@ -298,7 +598,6 @@ export async function POST(request: Request) {
       postcode = excluded.postcode,
       contact_name = excluded.contact_name,
       phone = excluded.phone,
-      partner_type = excluded.partner_type,
       business_website = excluded.business_website,
       service_states = excluded.service_states,
       capabilities = excluded.capabilities,
@@ -378,7 +677,7 @@ export async function POST(request: Request) {
       priority: "high",
       title: `${businessName} requires a fresh ABN review`,
       summary:
-        "The business changed its ABN, registered name or account type. Protected access remains blocked until a new official ABN review is recorded.",
+        "The business changed its ABN or registered name. Protected access remains blocked until a new official ABN review is recorded.",
       entityType: "trade_account",
       entityId: identity.uid,
       actorType: partnerType,
@@ -421,5 +720,169 @@ export async function POST(request: Request) {
       verificationReviewedByUid: saved?.verification_reviewed_by_uid || "",
       accessApproved,
     },
+  });
+}
+
+type CloseAccountPayload = {
+  confirmation?: unknown;
+  reason?: unknown;
+};
+
+export async function DELETE(request: Request) {
+  if (!sameOrigin(request)) {
+    return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  }
+  const identity = await identityOrResponse(request);
+  if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
+  if (!hasRecentFirebaseAuthentication(identity.authTime)) {
+    return json({
+      ok: false,
+      code: "RECENT_AUTH_REQUIRED",
+      error:
+        "For security, sign out and sign in again before closing this account, then retry within 15 minutes.",
+    }, 401);
+  }
+
+  let raw: CloseAccountPayload;
+  try {
+    raw = await request.json() as CloseAccountPayload;
+  } catch {
+    return json({ ok: false, error: "The account closure request could not be read." }, 400);
+  }
+  if (cleanSingleLine(raw.confirmation, 40) !== "CLOSE ACCOUNT") {
+    return json({
+      ok: false,
+      code: "ACCOUNT_CLOSURE_CONFIRMATION_REQUIRED",
+      error: "Type CLOSE ACCOUNT to confirm that TLink access and editable settings should be closed.",
+    }, 400);
+  }
+  const reason = cleanText(raw.reason, 800);
+  const db = getD1();
+  const account = await db.prepare(`
+    SELECT business_name, partner_type, account_status, account_closed_at
+    FROM trade_accounts
+    WHERE firebase_uid = ?
+  `).bind(identity.uid).first<Record<string, unknown>>();
+  if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
+
+  const existingClosure = await db.prepare(`
+    SELECT id, requested_at, completed_at
+    FROM trade_account_closure_requests
+    WHERE firebase_uid = ? AND status = 'closed'
+    ORDER BY requested_at, id
+    LIMIT 1
+  `).bind(identity.uid).first<Record<string, unknown>>();
+  const closureCountRecord = await db.prepare(`
+    SELECT COUNT(*) closure_count
+    FROM trade_account_closure_requests
+    WHERE firebase_uid = ?
+  `).bind(identity.uid).first<Record<string, unknown>>();
+  const rawClosureCount = Number(closureCountRecord?.closure_count || 0);
+  const closureCycle = Number.isFinite(rawClosureCount) ? rawClosureCount : 0;
+  const now = new Date().toISOString();
+  const existingClosureId = cleanSingleLine(existingClosure?.id, 100);
+  const closureId = existingClosureId
+    || await stableAccountClosureId(identity.uid, closureCycle);
+  const priorClosedAt = cleanSingleLine(account.account_closed_at, 60);
+  const closureRequestedAt = cleanSingleLine(existingClosure?.requested_at, 60)
+    || priorClosedAt
+    || now;
+  const accountClosedAt = cleanSingleLine(existingClosure?.completed_at, 60)
+    || priorClosedAt
+    || now;
+  await db.batch([
+    db.prepare(`
+      UPDATE trade_accounts
+      SET account_status = 'closed',
+          availability_status = 'paused',
+          service_base_postcode = '',
+          service_radius_km = 50,
+          email_opportunities = 0,
+          email_weekly_summary = 0,
+          brand_theme_key = ?,
+          brand_border_style = ?,
+          logo_object_key = '',
+          logo_content_type = '',
+          banner_object_key = '',
+          banner_content_type = '',
+          quote_email_subject_template = ?,
+          quote_email_intro = ?,
+          quote_default_terms = '',
+          account_closed_at = ?,
+          settings_updated_at = ?,
+          updated_at = ?
+      WHERE firebase_uid = ? AND account_status <> 'closed'
+    `).bind(
+      DEFAULT_TRADE_BRAND_THEME,
+      DEFAULT_TRADE_BRAND_BORDER,
+      DEFAULT_QUOTE_EMAIL_SUBJECT,
+      DEFAULT_QUOTE_EMAIL_INTRO,
+      now,
+      now,
+      now,
+      identity.uid,
+    ),
+    db.prepare("DELETE FROM trade_account_service_areas WHERE firebase_uid = ?")
+      .bind(identity.uid),
+    db.prepare(`
+      UPDATE trade_crm_quote_links
+      SET status = 'revoked',
+          token_hash = '',
+          encrypted_token = '',
+          revoked_at = CASE WHEN revoked_at = '' THEN ? ELSE revoked_at END,
+          updated_at = ?
+      WHERE firebase_uid = ? AND status = 'active'
+    `).bind(now, now, identity.uid),
+    db.prepare(`
+      UPDATE trade_team_members
+      SET status = 'suspended',
+          updated_at = ?
+      WHERE owner_uid = ? AND status = 'active'
+    `).bind(now, identity.uid),
+    db.prepare(`
+      INSERT OR IGNORE INTO trade_account_closure_requests
+        (id, firebase_uid, status, reason, retention_notice_version,
+         requested_at, completed_at, recovered_at, recovered_by_uid, created_at, updated_at)
+      VALUES (?, ?, 'closed', ?, ?, ?, ?, '', '', ?, ?)
+    `).bind(
+      closureId,
+      identity.uid,
+      reason,
+      ACCOUNT_CLOSURE_RETENTION_NOTICE_VERSION,
+      closureRequestedAt,
+      accountClosedAt,
+      now,
+      now,
+    ),
+    adminNotificationStatement(db, {
+      eventKey: `trade-account-closed:${identity.uid}`,
+      eventType: "trade.account_closed",
+      category: "account",
+      priority: "normal",
+      title: `${String(account.business_name || "Trade business")} closed its TLink account`,
+      summary:
+        "Trade access and editable settings were closed. Regulated, compliance, customer, job and audit records remain retained for authorised review. Restoring access requires a separate authorised recovery process.",
+      entityType: "trade_account",
+      entityId: identity.uid,
+      actorType: account.partner_type === "supplier" ? "supplier" : "installer",
+      actorUid: identity.uid,
+      requiresAction: false,
+      metadata: {
+        closureId,
+        retentionNoticeVersion: ACCOUNT_CLOSURE_RETENTION_NOTICE_VERSION,
+      },
+      occurredAt: closureRequestedAt,
+    }),
+  ]);
+  return json({
+    ok: true,
+    accountStatus: "closed",
+    accountClosedAt,
+    closureRequestId: closureId,
+    alreadyClosed: account.account_status === "closed" || Boolean(existingClosureId),
+    recovery:
+      "Restoring access requires a separate authorised administrator recovery process after a verified business request.",
+    retainedRecords:
+      "Government program, compliance, customer, job, quote, invoice and audit records remain retained for authorised administration and legal obligations.",
   });
 }

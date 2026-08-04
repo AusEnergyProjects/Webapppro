@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -27,6 +26,11 @@ import type { CustomerPlanReportView } from "@/lib/customer-plan-report";
 import {
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
+import {
+  TradeBusinessSettingsWorkspace,
+  tradeBusinessThemeGradient,
+  type TradeBusinessSettingsProfile,
+} from "./TradeBusinessSettingsWorkspace";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const InstallerProductMarketplace = dynamic(() => import("./InstallerProductMarketplace").then((module) => module.InstallerProductMarketplace));
@@ -38,22 +42,7 @@ const TradeScheduleWorkspace = dynamic(() => import("./TradeScheduleWorkspace").
 const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 
-type DashboardProfile = {
-  businessName: string;
-  partnerType: "installer" | "supplier";
-  addressLine1: string;
-  suburb: string;
-  addressState: string;
-  postcode: string;
-  serviceStates: string[];
-  capabilities: string[];
-  accountStatus: string;
-  verificationStatus: string;
-  availabilityStatus: "open" | "limited" | "paused";
-  serviceBasePostcode: string;
-  serviceRadiusKm: number;
-  emailOpportunities: boolean;
-  emailWeeklySummary: boolean;
+type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
     verified: boolean;
     accessLabel: string;
@@ -500,15 +489,6 @@ export function DirectTradeDashboard() {
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [availabilityStatus, setAvailabilityStatus] = useState<
-    "open" | "limited" | "paused"
-  >("paused");
-  const [emailOpportunities, setEmailOpportunities] = useState(true);
-  const [emailWeeklySummary, setEmailWeeklySummary] = useState(true);
-  const [serviceBasePostcode, setServiceBasePostcode] = useState("");
-  const [serviceRadiusKm, setServiceRadiusKm] = useState(50);
-  const [settingsBusy, setSettingsBusy] = useState(false);
-  const [settingsStatus, setSettingsStatus] = useState("");
   const [opportunities, setOpportunities] = useState<DashboardOpportunity[]>(
     [],
   );
@@ -626,17 +606,6 @@ export function DirectTradeDashboard() {
           const nextProfile = result.profile as DashboardProfile | null;
           setProfile(nextProfile);
           if (nextProfile) {
-            setAvailabilityStatus(
-              ["open", "limited"].includes(nextProfile.availabilityStatus)
-                ? nextProfile.availabilityStatus
-                : "paused",
-            );
-            setEmailOpportunities(nextProfile.emailOpportunities !== false);
-            setEmailWeeklySummary(nextProfile.emailWeeklySummary !== false);
-            setServiceBasePostcode(
-              nextProfile.serviceBasePostcode || nextProfile.postcode,
-            );
-            setServiceRadiusKm(Number(nextProfile.serviceRadiusKm || 50));
             if (nextProfile.partnerType === "supplier" || !nextProfile.entitlements?.features?.installer_leads) setOpportunities([]);
           }
         }
@@ -689,9 +658,6 @@ export function DirectTradeDashboard() {
   );
   const offeredCount = opportunities.filter((item) =>
     ["offered", "viewed"].includes(item.matchStatus),
-  ).length;
-  const interestedCount = opportunities.filter(
-    (item) => item.matchStatus === "interested",
   ).length;
   const visibleLeadOpportunities = useMemo(() => {
     const term = leadSearch.trim().toLowerCase();
@@ -808,54 +774,6 @@ export function DirectTradeDashboard() {
       return next;
     });
   }, []);
-
-  async function saveSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!user || !profile) return;
-    setSettingsBusy(true);
-    setSettingsStatus("Saving dashboard preferences...");
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/trade-profile", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          availabilityStatus,
-          serviceBasePostcode,
-          serviceRadiusKm,
-          emailOpportunities,
-          emailWeeklySummary,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok)
-        throw new Error(
-          result.error || "The dashboard preferences could not be saved.",
-        );
-      setProfile({
-        ...profile,
-        availabilityStatus,
-        serviceBasePostcode,
-        serviceRadiusKm,
-        emailOpportunities,
-        emailWeeklySummary,
-      });
-      setSettingsStatus(
-        "Preferences saved. Future allocation will use the service-base postcode, radius, verified capability and recent opportunity load.",
-      );
-    } catch (settingsError) {
-      setSettingsStatus(
-        settingsError instanceof Error
-          ? settingsError.message
-          : "The dashboard preferences could not be saved.",
-      );
-    } finally {
-      setSettingsBusy(false);
-    }
-  }
 
   async function respondToOpportunity(
     matchId: string,
@@ -1190,6 +1108,24 @@ export function DirectTradeDashboard() {
             Return to account setup
           </a>
         </section>
+      ) : profile?.accountStatus === "closed" ? (
+        <section className="dashboard-state-card">
+          <span>Account closed</span>
+          <h1>This TLink account is closed</h1>
+          <p>
+            Trade workspace access and editable settings are unavailable.
+            Existing operational and compliance records remain retained.
+            Restoring access requires a separate authorised administrator
+            recovery process.
+          </p>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => void signOut(firebaseAuth)}
+          >
+            Sign out
+          </button>
+        </section>
       ) : !profile || !profileComplete ? (
         <section className="dashboard-state-card">
           <span>Profile required</span>
@@ -1221,7 +1157,12 @@ export function DirectTradeDashboard() {
         </section>
       ) : (
         <div className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}>
-          <header className="dashboard-hero">
+          <header
+            className="dashboard-hero"
+            style={{
+              background: tradeBusinessThemeGradient(profile.brandThemeKey),
+            }}
+          >
             <div className="trade-portal-brand">
               <TLinkBrand context={isSupplier ? "Wholesaler control centre" : "Installer control centre"} />
             </div>
@@ -1249,7 +1190,9 @@ export function DirectTradeDashboard() {
                 <small>Business account</small>
                 <strong title={user.email || ""}>{profile.businessName}</strong>
               </div>
-              <a href="/direct-trade/partners">Profile</a>
+              <button type="button" onClick={() => setWorkspace("account")}>
+                Business
+              </button>
               <button type="button" onClick={() => void signOut(firebaseAuth)}>
                 Sign out
               </button>
@@ -1276,7 +1219,6 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">05</b><span>Business</span><small>Profile and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Wholesalers manage products and supply. Household leads and customer contact details never enter this workspace.</p></div>
               </nav>
-              {workspace === "account" && <TradeAccessPanel profile={profile} />}
               {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="supplier"
@@ -1294,7 +1236,21 @@ export function DirectTradeDashboard() {
               />}
               {workspace === "orders" && (hasBusinessOperations ? <TradePurchasingWorkspace user={user} partnerType="supplier" navigationTarget={commandTarget} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use purchasing, fulfilment milestones and warranty claims.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
               {workspace === "import" && (hasBusinessOperations && hasBulkImport ? <TradeDataImportWorkspace user={user} partnerType="supplier" /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to use guided catalogue imports, duplicate review and rollback.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
-              {workspace === "account" && <section className="dashboard-panel dashboard-account-home"><div className="dashboard-panel-heading"><span>Business account</span><h2>Profile and verification</h2><p>Core trade operations cost A$0 after verification.</p></div><div className="dashboard-account-links"><a href="/direct-trade/partners"><strong>Edit business profile</strong><span>Contact, service areas and capabilities</span></a><a href="/direct-trade/dashboard/verification"><strong>Verification centre</strong><span>Evidence, licences and review status</span></a></div></section>}
+              {workspace === "account" && (
+                <TradeBusinessSettingsWorkspace
+                  user={user}
+                  profile={profile}
+                  onProfileChange={(changes) =>
+                    setProfile((current) =>
+                      current ? { ...current, ...changes } : current,
+                    )
+                  }
+                  onAccountClosed={() => {
+                    setProfile(null);
+                    void signOut(firebaseAuth);
+                  }}
+                />
+              )}
             </>
           ) : (
             <>
@@ -1321,8 +1277,6 @@ export function DirectTradeDashboard() {
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
-              {workspace === "account" && <TradeAccessPanel profile={profile} />}
-
               {workspace === "work" && <TradeBusinessHub
                 user={user}
                 partnerType="installer"
@@ -1348,63 +1302,21 @@ export function DirectTradeDashboard() {
 
               {workspace === "follow-ups" && (hasBusinessOperations && hasTeamAccess ? <TradeServiceFollowUpWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before service follow-up preparation is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
-              {workspace === "account" && <section
-                className="dashboard-status-grid"
-                aria-label="Account status"
-              >
-                <article>
-                  <span>Profile</span>
-                  <strong>Business details saved</strong>
-                  <small>
-                    {profile.addressState} {profile.postcode}
-                  </small>
-                </article>
-                <article>
-                  <span>Verification</span>
-                  <strong>
-                    {profile.verificationStatus === "approved"
-                      ? "Approved"
-                      : profile.verificationStatus === "under_review"
-                        ? "Under review"
-                        : profile.verificationStatus === "needs_information"
-                          ? "More information needed"
-                          : "Not started"}
-                  </strong>
-                  <small>
-                    <a href="/direct-trade/dashboard/verification">
-                      Review the evidence pathway
-                    </a>
-                  </small>
-                </article>
-                <article>
-                  <span>Opportunity inbox</span>
-                  <strong>
-                    {!hasLeadAccess
-                      ? "Verification required"
-                      : offeredCount
-                      ? `${offeredCount} awaiting response`
-                      : "Nothing awaiting response"}
-                  </strong>
-                  <small>
-                    {!hasLeadAccess
-                      ? "No leads can be allocated until verification is approved."
-                      : interestedCount
-                      ? `${interestedCount} expression${interestedCount === 1 ? "" : "s"} of interest active`
-                      : "Matching follows coverage and capability."}
-                  </small>
-                </article>
-                <article>
-                  <span>Availability</span>
-                  <strong>
-                    {availabilityStatus === "open"
-                      ? "Open to suitable work"
-                      : availabilityStatus === "limited"
-                        ? "Limited capacity"
-                        : "Paused"}
-                  </strong>
-                  <small>No per-lead purchase or bidding is required.</small>
-                </article>
-              </section>}
+              {workspace === "account" && (
+                <TradeBusinessSettingsWorkspace
+                  user={user}
+                  profile={profile}
+                  onProfileChange={(changes) =>
+                    setProfile((current) =>
+                      current ? { ...current, ...changes } : current,
+                    )
+                  }
+                  onAccountClosed={() => {
+                    setProfile(null);
+                    void signOut(firebaseAuth);
+                  }}
+                />
+              )}
 
               {workspace === "leads" && <div className="dashboard-main-grid">
                 <section
@@ -1803,7 +1715,8 @@ export function DirectTradeDashboard() {
                     <div>
                       <span>Serviceability</span>
                       <strong>
-                        {serviceBasePostcode} · {serviceRadiusKm} km radius ·{" "}
+                        {profile.serviceBasePostcode || profile.postcode} ·{" "}
+                        {profile.serviceRadiusKm || 50} km radius ·{" "}
                         {profile.serviceStates.join(", ")}
                       </strong>
                     </div>
@@ -1853,12 +1766,12 @@ export function DirectTradeDashboard() {
                     </li>
                     <li
                       className={
-                        availabilityStatus === "paused" ? "" : "complete"
+                        profile.availabilityStatus === "paused" ? "" : "complete"
                       }
                     >
                       <strong>Set availability</strong>
                       <small>
-                        {availabilityStatus === "paused"
+                        {profile.availabilityStatus === "paused"
                           ? "Choose a capacity preference below"
                           : "Capacity preference saved"}
                       </small>
@@ -1866,229 +1779,6 @@ export function DirectTradeDashboard() {
                   </ol>
                 </aside>
               </div>}
-
-              {workspace === "account" && <section
-                className="dashboard-panel dashboard-activity"
-                aria-labelledby="dashboard-activity-title"
-              >
-                <div className="dashboard-panel-heading">
-                  <span>Account activity</span>
-                  <h2 id="dashboard-activity-title">
-                    A clear record of what is moving
-                  </h2>
-                  <p>
-                    Opportunity responses and readiness changes remain visible
-                    so the business can follow its own progress.
-                  </p>
-                </div>
-                <div className="dashboard-activity-grid">
-                  <article>
-                    <strong>Business profile ready</strong>
-                    <span>
-                      {profile.addressState} {profile.postcode} ·{" "}
-                      {profile.serviceStates.length} service area
-                      {profile.serviceStates.length === 1 ? "" : "s"}
-                    </span>
-                  </article>
-                  <article>
-                    <strong>
-                      Verification{" "}
-                      {profile.verificationStatus.replaceAll("_", " ")}
-                    </strong>
-                    <span>
-                      {profile.verificationStatus === "approved"
-                        ? "Evidence review completed"
-                        : "Open the verification centre to review the next requirement"}
-                    </span>
-                  </article>
-                  {opportunities.slice(0, 4).map((item) => (
-                    <article key={item.matchId}>
-                      <strong>{item.title}</strong>
-                      <span>
-                        {item.matchStatus.replaceAll("_", " ")} · updated{" "}
-                        {new Date(item.updatedAt).toLocaleDateString("en-AU")}
-                      </span>
-                    </article>
-                  ))}
-                  {!opportunities.length && (
-                    <article>
-                      <strong>
-                        {hasLeadAccess
-                          ? "Opportunity matching ready"
-                          : "Opportunity matching locked"}
-                      </strong>
-                      <span>
-                        {hasLeadAccess
-                          ? "No assignments have been made to this account yet."
-                          : "Accounts awaiting approval are excluded from lead allocation."}
-                      </span>
-                    </article>
-                  )}
-                </div>
-              </section>}
-
-              {workspace === "account" && <section
-                className="dashboard-panel dashboard-settings"
-                aria-labelledby="dashboard-settings-title"
-              >
-                <div className="dashboard-panel-heading">
-                  <span>Matching preferences</span>
-                  <h2 id="dashboard-settings-title">
-                    Set serviceability, capacity and account emails
-                  </h2>
-                  <p>
-                    Distance uses postcode centroids rather than a precise
-                    street location. The 10 km proximity band and recent
-                    allocation load help nearby installers receive a fairer
-                    share.
-                  </p>
-                </div>
-                <form onSubmit={saveSettings}>
-                  <fieldset>
-                    <legend>Serviceability from the business base</legend>
-                    <div className="dashboard-serviceability-fields">
-                      <label>
-                        <span>Service-base postcode</span>
-                        <input
-                          required
-                          inputMode="numeric"
-                          maxLength={4}
-                          value={serviceBasePostcode}
-                          onChange={(event) =>
-                            setServiceBasePostcode(
-                              event.target.value.replace(/\D/g, "").slice(0, 4),
-                            )
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>Maximum travel radius</span>
-                        <div>
-                          <input
-                            type="range"
-                            min="10"
-                            max="1000"
-                            step="10"
-                            value={serviceRadiusKm}
-                            onChange={(event) =>
-                              setServiceRadiusKm(Number(event.target.value))
-                            }
-                          />
-                          <strong>{serviceRadiusKm} km</strong>
-                        </div>
-                      </label>
-                    </div>
-                  </fieldset>
-                  <fieldset>
-                    <legend>Current availability</legend>
-                    <div className="dashboard-choice-grid">
-                      <label
-                        className={
-                          availabilityStatus === "open" ? "selected" : ""
-                        }
-                      >
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="open"
-                          checked={availabilityStatus === "open"}
-                          onChange={() => setAvailabilityStatus("open")}
-                        />
-                        <span>
-                          <strong>Open to suitable work</strong>
-                          <small>
-                            Include the business in verified matching.
-                          </small>
-                        </span>
-                      </label>
-                      <label
-                        className={
-                          availabilityStatus === "limited" ? "selected" : ""
-                        }
-                      >
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="limited"
-                          checked={availabilityStatus === "limited"}
-                          onChange={() => setAvailabilityStatus("limited")}
-                        />
-                        <span>
-                          <strong>Limited capacity</strong>
-                          <small>
-                            Stay eligible with a fair-allocation capacity
-                            adjustment.
-                          </small>
-                        </span>
-                      </label>
-                      <label
-                        className={
-                          availabilityStatus === "paused" ? "selected" : ""
-                        }
-                      >
-                        <input
-                          type="radio"
-                          name="availability"
-                          value="paused"
-                          checked={availabilityStatus === "paused"}
-                          onChange={() => setAvailabilityStatus("paused")}
-                        />
-                        <span>
-                          <strong>Paused</strong>
-                          <small>
-                            Do not include the business in matching.
-                          </small>
-                        </span>
-                      </label>
-                    </div>
-                  </fieldset>
-                  <fieldset>
-                    <legend>Email preferences</legend>
-                    <div className="dashboard-notification-list">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={emailOpportunities}
-                          onChange={(event) =>
-                            setEmailOpportunities(event.target.checked)
-                          }
-                        />
-                        <span>
-                          <strong>Opportunity and customer response emails</strong>
-                          <small>
-                            Email the account contact when a reviewed
-                            opportunity is assigned or a customer accepts a quote.
-                          </small>
-                        </span>
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={emailWeeklySummary}
-                          onChange={(event) =>
-                            setEmailWeeklySummary(event.target.checked)
-                          }
-                        />
-                        <span>
-                          <strong>Weekly account summary</strong>
-                          <small>
-                            Receive one concise update covering readiness and
-                            account activity.
-                          </small>
-                        </span>
-                      </label>
-                    </div>
-                  </fieldset>
-                  <button className="btn" disabled={settingsBusy}>
-                    {settingsBusy ? "Saving..." : "Save dashboard preferences"}
-                  </button>
-                  {settingsStatus && (
-                    <p className="dashboard-settings-status" role="status">
-                      {settingsStatus}
-                    </p>
-                  )}
-                </form>
-              </section>}
 
               {workspace === "products" && (hasMarketplaceAccess ? (
                 <InstallerProductMarketplace user={user} navigationTarget={commandTarget} />

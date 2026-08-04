@@ -7,6 +7,7 @@ const evidenceRoute = read("../src/app/api/customer-project-evidence/route.ts");
 const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const accountQuoteRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkQuoteRoute = read("../src/app/api/quote-review/[token]/route.ts");
+const linkQuoteServer = read("../src/lib/trade-quote-review-server.ts");
 const jobInformationRoute = read("../src/app/api/job-information/[token]/route.ts");
 
 function predicateCallCount(source) {
@@ -51,8 +52,9 @@ test("account and secure-link quote decisions stop when current trade access is 
     accountQuoteRoute,
     /v\.status = 'issued'[\s\S]*v\.version_number = q\.current_version_number/,
   );
-  assert.equal(predicateCallCount(linkQuoteRoute), 1);
-  assert.match(linkQuoteRoute, /authorisedLink[\s\S]*verifiedTradeAccountPredicate\("trade"\)/);
+  assert.match(linkQuoteRoute, /authoriseTradeQuoteLink/);
+  assert.equal(predicateCallCount(linkQuoteServer), 1);
+  assert.match(linkQuoteServer, /authoriseTradeQuoteLink[\s\S]*verifiedTradeAccountPredicate\("trade"\)/);
 });
 
 test("customer-owned decided quote history remains readable without reopening quote actions", () => {

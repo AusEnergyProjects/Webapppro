@@ -4,6 +4,9 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const businessSettings = read(
+  "../src/components/TradeBusinessSettingsWorkspace.tsx",
+);
 const styles = read("../src/app/globals.css");
 const supplierCatalogue = read(
   "../src/components/SupplierCatalogueWorkspace.tsx",
@@ -26,7 +29,7 @@ const tlinkChrome = read("../src/components/TLinkChrome.tsx");
 const manifest = read("../src/app/manifest.ts");
 const appLayout = read("../src/app/layout.tsx");
 
-test("dashboard availability and email preferences are durable and owner protected", () => {
+test("unified Business settings remain durable and owner protected", () => {
   assert.match(schema, /availabilityStatus: text\("availability_status"\)/);
   assert.match(schema, /emailOpportunities: integer\("email_opportunities"/);
   assert.match(schema, /emailWeeklySummary: integer\("email_weekly_summary"/);
@@ -35,15 +38,68 @@ test("dashboard availability and email preferences are durable and owner protect
   assert.match(profileRoute, /sameOrigin/);
   assert.match(profileRoute, /\["open", "limited", "paused"\]/);
   assert.match(profileRoute, /WHERE firebase_uid = \?/);
-  assert.match(dashboard, /Save dashboard preferences/);
-  assert.match(
-    dashboard,
-    /Future allocation will use the service-base postcode, radius, verified capability and recent opportunity load/,
+  assert.equal(
+    [...dashboard.matchAll(/<TradeBusinessSettingsWorkspace/g)].length,
+    2,
   );
+  assert.match(businessSettings, /Save notifications/);
+  assert.match(businessSettings, /emailOpportunities/);
+  assert.match(businessSettings, /emailWeeklySummary/);
+  assert.match(businessSettings, /serviceAreas/);
+  assert.doesNotMatch(dashboard, /Save dashboard preferences/);
   assert.match(
     supplierCatalogue,
     /Wholesaler accounts never receive or view household opportunities/,
   );
+});
+
+test("Business settings expose bounded branding, service, template and closure controls", () => {
+  assert.match(businessSettings, /Business settings sections/);
+  for (const section of [
+    "Account",
+    "Appearance",
+    "Service areas",
+    "Quote defaults",
+    "Notifications",
+    "Templates",
+    "Close account",
+  ]) {
+    assert.match(businessSettings, new RegExp(`label: "${section}"`));
+  }
+  assert.match(businessSettings, /TRADE_BRAND_THEME_KEYS/);
+  assert.match(businessSettings, /TRADE_BRAND_BORDER_STYLES/);
+  assert.match(businessSettings, /uploadMedia\("logo"/);
+  assert.match(businessSettings, /uploadMedia\("banner"/);
+  assert.match(businessSettings, /serviceAreas\.length >= 6/);
+  assert.match(businessSettings, /Customer document preview/);
+  assert.match(businessSettings, /\["quote", "invoice"\]/);
+  assert.match(businessSettings, /Default quote email subject/);
+  assert.match(businessSettings, /Type CLOSE ACCOUNT to confirm/);
+  assert.match(businessSettings, /Closing removes trade workspace access/);
+  assert.doesNotMatch(businessSettings, /Closing removes sign-in access/);
+  assert.match(businessSettings, /compliance records/);
+  assert.match(businessSettings, /authorised TLink administrator/);
+  assert.doesNotMatch(businessSettings, /Creditex/);
+});
+
+test("closed accounts receive a terminal dashboard state without profile recreation", () => {
+  const closedStateStart = dashboard.indexOf(
+    'profile?.accountStatus === "closed"',
+  );
+  const incompleteStateStart = dashboard.indexOf(
+    "!profile || !profileComplete",
+  );
+  assert.ok(closedStateStart >= 0, "the dashboard must recognise a closed account");
+  assert.ok(
+    closedStateStart < incompleteStateStart,
+    "closed accounts must not fall through to profile setup",
+  );
+  const closedState = dashboard.slice(closedStateStart, incompleteStateStart);
+  assert.match(closedState, /This TLink account is closed/);
+  assert.match(closedState, /authorised administrator\s+recovery process/);
+  assert.match(closedState, /onClick=\{\(\) => void signOut\(firebaseAuth\)\}/);
+  assert.doesNotMatch(closedState, /direct-trade\/partners/);
+  assert.doesNotMatch(closedState, /Update business profile/);
 });
 
 test("verification centre changes private evidence workflow by business role", () => {
@@ -154,7 +210,7 @@ test("wholesaler work is progressive instead of one crowded catalogue page", () 
 
 test("new dashboard, verification and access copy avoids prohibited dash characters", () => {
   assert.doesNotMatch(
-    dashboard + supplierCatalogue + purchasing + businessHub + verification + access,
+    dashboard + businessSettings + supplierCatalogue + purchasing + businessHub + verification + access,
     /[\u2013\u2014]/,
   );
 });

@@ -52,8 +52,30 @@ test("the starter dashboard makes verified core access free", () => {
   assert.match(dashboard, /Core trade operations cost A\$0/);
   assert.match(dashboard, /No payment details are required/);
   assert.match(form, /Submit business profile for review/);
-  assert.match(form, /protected access remains locked until the ABN and required evidence are reviewed and approved/);
+  assert.match(form, /Protected access remains locked until the ABN and required evidence are reviewed and approved/);
   assert.match(dashboard, /partnerType === "supplier"/);
+});
+
+test("installer or wholesaler account type is immutable after initial setup", () => {
+  assert.match(form, /existingPartnerType/);
+  assert.match(form, /setExistingPartnerType\(savedPartnerType\)/);
+  assert.match(form, /setExistingPartnerType\(partnerType\)/);
+  assert.equal(
+    [...form.matchAll(/disabled=\{Boolean\(existingPartnerType\)\}/g)].length,
+    2,
+  );
+  assert.match(
+    form,
+    /The account type was fixed when this business account was created/,
+  );
+  assert.match(
+    form,
+    /This choice is fixed after the account is created/,
+  );
+  assert.match(
+    profileRoute,
+    /existingAccount\.partner_type !== requestedPartnerType/,
+  );
 });
 
 test("partner form avoids collecting sensitive verification documents", () => {

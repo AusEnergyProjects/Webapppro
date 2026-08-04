@@ -28,6 +28,16 @@ export const tradeAccounts = sqliteTable("trade_accounts", {
   serviceRadiusKm: integer("service_radius_km").notNull().default(50),
   emailOpportunities: integer("email_opportunities", { mode: "boolean" }).notNull().default(true),
   emailWeeklySummary: integer("email_weekly_summary", { mode: "boolean" }).notNull().default(true),
+  brandThemeKey: text("brand_theme_key").notNull().default("emerald_navy"),
+  brandBorderStyle: text("brand_border_style").notNull().default("soft"),
+  logoObjectKey: text("logo_object_key").notNull().default(""),
+  logoContentType: text("logo_content_type").notNull().default(""),
+  bannerObjectKey: text("banner_object_key").notNull().default(""),
+  bannerContentType: text("banner_content_type").notNull().default(""),
+  quoteEmailSubjectTemplate: text("quote_email_subject_template").notNull().default("{business_name} sent quote {quote_number}"),
+  quoteEmailIntro: text("quote_email_intro").notNull().default("Thank you for the opportunity to quote for your project. Review the scope, choices and total below."),
+  quoteDefaultTerms: text("quote_default_terms").notNull().default(""),
+  accountClosedAt: text("account_closed_at").notNull().default(""),
   isSynthetic: integer("is_synthetic", { mode: "boolean" }).notNull().default(false),
   settingsUpdatedAt: text("settings_updated_at").notNull().default(""),
   consentVersion: text("consent_version").notNull(),
@@ -62,6 +72,41 @@ export const tradeSupplierLocations = sqliteTable("trade_supplier_locations", {
 }, (table) => [
   uniqueIndex("trade_supplier_locations_owner_name_idx").on(table.firebaseUid, table.locationName),
   index("trade_supplier_locations_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.addressState, table.postcode),
+]);
+
+export const tradeAccountServiceAreas = sqliteTable("trade_account_service_areas", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  position: integer("position").notNull(),
+  postcode: text("postcode").notNull(),
+  radiusKm: integer("radius_km").notNull(),
+  recordStatus: text("record_status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_account_service_areas_owner_position_idx").on(table.firebaseUid, table.position),
+  uniqueIndex("trade_account_service_areas_owner_postcode_idx").on(table.firebaseUid, table.postcode).where(sql`${table.recordStatus} = 'active'`),
+  index("trade_account_service_areas_owner_status_idx").on(table.firebaseUid, table.recordStatus, table.position),
+]);
+
+export const tradeAccountClosureRequests = sqliteTable("trade_account_closure_requests", {
+  id: text("id").primaryKey(),
+  firebaseUid: text("firebase_uid").notNull(),
+  status: text("status").notNull().default("closed"),
+  reason: text("reason").notNull().default(""),
+  retentionNoticeVersion: text("retention_notice_version").notNull(),
+  requestedAt: text("requested_at").notNull(),
+  completedAt: text("completed_at").notNull().default(""),
+  recoveredAt: text("recovered_at").notNull().default(""),
+  recoveredByUid: text("recovered_by_uid").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_account_closure_requests_owner_closed_idx")
+    .on(table.firebaseUid)
+    .where(sql`${table.status} = 'closed'`),
+  index("trade_account_closure_requests_owner_status_idx").on(table.firebaseUid, table.status, table.requestedAt),
+  index("trade_account_closure_requests_status_idx").on(table.status, table.requestedAt),
 ]);
 
 export const leadRateLimits = sqliteTable("lead_rate_limits", {
@@ -1539,6 +1584,8 @@ export const tradeCrmQuoteVersions = sqliteTable("trade_crm_quote_versions", {
   taxCents: integer("tax_cents").notNull().default(0),
   totalCents: integer("total_cents").notNull().default(0),
   terms: text("terms").notNull().default(""),
+  customerMessage: text("customer_message").notNull().default(""),
+  documentSnapshotJson: text("document_snapshot_json").notNull().default(""),
   validUntil: text("valid_until").notNull().default(""),
   consentStatement: text("consent_statement").notNull().default(""),
   issuedAt: text("issued_at").notNull().default(""),
@@ -1766,6 +1813,9 @@ export const tradeCrmQuoteDeliveries = sqliteTable("trade_crm_quote_deliveries",
   channel: text("channel").notNull(), provider: text("provider").notNull(), status: text("status").notNull().default("queued"), recipientPreview: text("recipient_preview").notNull().default(""),
   consentBasis: text("consent_basis").notNull().default(""), idempotencyKey: text("idempotency_key").notNull(), providerMessageId: text("provider_message_id").notNull().default(""), providerStatus: text("provider_status").notNull().default(""),
   attempts: integer("attempts").notNull().default(0), lastError: text("last_error").notNull().default(""), sentAt: text("sent_at").notNull().default(""), deliveredAt: text("delivered_at").notNull().default(""),
+  recipientRole: text("recipient_role").notNull().default("acceptance"), subjectSnapshot: text("subject_snapshot").notNull().default(""),
+  emailContentSha256: text("email_content_sha256").notNull().default(""), attachmentFilename: text("attachment_filename").notNull().default(""),
+  attachmentSha256: text("attachment_sha256").notNull().default(""),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("trade_crm_quote_deliveries_idempotency_idx").on(table.idempotencyKey), index("trade_crm_quote_deliveries_version_idx").on(table.quoteVersionId, table.createdAt)]);
 

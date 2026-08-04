@@ -4,12 +4,14 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { calculateTradeQuoteLine, dollarsToCents, normaliseTradeQuoteLines, quantityToMilli } from "../src/lib/trade-quote.ts";
 import { calculateQuoteSelection, normaliseQuoteChoices } from "../src/lib/trade-quote-options.ts";
+import { tradeQuoteDocumentDisplayTotals } from "../src/lib/trade-quote-document-totals.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0050_versioned_trade_quotes.sql");
 const optionsMigration = read("../drizzle/0066_optioned_trade_quotes.sql");
 const sharingMigration = read("../drizzle/0067_secure_quote_sharing.sql");
+const documentMigration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
@@ -20,6 +22,11 @@ const dashboard = read("../src/components/CustomerDashboard.tsx");
 const styles = read("../src/app/globals.css");
 const linkUi = read("../src/components/QuoteLinkReview.tsx");
 const commercial = read("../src/lib/trade-commercial-reference.ts");
+const documentServer = read("../src/lib/trade-quote-review-server.ts");
+const documentEmail = read("../src/lib/trade-quote-email.ts");
+const documentPdf = read("../src/lib/trade-quote-pdf.mjs");
+const documentPdfRoute = read("../src/app/api/quote-review/[token]/pdf/route.ts");
+const providerDelivery = read("../src/lib/service-reminder-delivery.ts");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -70,6 +77,64 @@ test("optioned quotes add immutable choices and exact selection evidence", () =>
   assert.deepEqual({ subtotal: selected.subtotalCents, tax: selected.taxCents, total: selected.totalCents }, { subtotal: 45_000, tax: 4_500, total: 49_500 });
 });
 
+test("document totals include one default required choice and exclude optional extras", () => {
+  const packageOnly = tradeQuoteDocumentDisplayTotals({
+    subtotalCents: 0,
+    taxCents: 0,
+    totalCents: 0,
+    choices: [
+      { id: "good", kind: "package", groupKey: "system", subtotalCents: 20_000, taxCents: 2_000, totalCents: 22_000 },
+      { id: "better", kind: "package", groupKey: "system", recommended: true, subtotalCents: 30_000, taxCents: 3_000, totalCents: 33_000 },
+      { id: "monitor", kind: "addon", groupKey: "monitor", recommended: true, subtotalCents: 5_000, taxCents: 500, totalCents: 5_500 },
+    ],
+  });
+  assert.deepEqual(
+    { choices: packageOnly.selectedChoiceIds, subtotal: packageOnly.subtotalCents, tax: packageOnly.taxCents, total: packageOnly.totalCents },
+    { choices: ["better"], subtotal: 30_000, tax: 3_000, total: 33_000 },
+  );
+
+  const includedPlusChoice = tradeQuoteDocumentDisplayTotals({
+    subtotalCents: 10_000,
+    taxCents: 1_000,
+    totalCents: 11_000,
+    choices: [
+      { id: "standard", kind: "package", groupKey: "system", subtotalCents: 20_000, taxCents: 2_000, totalCents: 22_000 },
+      { id: "premium", kind: "package", groupKey: "system", recommended: true, subtotalCents: 40_000, taxCents: 4_000, totalCents: 44_000 },
+    ],
+  });
+  assert.deepEqual(
+    { choices: includedPlusChoice.selectedChoiceIds, subtotal: includedPlusChoice.subtotalCents, tax: includedPlusChoice.taxCents, total: includedPlusChoice.totalCents },
+    { choices: ["premium"], subtotal: 50_000, tax: 5_000, total: 55_000 },
+  );
+
+  const groupedDefaults = tradeQuoteDocumentDisplayTotals({
+    subtotalCents: 10_000,
+    taxCents: 1_000,
+    totalCents: 11_000,
+    choices: [
+      { id: "first-package", kind: "package", groupKey: "system", subtotalCents: 20_000, taxCents: 2_000, totalCents: 22_000 },
+      { id: "second-package", kind: "package", groupKey: "system", subtotalCents: 30_000, taxCents: 3_000, totalCents: 33_000 },
+      { id: "standard-control", kind: "choose_one", groupKey: "control", subtotalCents: 5_000, taxCents: 500, totalCents: 5_500 },
+      { id: "recommended-control", kind: "choose_one", groupKey: "control", recommended: true, subtotalCents: 8_000, taxCents: 800, totalCents: 8_800 },
+      { id: "optional-monitor", kind: "addon", groupKey: "monitor", recommended: true, subtotalCents: 4_000, taxCents: 400, totalCents: 4_400 },
+    ],
+  });
+  assert.deepEqual(
+    {
+      choices: groupedDefaults.selectedChoiceIds,
+      subtotal: groupedDefaults.subtotalCents,
+      tax: groupedDefaults.taxCents,
+      total: groupedDefaults.totalCents,
+    },
+    {
+      choices: ["first-package", "recommended-control"],
+      subtotal: 38_000,
+      tax: 3_800,
+      total: 41_800,
+    },
+  );
+});
+
 test("secure quote sharing is revocable, expiring and commercially provider neutral", () => {
   for (const table of ["trade_crm_quote_links", "trade_crm_quote_events", "trade_crm_quote_questions", "trade_crm_quote_deliveries"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
@@ -95,9 +160,44 @@ test("installer quote actions preserve direct-customer ownership and immutable i
   assert.match(installerRoute, /versionNumber \+= 1/);
   assert.match(installerRoute, /action === "issue_quote"/);
   assert.match(installerRoute, /status = 'issued'/);
-  assert.match(installerRoute, /quote_status = 'sent'/);
+  assert.match(installerRoute, /quote_status = 'issued'/);
+  assert.match(installerRoute, /sendServiceReminderProviderMessage[\s\S]*?quote_status = 'sent'/);
   assert.match(installerRoute, /authorisedEmails/);
   assert.doesNotMatch(installerRoute, /trade_opportunities|opportunity_matches/);
+});
+
+test("issued quote delivery is immutable, branded, attached and retry safe", () => {
+  for (const column of [
+    "customer_message",
+    "document_snapshot_json",
+    "recipient_role",
+    "subject_snapshot",
+    "email_content_sha256",
+    "attachment_filename",
+    "attachment_sha256",
+  ]) assert.match(documentMigration, new RegExp(column));
+  for (const boundary of [
+    "buildTradeQuoteDocumentSnapshot",
+    "document_snapshot_json",
+    "parseTradeQuoteDocumentSnapshot",
+    "QUOTE_DOCUMENT_INVALID",
+    "idempotencyKey",
+    "status = 'sending'",
+    "status = 'failed'",
+    "tradeQuoteEmailContentSha256",
+    "tradeQuotePdfSha256",
+    "tradeQuotePdfBase64",
+  ]) assert.match(installerRoute, new RegExp(boundary));
+  assert.match(installerRoute, /attachments: \[\{/);
+  assert.match(installerRoute, /replyTo: emailContent\.replyTo/);
+  assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);
+  assert.match(documentEmail, /html:/);
+  assert.match(documentPdf, /tradeQuoteDocumentDisplayTotals/);
+  assert.match(documentPdfRoute, /renderTradeQuotePdf/);
+  assert.match(providerDelivery, /attachments\?: Array<\{ filename: string; content: string; contentType: string \}>/);
+  assert.match(providerDelivery, /replyTo\?: string/);
+  assert.match(documentServer, /QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
+  assert.match(documentServer, /if \(storedSnapshot\)[\s\S]*?QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
 });
 
 test("customer decisions require verified matching identity and retain exact acceptance evidence", () => {
@@ -112,7 +212,7 @@ test("customer decisions require verified matching identity and retain exact acc
 
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
@@ -121,8 +221,20 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Customer quote email", "Save as next draft", "Preview and send", "Confirm and send quote", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and send quote", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
   assert.match(installerUi, /async function sendPreviewedQuote\(\)[\s\S]*?action: "save_draft"[\s\S]*?action: "issue_quote"[\s\S]*?action: "send_quote"/);
+  assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
+  assert.match(installerUi, /sendPreview\.displayTotals\.subtotalCents[\s\S]*?sendPreview\.displayTotals\.taxCents[\s\S]*?sendPreview\.displayTotals\.label[\s\S]*?sendPreview\.displayTotals\.totalCents/);
+  assert.doesNotMatch(installerUi, /<dl><div><dt>Included before choices<\/dt>[\s\S]*?sendPreview\.base\.totalCents/);
+  for (const modalBoundary of [
+    "previewTriggerRef",
+    "previewDialogRef",
+    'event.key === "Escape"',
+    'event.key !== "Tab"',
+    "event.shiftKey",
+    "document.body.style.overflow = \"hidden\"",
+    "returnFocus.focus({ preventScroll: true })",
+  ]) assert.match(installerUi, new RegExp(modalBoundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(installerUi, /consentConfirmed: true/);
   assert.match(installerUi, /Quote issued, but the email was not sent/);
   assert.doesNotMatch(installerUi, /Issue for customer review/);
@@ -134,7 +246,8 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(styles, /\.trade-quote-field > span, \.trade-quote-description > span \{[^}]*display: block;/);
   assert.match(styles, /\.trade-quote-send-preview/);
-  for (const copy of ["Print or save PDF", "Ask the trade business", "Type your name to sign", "Calculated and checked again by the server", "Accept for"]) assert.match(linkUi, new RegExp(copy));
+  for (const copy of ["Download PDF", "Ask the trade business", "Type your name to sign", "Calculated and checked again by the server", "Accept for"]) assert.match(linkUi, new RegExp(copy));
+  assert.doesNotMatch(linkUi, /window\.print/);
   for (const copy of ["One secure quote link", "Copy link", "Email quote", "Replace link", "Revoke link", "Quote activity"]) assert.match(installerUi, new RegExp(copy));
   assert.match(styles, /@media print/);
 });
