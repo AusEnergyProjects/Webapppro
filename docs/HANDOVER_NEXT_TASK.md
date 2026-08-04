@@ -1,22 +1,24 @@
 # Next task handover
 
-Status: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` released and live
+Status: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44` released and live
 
 Prepared: 4 August 2026
 
-Milestone ID: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43`
+Milestone ID: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
+Previous production application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
 
-Released application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
+Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
 
-Current production: Sites version 280 from application commit `fcfca482b0f86413423af2af8c5ae77054e6186f`
+Released application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3`
+Current production: Sites version 282 from application commit `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
 
-Deployment: `appgdep_6a71bf0136dc81918e71ba815cddd0ff`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
+
+Deployment: `appgdep_6a71e7f3af3c81918f0f89a3e0354d36`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -28,165 +30,175 @@ Environment revision: 19
 
 ## Active milestone contract
 
-Outcome: a verified trade owner can manage business identity, service areas,
-customer-document appearance, quote defaults, notifications and account closure
-in one TLink workspace. An installer can issue one immutable direct-customer
-quote version, send the matching private review link and branded PDF through the
-configured provider, and retain exact delivery evidence without deleting
-commercial or compliance history.
+Outcome: the TLink trade workspace is readable, full-width and coherent across
+Jobs, Schedule, Business settings and customer quote delivery. Fourteen
+accessible themes now govern the complete shell and customer documents, every
+business setting is visible on one scroll page, the permanent CRM navigation
+remains available on Schedule, issued quote review and PDFs run without local
+font or filesystem dependencies, and provider API acceptance is recorded
+without claiming customer inbox delivery.
 
 Owning workflow:
 
-- unified business settings in `TradeBusinessSettingsWorkspace`;
-- quote authoring and delivery in `TradeQuotePanel` and the trade-quotes API;
-- durable snapshots in
-  `trade_crm_quote_versions.document_snapshot_json`, authored by
-  `src/app/api/trade-quotes/route.ts` and served by
-  `src/lib/trade-quote-review-server.ts`;
-- branded HTML and text delivery in `trade-quote-email`;
-- server-generated A4 PDF delivery in `trade-quote-pdf`;
-- token-authorised customer review, media and PDF routes;
-- additive business, media, service-area, quote-delivery and closure records in
-  migration `0120_trade_business_identity_and_quote_delivery.sql`.
+- shell, theme and density rules in `src/app/globals.css` and
+  `src/lib/trade-business-branding.ts`;
+- one-page owner settings in `TradeBusinessSettingsWorkspace`;
+- workspace routing in `DirectTradeDashboard`, `InstallerCrmWorkspace` and
+  `TradeBusinessHub`;
+- quote authoring, delivery, public review and PDF generation in
+  `TradeQuotePanel`, the trade-quotes and quote-review routes,
+  `trade-quote-review-server` and `trade-quote-pdf`;
+- lead and monitor timeout alignment in `leads`, `lead-webhook-probe` and
+  `api-health-monitor`;
+- the no-index rollback boundary in
+  `src/app/compare/electricity-legacy/route.ts` and
+  `public/electricity-comparator.html`.
 
 In scope:
 
-- keep installer and wholesaler account type immutable after account creation;
-- require a business name and canonicalise an optional HTTPS website;
-- expose one Business workspace for identity, appearance, up to six
-  postcode/radius service areas, quote defaults, notifications, customer
-  document preview and account closure;
-- accept only signature-checked JPEG or PNG logo and banner files up to 3 MB,
-  strip uploaded metadata and keep bytes private;
-- provide six controlled colour themes and three controlled border styles;
-- let every quote add an authorised customer email without replacing the
-  primary address and expose a direct customer-details shortcut;
-- make the email introduction and standard terms editable per quote and
-  optionally reusable as the business default;
-- freeze exact business identity, branding, recipient, customer, scope, terms
-  and totals in an immutable `trade-quote-document-v1` snapshot for every newly
-  issued version;
-- calculate quote totals server-side, attach the exact matching PDF, and retain
-  message, document, PDF and delivery hashes plus provider ID and attempt state;
-- mark a version `issued` before provider work and `sent` only after Resend
-  accepts the API request and returns a provider message ID; inbox delivery
-  remains unverified;
-- make customer-facing review, logo, banner and PDF responses
-  token-authorised and `no-store`; owner branding media separately requires
-  verified trade access;
-- close an account only after recent Firebase authentication and typed
-  `CLOSE ACCOUNT`, revoke active quote links, clear token material, suspend
-  active team members and commit the closure ledger plus stable administrator
-  notification atomically.
+- propagate the selected theme across header, search, navigation rail, controls,
+  workspace surfaces and customer documents with readable light/dark contrast;
+- expose all Account, Appearance, Service areas, Quote defaults, Notifications,
+  Templates and Close account sections together with local save actions;
+- retain immutable installer or wholesaler account type and existing closure,
+  media and service-area controls;
+- make the Jobs register use the available workspace width and retain the
+  company-scoped Dataforce-aligned fields and callable mobile values;
+- keep the permanent installer CRM tabs visible when Schedule is opened from the
+  left rail and keep rail activity synchronized;
+- preflight the matching server PDF before creating an immutable customer link;
+- use worker-safe standard fonts when bundled fonts are unavailable;
+- retain private quote review, media and PDF access for the active authorised
+  customer token and current verified trade owner;
+- store successful provider submission as `provider_accepted`; do not label an
+  unconfirmed inbox as delivered;
+- align the authorised lead relay at 20 seconds and the outer lead health check
+  at 25 seconds so the monitor does not cancel its own valid downstream request;
+- serve the legacy electricity fallback through the deployed public asset rather
+  than Node filesystem access and keep both responses no-indexed.
 
 Out of scope:
 
+- sending another production quote or proving Gmail or Outlook inbox receipt;
 - SMS, payment initiation, invoice PDF or invoice email delivery;
-- provisioning or verifying a production Resend sender or inbox receipt;
-- Firebase identity deletion, physical record erasure or an account-recovery
-  workflow;
+- Firebase identity deletion, physical erasure or account recovery;
 - regulator submission, certificate creation, certificate trade or settlement;
-- changing the separately authorised internal compliance portal or tenant
-  boundary;
-- uploading production branding, sending a new quote or closing an account
-  during release verification.
+- changing the internal compliance portal, governed calculation authority or
+  tenant boundary;
+- uploading production branding or changing live customer, business, quote,
+  case, certificate or evidence data during release verification.
 
 Acceptance criteria:
 
-- the Business workspace exposes every saved section without duplicating
-  settings across Profile and Business;
-- account type cannot be changed, media validation rejects unsafe content and
-  service areas cannot exceed six;
-- one issued quote version has one exact immutable customer document, matching
-  private review and downloadable PDF;
-- an added delivery address becomes an authorised customer contact and never
-  silently changes the customer's primary address;
-- customer-visible totals match the server recomputation and internal cost or
-  margin data never enters the customer snapshot, email or PDF;
-- a provider failure cannot leave a quote falsely marked sent;
-- account closure cannot rewrite retained identity, reactivate stale links or
-  retain active team access;
-- installer and customer surfaces contain no visible compliance-partner name;
-- type checking, lint, focused tests, migration replay, integration tests, the
-  complete suite, production build and Sites bundle audit pass.
+- all 14 themes are controlled values and the selected theme reaches the full
+  trade shell without reducing readable contrast;
+- one Business page exposes every section and each editable section has a clear
+  save action;
+- full-width Jobs, the Dataforce-aligned register and permanent Schedule tabs
+  render in the signed-in custom-domain workspace;
+- one existing issued quote review and matching server PDF return successfully;
+- a provider failure cannot become sent or delivered, and API acceptance is
+  distinct from inbox delivery;
+- lead delivery receives a longer downstream timeout than the historical failing
+  monitor window;
+- the legacy fallback returns a no-store, no-index redirect and its target is
+  also no-indexed;
+- type checking, warning-free lint, focused tests, migration replay, integration
+  tests, the complete suite, production build and Sites bundle audit pass.
 
-Stop condition: stop if an issued quote can change after issuance, if a
-customer-visible document exposes internal margin or protected data, if media
-bytes become public without a valid review token, if closure deletes retained
-commercial or compliance records, if an account or tenant boundary fails, or if
-release verification would send a message or mutate production business data
-beyond a designed idempotent audit-view event.
+Stop condition: stop if an issued quote changes after issuance, internal margin
+or protected data reaches a customer document, token access broadens beyond the
+active customer review or verified trade owner, account or tenant isolation
+fails, the fallback becomes indexable, or release verification would send a
+message or mutate production business data beyond a designed idempotent
+audit-view event.
 
 ## Release result
 
-Application source `fcfca482b0f86413423af2af8c5ae77054e6186f` is live as
-Sites version 280. New migration
-`0120_trade_business_identity_and_quote_delivery.sql` adds the durable business
-identity, appearance, service-area, immutable quote-document, delivery and
-account-closure contracts without deleting prior commercial or compliance
-records.
+Application source `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` is live as
+Sites version 282. It contains primary TLink recovery commit
+`b7e40751e2556ffc64e37704c641a6e917046bb6` plus the worker-safe legacy fallback
+correction. Sites version 281 from `b7e4075` was superseded during release QA
+after a pre-existing rollback-route failure was found. No migration was added.
 
-The signed-in Business workspace now presents Account, Appearance, Service
-areas, Quote defaults, Notifications, Templates and Close account as one
-coherent owner workflow. Branding is reused by the customer review, provider
-email and two-page A4 PDF. Newly issued quote versions retain exact customer and
-business identity, line choices, totals, terms, message body, branding
-references and hashes. The delivery path uses the current authorised customer
-email, attaches the matching PDF and records provider API acceptance without
-treating a failed request as sent or claiming inbox delivery.
+The signed-in Business workspace presents Account, Appearance, Service areas,
+Quote defaults, Notifications, Templates and Close account on one scroll page.
+Fourteen controlled themes now govern the header, search, rail, buttons,
+workspace and customer documents. Safe partial profile updates preserve omitted
+notification and availability values. Jobs use the available width, retain the
+company-scoped Dataforce register and callable phone values, and Schedule keeps
+the permanent CRM navigation.
 
-Account closure is a soft access-removal boundary. It requires recent
-authentication and exact typed confirmation, then atomically closes the
-business, records the retained closure ledger and administrator notification,
-revokes active quote links, clears review-token material and suspends active
-team members. Closed owners receive a terminal signed-in state and cannot mutate
-retained identity. Firebase deletion, physical erasure and recovery remain
-separate future-authorised work.
+Quote issuance preflights the exact PDF before creating the immutable review
+link. PDF generation falls back to worker-safe standard fonts if bundled font
+assets cannot be loaded. Existing issued review, PDF and media reads accept only
+the active customer token or current verified trade owner; customer mutations
+remain token-bound. Provider submission now records `provider_accepted`, not
+inbox delivery. The existing retained closure, token-revocation and tenant
+boundaries remain unchanged.
 
-`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
-integration tests, 1,457 main tests with 1,455 passed, 2 intentionally skipped
-and 0 failed, all 121 migrations through
-`0120_trade_business_identity_and_quote_delivery.sql`, the customer-plan PDF
-audit, Vinext production build and Sites server-bundle audit. The focused
-closure set passed 22 of 22. Independent final review found no remaining P0, P1
-or P2 defect.
+The lead route and authorised relay now share a 20-second downstream timeout and
+the outer health check allows 25 seconds. The no-index electricity rollback
+route no longer reads from the worker filesystem; it returns a no-store 307 to
+the deployed legacy asset, whose HTML has an explicit no-index directive.
+
+`npm.cmd run validate` passed on exact source `9c278bb`: type checking,
+warning-free lint, 31 of 31 integration tests, 1,466 main tests with 1,464
+passed, 2 intentionally skipped and 0 failed, all 121 migrations, the
+customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
+The TLink recovery-focused set passed 104 of 104 before the final fallback
+correction, and the fallback set passed 8 of 8 after it. `git diff --check`
+passed. Experimental Node glob/type-strip and build-plugin timing notices were
+non-failing toolchain warnings.
 
 Release provenance:
 
-- Application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
-- Archive `.openai/site-release-fcfca48.tar.gz`: 7,833,168 bytes, SHA-256
-  `806E919D9144B30A162C051660444F82F7BEAFE542EEBEB954C742675161139B`,
+- Application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
+- Primary TLink recovery source:
+  `b7e40751e2556ffc64e37704c641a6e917046bb6`
+- Archive `.openai/site-release-9c278bb.tar.gz`: 7,829,193 bytes, SHA-256
+  `EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`,
   375 entries, all 121 migrations and zero CSV entries
 - Saved version:
-  `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3`
-- Deployment: `appgdep_6a71bf0136dc81918e71ba815cddd0ff`
-- Sites version 280, environment revision 19
-- Sites stored 361 files and 31,856,640 bytes with content hash
-  `sha256:cf01b5bdf49058a7b12e7177e864c08a17af1203dc23f1e4b22a10ce5d7dcc2c`
+  `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
+- Deployment: `appgdep_6a71e7f3af3c81918f0f89a3e0354d36`
+- Sites version 282, environment revision 19
+- Sites stored 361 files and 31,907,840 bytes with content hash
+  `sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96`
 
-Signed-in QA hard-refreshed the custom-domain installer dashboard to version
-280, opened the unified Business workspace, Appearance, Quote defaults,
-Templates, one existing job and its Quote workspace. It verified the authorised
-recipient, additional-email and customer-details controls, server totals,
-private review link and issued-PDF action without saving or sending. The
-customer review rendered on desktop and a 390 px viewport with the exact
-$4,444.00 total, download action and decision controls, and contained no visible
-compliance-partner name. Health, homepage, dashboard and every referenced
-homepage asset returned HTTP 200. The final five-minute errors-only Sites worker
-log contained zero events. Chrome-extension message-channel warnings were
-observed but were not application errors.
+Signed-in custom-domain QA opened Jobs, Schedule, Business and one existing test
+quote without saving or sending. Jobs rendered 8 company-scoped records across
+the Dataforce-aligned register; the results region used 1,661 px of a 2,048 px
+viewport. Schedule retained all 12 CRM tabs and showed the expected two test
+appointments. Business showed all seven settings regions, local save actions,
+14 themes and three border styles on one page. The existing customer review
+rendered the exact $4,444.00 total, decision controls and no visible
+compliance-partner name. Its PDF returned HTTP 200, `application/pdf`, 399,318
+bytes and a valid `%PDF-1.7` header. Opening the review records the designed
+daily `viewed` audit event, creating it once or reusing it for that day.
 
-Release QA did not upload branding, edit a business, add a recipient, issue or
-send a quote, accept or decline a quote, close an account, or create or change a
-customer, job, intent, case, evidence, certificate, submission, trade or
-settlement record. Opening the existing customer review records or reuses its
-designed daily `viewed` audit event; no customer, business, quote version or
-commercial value was changed.
+Public root, health, compare, gas, direct-trade and dashboard probes returned
+HTTP 200. The version-281 audit found the inherited rollback route at HTTP 500,
+which caused the final correction and version 282. After propagation, ten
+consecutive custom-domain fallback probes returned HTTP 307 to the deployed
+legacy asset and the target returned HTTP 200 with the no-index meta directive.
+The final five-minute errors-only production Worker log returned zero events;
+a subsequent five-probe sample again returned HTTP 307 with `no-store` and
+`noindex, nofollow`, while the target and health endpoint both returned HTTP 200.
+
+Release QA did not upload branding, save a theme or setting, add a recipient,
+issue or send a quote, accept or decline a quote, close an account, or create or
+change a customer, job, intent, case, evidence, certificate, submission, trade
+or settlement record. No customer, business, quote version or commercial value
+was changed.
 
 Remaining controlled limitations:
 
-- a real Resend production receipt and Gmail or Outlook client rendering remain
-  unverified;
+- a real Resend production receipt and Gmail or Outlook inbox/client rendering
+  remain unverified; the reported attempt failed inside quote preparation before
+  provider submission, and no replacement email was sent during QA;
+- the next authorised lead-delivery monitor run must confirm the new 20/25
+  second timeout relationship against the live Google Workspace relay;
 - unreferenced removed branding may remain in private object storage until a
   separately authorised retention policy exists; branding referenced by an
   issued document is deliberately retained for integrity;
@@ -197,13 +209,27 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
-2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
-3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
-4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
-5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
+1. **Prove production quote delivery end to end:** run one controlled Gmail and one Outlook delivery through Resend, authenticate provider webhooks, show provider state and retries inside the quote activity, and keep `provider_accepted`, delivered, bounced and complained distinct.
+2. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, approved products and participants, evidence policy and calculation vectors under independent review, then exercise each through a manual non-submitting job.
+3. **Configure one approved Australian production address provider:** reuse one signed address component for customer, service-site and New Job creation and edits while preserving the visible manual-review fallback.
+4. **Complete immutable intent revision and case supersession:** cover address, activity, product and technician changes, linked-case supersession and a clear authorised return-to-installer path.
+5. **Complete physical field and Dataforce acceptance:** publish governed forms into real test jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and reconcile the remaining Dataforce import fields without inventing columns.
 
 ## Previous released milestone
+
+Status: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` released and historical
+
+Released application source:
+`fcfca482b0f86413423af2af8c5ae77054e6186f`, deployed as historical Sites
+version 280 through `appgdep_6a71bf0136dc81918e71ba815cddd0ff`.
+
+Milestone 43 established one authoritative Business workspace, controlled
+private branding, bounded service areas, immutable quote-document snapshots,
+branded email and server-PDF delivery evidence, token-authorised customer
+documents and retained soft account closure. Its full contract and release
+evidence remain in `ROADMAP.md` and `docs/RELEASE_TRUTH.md`.
+
+## Earlier released milestone
 
 Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` released and historical
 

@@ -1384,7 +1384,7 @@ remain required for verified autocomplete.
 
 ## Released milestone: TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43
 
-Status: released and live with unified business identity, controlled branding,
+Status: released and historical with unified business identity, controlled branding,
 immutable customer quote documents, server PDFs and retained delivery evidence
 
 Release status: application commit
@@ -1459,13 +1459,81 @@ client rendering, private-object retention for unreferenced removed branding,
 legacy pre-`0120` issued versions without a frozen snapshot, and the deliberately
 absent account-recovery and physical-erasure workflows.
 
+## Released milestone: TRADE-WORKSPACE-DELIVERY-RECOVERY-44
+
+Status: released and live with a complete themed trade shell, one-page business
+settings, restored workspace navigation, reliable quote review and PDF access,
+truthful provider-delivery state and worker-safe rollback handling
+
+Release status: primary recovery commit
+`b7e40751e2556ffc64e37704c641a6e917046bb6` implemented the TLink workspace
+and delivery recovery. Final application commit
+`9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` added the worker-safe legacy
+fallback correction, was validated, pushed to GitHub and Sites managed `main`,
+saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
+and deployed as Sites version 282 through
+`appgdep_6a71e7f3af3c81918f0f89a3e0354d36` with environment revision 19.
+Sites version 281 from the primary recovery commit was superseded during
+release QA after the inherited rollback route returned HTTP 500.
+
+### Outcome
+
+Fourteen accessible themes now govern the complete trade shell and customer
+documents. Account, Appearance, Service areas, Quote defaults, Notifications,
+Templates and Close account are visible together on one Business settings
+page, each with a local save action. The Jobs register uses the available
+workspace width while retaining the company-scoped Dataforce-aligned fields,
+and Schedule keeps the permanent installer CRM navigation.
+
+Quote issuance preflights the exact server PDF before creating an immutable
+customer review link. Existing issued reviews, PDFs and media remain available
+only to the active customer token or current verified trade owner. Successful
+Resend API submission is stored as `provider_accepted`, not customer inbox
+delivery. The authorised lead relay now allows 20 seconds and its outer health
+check allows 25 seconds. The legacy electricity fallback uses a no-store,
+no-index 307 redirect to the deployed no-index asset without relying on a Node
+filesystem.
+
+### Safety and release evidence
+
+- Exact application commit
+  `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` passed
+  `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration
+  tests, 1,466 main tests with 1,464 passed, 2 intentionally skipped and 0
+  failed, all 121 migrations, the customer-plan PDF audit, Vinext production
+  build and Sites server-bundle audit.
+- The TLink recovery-focused set passed 104 of 104 before the final fallback
+  correction, and the fallback set passed 8 of 8 after it.
+- Archive `.openai/site-release-9c278bb.tar.gz` is 7,829,193 bytes with SHA-256
+  `EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`.
+  Sites stored 361 files and 31,907,840 bytes with content hash
+  `sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96`.
+- Signed-in custom-domain QA opened Jobs, Schedule, Business and one existing
+  test quote without saving or sending. The existing review rendered its exact
+  $4,444.00 total and its PDF returned HTTP 200, `application/pdf`, 399,318
+  bytes and a valid `%PDF-1.7` header.
+- After Sites version 281 exposed the inherited rollback failure and was
+  superseded, ten consecutive version-282 fallback probes returned HTTP 307 to
+  the deployed asset and the target returned HTTP 200 with its no-index
+  directive.
+- Release QA did not upload branding, save settings, add a recipient, issue or
+  send a quote, close an account, or create or change a customer, job, intent,
+  case, evidence, certificate, submission, trade or settlement record.
+
+Remaining controlled limitations are unverified real Resend receipt and Gmail
+or Outlook rendering, the next authorised live monitor proof of the 20/25
+second timeout relationship, separately governed retention for unreferenced
+branding, legacy pre-`0120` quote reconstruction, and the deliberately absent
+account-recovery and physical-erasure workflows.
+
 ## Next five logical product steps
 
-1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
-2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
-3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
-4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
-5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
+1. **Prove production quote delivery end to end:** run one controlled Gmail and one Outlook delivery through Resend, authenticate provider webhooks, show provider state and retries inside the quote activity, and keep `provider_accepted`, delivered, bounced and complained distinct.
+2. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, approved products and participants, evidence policy and calculation vectors under independent review, then exercise each through a manual non-submitting job.
+3. **Configure one approved Australian production address provider:** reuse one signed address component for customer, service-site and New Job creation and edits while preserving the visible manual-review fallback.
+4. **Complete immutable intent revision and case supersession:** cover address, activity, product and technician changes, linked-case supersession and a clear authorised return-to-installer path.
+5. **Complete physical field and Dataforce acceptance:** publish governed forms into real test jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and reconcile the remaining Dataforce import fields without inventing columns.
 
 ## Global stop conditions
 

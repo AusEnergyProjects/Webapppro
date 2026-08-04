@@ -117,17 +117,109 @@ This is the only current implementation and release-status document. The [dated 
 | Historical multi-activity application source | `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea` | Exact validated final source with the D1-compatible seven-statement asset timeline batch; deployed as Sites version 279 |
 | Historical Sites version 279 archive | `.openai/site-release-13dbf2d.tar.gz` | 7,781,979 bytes; SHA-256 `D6AC82425EC5EE82B84318978177D49F0E41E54DF755094FEC935F7549FDAA67`; 374 entries, all 120 migrations and zero CSV entries |
 | Historical Sites version 279 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487` | Built from `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`; 360 stored files; 31,682,560 stored bytes; content hash `sha256:1630c642f67fb83d38fd428197e05e4ae32e4bad97c29eb111d6c090760d7dc3`; deployment `appgdep_6a7178bb43c08191b86b568dabd45b94` |
-| Current business-identity and quote-delivery application source | `fcfca482b0f86413423af2af8c5ae77054e6186f` | Exact validated source for unified trade business settings, immutable customer quote documents, branded provider delivery, server PDFs and soft account closure; the working branch and Sites managed `main` contain this commit |
-| Current release archive | `.openai/site-release-fcfca48.tar.gz` | 7,833,168 bytes; SHA-256 `806E919D9144B30A162C051660444F82F7BEAFE542EEBEB954C742675161139B`; 375 entries, all 121 migrations and zero CSV entries |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3` | Exact Sites version 280 built from `fcfca482b0f86413423af2af8c5ae77054e6186f`; 361 stored files; 31,856,640 stored bytes; content hash `sha256:cf01b5bdf49058a7b12e7177e864c08a17af1203dc23f1e4b22a10ce5d7dcc2c` |
-| Current executable application identity | Sites version 280 from `fcfca482b0f86413423af2af8c5ae77054e6186f` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a71bf0136dc81918e71ba815cddd0ff` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Historical business-identity and quote-delivery application source | `fcfca482b0f86413423af2af8c5ae77054e6186f` | Exact validated source for milestone 43 and historical Sites version 280 |
+| Historical Sites version 280 archive | `.openai/site-release-fcfca48.tar.gz` | 7,833,168 bytes; SHA-256 `806E919D9144B30A162C051660444F82F7BEAFE542EEBEB954C742675161139B`; 375 entries, all 121 migrations and zero CSV entries |
+| Historical Sites version 280 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3` | Built from `fcfca482b0f86413423af2af8c5ae77054e6186f`; 361 stored files; 31,856,640 stored bytes; content hash `sha256:cf01b5bdf49058a7b12e7177e864c08a17af1203dc23f1e4b22a10ce5d7dcc2c`; deployment `appgdep_6a71bf0136dc81918e71ba815cddd0ff` |
+| Primary trade-workspace recovery source | `b7e40751e2556ffc64e37704c641a6e917046bb6` | Restored the milestone-44 TLink workspace and quote-delivery flows; retained as the direct parent of the current executable source |
+| Superseded Sites version 281 | `appgprj_6a550c378000819185caf094173422bb~appgver_4f2d58013ec08191bb6c605a58b958b3` | Built from `b7e40751e2556ffc64e37704c641a6e917046bb6` and deployed through `appgdep_6a71e1807efc819192c7a71ecd6db9d0`; superseded during release QA after the inherited filesystem-dependent legacy electricity fallback returned HTTP 500 |
+| Current trade-workspace delivery-recovery application source | `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` | Exact validated milestone-44 source containing `b7e40751e2556ffc64e37704c641a6e917046bb6` plus the worker-safe legacy fallback correction; the working branch and Sites managed `main` contain this commit |
+| Current release archive | `.openai/site-release-9c278bb.tar.gz` | 7,829,193 bytes; SHA-256 `EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`; 375 entries, all 121 migrations and zero CSV entries |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271` | Exact Sites version 282 built from `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`; 361 stored files; 31,907,840 stored bytes; content hash `sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96` |
+| Current executable application identity | Sites version 282 from `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a71e7f3af3c81918f0f89a3e0354d36` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
-The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer, installer and trade releases, protected-trade locality, authorised compliance operations, evidence-policy governance, national government-activity workflow and isolated VEU synthetic pilot are deployed to production. Sites version 280 from exact application commit `fcfca482b0f86413423af2af8c5ae77054e6186f` is the current executable application source. Milestone 43 adds unified trade business identity and appearance, bounded service areas, immutable customer quote-document snapshots, exact recipient and provider-delivery evidence, token-authorised private media and PDFs, and soft account closure that retains commercial and compliance history. Signed-in desktop and 390 px customer-review QA passed without changing customer, business, quote-version or commercial content; opening the review records or reuses its designed daily `viewed` audit event. Health, homepage, dashboard and current homepage assets returned HTTP 200, and the final five-minute errors-only worker log contained zero events. Real provider inbox receipt, email-client rendering, account recovery and physical record erasure remain unverified or intentionally absent. The controlled 10-installer, 30-technician, 300-job VEU pilot and every unverified calculator or external execution path remain isolated and disabled.
+The additive schema expansion, reviewed-ABN application, authorised contract cleanup, customer, installer and trade releases, protected-trade locality, authorised compliance operations, evidence-policy governance, national government-activity workflow and isolated VEU synthetic pilot are deployed to production. Sites version 282 from exact application commit `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` is the current executable application source. Milestone 44 contains primary TLink recovery source `b7e40751e2556ffc64e37704c641a6e917046bb6`, restores the complete themed trade shell, one-page Business settings, full-width Jobs, permanent Schedule navigation, quote-PDF preflight and worker-safe generation, exact token boundaries and truthful `provider_accepted` delivery status, aligns the authorised lead-relay and monitor timeouts, and restores the no-index legacy electricity fallback without Worker filesystem access. Signed-in and public custom-domain QA passed without saving settings, issuing or sending a quote, or changing customer, business, quote-version or commercial content; opening the existing review records the designed daily `viewed` audit event, creating it once or reusing it for that day. Production inbox delivery, Gmail and Outlook rendering, and a live authorised lead-relay confirmation remain unverified. Account recovery and physical record erasure remain intentionally absent. The controlled 10-installer, 30-technician, 300-job VEU pilot and every unverified calculator or external execution path remain isolated and disabled.
 
-## Current trade business identity and quote-delivery release
+## Current trade workspace delivery-recovery release
 
-`TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` is the current release. Exact
+`TRADE-WORKSPACE-DELIVERY-RECOVERY-44` is the current release. Exact application
+commit `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` contains primary TLink recovery
+commit `b7e40751e2556ffc64e37704c641a6e917046bb6` plus the worker-safe legacy
+electricity fallback correction. Sites version 281 from the primary recovery
+commit was superseded during release QA after the inherited fallback route
+returned HTTP 500. No migration was added.
+
+Fourteen controlled themes now govern the complete trade header, search,
+navigation rail, controls, workspace surfaces and customer documents with
+readable contrast. Business presents Account, Appearance, Service areas, Quote
+defaults, Notifications, Templates and Close account on one scroll page with
+local save actions. Safe partial profile updates preserve omitted notification
+and availability values. Jobs uses the available workspace width, retains the
+company-scoped Dataforce-aligned register and callable mobile values, and
+Schedule retains the permanent installer CRM navigation.
+
+Quote issuance preflights the exact server PDF before creating an immutable
+customer review link. PDF generation falls back to worker-safe standard fonts
+when bundled font assets cannot be loaded. Existing issued review, PDF and media
+reads accept only the active customer token or current verified trade owner;
+customer mutations remain token-bound. Successful provider submission is
+recorded as `provider_accepted`, not as inbox delivery.
+
+The lead route and authorised relay share a 20-second downstream timeout while
+the outer health check allows 25 seconds. The no-index electricity fallback no
+longer reads from the Worker filesystem; it returns a no-store HTTP 307 to the
+deployed legacy asset, whose HTML contains an explicit no-index directive.
+
+Exact application commit `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
+passed `npm.cmd run validate`: type checking, warning-free lint, 31 of 31
+integration tests, 1,466 main tests with 1,464 passed, 2 intentionally skipped
+and 0 failed, all 121 migrations, the customer-plan PDF audit, Vinext production
+build and Sites server-bundle audit. The TLink recovery-focused set passed 104
+of 104 before the final fallback correction, and the fallback set passed 8 of 8
+after it. `git diff --check` passed. Experimental Node glob/type-strip and
+build-plugin timing notices were non-failing toolchain warnings.
+
+Archive `.openai/site-release-9c278bb.tar.gz` is 7,829,193 bytes with SHA-256
+`EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`,
+375 entries, all 121 migrations and zero CSV entries. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
+stores 361 files and 31,907,840 bytes with content hash
+`sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96`.
+Deployment `appgdep_6a71e7f3af3c81918f0f89a3e0354d36` succeeded as Sites
+version 282 with environment revision 19.
+
+Signed-in custom-domain QA opened Jobs, Schedule, Business and one existing test
+quote without saving or sending. Jobs rendered 8 company-scoped records across
+the Dataforce-aligned register and used 1,661 px of the 2,048 px viewport.
+Schedule retained all 12 CRM tabs and showed the expected two test appointments.
+Business showed all seven settings regions, local save actions, 14 themes and
+three border styles on one page. The existing customer review rendered the
+exact $4,444.00 total, decision controls and no visible compliance-partner name.
+Its PDF returned HTTP 200, `application/pdf`, 399,318 bytes and a valid
+`%PDF-1.7` header. Opening the review records the designed daily `viewed` audit
+event, creating it once or reusing it for that day.
+
+Public root, health, compare, gas, direct-trade and dashboard probes returned
+HTTP 200. After version 281 exposed the inherited fallback failure and version
+282 propagated, ten consecutive custom-domain fallback probes returned HTTP 307
+to the deployed legacy asset; the target returned HTTP 200 and contained the
+no-index meta directive.
+The final five-minute errors-only production Worker log returned zero events;
+a subsequent five-probe sample again returned HTTP 307 with `no-store` and
+`noindex, nofollow`, while the target and health endpoint both returned HTTP 200.
+
+Release QA did not upload branding, save a theme or setting, add a recipient,
+issue or send a quote, accept or decline a quote, close an account, or create or
+change a customer, job, intent, case, evidence, certificate, submission, trade
+or settlement record. No customer, business, quote version or commercial value
+was changed.
+
+Production provider receipt and Gmail or Outlook inbox/client rendering remain
+unverified. The reported delivery attempt failed during quote preparation
+before provider submission, and no replacement email was sent during QA. The
+next authorised lead-delivery monitor run must confirm the new 20/25-second
+timeout relationship against the live Google Workspace relay. Unreferenced
+removed branding may remain in private object storage until a separately
+authorised retention policy exists; branding referenced by an issued document
+is retained for integrity. Legacy issued quote versions created before
+migration `0120` do not have a frozen document snapshot and are reconstructed
+from their retained legacy record. Account recovery and physical record erasure
+remain intentionally absent.
+
+## Previous trade business identity and quote-delivery release
+
+`TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` was the preceding production
+release. Exact
 application commit `fcfca482b0f86413423af2af8c5ae77054e6186f` adds one
 authoritative TLink Business workspace, controlled customer-document branding,
 immutable issued quote snapshots, branded provider delivery, server-generated
@@ -1203,7 +1295,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 280 is:
+The current verified deployed topology for Sites version 282 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -1228,7 +1320,7 @@ The 21 July audit reconciled these capability groups to deployed source:
 - Owner-scoped integrations, provider-reconciliation foundations and the AEA Field sync contract.
 - Restricted administration, operational notifications, pagination, search, query telemetry and saved Jobs and Customers views.
 
-Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt, one authoritative installer-submit transaction, a bounded installer enquiry pack, complete request-bound photo sharing, the full installer-safe plan and PDF, durable dispatch jobs, independent operations and business alerts, staged submit progress, a top-level customer Quotes centre, exact owner-scoped quote deep links, customer quote-submitted email, trade Work updates, quote submission idempotency, one immutable one-business claim, Resend callback retry handling, contact-only customer handover, owner-scoped new-lead bell items, compact lead cards, aligned quote sections, reliable next-step scroll focus, a privacy-first public-plan enquiry bridge, precise gas hot-water choices, reported electrical-phase planning clues, plain household exhaust-fan choices, a visible account form, refreshed customer verification state, connected-customer identity presented first in the authorised trade lead, consent beside installer-request submission, aligned shared customer navigation, reciprocal product branding, exact-current protected suburb/postcode/state matching, the authorised compliance foundation and operations portal, evidence-policy governance, the national government-activity workflow, the isolated VEU synthetic pilot, its dense register, the complete owner-scoped job audit workspace, the readable compact operator-usability refinement, the controlled-intake foundations, governed approval, custody, calculator and exact Dataforce parallel-operation foundations, the exact 23-column Dataforce operator register, effective-dated lookup approval, legacy mapping authoring, draft-only calculator authoring, the national calculation-readiness catalogue, deterministic SRES expected-entitlement estimator, national synthetic manual-evidence lab, exact manual-field custody, government-minimum composition, unified synthetic register, complete calculation coverage, blocked regulator interchange preflight, shared-navigation discovery, exact official-source custody with audited independent review, guided installer multi-activity planning, immutable pre-case job intent and planned-date revision, accepted-quote governed case linking, evidence-complete web and offline gates, viewport-safe scheduling, callable customer contacts, dated customer jobs, schedule quote actions, exact company-scoped Dataforce export, bounded on-demand internal audit domains, the D1-compatible customer asset timeline, one authoritative trade Business workspace, controlled private branding, immutable quote-document snapshots, branded email and server-PDF delivery evidence, token-authorised private customer documents and retained soft account closure. Those capabilities are deployed in Sites version 280 alongside the earlier owner Database Console. Public enquiry placement and handoff, account privacy explanation, selected home-fact continuity, simplified fan intake, account-control presentation, verification return routing, signed-in Quotes, connected contact disclosure, lead compaction, Work updates, consent presentation, reciprocal navigation, the signed-out compliance boundary, signed-in compliance administration, Dataforce-parity advanced filters, government-source discovery, activity-source governance, controlled installer selectors, evidence-policy transcription, four-eyes notice, Access membership, the 10-installer and 30-technician pilot population, 300 one-row jobs, the exact 23 Dataforce register columns in order, 23 cells per row, 300 row actions embedded within `App Id`, the stable dark full-height register, fixed primary and pilot tab bars, global all-field search, compact right-edge drawer, removal of the fixed activity rail, exact 23-column CSV export and stage-only import, source and lookup independent approvals, evidence and physical-custody foundations, exact-decimal calculator receipts, guarded draft-only calculator authoring, exact Dataforce-bound non-evidentiary comparisons, controlled mapping authoring, Dataforce-style context actions, double-click records, collapsible record rails, job-level compliance counts, deterministic dry-run manifest, synthetic isolation guards, 212 explicit calculation pathways, protected STC estimates, responsive calculator layouts, editable form versions, synthetic manual jobs, installer preview, exact byte and metadata custody contracts, policy-layer composition, source-aware advanced facets, guarded interchange readiness, visible compact navigation discovery, draft-only official-source custody and the production-safe planned-work handoff are verified. A newly written version-242 opportunity and locality-bearing notification were not created during release QA; production provider inbox receipt, customer email-client rendering and a newly generated customer verification email action remain unverified. The controlled catalogue contains 32 program pathways and 212 calculation-readiness activity templates. This release did not directly re-query governed production inventory; regulated evidence and real registry activity remain incomplete as recorded above.
+Subsequent verified releases add the free reviewed-ABN application, contract cleanup, customer home advisor, advisor context, administrator notification stability, independent customer-plan sharing, the shared home-detail taxonomy, private evidence scope, bounded plan history, optional self-declared professional review, helpful everyday actions, browser-native PDF attachment downloads that avoid print APIs and account mutations, the shared premium PDF plus email report, the exact-brand technical presentation with truthful completed-plan and evidence-boundary handling, consistent spacing with rounded report surfaces, premium on-page preview, duplicated bottom actions, guided private photo capture, plain-language two-version comparison, privacy-filtered export, private check-ins, guarded restore, tagged-PDF foundations, adaptive email compatibility, compact saved-project controls, recoverable deletion, pre-roadmap home and work context, goal-derived priorities, a non-duplicated quote-preparation stage, explicit completed-stage styling, one-confirmation private installer requests, resumable evidence, a worker-safe embedded-font boundary, trigger-safe request submission, multiple photos per guided prompt, one authoritative installer-submit transaction, a bounded installer enquiry pack, complete request-bound photo sharing, the full installer-safe plan and PDF, durable dispatch jobs, independent operations and business alerts, staged submit progress, a top-level customer Quotes centre, exact owner-scoped quote deep links, customer quote-submitted email, trade Work updates, quote submission idempotency, one immutable one-business claim, Resend callback retry handling, contact-only customer handover, owner-scoped new-lead bell items, compact lead cards, aligned quote sections, reliable next-step scroll focus, a privacy-first public-plan enquiry bridge, precise gas hot-water choices, reported electrical-phase planning clues, plain household exhaust-fan choices, a visible account form, refreshed customer verification state, connected-customer identity presented first in the authorised trade lead, consent beside installer-request submission, aligned shared customer navigation, reciprocal product branding, exact-current protected suburb/postcode/state matching, the authorised compliance foundation and operations portal, evidence-policy governance, the national government-activity workflow, the isolated VEU synthetic pilot, its dense register, the complete owner-scoped job audit workspace, the readable compact operator-usability refinement, the controlled-intake foundations, governed approval, custody, calculator and exact Dataforce parallel-operation foundations, the exact 23-column Dataforce operator register, effective-dated lookup approval, legacy mapping authoring, draft-only calculator authoring, the national calculation-readiness catalogue, deterministic SRES expected-entitlement estimator, national synthetic manual-evidence lab, exact manual-field custody, government-minimum composition, unified synthetic register, complete calculation coverage, blocked regulator interchange preflight, shared-navigation discovery, exact official-source custody with audited independent review, guided installer multi-activity planning, immutable pre-case job intent and planned-date revision, accepted-quote governed case linking, evidence-complete web and offline gates, viewport-safe scheduling, callable customer contacts, dated customer jobs, schedule quote actions, exact company-scoped Dataforce export, bounded on-demand internal audit domains, the D1-compatible customer asset timeline, one authoritative trade Business workspace, controlled private branding, immutable quote-document snapshots, branded email and server-PDF delivery evidence, token-authorised private customer documents, retained soft account closure, complete-shell theme recovery, full-width Jobs, permanent Schedule navigation, quote-PDF preflight and worker-safe generation, truthful provider-acceptance status, aligned lead-relay monitoring and a worker-safe noindex electricity fallback. Those capabilities are deployed in Sites version 282 alongside the earlier owner Database Console. Public enquiry placement and handoff, account privacy explanation, selected home-fact continuity, simplified fan intake, account-control presentation, verification return routing, signed-in Quotes, connected contact disclosure, lead compaction, Work updates, consent presentation, reciprocal navigation, the signed-out compliance boundary, signed-in compliance administration, Dataforce-parity advanced filters, government-source discovery, activity-source governance, controlled installer selectors, evidence-policy transcription, four-eyes notice, Access membership, the 10-installer and 30-technician pilot population, 300 one-row jobs, the exact 23 Dataforce register columns in order, 23 cells per row, 300 row actions embedded within `App Id`, the stable dark full-height register, fixed primary and pilot tab bars, global all-field search, compact right-edge drawer, removal of the fixed activity rail, exact 23-column CSV export and stage-only import, source and lookup independent approvals, evidence and physical-custody foundations, exact-decimal calculator receipts, guarded draft-only calculator authoring, exact Dataforce-bound non-evidentiary comparisons, controlled mapping authoring, Dataforce-style context actions, double-click records, collapsible record rails, job-level compliance counts, deterministic dry-run manifest, synthetic isolation guards, 212 explicit calculation pathways, protected STC estimates, responsive calculator layouts, editable form versions, synthetic manual jobs, installer preview, exact byte and metadata custody contracts, policy-layer composition, source-aware advanced facets, guarded interchange readiness, visible compact navigation discovery, draft-only official-source custody and the production-safe planned-work handoff are verified. A newly written version-242 opportunity and locality-bearing notification were not created during release QA; production provider inbox receipt, customer email-client rendering, a live authorised lead-relay confirmation and a newly generated customer verification email action remain unverified. The controlled catalogue contains 32 program pathways and 212 calculation-readiness activity templates. This release did not directly re-query governed production inventory; regulated evidence and real registry activity remain incomplete as recorded above.
 
 The audit recommends withdrawing the generic Database Console because broad catalogue access and generic mutation bypass domain services. That withdrawal is forward work and is not claimed complete here.
 
@@ -1252,6 +1344,8 @@ The audit recommends withdrawing the generic Database Console because broad cata
 - Physical iOS and Android distribution, signing, device and accessibility acceptance.
 - Full WCAG 2.2 AA evidence.
 - Production Resend inbox receipt for the version-238 quote-submitted delivery and the version-239 business-contact handover wording.
+- Production provider receipt and Gmail or Outlook rendering for milestone 44; no replacement quote email was sent during release QA.
+- One authorised live lead-delivery monitor run confirming the milestone-44 20-second relay and 25-second outer-monitor timeout relationship against the Google Workspace relay.
 - Provider credentials and sender approval for the deployed Resend integration.
 - Independent hosted row counts for customer-project activity events and deliveries, quote-submission ledger entries and one-business contact claims.
 - Delivered rendering and clipping acceptance in controlled non-customer Gmail and Outlook inboxes.
