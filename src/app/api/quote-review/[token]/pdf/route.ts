@@ -4,9 +4,9 @@ import {
   tradeQuoteTokenErrorResponse,
 } from "@/lib/trade-quote-review-server";
 import {
-  renderTradeQuotePdf,
   tradeQuotePdfFilename,
 } from "@/lib/trade-quote-pdf-server";
+import { issuedTradeQuotePdf } from "@/lib/trade-quote-issued-pdf-server";
 
 export const runtime = "edge";
 
@@ -22,9 +22,13 @@ export async function GET(request: Request, context: Context) {
   try {
     const row = await authoriseTradeQuoteLink((await context.params).token);
     const snapshot = await quoteDocumentSnapshotForAuthorisedLink(row);
-    const bytes = await renderTradeQuotePdf(snapshot, {
+    const issuedPdf = await issuedTradeQuotePdf({
+      ownerUid: row.firebase_uid,
+      quoteVersionId: row.quote_version_id,
+      snapshot,
       origin: new URL(request.url).origin,
     });
+    const bytes = issuedPdf.bytes;
     const disposition =
       new URL(request.url).searchParams.get("download") === "1"
         ? "attachment"

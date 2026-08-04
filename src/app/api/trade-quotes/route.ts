@@ -21,8 +21,11 @@ import {
   renderTradeQuotePdf,
   tradeQuotePdfBase64,
   tradeQuotePdfFilename,
-  tradeQuotePdfSha256,
 } from "@/lib/trade-quote-pdf-server";
+import {
+  issuedTradeQuotePdf,
+  storeTradeQuoteIssuedPdf,
+} from "@/lib/trade-quote-issued-pdf-server";
 
 export const runtime = "edge";
 
@@ -47,6 +50,7 @@ function errorResponse(error: unknown) {
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);
   if (code === "IMMUTABLE_VERSION") return adminJson({ ok: false, error: "Issued quote versions cannot be changed. Create the next version instead." }, 409);
   if (code === "QUOTE_DOCUMENT_INVALID") return adminJson({ ok: false, error: "The issued quote document snapshot could not be verified. Create a replacement version before sending." }, 409);
+  if (["QUOTE_ISSUED_PDF_MISMATCH", "QUOTE_ISSUED_PDF_UNAVAILABLE"].includes(code)) return adminJson({ ok: false, error: "The exact issued quote PDF could not be verified. Create and issue a replacement quote version before sending." }, 409);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved item is no longer active. Remove it or add its replacement from the price book." }, 409);
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
   if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
@@ -351,7 +355,19 @@ export async function POST(request: Request) {
         return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
       }
       const origin = new URL(request.url).origin;
-      await renderQuotePdfOrThrow(documentSnapshot, origin, "issue_pdf_preflight");
+      const issuedPdfBytes = await renderQuotePdfOrThrow(documentSnapshot, origin, "issue_pdf_preflight");
+      let issuedPdf: Awaited<ReturnType<typeof storeTradeQuoteIssuedPdf>>;
+      try {
+        issuedPdf = await storeTradeQuoteIssuedPdf({
+          quoteVersionId: String(version.id),
+          versionNumber: Number(version.version_number),
+          bytes: issuedPdfBytes,
+        });
+      } catch {
+        const error = new Error("QUOTE_PDF_UNAVAILABLE") as StagedQuoteError;
+        error.stage = "issue_pdf_store";
+        throw error;
+      }
       const linkId = crypto.randomUUID(); const secret = newQuoteLinkSecret(); const tokenIssue = 1;
       const validExpiry = version.valid_until ? new Date(`${version.valid_until}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000);
       const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
@@ -362,8 +378,12 @@ export async function POST(request: Request) {
           .bind(crypto.randomUUID(), version.id, access.ownerUid, execution.sourceKind, JSON.stringify(execution.packets), execution.expectedDurationMinutes,
             execution.suggestedCrewSize, JSON.stringify(execution.requiredCapabilities), now),
         db.prepare(`UPDATE trade_crm_quote_versions SET status = 'superseded', updated_at = ? WHERE quote_id = ? AND firebase_uid = ? AND status = 'issued'`).bind(now, quote.id, access.ownerUid),
-        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?, document_snapshot_json = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
-          .bind(consentStatement, now, documentSnapshotJson, now, version.id, access.ownerUid),
+        db.prepare(`UPDATE trade_crm_quote_versions SET status = 'issued', consent_statement = ?, issued_at = ?,
+          document_snapshot_json = ?, issued_pdf_object_key = ?, issued_pdf_sha256 = ?,
+          issued_pdf_size_bytes = ?, updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
+          .bind(consentStatement, now, documentSnapshotJson, issuedPdf.objectKey,
+            issuedPdf.sha256, issuedPdf.sizeBytes, now, version.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_quotes SET status = 'issued', crm_customer_id = ?, service_site_id = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(job.crm_customer_id, job.service_site_id, now, quote.id, access.ownerUid),
         db.prepare(`UPDATE trade_crm_job_details SET quote_status = 'issued', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(now, workOrderId, access.ownerUid),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at) VALUES (?, ?, ?, 'quote_issued', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${quote.quote_number} version ${version.version_number} issued with secure customer review.`, now),
@@ -450,11 +470,15 @@ export async function POST(request: Request) {
         const origin = new URL(request.url).origin;
         const shareUrl = `${origin}${quoteReviewPath(String(link.id), secret)}`;
         const emailContent = buildTradeQuoteEmail({ snapshot, shareUrl, expiresAt: String(link.expires_at) });
-        const pdfBytes = await renderQuotePdfOrThrow(snapshot, origin, "send_pdf");
-        const [emailContentSha256, attachmentSha256] = await Promise.all([
-          tradeQuoteEmailContentSha256(emailContent),
-          tradeQuotePdfSha256(pdfBytes),
-        ]);
+        const issuedPdf = await issuedTradeQuotePdf({
+          ownerUid: access.ownerUid,
+          quoteVersionId: String(version.id),
+          snapshot,
+          origin,
+        });
+        const pdfBytes = issuedPdf.bytes;
+        const emailContentSha256 = await tradeQuoteEmailContentSha256(emailContent);
+        const attachmentSha256 = issuedPdf.reference.sha256;
         const attachmentFilename = tradeQuotePdfFilename(snapshot);
         const recipientRole = String(job.customer_email || "").trim().toLowerCase() === email
           ? "primary_customer"

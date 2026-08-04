@@ -31,7 +31,7 @@ test("invoices are a main installer workspace over existing owner-scoped records
 
 test("jobs expose explicit and guarded double-click navigation while schedule appointments retain explicit open actions", () => {
   assert.match(crm, /className="crm-index-open-button" onClick=\{onOpen\}/);
-  assert.match(crm, /className="crm-row-open"[^>]*onDoubleClick=\{\(event\) => \{ if \(\(event\.target as HTMLElement\)\.closest\("a, button, input, select, textarea"\)\) return; openFocusedJob\(job\.id\); \}\}/);
+  assert.match(crm, /className="crm-row-open crm-record-data-row crm-index-row"[^>]*onDoubleClick=\{\(event\) => \{ if \(\(event\.target as HTMLElement\)\.closest\("a, button, input, select, textarea"\)\) return; openFocusedJob\(job\.id\); \}\}/);
   assert.match(crm, /crm-job-workspace/);
   assert.match(crm, /Back to all jobs/);
   assert.match(crm, /initialTab=\{focusedJobTab\}/);

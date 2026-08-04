@@ -72,7 +72,8 @@ test("Business settings expose bounded branding, service, template and closure c
   assert.match(businessSettings, /uploadMedia\("logo"/);
   assert.match(businessSettings, /uploadMedia\("banner"/);
   assert.match(businessSettings, /serviceAreas\.length >= 6/);
-  assert.match(businessSettings, /Customer document preview/);
+  assert.match(businessSettings, /Quote and invoice preview/);
+  assert.match(businessSettings, /business-settings-document-preview-grid/);
   assert.match(businessSettings, /\["quote", "invoice"\]/);
   assert.match(businessSettings, /Default quote email subject/);
   assert.match(businessSettings, /Type CLOSE ACCOUNT to confirm/);

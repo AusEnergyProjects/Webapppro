@@ -1,5 +1,6 @@
 import { getD1 } from "../../../../../db";
 import { verifyResendWebhook } from "@/lib/service-reminder-delivery";
+import { QUICK_INVOICE_PROVIDER_EVENT_UPDATE_SQL } from "@/lib/trade-quick-invoice-server";
 
 export const runtime = "edge";
 
@@ -30,16 +31,21 @@ export async function POST(request: Request) {
     .bind(providerMessageId).first<Record<string, unknown>>();
   const quoteDelivery = serviceDelivery || appointmentDelivery || photoDelivery ? null : await db.prepare(`SELECT id, quote_link_id, quote_version_id, work_order_id, firebase_uid, crm_customer_id, status
     FROM trade_crm_quote_deliveries WHERE provider = 'resend' AND provider_message_id = ?`).bind(providerMessageId).first<Record<string, unknown>>();
-  const opportunityDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery ? null : await db.prepare(`SELECT id, status, recipient_email_hash
+  const quickInvoiceDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery ? null
+    : await db.prepare(`SELECT id, work_order_id, firebase_uid, delivery_status status
+      FROM trade_crm_quick_invoices
+      WHERE delivery_provider = 'resend' AND provider_message_id = ?`)
+      .bind(providerMessageId).first<Record<string, unknown>>();
+  const opportunityDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery || quickInvoiceDelivery ? null : await db.prepare(`SELECT id, status, recipient_email_hash
     FROM trade_opportunity_notification_deliveries WHERE provider = 'resend' AND provider_message_id = ?`)
     .bind(providerMessageId).first<Record<string, unknown>>();
-  const activityDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery || opportunityDelivery ? null
+  const activityDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery || quickInvoiceDelivery || opportunityDelivery ? null
     : await db.prepare(`SELECT id, audience, recipient_uid, status, recipient_email_hash
       FROM customer_project_activity_deliveries
       WHERE provider = 'resend' AND provider_message_id = ?`)
       .bind(providerMessageId).first<Record<string, unknown>>();
   const delivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
-    || opportunityDelivery || activityDelivery;
+    || quickInvoiceDelivery || opportunityDelivery || activityDelivery;
   if (!delivery) {
     return Response.json(
       {
@@ -58,7 +64,13 @@ export async function POST(request: Request) {
     : photoDelivery ? "trade_crm_photo_request_delivery_events"
       : opportunityDelivery ? "trade_opportunity_notification_delivery_events"
         : activityDelivery ? "customer_project_activity_delivery_events" : "";
-  if (quoteDelivery ? await db.prepare("SELECT id FROM trade_crm_quote_events WHERE evidence_key = ?").bind(providerEventKey).first() : await db.prepare(`SELECT id FROM ${replayTable} WHERE provider_event_key = ?`).bind(providerEventKey).first()) return Response.json({ ok: true, replay: true });
+  const quickInvoiceEventId = `quick-invoice-provider:${providerEventKey}`;
+  const replay = quickInvoiceDelivery
+    ? await db.prepare("SELECT id FROM trade_work_order_events WHERE id = ?").bind(quickInvoiceEventId).first()
+    : quoteDelivery
+      ? await db.prepare("SELECT id FROM trade_crm_quote_events WHERE evidence_key = ?").bind(providerEventKey).first()
+      : await db.prepare(`SELECT id FROM ${replayTable} WHERE provider_event_key = ?`).bind(providerEventKey).first();
+  if (replay) return Response.json({ ok: true, replay: true });
   const now = new Date().toISOString(); const terminal = ["bounced", "failed", "opted_out"].includes(status);
   const opportunityStatus = eventType === "email.complained" ? "complained"
     : eventType === "email.failed" ? "provider_failed" : status;
@@ -88,6 +100,38 @@ export async function POST(request: Request) {
       failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END,
       last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
       .bind(status, eventType, status, now, terminal ? 1 : 0, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
+  ] : quickInvoiceDelivery ? [
+    db.prepare(`INSERT OR IGNORE INTO trade_work_order_events
+      (id, work_order_id, firebase_uid, event_type, summary, created_at)
+      SELECT ?, work_order_id, firebase_uid, ?, ?, ?
+      FROM trade_crm_quick_invoices
+      WHERE id = ? AND firebase_uid = ? AND delivery_provider = 'resend' AND provider_message_id = ?`)
+      .bind(
+        quickInvoiceEventId,
+        `quick_invoice_${status}`,
+        `Authenticated Resend invoice delivery event received: ${eventType}.`,
+        now,
+        quickInvoiceDelivery.id,
+        quickInvoiceDelivery.firebase_uid,
+        providerMessageId,
+      ),
+    db.prepare(QUICK_INVOICE_PROVIDER_EVENT_UPDATE_SQL)
+      .bind(
+        status,
+        status,
+        status,
+        status,
+        status,
+        status,
+        eventType.slice(0, 120),
+        status,
+        eventType.slice(0, 120),
+        status,
+        now,
+        quickInvoiceDelivery.id,
+        quickInvoiceDelivery.firebase_uid,
+        providerMessageId,
+      ),
   ] : activityDelivery ? [
     db.prepare(`INSERT OR IGNORE INTO customer_project_activity_delivery_events
       (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)

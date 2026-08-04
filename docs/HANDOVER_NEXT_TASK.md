@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44` released and live
+Status: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` validated release candidate
 
-Prepared: 4 August 2026
+Prepared: 5 August 2026
 
-Milestone ID: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44`
+Milestone ID: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45`
 
 Working branch: `codex/sites-custom-domain-migration`
 
@@ -30,57 +30,45 @@ Environment revision: 19
 
 ## Active milestone contract
 
-Outcome: the TLink trade workspace is readable, full-width and coherent across
-Jobs, Schedule, Business settings and customer quote delivery. Fourteen
-accessible themes now govern the complete shell and customer documents, every
-business setting is visible on one scroll page, the permanent CRM navigation
-remains available on Schedule, issued quote review and PDFs run without local
-font or filesystem dependencies, and provider API acceptance is recorded
-without claiming customer inbox delivery.
+Outcome: restore one job per row with each value in its Dataforce-aligned
+column, then make customer quote and invoice documents use an explicit saved
+business identity, full-width positioned banner, clear tax, discount and
+payment details, and an accurate owner-visible document preview without
+changing an already issued document.
 
 Owning workflow:
 
-- shell, theme and density rules in `src/app/globals.css` and
-  `src/lib/trade-business-branding.ts`;
-- one-page owner settings in `TradeBusinessSettingsWorkspace`;
-- workspace routing in `DirectTradeDashboard`, `InstallerCrmWorkspace` and
-  `TradeBusinessHub`;
-- quote authoring, delivery, public review and PDF generation in
-  `TradeQuotePanel`, the trade-quotes and quote-review routes,
-  `trade-quote-review-server` and `trade-quote-pdf`;
-- lead and monitor timeout alignment in `leads`, `lead-webhook-probe` and
-  `api-health-monitor`;
-- the no-index rollback boundary in
-  `src/app/compare/electricity-legacy/route.ts` and
-  `public/electricity-comparator.html`.
+- the owner-scoped Jobs register in `InstallerCrmWorkspace`;
+- business document identity, banner framing, payment details and previews in
+  `TradeBusinessSettingsWorkspace`, `trade-profile` and an additive migration;
+- immutable quote snapshots and customer PDF rendering in the trade quote
+  server, panel and PDF generator;
+- quick invoice calculation, storage, delivery and owner/customer presentation
+  in the existing invoice workflow;
+- affected layout rules in `src/app/globals.css`.
 
 In scope:
 
-- propagate the selected theme across header, search, navigation rail, controls,
-  workspace surfaces and customer documents with readable light/dark contrast;
-- expose all Account, Appearance, Service areas, Quote defaults, Notifications,
-  Templates and Close account sections together with local save actions;
-- retain immutable installer or wholesaler account type and existing closure,
-  media and service-area controls;
-- make the Jobs register use the available workspace width and retain the
-  company-scoped Dataforce-aligned fields and callable mobile values;
-- keep the permanent installer CRM tabs visible when Schedule is opened from the
-  left rail and keep rail activity synchronized;
-- preflight the matching server PDF before creating an immutable customer link;
-- use worker-safe standard fonts when bundled fonts are unavailable;
-- retain private quote review, media and PDF access for the active authorised
-  customer token and current verified trade owner;
-- store successful provider submission as `provider_accepted`; do not label an
-  unconfirmed inbox as delivered;
-- align the authorised lead relay at 20 seconds and the outer lead health check
-  at 25 seconds so the monitor does not cancel its own valid downstream request;
-- serve the legacy electricity fallback through the deployed public asset rather
-  than Node filesystem access and keep both responses no-indexed.
+- restore separate Dataforce-aligned Jobs cells, one job per row, horizontal
+  scrolling, callable mobile values, company scoping and matching CSV order;
+- make the issued-PDF download action visually consistent with adjacent actions;
+- save customer-facing business name, phone, email and bank payment details
+  separately from the TLink identity used to sign in;
+- provide a bounded banner focal-position and scale control whose preview
+  matches the full-width PDF crop;
+- snapshot saved document identity, banner framing and payment details into new
+  quote and invoice versions so historical output remains immutable;
+- show subtotal, discount, GST and total explicitly in invoice authoring,
+  storage, customer delivery and the Business settings document preview;
+- remove the redundant customer-facing `Work`, `Always included` and
+  `Your base scope` labels while retaining itemised scope and internal margin
+  controls.
 
 Out of scope:
 
-- sending another production quote or proving Gmail or Outlook inbox receipt;
-- SMS, payment initiation, invoice PDF or invoice email delivery;
+- sending another production quote or invoice during release verification;
+- proving Gmail or Outlook inbox receipt;
+- SMS or payment initiation;
 - Firebase identity deletion, physical erasure or account recovery;
 - regulator submission, certificate creation, certificate trade or settlement;
 - changing the internal compliance portal, governed calculation authority or
@@ -90,28 +78,24 @@ Out of scope:
 
 Acceptance criteria:
 
-- all 14 themes are controlled values and the selected theme reaches the full
-  trade shell without reducing readable contrast;
-- one Business page exposes every section and each editable section has a clear
-  save action;
-- full-width Jobs, the Dataforce-aligned register and permanent Schedule tabs
-  render in the signed-in custom-domain workspace;
-- one existing issued quote review and matching server PDF return successfully;
-- a provider failure cannot become sent or delivered, and API acceptance is
-  distinct from inbox delivery;
-- lead delivery receives a longer downstream timeout than the historical failing
-  monitor window;
-- the legacy fallback returns a no-store, no-index redirect and its target is
-  also no-indexed;
-- type checking, warning-free lint, focused tests, migration replay, integration
-  tests, the complete suite, production build and Sites bundle audit pass.
+- the Jobs register renders one record per row with values in their declared
+  columns at desktop and mobile breakpoints;
+- customer-document contact values are independently editable, validated and
+  tenant-scoped without changing login identity;
+- owner preview and generated quote PDF use the same full-width banner crop and
+  customer-facing identity;
+- invoice totals reconcile exactly as subtotal minus discount plus GST equals
+  total, with saved payment details shown only when configured;
+- issued quote content remains byte-stable and only a new issue or invoice
+  revision can adopt changed branding or payment settings;
+- focused tests, migration replay, complete validation, production build, Sites
+  bundle audit and rendered-PDF inspection pass.
 
-Stop condition: stop if an issued quote changes after issuance, internal margin
-or protected data reaches a customer document, token access broadens beyond the
-active customer review or verified trade owner, account or tenant isolation
-fails, the fallback becomes indexable, or release verification would send a
-message or mutate production business data beyond a designed idempotent
-audit-view event.
+Stop condition: stop if an issued quote changes after issuance, totals do not
+reconcile, internal margin or protected data reaches a customer document,
+customer-document settings can cross tenant boundaries, the job export order no
+longer matches the register, or verification would send a message or mutate
+production business, quote or invoice data.
 
 ## Release result
 

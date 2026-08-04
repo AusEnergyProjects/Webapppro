@@ -1,0 +1,12 @@
+ALTER TABLE trade_accounts ADD COLUMN document_business_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN document_phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN document_email TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN banner_crop_x_basis_points INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trade_accounts ADD COLUMN banner_crop_y_basis_points INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trade_accounts ADD COLUMN banner_crop_width_basis_points INTEGER NOT NULL DEFAULT 10000;
+ALTER TABLE trade_accounts ADD COLUMN banner_crop_height_basis_points INTEGER NOT NULL DEFAULT 10000;
+ALTER TABLE trade_accounts ADD COLUMN invoice_payment_account_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN invoice_payment_bsb TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN invoice_payment_account_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN invoice_payment_reference TEXT NOT NULL DEFAULT '';
+ALTER TABLE trade_accounts ADD COLUMN invoice_default_terms TEXT NOT NULL DEFAULT '';

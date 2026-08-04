@@ -32,6 +32,14 @@ const ACCOUNT_CLOSURE_CLOCK_SKEW_SECONDS = 60;
 const STATES = new Set(AUSTRALIAN_STATE_CODES);
 const BRAND_THEMES = new Set<string>(TRADE_BRAND_THEME_KEYS);
 const BRAND_BORDERS = new Set<string>(TRADE_BRAND_BORDER_STYLES);
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BANNER_CROP_SCALE = 10_000;
+const DEFAULT_BANNER_CROP = {
+  x: 0,
+  y: 0,
+  width: 10_000,
+  height: 10_000,
+} as const;
 const CAPABILITIES = new Set([
   "assessment",
   "solar",
@@ -149,6 +157,91 @@ function validateQuoteSubjectTemplate(value: string) {
     && placeholders.every((placeholder) => QUOTE_SUBJECT_PLACEHOLDERS.has(placeholder));
 }
 
+function optionalSingleLine(value: unknown, maximum: number): string | null {
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  if (
+    candidate.length > maximum
+    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(candidate)
+  ) return null;
+  return candidate.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ");
+}
+
+function normaliseOptionalPhone(value: unknown): string | null {
+  const phone = optionalSingleLine(value, 60);
+  if (phone === null || !phone) return phone;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 8
+    && digits.length <= 15
+    && /^[+\d()\s-]+$/.test(phone)
+    ? phone
+    : null;
+}
+
+function normaliseOptionalEmail(value: unknown): string | null {
+  const email = optionalSingleLine(value, 254);
+  if (email === null || !email) return email;
+  const canonical = email.toLowerCase();
+  return EMAIL_PATTERN.test(canonical) ? canonical : null;
+}
+
+function normaliseBsb(value: unknown): string | null {
+  const bsb = optionalSingleLine(value, 12);
+  if (bsb === null || !bsb) return bsb;
+  const digits = bsb.replace(/[\s-]/g, "");
+  return /^\d{6}$/.test(digits) ? digits : null;
+}
+
+function normaliseAccountNumber(value: unknown): string | null {
+  const accountNumber = optionalSingleLine(value, 24);
+  if (accountNumber === null || !accountNumber) return accountNumber;
+  const digits = accountNumber.replace(/[\s-]/g, "");
+  return /^\d{4,12}$/.test(digits) ? digits : null;
+}
+
+function bannerCropFromPayload(
+  raw: SettingsPayload,
+  account: Record<string, unknown>,
+): { x: number; y: number; width: number; height: number } | null {
+  const requestedNumber = (requested: unknown, current: unknown, fallback: number) =>
+    requested === undefined
+      ? Number(current ?? fallback)
+      : typeof requested === "number"
+        ? requested
+        : Number.NaN;
+  const values = {
+    x: requestedNumber(
+      raw.bannerCropXBasisPoints,
+      account.banner_crop_x_basis_points,
+      DEFAULT_BANNER_CROP.x,
+    ),
+    y: requestedNumber(
+      raw.bannerCropYBasisPoints,
+      account.banner_crop_y_basis_points,
+      DEFAULT_BANNER_CROP.y,
+    ),
+    width: requestedNumber(
+      raw.bannerCropWidthBasisPoints,
+      account.banner_crop_width_basis_points,
+      DEFAULT_BANNER_CROP.width,
+    ),
+    height: requestedNumber(
+      raw.bannerCropHeightBasisPoints,
+      account.banner_crop_height_basis_points,
+      DEFAULT_BANNER_CROP.height,
+    ),
+  };
+  return Object.values(values).every(Number.isInteger)
+    && values.x >= 0
+    && values.y >= 0
+    && values.width >= 500
+    && values.height >= 500
+    && values.x + values.width <= BANNER_CROP_SCALE
+    && values.y + values.height <= BANNER_CROP_SCALE
+    ? values
+    : null;
+}
+
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -186,7 +279,7 @@ export async function GET(request: Request) {
 
   const db = getD1();
   const record = await db.prepare(`
-    SELECT account.business_name, account.abn, account.address_line_1,
+    SELECT account.email, account.business_name, account.abn, account.address_line_1,
            account.suburb, account.address_state, account.postcode,
            account.contact_name, account.phone, account.partner_type,
            account.business_website, account.service_states, account.capabilities,
@@ -199,8 +292,14 @@ export async function GET(request: Request) {
            account.brand_theme_key, account.brand_border_style,
            account.logo_object_key, account.logo_content_type,
            account.banner_object_key, account.banner_content_type,
+           account.document_business_name, account.document_phone, account.document_email,
+           account.banner_crop_x_basis_points, account.banner_crop_y_basis_points,
+           account.banner_crop_width_basis_points, account.banner_crop_height_basis_points,
            account.quote_email_subject_template, account.quote_email_intro,
-           account.quote_default_terms, account.account_closed_at,
+           account.quote_default_terms,
+           account.invoice_payment_account_name, account.invoice_payment_bsb,
+           account.invoice_payment_account_number, account.invoice_payment_reference,
+           account.invoice_default_terms, account.account_closed_at,
            CASE WHEN ${approvedTradeReviewPredicate("account")}
              THEN 1 ELSE 0 END approval_review_exists
     FROM trade_accounts account
@@ -235,6 +334,7 @@ export async function GET(request: Request) {
     ok: true,
     profile: {
       businessName: record.business_name,
+      accountEmail: record.email,
       abn: record.abn,
       addressLine1: record.address_line_1,
       suburb: record.suburb,
@@ -266,9 +366,24 @@ export async function GET(request: Request) {
       hasBanner: Boolean(record.banner_object_key && record.banner_content_type),
       logoMediaUrl: record.logo_object_key ? "/api/trade-profile-media?kind=logo" : "",
       bannerMediaUrl: record.banner_object_key ? "/api/trade-profile-media?kind=banner" : "",
+      documentBusinessName: record.document_business_name || "",
+      documentPhone: record.document_phone || "",
+      documentEmail: record.document_email || "",
+      documentDisplayBusinessName: record.document_business_name || record.business_name,
+      documentDisplayPhone: record.document_phone || record.phone,
+      documentDisplayEmail: record.document_email || record.email,
+      bannerCropXBasisPoints: Number(record.banner_crop_x_basis_points ?? DEFAULT_BANNER_CROP.x),
+      bannerCropYBasisPoints: Number(record.banner_crop_y_basis_points ?? DEFAULT_BANNER_CROP.y),
+      bannerCropWidthBasisPoints: Number(record.banner_crop_width_basis_points ?? DEFAULT_BANNER_CROP.width),
+      bannerCropHeightBasisPoints: Number(record.banner_crop_height_basis_points ?? DEFAULT_BANNER_CROP.height),
       quoteEmailSubjectTemplate: record.quote_email_subject_template || DEFAULT_QUOTE_EMAIL_SUBJECT,
       quoteEmailIntro: record.quote_email_intro || DEFAULT_QUOTE_EMAIL_INTRO,
       quoteDefaultTerms: record.quote_default_terms || "",
+      invoicePaymentAccountName: record.invoice_payment_account_name || "",
+      invoicePaymentBsb: record.invoice_payment_bsb || "",
+      invoicePaymentAccountNumber: record.invoice_payment_account_number || "",
+      invoicePaymentReference: record.invoice_payment_reference || "",
+      invoiceDefaultTerms: record.invoice_default_terms || "",
       serviceAreas: serviceAreaRows.results.map((area) => ({
         postcode: area.postcode,
         radiusKm: Number(area.radius_km),
@@ -291,6 +406,18 @@ type SettingsPayload = {
   quoteEmailSubjectTemplate?: unknown;
   quoteEmailIntro?: unknown;
   quoteDefaultTerms?: unknown;
+  documentBusinessName?: unknown;
+  documentPhone?: unknown;
+  documentEmail?: unknown;
+  bannerCropXBasisPoints?: unknown;
+  bannerCropYBasisPoints?: unknown;
+  bannerCropWidthBasisPoints?: unknown;
+  bannerCropHeightBasisPoints?: unknown;
+  invoicePaymentAccountName?: unknown;
+  invoicePaymentBsb?: unknown;
+  invoicePaymentAccountNumber?: unknown;
+  invoicePaymentReference?: unknown;
+  invoiceDefaultTerms?: unknown;
 };
 
 export async function PATCH(request: Request) {
@@ -315,10 +442,15 @@ export async function PATCH(request: Request) {
   }
 
   const db = getD1();
-  const account = await db.prepare(`SELECT partner_type, postcode, service_base_postcode,
+  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, service_base_postcode,
       service_radius_km, availability_status, email_opportunities,
       email_weekly_summary, brand_theme_key, brand_border_style,
-      quote_email_subject_template, quote_email_intro, quote_default_terms
+      quote_email_subject_template, quote_email_intro, quote_default_terms,
+      document_business_name, document_phone, document_email,
+      banner_crop_x_basis_points, banner_crop_y_basis_points,
+      banner_crop_width_basis_points, banner_crop_height_basis_points,
+      invoice_payment_account_name, invoice_payment_bsb,
+      invoice_payment_account_number, invoice_payment_reference, invoice_default_terms
     FROM trade_accounts WHERE firebase_uid = ?`)
     .bind(identity.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
@@ -426,6 +558,67 @@ export async function PATCH(request: Request) {
   const quoteDefaultTerms = raw.quoteDefaultTerms === undefined
     ? String(account.quote_default_terms || "")
     : cleanText(raw.quoteDefaultTerms, 5000);
+  const documentBusinessName = raw.documentBusinessName === undefined
+    ? String(account.document_business_name || "")
+    : optionalSingleLine(raw.documentBusinessName, 240);
+  const documentPhone = raw.documentPhone === undefined
+    ? String(account.document_phone || "")
+    : normaliseOptionalPhone(raw.documentPhone);
+  const documentEmail = raw.documentEmail === undefined
+    ? String(account.document_email || "")
+    : normaliseOptionalEmail(raw.documentEmail);
+  if (documentBusinessName === null || documentPhone === null || documentEmail === null) {
+    return json({
+      ok: false,
+      error: "Enter valid single-line customer-facing business contact details, or leave a field blank to use the registered account detail.",
+    }, 400);
+  }
+  const bannerCrop = bannerCropFromPayload(raw, account);
+  if (!bannerCrop) {
+    return json({
+      ok: false,
+      error: "The banner crop must be a bounded source-image rectangle using whole-number basis points.",
+    }, 400);
+  }
+  const invoicePaymentAccountName = raw.invoicePaymentAccountName === undefined
+    ? String(account.invoice_payment_account_name || "")
+    : optionalSingleLine(raw.invoicePaymentAccountName, 180);
+  const invoicePaymentBsb = raw.invoicePaymentBsb === undefined
+    ? String(account.invoice_payment_bsb || "")
+    : normaliseBsb(raw.invoicePaymentBsb);
+  const invoicePaymentAccountNumber = raw.invoicePaymentAccountNumber === undefined
+    ? String(account.invoice_payment_account_number || "")
+    : normaliseAccountNumber(raw.invoicePaymentAccountNumber);
+  const invoicePaymentReference = raw.invoicePaymentReference === undefined
+    ? String(account.invoice_payment_reference || "")
+    : optionalSingleLine(raw.invoicePaymentReference, 120);
+  const invoiceDefaultTerms = raw.invoiceDefaultTerms === undefined
+    ? String(account.invoice_default_terms || "")
+    : typeof raw.invoiceDefaultTerms === "string"
+      && raw.invoiceDefaultTerms.trim().length <= 5000
+      && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(raw.invoiceDefaultTerms)
+      ? raw.invoiceDefaultTerms.trim()
+      : null;
+  if (
+    invoicePaymentAccountName === null
+    || invoicePaymentBsb === null
+    || invoicePaymentAccountNumber === null
+    || invoicePaymentReference === null
+    || invoiceDefaultTerms === null
+  ) {
+    return json({ ok: false, error: "Enter valid invoice payment and terms details." }, 400);
+  }
+  const bankFields = [
+    invoicePaymentAccountName,
+    invoicePaymentBsb,
+    invoicePaymentAccountNumber,
+  ];
+  if (bankFields.some(Boolean) && !bankFields.every(Boolean)) {
+    return json({
+      ok: false,
+      error: "Add the payment account name, six-digit BSB and account number together, or leave all three blank.",
+    }, 400);
+  }
 
   const serviceBasePostcode = serviceAreas[0]?.postcode
     || String(account.service_base_postcode || account.postcode);
@@ -437,7 +630,13 @@ export async function PATCH(request: Request) {
     SET availability_status = ?, service_base_postcode = ?, service_radius_km = ?,
         email_opportunities = ?, email_weekly_summary = ?,
         brand_theme_key = ?, brand_border_style = ?,
+        document_business_name = ?, document_phone = ?, document_email = ?,
+        banner_crop_x_basis_points = ?, banner_crop_y_basis_points = ?,
+        banner_crop_width_basis_points = ?, banner_crop_height_basis_points = ?,
         quote_email_subject_template = ?, quote_email_intro = ?, quote_default_terms = ?,
+        invoice_payment_account_name = ?, invoice_payment_bsb = ?,
+        invoice_payment_account_number = ?, invoice_payment_reference = ?,
+        invoice_default_terms = ?,
         settings_updated_at = ?, updated_at = ?
     WHERE firebase_uid = ?
   `).bind(
@@ -448,9 +647,21 @@ export async function PATCH(request: Request) {
     emailWeeklySummary ? 1 : 0,
     brandThemeKey,
     brandBorderStyle,
+    documentBusinessName,
+    documentPhone,
+    documentEmail,
+    bannerCrop.x,
+    bannerCrop.y,
+    bannerCrop.width,
+    bannerCrop.height,
     quoteEmailSubjectTemplate,
     quoteEmailIntro,
     quoteDefaultTerms,
+    invoicePaymentAccountName,
+    invoicePaymentBsb,
+    invoicePaymentAccountNumber,
+    invoicePaymentReference,
+    invoiceDefaultTerms,
     now,
     now,
     identity.uid,
@@ -491,9 +702,24 @@ export async function PATCH(request: Request) {
       serviceAreas,
       brandThemeKey,
       brandBorderStyle,
+      documentBusinessName,
+      documentPhone,
+      documentEmail,
+      documentDisplayBusinessName: documentBusinessName || String(account.business_name || ""),
+      documentDisplayPhone: documentPhone || String(account.phone || ""),
+      documentDisplayEmail: documentEmail || String(account.email || ""),
+      bannerCropXBasisPoints: bannerCrop.x,
+      bannerCropYBasisPoints: bannerCrop.y,
+      bannerCropWidthBasisPoints: bannerCrop.width,
+      bannerCropHeightBasisPoints: bannerCrop.height,
       quoteEmailSubjectTemplate,
       quoteEmailIntro,
       quoteDefaultTerms,
+      invoicePaymentAccountName,
+      invoicePaymentBsb,
+      invoicePaymentAccountNumber,
+      invoicePaymentReference,
+      invoiceDefaultTerms,
       settingsUpdatedAt: now,
     },
   });
@@ -819,9 +1045,21 @@ export async function DELETE(request: Request) {
           logo_content_type = '',
           banner_object_key = '',
           banner_content_type = '',
+          document_business_name = '',
+          document_phone = '',
+          document_email = '',
+          banner_crop_x_basis_points = 0,
+          banner_crop_y_basis_points = 0,
+          banner_crop_width_basis_points = 10000,
+          banner_crop_height_basis_points = 10000,
           quote_email_subject_template = ?,
           quote_email_intro = ?,
           quote_default_terms = '',
+          invoice_payment_account_name = '',
+          invoice_payment_bsb = '',
+          invoice_payment_account_number = '',
+          invoice_payment_reference = '',
+          invoice_default_terms = '',
           account_closed_at = ?,
           settings_updated_at = ?,
           updated_at = ?

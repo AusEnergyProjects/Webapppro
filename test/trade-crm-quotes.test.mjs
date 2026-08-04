@@ -13,6 +13,7 @@ const migration = read("../drizzle/0050_versioned_trade_quotes.sql");
 const optionsMigration = read("../drizzle/0066_optioned_trade_quotes.sql");
 const sharingMigration = read("../drizzle/0067_secure_quote_sharing.sql");
 const documentMigration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
+const issuedDocumentMigration = read("../drizzle/0123_immutable_issued_pdf_artifacts.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
@@ -27,6 +28,7 @@ const documentServer = read("../src/lib/trade-quote-review-server.ts");
 const documentEmail = read("../src/lib/trade-quote-email.ts");
 const documentPdf = read("../src/lib/trade-quote-pdf.mjs");
 const documentPdfRoute = read("../src/app/api/quote-review/[token]/pdf/route.ts");
+const issuedDocumentServer = read("../src/lib/trade-quote-issued-pdf-server.ts");
 const providerDelivery = read("../src/lib/service-reminder-delivery.ts");
 
 const apply = (db, sql) => {
@@ -246,7 +248,8 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
     "status = 'sending'",
     "status = 'failed'",
     "tradeQuoteEmailContentSha256",
-    "tradeQuotePdfSha256",
+    "storeTradeQuoteIssuedPdf",
+    "issuedTradeQuotePdf",
     "tradeQuotePdfBase64",
     "provider_accepted",
   ]) assert.match(installerRoute, new RegExp(boundary));
@@ -268,7 +271,8 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);
   assert.match(documentEmail, /html:/);
   assert.match(documentPdf, /tradeQuoteDocumentDisplayTotals/);
-  assert.match(documentPdfRoute, /renderTradeQuotePdf/);
+  assert.match(documentPdfRoute, /issuedTradeQuotePdf/);
+  assert.doesNotMatch(documentPdfRoute, /renderTradeQuotePdf/);
   assert.match(providerDelivery, /attachments\?: Array<\{ filename: string; content: string; contentType: string \}>/);
   assert.match(providerDelivery, /replyTo\?: string/);
   assert.match(documentServer, /QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
@@ -285,6 +289,74 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   assert.match(documentPdfRoute, /tradeQuoteTokenErrorResponse\(error, "pdf"\)/);
 });
 
+test("issued quote PDFs retain exact bytes and legacy backfill fails closed", () => {
+  for (const column of [
+    "issued_pdf_object_key",
+    "issued_pdf_sha256",
+    "issued_pdf_size_bytes",
+  ]) {
+    assert.match(issuedDocumentMigration, new RegExp(column));
+    assert.match(installerRoute, new RegExp(column));
+    assert.match(issuedDocumentServer, new RegExp(column));
+  }
+  assert.match(
+    issuedDocumentServer,
+    /return \{ kind: "quote", documentId, revision \}/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /readImmutableIssuedPdf\(reference, identity\)/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /SELECT quote_id, version_number[\s\S]*WHERE id = \? AND version_number = \?[\s\S]*const identity = quotePdfIdentity\(row\)[\s\S]*storeImmutableIssuedPdf\(\{\s*\.\.\.identity,/,
+  );
+  const issueBlock = installerRoute.slice(
+    installerRoute.indexOf('action === "issue_quote"'),
+    installerRoute.indexOf(
+      '["replace_link", "revoke_link", "send_quote", "answer_question"]',
+    ),
+  );
+  assert.ok(
+    issueBlock.indexOf("storeTradeQuoteIssuedPdf") <
+      issueBlock.indexOf("SET status = 'issued'"),
+    "exact PDF bytes must be stored before the quote is marked issued",
+  );
+  assert.match(
+    issueBlock,
+    /document_snapshot_json = \?, issued_pdf_object_key = \?, issued_pdf_sha256 = \?,[\s\S]*issued_pdf_size_bytes = \?/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /deliveryRows\.results\.length &&[\s\S]*!recordedHashes\.every\([\s\S]*SHA256_PATTERN\.test\(hash\) && hash === legacySha256[\s\S]*QUOTE_ISSUED_PDF_MISMATCH/,
+  );
+  assert.doesNotMatch(
+    issuedDocumentServer,
+    /WHERE quote_version_id = \? AND firebase_uid = \?[\s\S]{0,80}attachment_sha256 != ''/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /expectedSha256: deliveryRows\.results\.length \? legacySha256 : undefined/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /status = 'issued'[\s\S]*issued_pdf_object_key = ''[\s\S]*issued_pdf_sha256 = ''[\s\S]*issued_pdf_size_bytes = 0/,
+  );
+  assert.match(
+    issuedDocumentServer,
+    /concurrent request may have won the conditional backfill[\s\S]*readVerifiedIssuedPdf\(racedReference, racedIdentity\)/,
+  );
+  const sendPdfBlock = installerRoute.slice(
+    installerRoute.indexOf("const emailContent = buildTradeQuoteEmail"),
+    installerRoute.indexOf(
+      "const attachmentFilename",
+      installerRoute.indexOf("const emailContent = buildTradeQuoteEmail"),
+    ),
+  );
+  assert.match(sendPdfBlock, /issuedTradeQuotePdf/);
+  assert.doesNotMatch(sendPdfBlock, /renderQuotePdfOrThrow/);
+});
+
 test("customer decisions require verified matching identity and retain exact acceptance evidence", () => {
   for (const boundary of ["identity.emailVerified", "customer_accounts", "v.acceptance_email = ?", "d.customer_source = 'trade_owned'", "v.status = 'issued'", "v.version_number = q.current_version_number"]) assert.match(customerRoute, new RegExp(boundary));
   for (const evidence of ["customer_firebase_uid", "actor_email", "actor_email_verified", "actor_auth_time", "actor_sign_in_provider", "consent_statement", "selected_choice_ids_json", "selected_total_cents", "selection_summary", "decided_at"]) assert.match(customerRoute, new RegExp(evidence));
@@ -298,6 +370,7 @@ test("customer decisions require verified matching identity and retain exact acc
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
   for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  apply(db, issuedDocumentMigration.split("--> statement-breakpoint").slice(0, 3).join("--> statement-breakpoint"));
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
@@ -335,6 +408,15 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.doesNotMatch(linkUi, /window\.print/);
   for (const copy of ["One secure quote link", "Copy link", "Email quote", "Replace link", "Revoke link", "Quote activity"]) assert.match(installerUi, new RegExp(copy));
   assert.match(styles, /@media print/);
+});
+
+test("installer quote controls use plain totals and a consistently styled PDF action", () => {
+  assert.match(installerUi, /<section className="trade-quote-base"><header><div><strong>Quote items<\/strong>/);
+  assert.match(installerUi, /className="trade-quote-totals"><div><span>Subtotal<\/span>[\s\S]*?<span>GST<\/span>[\s\S]*?<span>Total<\/span>/);
+  assert.doesNotMatch(installerUi, /Always included|Your base scope|GST on included|Included total/);
+  assert.match(installerUi, /className="trade-quote-share-actions"[\s\S]*?<a href=\{quote\.link\.pdfUrl\} target="_blank" rel="noreferrer">Download issued PDF<\/a>/);
+  assert.match(styles, /\.trade-quote-share-actions a,[\s\S]*?text-decoration: none/);
+  assert.match(installerUi, /line\.sectionHeading/);
 });
 
 test("customer quote questions are visible and actionable before quote editing", () => {

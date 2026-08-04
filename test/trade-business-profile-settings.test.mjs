@@ -21,6 +21,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
 const mediaRoute = read("../src/app/api/trade-profile-media/route.ts");
 const migration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
+const customerDocumentsMigration = read("../drizzle/0121_trade_customer_documents.sql");
 const schema = read("../db/schema.ts");
 const settingsUi = read("../src/components/TradeBusinessSettingsWorkspace.tsx");
 const globalStyles = read("../src/app/globals.css");
@@ -207,6 +208,7 @@ test("business settings render as one continuous page with explicit section acti
   for (const section of [
     "account",
     "appearance",
+    "documents",
     "service",
     "quotes",
     "notifications",
@@ -225,6 +227,7 @@ test("business settings render as one continuous page with explicit section acti
   );
   for (const action of [
     "Save appearance",
+    "Save customer document details",
     "Save service areas",
     "Save quote defaults",
     "Save notifications",
@@ -235,7 +238,7 @@ test("business settings render as one continuous page with explicit section acti
   }
   assert.match(settingsUi, /className="business-settings-jump-nav"/);
   assert.match(settingsUi, /href=\{`#business-settings-\$\{option\.id\}`\}/);
-  for (const section of ["appearance", "service", "quotes", "notifications"]) {
+  for (const section of ["appearance", "documents", "service", "quotes", "notifications"]) {
     assert.match(
       settingsUi,
       new RegExp(`data-settings-section="${section}"`),
@@ -243,12 +246,94 @@ test("business settings render as one continuous page with explicit section acti
   }
   assert.match(
     settingsUi,
-    /targetSection === "appearance"[\s\S]*\? \{ brandThemeKey, brandBorderStyle \}/,
+    /targetSection === "appearance"[\s\S]*bannerCropXBasisPoints: bannerCrop\.x[\s\S]*bannerCropHeightBasisPoints: bannerCrop\.height/,
   );
   assert.match(
     settingsUi,
     /targetSection === "notifications"[\s\S]*availabilityStatus[\s\S]*emailOpportunities[\s\S]*emailWeeklySummary/,
   );
+});
+
+test("customer document identity, crop and payment settings have one strict owner contract", () => {
+  const columns = [
+    ["document_business_name", "documentBusinessName"],
+    ["document_phone", "documentPhone"],
+    ["document_email", "documentEmail"],
+    ["banner_crop_x_basis_points", "bannerCropXBasisPoints"],
+    ["banner_crop_y_basis_points", "bannerCropYBasisPoints"],
+    ["banner_crop_width_basis_points", "bannerCropWidthBasisPoints"],
+    ["banner_crop_height_basis_points", "bannerCropHeightBasisPoints"],
+    ["invoice_payment_account_name", "invoicePaymentAccountName"],
+    ["invoice_payment_bsb", "invoicePaymentBsb"],
+    ["invoice_payment_account_number", "invoicePaymentAccountNumber"],
+    ["invoice_payment_reference", "invoicePaymentReference"],
+    ["invoice_default_terms", "invoiceDefaultTerms"],
+  ];
+  for (const [sqlColumn, schemaField] of columns) {
+    assert.ok(
+      customerDocumentsMigration.includes(`ADD COLUMN ${sqlColumn}`),
+      `migration missing ${sqlColumn}`,
+    );
+    assert.match(
+      schema,
+      new RegExp(`${schemaField}: (?:text|integer)\\("${sqlColumn}"\\)`),
+      `schema missing ${schemaField}`,
+    );
+    assert.ok(profileRoute.includes(sqlColumn), `profile route missing ${sqlColumn}`);
+  }
+  assert.match(profileRoute, /SELECT account\.email, account\.business_name/);
+  assert.match(
+    profileRoute,
+    /documentDisplayBusinessName: record\.document_business_name \|\| record\.business_name/,
+  );
+  assert.match(
+    profileRoute,
+    /documentDisplayPhone: record\.document_phone \|\| record\.phone/,
+  );
+  assert.match(
+    profileRoute,
+    /documentDisplayEmail: record\.document_email \|\| record\.email/,
+  );
+  assert.match(profileRoute, /function normaliseOptionalPhone/);
+  assert.match(profileRoute, /function normaliseOptionalEmail/);
+  assert.match(profileRoute, /function normaliseBsb/);
+  assert.match(profileRoute, /function normaliseAccountNumber/);
+  assert.match(profileRoute, /values\.x \+ values\.width <= BANNER_CROP_SCALE/);
+  assert.match(profileRoute, /values\.y \+ values\.height <= BANNER_CROP_SCALE/);
+  assert.match(customerDocumentsMigration, /banner_crop_x_basis_points INTEGER NOT NULL DEFAULT 0/);
+  assert.match(customerDocumentsMigration, /banner_crop_y_basis_points INTEGER NOT NULL DEFAULT 0/);
+  assert.match(customerDocumentsMigration, /banner_crop_width_basis_points INTEGER NOT NULL DEFAULT 10000/);
+  assert.match(customerDocumentsMigration, /banner_crop_height_basis_points INTEGER NOT NULL DEFAULT 10000/);
+  assert.match(settingsUi, /x: 0,[\s\S]*y: 0,[\s\S]*width: 10_000,[\s\S]*height: 10_000/);
+  assert.match(profileRoute, /bankFields\.some\(Boolean\) && !bankFields\.every\(Boolean\)/);
+  assert.match(profileRoute, /document_business_name = ''/);
+  assert.match(profileRoute, /invoice_payment_account_number = ''/);
+});
+
+test("business settings show crop-safe quote and invoice previews together", () => {
+  assert.match(settingsUi, /function BannerCropPreview/);
+  assert.match(settingsUi, /function fitCropToFiveToOne/);
+  assert.match(settingsUi, /image\.naturalWidth/);
+  assert.match(settingsUi, /context\.drawImage/);
+  assert.match(settingsUi, /width=\{1000\}/);
+  assert.match(settingsUi, /height=\{200\}/);
+  assert.match(settingsUi, /Save appearance and apply crop/);
+  assert.match(settingsUi, /Customer-facing business name/);
+  assert.match(settingsUi, /Customer enquiries phone/);
+  assert.match(settingsUi, /Customer enquiries email/);
+  assert.match(settingsUi, /Invoice payment details/);
+  assert.match(settingsUi, /\(\["quote", "invoice"\] as const\)\.map/);
+  assert.match(settingsUi, /businessName=\{documentDisplayBusinessName\}/);
+  assert.match(settingsUi, /<span>Subtotal<\/span>/);
+  assert.match(settingsUi, /<span>Discount<\/span>/);
+  assert.match(settingsUi, /<span>GST \(10%\)<\/span>/);
+  assert.match(settingsUi, /<span className="total">Total<\/span>/);
+  assert.match(settingsUi, /Payment details/);
+  for (const redundantLabel of ["Always included", "Your base scope"]) {
+    assert.doesNotMatch(settingsUi, new RegExp(redundantLabel, "i"));
+  }
+  assert.match(globalStyles, /\.business-settings-document-banner \{[^}]*aspect-ratio: 5 \/ 1/);
+  assert.match(globalStyles, /\.business-settings-document-preview-grid/);
 });
 
 test("saved themes expose readable workspace, rail, search and action tokens", () => {

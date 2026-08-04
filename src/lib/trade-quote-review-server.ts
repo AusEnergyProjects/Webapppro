@@ -10,6 +10,7 @@ type Row = Record<string, unknown>;
 
 export type TradeQuoteLineSnapshot = {
   id: string;
+  lineType?: "product" | "labour" | "adjustment";
   description: string;
   quantityMilli: number;
   unitPriceCents: number;
@@ -37,8 +38,15 @@ export type TradeQuoteBrandAssetSnapshot = {
   contentType: "image/png" | "image/jpeg";
 };
 
+export type TradeQuoteBannerCropSnapshot = {
+  xBasisPoints: number;
+  yBasisPoints: number;
+  widthBasisPoints: number;
+  heightBasisPoints: number;
+};
+
 export type TradeQuoteDocumentSnapshot = {
-  schemaVersion: "trade-quote-document-v1";
+  schemaVersion: "trade-quote-document-v1" | "trade-quote-document-v2";
   capturedAt: string;
   quoteId: string;
   quoteVersionId: string;
@@ -76,6 +84,7 @@ export type TradeQuoteDocumentSnapshot = {
     borderStyle: string;
     logo: TradeQuoteBrandAssetSnapshot | null;
     banner: TradeQuoteBrandAssetSnapshot | null;
+    bannerCrop?: TradeQuoteBannerCropSnapshot;
     quoteEmailSubjectTemplate: string;
     quoteEmailIntro: string;
   };
@@ -135,6 +144,7 @@ export type TradeQuoteReviewPayload = {
     borderStyle: string;
     hasLogo: boolean;
     hasBanner: boolean;
+    bannerCrop: TradeQuoteBannerCropSnapshot;
   };
   subtotalCents: number;
   taxCents: number;
@@ -178,6 +188,59 @@ function boundedInteger(value: unknown, maximum = 1_000_000_000) {
   return Math.min(maximum, Math.max(0, number));
 }
 
+function signedBoundedInteger(value: unknown, maximum = 1_000_000_000) {
+  const number = Math.round(Number(value) || 0);
+  return Math.min(maximum, Math.max(-maximum, number));
+}
+
+const DEFAULT_BANNER_CROP: TradeQuoteBannerCropSnapshot = {
+  xBasisPoints: 0,
+  yBasisPoints: 0,
+  widthBasisPoints: 10_000,
+  heightBasisPoints: 10_000,
+};
+
+function normaliseBannerCrop(
+  value: unknown,
+): TradeQuoteBannerCropSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const values = [
+    row.xBasisPoints,
+    row.yBasisPoints,
+    row.widthBasisPoints,
+    row.heightBasisPoints,
+  ].map(Number);
+  if (values.some((item) => !Number.isInteger(item))) return null;
+  const [xBasisPoints, yBasisPoints, widthBasisPoints, heightBasisPoints] =
+    values;
+  if (
+    xBasisPoints < 0 ||
+    yBasisPoints < 0 ||
+    widthBasisPoints <= 0 ||
+    heightBasisPoints <= 0 ||
+    xBasisPoints + widthBasisPoints > 10_000 ||
+    yBasisPoints + heightBasisPoints > 10_000
+  ) {
+    return null;
+  }
+  return {
+    xBasisPoints,
+    yBasisPoints,
+    widthBasisPoints,
+    heightBasisPoints,
+  };
+}
+
+function lineType(value: unknown) {
+  const candidate = cleanText(value, 30);
+  return candidate === "product" ||
+    candidate === "labour" ||
+    candidate === "adjustment"
+    ? candidate
+    : null;
+}
+
 function imageAsset(objectKey: unknown, contentType: unknown) {
   const key = cleanText(objectKey, 1_000);
   const type = cleanText(contentType, 100).toLowerCase();
@@ -194,36 +257,57 @@ function imageAsset(objectKey: unknown, contentType: unknown) {
 }
 
 function lineSnapshot(row: Row): TradeQuoteLineSnapshot {
+  const resolvedLineType = lineType(row.line_type) || "product";
+  const amount = resolvedLineType === "adjustment"
+    ? signedBoundedInteger
+    : boundedInteger;
   return {
     id: cleanText(row.id, 180),
+    lineType: resolvedLineType,
     description: cleanText(row.description, 500),
     quantityMilli: boundedInteger(row.quantity_milli, 100_000_000),
-    unitPriceCents: boundedInteger(row.unit_price_cents),
-    subtotalCents: boundedInteger(row.subtotal_cents),
-    taxCents: boundedInteger(row.tax_cents),
-    totalCents: boundedInteger(row.total_cents),
+    unitPriceCents: amount(row.unit_price_cents),
+    subtotalCents: amount(row.subtotal_cents),
+    taxCents: amount(row.tax_cents),
+    totalCents: amount(row.total_cents),
     sectionHeading: cleanText(row.section_heading, 160) || "Included work",
   };
 }
 
-function normaliseLine(value: unknown): TradeQuoteLineSnapshot | null {
+function normaliseLine(
+  value: unknown,
+  schemaVersion: TradeQuoteDocumentSnapshot["schemaVersion"],
+): TradeQuoteLineSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const description = cleanText(row.description, 500);
   if (!description) return null;
+  const resolvedLineType = lineType(row.lineType);
+  if (schemaVersion === "trade-quote-document-v2" && !resolvedLineType) {
+    return null;
+  }
+  const amount =
+    schemaVersion === "trade-quote-document-v2" &&
+    resolvedLineType === "adjustment"
+      ? signedBoundedInteger
+      : boundedInteger;
   return {
     id: cleanText(row.id, 180),
+    ...(resolvedLineType ? { lineType: resolvedLineType } : {}),
     description,
     quantityMilli: boundedInteger(row.quantityMilli, 100_000_000),
-    unitPriceCents: boundedInteger(row.unitPriceCents),
-    subtotalCents: boundedInteger(row.subtotalCents),
-    taxCents: boundedInteger(row.taxCents),
-    totalCents: boundedInteger(row.totalCents),
+    unitPriceCents: amount(row.unitPriceCents),
+    subtotalCents: amount(row.subtotalCents),
+    taxCents: amount(row.taxCents),
+    totalCents: amount(row.totalCents),
     sectionHeading: cleanText(row.sectionHeading, 160) || "Included work",
   };
 }
 
-function normaliseChoice(value: unknown): TradeQuoteChoiceSnapshot | null {
+function normaliseChoice(
+  value: unknown,
+  schemaVersion: TradeQuoteDocumentSnapshot["schemaVersion"],
+): TradeQuoteChoiceSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const rawKind = cleanText(row.kind, 30);
@@ -235,6 +319,18 @@ function normaliseChoice(value: unknown): TradeQuoteChoiceSnapshot | null {
       : null;
   const name = cleanText(row.name, 200);
   if (!kind || !name) return null;
+  const sourceItems = Array.isArray(row.items)
+    ? row.items.slice(0, 200)
+    : [];
+  const items = sourceItems
+    .map((item) => normaliseLine(item, schemaVersion))
+    .filter(Boolean) as TradeQuoteLineSnapshot[];
+  if (
+    schemaVersion === "trade-quote-document-v2" &&
+    items.length !== sourceItems.length
+  ) {
+    return null;
+  }
   return {
     id: cleanText(row.id, 180),
     kind,
@@ -245,9 +341,7 @@ function normaliseChoice(value: unknown): TradeQuoteChoiceSnapshot | null {
     subtotalCents: boundedInteger(row.subtotalCents),
     taxCents: boundedInteger(row.taxCents),
     totalCents: boundedInteger(row.totalCents),
-    items: Array.isArray(row.items)
-      ? row.items.slice(0, 200).map(normaliseLine).filter(Boolean) as TradeQuoteLineSnapshot[]
-      : [],
+    items,
   };
 }
 
@@ -260,8 +354,13 @@ function normaliseAsset(value: unknown) {
 function snapshotFromObject(
   row: Record<string, unknown>,
 ): TradeQuoteDocumentSnapshot | null {
+  const schemaVersion =
+    row.schemaVersion === "trade-quote-document-v1" ||
+    row.schemaVersion === "trade-quote-document-v2"
+      ? row.schemaVersion
+      : null;
   if (
-    row.schemaVersion !== "trade-quote-document-v1" ||
+    !schemaVersion ||
     !row.work ||
     !row.customer ||
     !row.site ||
@@ -275,11 +374,34 @@ function snapshotFromObject(
   const business = row.business as Record<string, unknown>;
   const quoteVersionId = cleanText(row.quoteVersionId, 180);
   const quoteNumber = cleanText(row.quoteNumber, 120);
+  const bannerCrop = normaliseBannerCrop(business.bannerCrop);
   if (!quoteVersionId || !quoteNumber || !cleanText(business.name, 240)) {
     return null;
   }
+  if (schemaVersion === "trade-quote-document-v2" && !bannerCrop) return null;
+  const sourceItems = Array.isArray(row.items)
+    ? row.items.slice(0, 500)
+    : [];
+  const items = sourceItems
+    .map((item) => normaliseLine(item, schemaVersion))
+    .filter(Boolean) as TradeQuoteLineSnapshot[];
+  const sourceChoices = Array.isArray(row.choices)
+    ? row.choices.slice(0, 100)
+    : [];
+  const choices = sourceChoices
+    .map((choice) => normaliseChoice(choice, schemaVersion))
+    .filter(Boolean) as TradeQuoteChoiceSnapshot[];
+  if (
+    schemaVersion === "trade-quote-document-v2" &&
+    (
+      items.length !== sourceItems.length ||
+      choices.length !== sourceChoices.length
+    )
+  ) {
+    return null;
+  }
   return {
-    schemaVersion: "trade-quote-document-v1",
+    schemaVersion,
     capturedAt: cleanText(row.capturedAt, 40),
     quoteId: cleanText(row.quoteId, 180),
     quoteVersionId,
@@ -317,6 +439,7 @@ function snapshotFromObject(
       borderStyle: cleanText(business.borderStyle, 30) || "soft",
       logo: normaliseAsset(business.logo),
       banner: normaliseAsset(business.banner),
+      ...(bannerCrop ? { bannerCrop } : {}),
       quoteEmailSubjectTemplate: cleanText(
         business.quoteEmailSubjectTemplate,
         240,
@@ -332,12 +455,8 @@ function snapshotFromObject(
     validUntil: cleanText(row.validUntil, 20),
     consentStatement: cleanText(row.consentStatement, 2_000, true),
     issuedAt: cleanText(row.issuedAt, 40),
-    items: Array.isArray(row.items)
-      ? row.items.slice(0, 500).map(normaliseLine).filter(Boolean) as TradeQuoteLineSnapshot[]
-      : [],
-    choices: Array.isArray(row.choices)
-      ? row.choices.slice(0, 100).map(normaliseChoice).filter(Boolean) as TradeQuoteChoiceSnapshot[]
-      : [],
+    items,
+    choices,
   };
 }
 
@@ -386,6 +505,10 @@ export async function buildTradeQuoteDocumentSnapshot(
         trade.postcode trade_postcode, trade.brand_theme_key,
         trade.brand_border_style, trade.logo_object_key, trade.logo_content_type,
         trade.banner_object_key, trade.banner_content_type,
+        trade.document_business_name, trade.document_phone,
+        trade.document_email, trade.banner_crop_x_basis_points,
+        trade.banner_crop_y_basis_points, trade.banner_crop_width_basis_points,
+        trade.banner_crop_height_basis_points,
         trade.quote_email_subject_template, trade.quote_email_intro
       FROM trade_crm_quote_versions version
       JOIN trade_crm_quotes quote
@@ -444,9 +567,16 @@ export async function buildTradeQuoteDocumentSnapshot(
     .map((value) => cleanText(value, 300))
     .filter(Boolean)
     .join(", ");
+  const bannerCrop =
+    normaliseBannerCrop({
+      xBasisPoints: row.banner_crop_x_basis_points,
+      yBasisPoints: row.banner_crop_y_basis_points,
+      widthBasisPoints: row.banner_crop_width_basis_points,
+      heightBasisPoints: row.banner_crop_height_basis_points,
+    }) || DEFAULT_BANNER_CROP;
 
   return {
-    schemaVersion: "trade-quote-document-v1",
+    schemaVersion: "trade-quote-document-v2",
     capturedAt:
       cleanText(overrides.capturedAt, 40) || new Date().toISOString(),
     quoteId: cleanText(row.quote_id, 180),
@@ -475,9 +605,15 @@ export async function buildTradeQuoteDocumentSnapshot(
       summary: siteSummary,
     },
     business: {
-      name: cleanText(row.trade_business_name, 240),
-      email: cleanText(row.trade_email, 254),
-      phone: cleanText(row.trade_phone, 60),
+      name:
+        cleanText(row.document_business_name, 240) ||
+        cleanText(row.trade_business_name, 240),
+      email:
+        cleanText(row.document_email, 254) ||
+        cleanText(row.trade_email, 254),
+      phone:
+        cleanText(row.document_phone, 60) ||
+        cleanText(row.trade_phone, 60),
       abn: cleanText(row.trade_abn, 20),
       website: cleanText(row.trade_website, 500),
       address: businessAddress,
@@ -485,6 +621,7 @@ export async function buildTradeQuoteDocumentSnapshot(
       borderStyle: cleanText(row.brand_border_style, 30) || "soft",
       logo: imageAsset(row.logo_object_key, row.logo_content_type),
       banner: imageAsset(row.banner_object_key, row.banner_content_type),
+      bannerCrop,
       quoteEmailSubjectTemplate: cleanText(
         row.quote_email_subject_template,
         240,
@@ -654,6 +791,7 @@ export async function buildTradeQuoteReviewPayload(
       borderStyle: snapshot.business.borderStyle,
       hasLogo: Boolean(snapshot.business.logo),
       hasBanner: Boolean(snapshot.business.banner),
+      bannerCrop: snapshot.business.bannerCrop || DEFAULT_BANNER_CROP,
     },
     subtotalCents: snapshot.subtotalCents,
     taxCents: snapshot.taxCents,
@@ -682,6 +820,8 @@ function publicFailureCode(error: unknown) {
   if (
     [
       "QUOTE_DOCUMENT_SNAPSHOT_INVALID",
+      "QUOTE_ISSUED_PDF_MISMATCH",
+      "QUOTE_ISSUED_PDF_UNAVAILABLE",
       "QUOTE_LINK_EXPIRED",
       "QUOTE_LINK_STOPPED",
       "QUOTE_LINK_INVALID",
@@ -714,6 +854,18 @@ export function tradeQuoteTokenErrorResponse(
         ok: false,
         error:
           "This quote document could not be verified. Ask the trade business to issue a replacement.",
+      },
+      409,
+    );
+  } else if (
+    code === "QUOTE_ISSUED_PDF_MISMATCH" ||
+    code === "QUOTE_ISSUED_PDF_UNAVAILABLE"
+  ) {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "The exact issued quote PDF could not be verified. Ask the trade business to issue a replacement.",
       },
       409,
     );

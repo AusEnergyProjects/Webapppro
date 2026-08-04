@@ -37,7 +37,7 @@ function money(cents: number) {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: "AUD",
-  }).format(Math.max(0, Number(cents) || 0) / 100);
+  }).format((Number(cents) || 0) / 100);
 }
 
 function safeShareUrl(value: string) {
@@ -85,8 +85,8 @@ function subjectFromTemplate(
   return subject;
 }
 
-function summaryLines(snapshot: TradeQuoteDocumentSnapshot) {
-  const lines = snapshot.items.slice(0, 8);
+function summaryLines(linesToDisplay: TradeQuoteDocumentSnapshot["items"]) {
+  const lines = linesToDisplay.slice(0, 8);
   return {
     text: lines
       .map((line) => `- ${line.description}: ${money(line.totalCents)}`)
@@ -97,7 +97,7 @@ function summaryLines(snapshot: TradeQuoteDocumentSnapshot) {
           `<tr><td style="padding:8px 0;color:#173f3b;border-bottom:1px solid #d9e8e5">${escapeHtml(line.description)}</td><td style="padding:8px 0 8px 16px;text-align:right;font-weight:700;color:#063b42;border-bottom:1px solid #d9e8e5">${escapeHtml(money(line.totalCents))}</td></tr>`,
       )
       .join(""),
-    remaining: Math.max(0, snapshot.items.length - lines.length),
+    remaining: Math.max(0, linesToDisplay.length - lines.length),
   };
 }
 
@@ -117,8 +117,23 @@ export function buildTradeQuoteEmail(
     cleanText(snapshot.business.quoteEmailIntro, 1_000) ||
     "Thank you for the opportunity to quote for your project. Review the scope, choices and total below.";
   const expires = cleanText(input.expiresAt, 40).slice(0, 10);
-  const lines = summaryLines(snapshot);
   const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
+  const headlineItems = [
+    ...snapshot.items,
+    ...snapshot.choices
+      .filter((choice) =>
+        displayTotals.selectedChoiceIds.includes(String(choice.id || "")),
+      )
+      .flatMap((choice) => choice.items),
+  ];
+  const lines = summaryLines(headlineItems);
+  const discountSubtotalCents = headlineItems.reduce(
+    (sum, item) =>
+      item.subtotalCents < 0 ? sum + item.subtotalCents : sum,
+    0,
+  );
+  const grossSubtotalCents =
+    displayTotals.subtotalCents - discountSubtotalCents;
   const contact = [snapshot.business.phone, snapshot.business.email]
     .map((value) => cleanText(value, 160))
     .filter(Boolean)
@@ -134,11 +149,17 @@ export function buildTradeQuoteEmail(
     "",
     intro,
     "",
-    `${snapshot.work.title} | ${snapshot.site.summary}`,
+    `${snapshot.work.title} | ${snapshot.work.number}`,
+    snapshot.site.summary,
     lines.text,
     lines.remaining ? `- Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"}` : "",
     "",
-    `${displayTotals.label}: ${money(displayTotals.totalCents)} including GST`,
+    `Subtotal ex GST: ${money(grossSubtotalCents)}`,
+    discountSubtotalCents < 0
+      ? `Discount ex GST: ${money(discountSubtotalCents)}`
+      : "",
+    `GST: ${money(displayTotals.taxCents)}`,
+    `Total incl GST: ${money(displayTotals.totalCents)}`,
     optionalText.trim(),
     displayTotals.hasChoices
       ? "Your final total is calculated from the options you choose in the secure review."
@@ -174,15 +195,23 @@ export function buildTradeQuoteEmail(
             <p style="margin:0 0 22px;font-size:16px;line-height:1.6;color:#345b57">${escapeHtml(intro)}</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:22px;background:#f2f8f6;border-radius:12px">
               <tr><td style="padding:16px">
-                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#397068">Work</div>
-                <div style="padding-top:5px;font-size:18px;font-weight:700;color:#063b42">${escapeHtml(snapshot.work.title)}</div>
+                <div style="font-size:18px;font-weight:700;color:#063b42">${escapeHtml(snapshot.work.title)}</div>
+                <div style="padding-top:5px;font-size:12px;line-height:1.45;color:#397068">${escapeHtml(snapshot.work.number)}</div>
                 <div style="padding-top:5px;font-size:13px;line-height:1.45;color:#55736f">${escapeHtml(snapshot.site.summary)}</div>
               </td></tr>
             </table>
             ${lines.html ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:18px">${lines.html}</table>` : ""}
             ${lines.remaining ? `<p style="margin:0 0 18px;font-size:13px;color:#55736f">Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"} in the attached quote.</p>` : ""}
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background:#063b42;border-radius:12px;color:#ffffff">
-              <tr><td style="padding:18px 20px"><div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#8debd0">${escapeHtml(displayTotals.label)} including GST</div><div style="padding-top:5px;font-size:28px;font-weight:700">${escapeHtml(money(displayTotals.totalCents))}</div></td></tr>
+              <tr><td style="padding:18px 20px">
+                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#8debd0">Total incl GST</div>
+                <div style="padding-top:5px;font-size:28px;font-weight:700">${escapeHtml(money(displayTotals.totalCents))}</div>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding-top:10px;font-size:13px;color:#d9f6ed">
+                  <tr><td>Subtotal ex GST</td><td align="right">${escapeHtml(money(grossSubtotalCents))}</td></tr>
+                  ${discountSubtotalCents < 0 ? `<tr><td>Discount ex GST</td><td align="right">${escapeHtml(money(discountSubtotalCents))}</td></tr>` : ""}
+                  <tr><td>GST</td><td align="right">${escapeHtml(money(displayTotals.taxCents))}</td></tr>
+                </table>
+              </td></tr>
             </table>
             ${snapshot.choices.length ? `<p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#55736f">This quote includes ${snapshot.choices.length} customer choice${snapshot.choices.length === 1 ? "" : "s"} to review online.</p>` : ""}
             ${displayTotals.hasChoices ? `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:#6c827f">Your final total is calculated from the options you choose in the secure review.</p>` : ""}

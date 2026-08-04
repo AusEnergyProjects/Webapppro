@@ -469,8 +469,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /`fcfca482b0f86413423af2af8c5ae77054e6186f`[\s\S]{0,500}Sites version 280/i);
   assert.match(roadmap, /## Released milestone: TRADE-WORKSPACE-DELIVERY-RECOVERY-44/);
   assert.match(roadmap, /`9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`[\s\S]{0,500}Sites version 282/i);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44` released and live/);
-  assert.match(handover, /Milestone ID: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44`/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` validated release candidate/);
+  assert.match(handover, /Milestone ID: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45`/);
   assert.match(handover, /Previous production application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`/);
   assert.match(handover, /Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`/);
   assert.match(handover, /Released application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`/);

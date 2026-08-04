@@ -103,6 +103,24 @@ test("installer indexes apply named views, movable columns and matching visible 
   assert.match(savedViewsUi, /Delete/);
 });
 
+test("installer job rows preserve the selected Dataforce column grid", () => {
+  const jobResultsStart = crmUi.indexOf('<section className="crm-job-list crm-record-table" aria-label="Job results">');
+  assert.notEqual(jobResultsStart, -1);
+  const jobResults = crmUi.slice(jobResultsStart, crmUi.indexOf("</section>", jobResultsStart));
+  assert.match(
+    jobResults,
+    /<article key=\{job\.id\} className="crm-row-open crm-record-data-row crm-index-row" style=\{jobGridStyle\}/,
+  );
+  assert.match(jobResults, /\}>\{jobColumns\.map\(\(key\) => <span className="crm-index-cell" key=\{key\}>\{jobIndexCell\(job, key,/);
+  assert.doesNotMatch(
+    jobResults,
+    /<article key=\{job\.id\} className="crm-row-open"[^>]*><div className="crm-record-data-row crm-index-row"/,
+  );
+  assert.doesNotMatch(jobResults, /type="checkbox"|crm-row-select/);
+  assert.match(jobResults, /jobColumns\.map\(\(key\) => <span key=\{key\}>\{jobIndexColumns\.find/);
+  assert.match(crmUi, /if \(key === "Phone" \|\| key === "Mobile"\)[\s\S]*href=\{phoneHref\(value\)\}/);
+});
+
 test("installer saved views retain bounded populated job filters", () => {
   for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference"]) {
     assert.match(shared, new RegExp(`${field}\\?: string`));

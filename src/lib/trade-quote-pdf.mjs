@@ -1,6 +1,11 @@
 import {
   PDFDocument,
   StandardFonts,
+  clip,
+  endPath,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -158,7 +163,7 @@ function amount(cents) {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: "AUD",
-  }).format(Math.max(0, Number(cents) || 0) / 100);
+  }).format((Number(cents) || 0) / 100);
 }
 
 function wrapLine(font, value, size, width) {
@@ -218,6 +223,48 @@ function fitImage(image, maximumWidth, maximumHeight) {
   };
 }
 
+export function tradeQuoteBannerCropForImage(
+  suppliedCrop,
+  suppliedImageWidth,
+  suppliedImageHeight,
+) {
+  const imageWidth = Math.max(1, Number(suppliedImageWidth) || 1);
+  const imageHeight = Math.max(1, Number(suppliedImageHeight) || 1);
+  const crop = suppliedCrop && typeof suppliedCrop === "object"
+    ? suppliedCrop
+    : {};
+  const bounded = (value, fallback, minimum = 0) => {
+    const number = Number(value);
+    return Math.min(
+      10_000,
+      Math.max(minimum, Number.isFinite(number) ? number : fallback),
+    );
+  };
+  let x =
+    (bounded(crop.xBasisPoints, 0) / 10_000) * imageWidth;
+  let y =
+    (bounded(crop.yBasisPoints, 0) / 10_000) * imageHeight;
+  let width =
+    (bounded(crop.widthBasisPoints, 10_000, 1) / 10_000) * imageWidth;
+  let height =
+    (bounded(crop.heightBasisPoints, 10_000, 1) / 10_000) * imageHeight;
+  x = Math.min(x, imageWidth - 1);
+  y = Math.min(y, imageHeight - 1);
+  width = Math.max(1, Math.min(width, imageWidth - x));
+  height = Math.max(1, Math.min(height, imageHeight - y));
+
+  if (width / height > 5) {
+    const nextWidth = height * 5;
+    x += (width - nextWidth) / 2;
+    width = nextWidth;
+  } else {
+    const nextHeight = width / 5;
+    y += (height - nextHeight) / 2;
+    height = nextHeight;
+  }
+  return { x, y, width, height };
+}
+
 async function embeddedImage(pdf, asset) {
   if (
     !asset ||
@@ -251,7 +298,10 @@ export async function createTradeQuotePdfBytes(
       : null;
   if (
     !snapshot ||
-    snapshot.schemaVersion !== "trade-quote-document-v1" ||
+    (
+      snapshot.schemaVersion !== "trade-quote-document-v1" &&
+      snapshot.schemaVersion !== "trade-quote-document-v2"
+    ) ||
     !snapshot.quoteNumber ||
     !snapshot.business?.name
   ) {
@@ -285,6 +335,27 @@ export async function createTradeQuotePdfBytes(
   const palette =
     THEMES[snapshot.business.themeKey] || THEMES.emerald_navy;
   const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
+  const headlineItems = [
+    ...(Array.isArray(snapshot.items) ? snapshot.items : []),
+    ...(Array.isArray(snapshot.choices)
+      ? snapshot.choices
+          .filter((choice) =>
+            displayTotals.selectedChoiceIds.includes(String(choice.id || "")),
+          )
+          .flatMap((choice) =>
+            Array.isArray(choice.items) ? choice.items : [],
+          )
+      : []),
+  ];
+  const discountSubtotalCents = headlineItems.reduce(
+    (sum, item) =>
+      Number(item.subtotalCents) < 0
+        ? sum + Number(item.subtotalCents)
+        : sum,
+    0,
+  );
+  const grossSubtotalCents =
+    displayTotals.subtotalCents - discountSubtotalCents;
   const pages = [];
   let page;
   let y;
@@ -460,28 +531,53 @@ export async function createTradeQuotePdfBytes(
 
   addPage();
   if (banner) {
-    const size = fitImage(banner, CONTENT_WIDTH, 74);
+    const boxHeight = A4_WIDTH / 5;
+    const crop = tradeQuoteBannerCropForImage(
+      snapshot.business.bannerCrop,
+      banner.width,
+      banner.height,
+    );
+    const scale = A4_WIDTH / crop.width;
+    const boxBottom = A4_HEIGHT - boxHeight;
+    page.pushOperators(
+      pushGraphicsState(),
+      rectangle(0, boxBottom, A4_WIDTH, boxHeight),
+      clip(),
+      endPath(),
+    );
     page.drawImage(banner, {
-      x: MARGIN + (CONTENT_WIDTH - size.width) / 2,
-      y: y - size.height,
-      width: size.width,
-      height: size.height,
+      x: -crop.x * scale,
+      y: A4_HEIGHT + crop.y * scale - banner.height * scale,
+      width: banner.width * scale,
+      height: banner.height * scale,
       opacity: 0.96,
     });
-    y -= size.height + 18;
+    page.pushOperators(popGraphicsState());
+    y = boxBottom - 18;
   }
 
+  label("Quote from");
   if (logo) {
     const size = fitImage(logo, 96, 52);
+    const logoTop = y + 4;
     page.drawImage(logo, {
       x: MARGIN,
-      y: y - size.height,
+      y: logoTop - size.height,
       width: size.width,
       height: size.height,
     });
-    y -= size.height + 12;
+    const nameTop = y;
+    drawText(snapshot.business.name, {
+      x: MARGIN + 112,
+      width: CONTENT_WIDTH - 112,
+      font: bold,
+      size: 21,
+      lineHeight: 25,
+      color: palette.ink,
+      gapAfter: 7,
+    });
+    y = Math.min(y, logoTop - size.height - 8, nameTop - 32);
   } else {
-    label("Quote from");
     drawText(snapshot.business.name, {
       font: bold,
       size: 23,
@@ -524,9 +620,7 @@ export async function createTradeQuotePdfBytes(
     `${snapshot.quoteNumber} | Version ${snapshot.versionNumber}`,
     MARGIN + 14,
     half,
-    snapshot.validUntil
-      ? `Valid until ${snapshot.validUntil}`
-      : "Ask the trade business about validity",
+    `${snapshot.work.title} | ${snapshot.work.number}`,
   );
   summaryCell(
     "Prepared for",
@@ -536,41 +630,49 @@ export async function createTradeQuotePdfBytes(
     snapshot.site.summary,
   );
   y = summaryTop - 110;
-  label("Work");
-  drawText(snapshot.work.title, {
-    font: bold,
-    size: 15,
-    lineHeight: 19,
-    gapAfter: 3,
-  });
-  drawText(snapshot.work.number, {
-    size: 8.5,
-    color: rgb(0.34, 0.45, 0.45),
-    lineHeight: 11,
-    gapAfter: 8,
-  });
+  drawText(
+    snapshot.validUntil
+      ? `Valid until ${snapshot.validUntil}`
+      : "Ask the trade business about validity",
+    {
+      size: 8.5,
+      color: rgb(0.34, 0.45, 0.45),
+      lineHeight: 11,
+      gapAfter: 8,
+    },
+  );
 
   if (snapshot.customerMessage) {
-    ensureSpace(58);
+    const messageLineHeight = 13;
+    const messageHeight = Math.max(
+      19,
+      wrapText(
+        regular,
+        snapshot.customerMessage,
+        9.25,
+        CONTENT_WIDTH - 14,
+        regularCharacters,
+      ).length * messageLineHeight + 6,
+    );
+    ensureSpace(messageHeight + 20);
     page.drawRectangle({
       x: MARGIN,
-      y: y - 6,
+      y: y - messageHeight + 5,
       width: 4,
-      height: 38,
+      height: messageHeight,
       color: palette.accent,
     });
     drawText(snapshot.customerMessage, {
       x: MARGIN + 14,
       width: CONTENT_WIDTH - 14,
       size: 9.25,
-      lineHeight: 13,
+      lineHeight: messageLineHeight,
       color: rgb(0.24, 0.35, 0.35),
       gapAfter: 8,
     });
   }
 
   if (snapshot.items?.length) {
-    sectionTitle("Always included", "Your base scope");
     const headings = [
       ...new Set(
         snapshot.items.map(
@@ -579,14 +681,16 @@ export async function createTradeQuotePdfBytes(
       ),
     ];
     for (const heading of headings) {
-      ensureSpace(34);
-      drawText(heading, {
-        font: bold,
-        size: 10,
-        color: palette.primary,
-        lineHeight: 13,
-        gapAfter: 5,
-      });
+      if (headings.length > 1 || heading !== "Included work") {
+        ensureSpace(34);
+        drawText(heading, {
+          font: bold,
+          size: 10,
+          color: palette.primary,
+          lineHeight: 13,
+          gapAfter: 5,
+        });
+      }
       snapshot.items
         .filter(
           (item) =>
@@ -597,17 +701,17 @@ export async function createTradeQuotePdfBytes(
     }
   }
 
-  ensureSpace(94);
+  ensureSpace(104);
   y -= 8;
   page.drawRectangle({
     x: MARGIN,
-    y: y - 73,
+    y: y - 83,
     width: CONTENT_WIDTH,
-    height: 78,
+    height: 88,
     color: palette.ink,
   });
   page.drawText(
-    safeText(displayTotals.label.toUpperCase(), boldCharacters),
+    safeText("TOTAL INCL GST", boldCharacters),
     {
     x: MARGIN + 16,
     y: y - 16,
@@ -624,18 +728,33 @@ export async function createTradeQuotePdfBytes(
     size: 25,
     color: rgb(1, 1, 1),
   });
-  const tax = safeText(
-    `Subtotal ${amount(displayTotals.subtotalCents)} | GST ${amount(displayTotals.taxCents)}`,
-    regularCharacters,
-  );
-  page.drawText(tax, {
-    x: A4_WIDTH - MARGIN - regular.widthOfTextAtSize(tax, 8),
-    y: y - 43,
-    font: regular,
-    size: 8,
-    color: rgb(0.87, 0.94, 0.93),
+  const breakdownRows = [
+    ["Subtotal ex GST", grossSubtotalCents],
+    ...(discountSubtotalCents < 0
+      ? [["Discount ex GST", discountSubtotalCents]]
+      : []),
+    ["GST", displayTotals.taxCents],
+  ];
+  breakdownRows.forEach(([rowLabel, rowAmount], index) => {
+    const labelText = safeText(String(rowLabel), regularCharacters);
+    const amountText = safeText(amount(Number(rowAmount)), boldCharacters);
+    const rowY = y - 18 - index * 17;
+    page.drawText(labelText, {
+      x: A4_WIDTH - MARGIN - 178,
+      y: rowY,
+      font: regular,
+      size: 8,
+      color: rgb(0.87, 0.94, 0.93),
+    });
+    page.drawText(amountText, {
+      x: A4_WIDTH - MARGIN - bold.widthOfTextAtSize(amountText, 8.5),
+      y: rowY,
+      font: bold,
+      size: 8.5,
+      color: rgb(1, 1, 1),
+    });
   });
-  y -= 92;
+  y -= 102;
 
   if (snapshot.choices?.length) {
     sectionTitle(

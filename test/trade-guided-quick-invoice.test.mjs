@@ -19,12 +19,23 @@ const paymentPanel = read("../src/components/TradePaymentPanel.tsx");
 const accountingRoute = read("../src/app/api/trade-accounting/route.ts");
 const paymentRouteUrl = new URL("../src/app/api/trade-payment-links/route.ts", import.meta.url);
 const migration = read("../drizzle/0075_guided_quick_invoices.sql");
+const correctionMigration = read("../drizzle/0076_invoice_corrections_credits.sql");
+const documentMigration = read("../drizzle/0122_trade_invoice_documents.sql");
+const issuedDocumentMigration = read("../drizzle/0123_immutable_issued_pdf_artifacts.sql");
 const apply = (db, sql) => {
   for (
     const statement of sql
       .split("--> statement-breakpoint")
       .map((item) => item.trim())
       .filter(Boolean)
+  ) db.exec(statement);
+};
+const applyMatching = (db, sql, pattern) => {
+  for (
+    const statement of sql
+      .split("--> statement-breakpoint")
+      .map((item) => item.trim())
+      .filter((item) => item && pattern.test(item))
   ) db.exec(statement);
 };
 
@@ -48,7 +59,14 @@ test("quick invoice totals retain integer cents and explicit GST", () => {
   assert.deepEqual(quickInvoiceTotals([
     { subtotalCents: 20_000, taxCents: 2_000, totalCents: 22_000 },
     { subtotalCents: 8_500, taxCents: 0, totalCents: 8_500 },
-  ]), { subtotalCents: 28_500, taxCents: 2_000, totalCents: 30_500 });
+  ]), {
+    subtotalCents: 28_500,
+    discountCents: 0,
+    taxableDiscountCents: 0,
+    gstFreeDiscountCents: 0,
+    taxCents: 2_000,
+    totalCents: 30_500,
+  });
 });
 
 test("invoice due dates use the Australia Sydney calendar day at UTC boundaries", () => {
@@ -77,7 +95,10 @@ test("saved direct-customer jobs can create and recover a quick invoice without 
   assert.doesNotMatch(crmRoute, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
   assert.match(invoiceRoute, /action === "create_draft"/);
   assert.match(invoiceRoute, /details\.customer_source = 'trade_owned'/);
-  assert.match(invoiceRoute, /resolveQuickInvoiceDraft\(identity\.uid, body\.lines\)/);
+  assert.match(
+    invoiceRoute,
+    /resolveQuickInvoiceDraft\(access\.ownerUid, body\.lines, body\.discountCents\)/,
+  );
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoices/);
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoice_revisions/);
   assert.match(invoiceRoute, /quick_invoice_created/);
@@ -91,12 +112,21 @@ test("saved direct-customer jobs can create and recover a quick invoice without 
 test("successful delivery atomically records consent with the issued invoice", () => {
   const db = new DatabaseSync(":memory:");
   apply(db, migration);
+  db.exec(`CREATE TABLE trade_crm_payment_links (
+    id text PRIMARY KEY, work_order_id text, firebase_uid text, commercial_reference text, purpose text,
+    provider text, provider_payment_id text, paid_amount_cents integer, paid_at text, status text
+  )`);
+  apply(db, correctionMigration);
+  apply(db, documentMigration);
+  applyMatching(db, issuedDocumentMigration, /trade_crm_quick_invoice/);
   const createdAt = "2026-08-03T00:00:00.000Z";
   const sentAt = "2026-08-03T00:01:00.000Z";
+  const documentSnapshot = '{"invoiceId":"invoice-1","revision":1}';
   db.prepare(`INSERT INTO trade_crm_quick_invoices (
       id, work_order_id, firebase_uid, crm_customer_id, invoice_number,
-      due_at, consent_confirmed_at, created_by_uid, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?)`)
+      due_at, delivery_status, document_snapshot_json, consent_confirmed_at,
+      created_by_uid, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'sending', ?, '', ?, ?, ?)`)
     .run(
       "invoice-1",
       "job-1",
@@ -104,6 +134,7 @@ test("successful delivery atomically records consent with the issued invoice", (
       "customer-1",
       "INV-TLJ-1",
       "2026-08-10",
+      documentSnapshot,
       "owner-1",
       createdAt,
       createdAt,
@@ -116,11 +147,16 @@ test("successful delivery atomically records consent with the issued invoice", (
     db.prepare(sql).run(
       "resend",
       "provider-message-1",
+      "trade-issued-documents/invoice/invoice-1/revision-1/test.pdf",
+      "a".repeat(64),
+      1234,
       sentAt,
       sentAt,
       sentAt,
       "invoice-1",
       "owner-1",
+      1,
+      documentSnapshot,
     ).changes,
     1,
   );
@@ -132,7 +168,7 @@ test("successful delivery atomically records consent with the issued invoice", (
       WHERE id = 'invoice-1'`).get() },
     {
       status: "issued",
-      delivery_status: "sent",
+      delivery_status: "provider_accepted",
       provider_message_id: "provider-message-1",
       consent_confirmed_at: sentAt,
       sent_at: sentAt,
@@ -142,6 +178,174 @@ test("successful delivery atomically records consent with the issued invoice", (
   assert.match(
     invoiceRoute,
     /body\.consentConfirmed !== true[\s\S]*sendQuickInvoiceDelivery/,
+  );
+});
+
+test("provider acceptance recovers only the exact claimed invoice snapshot", () => {
+  const db = new DatabaseSync(":memory:");
+  apply(db, migration);
+  db.exec(`CREATE TABLE trade_crm_payment_links (
+    id text PRIMARY KEY, work_order_id text, firebase_uid text, commercial_reference text, purpose text,
+    provider text, provider_payment_id text, paid_amount_cents integer, paid_at text, status text
+  )`);
+  apply(db, correctionMigration);
+  apply(db, documentMigration);
+  applyMatching(db, issuedDocumentMigration, /trade_crm_quick_invoice/);
+  const createdAt = "2026-08-05T00:00:00.000Z";
+  const acceptedAt = "2026-08-05T00:01:00.000Z";
+  const claimedSnapshot = '{"invoiceId":"invoice-recover","revision":1}';
+  const storedPdf = {
+    key: "trade-issued-documents/invoice/invoice-recover/revision-1/test.pdf",
+    sha256: "a".repeat(64),
+    sizeBytes: 1234,
+  };
+  const insert = db.prepare(`INSERT INTO trade_crm_quick_invoices (
+      id, work_order_id, firebase_uid, crm_customer_id, invoice_number,
+      due_at, delivery_status, document_snapshot_json, consent_confirmed_at,
+      created_by_uid, created_at, updated_at
+    ) VALUES (?, ?, 'owner-1', 'customer-1', ?, '2026-08-12', ?, ?, '', 'owner-1', ?, ?)`);
+  insert.run(
+    "invoice-recover",
+    "job-recover",
+    "INV-RECOVER",
+    "failed",
+    claimedSnapshot,
+    createdAt,
+    createdAt,
+  );
+  const successSql = sourceSql(
+    invoiceServer,
+    "QUICK_INVOICE_SUCCESS_UPDATE_SQL",
+  );
+  assert.equal(
+    db.prepare(successSql).run(
+      "resend",
+      "provider-recover",
+      storedPdf.key,
+      storedPdf.sha256,
+      storedPdf.sizeBytes,
+      acceptedAt,
+      acceptedAt,
+      acceptedAt,
+      "invoice-recover",
+      "owner-1",
+      1,
+      claimedSnapshot,
+    ).changes,
+    0,
+  );
+  const recoverySql = sourceSql(
+    invoiceServer,
+    "QUICK_INVOICE_PROVIDER_ACCEPTED_RECOVERY_SQL",
+  );
+  assert.equal(
+    db.prepare(recoverySql).run(
+      "resend",
+      "provider-recover",
+      storedPdf.key,
+      storedPdf.sha256,
+      storedPdf.sizeBytes,
+      acceptedAt,
+      acceptedAt,
+      acceptedAt,
+      "invoice-recover",
+      "owner-1",
+      1,
+      claimedSnapshot,
+    ).changes,
+    1,
+  );
+  assert.deepEqual(
+    { ...db.prepare(`SELECT
+        status, delivery_status, provider_message_id,
+        issued_pdf_object_key, issued_pdf_sha256, issued_pdf_size_bytes
+      FROM trade_crm_quick_invoices
+      WHERE id = 'invoice-recover'`).get() },
+    {
+      status: "issued",
+      delivery_status: "provider_accepted",
+      provider_message_id: "provider-recover",
+      issued_pdf_object_key: storedPdf.key,
+      issued_pdf_sha256: storedPdf.sha256,
+      issued_pdf_size_bytes: storedPdf.sizeBytes,
+    },
+  );
+
+  insert.run(
+    "invoice-conflict",
+    "job-conflict",
+    "INV-CONFLICT",
+    "sending",
+    '{"invoiceId":"invoice-conflict","revision":2}',
+    createdAt,
+    createdAt,
+  );
+  assert.equal(
+    db.prepare(recoverySql).run(
+      "resend",
+      "provider-conflict",
+      "trade-issued-documents/invoice/invoice-conflict/revision-1/test.pdf",
+      "b".repeat(64),
+      1234,
+      acceptedAt,
+      acceptedAt,
+      acceptedAt,
+      "invoice-conflict",
+      "owner-1",
+      1,
+      claimedSnapshot,
+    ).changes,
+    0,
+  );
+  const conflictSql = sourceSql(
+    invoiceServer,
+    "QUICK_INVOICE_PROVIDER_ACCEPTED_CONFLICT_SQL",
+  );
+  assert.equal(
+    db.prepare(conflictSql).run(
+      "resend",
+      "provider-conflict",
+      acceptedAt,
+      "invoice-conflict",
+      "owner-1",
+    ).changes,
+    1,
+  );
+  assert.deepEqual(
+    { ...db.prepare(`SELECT
+        status, delivery_status, provider_message_id, last_error,
+        issued_pdf_object_key
+      FROM trade_crm_quick_invoices
+      WHERE id = 'invoice-conflict'`).get() },
+    {
+      status: "draft",
+      delivery_status: "reconciliation_required",
+      provider_message_id: "provider-conflict",
+      last_error: "PROVIDER_ACCEPTED_RECONCILIATION_REQUIRED",
+      issued_pdf_object_key: "",
+    },
+  );
+});
+
+test("provider reconciliation is never presented as issued or resendable", () => {
+  assert.match(
+    invoiceServer,
+    /delivery_status = 'reconciliation_required'/,
+  );
+  assert.match(
+    invoiceServer,
+    /delivery_status = 'reconciliation_required' THEN delivery_status/,
+  );
+  assert.match(invoicePanel, /const reconciliationRequired =/);
+  assert.match(invoicePanel, /Reconciliation required/);
+  assert.match(invoicePanel, /Do not resend it/);
+  assert.match(
+    invoicePanel,
+    /!providerAccepted && !reconciliationRequired/,
+  );
+  assert.match(
+    invoicePanel,
+    /invoice\.status !== "draft" &&[\s\S]*invoice\.canDownloadPdf/,
   );
 });
 
