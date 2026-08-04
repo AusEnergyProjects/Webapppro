@@ -7,6 +7,7 @@ const path = require("node:path");
 const page = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/page.tsx"), "utf8");
 const previewPage = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/electricity-next/page.tsx"), "utf8");
 const rollbackRoute = fs.readFileSync(path.resolve(__dirname, "../src/app/compare/electricity-legacy/route.ts"), "utf8");
+const legacyComparator = fs.readFileSync(path.resolve(__dirname, "../public/electricity-comparator.html"), "utf8");
 const component = fs.readFileSync(path.resolve(__dirname, "../src/components/electricity/NativeElectricityComparator.tsx"), "utf8");
 const chart = fs.readFileSync(path.resolve(__dirname, "../src/components/electricity/Nem12UsageChart.tsx"), "utf8");
 const styles = fs.readFileSync(path.resolve(__dirname, "../src/app/globals.css"), "utf8");
@@ -16,8 +17,10 @@ test("native electricity is primary with noindex regression and rollback routes"
   assert.match(page, /<NativeElectricityComparator \/>/);
   assert.match(previewPage, /robots: \{ index: false, follow: false \}/);
   assert.match(previewPage, /<NativeElectricityComparator preview \/>/);
-  assert.match(rollbackRoute, /electricity-comparator\.html/);
+  assert.match(rollbackRoute, /new URL\("\/electricity-comparator", request\.url\)/);
   assert.match(rollbackRoute, /X-Robots-Tag/);
+  assert.doesNotMatch(rollbackRoute, /node:fs|readFile|process\.cwd/);
+  assert.match(legacyComparator, /<meta name="robots" content="noindex,nofollow">/);
 });
 
 test("native results use the same-origin plan route and strict typed estimator", () => {
