@@ -29,6 +29,10 @@ function errorResponse(error: unknown) {
   if (code === "CUSTOMER_NOT_FOUND") return adminJson({ ok: false, error: "Customer not found." }, 404);
   if (code === "SITE_NOT_FOUND") return adminJson({ ok: false, error: "Choose a service site belonging to this customer." }, 400);
   if (code === "ASSET_NOT_FOUND") return adminJson({ ok: false, error: "Installed asset not found." }, 404);
+  console.error(
+    "Installer asset register request failed",
+    error instanceof Error ? error.message : "Unknown error",
+  );
   return adminJson({ ok: false, error: "The private asset register request could not be completed." }, 500);
 }
 
