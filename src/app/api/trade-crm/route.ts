@@ -257,6 +257,10 @@ function errorResponse(error: unknown) {
   if (code === "CUSTOMER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its customer-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next job number could not be reserved. Please try again." }, 503);
   if (code === "INVALID_CURSOR") return adminJson({ ok: false, error: "This CRM page link has expired. Start again from the first page." }, 400);
+  console.error(
+    "Installer CRM request failed",
+    error instanceof Error ? error.message : "Unknown error",
+  );
   return adminJson({ ok: false, error: "The private installer CRM request could not be completed." }, 500);
 }
 
