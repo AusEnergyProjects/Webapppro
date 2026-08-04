@@ -1,6 +1,211 @@
 # Next task handover
 
-Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` released and live
+Status: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` released and live
+
+Prepared: 4 August 2026
+
+Milestone ID: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43`
+
+Working branch: `codex/sites-custom-domain-migration`
+
+Previous production application source: `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
+
+Released application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
+
+Current production: Sites version 280 from application commit `fcfca482b0f86413423af2af8c5ae77054e6186f`
+
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3`
+
+Deployment: `appgdep_6a71bf0136dc81918e71ba815cddd0ff`
+
+Production URL: `https://compare.ausenergyassessments.com`
+
+Internal compliance URL: `https://compare.ausenergyassessments.com/creditex/compliance`
+
+Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
+
+Environment revision: 19
+
+## Active milestone contract
+
+Outcome: a verified trade owner can manage business identity, service areas,
+customer-document appearance, quote defaults, notifications and account closure
+in one TLink workspace. An installer can issue one immutable direct-customer
+quote version, send the matching private review link and branded PDF through the
+configured provider, and retain exact delivery evidence without deleting
+commercial or compliance history.
+
+Owning workflow:
+
+- unified business settings in `TradeBusinessSettingsWorkspace`;
+- quote authoring and delivery in `TradeQuotePanel` and the trade-quotes API;
+- durable snapshots in
+  `trade_crm_quote_versions.document_snapshot_json`, authored by
+  `src/app/api/trade-quotes/route.ts` and served by
+  `src/lib/trade-quote-review-server.ts`;
+- branded HTML and text delivery in `trade-quote-email`;
+- server-generated A4 PDF delivery in `trade-quote-pdf`;
+- token-authorised customer review, media and PDF routes;
+- additive business, media, service-area, quote-delivery and closure records in
+  migration `0120_trade_business_identity_and_quote_delivery.sql`.
+
+In scope:
+
+- keep installer and wholesaler account type immutable after account creation;
+- require a business name and canonicalise an optional HTTPS website;
+- expose one Business workspace for identity, appearance, up to six
+  postcode/radius service areas, quote defaults, notifications, customer
+  document preview and account closure;
+- accept only signature-checked JPEG or PNG logo and banner files up to 3 MB,
+  strip uploaded metadata and keep bytes private;
+- provide six controlled colour themes and three controlled border styles;
+- let every quote add an authorised customer email without replacing the
+  primary address and expose a direct customer-details shortcut;
+- make the email introduction and standard terms editable per quote and
+  optionally reusable as the business default;
+- freeze exact business identity, branding, recipient, customer, scope, terms
+  and totals in an immutable `trade-quote-document-v1` snapshot for every newly
+  issued version;
+- calculate quote totals server-side, attach the exact matching PDF, and retain
+  message, document, PDF and delivery hashes plus provider ID and attempt state;
+- mark a version `issued` before provider work and `sent` only after Resend
+  accepts the API request and returns a provider message ID; inbox delivery
+  remains unverified;
+- make customer-facing review, logo, banner and PDF responses
+  token-authorised and `no-store`; owner branding media separately requires
+  verified trade access;
+- close an account only after recent Firebase authentication and typed
+  `CLOSE ACCOUNT`, revoke active quote links, clear token material, suspend
+  active team members and commit the closure ledger plus stable administrator
+  notification atomically.
+
+Out of scope:
+
+- SMS, payment initiation, invoice PDF or invoice email delivery;
+- provisioning or verifying a production Resend sender or inbox receipt;
+- Firebase identity deletion, physical record erasure or an account-recovery
+  workflow;
+- regulator submission, certificate creation, certificate trade or settlement;
+- changing the separately authorised internal compliance portal or tenant
+  boundary;
+- uploading production branding, sending a new quote or closing an account
+  during release verification.
+
+Acceptance criteria:
+
+- the Business workspace exposes every saved section without duplicating
+  settings across Profile and Business;
+- account type cannot be changed, media validation rejects unsafe content and
+  service areas cannot exceed six;
+- one issued quote version has one exact immutable customer document, matching
+  private review and downloadable PDF;
+- an added delivery address becomes an authorised customer contact and never
+  silently changes the customer's primary address;
+- customer-visible totals match the server recomputation and internal cost or
+  margin data never enters the customer snapshot, email or PDF;
+- a provider failure cannot leave a quote falsely marked sent;
+- account closure cannot rewrite retained identity, reactivate stale links or
+  retain active team access;
+- installer and customer surfaces contain no visible compliance-partner name;
+- type checking, lint, focused tests, migration replay, integration tests, the
+  complete suite, production build and Sites bundle audit pass.
+
+Stop condition: stop if an issued quote can change after issuance, if a
+customer-visible document exposes internal margin or protected data, if media
+bytes become public without a valid review token, if closure deletes retained
+commercial or compliance records, if an account or tenant boundary fails, or if
+release verification would send a message or mutate production business data
+beyond a designed idempotent audit-view event.
+
+## Release result
+
+Application source `fcfca482b0f86413423af2af8c5ae77054e6186f` is live as
+Sites version 280. New migration
+`0120_trade_business_identity_and_quote_delivery.sql` adds the durable business
+identity, appearance, service-area, immutable quote-document, delivery and
+account-closure contracts without deleting prior commercial or compliance
+records.
+
+The signed-in Business workspace now presents Account, Appearance, Service
+areas, Quote defaults, Notifications, Templates and Close account as one
+coherent owner workflow. Branding is reused by the customer review, provider
+email and two-page A4 PDF. Newly issued quote versions retain exact customer and
+business identity, line choices, totals, terms, message body, branding
+references and hashes. The delivery path uses the current authorised customer
+email, attaches the matching PDF and records provider API acceptance without
+treating a failed request as sent or claiming inbox delivery.
+
+Account closure is a soft access-removal boundary. It requires recent
+authentication and exact typed confirmation, then atomically closes the
+business, records the retained closure ledger and administrator notification,
+revokes active quote links, clears review-token material and suspends active
+team members. Closed owners receive a terminal signed-in state and cannot mutate
+retained identity. Firebase deletion, physical erasure and recovery remain
+separate future-authorised work.
+
+`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+integration tests, 1,457 main tests with 1,455 passed, 2 intentionally skipped
+and 0 failed, all 121 migrations through
+`0120_trade_business_identity_and_quote_delivery.sql`, the customer-plan PDF
+audit, Vinext production build and Sites server-bundle audit. The focused
+closure set passed 22 of 22. Independent final review found no remaining P0, P1
+or P2 defect.
+
+Release provenance:
+
+- Application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
+- Archive `.openai/site-release-fcfca48.tar.gz`: 7,833,168 bytes, SHA-256
+  `806E919D9144B30A162C051660444F82F7BEAFE542EEBEB954C742675161139B`,
+  375 entries, all 121 migrations and zero CSV entries
+- Saved version:
+  `appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3`
+- Deployment: `appgdep_6a71bf0136dc81918e71ba815cddd0ff`
+- Sites version 280, environment revision 19
+- Sites stored 361 files and 31,856,640 bytes with content hash
+  `sha256:cf01b5bdf49058a7b12e7177e864c08a17af1203dc23f1e4b22a10ce5d7dcc2c`
+
+Signed-in QA hard-refreshed the custom-domain installer dashboard to version
+280, opened the unified Business workspace, Appearance, Quote defaults,
+Templates, one existing job and its Quote workspace. It verified the authorised
+recipient, additional-email and customer-details controls, server totals,
+private review link and issued-PDF action without saving or sending. The
+customer review rendered on desktop and a 390 px viewport with the exact
+$4,444.00 total, download action and decision controls, and contained no visible
+compliance-partner name. Health, homepage, dashboard and every referenced
+homepage asset returned HTTP 200. The final five-minute errors-only Sites worker
+log contained zero events. Chrome-extension message-channel warnings were
+observed but were not application errors.
+
+Release QA did not upload branding, edit a business, add a recipient, issue or
+send a quote, accept or decline a quote, close an account, or create or change a
+customer, job, intent, case, evidence, certificate, submission, trade or
+settlement record. Opening the existing customer review records or reuses its
+designed daily `viewed` audit event; no customer, business, quote version or
+commercial value was changed.
+
+Remaining controlled limitations:
+
+- a real Resend production receipt and Gmail or Outlook client rendering remain
+  unverified;
+- unreferenced removed branding may remain in private object storage until a
+  separately authorised retention policy exists; branding referenced by an
+  issued document is deliberately retained for integrity;
+- legacy issued quote versions created before migration `0120` do not have a
+  frozen document snapshot and are reconstructed from their retained legacy
+  record; every newly issued version uses the immutable snapshot contract;
+- account recovery and physical record erasure are intentionally absent.
+
+## Next five logical product steps
+
+1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
+2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
+3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
+4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
+5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
+
+## Previous released milestone
+
+Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` released and historical
 
 Prepared: 4 August 2026
 
@@ -12,7 +217,7 @@ Previous production application source: `c51934456c2248da4cfde9a0b759b70d69df56e
 
 Released application source: `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
 
-Current production: Sites version 279 from application commit `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
+Historical production: Sites version 279 from application commit `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
 
 Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e113332d3dac8191bff9ed71b5d51487`
 
@@ -26,7 +231,7 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Environment revision: 19
 
-## Active milestone contract
+## Released milestone contract
 
 Outcome: an installer can create one accurate scheduled certificate-work job
 with a complete customer record and one or more compatible program activities,
@@ -108,7 +313,7 @@ release verification would mutate production data.
 ## Release result
 
 Released application source `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`
-is live as Sites version 279. Primary implementation commit
+was deployed as Sites version 279. Primary implementation commit
 `103439d03a5c322757cea27e77e8b147b6c85590` keeps new-customer entry open
 beside existing-customer search, requires phone and email, and creates every
 selected controlled activity in one atomic job transaction. Each activity
@@ -186,7 +391,7 @@ Superseded signed-in QA releases:
   bytes with SHA-256
   `D72C597AE7075C1FCE24EDBA3F2236966B9F3ADBA5B3366EACB42B0A9C25E8FA`.
 
-## Previous released milestone
+## Earlier released milestone
 
 Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` released and historical
 
@@ -209,7 +414,7 @@ Remaining controlled limitation: production has no
 `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual address entry remains available,
 but it is explicitly stored and shown to Creditex as `manual_pending_review`.
 
-## Next five logical product steps
+## Superseded next-five sequence after milestone 42
 
 1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
 2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
@@ -571,7 +776,7 @@ Sites version 267 contained the complete milestone implementation from `8c29808a
 - Only 6 of 212 pathways expose deterministic SRES estimates. The remaining 206 are blocked or non-executable until exact source assets, lookups, independent formula approval and oracle reconciliation exist.
 - Production certificate creation, regulator submission, trading and settlement remain disabled.
 
-## Next five logical product steps
+## Superseded next-five sequence after milestone 37
 
 1. **Add automatic intent revision and return workflow:** create a new immutable planning version when the job, service site, activity or installation date changes, supersede the prior version visibly, and let Creditex accept or return the exact current plan without weakening the accepted-quote or governed-policy gate.
 2. **Approve the first governed VEU, SRES and NSW bundles:** retain the complete current official source bytes, effective periods, product and participant snapshots, formulas and evidence requirements under two-person review, then publish one bounded activity chain per program.
@@ -629,7 +834,7 @@ Creditex operational instructions remain separate from government rules. A promp
 - Manual test jobs do not yet appear in the main 23-column Jobs register or full job-audit workspace.
 - TESSA, ESC VEU and REC Registry interchange remains disabled. Certificate creation, submission, trading and settlement remain disabled.
 
-## Next five logical product steps
+## Superseded next-five sequence after milestone 36
 
 1. **Connect the physical field-test path:** bind locked manual-form prompts to AEA Field test-device capture, original bytes, EXIF, GPS, device identity, offline queue, retry and R2 restore, then record named physical acceptance.
 2. **Merge government policy without weakening it:** render independently approved government evidence requirements as immutable fields, layer editable Creditex instructions and additional operational prompts above them, and show an exact version diff before a form can be locked.

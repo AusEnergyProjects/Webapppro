@@ -1293,7 +1293,7 @@ Installer Jobs now mirrors the exact known Dataforce 23-column order with one co
 
 ## Released milestone: TRADE-MULTI-ACTIVITY-USABILITY-42
 
-Status: released and live with atomic multi-activity planning, installer and
+Status: released and historical with atomic multi-activity planning, installer and
 customer usability, evidence-complete field gates and D1-compatible customer
 asset history
 
@@ -1343,7 +1343,7 @@ preparation.
 - Government activity, evidence policy and calculation authority remains
   external and independently governed. This milestone does not create a
   certificate, regulator submission, trade or settlement.
-- Production is Sites version 279 from exact final application commit
+- Historical production was Sites version 279 from exact final application commit
   `13dbf2ddc4eea32c6a929ef15cb258a263ff99ea`.
 
 `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
@@ -1381,6 +1381,83 @@ Production still lacks `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` and
 `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual entry remains available and visibly
 fails closed to `manual_pending_review`; an approved provider and credential
 remain required for verified autocomplete.
+
+## Released milestone: TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43
+
+Status: released and live with unified business identity, controlled branding,
+immutable customer quote documents, server PDFs and retained delivery evidence
+
+Release status: application commit
+`fcfca482b0f86413423af2af8c5ae77054e6186f` was validated, pushed to GitHub
+and Sites managed `main`, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_a6468ced690881919d2e29c591fd11f3`
+and deployed as Sites version 280 through
+`appgdep_6a71bf0136dc81918e71ba815cddd0ff` with environment revision 19.
+
+### Outcome
+
+One TLink Business workspace now owns business identity, appearance, up to six
+postcode/radius service areas, quote defaults, notifications, customer-document
+preview and account closure. Installer or wholesaler account type is immutable.
+Logo and banner uploads accept only signature-checked JPEG or PNG files up to
+3 MB, strip metadata and remain private. Six controlled colour themes and three
+border styles are reused across the owner workspace and customer documents.
+
+Direct-customer quotes now support the current authorised customer email,
+additional authorised recipients, a customer-details shortcut, an editable
+email introduction and standard terms. Every newly issued version freezes exact
+business, branding, recipient, customer, scope, totals and terms in one
+immutable `trade-quote-document-v1` snapshot. The same snapshot renders the
+private customer review, branded HTML and text email and two-page A4 PDF.
+Delivery retains exact hashes, provider ID and attempt state. A version is
+marked sent only after Resend accepts the API request and returns a provider
+message ID; inbox delivery remains unverified.
+
+### Safety boundary
+
+- Customer totals are recomputed on the server. Internal supplier cost, markup
+  and margin remain outside the customer snapshot, email and PDF.
+- Customer-facing logo, banner, review and PDF responses require the exact
+  active review token and use `no-store`; owner branding media separately
+  requires verified trade access.
+- Account closure requires recent Firebase authentication and typed
+  `CLOSE ACCOUNT`, then atomically closes access, records the retained ledger and
+  administrator notification, revokes active quote links, clears review-token
+  material and suspends active team members.
+- Closed owners receive a terminal signed-in state and cannot mutate retained
+  identity. Firebase deletion, physical erasure and recovery are not claimed.
+- SMS, payment, invoice PDF or invoice email delivery, certificate creation,
+  regulator submission, trade and settlement remain disabled or out of scope.
+
+`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+integration tests, 1,457 main tests with 1,455 passed, 2 intentionally skipped
+and 0 failed, all 121 migrations through
+`0120_trade_business_identity_and_quote_delivery.sql`, the customer-plan PDF
+audit, Vinext production build and Sites server-bundle audit. The focused
+closure set passed 22 of 22, and independent final review found no remaining P0,
+P1 or P2 defect.
+
+Archive `.openai/site-release-fcfca48.tar.gz` is 7,833,168 bytes with SHA-256
+`806E919D9144B30A162C051660444F82F7BEAFE542EEBEB954C742675161139B`
+and 375 entries, including all 121 migrations and zero CSV entries. Sites stored
+361 files and 31,856,640 bytes with content hash
+`sha256:cf01b5bdf49058a7b12e7177e864c08a17af1203dc23f1e4b22a10ce5d7dcc2c`.
+
+Signed-in custom-domain QA exercised the unified Business, Appearance, Quote
+defaults and Templates sections and opened one existing quote without saving or
+sending. It verified the authorised recipient, additional-email,
+customer-details, exact totals, private review and issued-PDF controls. The
+customer review rendered on desktop and at 390 px with the exact $4,444.00 total
+and no visible compliance-partner name. Health, homepage, dashboard and current
+homepage assets returned HTTP 200. The final five-minute Sites errors-only log
+contained zero events. Opening the existing customer review records or reuses
+its designed daily `viewed` audit event; no customer, business, quote version or
+commercial value was changed.
+
+Remaining controlled limitations are a real Resend receipt and customer email
+client rendering, private-object retention for unreferenced removed branding,
+legacy pre-`0120` issued versions without a frozen snapshot, and the deliberately
+absent account-recovery and physical-erasure workflows.
 
 ## Next five logical product steps
 
