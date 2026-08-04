@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` validated release candidate
+Status: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` released
 
 Prepared: 5 August 2026
 
@@ -8,17 +8,17 @@ Milestone ID: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `fcfca482b0f86413423af2af8c5ae77054e6186f`
+Previous production application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
 
 Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
 
-Released application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
+Released application source: `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
 
-Current production: Sites version 282 from application commit `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
+Current production: Sites version 283 from application commit `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae`
 
-Deployment: `appgdep_6a71e7f3af3c81918f0f89a3e0354d36`
+Deployment: `appgdep_6a7221a403808191a44c354d51922058`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -99,76 +99,63 @@ production business, quote or invoice data.
 
 ## Release result
 
-Application source `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` is live as
-Sites version 282. It contains primary TLink recovery commit
-`b7e40751e2556ffc64e37704c641a6e917046bb6` plus the worker-safe legacy fallback
-correction. Sites version 281 from `b7e4075` was superseded during release QA
-after a pre-existing rollback-route failure was found. No migration was added.
+Application source `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` is live as
+Sites version 283. It preserves milestone 44 and completes the customer-document
+controls and Jobs register contract. Additive migrations bring the packaged
+schema total to 124.
 
-The signed-in Business workspace presents Account, Appearance, Service areas,
-Quote defaults, Notifications, Templates and Close account on one scroll page.
-Fourteen controlled themes now govern the header, search, rail, buttons,
-workspace and customer documents. Safe partial profile updates preserve omitted
-notification and availability values. Jobs use the available width, retain the
-company-scoped Dataforce register and callable phone values, and Schedule keeps
-the permanent CRM navigation.
+The installer Jobs register now renders one company-scoped job per row with 23
+separate Dataforce-aligned headings and 23 corresponding cells. The visible
+register, column selector, all-field search, horizontal scrolling and CSV export
+share the same declared order. Mobile numbers remain callable and no invented
+operator columns were added.
 
-Quote issuance preflights the exact PDF before creating the immutable review
-link. PDF generation falls back to worker-safe standard fonts if bundled font
-assets cannot be loaded. Existing issued review, PDF and media reads accept only
-the active customer token or current verified trade owner; customer mutations
-remain token-bound. Provider submission now records `provider_accepted`, not
-inbox delivery. The existing retained closure, token-revocation and tenant
-boundaries remain unchanged.
+Business settings now keeps the customer-facing business name, phone, email,
+bank name, account name, BSB, account number and payment reference separate from
+the TLink sign-in identity. A bounded 5:1 banner frame makes the full-width PDF
+crop explicit. Quote and invoice previews use that same banner, document
+identity and theme. Invoice authoring and output show line items, subtotal,
+discount, GST, total and configured payment details. The redundant
+customer-facing `Work`, `Always included` and `Your base scope` wrappers were
+removed.
 
-The lead route and authorised relay now share a 20-second downstream timeout and
-the outer health check allows 25 seconds. The no-index electricity rollback
-route no longer reads from the worker filesystem; it returns a no-store 307 to
-the deployed legacy asset, whose HTML has an explicit no-index directive.
+New quote and invoice revisions snapshot their document identity and financial
+presentation. Issued PDF bytes are retained as the authoritative private object
+and are verified against the document identity before readback. Provider
+acceptance conflicts fail into `reconciliation_required`; they cannot be
+resent or displayed as issued until reconciled.
 
-`npm.cmd run validate` passed on exact source `9c278bb`: type checking,
-warning-free lint, 31 of 31 integration tests, 1,466 main tests with 1,464
-passed, 2 intentionally skipped and 0 failed, all 121 migrations, the
+`npm.cmd run validate` passed on exact source `bfd4723`: type checking,
+warning-free lint, 31 of 31 integration tests, 1,494 main tests with 1,492
+passed, 2 intentionally skipped and 0 failed, all 124 migrations, the
 customer-plan PDF audit, Vinext production build and Sites server-bundle audit.
-The TLink recovery-focused set passed 104 of 104 before the final fallback
-correction, and the fallback set passed 8 of 8 after it. `git diff --check`
+The focused milestone acceptance set passed 62 of 62. `git diff --check`
 passed. Experimental Node glob/type-strip and build-plugin timing notices were
 non-failing toolchain warnings.
 
 Release provenance:
 
-- Application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
-- Primary TLink recovery source:
-  `b7e40751e2556ffc64e37704c641a6e917046bb6`
-- Archive `.openai/site-release-9c278bb.tar.gz`: 7,829,193 bytes, SHA-256
-  `EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`,
-  375 entries, all 121 migrations and zero CSV entries
+- Application source: `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
 - Saved version:
-  `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271`
-- Deployment: `appgdep_6a71e7f3af3c81918f0f89a3e0354d36`
-- Sites version 282, environment revision 19
-- Sites stored 361 files and 31,907,840 bytes with content hash
-  `sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96`
+  `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae`
+- Deployment: `appgdep_6a7221a403808191a44c354d51922058`
+- Sites version 283, environment revision 19
+- Sites stored 364 files and 31,682,560 bytes with content hash
+  `sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7`
 
-Signed-in custom-domain QA opened Jobs, Schedule, Business and one existing test
-quote without saving or sending. Jobs rendered 8 company-scoped records across
-the Dataforce-aligned register; the results region used 1,661 px of a 2,048 px
-viewport. Schedule retained all 12 CRM tabs and showed the expected two test
-appointments. Business showed all seven settings regions, local save actions,
-14 themes and three border styles on one page. The existing customer review
-rendered the exact $4,444.00 total, decision controls and no visible
-compliance-partner name. Its PDF returned HTTP 200, `application/pdf`, 399,318
-bytes and a valid `%PDF-1.7` header. Opening the review records the designed
-daily `viewed` audit event, creating it once or reusing it for that day.
+Signed-in custom-domain QA opened Jobs, Schedule and Business without saving or
+sending. Jobs rendered 8 company-scoped records, 23 visible headings and 23
+direct cells in each inspected row. Schedule retained all 12 CRM tabs and showed
+the expected two existing appointments. Business presented every settings
+section on one page, the explicit 5:1 crop controls and side-by-side quote and
+invoice previews. The previews showed the full-width banner, business identity,
+item grid, $4,040 subtotal, $200 discount, $384 GST, $4,224 total and payment
+area.
 
-Public root, health, compare, gas, direct-trade and dashboard probes returned
-HTTP 200. The version-281 audit found the inherited rollback route at HTTP 500,
-which caused the final correction and version 282. After propagation, ten
-consecutive custom-domain fallback probes returned HTTP 307 to the deployed
-legacy asset and the target returned HTTP 200 with the no-index meta directive.
-The final five-minute errors-only production Worker log returned zero events;
-a subsequent five-probe sample again returned HTTP 307 with `no-store` and
-`noindex, nofollow`, while the target and health endpoint both returned HTTP 200.
+Public root, `/api/health` and `/direct-trade/dashboard` probes returned HTTP
+200. Sites reports version 283 and deployment
+`appgdep_6a7221a403808191a44c354d51922058` as succeeded. The final 30-minute
+errors-only production Worker query returned zero events.
 
 Release QA did not upload branding, save a theme or setting, add a recipient,
 issue or send a quote, accept or decline a quote, close an account, or create or
@@ -178,28 +165,39 @@ was changed.
 
 Remaining controlled limitations:
 
-- a real Resend production receipt and Gmail or Outlook inbox/client rendering
-  remain unverified; the reported attempt failed inside quote preparation before
-  provider submission, and no replacement email was sent during QA;
-- the next authorised lead-delivery monitor run must confirm the new 20/25
-  second timeout relationship against the live Google Workspace relay;
-- unreferenced removed branding may remain in private object storage until a
-  separately authorised retention policy exists; branding referenced by an
-  issued document is deliberately retained for integrity;
-- legacy issued quote versions created before migration `0120` do not have a
-  frozen document snapshot and are reconstructed from their retained legacy
-  record; every newly issued version uses the immutable snapshot contract;
-- account recovery and physical record erasure are intentionally absent.
+- controlled Gmail and Outlook quote and invoice delivery, receipt and provider
+  callback reconciliation are not yet proven for this milestone;
+- the invoice provider boundary is source-tested, but release QA did not send a
+  production invoice;
+- a legacy issued PDF without provable retained bytes fails closed and requires
+  a new revision rather than reconstruction;
+- an approved Australian production address provider remains unconfigured;
+- one independently approved, complete manual VEU, SRES/STC and NSW governed
+  bundle has not yet been exercised through the live non-submitting workflow.
 
 ## Next five logical product steps
 
-1. **Prove production quote delivery end to end:** run one controlled Gmail and one Outlook delivery through Resend, authenticate provider webhooks, show provider state and retries inside the quote activity, and keep `provider_accepted`, delivered, bounced and complained distinct.
-2. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, approved products and participants, evidence policy and calculation vectors under independent review, then exercise each through a manual non-submitting job.
-3. **Configure one approved Australian production address provider:** reuse one signed address component for customer, service-site and New Job creation and edits while preserving the visible manual-review fallback.
-4. **Complete immutable intent revision and case supersession:** cover address, activity, product and technician changes, linked-case supersession and a clear authorised return-to-installer path.
-5. **Complete physical field and Dataforce acceptance:** publish governed forms into real test jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and reconcile the remaining Dataforce import fields without inventing columns.
+1. **Controlled Gmail and Outlook delivery proof for both quote and invoice, with provider callback reconciliation.**
+2. **One complete manual non-submitting VEU, SRES/STC and NSW governed job bundle each.**
+3. **Approved Australian production address provider reused across customer/site/job.**
+4. **Immutable planned-intent revision and governed-case supersession.**
+5. **Physical field/Dataforce acceptance: GPS, EXIF, offline evidence, remaining exact import fields.**
 
 ## Previous released milestone
+
+Status: `TRADE-WORKSPACE-DELIVERY-RECOVERY-44` released and historical
+
+Released application source:
+`9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`, deployed as historical Sites
+version 282 through `appgdep_6a71e7f3af3c81918f0f89a3e0354d36`.
+
+Milestone 44 restored the complete themed trade shell, one-page Business
+settings, full-width Jobs, permanent Schedule navigation, quote-PDF preflight,
+truthful provider acceptance, lead-monitor timing and worker-safe rollback
+handling. Its full contract and evidence remain in `ROADMAP.md` and
+`docs/RELEASE_TRUTH.md`.
+
+## Earlier released milestone
 
 Status: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` released and historical
 

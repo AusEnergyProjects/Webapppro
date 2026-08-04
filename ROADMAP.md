@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 4 August 2026
+Last reconciled: 5 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -1461,7 +1461,7 @@ absent account-recovery and physical-erasure workflows.
 
 ## Released milestone: TRADE-WORKSPACE-DELIVERY-RECOVERY-44
 
-Status: released and live with a complete themed trade shell, one-page business
+Status: released and historical with a complete themed trade shell, one-page business
 settings, restored workspace navigation, reliable quote review and PDF access,
 truthful provider-delivery state and worker-safe rollback handling
 
@@ -1527,13 +1527,78 @@ second timeout relationship, separately governed retention for unreferenced
 branding, legacy pre-`0120` quote reconstruction, and the deliberately absent
 account-recovery and physical-erasure workflows.
 
+## Released milestone: TRADE-DOCUMENT-CONTROLS-AND-JOBS-45
+
+Status: released and live with exact Jobs cells, explicit customer-document
+identity, full-width banner framing, clear invoice totals and immutable issued
+PDF artifacts
+
+Release status: exact application commit
+`bfd472359dd8ec2457379bc3694dc3c9503ac7dd` was validated, pushed to GitHub and
+Sites managed `main`, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae`
+and deployed as Sites version 283 through
+`appgdep_6a7221a403808191a44c354d51922058` with environment revision 19.
+
+### Outcome
+
+The owner-scoped Jobs register renders one job per row with 23 separate
+Dataforce-aligned headings and corresponding cells. Its visible register,
+column selector, all-field search, horizontal scroll and CSV export use the
+same authoritative column declaration; callable mobile values and company scope
+remain intact.
+
+Business settings independently saves the customer-facing business name, phone,
+email and bank/payment details. Its 5:1 banner crop controls make the exact
+full-width PDF frame visible before issue. Quote and invoice previews share that
+identity, banner and theme. Invoice authoring and output show item rows,
+subtotal, discount, GST, total and configured payment details. Redundant
+customer-facing `Work`, `Always included` and `Your base scope` wrappers are
+removed.
+
+Each new quote or invoice revision freezes its customer-document identity and
+financial presentation. Issued PDF bytes are retained as the authoritative
+private artifact and verified against the document identity on read. A provider
+acceptance conflict enters `reconciliation_required`, remains non-resendable
+and cannot be presented as issued until reconciled.
+
+### Safety and release evidence
+
+- Exact application commit
+  `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` passed
+  `npm.cmd run validate`: type checking, warning-free lint, 31 of 31 integration
+  tests, 1,494 main tests with 1,492 passed, 2 intentionally skipped and 0
+  failed, all 124 migrations, the customer-plan PDF audit, Vinext production
+  build and Sites server-bundle audit.
+- The focused milestone acceptance review passed 62 of 62 tests.
+- Sites version 283 stores 364 files and 31,682,560 bytes with content hash
+  `sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7`.
+- Signed-in custom-domain QA found 8 company-scoped Jobs rows, 23 visible
+  headings and 23 direct cells in each inspected row. Schedule retained all 12
+  CRM tabs and the expected two existing appointments.
+- Business settings showed every section on one page, the explicit 5:1 banner
+  frame and side-by-side quote/invoice previews with the full-width banner,
+  customer-facing identity, line items, $4,040 subtotal, $200 discount, $384
+  GST, $4,224 total and payment area.
+- Public root, `/api/health` and `/direct-trade/dashboard` returned HTTP 200;
+  the final 30-minute errors-only production Worker query returned zero events.
+- Release QA did not upload branding, save settings, issue or send a quote or
+  invoice, or create or change a customer, job, intent, case, evidence,
+  certificate, submission, trade or settlement record.
+
+Remaining controlled limitations are controlled Gmail and Outlook proof for
+both quote and invoice plus provider callback reconciliation, a production
+invoice send, legacy issued PDFs without provable retained bytes, the approved
+Australian address-provider integration, and independently approved complete
+manual VEU, SRES/STC and NSW governed bundles.
+
 ## Next five logical product steps
 
-1. **Prove production quote delivery end to end:** run one controlled Gmail and one Outlook delivery through Resend, authenticate provider webhooks, show provider state and retries inside the quote activity, and keep `provider_accepted`, delivered, bounced and complained distinct.
-2. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, approved products and participants, evidence policy and calculation vectors under independent review, then exercise each through a manual non-submitting job.
-3. **Configure one approved Australian production address provider:** reuse one signed address component for customer, service-site and New Job creation and edits while preserving the visible manual-review fallback.
-4. **Complete immutable intent revision and case supersession:** cover address, activity, product and technician changes, linked-case supersession and a clear authorised return-to-installer path.
-5. **Complete physical field and Dataforce acceptance:** publish governed forms into real test jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and reconcile the remaining Dataforce import fields without inventing columns.
+1. **Controlled Gmail and Outlook delivery proof for both quote and invoice, with provider callback reconciliation.**
+2. **One complete manual non-submitting VEU, SRES/STC and NSW governed job bundle each.**
+3. **Approved Australian production address provider reused across customer/site/job.**
+4. **Immutable planned-intent revision and governed-case supersession.**
+5. **Physical field/Dataforce acceptance: GPS, EXIF, offline evidence, remaining exact import fields.**
 
 ## Global stop conditions
 
