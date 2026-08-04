@@ -12,6 +12,7 @@ import {
 } from "../src/lib/australian-government-program-catalogue.ts";
 import {
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
+  canonicalCreditexSchemaGuardSql,
 } from "../src/lib/creditex-schema-guards.ts";
 import {
   CREDITEX_INSTALLER_ACCOUNT_SELECT_SQL,
@@ -67,6 +68,11 @@ const completeMigrationChain = fs.readdirSync(migrationDirectory)
 const INTENT_GUARD_NAMES = [
   "trade_compliance_intent_update_guard",
   "trade_compliance_intent_delete_guard",
+];
+const MULTI_ACTIVITY_MIGRATION_GUARD_NAMES = [
+  "compliance_cases_work_order_owner_guard",
+  "compliance_cases_linkage_no_update",
+  "trade_compliance_intent_update_guard",
 ];
 
 const NOW = "2026-08-03T00:00:00.000Z";
@@ -181,6 +187,31 @@ function routeTemplate(name) {
   assert.ok(match, `Missing ${name} SQL template`);
   return match[1];
 }
+
+test("migration 0119 installs the exact runtime schema guard contract", () => {
+  const database = new DatabaseSync(":memory:");
+  applyCompleteMigrationChain(database);
+
+  for (const name of MULTI_ACTIVITY_MIGRATION_GUARD_NAMES) {
+    const installed = database.prepare(`
+      SELECT sql
+      FROM sqlite_schema
+      WHERE type = 'trigger' AND name = ?
+    `).get(name);
+    const definition = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+      (candidate) => candidate.name === name,
+    );
+    assert.ok(installed?.sql, `Missing migration-installed trigger ${name}`);
+    assert.ok(definition, `Missing runtime trigger definition ${name}`);
+    assert.equal(
+      canonicalCreditexSchemaGuardSql(installed.sql),
+      canonicalCreditexSchemaGuardSql(definition.sql),
+      `${name} must match the trigger installed by migration 0119`,
+    );
+  }
+
+  database.close();
+});
 
 test("Creditex full-audit installer projection executes on the production schema", () => {
   const database = new DatabaseSync(":memory:");
